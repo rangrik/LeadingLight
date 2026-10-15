@@ -22,7 +22,9 @@ fn initialize_empty_vault(vault_dir: &Path, vault_path: &str) -> Result<(), Stri
         .map_err(|e| format!("Failed to create vault directory: {}", e))?;
 
     git::init_repo(vault_path)?;
-    vault::seed_config_files(vault_path);
+    if crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        vault::seed_config_files(vault_path);
+    }
     Ok(())
 }
 

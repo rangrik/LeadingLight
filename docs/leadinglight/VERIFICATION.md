@@ -5,6 +5,10 @@ starts from Tolaria revision `177a37e82def22c3f50d50ee2408844a89e4b117`.
 
 ## Writing and panes
 
+New local workspaces start with zero pages. Their local Git metadata is retained, while upstream
+AI guidance and type-template documents are not seeded into the note list. Regression coverage
+checks the empty scan and refusal to overwrite a nonempty folder.
+
 The packaged Tauri app was checked for independently editable pages, rich formatting saved
 to Markdown, horizontal and vertical layouts, resizing, retained closed pages, searchable
 page selection, independent scrolling, and reuse of an already-open page.

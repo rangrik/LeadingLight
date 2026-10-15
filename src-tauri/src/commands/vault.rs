@@ -379,19 +379,33 @@ mod tests {
     }
 
     #[test]
-    fn test_create_empty_vault_seeds_agents_and_type_scaffolding() {
+    fn test_create_empty_vault_starts_without_pages_in_local_mode() {
         let dir = tempfile::TempDir::new().unwrap();
         let vault_path = dir.path().join("fresh-vault");
 
         let result = create_empty_vault(vault_path.to_string_lossy().to_string());
         assert!(result.is_ok());
-        assert_paths_exist(
-            &vault_path,
-            &[".git", "AGENTS.md", "CLAUDE.md", "type.md", "note.md"],
-        );
+        assert_paths_exist(&vault_path, &[".git", ".gitignore"]);
         assert_paths_absent(&vault_path, &["config.md"]);
-        assert_seeded_guidance_content(&vault_path);
-        assert_seeded_type_scaffolding(&vault_path);
+        if crate::leadinglight::REMOTE_FEATURES_ENABLED {
+            assert_paths_exist(
+                &vault_path,
+                &["AGENTS.md", "CLAUDE.md", "type.md", "note.md"],
+            );
+            assert_seeded_guidance_content(&vault_path);
+            assert_seeded_type_scaffolding(&vault_path);
+        } else {
+            assert_paths_absent(
+                &vault_path,
+                &["AGENTS.md", "CLAUDE.md", "type.md", "note.md"],
+            );
+            let entries = crate::vault::scan_vault(&vault_path, &Default::default()).unwrap();
+            assert!(
+                entries.is_empty(),
+                "a fresh local vault should contain no pages"
+            );
+            assert!(check_vault_exists(vault_path.to_string_lossy().to_string()));
+        }
     }
 
     #[test]

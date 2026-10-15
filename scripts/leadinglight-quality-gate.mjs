@@ -40,7 +40,7 @@ if (stage === 'push' && files.some((file) => /^(src\/|src-tauri\/|package.json|p
   run('pnpm', ['exec', 'vitest', 'run', ...tests])
   if (files.some((file) => /^src-tauri\/(?:src\/.*\.rs|Cargo\.(?:toml|lock))$/.test(file))) {
     run('cargo', ['check', '--locked', '--manifest-path', 'src-tauri/Cargo.toml'])
-    for (const filter of ['leadinglight', 'shutdown_save', 'settings::', 'app_config::', 'vault_list::', 'vault::cache::tests::paths_and_io']) {
+    for (const filter of ['leadinglight', 'shutdown_save', 'create_empty_vault', 'settings::', 'app_config::', 'vault_list::', 'vault::cache::tests::paths_and_io']) {
       run('cargo', ['test', '--locked', '--manifest-path', 'src-tauri/Cargo.toml', filter])
     }
   }
