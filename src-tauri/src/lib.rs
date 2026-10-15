@@ -26,6 +26,7 @@ mod html_block_protocol;
 pub mod kiro_cli;
 mod kiro_discovery;
 pub mod leadinglight;
+mod leadinglight_trash;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
 mod linux_appimage;
 mod macos_fullscreen_escape;
@@ -348,6 +349,9 @@ macro_rules! app_invoke_handler {
             commands::delete_note,
             commands::batch_delete_notes,
             commands::batch_delete_notes_async,
+            commands::move_to_local_trash,
+            commands::list_local_trash,
+            commands::restore_from_local_trash,
             commands::migrate_is_a_to_type,
             commands::create_vault_folder,
             commands::rename_vault_folder,

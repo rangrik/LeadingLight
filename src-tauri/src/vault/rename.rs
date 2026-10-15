@@ -119,11 +119,15 @@ fn replace_wikilinks_in_content(content: &str, re: &Regex, new_target: &str) -> 
     }
 }
 
+/// LeadingLight's local Trash: deleted pages must keep their exact bytes.
+const LOCAL_TRASH_STORE_DIR: &str = ".leadinglight";
+
 /// Collect all .md file paths in vault eligible for wikilink replacement.
 fn collect_md_files(vault_path: &Path, exclude: &Path) -> Vec<std::path::PathBuf> {
     WalkDir::new(vault_path)
         .follow_links(true)
         .into_iter()
+        .filter_entry(|e| e.depth() == 0 || e.file_name() != LOCAL_TRASH_STORE_DIR)
         .filter_map(|e| e.ok())
         .map(|e| e.into_path())
         .filter(|p| is_replaceable_md_file(p, exclude))
@@ -1035,6 +1039,29 @@ mod tests {
                 assert!(!ref_content.contains(removed_link));
             }
         }
+    }
+
+    #[test]
+    fn leadinglight_trash_store_is_never_rewritten_by_rename() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let stored = ".leadinglight/trash/0123456789abcdef0123456789abcdef/kept.md";
+        let link = "See [[Weekly Review]].\n";
+        create_test_file(vault, "note/ref.md", link);
+        create_test_file(vault, stored, link);
+
+        let (_old_path, result) = rename_test_note_file(
+            vault,
+            RenameTestRequest {
+                path: "note/weekly-review.md",
+                content: "# Weekly Review\n",
+                new_title: "Sprint Retro",
+                old_title_hint: None,
+            },
+        );
+
+        assert_eq!(result.updated_files, 1);
+        assert_eq!(fs::read_to_string(vault.join(stored)).unwrap(), link);
     }
 
     #[test]

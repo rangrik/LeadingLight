@@ -17,7 +17,10 @@ struct VaultChangedPayload {
 fn has_ignored_component(path: &Path) -> bool {
     path.components().any(|part| {
         let component = part.as_os_str();
-        component == OsStr::new(".git") || component == OsStr::new("node_modules")
+        component == OsStr::new(".git")
+            || component == OsStr::new("node_modules")
+            // LeadingLight's local Trash; its own commands report every change.
+            || component == OsStr::new(".leadinglight")
     })
 }
 
@@ -373,6 +376,22 @@ mod tests {
         assert!(!is_watchable_path(Path::new(".tolaria-rename-txn"), None));
         assert!(!is_watchable_path(Path::new(".gitstatus.KASSUJ"), None));
         assert!(!is_watchable_path(Path::new("notes/draft.md.icloud"), None));
+    }
+
+    #[test]
+    fn ignores_leadinglight_local_trash_store() {
+        assert!(!is_watchable_path(
+            Path::new("/vault/.leadinglight/trash/0123/payload"),
+            None
+        ));
+        assert!(!is_watchable_path(
+            Path::new("/vault/.leadinglight/trash.lock"),
+            None
+        ));
+        assert!(is_watchable_path(
+            Path::new("/vault/.laputa/views/a.yml"),
+            None
+        ));
     }
 
     #[test]

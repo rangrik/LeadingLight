@@ -1,12 +1,12 @@
 [package]
 name = "leadinglight"
-version = "0.2.0"
+version = "0.3.0"
 description = "A quiet, local Markdown writing workspace"
 authors = ["LeadingLight contributors", "Luca Rossi (Tolaria)"]
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/rangrik/LeadingLight"
 edition = "2021"
-rust-version = "1.77.2"
+rust-version = "1.89"
 
 [lib]
 name = "tolaria_lib"
