@@ -1,65 +1,72 @@
-import { test, expect } from '@playwright/test'
-import { sendShortcut } from './helpers'
+import fs from 'fs'
+import path from 'path'
+import { test, expect, type Page } from '@playwright/test'
+import { createFixtureVaultCopy, openFixtureVault, removeFixtureVaultCopy } from '../helpers/fixtureVault'
 
-async function openNoteViaQuickOpen(page: import('@playwright/test').Page, query: string) {
-  await page.locator('body').click()
-  await sendShortcut(page, 'p', ['Control'])
-  const searchInput = page.locator('input[placeholder="Search notes..."]')
-  await expect(searchInput).toBeVisible()
-  await searchInput.fill(query)
-  await page.waitForTimeout(500)
-  await page.keyboard.press('Enter')
-  await page.waitForTimeout(1000)
+let tempVaultDir: string
+
+// Disposable copy only. Links point at pages the shared fixture already has.
+const RELATIONSHIP_NOTES: Record<string, string> = {
+  // Custom keys holding wikilinks, next to a plain-text status.
+  'project/sponsorships.md': '---\ntype: Project\nStatus: Open\nHas Measures:\n  - "[[Note B]]"\nHas Procedures:\n  - "[[Note C]]"\n---\n\n# Sponsorships\n\nWho funds the work.\n',
+  // Single wikilink values on a built-in and a custom key.
+  'project/start-laputa-app.md': '---\ntype: Project\nStatus: Active\nBelongs to: "[[Spring 2026]]"\nOwner: "[[Note B]]"\n---\n\n# Start Laputa App\n\nKickoff plan.\n',
 }
+
+function addRelationshipNotes(vaultDir: string) {
+  for (const [file, content] of Object.entries(RELATIONSHIP_NOTES)) fs.writeFileSync(path.join(vaultDir, file), content)
+}
+
+async function openPageFromSearch(page: Page, title: string, fileStem: string) {
+  await page.getByTestId('sidebar-top-nav').getByRole('button', { name: 'Search', exact: true }).click()
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  await finder.getByRole('combobox').fill(title)
+  await finder.getByRole('group', { name: 'Pages' }).getByRole('option', { name: title, exact: true }).click()
+  await expect(finder).not.toBeVisible()
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(fileStem, { timeout: 5_000 })
+  // LeadingLight starts with the properties panel closed; open it the way a user does.
+  await page.locator('[data-pane-active="true"]').getByRole('button', { name: 'Open the properties panel' }).click()
+}
+
+const property = (page: Page, label: string) => page.locator('[data-testid="editable-property"]').filter({ hasText: label })
+// A relationship row shows its label next to the linked page; an empty suggestion row has no link.
+const relationship = (page: Page, label: string, linkedPage: string) =>
+  page.getByTestId('relationship-section-label').filter({ hasText: label }).locator('..').getByRole('button', { name: linkedPage, exact: true })
 
 test.describe('Dynamic wikilink relationship detection', () => {
   test.beforeEach(async ({ page }) => {
+    tempVaultDir = createFixtureVaultCopy()
+    addRelationshipNotes(tempVaultDir)
     await page.setViewportSize({ width: 1600, height: 900 })
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    await openFixtureVault(page, tempVaultDir)
+  })
+
+  test.afterEach(() => {
+    removeFixtureVaultCopy(tempVaultDir)
   })
 
   test('wikilink fields render as relationships, plain-text fields as properties', async ({ page }) => {
-    // Open "Sponsorships" — has Has Measures/Has Procedures (custom wikilink arrays)
-    // and Status: Open (plain text)
-    await openNoteViaQuickOpen(page, 'Sponsorships')
+    await openPageFromSearch(page, 'Sponsorships', 'sponsorships')
 
-    // Wait for note to load — Status should render as editable property
-    const statusProp = page.locator('[data-testid="editable-property"]').filter({ hasText: 'Status' })
-    await expect(statusProp).toBeVisible({ timeout: 5000 })
+    const statusProp = property(page, 'Status')
+    await expect(statusProp).toBeVisible({ timeout: 5_000 })
     await expect(statusProp.getByText('Open')).toBeVisible()
 
-    // 'Has Measures' has wikilinks → should NOT be in Properties
-    const measuresProp = page.locator('[data-testid="editable-property"]').filter({ hasText: 'Has Measures' })
-    await expect(measuresProp).not.toBeVisible()
-
-    // 'Has Measures' should appear as a relationship label
-    const measuresLabel = page.locator('span.font-mono-overline').filter({ hasText: 'Has Measures' })
-    await expect(measuresLabel).toBeVisible()
-
-    // 'Has Procedures' has wikilinks → should be in Relationships
-    const proceduresLabel = page.locator('span.font-mono-overline').filter({ hasText: 'Has Procedures' })
-    await expect(proceduresLabel).toBeVisible()
+    await expect(property(page, 'Has Measures')).not.toBeVisible()
+    await expect(relationship(page, 'Has Measures', 'Note B')).toBeVisible()
+    await expect(property(page, 'Has Procedures')).not.toBeVisible()
+    await expect(relationship(page, 'Has Procedures', 'Note C')).toBeVisible()
   })
 
   test('existing wikilink relationships still render correctly', async ({ page }) => {
-    // Open "Start Laputa App Project" — has Belongs to: [[24q4]], Owner: [[person-luca-rossi]]
-    await openNoteViaQuickOpen(page, 'Start Laputa App')
+    await openPageFromSearch(page, 'Start Laputa App', 'start-laputa-app')
 
-    // Wait for note content to load
-    const statusProp = page.locator('[data-testid="editable-property"]').first()
-    await expect(statusProp).toBeVisible({ timeout: 5000 })
+    await expect(property(page, 'Status')).toBeVisible({ timeout: 5_000 })
 
-    // 'Belongs to' has wikilink → should be in Relationships (not Properties)
-    const belongsToProp = page.locator('[data-testid="editable-property"]').filter({ hasText: 'Belongs to' })
-    await expect(belongsToProp).not.toBeVisible()
+    await expect(property(page, 'Belongs to')).not.toBeVisible()
+    await expect(relationship(page, 'Belongs to', 'Spring 2026')).toBeVisible()
 
-    // 'Belongs to' should appear as a relationship label
-    const belongsToLabel = page.locator('span.font-mono-overline').filter({ hasText: 'Belongs to' })
-    await expect(belongsToLabel).toBeVisible()
-
-    // 'Owner' has wikilink → should be in Relationships
-    const ownerProp = page.locator('[data-testid="editable-property"]').filter({ hasText: 'Owner' })
-    await expect(ownerProp).not.toBeVisible()
+    await expect(property(page, 'Owner')).not.toBeVisible()
+    await expect(relationship(page, 'Owner', 'Note B')).toBeVisible()
   })
 })

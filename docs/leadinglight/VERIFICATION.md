@@ -106,3 +106,15 @@ adds 19 English keys. No cloud translation service was used. Remote AI and simul
 workspaces remain deliberately disabled; historical tests that require them do not qualify those
 features for LeadingLight. The entire upstream feature set and Windows/Linux runtime remain
 outside this release's verified scope.
+
+The local macOS bundle was signed ad hoc after packaging to seal its resources, then passed
+strict `codesign` verification. This is a local development build, not a notarized distribution.
+The installed bundle was then launched against the same disposable vault and checked for its
+version, restored pages and attachments, followed by another successful normal shutdown.
+
+Across the targeted public browser runs, 49 distinct tests passed in the 18 changed smoke files.
+Four historical cases were skipped: remote AI and mounted workspaces are disabled by fork policy,
+and two archive-banner/badge cases lack their expected demo data. The finder has a separate,
+passing fixture-backed archive-exclusion test. Corrected tests preserve their behavior assertions;
+readiness and virtualized-list handling were updated for the new surface. These results combine
+focused runs and are not presented as a full upstream regression-suite pass.
