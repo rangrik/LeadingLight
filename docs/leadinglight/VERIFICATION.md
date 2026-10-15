@@ -107,6 +107,10 @@ workspaces remain deliberately disabled; historical tests that require them do n
 features for LeadingLight. The entire upstream feature set and Windows/Linux runtime remain
 outside this release's verified scope.
 
+An inherited relationship-inspector issue remains for the next milestone: a human-form key such
+as `Belongs to` can also produce an empty suggested relationship row. This milestone verifies
+the populated relationship, but does not qualify adding through that duplicate suggestion.
+
 The local macOS bundle was signed ad hoc after packaging to seal its resources, then passed
 strict `codesign` verification. This is a local development build, not a notarized distribution.
 The installed bundle was then launched against the same disposable vault and checked for its
