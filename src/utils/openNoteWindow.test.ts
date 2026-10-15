@@ -3,6 +3,13 @@ import { buildNoteWindowUrl, buildRuntimeNoteWindowUrl, openNoteInNewWindow } fr
 import { isTauri } from '../mock-tauri'
 import { shouldUseCustomWindowChrome } from './platform'
 
+// Preserve dormant upstream window construction coverage; the shipping gate is
+// exercised separately by leadinglight/localWorkspaceSafety.test.tsx.
+vi.mock('../leadinglight/localPolicy', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../leadinglight/localPolicy')>(),
+  SEPARATE_WINDOWS_ENABLED: true,
+}))
+
 const webviewWindowCalls = vi.fn()
 const localStorageMock = (() => {
   let store: Record<string, string> = {}

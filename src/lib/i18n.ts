@@ -1,3 +1,4 @@
+import { brandCopy } from '../leadinglight/brand'
 import EN_TRANSLATIONS from './locales/en.json'
 
 export const DEFAULT_APP_LOCALE = 'en'
@@ -281,7 +282,7 @@ export function translate(locale: AppLocale, key: TranslationKey, values?: Trans
   const catalog = Reflect.get(TRANSLATIONS, locale) as Partial<Record<TranslationKey, string>> | undefined
   const template = Reflect.get(catalog ?? {}, key) as string | undefined
   const fallbackTemplate = Reflect.get(EN_TRANSLATIONS, key) as string
-  return interpolate(template ?? fallbackTemplate, localizedInterpolationValues(locale, values))
+  return interpolate(brandCopy(template ?? fallbackTemplate), localizedInterpolationValues(locale, values))
 }
 
 export function createTranslator(locale: AppLocale = DEFAULT_APP_LOCALE) {

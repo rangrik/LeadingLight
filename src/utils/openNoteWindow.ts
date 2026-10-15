@@ -1,3 +1,4 @@
+import { SEPARATE_WINDOWS_ENABLED } from '../leadinglight/localPolicy'
 import { isTauri } from '../mock-tauri'
 import { shouldUseCustomWindowChrome } from './platform'
 import { rememberNoteWindowParams } from './windowMode'
@@ -40,7 +41,7 @@ export function buildRuntimeNoteWindowUrl(
  * In browser mode (non-Tauri), this is a no-op.
  */
 export async function openNoteInNewWindow(notePath: string, vaultPath: string, noteTitle: string): Promise<void> {
-  if (!isTauri()) return
+  if (!SEPARATE_WINDOWS_ENABLED || !isTauri()) return
 
   const { LogicalPosition } = await import('@tauri-apps/api/dpi')
   const { WebviewWindow } = await import('@tauri-apps/api/webviewWindow')

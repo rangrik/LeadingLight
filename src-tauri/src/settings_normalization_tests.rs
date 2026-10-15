@@ -95,8 +95,8 @@ fn test_save_and_load_preserves_values() {
     });
     assert_eq!(loaded.auto_pull_interval_minutes, Some(10));
     assert_eq!(loaded.git_enabled, Some(false));
-    assert_eq!(loaded.autogit_enabled, Some(true));
-    assert_eq!(loaded.autogit_use_ai_commit_messages, Some(true));
+    assert_eq!(loaded.autogit_enabled, Some(false));
+    assert_eq!(loaded.autogit_use_ai_commit_messages, Some(false));
     assert_eq!(loaded.autogit_idle_threshold_seconds, Some(90));
     assert_eq!(loaded.autogit_inactive_threshold_seconds, Some(30));
     assert_eq!(loaded.auto_advance_inbox_after_organize, Some(true));
@@ -111,7 +111,7 @@ fn test_save_and_load_preserves_values() {
     assert_eq!(loaded.ai_features_enabled, Some(false));
     assert_eq!(loaded.default_ai_agent.as_deref(), Some("codex"));
     assert_eq!(loaded.hide_gitignored_files, Some(false));
-    assert_eq!(loaded.multi_workspace_enabled, Some(true));
+    assert_eq!(loaded.multi_workspace_enabled, Some(false));
     assert_eq!(loaded.all_notes_show_pdfs, Some(true));
     assert_eq!(loaded.all_notes_show_images, Some(false));
     assert_eq!(loaded.all_notes_show_unsupported, Some(true));
@@ -164,7 +164,8 @@ fn test_save_trims_whitespace() {
         default_ai_agent: Some("  codex  ".to_string()),
         ..Default::default()
     });
-    assert_eq!(loaded.anonymous_id.as_deref(), Some("test-uuid"));
+    // LeadingLight removes telemetry identifiers regardless of persisted whitespace.
+    assert_eq!(loaded.anonymous_id, None);
     assert_eq!(loaded.git_path.as_deref(), Some("/opt/homebrew/bin/git"));
     assert_eq!(loaded.git_provider.as_deref(), Some("native"));
     assert_eq!(loaded.git_wsl_distro.as_deref(), Some("Ubuntu"));

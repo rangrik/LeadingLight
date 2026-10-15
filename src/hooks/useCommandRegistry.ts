@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { isLocalCommandVisible } from '../leadinglight/localCommands'
 import type { AiAgentId, AiAgentsStatus } from '../lib/aiAgents'
 import type { AppLocale, UiLanguagePreference } from '../lib/i18n'
 import type { ThemeMode } from '../lib/themeMode'
@@ -326,5 +327,5 @@ export function useCommandRegistry(config: CommandRegistryConfig): import('./com
     settingsCommands, aiCommands, typeCommands, filterCommands,
   ])
 
-  return useMemo(() => localizeCommandActions(commands, locale), [commands, locale])
+  return useMemo(() => localizeCommandActions(commands.filter(isLocalCommandVisible), locale), [commands, locale])
 }

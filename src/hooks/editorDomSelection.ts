@@ -7,8 +7,8 @@ function getElementForNode(node: Node | null): Element | null {
   return node?.parentElement ?? null
 }
 
-function getEditorContainers(): HTMLElement[] {
-  return Array.from(document.querySelectorAll<HTMLElement>(EDITOR_CONTAINER_SELECTOR))
+function getEditorContainers(scope: ParentNode): HTMLElement[] {
+  return Array.from(scope.querySelectorAll<HTMLElement>(EDITOR_CONTAINER_SELECTOR))
 }
 
 function isElementInsideEditor(element: Element | null, containers: HTMLElement[]): boolean {
@@ -40,18 +40,18 @@ function clearSelectionIfInsideEditor(
   selection.removeAllRanges()
 }
 
-function blurEditorEditableElements(): void {
-  for (const editable of document.querySelectorAll<HTMLElement>(EDITOR_EDITABLE_SELECTOR)) {
+function blurEditorEditableElements(scope: ParentNode): void {
+  for (const editable of scope.querySelectorAll<HTMLElement>(EDITOR_EDITABLE_SELECTOR)) {
     editable.blur()
   }
 }
 
-export function clearEditorDomSelection(): void {
+export function clearEditorDomSelection(scope: ParentNode = document): void {
   if (typeof document === 'undefined') return
-  const containers = getEditorContainers()
+  const containers = getEditorContainers(scope)
   if (containers.length === 0) return
 
   blurActiveEditorElement(containers)
   clearSelectionIfInsideEditor(window.getSelection(), containers)
-  blurEditorEditableElements()
+  blurEditorEditableElements(scope)
 }

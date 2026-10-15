@@ -5,6 +5,9 @@ import type { CommandAction } from './useCommandRegistry'
 import { NEW_AI_CHAT_EVENT, OPEN_AI_CHAT_EVENT } from '../utils/aiPromptBridge'
 import { formatShortcutDisplay } from './appCommandCatalog'
 
+// Retain upstream registry coverage; localCommands.test.ts verifies the fork's visible command boundary.
+vi.mock('../leadinglight/localPolicy', () => ({ REMOTE_FEATURES_ENABLED: true, SEPARATE_WINDOWS_ENABLED: true }))
+
 function makeConfig(overrides: Record<string, unknown> = {}) {
   return {
     activeTabPath: '/vault/test.md',

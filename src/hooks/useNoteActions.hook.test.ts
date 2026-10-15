@@ -263,6 +263,7 @@ describe('useNoteActions hook', () => {
       renders += 1
       return useNoteActions(makeConfig())
     })
+    await act(flushAsyncWork)
     const initialRenders = renders
 
     await act(async () => {

@@ -1,3 +1,4 @@
+import { SEPARATE_WINDOWS_ENABLED } from '../leadinglight/localPolicy'
 import { invoke } from '@tauri-apps/api/core'
 import type { VaultOption } from '../components/status-bar/types'
 import { trackEvent } from '../lib/telemetry'
@@ -16,6 +17,7 @@ function openVaultWindowCommand(request: OpenVaultWindowRequest): Promise<void> 
 }
 
 export async function openVaultInNewWindow(vault: VaultOption): Promise<void> {
+  if (!SEPARATE_WINDOWS_ENABLED) return
   try {
     await openVaultWindowCommand({
       vaultPath: vault.path,

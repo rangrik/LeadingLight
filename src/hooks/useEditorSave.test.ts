@@ -616,3 +616,92 @@ describe('useEditorSave', () => {
     })
   })
 })
+
+describe('split pane save lanes', () => {
+  beforeEach(() => { mockInvokeFn.mockReset(); mockInvokeFn.mockResolvedValue(null) })
+  it('persists both documents edited inside one debounce window', async () => {
+    vi.useFakeTimers()
+    try {
+      const persisted = vi.fn()
+      const { result } = renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn(), onNotePersisted: persisted }))
+      act(() => {
+        result.current.handleContentChange('/test/left.md', 'left latest')
+        result.current.handleContentChange('/test/right.md', 'right latest')
+      })
+      await act(() => vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS))
+      expect(mockInvokeFn).toHaveBeenCalledWith('save_note_content', { path: '/test/left.md', content: 'left latest' })
+      expect(mockInvokeFn).toHaveBeenCalledWith('save_note_content', { path: '/test/right.md', content: 'right latest' })
+      expect(persisted).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+  it('flushing one document does not cancel the other document autosave', async () => {
+    vi.useFakeTimers()
+    try {
+      const { result } = renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn() }))
+      act(() => {
+        result.current.handleContentChange('/test/left.md', 'left')
+        result.current.handleContentChange('/test/right.md', 'right')
+      })
+      await act(() => result.current.savePendingForPath('/test/left.md'))
+      await act(() => vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS))
+      expect(mockInvokeFn).toHaveBeenCalledTimes(2)
+    } finally { vi.useRealTimers() }
+  })
+  it('serializes slow writes to the same document and drains newer text on manual flush', async () => {
+    let release!: () => void
+    mockInvokeFn.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(null) }))
+    const { result } = renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn() }))
+    let first!: Promise<boolean>
+    let second!: Promise<boolean>
+    act(() => { result.current.handleContentChange('/test/left.md', 'old'); first = result.current.savePendingForPath('/test/left.md') })
+    act(() => { result.current.handleContentChange('/test/left.md', 'new'); second = result.current.savePendingForPath('/test/left.md') })
+    expect(mockInvokeFn).toHaveBeenCalledTimes(1)
+    await act(async () => { release(); await Promise.all([first, second]) })
+    expect(mockInvokeFn).toHaveBeenLastCalledWith('save_note_content', { path: '/test/left.md', content: 'new' })
+  })
+})
+
+it('drains an edit arriving during an explicit save without requiring a second flush call', async () => {
+  mockInvokeFn.mockReset()
+  let release!: () => void
+  mockInvokeFn.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(null) })).mockResolvedValue(null)
+  const { result } = renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn() }))
+  let save!: Promise<boolean>
+  act(() => { result.current.handleContentChange('/test/left.md', 'first'); save = result.current.savePendingForPath('/test/left.md') })
+  act(() => { result.current.handleContentChange('/test/left.md', 'latest during write') })
+  await act(async () => { release(); await save })
+  expect(mockInvokeFn).toHaveBeenLastCalledWith('save_note_content', { path: '/test/left.md', content: 'latest during write' })
+})
+
+it('retains queued edits when an equivalent writable-vault array is recreated', async () => {
+  mockInvokeFn.mockReset(); mockInvokeFn.mockResolvedValue(null)
+  const { result, rerender } = renderHook(({ scope }) => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn(), persistenceScope: scope }), { initialProps: { scope: ['/test', '/other'] } })
+  act(() => result.current.handleContentChange('/test/note.md', 'pending survives'))
+  rerender({ scope: ['/other', '/test'] })
+  await act(() => result.current.savePendingForPath('/test/note.md'))
+  expect(mockInvokeFn).toHaveBeenCalledWith('save_note_content', { path: '/test/note.md', content: 'pending survives' })
+})
+
+it('keeps pending content when adding another writable workspace', async () => {
+  mockInvokeFn.mockReset(); mockInvokeFn.mockResolvedValue(null)
+  const { result, rerender } = renderHook(({ scope }) => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn(), persistenceScope: scope }), { initialProps: { scope: ['/test'] } })
+  act(() => result.current.handleContentChange('/test/note.md', 'pending survives'))
+  rerender({ scope: ['/test', '/other'] })
+  await act(() => result.current.savePendingForPath('/test/note.md'))
+  expect(mockInvokeFn).toHaveBeenCalledWith('save_note_content', { path: '/test/note.md', content: 'pending survives' })
+})
+
+it('reuses a renamed document write lane while the old path save is still in flight', async () => {
+  mockInvokeFn.mockReset()
+  let release!: () => void
+  mockInvokeFn.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(null) })).mockResolvedValue(null)
+  let renamed = false
+  const { result } = renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn(), resolvePath: path => renamed && path === '/test/old.md' ? '/test/new.md' : path }))
+  let first!: Promise<boolean>; let second!: Promise<boolean>
+  act(() => { result.current.handleContentChange('/test/old.md', 'old content'); first = result.current.savePendingForPath('/test/old.md') })
+  renamed = true
+  act(() => { result.current.handleContentChange('/test/new.md', 'new content'); second = result.current.savePendingForPath('/test/new.md') })
+  expect(mockInvokeFn).toHaveBeenCalledTimes(1)
+  await act(async () => { release(); await Promise.all([first, second]) })
+  expect(mockInvokeFn).toHaveBeenLastCalledWith('save_note_content', { path: '/test/new.md', content: 'new content' })
+})

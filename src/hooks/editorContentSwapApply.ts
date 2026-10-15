@@ -1,10 +1,10 @@
+import { editorScopeForPath } from '../leadinglight/editorScope'
 import type { MutableRefObject } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import type { Transaction } from '@tiptap/pm/state'
 import { trackEvent } from '../lib/telemetry'
 import { classifyRichEditorRecoveryError } from '../components/richEditorRecoveryClassifier'
 import { blankParagraphBlocks } from './editorTabContent'
-import { EDITOR_CONTAINER_SELECTOR } from './editorDomSelection'
 import { resetTextSelectionBeforeContentSwap } from './editorTiptapSelection'
 import { repairMalformedEditorBlocks } from './editorBlockRepair'
 import { logEditorBlockApplyTrace } from '../utils/editorPerformanceTrace'
@@ -355,7 +355,7 @@ function commitAppliedEditorContent(
       return
     }
     editorContentPathRef.current = targetPath
-    const scrollEl = typeof document === 'undefined' ? null : document.querySelector(EDITOR_CONTAINER_SELECTOR)
+    const scrollEl = typeof document === 'undefined' ? null : editorScopeForPath(targetPath).querySelector<HTMLElement>('.editor__blocknote-container')
     if (scrollEl) scrollEl.scrollTop = scrollTop
     onCommitted?.()
     suppressChangeRef.current = false

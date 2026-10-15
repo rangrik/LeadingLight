@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/react'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 import { resolveFrontendTelemetryConfig } from './telemetryConfig'
 import { redactPathText } from './sensitiveTextRedaction'
 import {
@@ -265,6 +266,7 @@ let sentryInitialized = false
 let posthogInstance: typeof import('posthog-js').default | null = null
 
 export function initSentry(anonymousId: AnonymousTelemetryId): void {
+  if (!REMOTE_FEATURES_ENABLED) return
   if (sentryInitialized) return
 
   const { sentryDsn, sentryBuildVersion, sentryRelease } = resolveFrontendTelemetryConfig()
@@ -295,6 +297,7 @@ export function teardownSentry(): void {
 }
 
 export async function initPostHog(anonymousId: AnonymousTelemetryId, releaseChannel?: ReleaseChannel): Promise<void> {
+  if (!REMOTE_FEATURES_ENABLED) return
   if (posthogInstance) return
 
   const { posthogKey, posthogHost } = resolveFrontendTelemetryConfig()
@@ -320,7 +323,7 @@ export function teardownPostHog(): void {
 }
 
 export function updatePostHogIdentify(releaseChannel: ReleaseChannel): void {
-  posthogInstance?.identify(undefined, { release_channel: releaseChannel })
+  posthogInstance?.identify(posthogInstance.get_distinct_id(), { release_channel: releaseChannel })
 }
 
 /** Hardcoded defaults for first launch with no network (PostHog cache empty). */

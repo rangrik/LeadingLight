@@ -1,3 +1,4 @@
+import { editorScopeForEditor } from '../leadinglight/editorScope'
 import { trySelectFirstHeading } from './editorTitleSelection'
 import type { TitleHeadingTextBlock } from './editorTitleHeadingText'
 import { canEditorClaimFocus } from './editorFocusOwnership'
@@ -24,15 +25,18 @@ export interface TiptapEditor {
 }
 
 export interface FocusableEditor {
+  prosemirrorView?: { dom?: HTMLElement }
   focus: () => void
   _tiptapEditor?: TiptapEditor
   document?: FocusableHeadingBlock[]
   setTextCursorPosition?: (targetBlock: string, placement?: 'start' | 'end') => void
 }
 
-function hasEditableFocus(): boolean {
+function hasEditableFocus(editor: FocusableEditor): boolean {
+  const scope = editorScopeForEditor(editor)
   const activeElement = document.activeElement
   return activeElement instanceof Element
+    && scope.contains(activeElement)
     && (Reflect.get(activeElement, 'isContentEditable') === true || activeElement.closest('[contenteditable="true"]') !== null)
 }
 
@@ -40,13 +44,13 @@ function canFocusWindow(): boolean {
   return !navigator.userAgent.toLowerCase().includes('jsdom')
 }
 
-function focusEditableCandidate(editable: HTMLElement): boolean {
+function focusEditableCandidate(editable: HTMLElement, editor: FocusableEditor): boolean {
   if (canFocusWindow()) {
     window.focus?.()
   }
   editable.focus()
 
-  if (hasEditableFocus()) return true
+  if (hasEditableFocus(editor)) return true
 
   const selection = window.getSelection()
   if (selection && editable.isContentEditable) {
@@ -58,27 +62,28 @@ function focusEditableCandidate(editable: HTMLElement): boolean {
     editable.focus()
   }
 
-  return hasEditableFocus()
+  return hasEditableFocus(editor)
 }
 
-function focusEditableNode(): boolean {
-  const rootEditable = document.querySelector<HTMLElement>(ROOT_EDITABLE_SELECTOR)
-  if (rootEditable && focusEditableCandidate(rootEditable)) {
+function focusEditableNode(editor: FocusableEditor): boolean {
+  const scope = editorScopeForEditor(editor)
+  const rootEditable = scope.querySelector<HTMLElement>(ROOT_EDITABLE_SELECTOR)
+  if (rootEditable && focusEditableCandidate(rootEditable, editor)) {
     return true
   }
 
-  const fallbackEditable = document.querySelector<HTMLElement>(FALLBACK_EDITABLE_SELECTOR)
-  if (fallbackEditable && focusEditableCandidate(fallbackEditable)) {
+  const fallbackEditable = scope.querySelector<HTMLElement>(FALLBACK_EDITABLE_SELECTOR)
+  if (fallbackEditable && focusEditableCandidate(fallbackEditable, editor)) {
     return true
   }
 
   return false
 }
 
-function ensureEditableFocus(): boolean {
-  if (hasEditableFocus()) return true
-  focusEditableNode()
-  return hasEditableFocus()
+function ensureEditableFocus(editor: FocusableEditor): boolean {
+  if (hasEditableFocus(editor)) return true
+  focusEditableNode(editor)
+  return hasEditableFocus(editor)
 }
 
 function logFocusTiming(t0: number | undefined, label: 'focus' | 'focus+select'): void {
@@ -91,7 +96,7 @@ function selectTitleWithRetries(
   t0: number | undefined,
   attempt = 0,
 ): void {
-  const selectedHeading = ensureEditableFocus() && trySelectFirstHeading(editor)
+  const selectedHeading = ensureEditableFocus(editor) && trySelectFirstHeading(editor)
 
   if (selectedHeading || attempt >= MAX_TITLE_SELECTION_ATTEMPTS) {
     logFocusTiming(t0, 'focus+select')
@@ -107,9 +112,11 @@ export function focusEditorWithRetries(
   t0: number | undefined,
   attempt = 0,
 ): void {
+  const scope = editorScopeForEditor(editor)
+  if (scope instanceof HTMLElement && scope.dataset.paneActive === 'false') return
   if (!canEditorClaimFocus()) return
   editor.focus()
-  const hasFocus = ensureEditableFocus()
+  const hasFocus = ensureEditableFocus(editor)
   if (!hasFocus && attempt < MAX_FOCUS_ATTEMPTS) {
     requestAnimationFrame(() => focusEditorWithRetries(editor, selectTitle, t0, attempt + 1))
     return

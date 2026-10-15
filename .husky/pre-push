@@ -1,4 +1,7 @@
 #!/bin/sh
+# LeadingLight uses local checks; original Tolaria gate retained below for upstream merges.
+exec node scripts/leadinglight-quality-gate.mjs push
+
 # Pre-push: full CI checks run locally before any push.
 # This replaces remote CI for normal task pushes.
 # DO NOT skip with --no-verify (Claude Code is configured to never do this).

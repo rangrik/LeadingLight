@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import type { Settings, VaultEntry } from './types'
@@ -47,6 +47,17 @@ vi.mock('@tauri-apps/api/window', () => ({
     setSize: vi.fn(async () => {}),
   }),
 }))
+
+// Real local-only policy by default; dormant upstream flows opt in to keep their coverage.
+const remotePolicy = vi.hoisted(() => ({ enabled: false }))
+vi.mock('./leadinglight/localPolicy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./leadinglight/localPolicy')>()
+  return {
+    ...actual,
+    get REMOTE_FEATURES_ENABLED() { return remotePolicy.enabled },
+    applyLocalOnlySettings: (settings: Settings) => (remotePolicy.enabled ? settings : actual.applyLocalOnlySettings(settings)),
+  }
+})
 
 vi.mock('./components/Editor', () => ({
   Editor: (props: { activeTabPath: string | null; entries: VaultEntry[] }) => {
@@ -202,7 +213,6 @@ vi.mock('./mock-tauri', () => ({
 }))
 
 import App from './App'
-import { APP_STORAGE_KEYS } from './constants/appStorage'
 
 function renderApp(children: ReactNode) {
   return render(<TooltipProvider>{children}</TooltipProvider>)
@@ -211,6 +221,7 @@ function renderApp(children: ReactNode) {
 describe('App note windows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    remotePolicy.enabled = false
     editorSnapshots.length = 0
     resetCommandResults()
     localStorage.clear()
@@ -231,9 +242,10 @@ describe('App note windows', () => {
         vaultPath: '/vault',
       })
     })
-    expect(commandResults.list_vault).toHaveBeenCalled()
 
+    // The entry lookup starts on mount; the vault scan follows once the vault list resolves.
     await waitFor(() => {
+      expect(commandResults.list_vault).toHaveBeenCalled()
       expect(screen.getByTestId('mock-editor-entry-titles')).toHaveTextContent(
         'Test Project|Software Development|Second Project',
       )
@@ -244,25 +256,34 @@ describe('App note windows', () => {
     })
   })
 
-  it('does not replace the main window last-note state', async () => {
-    localStorage.setItem(APP_STORAGE_KEYS.lastActiveNotePath, secondEntry.path)
+  it('neither restores nor replaces the main window workspace', async () => {
+    const mainWorkspace = JSON.stringify({
+      paths: [secondEntry.path, relatedEntry.path], active: 1, split: true, orientation: 'vertical', ratio: 40,
+    })
+    localStorage.setItem('leadinglight.workspace:/vault', mainWorkspace)
 
     renderApp(<App />)
 
     await waitFor(() => {
-      expect(editorSnapshots.at(-1)?.activeTabPath).toBe(activeEntry.path)
+      expect(commandResults.list_vault).toHaveBeenCalled()
+      expect(editorSnapshots.at(-1)?.entryTitles).toHaveLength(entries.length)
     })
-    expect(localStorage.getItem(APP_STORAGE_KEYS.lastActiveNotePath)).toBe(secondEntry.path)
+    // Leave room for a restore that must not happen.
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)) })
+    expect(new Set(editorSnapshots.map((snapshot) => snapshot.activeTabPath))).toEqual(new Set([activeEntry.path]))
+    expect(localStorage.getItem('leadinglight.workspace:/vault')).toBe(mainWorkspace)
   })
 
   it('opens repeated note windows through the full app vault loader', async () => {
     const firstWindow = renderApp(<App />)
 
+    // Each window must start its own vault scan; unmounting earlier would race it.
     await waitFor(() => {
       expect(commandResults.reload_vault_entry).toHaveBeenCalledWith({
         path: activeEntry.path,
         vaultPath: '/vault',
       })
+      expect(commandResults.list_vault).toHaveBeenCalled()
     })
     firstWindow.unmount()
 
@@ -280,10 +301,13 @@ describe('App note windows', () => {
       })
     })
     expect(commandResults.reload_vault_entry).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(commandResults.list_vault).mock.calls.length).toBeGreaterThanOrEqual(2)
+    await waitFor(() => {
+      expect(vi.mocked(commandResults.list_vault).mock.calls.length).toBeGreaterThanOrEqual(2)
+    })
   })
 
   it('keeps automatic Git work out of secondary note windows', async () => {
+    remotePolicy.enabled = true
     const isGitRepo = vi.fn(() => true)
     const getModifiedFiles = vi.fn(() => [])
     const gitRemoteStatus = vi.fn(() => ({
@@ -310,6 +334,7 @@ describe('App note windows', () => {
   })
 
   it('probes installed AI agents in note windows for target-picker parity', async () => {
+    remotePolicy.enabled = true
     const getAiAgentsStatus = vi.fn(() => ({
       claude_code: { installed: true, version: '2.1.90' },
       codex: { installed: true, version: '0.122.0-alpha.1' },

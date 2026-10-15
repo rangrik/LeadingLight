@@ -89,6 +89,9 @@ pub(crate) fn sync_ws_bridge_for_vault(
     vault_path: Option<&Path>,
     active_vault_paths: &[PathBuf],
 ) -> Result<&'static str, String> {
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return Ok("disabled");
+    }
     use tauri::Manager;
 
     let state: tauri::State<'_, WsBridgeChild> = app_handle.state();
@@ -158,7 +161,11 @@ where
 }
 
 pub(crate) fn spawn_startup_tasks() {
-    let Some(vault_path) = dirs::home_dir().map(|home| home.join("Laputa")) else {
+    // Never discover or migrate an upstream vault on LeadingLight startup.
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return;
+    }
+    let Ok(vault_path) = crate::vault::default_vault_path() else {
         return;
     };
     spawn_startup_tasks_for_vault_with(vault_path, |path| run_startup_tasks_for_vault(&path));
@@ -184,6 +191,9 @@ fn sync_ws_bridge_for_selected_vault(app_handle: &tauri::AppHandle) {
 }
 
 pub(crate) fn spawn_initial_ws_bridge_sync(app: &tauri::App) {
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return;
+    }
     let app_handle = app.handle().clone();
     spawn_background_task("tolaria-ws-bridge-startup", move || {
         #[cfg(target_os = "linux")]

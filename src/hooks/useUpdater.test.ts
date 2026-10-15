@@ -6,6 +6,9 @@ import {
   isRestartRequiredAfterUpdate,
 } from '../lib/appUpdater'
 
+// Exercise the retained upstream implementation; localPolicy.test.ts covers the production prohibition.
+vi.mock('../leadinglight/localPolicy', () => ({ REMOTE_FEATURES_ENABLED: true }))
+
 vi.mock('../mock-tauri', () => ({
   isTauri: vi.fn(() => false),
 }))

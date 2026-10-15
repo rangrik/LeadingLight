@@ -1,5 +1,8 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
+// Exercise the retained upstream implementation; localPolicy.test.ts covers the production prohibition.
+vi.mock('../leadinglight/localPolicy', () => ({ REMOTE_FEATURES_ENABLED: true }))
+
 const sentryMocks = vi.hoisted(() => ({
   close: vi.fn(),
   init: vi.fn(),

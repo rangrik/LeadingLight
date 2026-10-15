@@ -2,6 +2,19 @@ use super::super::*;
 use super::support::*;
 
 #[test]
+fn cache_default_stays_in_leadinglight_config_namespace() {
+    let config = PathBuf::from("/synthetic/config/dev.rangrik.leadinglight/settings.json");
+    assert_eq!(
+        cache_dir_from_config(Ok(config)),
+        PathBuf::from("/synthetic/config/dev.rangrik.leadinglight/cache")
+    );
+    assert_eq!(
+        cache_dir_from_config(Err("no config root".into())),
+        std::env::temp_dir().join("leadinglight/cache")
+    );
+}
+
+#[test]
 fn test_cache_path_is_outside_vault() {
     let _lock = ENV_LOCK.lock().unwrap();
     let cache_dir = TempDir::new().unwrap();

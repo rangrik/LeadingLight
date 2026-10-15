@@ -1,3 +1,4 @@
+import { SEPARATE_WINDOWS_ENABLED } from '../../leadinglight/localPolicy'
 import type { VaultEntry, SidebarSelection, SidebarFilter, ModifiedFile, NoteStatus, ViewFile } from '../../types'
 import type { RelationshipGroup } from '../../utils/noteListHelpers'
 import { translate, type AppLocale } from '../../lib/i18n'
@@ -92,7 +93,13 @@ function isNeighborhoodClick(
 
 export function routeNoteClick(entry: VaultEntry, e: React.MouseEvent, actions: ClickActions) {
   if (isOpenInNewWindowClick(e)) {
-    actions.onOpenInNewWindow?.(entry)
+    if (SEPARATE_WINDOWS_ENABLED) {
+      actions.onOpenInNewWindow?.(entry)
+    } else {
+      actions.multiSelect.clear()
+      actions.multiSelect.setAnchor(entry.path)
+      actions.onReplace(entry)
+    }
     return
   }
 

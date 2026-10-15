@@ -411,7 +411,7 @@ function useEditorSetup(options: EditorSetupParams) {
           }
         }
       }, [flushPendingEditorChange])
-      useEditorFocus(editor, editorMountedRef)
+      useEditorFocus(editor, editorMountedRef, activeTabPath)
 
       const { diffMode, diffContent, diffLoading, handleToggleDiff, handleViewCommitDiff } = useDiffMode({
         activeTabPath,

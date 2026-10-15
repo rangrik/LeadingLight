@@ -1,3 +1,4 @@
+import { MULTI_WORKSPACE_ENABLED, REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 import { Article, ArrowsClockwise as RefreshCw, Cube, GitBranch, ListChecks, Palette, Robot as Bot, ShieldCheck, type IconProps } from '@phosphor-icons/react'
 import type { ComponentType } from 'react'
 import type { TranslationKey } from '../lib/i18n'
@@ -29,7 +30,7 @@ export function SettingsBodyNav({ t }: SettingsBodyNavProps) {
   return (
     <div className="hidden w-64 shrink-0 border-r border-border px-3 py-4 md:block">
       <div className="sticky top-0 space-y-1.5">
-        {items.map((item) => (
+        {items.filter((item) => (MULTI_WORKSPACE_ENABLED || item.id !== SETTINGS_SECTION_IDS.workspaces) && (REMOTE_FEATURES_ENABLED || ![SETTINGS_SECTION_IDS.sync, SETTINGS_SECTION_IDS.autogit, SETTINGS_SECTION_IDS.ai].some((id) => id === item.id))).map((item) => (
           <Button
             key={item.id}
             type="button"

@@ -7,6 +7,7 @@ import {
   TOGGLE_GITIGNORED_VISIBILITY_EVENT,
 } from '../lib/gitignoredVisibilityEvents'
 import { useSettings } from './useSettings'
+import { applyLocalOnlySettings } from '../leadinglight/localPolicy'
 
 const { trackEventMock } = vi.hoisted(() => ({
   trackEventMock: vi.fn(),
@@ -164,7 +165,7 @@ describe('useSettings', () => {
     mockInvokeFn.mockImplementationOnce(() => new Promise(() => {}))
 
     const { result, unmount } = renderHook(() => useSettings())
-    expect(result.current.settings).toEqual(defaultSettings)
+    expect(result.current.settings).toEqual(applyLocalOnlySettings(defaultSettings))
     expect(result.current.loaded).toBe(false)
     unmount()
   })
@@ -261,8 +262,8 @@ describe('useSettings', () => {
     })
 
     expect(onComplete).toHaveBeenCalledWith(true)
-    expect(mockInvokeFn).toHaveBeenCalledWith('save_settings', { settings: newSettings })
-    expect(result.current.settings).toEqual(newSettings)
+    expect(mockInvokeFn).toHaveBeenCalledWith('save_settings', { settings: applyLocalOnlySettings(newSettings) })
+    expect(result.current.settings).toEqual(applyLocalOnlySettings(newSettings))
   })
 
   it('tracks theme mode changes after settings save succeeds', async () => {
@@ -344,9 +345,9 @@ describe('useSettings', () => {
       await result.current.saveSettings(newSettings)
     })
 
-    expect(nativeInvoke).toHaveBeenCalledWith('save_settings', { settings: newSettings })
+    expect(nativeInvoke).toHaveBeenCalledWith('save_settings', { settings: applyLocalOnlySettings(newSettings) })
     expect(mockInvokeFn).not.toHaveBeenCalled()
-    expect(result.current.settings).toEqual(newSettings)
+    expect(result.current.settings).toEqual(applyLocalOnlySettings(newSettings))
   })
 
   it('handles load error gracefully', async () => {
@@ -360,7 +361,7 @@ describe('useSettings', () => {
     })
 
     // Should fall back to empty settings
-    expect(result.current.settings).toEqual(defaultSettings)
+    expect(result.current.settings).toEqual(applyLocalOnlySettings(defaultSettings))
     warnSpy.mockRestore()
   })
 
@@ -381,7 +382,7 @@ describe('useSettings', () => {
 
     // Settings should not have changed on error
     expect(onComplete).toHaveBeenCalledWith(false)
-    expect(result.current.settings).toEqual(defaultSettings)
+    expect(result.current.settings).toEqual(applyLocalOnlySettings(defaultSettings))
     errorSpy.mockRestore()
   })
 })

@@ -15,6 +15,7 @@ import { normalizeDateDisplayFormat } from '../utils/dateDisplay'
 import { DEFAULT_THEME_MODE, normalizeThemeMode, type ThemeMode } from '../lib/themeMode'
 import type { Settings } from '../types'
 import { normalizeNoteWidthMode } from '../utils/noteWidth'
+import { applyLocalOnlySettings } from '../leadinglight/localPolicy'
 
 type UnknownRecord = Record<string, unknown>
 type AiWorkspaceConversationSetting = NonNullable<Settings['ai_workspace_conversations']>[number]
@@ -84,7 +85,7 @@ function nonEmptyArrayOrNull<T>(items: T[]): T[] | null {
 function normalizeSettings(settings: Settings): Settings {
   const aiModelProviders = normalizeAiModelProviders(settings.ai_model_providers)
 
-  return {
+  return applyLocalOnlySettings({
     ...settings,
     git_enabled: nullableBoolean(settings.git_enabled),
     git_path: nullableTrimmedString(settings.git_path),
@@ -110,7 +111,7 @@ function normalizeSettings(settings: Settings): Settings {
     all_notes_show_images: nullableBoolean(settings.all_notes_show_images),
     all_notes_show_unsupported: nullableBoolean(settings.all_notes_show_unsupported),
     multi_workspace_enabled: nullableBoolean(settings.multi_workspace_enabled),
-  }
+  })
 }
 
 function normalizeGitProvider(value: unknown): Settings['git_provider'] {
@@ -158,7 +159,7 @@ function effectiveThemeMode(settings: Settings): ThemeMode {
 }
 
 export function useSettings() {
-  const [settings, setSettings] = useState<Settings>(EMPTY_SETTINGS)
+  const [settings, setSettings] = useState<Settings>(() => applyLocalOnlySettings(EMPTY_SETTINGS))
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {

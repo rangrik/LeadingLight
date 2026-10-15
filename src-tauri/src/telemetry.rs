@@ -84,6 +84,9 @@ fn sentry_release_kind(version: &str) -> &'static str {
 /// Initialize Sentry if the user has opted in to crash reporting.
 /// Returns `true` if Sentry was initialized, `false` if skipped.
 pub fn init_sentry_from_settings() -> bool {
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return false;
+    }
     let settings = match settings::get_settings() {
         Ok(s) => s,
         Err(_) => return false,

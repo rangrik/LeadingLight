@@ -279,14 +279,14 @@ function buildBlockNoteRestoreState(
   }
 }
 
-export function readBlockNoteScrollTop(documentObject: Document): number {
+export function readBlockNoteScrollTop(documentObject: ParentNode): number {
   const scrollElement = documentObject.querySelector<HTMLElement>(BLOCKNOTE_SCROLL_SELECTOR)
   return scrollElement?.scrollTop ?? 0
 }
 
 export function captureRichEditorPositionSnapshot(
   editor: BlockNotePositionEditor,
-  documentObject: Document,
+  documentObject: ParentNode,
 ): RichEditorPositionSnapshot | null {
   if (editor.document.length === 0) return null
 
@@ -326,12 +326,12 @@ export function buildCodeMirrorRestoreState(
   }
 }
 
-export function getRawEditorView(documentObject: Document): CodeMirrorViewLike | null {
+export function getRawEditorView(documentObject: ParentNode): CodeMirrorViewLike | null {
   const host = documentObject.querySelector<RawEditorHost>(RAW_EDITOR_SELECTOR)
   return host?.__cmView ?? null
 }
 
-export function captureRawEditorPositionSnapshot(documentObject: Document): RawEditorPositionSnapshot | null {
+export function captureRawEditorPositionSnapshot(documentObject: ParentNode): RawEditorPositionSnapshot | null {
   const view = getRawEditorView(documentObject)
   if (!view) return null
 
@@ -346,7 +346,7 @@ export function captureRawEditorPositionSnapshot(documentObject: Document): RawE
   }
 }
 
-export function captureRawCodeMirrorRestoreState(documentObject: Document): CodeMirrorRestoreState | null {
+export function captureRawCodeMirrorRestoreState(documentObject: ParentNode): CodeMirrorRestoreState | null {
   const view = getRawEditorView(documentObject)
   if (!view) return null
 
@@ -358,7 +358,7 @@ export function captureRawCodeMirrorRestoreState(documentObject: Document): Code
 }
 
 export function restoreCodeMirrorView(
-  documentObject: Document,
+  documentObject: ParentNode,
   state: CodeMirrorRestoreState,
 ): boolean {
   const view = getRawEditorView(documentObject)
@@ -383,7 +383,7 @@ export function restoreCodeMirrorView(
 export function restoreBlockNoteView(
   editor: BlockNotePositionEditor,
   snapshot: RawEditorPositionSnapshot,
-  documentObject: Document,
+  documentObject: ParentNode,
 ): boolean {
   const state = buildBlockNoteRestoreState(editor, snapshot)
   if (!state) return false

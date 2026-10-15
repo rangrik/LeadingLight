@@ -12,6 +12,8 @@ const vitestCoverageDirectory =
 	path.join(os.tmpdir(), "tolaria-vitest-coverage", String(process.pid));
 
 const devServerWatchIgnored = [
+	"**/.claude/**",
+	"**/workspace_management/**",
 	"**/coverage/**",
 	"**/test-results/**",
 	"**/playwright-report/**",
@@ -42,6 +44,8 @@ function mcpBridgeInfoPlugin(): Plugin {
 export default defineConfig({
 	plugins: [react(), tailwindcss(), vaultApiPlugin(), mcpBridgeInfoPlugin()],
 	cacheDir: process.env.TOLARIA_VITE_CACHE_DIR,
+	// Desktop entry only; sibling web prototypes have separate dependency workspaces.
+	optimizeDeps: { entries: ["index.html"] },
 
 	resolve: {
 		alias: {
@@ -54,7 +58,7 @@ export default defineConfig({
 	// baking the CI runner's absolute path into the distributed bundle.
 	define: {
 		...(process.env.CI ||
-		(process.env.TAURI_PLATFORM && !process.env.TAURI_DEBUG)
+		process.env.TAURI_PLATFORM
 			? {}
 			: {
 					__DEMO_VAULT_PATH__: JSON.stringify(
@@ -96,7 +100,7 @@ export default defineConfig({
 		// The full jsdom suite is heavy enough that unconstrained worker fan-out can
 		// starve UI tests on local dev machines. Keep the default hook path stable,
 		// while still allowing CI or one-off runs to opt into a different cap.
-		maxWorkers: process.env.VITEST_MAX_WORKERS ?? 4,
+		maxWorkers: process.env.VITEST_MAX_WORKERS ?? 2,
 		testTimeout: Number(process.env.VITEST_TEST_TIMEOUT_MS ?? 10_000),
 		coverage: {
 			provider: "v8",

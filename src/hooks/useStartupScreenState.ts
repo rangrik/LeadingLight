@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 
 interface StartupOnboardingState {
   status: string
@@ -68,7 +69,7 @@ function needsTelemetryConsent(
   settingsLoaded: boolean,
   telemetryConsent: boolean | null,
 ): boolean {
-  return !isStartupLoading && settingsLoaded && telemetryConsent === null
+  return REMOTE_FEATURES_ENABLED && !isStartupLoading && settingsLoaded && telemetryConsent === null
 }
 
 function needsAiAgentsOnboarding(
@@ -76,7 +77,7 @@ function needsAiAgentsOnboarding(
   aiAgentsPromptVisible: boolean,
   showMcpSetupDialog: boolean,
 ): boolean {
-  return onboardingState.status === 'ready' && aiAgentsPromptVisible && !showMcpSetupDialog
+  return REMOTE_FEATURES_ENABLED && onboardingState.status === 'ready' && aiAgentsPromptVisible && !showMcpSetupDialog
 }
 
 function shouldShowStartupScreenForState(options: ShouldShowStartupScreenArgs): boolean {

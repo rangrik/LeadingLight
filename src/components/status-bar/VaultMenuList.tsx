@@ -1,3 +1,4 @@
+import { MULTI_WORKSPACE_ENABLED, SEPARATE_WINDOWS_ENABLED } from '../../leadinglight/localPolicy'
 import { Check, ArrowSquareOut, Warning as AlertTriangle, X } from '@phosphor-icons/react'
 import { useEffect, useMemo, useRef } from 'react'
 import type { ReactNode } from 'react'
@@ -149,7 +150,7 @@ const HOVER_ACTION_CLASS = 'h-7 w-7 shrink-0 rounded-sm text-muted-foreground op
 
 function VaultOpenWindowButton(props: { locale: AppLocale; vault: VaultOption }) {
   const { locale, vault } = props
-  if (vault.available === false) return null
+  if (!SEPARATE_WINDOWS_ENABLED || vault.available === false) return null
 
   const label = translate(locale, 'status.vault.openInNewWindow', { label: vault.label })
   return (
@@ -208,11 +209,12 @@ function VaultMenuItem(props: VaultMenuItemProps) {
     canRemove,
     disableMountToggle,
     locale,
-    multiWorkspaceEnabled,
+    multiWorkspaceEnabled: requestedMultiWorkspace,
     onSelect,
     onMountedChange,
     onRequestRemove,
   } = props
+  const multiWorkspaceEnabled = MULTI_WORKSPACE_ENABLED && requestedMultiWorkspace
   const unavailable = vault.available === false
   const itemRef = useRef<HTMLDivElement>(null)
 

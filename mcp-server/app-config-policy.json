@@ -1,8 +1,8 @@
 {
-  "current_namespace": "com.tolaria.app",
-  "development_namespace": "com.tolaria.app.dev",
-  "legacy_namespace": "com.laputa.app",
-  "namespace_read_order": ["current", "legacy"],
+  "current_namespace": "dev.rangrik.leadinglight",
+  "development_namespace": "dev.rangrik.leadinglight.dev",
+  "legacy_namespace": "dev.rangrik.leadinglight",
+  "namespace_read_order": ["current"],
   "files": {
     "settings": "settings.json",
     "vaults": "vaults.json",
@@ -13,9 +13,7 @@
   },
   "read_order": [
     "preferred config root/current namespace",
-    "preferred config root/legacy namespace",
-    "platform config root/current namespace when different",
-    "platform config root/legacy namespace when different"
+    "platform config root/current namespace when different"
   ],
   "write_target": "preferred config root/current namespace"
 }

@@ -103,3 +103,8 @@ CODE-HEALTH-REPORT.md
 # it puts generated notes in every diff and pull request.
 .verity/*
 !.verity/standard.yaml
+
+# LeadingLight private coordination, synthetic vaults and local build artifacts
+/workspace_management/
+/.leadinglight-build/
+/leadinglight-qa/

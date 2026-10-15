@@ -5,7 +5,7 @@ export interface EditorContentPathSignal {
   version: number
 }
 
-export function useEditorContentPathSignal(): EditorContentPathSignal {
+export function useEditorContentPathSignal(activePath?: string | null): EditorContentPathSignal {
   const [contentSignal, setContentSignal] = useState<EditorContentPathSignal>({ path: null, version: 0 })
 
   useEffect(() => {
@@ -13,14 +13,14 @@ export function useEditorContentPathSignal(): EditorContentPathSignal {
       const path = event instanceof CustomEvent && typeof event.detail?.path === 'string'
         ? event.detail.path
         : null
-      if (path) {
+      if (path && (activePath === undefined || path === activePath)) {
         setContentSignal((current) => ({ path, version: current.version + 1 }))
       }
     }
 
     window.addEventListener('laputa:editor-tab-swapped', handleTabSwapped)
     return () => { window.removeEventListener('laputa:editor-tab-swapped', handleTabSwapped); }
-  }, [])
+  }, [activePath])
 
   return contentSignal
 }

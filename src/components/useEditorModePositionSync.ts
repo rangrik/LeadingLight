@@ -1,3 +1,4 @@
+import { editorScopeForPath } from '../leadinglight/editorScope'
 import { useEffect } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import {
@@ -42,7 +43,7 @@ function useRawEditorRestoreEffect({
     const tryRestore = () => {
       const pendingState = restoreTransitionRef.current.rawRestore
       if (!pendingState) return
-      if (restoreCodeMirrorView(document, pendingState)) {
+      if (restoreCodeMirrorView(editorScopeForPath(activeTabPath), pendingState)) {
         restoreTransitionRef.current.rawRestore = null
         return
       }
@@ -101,7 +102,7 @@ function useBlockNoteRestoreEffect({
         restoreFrame = 0
         if (canceled) return
 
-        restoreBlockNoteView(editor, pendingSnapshot, document)
+        restoreBlockNoteView(editor, pendingSnapshot, editorScopeForPath(activeTabPath))
         restoreTransitionRef.current.roundTripRawRestore = null
         restoreTransitionRef.current.richRestore = null
       })

@@ -21,10 +21,19 @@ export function useDebouncedEditorChange({
   const flushPendingEditorChange = useCallback(() => {
     if (!pendingRef.current) return false
     clearTimer()
-    pendingRef.current = false
     onFlush()
+    pendingRef.current = false
     return true
   }, [clearTimer, onFlush])
+
+  const tryBackgroundFlush = useCallback(() => {
+    try {
+      flushPendingEditorChange()
+    } catch (error) {
+      // Keep the pending change so an explicit save/close can report and retry it.
+      console.warn('[editor] Could not flush pending editor change:', error)
+    }
+  }, [flushPendingEditorChange])
 
   const handleEditorChange = useCallback(() => {
     if (suppressChangeRef.current) return
@@ -33,16 +42,16 @@ export function useDebouncedEditorChange({
     clearTimer()
     timerRef.current = setTimeout(() => {
       timerRef.current = null
-      void flushPendingEditorChange()
+      tryBackgroundFlush()
     }, RICH_EDITOR_CHANGE_DEBOUNCE_MS)
-  }, [clearTimer, flushPendingEditorChange, suppressChangeRef])
+  }, [clearTimer, tryBackgroundFlush, suppressChangeRef])
 
   useEffect(() => {
     return () => {
-      void flushPendingEditorChange()
+      tryBackgroundFlush()
       clearTimer()
     }
-  }, [clearTimer, flushPendingEditorChange])
+  }, [clearTimer, tryBackgroundFlush])
 
   return { handleEditorChange, flushPendingEditorChange }
 }

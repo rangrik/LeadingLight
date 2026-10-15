@@ -5,15 +5,11 @@ use std::path::{Path, PathBuf};
 pub const GETTING_STARTED_REPO_URL: &str =
     "https://github.com/refactoringhq/tolaria-getting-started.git";
 
-/// Default location for the Getting Started vault.
+/// Default location for LeadingLight's fresh local vault.
 pub fn default_vault_path() -> Result<PathBuf, String> {
-    documents_dir()
-        .map(|d| d.join("Getting Started"))
-        .ok_or_else(|| "Could not determine Documents directory".to_string())
-}
-
-fn documents_dir() -> Option<PathBuf> {
-    dirs::document_dir().or_else(|| dirs::home_dir().map(|home| home.join("Documents")))
+    dirs::home_dir()
+        .map(|d| d.join("LeadingLight Vault"))
+        .ok_or_else(|| "Could not determine home directory".to_string())
 }
 
 const GETTING_STARTED_REQUIRED_CONFIG_FILES: [&str; 2] = ["type.md", "note.md"];
@@ -21,6 +17,9 @@ const GETTING_STARTED_TEMPLATE_MARKERS: [&str; 2] = ["welcome.md", "views/active
 
 /// Check whether a vault path exists on disk.
 pub fn vault_exists(path: &str) -> bool {
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return Path::new(path).is_dir();
+    }
     let default_path = default_vault_path().ok();
     vault_exists_with_default_path(Path::new(path), default_path.as_deref())
 }
@@ -517,6 +516,9 @@ Do not modify app configuration files — those are local to each installation.
 
 /// Clone the public starter vault into the requested path.
 pub fn create_getting_started_vault(target_path: &str) -> Result<String, String> {
+    if !crate::leadinglight::REMOTE_FEATURES_ENABLED {
+        return Err(crate::leadinglight::DISABLED_FEATURE_MESSAGE.to_string());
+    }
     let vault_path = create_getting_started_vault_from_repo(
         Path::new(target_path),
         &getting_started_repo_url(),
@@ -679,10 +681,11 @@ mod tests {
     }
 
     #[test]
-    fn test_default_vault_path_appends_getting_started() {
+    fn test_default_vault_path_appends_leadinglight_vault() {
         let path = default_vault_path().unwrap();
         let path_str = path.to_string_lossy();
-        assert!(path_str.ends_with("Getting Started"));
+        assert!(path_str.ends_with("LeadingLight Vault"));
+        assert_eq!(path.parent(), dirs::home_dir().as_deref());
     }
 
     #[test]

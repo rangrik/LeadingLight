@@ -17,8 +17,8 @@ export function headingBlockText(block: TitleHeadingTextBlock | undefined): stri
     .trim()
 }
 
-export function hasTitleHeadingText(block: TitleHeadingTextBlock | undefined): boolean {
-  const domText = document.querySelector<HTMLElement>(TITLE_HEADING_SELECTOR)?.textContent?.trim() ?? ''
+export function hasTitleHeadingText(block: TitleHeadingTextBlock | undefined, scope: ParentNode = document): boolean {
+  const domText = scope.querySelector<HTMLElement>(TITLE_HEADING_SELECTOR)?.textContent?.trim() ?? ''
 
   return domText.length > 0 || headingBlockText(block).length > 0
 }

@@ -866,13 +866,12 @@ describe('useEditorTabSwap raw mode sync', () => {
     expect(appliedText).toContain('Changed before switch')
   })
 
-  it('rejects unserializable mixed paragraph and list content without crashing', async () => {
+  it('rejects unserializable mixed content at the explicit save boundary and permits retry', async () => {
     const tabA = makeTab('mixed.md', 'Mixed Note')
     const onContentChange = vi.fn()
     const serializationError = new RangeError(
       'Invalid content for node blockContainer: <paragraph("User"), blockGroup(blockContainer(bulletListItem("Task")))>',
     )
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { docRef, mockEditor, result } = await createSwapHarness({
       initialProps: { tabs: [tabA], activeTabPath: 'mixed.md', rawMode: false },
       onContentChange,
@@ -899,12 +898,11 @@ describe('useEditorTabSwap raw mode sync', () => {
       act(() => {
         result.current.flushPendingEditorChange()
       })
-    }).not.toThrow()
+    }).toThrow(serializationError)
     expect(onContentChange).not.toHaveBeenCalled()
-    expect(consoleSpy).toHaveBeenCalledWith(
-      '[editor] Skipped editor change because BlockNote document could not be serialized:',
-      serializationError,
-    )
+    mockEditor.blocksToMarkdownLossy.mockReturnValue('User\n\n- Task\n')
+    act(() => { result.current.flushPendingEditorChange() })
+    expect(onContentChange).toHaveBeenCalledWith('mixed.md', expect.stringContaining('- Task'))
   })
 
   it('re-parses from tab.content when rawMode transitions from true to false', async () => {

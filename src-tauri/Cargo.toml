@@ -1,10 +1,10 @@
 [package]
-name = "tolaria"
+name = "leadinglight"
 version = "0.1.0"
-description = "Personal knowledge and life management app"
-authors = ["Luca Rossi"]
+description = "A quiet, local Markdown writing workspace"
+authors = ["LeadingLight contributors", "Luca Rossi (Tolaria)"]
 license = "AGPL-3.0-or-later"
-repository = ""
+repository = "https://github.com/rangrik/LeadingLight"
 edition = "2021"
 rust-version = "1.77.2"
 
@@ -13,7 +13,7 @@ name = "tolaria_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.5.4", features = [] }
+tauri-build = { version = "2.7.3", features = [] }
 
 [dependencies]
 serde_json = "1.0"
@@ -21,8 +21,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 log = "0.4"
 notify = "6.1"
-tauri = { version = "2.11.5", features = ["macos-private-api", "protocol-asset", "image-png"] }
-tauri-plugin-log = "2"
+tauri = { version = "2.12.4", features = ["macos-private-api", "protocol-asset", "image-png"] }
+tauri-plugin-log = "2.10.1"
 gray_matter = "0.2"
 walkdir = "2"
 chrono = { version = "0.4", features = ["serde"] }
@@ -33,17 +33,17 @@ regex = "1"
 ironcalc_base = "0.7.1"
 csv = "1.4"
 dirs = "5"
-tauri-plugin-dialog = "2"
+tauri-plugin-dialog = "2.8.3"
 tauri-plugin-updater = "2.10.0"
-tauri-plugin-process = "2.3.1"
-tauri-plugin-opener = "2"
+tauri-plugin-process = "2.4.0"
+tauri-plugin-opener = "2.7.2"
 tauri-plugin-prevent-default = "4.0.4"
 sentry = "0.37"
 uuid = { version = "1", features = ["v4"] }
 tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-tauri-plugin-deep-link = "2.4.9"
-tauri-plugin-single-instance = { version = "2.4.2", features = ["deep-link"] }
+tauri-plugin-deep-link = "2.6.2"
+tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6.2"
@@ -53,3 +53,12 @@ objc2-foundation = "0.3.2"
 png = "0.17.16"
 
 [dev-dependencies]
+
+# One compact development cache for the personal desktop build.
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

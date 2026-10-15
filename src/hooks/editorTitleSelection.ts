@@ -1,3 +1,4 @@
+import { editorScopeForEditor } from '../leadinglight/editorScope'
 import { hasTitleHeadingText, headingBlockText } from './editorTitleHeadingText'
 import type { FocusableEditor, TiptapEditor } from './editorFocusUtils'
 import {
@@ -81,7 +82,7 @@ function tryApplyHeadingRange(tiptap: TiptapEditor, range: HeadingRange): boolea
 }
 
 export function trySelectFirstHeading(editor: FocusableEditor): boolean {
-  if (hasTitleHeadingText(getFirstHeadingBlock(editor))) return true
+  if (hasTitleHeadingText(getFirstHeadingBlock(editor), editorScopeForEditor(editor))) return true
   if (trySelectEmptyFirstHeading(editor)) return true
   const tiptap = editor._tiptapEditor
   const state = tiptap ? Reflect.get(tiptap, 'state') as TiptapEditor['state'] | undefined : undefined

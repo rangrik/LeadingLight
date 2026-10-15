@@ -1,4 +1,4 @@
-import { lazy, StrictMode, Suspense } from 'react'
+import { StrictMode, Suspense } from 'react'
 import * as Sentry from '@sentry/react'
 import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/inter/wght.css'
@@ -11,6 +11,7 @@ import './index.css'
 import { FrontendReadyMarker } from './components/FrontendReadyMarker'
 import { LinuxTitlebar } from './components/LinuxTitlebar'
 import { StartupShellFallback } from './components/StartupShellFallback'
+import { LazyApp } from './components/LazyApp'
 import { applyStoredThemeMode } from './lib/themeMode'
 import {
   APP_COMMAND_EVENT_NAME,
@@ -61,13 +62,6 @@ async function installMacosFullscreenChromeTracking(): Promise<void> {
     document.body.classList.remove(MACOS_FULLSCREEN_CHROME_CLASS)
   }
 }
-
-const RootApp = lazy(async () => {
-  markStartupPhase('app_module_requested')
-  const appModule = await import('./App.tsx')
-  markStartupPhase('app_module_loaded')
-  return appModule
-})
 
 function dataTransferHasFiles(dataTransfer: DataTransfer | null): boolean {
   if (!dataTransfer) return false
@@ -209,7 +203,7 @@ function showFatalRenderError(
 ): void {
   const overlay = fatalRenderOverlay()
   overlay.textContent = [
-    'Tolaria render error',
+    'LeadingLight render error',
     '',
     errorText(error),
     '',
@@ -271,7 +265,7 @@ createRoot(getRequiredRootElement(), {
     <TooltipProvider>
       <LinuxTitlebar />
       <Suspense fallback={<StartupShellFallback />}>
-        <RootApp />
+        <LazyApp />
         <FrontendReadyMarker />
       </Suspense>
     </TooltipProvider>

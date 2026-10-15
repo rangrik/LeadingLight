@@ -330,7 +330,7 @@ describe('useAppSave', () => {
     const { path, result } = renderMissingVaultDraft()
 
     await act(async () => {
-      await result.current.flushBeforeAction(path)
+      await expect(result.current.flushBeforeAction(path)).rejects.toThrow('Select or restore a vault before saving.')
     })
 
     expect(deps.setToastMessage).toHaveBeenCalledWith('Select or restore a vault before saving.')

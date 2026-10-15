@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react'
+import { registerEditorCompositionBoundary } from '../hooks/editorCompositionBoundary'
 
 const IME_COMMIT_RECONCILIATION_FALLBACK_MS = 50
 
@@ -62,8 +63,9 @@ function publishEditorChange(state: CompositionChangeState) {
 export function useCompositionAwareEditorChange(options: {
   containerRef: RefObject<HTMLDivElement | null>
   onChange?: () => void
+  editor?: object
 }) {
-  const { containerRef, onChange } = options
+  const { containerRef, onChange, editor } = options
   const onChangeRef = useRef(onChange)
   const composingRef = useRef(false)
   const pendingChangeRef = useRef(false)
@@ -81,6 +83,17 @@ export function useCompositionAwareEditorChange(options: {
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
+
+  useLayoutEffect(() => {
+    if (!editor) return
+    return registerEditorCompositionBoundary(editor, () => {
+      // Do not force serialization ahead of ProseMirror's composition reconciliation.
+      // Explicit save/close can retry once the existing onChange or fallback runs.
+      if (state.composing.current || state.pendingChange.current) {
+        throw new Error('Editor composition has not finished reconciling')
+      }
+    })
+  }, [editor, state])
 
   useEffect(() => {
     const container = containerRef.current

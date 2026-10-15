@@ -703,3 +703,26 @@ describe('useVaultSwitcher', () => {
     })
   })
 })
+
+describe('vault switch save boundary', () => {
+  it('keeps the old vault selected until the save boundary completes', async () => {
+    mockVaultListStore = { vaults: [], active_vault: null, hidden_defaults: [] }
+    let release!: () => void
+    const flush = vi.fn(() => new Promise<void>(resolve => { release = resolve }))
+    const { result } = renderHook(() => useVaultSwitcher({ onSwitch: flush, onToast: vi.fn() }))
+    await waitFor(() => expect(result.current.loaded).toBe(true))
+    const original = result.current.vaultPath
+    act(() => result.current.switchVault('/next/vault'))
+    expect(result.current.vaultPath).toBe(original)
+    await act(async () => { release() })
+    expect(result.current.vaultPath).toBe('/next/vault')
+  })
+  it('does not change the vault when saving rejects', async () => {
+    mockVaultListStore = { vaults: [], active_vault: null, hidden_defaults: [] }
+    const { result } = renderHook(() => useVaultSwitcher({ onSwitch: async () => { throw new Error('Disk full') }, onToast: vi.fn() }))
+    await waitFor(() => expect(result.current.loaded).toBe(true))
+    const original = result.current.vaultPath
+    await act(async () => { result.current.switchVault('/next/vault') })
+    expect(result.current.vaultPath).toBe(original)
+  })
+})

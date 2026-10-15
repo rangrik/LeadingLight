@@ -1,7 +1,8 @@
 import { AiAgentsOnboardingPrompt } from './AiAgentsOnboardingPrompt'
 import { TelemetryConsentDialog } from './TelemetryConsentDialog'
 import { Toast } from './Toast'
-import { WelcomeScreen } from './WelcomeScreen'
+import { LocalWelcome } from '../leadinglight/LocalWelcome'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 import type { useAiAgentsOnboarding } from '../hooks/useAiAgentsOnboarding'
 import type { useAiAgentsStatus } from '../hooks/useAiAgentsStatus'
 import type { useOnboarding } from '../hooks/useOnboarding'
@@ -37,7 +38,8 @@ export interface StartupScreenParams {
 }
 
 function shouldShowTelemetryConsent(params: StartupScreenParams): boolean {
-  return !params.noteWindowParams
+  return REMOTE_FEATURES_ENABLED
+    && !params.noteWindowParams
     && !params.isStartupLoading
     && params.settingsLoaded
     && params.settings.telemetry_consent === null
@@ -71,29 +73,25 @@ function welcomeOnboardingState(params: StartupScreenParams): OnboardingState {
 }
 
 function shouldShowAiAgentsOnboarding(params: StartupScreenParams): boolean {
-  return !params.noteWindowParams
+  return REMOTE_FEATURES_ENABLED
+    && !params.noteWindowParams
     && params.onboarding.state.status === 'ready'
     && params.aiAgentsOnboarding.showPrompt
     && !params.showMcpSetupDialog
 }
 
-function WelcomeView({ onboarding, isOffline, locale }: { onboarding: OnboardingState; isOffline: boolean; locale?: AppLocale }) {
+function WelcomeView({ onboarding, locale }: { onboarding: OnboardingState; locale?: AppLocale }) {
   const state = onboarding.state as { status: 'welcome' | 'vault-missing'; defaultPath: string; vaultPath?: string }
   return (
     <div className="app-shell">
-      <WelcomeScreen
+      <LocalWelcome
         mode={state.status === 'welcome' ? 'welcome' : 'vault-missing'}
         missingPath={state.status === 'vault-missing' ? state.vaultPath : undefined}
         locale={locale}
-        defaultVaultPath={state.defaultPath}
-        onCreateVault={onboarding.handleCreateVault}
-        onRetryCreateVault={onboarding.retryCreateVault}
         onCreateEmptyVault={onboarding.handleCreateEmptyVault}
         onOpenFolder={onboarding.handleOpenFolder}
-        isOffline={isOffline}
         creatingAction={onboarding.creatingAction}
         error={onboarding.error}
-        canRetryTemplate={onboarding.canRetryTemplate}
       />
     </div>
   )
@@ -147,7 +145,6 @@ export function StartupScreen(params: StartupScreenParams) {
     return (
       <WelcomeView
         onboarding={welcomeOnboardingState(params)}
-        isOffline={params.isOffline}
         locale={params.locale}
       />
     )

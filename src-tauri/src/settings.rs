@@ -215,7 +215,7 @@ pub fn normalize_ui_language(value: Option<&str>) -> Option<String> {
 }
 
 fn normalize_settings(settings: Settings) -> Settings {
-    Settings {
+    crate::leadinglight::apply_local_only_settings(Settings {
         auto_pull_interval_minutes: settings.auto_pull_interval_minutes,
         git_enabled: settings.git_enabled,
         git_path: normalize_optional_string(settings.git_path),
@@ -254,7 +254,7 @@ fn normalize_settings(settings: Settings) -> Settings {
         all_notes_show_images: settings.all_notes_show_images,
         all_notes_show_unsupported: settings.all_notes_show_unsupported,
         multi_workspace_enabled: settings.multi_workspace_enabled,
-    }
+    })
 }
 
 fn normalize_ai_workspace_conversations(
@@ -302,7 +302,7 @@ fn settings_path() -> Result<PathBuf, String> {
 
 fn get_settings_at(path: &PathBuf) -> Result<Settings, String> {
     if !path.exists() {
-        return Ok(Settings::default());
+        return Ok(normalize_settings(Settings::default()));
     }
     let content =
         fs::read_to_string(path).map_err(|e| format!("Failed to read settings: {}", e))?;

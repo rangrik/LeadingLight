@@ -264,12 +264,14 @@ mod tests {
     }
 
     #[test]
-    fn preferred_path_uses_tolaria_namespace() {
+    fn preferred_path_uses_leadinglight_namespace() {
         let config_dir = absolute_temp_dir("tolaria-config-root");
         let path = preferred_path_in(&config_dir, "settings.json");
         assert_eq!(
             path,
-            config_dir.join("com.tolaria.app").join("settings.json")
+            config_dir
+                .join("dev.rangrik.leadinglight")
+                .join("settings.json")
         );
     }
 
@@ -313,8 +315,8 @@ mod tests {
     #[test]
     fn declared_development_namespace_can_replace_current_namespace() {
         assert_eq!(
-            app_config_policy().current_namespace_for(Some("com.tolaria.app.dev")),
-            "com.tolaria.app.dev"
+            app_config_policy().current_namespace_for(Some("dev.rangrik.leadinglight.dev")),
+            "dev.rangrik.leadinglight.dev"
         );
     }
 
@@ -322,7 +324,7 @@ mod tests {
     fn unknown_requested_namespace_keeps_production_namespace() {
         assert_eq!(
             app_config_policy().current_namespace_for(Some("com.example.other")),
-            "com.tolaria.app"
+            "dev.rangrik.leadinglight"
         );
     }
 
@@ -349,36 +351,32 @@ mod tests {
     }
 
     #[test]
-    fn legacy_path_is_read_when_preferred_path_is_absent() {
+    fn upstream_vault_registry_is_never_read_when_leadinglight_is_empty() {
         let dir = tempfile::TempDir::new().unwrap();
-        let legacy = dir
-            .path()
-            .join(app_config_policy().legacy_namespace.as_str())
-            .join("vaults.json");
+        let legacy = dir.path().join("com.laputa.app").join("vaults.json");
         std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
         std::fs::write(&legacy, r#"{"vaults":[]}"#).unwrap();
 
         assert_eq!(
             existing_or_preferred_path_in_dirs(&[dir.path().to_path_buf()], "vaults.json"),
-            legacy
+            preferred_path_in(dir.path(), "vaults.json")
         );
     }
 
     #[test]
-    fn settings_and_vault_registry_share_namespace_fallback_order() {
+    fn settings_and_vault_registry_ignore_upstream_namespaces() {
         let dir = tempfile::TempDir::new().unwrap();
 
         for file_name in ["settings.json", "vaults.json"] {
-            let legacy = dir
-                .path()
-                .join(app_config_policy().legacy_namespace.as_str())
-                .join(file_name);
-            std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
-            std::fs::write(&legacy, "{}").unwrap();
+            for namespace in ["com.tolaria.app", "com.laputa.app"] {
+                let legacy = dir.path().join(namespace).join(file_name);
+                std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+                std::fs::write(&legacy, "{\"upstream_private_content\":true}").unwrap();
+            }
 
             assert_eq!(
                 existing_or_preferred_path_in_dirs(&[dir.path().to_path_buf()], file_name),
-                legacy
+                preferred_path_in(dir.path(), file_name)
             );
         }
     }

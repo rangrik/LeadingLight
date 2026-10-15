@@ -2,7 +2,6 @@ import { act, render as testingLibraryRender, screen, fireEvent, waitFor, within
 import type { ReactElement, ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DEFAULT_VAULTS } from './hooks/useVaultSwitcher'
-import { formatShortcutDisplay } from './hooks/appCommandCatalog'
 import { invoke } from '@tauri-apps/api/core'
 import type { Settings, ViewDefinition, ViewFile } from './types'
 
@@ -49,6 +48,21 @@ vi.mock('@tauri-apps/api/window', async () => {
     }),
   }
 })
+
+// Real local-only policy by default; dormant upstream flows opt in to keep their coverage.
+const remotePolicy = vi.hoisted(() => ({ enabled: false }))
+vi.mock('./leadinglight/localPolicy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./leadinglight/localPolicy')>()
+  return {
+    ...actual,
+    get REMOTE_FEATURES_ENABLED() { return remotePolicy.enabled },
+    applyLocalOnlySettings: (settings: Settings) => (remotePolicy.enabled ? settings : actual.applyLocalOnlySettings(settings)),
+  }
+})
+
+function enableUpstreamRemotePolicy() {
+  remotePolicy.enabled = true
+}
 
 // Mock mock-tauri module
 const mockEntries = [
@@ -467,6 +481,50 @@ function render(ui: ReactElement, options?: Parameters<typeof testingLibraryRend
   })
 }
 
+function rememberDefaultVaultWithoutOnboarding() {
+  localStorage.setItem('tolaria_welcome_dismissed', '1')
+  mockCommandResults.get_default_vault_path = expectedDefaultVaultPath
+  mockCommandResults.get_settings = createSettings({ telemetry_consent: null })
+  mockCommandResults.load_vault_list = {
+    vaults: [],
+    active_vault: expectedDefaultVaultPath,
+    hidden_defaults: [],
+  }
+  mockCommandResults.check_vault_exists = (args?: { path?: string }) => args?.path === expectedDefaultVaultPath
+}
+
+async function openFolderOnFirstRun(
+  label: string,
+  { action = 'welcome-open-folder', exists = () => true }: { action?: string; exists?: () => boolean } = {},
+) {
+  const folderPath = `/Users/mock/Documents/${label}`
+  const saveVaultList = vi.fn()
+  const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(`file://${encodeURI(folderPath)}`)
+  localStorage.removeItem(CLAUDE_CODE_ONBOARDING_DISMISSED_STORAGE_NAME)
+  mockCommandResults.load_vault_list = { vaults: [], active_vault: null, hidden_defaults: [] }
+  mockCommandResults.check_vault_exists = (args?: { path?: string }) => args?.path === folderPath && exists()
+  mockCommandResults.save_vault_list = (args?: unknown) => {
+    saveVaultList(args)
+    return null
+  }
+
+  render(<App />)
+  fireEvent.click(await screen.findByTestId(action, {}, { timeout: SLOW_APP_READY_TIMEOUT_MS }))
+
+  await waitFor(() => {
+    expect(saveVaultList).toHaveBeenCalledWith({
+      list: {
+        vaults: [{ label, path: folderPath, alias: null, color: null, icon: null, mounted: true }],
+        active_vault: folderPath,
+        default_workspace_path: folderPath,
+        hidden_defaults: [],
+      },
+    })
+  })
+  expect(saveVaultList).toHaveBeenCalledTimes(1)
+  return promptSpy
+}
+
 function createMockUpdaterResult(
   checkForUpdates: () => Promise<{ kind: 'up-to-date' } | { kind: 'available'; version: string; displayVersion: string } | { kind: 'error'; message: string }> = async () => ({ kind: 'up-to-date' }),
 ) {
@@ -484,6 +542,7 @@ function createMockUpdaterResult(
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    remotePolicy.enabled = false
     resetMockCommandResults()
     vi.mocked(invoke).mockImplementation(async (cmd: string, args?: unknown) => resolveMockCommandResult(cmd, args))
     vi.mocked(isTauri).mockReturnValue(false)
@@ -562,11 +621,9 @@ describe('App', () => {
     })
   })
 
-  it('shows empty state in editor when no note is selected', async () => {
+  it('shows the empty page state when no note is selected', async () => {
     render(<App />)
-    await waitFor(() => {
-      expect(screen.getByText('Select a note to start editing')).toBeInTheDocument()
-    })
+    expect(await screen.findByText('Open a page here', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })).toBeInTheDocument()
   })
 
   it('opens a note window after loading the active vault graph', async () => {
@@ -595,17 +652,28 @@ describe('App', () => {
     expect(listVault).toHaveBeenCalled()
   }, SLOW_APP_READY_TIMEOUT_MS * 2)
 
-  it('shows keyboard shortcut hints', async () => {
-    const quickOpenHint = formatShortcutDisplay({ display: '⌘P / ⌘O' })
-    const newNoteHint = formatShortcutDisplay({ display: '⌘N' })
-    const { container } = render(<App />)
-    await screen.findByText('Select a note to start editing')
+  it('creates a local page from the empty page state', async () => {
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(1700000000000)
+    const saveNoteContent = vi.fn(() => null)
+    mockCommandResults.save_note_content = saveNoteContent
 
-    await waitFor(() => {
-      const visibleText = container.textContent ?? ''
-      expect(visibleText).toContain(`${quickOpenHint} to search`)
-      expect(visibleText).toContain(`${newNoteHint} to create`)
-    })
+    try {
+      render(<App />)
+      const pane = await screen.findByLabelText('Page pane 1', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+      fireEvent.click(within(pane).getByText('New page'))
+
+      await waitFor(() => {
+        expect(saveNoteContent).toHaveBeenCalledWith(expect.objectContaining({
+          path: '/vault/untitled-note-1700000000.md',
+          vaultPath: '/vault',
+        }))
+      })
+      await waitFor(() => {
+        expect(window.__laputaTest?.activeTabPath).toBe('/vault/untitled-note-1700000000.md')
+      })
+    } finally {
+      dateNow.mockRestore()
+    }
   })
 
   it('registers keyboard shortcuts without error', async () => {
@@ -657,6 +725,7 @@ describe('App', () => {
   })
 
   it('shows visible feedback when a manual update check finds an update', async () => {
+    enableUpstreamRemotePolicy()
     vi.mocked(useUpdater).mockReturnValue(createMockUpdaterResult(async () => ({
       kind: 'available',
       version: '2026.4.25',
@@ -677,6 +746,7 @@ describe('App', () => {
   })
 
   it('shows visible feedback when a menu-driven update check finds no eligible update', async () => {
+    enableUpstreamRemotePolicy()
     vi.mocked(useUpdater).mockReturnValue(createMockUpdaterResult(async () => ({ kind: 'up-to-date' })))
 
     render(<App />)
@@ -696,6 +766,7 @@ describe('App', () => {
   })
 
   it('shows immediate feedback while a menu-driven update check is pending', async () => {
+    enableUpstreamRemotePolicy()
     let resolveUpdate: ((result: { kind: 'up-to-date' }) => void) | null = null
     const checkForUpdates = vi.fn(() => new Promise<{ kind: 'up-to-date' }>((resolve) => {
       resolveUpdate = resolve
@@ -729,6 +800,7 @@ describe('App', () => {
   })
 
   it('shows the external AI setup dialog from the menu when AI onboarding is active', async () => {
+    enableUpstreamRemotePolicy()
     localStorage.removeItem(AI_AGENTS_ONBOARDING_DISMISSED_STORAGE_NAME)
     localStorage.removeItem(CLAUDE_CODE_ONBOARDING_DISMISSED_STORAGE_NAME)
     mockCommandResults.get_ai_agents_status = {
@@ -762,6 +834,7 @@ describe('App', () => {
   })
 
   it('routes right-panel AI chat messages to the selected default agent', async () => {
+    enableUpstreamRemotePolicy()
     mockCommandResults.get_settings = createSettings({
       auto_advance_inbox_after_organize: null,
       default_ai_agent: 'codex',
@@ -777,6 +850,8 @@ describe('App', () => {
     render(<App />)
 
     await screen.findByText('All Notes')
+    // AI chat lives in the open page's editor pane.
+    await clickNoteListItem(screen.getByTestId('note-list-container'), 'Test Project')
     fireEvent.keyDown(window, { key: 'l', code: 'KeyL', metaKey: true, shiftKey: true })
 
     const input = await screen.findByTestId('agent-input')
@@ -796,6 +871,7 @@ describe('App', () => {
   })
 
   it('waits for saved AI agent settings before sending right-panel messages', async () => {
+    enableUpstreamRemotePolicy()
     let resolveSettings: ((settings: Settings) => void) | null = null
     mockCommandResults.get_settings = () => new Promise((resolve) => {
       resolveSettings = resolve
@@ -811,6 +887,8 @@ describe('App', () => {
     render(<App />)
 
     await screen.findByText('All Notes')
+    // AI chat lives in the open page's editor pane.
+    await clickNoteListItem(screen.getByTestId('note-list-container'), 'Test Project')
     fireEvent.keyDown(window, { key: 'l', code: 'KeyL', metaKey: true, shiftKey: true })
 
     const input = await screen.findByTestId('agent-input')
@@ -844,6 +922,7 @@ describe('App', () => {
   })
 
   it('shows onboarding after telemetry consent when no active vault is configured', async () => {
+    enableUpstreamRemotePolicy()
     mockCommandResults.get_settings = createSettings({ telemetry_consent: null })
     mockCommandResults.load_vault_list = { vaults: [], active_vault: null, hidden_defaults: [] }
     mockCommandResults.check_vault_exists = (args?: { path?: string }) => args?.path === expectedDefaultVaultPath
@@ -859,23 +938,15 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByTestId('welcome-screen')).toBeInTheDocument()
     }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
-    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open existing vault')
+    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open a folder')
   })
 
   it.each([
     ['telemetry-accept', 'Allow anonymous reporting'],
     ['telemetry-decline', 'No thanks'],
   ])('ignores a remembered default vault after %s when onboarding was never completed', async (buttonTestId) => {
-    const rememberedDefaultVaultPath = expectedDefaultVaultPath
-    localStorage.setItem('tolaria_welcome_dismissed', '1')
-    mockCommandResults.get_default_vault_path = rememberedDefaultVaultPath
-    mockCommandResults.get_settings = createSettings({ telemetry_consent: null })
-    mockCommandResults.load_vault_list = {
-      vaults: [],
-      active_vault: rememberedDefaultVaultPath,
-      hidden_defaults: [],
-    }
-    mockCommandResults.check_vault_exists = (args?: { path?: string }) => args?.path === rememberedDefaultVaultPath
+    enableUpstreamRemotePolicy()
+    rememberDefaultVaultWithoutOnboarding()
 
     render(<App />)
 
@@ -888,7 +959,19 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByTestId('welcome-screen')).toBeInTheDocument()
     }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
-    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open existing vault')
+    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open a folder')
+  })
+
+  it('starts unfinished onboarding at the local welcome without telemetry or AI prompts', async () => {
+    rememberDefaultVaultWithoutOnboarding()
+
+    render(<App />)
+
+    expect(await screen.findByTestId('welcome-screen', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })).toBeInTheDocument()
+    expect(screen.getByTestId('welcome-create-new')).toHaveTextContent('Create local workspace')
+    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open a folder')
+    expect(screen.queryByTestId('telemetry-accept')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('ai-agents-onboarding-screen')).not.toBeInTheDocument()
   })
 
   it('keeps one startup shell visible while the last vault is still resolving', async () => {
@@ -940,10 +1023,9 @@ describe('App', () => {
 
     render(<App />)
 
-    await waitFor(() => {
-      expect(screen.getByText(/folder may have moved or been deleted/)).toBeInTheDocument()
-    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
-    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open existing vault')
+    expect(await screen.findByText('Workspace folder not found', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })).toBeInTheDocument()
+    expect(screen.getByText('/missing-vault')).toBeInTheDocument()
+    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open a folder')
   })
 
   it('shows welcome instead of vault-missing when the missing path was not a persisted active vault', async () => {
@@ -957,54 +1039,29 @@ describe('App', () => {
 
     render(<App />)
 
+    expect(await screen.findByRole('heading', { name: 'LeadingLight' })).toBeInTheDocument()
+    expect(screen.queryByText('Workspace folder not found')).not.toBeInTheDocument()
+    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open a folder')
+  })
+
+  it('persists an existing folder after first-run open without AI onboarding', async () => {
+    const getAiAgentsStatus = vi.fn(() => ({}))
+    mockCommandResults.get_ai_agents_status = getAiAgentsStatus
+    const promptSpy = await openFolderOnFirstRun('Work Vault')
+
     await waitFor(() => {
-      expect(screen.getByText('Welcome to Tolaria')).toBeInTheDocument()
-    })
-    expect(screen.getByTestId('welcome-open-folder')).toHaveTextContent('Open existing vault')
+      expect(screen.getByTestId('status-vault-trigger')).toHaveTextContent('Work Vault')
+    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    expect(screen.queryByTestId('ai-agents-onboarding-screen')).not.toBeInTheDocument()
+    expect(getAiAgentsStatus).not.toHaveBeenCalled()
+
+    promptSpy.mockRestore()
   })
 
   it('persists an existing vault and shows AI onboarding after first-run open', async () => {
-    const selectedVaultPath = '/Users/mock/Documents/Work Vault'
-    const saveVaultList = vi.fn()
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('file:///Users/mock/Documents/Work%20Vault')
-
-    localStorage.removeItem(CLAUDE_CODE_ONBOARDING_DISMISSED_STORAGE_NAME)
-    mockCommandResults.load_vault_list = { vaults: [], active_vault: null, hidden_defaults: [] }
-    mockCommandResults.check_vault_exists = (args?: { path?: string }) => args?.path === selectedVaultPath
+    enableUpstreamRemotePolicy()
     mockCommandResults.get_ai_agents_status = {}
-    mockCommandResults.save_vault_list = (args?: {
-      list?: { vaults?: Array<{ label: string; path: string }>; active_vault?: string | null }
-    }) => {
-      saveVaultList(args)
-      return null
-    }
-
-    render(<App />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('welcome-screen')).toBeInTheDocument()
-    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
-
-    fireEvent.click(screen.getByTestId('welcome-open-folder'))
-
-    await waitFor(() => {
-      expect(saveVaultList).toHaveBeenCalledWith({
-        list: {
-          vaults: [{
-            label: 'Work Vault',
-            path: selectedVaultPath,
-            alias: null,
-            color: null,
-            icon: null,
-            mounted: true,
-          }],
-          active_vault: selectedVaultPath,
-          default_workspace_path: selectedVaultPath,
-          hidden_defaults: [],
-        },
-      })
-    })
-    expect(saveVaultList).toHaveBeenCalledTimes(1)
+    const promptSpy = await openFolderOnFirstRun('Work Vault')
 
     await waitFor(() => {
       expect(screen.getByTestId('ai-agents-onboarding-screen')).toBeInTheDocument()
@@ -1014,53 +1071,22 @@ describe('App', () => {
     promptSpy.mockRestore()
   })
 
-  it('persists and opens the onboarding template vault after cloning', async () => {
-    let templateExists = false
-    const saveVaultList = vi.fn()
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('file:///Users/mock/Documents')
-    const expectedLabel = 'Getting Started'
-
-    mockCommandResults.load_vault_list = { vaults: [], active_vault: null, hidden_defaults: [] }
-    mockCommandResults.check_vault_exists = (args?: { path?: string }) => {
-      if (args?.path === expectedDefaultVaultPath) {
-        return templateExists
-      }
-      return false
-    }
-    mockCommandResults.create_getting_started_vault = () => {
-      templateExists = true
-      return expectedDefaultVaultPath
-    }
-    mockCommandResults.save_vault_list = (args?: {
-      list?: { vaults?: Array<{ label: string; path: string }>; active_vault?: string | null }
-    }) => {
-      saveVaultList(args)
-      return null
-    }
-
-    render(<App />)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('welcome-screen')).toBeInTheDocument()
+  it('creates and opens a local workspace folder on first run', async () => {
+    let created = false
+    const createEmptyVault = vi.fn(() => {
+      created = true
+      return '/Users/mock/Documents/LeadingLight Vault'
+    })
+    mockCommandResults.create_empty_vault = createEmptyVault
+    const promptSpy = await openFolderOnFirstRun('LeadingLight Vault', {
+      action: 'welcome-create-new',
+      exists: () => created,
     })
 
-    fireEvent.click(screen.getByTestId('welcome-create-vault'))
-
+    expect(createEmptyVault).toHaveBeenCalledWith({ targetPath: '/Users/mock/Documents/LeadingLight Vault' })
     await waitFor(() => {
-      expect(saveVaultList).toHaveBeenCalledWith({
-        list: {
-          vaults: [],
-          active_vault: expectedDefaultVaultPath,
-          default_workspace_path: expectedDefaultVaultPath,
-          hidden_defaults: [],
-        },
-      })
-    })
-    expect(saveVaultList).toHaveBeenCalledTimes(1)
-
-    await waitFor(() => {
-      expect(screen.getByTestId('status-vault-trigger')).toHaveTextContent(expectedLabel)
-    })
+      expect(screen.getByTestId('status-vault-trigger')).toHaveTextContent('LeadingLight Vault')
+    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
 
     promptSpy.mockRestore()
   })
@@ -1295,6 +1321,7 @@ describe('App', () => {
   })
 
   it('clears the Git setup dialog when switching to a Git-enabled vault', async () => {
+    enableUpstreamRemotePolicy()
     mockCommandResults.load_vault_list = {
       vaults: [
         { label: 'Missing Git', path: '/work' },

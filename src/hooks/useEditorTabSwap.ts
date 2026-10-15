@@ -1,3 +1,4 @@
+import { editorContainer, editorScopeForEditor } from '../leadinglight/editorScope'
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import type { VaultEntry } from '../types'
@@ -31,7 +32,7 @@ import {
   pathStem,
   slugifyPathStem,
 } from './editorTabContent'
-import { clearEditorDomSelection, EDITOR_CONTAINER_SELECTOR } from './editorDomSelection'
+import { clearEditorDomSelection } from './editorDomSelection'
 import { editorDocumentSignature, isBlankEditorDocument } from './editorDocumentState'
 import {
   cacheEditorState,
@@ -51,6 +52,7 @@ import {
 import { useParsedBlockPreload } from './editorParsedBlockPreload'
 import { scheduleParsedBlockSwap } from './editorParsedBlockSwap'
 import { useEditorContentPathSignal } from './useEditorContentPathSignal'
+import { assertEditorCompositionReady } from './editorCompositionBoundary'
 export { extractEditorBody, getH1TextFromBlocks, replaceTitleInFrontmatter } from './editorTabContent'
 export { RICH_EDITOR_CHANGE_DEBOUNCE_MS } from './editorChangeDebounce'
 
@@ -131,8 +133,8 @@ function signalEditorTabSwapped(path: string): void {
   finishNoteOpenTrace(path)
 }
 
-function readEditorScrollTop(): number {
-  const scrollEl = document.querySelector(EDITOR_CONTAINER_SELECTOR)
+function readEditorScrollTop(editor: ReturnType<typeof useCreateBlockNote>): number {
+  const scrollEl = editorContainer(editor)
   return scrollEl?.scrollTop ?? 0
 }
 
@@ -222,23 +224,18 @@ function serializedEditorChange(options: {
   path: string
   previousContent: string
   vaultPath?: string
-}): { blocks: CachedTabState['blocks'], content: string } | null {
+}): { blocks: CachedTabState['blocks'], content: string } {
   const { editor, path, previousContent, vaultPath } = options
   const blocks = editor.document
-  try {
-    return {
+  return {
+    blocks,
+    content: serializeRichEditorDocumentToMarkdown({
       blocks,
-      content: serializeRichEditorDocumentToMarkdown({
-        blocks,
-        editor,
-        notePath: path,
-        tabContent: previousContent,
-        vaultPath,
-      }),
-    }
-  } catch (error) {
-    console.warn('[editor] Skipped editor change because BlockNote document could not be serialized:', error)
-    return null
+      editor,
+      notePath: path,
+      tabContent: previousContent,
+      vaultPath,
+    }),
   }
 }
 
@@ -266,6 +263,7 @@ function useEditorChangeHandler(options: {
   } = options
 
   const propagateEditorChange = useCallback(() => {
+    assertEditorCompositionReady(editor)
     const path = activeEditorChangePath({ prevActivePathRef, editorContentPathRef })
     if (!path) return
 
@@ -274,7 +272,7 @@ function useEditorChangeHandler(options: {
       tabs: tabsRef.current,
       cache: tabCacheRef.current,
     })
-    if (!previousContent) return
+    if (previousContent === undefined) return
 
     const next = serializedEditorChange({
       editor,
@@ -282,18 +280,21 @@ function useEditorChangeHandler(options: {
       previousContent,
       vaultPath: vaultPathRef.current,
     })
-    if (!next) return
-
     pendingLocalContentRef.current = { path, content: next.content }
     cacheResolvedEditorState(tabCacheRef.current, path, {
       blocks: next.blocks,
-      scrollTop: readEditorScrollTop(),
+      scrollTop: readEditorScrollTop(editor),
       sourceContent: next.content,
     }, vaultPathRef.current)
     onContentChangeRef.current?.(path, next.content)
   }, [editor, editorContentPathRef, onContentChangeRef, pendingLocalContentRef, prevActivePathRef, tabCacheRef, tabsRef, vaultPathRef])
 
-  return useDebouncedEditorChange({ onFlush: propagateEditorChange, suppressChangeRef })
+  const { handleEditorChange, flushPendingEditorChange: flushChange } = useDebouncedEditorChange({ onFlush: propagateEditorChange, suppressChangeRef })
+  const flushPendingEditorChange = useCallback(() => {
+    assertEditorCompositionReady(editor)
+    return flushChange()
+  }, [editor, flushChange])
+  return { handleEditorChange, flushPendingEditorChange }
 }
 
 function cachePreviousTabOnPathChange(options: {
@@ -310,7 +311,7 @@ function cachePreviousTabOnPathChange(options: {
   if (editorContentPathRef.current !== prevPath) return
   cacheEditorState(cache, prevPath, {
     blocks: editor.document,
-    scrollTop: readEditorScrollTop(),
+    scrollTop: readEditorScrollTop(editor),
     sourceContent: previousTab.content,
   })
 }
@@ -620,7 +621,7 @@ function cacheStableActivePath(options: {
   editorContentPathRef.current = activeTabPath
   cacheEditorState(cache, activeTabPath, {
     blocks: editor.document,
-    scrollTop: readEditorScrollTop(),
+    scrollTop: readEditorScrollTop(editor),
     sourceContent: activeTab.content,
   })
 }
@@ -838,7 +839,7 @@ function scheduleTabSwap(options: {
     if (shouldAbortSwap({ prevActivePathRef, suppressChangeRef, swapSeqRef, tabsRef, token })) return
     if (clearStaleSwap({ targetPath, prevActivePathRef, suppressChangeRef })) return
     rawSwapPendingRef.current = false
-    if (clearDomSelection) clearEditorDomSelection()
+    if (clearDomSelection) clearEditorDomSelection(editorScopeForEditor(editor))
 
     if (isBlankBodyContent({ content: activeTab.content })) {
       applyBlankTabState({
@@ -1045,7 +1046,8 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
   } = options
 
   useEffect(() => {
-    runTabSwapEffect({
+    try {
+      runTabSwapEffect({
       tabs,
       activeTabPath,
       editor,
@@ -1063,7 +1065,12 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
       pendingLocalContentRef,
       flushPendingEditorChange,
       vaultPath: vaultPathRef.current,
-    })
+      })
+    } catch (error) {
+      // Keep the current document intact. Explicit save/navigation reports the error;
+      // an unrelated render must neither replace unsaved text nor crash the editor.
+      console.warn('[editor] Deferred tab synchronization until pending content can be saved:', error)
+    }
   }, [
     activeTabPath,
     editor,
@@ -1145,7 +1152,7 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
   const pendingLocalContentRef = useRef<PendingLocalContent | null>(null)
   const prevActivePathRef = useRef<string | null>(null)
   const activeTabPathLatestRef = useLatestRef(activeTabPath)
-  const editorContentSignal = useEditorContentPathSignal()
+  const editorContentSignal = useEditorContentPathSignal(activeTabPath)
   const editorContentPathRef = useRef<string | null>(null)
   const editorMountedRef = useRef(false)
   const pendingSwapRef = useRef<(() => void) | null>(null)

@@ -7,6 +7,7 @@ interface UseAppNavigationParams {
   entries: VaultEntry[]
   activeTabPath: string | null
   onSelectNote: (entry: VaultEntry) => void
+  paneNavigation?: { goBack: () => void; goForward: () => void; canGoBack: boolean; canGoForward: boolean }
 }
 
 /**
@@ -19,6 +20,7 @@ export function useAppNavigation({
   entries,
   activeTabPath,
   onSelectNote,
+  paneNavigation,
 }: UseAppNavigationParams) {
   const navHistory = useNavigationHistory()
 
@@ -54,7 +56,7 @@ export function useAppNavigation({
     }
   }, [navHistory, isEntryExists, entries, onSelectNote])
 
-  useNavigationGestures({ onGoBack: handleGoBack, onGoForward: handleGoForward })
+  useNavigationGestures({ onGoBack: paneNavigation?.goBack ?? handleGoBack, onGoForward: paneNavigation?.goForward ?? handleGoForward })
 
   // O(1) path lookup map — rebuilt only when entries change
   const entriesByPath = useMemo(() => {
@@ -64,10 +66,10 @@ export function useAppNavigation({
   }, [entries])
 
   return {
-    handleGoBack,
-    handleGoForward,
-    canGoBack: navHistory.canGoBack,
-    canGoForward: navHistory.canGoForward,
+    handleGoBack: paneNavigation?.goBack ?? handleGoBack,
+    handleGoForward: paneNavigation?.goForward ?? handleGoForward,
+    canGoBack: paneNavigation?.canGoBack ?? navHistory.canGoBack,
+    canGoForward: paneNavigation?.canGoForward ?? navHistory.canGoForward,
     entriesByPath,
   }
 }

@@ -95,5 +95,6 @@ export function useNavigationHistory() {
     })
   }, [])
 
-  return { canGoBack, canGoForward, push, goBack, goForward, removePath }
+  const reset = useCallback(() => { stateRef.current = EMPTY; setState(EMPTY) }, [])
+  return { canGoBack, canGoForward, push, goBack, goForward, removePath, reset }
 }

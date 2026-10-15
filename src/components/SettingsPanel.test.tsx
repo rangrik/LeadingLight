@@ -6,6 +6,14 @@ import { THEME_MODE_STORAGE_KEY } from '../lib/themeMode'
 import type { AiAgentsStatus } from '../lib/aiAgents'
 import type { VaultOption } from './StatusBar'
 
+// Keep upstream settings behavior covered in an explicit test-only mode.
+// The immutable shipping policy is verified in leadinglight/localSettings.test.tsx.
+vi.mock('../leadinglight/localPolicy', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../leadinglight/localPolicy')>(),
+  REMOTE_FEATURES_ENABLED: true,
+  MULTI_WORKSPACE_ENABLED: true,
+}))
+
 const { trackEventMock, registerEscapeSurfaceMock, unregisterEscapeSurfaceMock } = vi.hoisted(() => ({
   trackEventMock: vi.fn(),
   registerEscapeSurfaceMock: vi.fn(),
@@ -215,7 +223,7 @@ describe('SettingsPanel', () => {
 
     fireEvent.change(screen.getByLabelText('Model ID'), { target: { value: 'local-llama' } })
     fireEvent.pointerDown(screen.getByText('No key').closest('button')!, { button: 0, pointerType: 'mouse' })
-    fireEvent.click(screen.getByRole('option', { name: 'Save locally in Tolaria' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Save locally in LeadingLight' }))
     fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'lm-secret' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
     await waitFor(() => expect(screen.getByText('Ollama · local-llama')).toBeInTheDocument())
@@ -384,7 +392,7 @@ describe('SettingsPanel', () => {
     const confirmation = within(teamRow).getByTestId('settings-workspace-remove-confirm-team')
     expect(screen.queryByTestId('confirm-delete-dialog')).not.toBeInTheDocument()
     expect(confirmation).toHaveTextContent('Remove vault?')
-    expect(confirmation).toHaveTextContent("This removes Team Vault from Tolaria's vault list. Files on disk are not deleted.")
+    expect(confirmation).toHaveTextContent("This removes Team Vault from LeadingLight's vault list. Files on disk are not deleted.")
 
     fireEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
     expect(onRemoveVault).not.toHaveBeenCalled()

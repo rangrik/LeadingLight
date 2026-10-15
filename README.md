@@ -1,3 +1,60 @@
+# LeadingLight
+
+A quiet, local-only desktop writing workspace, built on [Tolaria](https://github.com/refactoringhq/tolaria) and Tauri.
+
+Your pages are Markdown files in a folder you control. LeadingLight has its own app identity and
+settings. It disables telemetry, automatic updates, cloud AI, remote templates and note sync.
+The application source is public; your notes are not part of this repository.
+
+The first milestone adds two independently editable pages side by side or stacked, with
+resizable panes and restored workspace state. See [the product plan](docs/leadinglight/PRODUCT.md)
+and [the fork architecture](docs/leadinglight/ARCHITECTURE.md) for scope and maintenance.
+The [verification record](docs/leadinglight/VERIFICATION.md) documents tested behavior and limits.
+
+## Start writing
+
+Open LeadingLight and choose **Create local workspace** for a fresh folder, or **Open a folder**
+for existing Markdown. Create a page with **New page** or `⌘N`. Use **Split right** or **Stack
+pages**, then choose a page in the other pane's searchable title control. Drag a note directly
+from **All Notes** to an edge of the page area to open it beside or above your current page.
+Drop in the center of a pane to open it there. Drag a page title to rearrange the split;
+the preview shows where it will land. Each pane stays editable.
+Drag the divider to resize; double-click it to return to equal sizes. Closing a pane keeps its
+page available when you reopen the split.
+
+`⌘P` finds a page, `⌘S` saves immediately, and `⌘⌥1` / `⌘⌥2` focuses either pane. On Windows
+and Linux, use Ctrl instead of Command. Rich text and Markdown shortcuts use the inherited
+editor; the Markdown files remain readable in other tools.
+
+The initial release uses one workspace window, with two page panes and guarded switching
+between local folders. Combined multi-workspace views and separate editing windows are held
+until they share the same document ownership and save guarantees.
+
+## Development
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev          # Browser fixture preview, not the native persistence check
+pnpm tauri dev    # Native local application
+CARGO_BUILD_JOBS=2 pnpm tauri build --debug --bundles app # Local macOS app bundle
+```
+
+Use one shared dependency install and one Rust target directory. Native builds run with at most
+two Cargo jobs. Project instructions and local checks are documented in [AGENTS.md](AGENTS.md).
+Tauri is current stable for this milestone. Compatible packages were refreshed; editor patches
+and major-version migration holds are listed explicitly in [dependency status](docs/leadinglight/DEPENDENCIES.md).
+
+## Attribution
+
+LeadingLight is an independent fork of Tolaria by Luca Rossi and contributors. It retains the
+AGPL-3.0-or-later license. LeadingLight's page-and-light mark is its own identity; interface icons use Phosphor. Capacities and
+Notion are interaction references; LeadingLight is not affiliated with either product.
+
+---
+
+The original upstream README follows for reference. Its cloud/AI integrations and release links
+describe Tolaria and do not define LeadingLight's enabled behavior.
+
 ![Latest stable](https://img.shields.io/github/v/release/refactoringhq/tolaria?display_name=tag) [![Codecov](https://codecov.io/gh/refactoringhq/tolaria/graph/badge.svg?branch=main)](https://codecov.io/gh/refactoringhq/tolaria) [![CodeScene Hotspot Code Health](https://codescene.io/projects/76865/status-badges/hotspot-code-health)](https://codescene.io/projects/76865) [![Codacy Badge](https://app.codacy.com/project/badge/Grade/fa3cdc28aefa460591c74aa262530708)](https://app.codacy.com/gh/refactoringhq/tolaria/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 
 # 💧 Tolaria

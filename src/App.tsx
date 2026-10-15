@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MULTI_WORKSPACE_ENABLED, SEPARATE_WINDOWS_ENABLED } from './leadinglight/localPolicy'
 import { Sidebar } from './components/Sidebar'
 import { NoteList } from './components/NoteList'
-import { LazyEditor } from './components/LazyEditor'
+import { SplitEditorWorkspace } from './leadinglight/SplitEditorWorkspace'
+import { useNativeSaveBeforeClose } from './leadinglight/useNativeSaveBeforeClose'
 import { ResizeHandle } from './components/ResizeHandle'
 import { CreateTypeDialog } from './components/CreateTypeDialog'
 import { CreateViewDialog } from './components/CreateViewDialog'
@@ -56,7 +58,6 @@ import { useFileActions } from './hooks/useFileActions'
 import { useDeepLinks } from './hooks/useDeepLinks'
 import { useNoteGitUrls } from './hooks/useNoteGitUrls'
 import { useLayoutPanels } from './hooks/useLayoutPanels'
-import { useLastActiveNote } from './hooks/useLastActiveNote'
 import { useConflictFlow } from './hooks/useConflictFlow'
 import { useAppSave } from './hooks/useAppSave'
 import { useNoteRetargetingUi } from './hooks/useNoteRetargetingUi'
@@ -205,6 +206,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const openDocs = useCallback(() => {
     void openExternalUrl(TOLARIA_DOCS_URL)
   }, [])
+  const [workspaceTransitionPending, setWorkspaceTransitionPending] = useState(false)
+  const workspaceTransitionRef = useRef<Promise<void> | null>(null)
   const networkStatus = useNetworkStatus()
   const { settings, loaded: settingsLoaded, saveSettings } = useSettings()
   const aiFeaturesEnabled = areAiFeaturesEnabled(settings)
@@ -215,8 +218,19 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const vaultSwitcher = useVaultSwitcher({
     onSwitch: () => {
       if (noteWindowParams || aiWorkspaceWindow) return
-      handleSetSelection(DEFAULT_SELECTION)
-      notes.closeAllTabs()
+      if (workspaceTransitionRef.current) return workspaceTransitionRef.current
+      setWorkspaceTransitionPending(true)
+      const transition = (async () => {
+        for (const tab of notes.tabs) await flushEditorStateBeforeAction(tab.entry.path)
+        notes.splitWorkspace.suspendPersistence()
+        handleSetSelection(DEFAULT_SELECTION)
+        notes.closeAllTabs()
+      })().finally(() => {
+        setWorkspaceTransitionPending(false)
+        workspaceTransitionRef.current = null
+      })
+      workspaceTransitionRef.current = transition
+      return transition
     },
     onToast: (msg) => setToastMessage(msg),
   })
@@ -543,6 +557,9 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     addEntry: vault.addEntry,
     removeEntry: vault.removeEntry,
     entries: visibleEntries,
+    // Split restore waits for an authoritative listing of this exact vault, not a cached or previous one.
+    isVaultLoading: !(settingsLoaded && vault.loadedVaultPath === resolvedPath && !vault.isLoading),
+    restoreWorkspace: !noteWindowParams,
     flushBeforeNoteSwitch: flushEditorStateBeforeAction,
     flushBeforeNoteMutation: flushEditorStateBeforeMutation,
     reloadVault: vault.reloadVault,
@@ -575,13 +592,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   } = notes
   const noteActiveTabPath = notes.activeTabPath
   const noteActiveTabPathRef = notes.activeTabPathRef
-  useLastActiveNote({
-    activeTabPath: noteActiveTabPath,
-    enabled: !noteWindowParams && !aiWorkspaceWindow,
-    entries: visibleEntries,
-    isVaultLoading: vault.isLoading || !vaultSwitcher.loaded || !resolvedPath,
-    openNote: handleSelectNote,
-  })
+
   const noteTabsRef = useRef(notes.tabs)
   useEffect(() => {
     noteTabsRef.current = notes.tabs
@@ -753,6 +764,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   }, [visibleEntries, setNoteTabs])
 
   const { handleGoBack, handleGoForward, canGoBack, canGoForward, entriesByPath } = useAppNavigation({
+    paneNavigation: notes.splitWorkspace,
     entries: visibleEntries,
     activeTabPath: notes.activeTabPath,
     onSelectNote: notes.handleSelectNote,
@@ -821,6 +833,17 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     appSaveFlushBeforeActionRef.current = appSave.flushBeforeAction
     appSavePendingForPathRef.current = appSave.savePendingForPath
   }, [appSave.flushBeforeAction, appSave.savePendingForPath])
+
+  const saveWorkspacePending = appSave.savePending
+  const flushWorkspaceBeforeClose = useCallback(async () => {
+    for (const tab of notes.tabs) await flushEditorStateBeforeAction(tab.entry.path)
+    await saveWorkspacePending()
+  }, [notes.tabs, flushEditorStateBeforeAction, saveWorkspacePending])
+  const { isClosing } = useNativeSaveBeforeClose({
+    flush: flushWorkspaceBeforeClose,
+    onError: setToastMessage,
+    locale: appLocale,
+  })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -1106,9 +1129,9 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   }, [handleAppContentChange, recordAutoGitActivity])
 
   const handleTrackedSave = useCallback(async (...args: Parameters<typeof handleAppSave>) => {
-    if (notes.activeTabPath) {
-      flushPendingEditorContentRef.current?.(notes.activeTabPath)
-      flushPendingRawContentRef.current?.(notes.activeTabPath)
+    for (const tab of notes.tabs) {
+      flushPendingEditorContentRef.current?.(tab.entry.path)
+      flushPendingRawContentRef.current?.(tab.entry.path)
     }
     const result = await handleAppSave(...args)
     const activeTab = notes.activeTabPath
@@ -1556,7 +1579,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onPastePlainText: pastePlainTextCommand,
     onCreateNote: notes.handleCreateNoteImmediate,
     onCreateNoteOfType: notes.handleCreateNoteImmediate,
-    onSave: appSave.handleSave,
+    onSave: handleTrackedSave,
     onUndo: undoCommand,
     onRedo: redoCommand,
     canUndo: notes.canUndo,
@@ -1629,7 +1652,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     activeNoteHasIcon,
     noteListFilter,
     onSetNoteListFilter: setNoteListFilter,
-    onOpenInNewWindow: handleOpenInNewWindow,
+    onOpenInNewWindow: SEPARATE_WINDOWS_ENABLED ? handleOpenInNewWindow : undefined,
     onRevealActiveFile: fileActions.revealFile,
     onCopyActiveFilePath: fileActions.copyFilePath,
     onCopyActiveDeepLink: deepLinks.copyPathDeepLink,
@@ -1745,7 +1768,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
 
   return (
     <AppPreferencesProvider appLocale={appLocale} dateDisplayFormat={dateDisplayFormat}>
-      <div className="app-shell">
+      {isClosing && <div role="status" className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/80 text-sm text-muted-foreground">{translate(appLocale, 'leadinglight.shutdown.saving')}</div>}
+      <div className="app-shell" inert={isClosing || workspaceTransitionPending} aria-busy={isClosing || workspaceTransitionPending}>
         <div className="app">
           {sidebarVisible && (
             <>
@@ -1761,14 +1785,18 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
                 {effectiveSelection.kind === 'filter' && effectiveSelection.filter === 'pulse' ? (
                   <PulseView vaultPath={gitSurfaces.historyRepositoryPath} onOpenNote={handlePulseOpenNote} refreshKey={gitHistoryRefreshKey} sidebarCollapsed={!sidebarVisible} onExpandSidebar={() => handleSetViewMode('all')} repositories={gitRepositories} selectedRepositoryPath={gitSurfaces.historyRepositoryPath} onRepositoryChange={gitSurfaces.setHistoryRepositoryPath} locale={appLocale} />
                 ) : (
-                  <NoteList entries={visibleEntries} selection={effectiveSelection} selectedNote={activeTab?.entry ?? null} loading={isVaultContentLoading} noteListFilter={noteListFilter} onNoteListFilterChange={setNoteListFilter} inboxPeriod={inboxPeriod} modifiedFiles={noteListModifiedFiles} modifiedFilesError={noteListModifiedFilesError} gitRepositories={gitRepositories} selectedGitRepositoryPath={gitSurfaces.changesRepositoryPath} onGitRepositoryChange={gitSurfaces.setChangesRepositoryPath} getNoteStatus={vault.getNoteStatus} sidebarCollapsed={!sidebarVisible} onSelectNote={notes.handleSelectNote} onReplaceActiveTab={handleReplaceActiveTabWithQueuedDiff} onEnterNeighborhood={handleEnterNeighborhood} onCreateNote={notes.handleCreateNoteImmediate} onBulkOrganize={explicitOrganizationEnabled ? bulkActions.handleBulkOrganize : undefined} onBulkArchive={bulkActions.handleBulkArchive} onBulkDeletePermanently={deleteActions.handleBulkDeletePermanently} onUpdateTypeSort={notes.handleUpdateFrontmatter} onUpdateViewDefinition={handleUpdateViewDefinition} updateEntry={vault.updateEntry} onOpenInNewWindow={handleOpenEntryInNewWindow} onRenameFilename={appSave.handleFilenameRename} onExportPdf={handleExportNotePdfFromList} onToggleFavorite={entryActions.handleToggleFavorite} onToggleOrganized={explicitOrganizationEnabled ? entryActions.handleToggleOrganized : undefined} onRevealFile={fileActions.revealFile} onCopyFilePath={fileActions.copyFilePath} canCopyGitUrl={noteGitUrls.canCopyEntryGitUrl} onCopyGitUrl={noteGitUrls.copyEntryGitUrl} onDiscardFile={handleDiscardFile} onOpenDeletedNote={handleOpenDeletedNote} allNotesNoteListProperties={vaultConfig.allNotes?.noteListProperties ?? null} onUpdateAllNotesNoteListProperties={handleUpdateAllNotesNoteListProperties} inboxNoteListProperties={vaultConfig.inbox?.noteListProperties ?? null} onUpdateInboxNoteListProperties={handleUpdateInboxNoteListProperties} views={vault.views} visibleNotesRef={visibleNotesRef} allNotesFileVisibility={allNotesFileVisibility} multiSelectionCommandRef={multiSelectionCommandRef} locale={appLocale} />
+                  <NoteList entries={visibleEntries} selection={effectiveSelection} selectedNote={activeTab?.entry ?? null} loading={isVaultContentLoading} noteListFilter={noteListFilter} onNoteListFilterChange={setNoteListFilter} inboxPeriod={inboxPeriod} modifiedFiles={noteListModifiedFiles} modifiedFilesError={noteListModifiedFilesError} gitRepositories={gitRepositories} selectedGitRepositoryPath={gitSurfaces.changesRepositoryPath} onGitRepositoryChange={gitSurfaces.setChangesRepositoryPath} getNoteStatus={vault.getNoteStatus} sidebarCollapsed={!sidebarVisible} onSelectNote={notes.handleSelectNote} onReplaceActiveTab={handleReplaceActiveTabWithQueuedDiff} onEnterNeighborhood={handleEnterNeighborhood} onCreateNote={notes.handleCreateNoteImmediate} onBulkOrganize={explicitOrganizationEnabled ? bulkActions.handleBulkOrganize : undefined} onBulkArchive={bulkActions.handleBulkArchive} onBulkDeletePermanently={deleteActions.handleBulkDeletePermanently} onUpdateTypeSort={notes.handleUpdateFrontmatter} onUpdateViewDefinition={handleUpdateViewDefinition} updateEntry={vault.updateEntry} onOpenInNewWindow={SEPARATE_WINDOWS_ENABLED ? handleOpenEntryInNewWindow : undefined} onRenameFilename={appSave.handleFilenameRename} onExportPdf={handleExportNotePdfFromList} onToggleFavorite={entryActions.handleToggleFavorite} onToggleOrganized={explicitOrganizationEnabled ? entryActions.handleToggleOrganized : undefined} onRevealFile={fileActions.revealFile} onCopyFilePath={fileActions.copyFilePath} canCopyGitUrl={noteGitUrls.canCopyEntryGitUrl} onCopyGitUrl={noteGitUrls.copyEntryGitUrl} onDiscardFile={handleDiscardFile} onOpenDeletedNote={handleOpenDeletedNote} allNotesNoteListProperties={vaultConfig.allNotes?.noteListProperties ?? null} onUpdateAllNotesNoteListProperties={handleUpdateAllNotesNoteListProperties} inboxNoteListProperties={vaultConfig.inbox?.noteListProperties ?? null} onUpdateInboxNoteListProperties={handleUpdateInboxNoteListProperties} views={vault.views} visibleNotesRef={visibleNotesRef} allNotesFileVisibility={allNotesFileVisibility} multiSelectionCommandRef={multiSelectionCommandRef} locale={appLocale} />
                 )}
               </div>
               <ResizeHandle onResize={layout.handleNoteListResize} />
             </>
           )}
           <div className={`app__editor${aiActivity.highlightElement === 'editor' || aiActivity.highlightElement === 'tab' ? ' ai-highlight' : ''}`}>
-            <LazyEditor
+            <SplitEditorWorkspace
+              transitionPending={workspaceTransitionPending || isClosing}
+              onCreatePage={title => notes.handleCreateNote(title, 'Note', 'quick_open')}
+              workspace={notes.splitWorkspace}
+              unsavedPaths={vault.unsavedPaths}
               tabs={notes.tabs}
               activeTabPath={notes.activeTabPath}
               isVaultLoading={isVaultContentLoading}
@@ -1849,7 +1877,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         </div>
         <UpdateBanner status={updateStatus} actions={updateActions} locale={appLocale} />
         <RenameDetectedBanner renames={detectedRenames} onUpdate={handleUpdateWikilinks} onDismiss={handleDismissRenames} />
-        <StatusBar noteCount={visibleEntries.length} modifiedCount={gitModifiedCount} vaultPath={resolvedPath} defaultWorkspacePath={defaultWorkspacePath} vaults={vaultSwitcher.allVaults} multiWorkspaceEnabled={multiWorkspaceEnabled} onSwitchVault={vaultSwitcher.switchVault} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onOpenSettings={handleOpenSettings} onOpenVaultSettings={handleOpenVaultSettings} onOpenFeedback={openFeedback} onOpenDocs={openDocs} onOpenLocalFolder={vaultSwitcher.handleOpenLocalFolder} onCreateEmptyVault={vaultSwitcher.handleCreateEmptyVault} onCloneVault={dialogs.openCloneVault} onCloneGettingStarted={cloneGettingStartedVault} onClickPending={() => handleSetSelection({ kind: 'filter', filter: 'changes' })} onClickPulse={() => handleSetSelection({ kind: 'filter', filter: 'pulse' })} onCommitPush={handleCommitPush} commitActionPending={commitFlow.isOpeningCommitDialog} gitFeaturesEnabled={gitFeaturesEnabled} onInitializeGit={openGitSetupDialog} isOffline={networkStatus.isOffline} isGitVault={isGitVault} isVaultReloading={vault.isReloading || isVaultContentLoading} syncStatus={autoSync.syncStatus} lastSyncTime={autoSync.lastSyncTime} conflictCount={autoSync.conflictFiles.length} remoteStatus={autoSync.remoteStatus} repositories={gitRepositories} selectedRepositoryPath={gitSurfaces.syncRepositoryPath} onRepositoryChange={gitSurfaces.setSyncRepositoryPath} onTriggerSync={handlePullSelectedRepository} onPullAndPush={handlePullAndPushSelectedRepository} onOpenConflictResolver={conflictFlow.handleOpenConflictResolver} zoomLevel={zoom.zoomLevel} themeMode={documentThemeMode} onZoomReset={zoom.zoomReset} onToggleThemeMode={settingsLoaded ? handleToggleThemeMode : undefined} buildNumber={buildNumber} onCheckForUpdates={handleCheckForUpdates} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} aiFeaturesEnabled={aiFeaturesEnabled} mcpStatus={mcpSetupDialog.status} onInstallMcp={mcpSetupDialog.openDialog} locale={appLocale} />
+        <StatusBar noteCount={visibleEntries.length} modifiedCount={gitModifiedCount} vaultPath={resolvedPath} defaultWorkspacePath={defaultWorkspacePath} vaults={vaultSwitcher.allVaults} multiWorkspaceEnabled={multiWorkspaceEnabled} onSwitchVault={vaultSwitcher.switchVault} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onOpenSettings={handleOpenSettings} onOpenVaultSettings={MULTI_WORKSPACE_ENABLED ? handleOpenVaultSettings : undefined} onOpenFeedback={openFeedback} onOpenDocs={openDocs} onOpenLocalFolder={vaultSwitcher.handleOpenLocalFolder} onCreateEmptyVault={vaultSwitcher.handleCreateEmptyVault} onCloneVault={dialogs.openCloneVault} onCloneGettingStarted={cloneGettingStartedVault} onClickPending={() => handleSetSelection({ kind: 'filter', filter: 'changes' })} onClickPulse={() => handleSetSelection({ kind: 'filter', filter: 'pulse' })} onCommitPush={handleCommitPush} commitActionPending={commitFlow.isOpeningCommitDialog} gitFeaturesEnabled={gitFeaturesEnabled} onInitializeGit={openGitSetupDialog} isOffline={networkStatus.isOffline} isGitVault={isGitVault} isVaultReloading={vault.isReloading || isVaultContentLoading} syncStatus={autoSync.syncStatus} lastSyncTime={autoSync.lastSyncTime} conflictCount={autoSync.conflictFiles.length} remoteStatus={autoSync.remoteStatus} repositories={gitRepositories} selectedRepositoryPath={gitSurfaces.syncRepositoryPath} onRepositoryChange={gitSurfaces.setSyncRepositoryPath} onTriggerSync={handlePullSelectedRepository} onPullAndPush={handlePullAndPushSelectedRepository} onOpenConflictResolver={conflictFlow.handleOpenConflictResolver} zoomLevel={zoom.zoomLevel} themeMode={documentThemeMode} onZoomReset={zoom.zoomReset} onToggleThemeMode={settingsLoaded ? handleToggleThemeMode : undefined} buildNumber={buildNumber} onCheckForUpdates={handleCheckForUpdates} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} aiFeaturesEnabled={aiFeaturesEnabled} mcpStatus={mcpSetupDialog.status} onInstallMcp={mcpSetupDialog.openDialog} locale={appLocale} />
         {aiFeaturesEnabled && !effectiveShowAIChat ? (
           <AiWorkspaceFloatingButton
             statuses={aiAgentsStatus}

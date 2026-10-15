@@ -1,3 +1,4 @@
+import { editorScopeForPath } from '../leadinglight/editorScope'
 import { useEffect } from 'react'
 import { focusEditorWithRetries, type FocusableEditor } from './editorFocusUtils'
 import { resumeEditorFocus } from './editorFocusOwnership'
@@ -164,11 +165,17 @@ function registerPendingTabFocus(
 export function useEditorFocus(
   editor: FocusableEditor,
   editorMountedRef: React.RefObject<boolean>,
+  activePath?: string | null,
 ) {
   useEffect(() => {
     const pendingCleanups = new Set<() => void>()
 
     const handleFocusRequest = (detail: FocusEventDetail | undefined) => {
+      if (activePath !== undefined) {
+        if (detail?.path && detail.path !== activePath) return
+        const scope = editorScopeForPath(activePath)
+        if (scope instanceof HTMLElement && scope.dataset.paneActive !== 'true') return
+      }
       const t0 = detail?.t0
       const selectTitle = detail?.selectTitle ?? false
       const targetPath = detail?.path ?? null
@@ -194,5 +201,5 @@ export function useEditorFocus(
       }
       pendingCleanups.clear()
     }
-  }, [editor, editorMountedRef])
+  }, [editor, editorMountedRef, activePath])
 }

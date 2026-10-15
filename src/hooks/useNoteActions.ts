@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import type { VaultEntry, VaultPropertyValue } from '../types'
 import type { FrontmatterValue } from '../components/Inspector'
-import { cacheNoteContent, useTabManagement } from './useTabManagement'
+import { cacheNoteContent } from './useTabManagement'
+import { useSplitWorkspace as useTabManagement } from '../leadinglight/useSplitWorkspace'
 import {
   GITIGNORED_VISIBILITY_APPLIED_EVENT,
   type GitignoredVisibilityAppliedEvent,
@@ -26,6 +27,8 @@ export interface NoteActionsConfig {
   addEntry: (entry: VaultEntry) => void
   removeEntry: (path: string) => void
   entries: VaultEntry[]
+  isVaultLoading?: boolean
+  restoreWorkspace?: boolean
   flushBeforeNoteSwitch?: (path: string) => Promise<void>
   flushBeforeNoteMutation?: (path: string) => Promise<void>
   reloadVault?: () => Promise<unknown>
@@ -928,7 +931,7 @@ function useWikilinkNavigation({
 export function useNoteActions(config: NoteActionsConfig) {
   const { entries, setToastMessage, updateEntry } = config
   const { handlePathRenamed, resolveActionPath } = useRenamedNotePathResolver(config.onPathRenamed)
-  const tabMgmt = useTabManagement(buildTabManagementOptions(config))
+  const tabMgmt = useTabManagement({ ...buildTabManagementOptions(config), vaultPath: config.vaultPath, entries: config.entries, isVaultLoading: config.isVaultLoading, restoreWorkspace: config.restoreWorkspace })
   const { actionHistory, handleSelectNote } = useNoteSelectionState(config, tabMgmt)
   useGitignoredVisibilityTabCleanup({
     activeTabPathRef: tabMgmt.activeTabPathRef,

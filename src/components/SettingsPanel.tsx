@@ -1,3 +1,4 @@
+import { MULTI_WORKSPACE_ENABLED, REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 import { Copy, Cube, Monitor, Moon, Sun, X } from '@phosphor-icons/react'
 import {
   AI_AGENT_DEFINITIONS,
@@ -234,7 +235,7 @@ function createSettingsDraft(settings: Settings, explicitOrganizationEnabled: bo
     initialH1AutoRename: settings.initial_h1_auto_rename_enabled ?? true,
     hideGitignoredFiles: shouldHideGitignoredFiles(settings),
     allNotesFileVisibility: resolveAllNotesFileVisibility(settings),
-    multiWorkspaceEnabled: settings.multi_workspace_enabled === true,
+    multiWorkspaceEnabled: MULTI_WORKSPACE_ENABLED && settings.multi_workspace_enabled === true,
     crashReporting: settings.crash_reporting_enabled ?? false,
     analytics: settings.analytics_enabled ?? false,
     explicitOrganization: explicitOrganizationEnabled,
@@ -288,7 +289,7 @@ function buildSettingsFromDraft(settings: Settings, draft: SettingsDraft): Setti
     default_ai_target: draft.defaultAiTarget,
     ai_model_providers: draft.aiModelProviders.length > 0 ? draft.aiModelProviders : null,
     hide_gitignored_files: draft.hideGitignoredFiles,
-    multi_workspace_enabled: draft.multiWorkspaceEnabled,
+    multi_workspace_enabled: MULTI_WORKSPACE_ENABLED && draft.multiWorkspaceEnabled,
   }
   return settingsWithAllNotesFileVisibility(nextSettings, draft.allNotesFileVisibility)
 }
@@ -655,9 +656,12 @@ function SettingsSyncAndAppearanceSections(options: SettingsBodyProps) {
   const { t, locale, systemLocale, multiWorkspaceEnabled, setMultiWorkspaceEnabled, vaults, defaultWorkspacePath, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, themeMode, setThemeMode, uiLanguage, setUiLanguage } = options
   return (
     <>
+      {REMOTE_FEATURES_ENABLED && (
       <SettingsSection id={SETTINGS_SECTION_IDS.sync} showDivider={false}>
         <SyncAndUpdatesSection {...options} />
       </SettingsSection>
+      )}
+      {MULTI_WORKSPACE_ENABLED && (
       <SettingsSection id={SETTINGS_SECTION_IDS.workspaces}>
         <SectionHeading icon={<Cube size={16} aria-hidden="true" />} title={t('settings.workspaces.title')} />
         <WorkspaceSettingsSection
@@ -674,9 +678,12 @@ function SettingsSyncAndAppearanceSections(options: SettingsBodyProps) {
           vaults={vaults}
         />
       </SettingsSection>
+      )}
+      {REMOTE_FEATURES_ENABLED && (
       <SettingsSection id={SETTINGS_SECTION_IDS.autogit}>
         <GitSettingsSection {...options} />
       </SettingsSection>
+      )}
 
       <SettingsSection id={SETTINGS_SECTION_IDS.appearance}>
         <SectionHeading title={t('settings.appearance.title')} />
@@ -722,6 +729,7 @@ function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
   const { t, autoAdvanceInboxAfterOrganize, setAutoAdvanceInboxAfterOrganize, aiFeaturesEnabled, setAiFeaturesEnabled, aiAgentsStatus, defaultAiAgent, setDefaultAiAgent, defaultAiTarget, setDefaultAiTarget, aiModelProviders, setAiModelProviders, onCopyMcpConfig, explicitOrganization, setExplicitOrganization, crashReporting, setCrashReporting, analytics, setAnalytics } = options
   return (
     <>
+      {REMOTE_FEATURES_ENABLED && (
       <SettingsSection id={SETTINGS_SECTION_IDS.ai}>
         <AiAgentSettingsSection
           t={t}
@@ -737,6 +745,7 @@ function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
           onCopyMcpConfig={onCopyMcpConfig}
         />
       </SettingsSection>
+      )}
 
       <SettingsSection id={SETTINGS_SECTION_IDS.workflow}>
         <OrganizationWorkflowSection
@@ -749,6 +758,7 @@ function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
       </SettingsSection>
 
       <SettingsSection id={SETTINGS_SECTION_IDS.privacy}>
+        {REMOTE_FEATURES_ENABLED ? (
         <PrivacySettingsSection
           t={t}
           crashReporting={crashReporting}
@@ -756,6 +766,12 @@ function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
           analytics={analytics}
           setAnalytics={setAnalytics}
         />
+        ) : (
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <SectionHeading title={t('leadinglight.privacy.title')} />
+            <p>{t('leadinglight.privacy.body')}</p>
+          </div>
+        )}
       </SettingsSection>
     </>
   )

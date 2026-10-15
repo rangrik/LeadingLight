@@ -1,7 +1,10 @@
 use super::*;
 
 fn assert_empty_settings(settings: &Settings) {
-    assert_eq!(settings, &Settings::default());
+    assert_eq!(
+        settings,
+        &crate::leadinglight::apply_local_only_settings(Settings::default())
+    );
 }
 
 fn save_and_reload(settings: Settings) -> Settings {
@@ -78,7 +81,7 @@ fn test_save_creates_parent_directories() {
     assert!(path.exists());
     assert_eq!(
         get_settings_at(&path).unwrap().anonymous_id.as_deref(),
-        Some("test-uuid")
+        None
     );
 }
 
@@ -93,7 +96,7 @@ fn test_get_settings_malformed_json() {
 }
 
 #[test]
-fn test_telemetry_fields_roundtrip() {
+fn test_telemetry_opt_ins_are_removed_on_save() {
     let loaded = save_and_reload(Settings {
         telemetry_consent: Some(true),
         crash_reporting_enabled: Some(true),
@@ -101,16 +104,10 @@ fn test_telemetry_fields_roundtrip() {
         anonymous_id: Some("test-uuid-v4".to_string()),
         ..Default::default()
     });
-    assert_eq!(
-        loaded,
-        Settings {
-            telemetry_consent: Some(true),
-            crash_reporting_enabled: Some(true),
-            analytics_enabled: Some(false),
-            anonymous_id: Some("test-uuid-v4".to_string()),
-            ..Default::default()
-        }
-    );
+    assert_eq!(loaded.telemetry_consent, Some(false));
+    assert_eq!(loaded.crash_reporting_enabled, Some(false));
+    assert_eq!(loaded.analytics_enabled, Some(false));
+    assert!(loaded.anonymous_id.is_none());
 }
 
 #[test]
@@ -134,18 +131,18 @@ fn test_settings_path_returns_ok() {
     assert!(result.is_ok());
     let path = result.unwrap();
     let path = path.to_str().unwrap();
-    assert!(path.contains("com.tolaria.app") || path.contains("com.laputa.app"));
+    assert!(path.contains("dev.rangrik.leadinglight"));
 }
 
 #[test]
-fn test_preferred_settings_path_uses_tolaria_namespace() {
+fn test_preferred_settings_path_uses_leadinglight_namespace() {
     let result = preferred_app_config_path("settings.json");
     assert!(result.is_ok());
     assert!(result
         .unwrap()
         .to_str()
         .unwrap()
-        .contains("com.tolaria.app"));
+        .contains("dev.rangrik.leadinglight"));
 }
 
 #[test]

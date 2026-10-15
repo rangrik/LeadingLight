@@ -299,6 +299,7 @@ export function SingleEditorView(options: {
   const handleEditorChange = useCompositionAwareEditorChange({
     containerRef,
     onChange,
+    editor,
   })
   const onImageUrl = useInsertImageCallback(editor)
   const { isDragOver } = useImageDrop({

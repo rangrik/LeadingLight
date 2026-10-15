@@ -1,3 +1,60 @@
+# LeadingLight fork policy (takes precedence over the upstream guide below)
+
+LeadingLight is rangrik's personal, local-only desktop notes application, derived from Tolaria.
+The owner explicitly requested this fork, its public source repository, independent branding,
+upstream compatibility, and the agent team below. The inherited Tolaria guide is retained to
+reduce merge churn; its organization-specific service requirements do not govern this fork.
+
+## Product and privacy
+- First milestone: two independently editable pages, side by side or stacked, resize, close,
+  reopen and restore. Reuse the existing rich editor and Markdown persistence.
+- Fresh local vault. Notes, attachments, settings, backups and history stay local. No telemetry,
+  remote error reporting, automatic Git sync, remote AI calls, remote templates or update checks.
+- Public source code is explicitly authorized; never commit user notes, credentials, local
+  screenshots of personal content, agent transcripts, or the owner's private information.
+- Keep AGPL-3.0-or-later and upstream attribution. Never publish as official Tolaria/Capacities.
+- Prefer calm defaults, progressive disclosure, plain language, easy capture and resumption,
+  visible saving/error states, reversible actions, no streaks or guilt-based prompts.
+- Reuse shadcn/Radix and Phosphor. No bespoke replacements for existing standard controls.
+
+## Team and coordination
+- This Codex chat is manager/integrator. Opus 5.5 xhigh is primary developer. Fable 5.1 xhigh
+  handles design/product when needed. Astra is senior tech lead and secondary developer.
+  Sol 6.1 ultra handles small tasks/computer use. Opus max handles any reverse engineering.
+- Use workspace_management/ for private task briefs, agent IDs, findings and handoffs.
+  Each agent owns a separate report. Manager owns the board and integration. No other agent
+  commits, pushes, installs dependencies, launches servers or starts native builds unless assigned.
+- Shared checkout, explicit file ownership, no simultaneous edits to shared files. Ask manager
+  before expanding scope. Communicate important contract changes before implementing them.
+- Do not read or change real user vaults for testing. Use disposable synthetic fixtures.
+
+## Architecture and quality
+- Keep upstream history and an upstream remote; origin is rangrik/LeadingLight. Never push upstream.
+- Prefer additive src/leadinglight modules and a small documented integration surface. Preserve
+  upstream internal identifiers where harmless. Record decisions under docs/leadinglight/.
+- Verify latest stable dependency versions; preserve/rebase editor correctness patches deliberately.
+  Never claim all packages are latest if compatibility exceptions remain.
+- Local quality gates: targeted behavioral tests for state/persistence, TypeScript, lint of changed
+  code, production frontend build, Rust checks for changed backend code, browser and native QA.
+  Run appropriate existing tests. Report failures and inherited baseline problems honestly.
+- Tolaria-specific Todoist/Linear, CodeScene/Codacy SaaS, PostHog instrumentation, Lara cloud
+  translation, Verity cloud memory, CircleCI publishing and external sidecar requirements are
+  superseded for this independent local-only fork. Do not contact upstream organizational services.
+- Use English source locale with the existing fallback system for the initial personal release.
+- Manager commits verified coherent units and pushes to the requested public repository. Never
+  bypass a failing hook; adapt fork hooks transparently to the local quality gates above.
+
+## Resource budget
+- One node_modules, one native target directory, one dev server. No duplicate worktree installs.
+- Cargo builds use at most 2 jobs and one reusable target; avoid simultaneous native/coverage builds.
+- Do not create release/debug/coverage caches simultaneously. Inspect disk use before major builds.
+- Do not delete other projects' caches. Keep only this project's necessary QA artifacts.
+- Monitor account usage; stop before 80% Codex weekly usage. Do not buy credits or reset limits.
+
+---
+
+## Historical upstream guide
+
 # AGENTS.md — Tolaria App
 
 ## 1. Development Process

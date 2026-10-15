@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { trackEvent } from '../lib/telemetry'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 
 export type HighlightElement = 'editor' | 'tab' | 'properties' | 'notelist' | null
 
@@ -151,6 +152,7 @@ function useUiActionMessageHandler(
 
 function useUiActionSocket(handleMessage: (event: MessageEvent) => void, clearHighlightTimer: () => void): void {
   useEffect(() => {
+    if (!REMOTE_FEATURES_ENABLED) return
     let ws: WebSocket | null = null
     let mounted = true
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null

@@ -78,15 +78,22 @@ fn vault_path_hash(vault: &Path) -> String {
     format!("{:016x}", hasher.finish())
 }
 
-/// Return the cache directory. Override with `LAPUTA_CACHE_DIR` env var (for tests).
+fn cache_dir_from_config(settings_path: Result<PathBuf, String>) -> PathBuf {
+    settings_path
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| std::env::temp_dir().join("leadinglight"))
+        .join("cache")
+}
+
+/// Keep the cache in LeadingLight's namespace; retain the upstream test override.
 fn cache_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("LAPUTA_CACHE_DIR") {
         return PathBuf::from(dir);
     }
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("~"))
-        .join(".laputa")
-        .join("cache")
+    cache_dir_from_config(crate::app_config::preferred_app_config_path(
+        "settings.json",
+    ))
 }
 
 fn cache_path(vault: &Path) -> PathBuf {

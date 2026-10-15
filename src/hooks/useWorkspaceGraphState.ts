@@ -1,3 +1,4 @@
+import { MULTI_WORKSPACE_ENABLED } from '../leadinglight/localPolicy'
 import { useEffect, useMemo } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri, mockInvoke } from '../mock-tauri'
@@ -191,8 +192,8 @@ export function hideWorkspaceMetadata(entries: VaultEntry[]): VaultEntry[] {
 }
 
 export function useWorkspaceGraphState({ allVaults, defaultWorkspacePath, resolvedPath, settings, vaultSwitcherLoaded, windowMode }: WorkspaceGraphConfig): WorkspaceGraphState {
-  const multiWorkspaceEnabled = settings.multi_workspace_enabled === true
-  const workspaceGraphLoadingEnabled = !windowMode
+  const multiWorkspaceEnabled = MULTI_WORKSPACE_ENABLED && settings.multi_workspace_enabled === true
+  const workspaceGraphLoadingEnabled = MULTI_WORKSPACE_ENABLED && !windowMode
   const graphDefaultWorkspacePath = workspaceGraphDefaultPath({
     defaultWorkspacePath,
     multiWorkspaceEnabled,

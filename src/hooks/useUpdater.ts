@@ -8,6 +8,7 @@ import {
 } from '../lib/appUpdater'
 import { formatCalendarVersionForDisplay } from '../utils/calendarVersion'
 import { openExternalUrl } from '../utils/url'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 
 const RELEASE_NOTES_URL = 'https://tolaria.md/releases/'
 
@@ -101,6 +102,9 @@ export function useUpdater(
   const updateRef = useRef<AppUpdateMetadata | null>(null)
 
   const checkForUpdates = useCallback(async (): Promise<UpdateCheckResult> => {
+    if (!REMOTE_FEATURES_ENABLED) {
+      return { kind: 'error', message: 'Update checks are unavailable in local-only mode.' }
+    }
     if (!isTauri()) return { kind: 'up-to-date' }
 
     setStatus({ state: 'checking' })
@@ -125,6 +129,7 @@ export function useUpdater(
   }, [releaseChannel])
 
   useEffect(() => {
+    if (!REMOTE_FEATURES_ENABLED) return
     if (!automaticChecksEnabled) return
     if (!isTauri()) return
     const timer = setTimeout(() => { checkForUpdates() }, 3000)

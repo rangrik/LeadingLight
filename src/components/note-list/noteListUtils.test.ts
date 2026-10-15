@@ -1,4 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
+// Retain dormant upstream routes; shipping policy is covered by localWorkspaceSafety.test.tsx.
+vi.mock('../../leadinglight/localPolicy', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../leadinglight/localPolicy')>(),
+  SEPARATE_WINDOWS_ENABLED: true,
+}))
+
 import { createNoteStatusResolver, resolveHeaderTitle, routeNoteClick } from './noteListUtils'
 
 function makeEntry(path = '/test.md') {

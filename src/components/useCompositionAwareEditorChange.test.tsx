@@ -2,10 +2,11 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useCompositionAwareEditorChange } from './useCompositionAwareEditorChange'
+import { assertEditorCompositionReady } from '../hooks/editorCompositionBoundary'
 
-function CompositionChangeHarness({ onChange }: { onChange: () => void }) {
+function CompositionChangeHarness({ onChange, editor }: { onChange: () => void; editor?: object }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const handleChange = useCompositionAwareEditorChange({ containerRef, onChange })
+  const handleChange = useCompositionAwareEditorChange({ containerRef, onChange, editor })
 
   return (
     <div data-testid="composition-container" ref={containerRef}>
@@ -64,5 +65,16 @@ describe('useCompositionAwareEditorChange', () => {
 
     await act(async () => vi.advanceTimersByTimeAsync(1))
     expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps composition barriers local to their editor and unregisters them on unmount', () => {
+    const editor = {}
+    const otherEditor = {}
+    const { unmount } = render(<CompositionChangeHarness editor={editor} onChange={vi.fn()} />)
+    fireEvent.compositionStart(screen.getByTestId('composition-container'))
+    expect(() => assertEditorCompositionReady(editor)).toThrow('composition')
+    expect(() => assertEditorCompositionReady(otherEditor)).not.toThrow()
+    unmount()
+    expect(() => assertEditorCompositionReady(editor)).not.toThrow()
   })
 })

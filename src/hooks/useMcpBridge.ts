@@ -7,6 +7,7 @@
  * Connection is lazy — only opens when first tool is called.
  */
 import { useCallback, useRef, useState } from 'react'
+import { REMOTE_FEATURES_ENABLED } from '../leadinglight/localPolicy'
 
 const DEFAULT_WS_URL = 'ws://localhost:9710'
 
@@ -28,6 +29,9 @@ export function useMcpBridge(wsUrl = DEFAULT_WS_URL) {
   const [connected, setConnected] = useState(false)
 
   const ensureConnection = useCallback((): Promise<WebSocket> => {
+    if (!REMOTE_FEATURES_ENABLED) {
+      return Promise.reject(new Error('The AI bridge is unavailable in local-only mode.'))
+    }
     const ws = wsRef.current
     if (ws && ws.readyState === WebSocket.OPEN) return Promise.resolve(ws)
 

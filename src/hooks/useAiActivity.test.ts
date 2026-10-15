@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useAiActivity } from './useAiActivity'
 
+// Exercise the retained upstream implementation; localPolicy.test.ts covers the production prohibition.
+vi.mock('../leadinglight/localPolicy', () => ({ REMOTE_FEATURES_ENABLED: true }))
+
 class MockWebSocket {
   static latest: MockWebSocket | null = null
   onmessage: ((event: MessageEvent) => void) | null = null

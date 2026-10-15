@@ -1,3 +1,4 @@
+import { editorScopeForPath } from '../leadinglight/editorScope'
 import { useRef, useLayoutEffect, useCallback, useState } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import { useEditorContentPathSignal } from '../hooks/useEditorContentPathSignal'
@@ -65,14 +66,14 @@ function buildPendingRawRestore({
   const nextContent = syncedContent ?? activeTabContent
   if (!nextContent) return null
 
-  const richSnapshot = captureRichEditorPositionSnapshot(editor, document)
+  const richSnapshot = captureRichEditorPositionSnapshot(editor, editorScopeForPath(activeTabPath))
   return richSnapshot ? buildCodeMirrorRestoreState(editor, nextContent, richSnapshot) : null
 }
 
 function capturePendingRoundTripRawRestore(activeTabPath: string | null): PendingRoundTripRawRestore | null {
   if (!activeTabPath) return null
 
-  const rawRestoreState = captureRawCodeMirrorRestoreState(document)
+  const rawRestoreState = captureRawCodeMirrorRestoreState(editorScopeForPath(activeTabPath))
   return rawRestoreState ? { path: activeTabPath, state: rawRestoreState } : null
 }
 
@@ -243,7 +244,7 @@ function useHandleBeforeRawEnd(options: {
   return useCallback(() => {
     const restoreTransition = restoreTransitionRef.current
     restoreTransition.roundTripRawRestore = capturePendingRoundTripRawRestore(activeTabPath)
-    restoreTransition.richRestore = captureRawEditorPositionSnapshot(document)
+    restoreTransition.richRestore = captureRawEditorPositionSnapshot(editorScopeForPath(activeTabPath))
     restoreTransition.rawRestore = null
     setPendingRawExitContent(
       rememberPendingRawExitContent({
@@ -307,7 +308,7 @@ export function useRawModeWithFlush(
   vaultPath?: string,
   flushPendingEditorChangeRef?: React.MutableRefObject<(() => boolean) | null>,
 ) {
-  const { path: editorContentPath } = useEditorContentPathSignal()
+  const { path: editorContentPath } = useEditorContentPathSignal(activeTabPath)
   const rawLatestContentRef = useRef<string | null>(null)
   const rawInitialContentRef = useRef<string | null>(null)
   const rawBufferPathRef = useRef<string | null>(null)

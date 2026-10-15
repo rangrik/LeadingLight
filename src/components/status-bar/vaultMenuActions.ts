@@ -1,5 +1,6 @@
 import { FolderOpen, GitBranch, Plus, Rocket } from '@phosphor-icons/react'
 import type { BuildVaultActionOptions, VaultAction } from './vaultMenuTypes'
+import { REMOTE_FEATURES_ENABLED } from '../../leadinglight/localPolicy'
 
 export function buildVaultActions(options: BuildVaultActionOptions): VaultAction[] {
   const { multiWorkspaceEnabled, onCreateEmptyVault, onCloneGettingStarted, onCloneVault, onOpenLocalFolder } = options
@@ -26,7 +27,7 @@ export function buildVaultActions(options: BuildVaultActionOptions): VaultAction
     })
   }
 
-  if (onCloneVault) {
+  if (REMOTE_FEATURES_ENABLED && onCloneVault) {
     items.push({
       key: 'clone-git',
       Icon: GitBranch,
@@ -36,7 +37,7 @@ export function buildVaultActions(options: BuildVaultActionOptions): VaultAction
     })
   }
 
-  if (onCloneGettingStarted) {
+  if (REMOTE_FEATURES_ENABLED && onCloneGettingStarted) {
     items.push({
       key: 'clone-getting-started',
       Icon: Rocket,

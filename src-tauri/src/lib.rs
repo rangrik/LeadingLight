@@ -25,9 +25,12 @@ mod hermes_discovery;
 mod html_block_protocol;
 pub mod kiro_cli;
 mod kiro_discovery;
+pub mod leadinglight;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
 mod linux_appimage;
 mod macos_fullscreen_escape;
+#[cfg(desktop)]
+mod macos_shutdown;
 pub mod mcp;
 #[cfg(desktop)]
 pub mod menu;
@@ -41,6 +44,8 @@ mod pi_discovery;
 mod pi_events;
 pub mod search;
 pub mod settings;
+#[cfg(desktop)]
+mod shutdown_save;
 pub mod telemetry;
 pub mod vault;
 mod vault_instance;
@@ -131,6 +136,7 @@ fn setup_deep_link_runtime_registration(
 fn setup_desktop_plugins(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     setup_macos_webview_shortcut_prevention(app)?;
     macos_fullscreen_escape::setup(app)?;
+    macos_shutdown::setup(app)?;
     setup_deep_link_runtime_registration(app)?;
     install_desktop_runtime_plugins(app)?;
     setup_native_desktop_menu(app)?;
@@ -142,8 +148,6 @@ fn setup_desktop_plugins(app: &mut tauri::App) -> Result<(), Box<dyn std::error:
 
 #[cfg(desktop)]
 fn install_desktop_runtime_plugins(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    app.handle()
-        .plugin(tauri_plugin_updater::Builder::new().build())?;
     app.handle().plugin(tauri_plugin_process::init())?;
     app.handle().plugin(tauri_plugin_opener::init())?;
     Ok(())
@@ -271,6 +275,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 macro_rules! app_invoke_handler {
     () => {
         tauri::generate_handler![
+            #[cfg(desktop)]
+            shutdown_save::shutdown_frontend_ready,
+            #[cfg(desktop)]
+            shutdown_save::complete_shutdown_save,
             commands::list_vault,
             commands::read_vault_snapshot,
             commands::get_startup_elapsed_ms,
@@ -392,7 +400,15 @@ macro_rules! app_invoke_handler {
 }
 
 fn with_invoke_handler(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<tauri::Wry> {
-    builder.invoke_handler(app_invoke_handler!())
+    let upstream_handler: fn(tauri::ipc::Invoke<tauri::Wry>) -> bool = app_invoke_handler!();
+    builder.invoke_handler(move |invoke| {
+        if leadinglight::is_disabled_command(invoke.message.command()) {
+            let message = leadinglight::disabled_feature_message(invoke.message.command());
+            invoke.resolver.reject(message);
+            return true;
+        }
+        upstream_handler(invoke)
+    })
 }
 
 #[cfg(desktop)]
@@ -400,6 +416,7 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
     use tauri::Manager;
 
     window_state::handle_run_event(app_handle, event);
+    shutdown_save::handle_run_event(app_handle, event);
 
     if let tauri::RunEvent::Exit = event {
         let state: tauri::State<'_, desktop_runtime::WsBridgeChild> = app_handle.state();
@@ -426,6 +443,7 @@ pub fn run() {
             Vec::new(),
         )))
         .manage(window_state::MainWindowFrameState::default())
+        .manage(shutdown_save::ShutdownSaveState::default())
         .manage(vault_watcher::VaultWatcherState::new());
 
     with_invoke_handler(builder)

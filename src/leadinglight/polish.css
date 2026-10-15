@@ -1,0 +1,50 @@
+/* LeadingLight pane polish. Additive presentation.
+   Load after splitWorkspace.css. Every rule targets .ll-* selectors only. */
+
+/* Toolbar: a quiet section label and a visible pressed state. */
+.ll-workspace-toolbar { min-height: 36px; padding: 2px 8px 2px 14px; gap: 2px; }
+.ll-workspace-hint { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.ll-workspace-toolbar [data-slot="button"] { color: var(--muted-foreground); }
+.ll-workspace-toolbar [data-slot="button"]:hover,
+.ll-workspace-toolbar [data-slot="button"][aria-pressed="true"] { color: var(--foreground); }
+.ll-workspace-toolbar [data-slot="button"][aria-pressed="true"] { background: var(--accent); }
+
+/* Pane header: reads as a document title, not a form field. */
+.ll-pane-header { min-height: 40px; padding: 4px 6px 4px 12px; gap: 6px; }
+.ll-page-picker { height: 30px; padding-inline: 6px; border-radius: calc(var(--radius) - 2px); background: transparent; font-size: 13px; font-weight: 500; color: var(--foreground); }
+.ll-page-picker:hover { background: var(--state-hover-subtle); }
+.ll-page-picker[data-placeholder] { font-weight: 400; color: var(--muted-foreground); }
+.ll-page-picker > svg { opacity: 0.35; transition: opacity 120ms; }
+.ll-page-picker:hover > svg,
+.ll-page-picker:focus-visible > svg,
+.ll-page-picker[data-state="open"] > svg,
+.ll-page-picker[data-placeholder] > svg { opacity: 0.7; }
+
+/* Active pane: dim the inactive header instead of boxing the active editor. */
+.ll-pane--active { border-color: transparent; }
+.ll-panes:has(> .ll-pane-separator) .ll-pane:not(.ll-pane--active) .ll-pane-header { background: var(--surface-sidebar); }
+.ll-panes:has(> .ll-pane-separator) .ll-pane:not(.ll-pane--active) .ll-page-picker { color: var(--muted-foreground); }
+
+/* Divider: a 1px line with a 6px grab area; accent while hovered, dragged or focused. */
+.ll-pane-separator { box-sizing: border-box; padding: 0 2.5px; background: var(--border); background-clip: content-box; transition: background-color 120ms, padding 120ms; }
+.ll-panes--vertical > .ll-pane-separator { padding: 2.5px 0; }
+.ll-pane-separator:hover,
+.ll-pane-separator:active,
+.ll-pane-separator:focus-visible { padding: 0 2px; background: var(--ring); background-clip: content-box; outline: none; }
+.ll-panes--vertical > .ll-pane-separator:hover,
+.ll-panes--vertical > .ll-pane-separator:active,
+.ll-panes--vertical > .ll-pane-separator:focus-visible { padding: 2px 0; }
+
+/* Keep a readable column in each pane. */
+.ll-panes--horizontal > .ll-pane { min-width: min(320px, 40%); }
+.ll-panes--vertical > .ll-pane { min-height: min(200px, 40%); }
+
+/* Saved state stays quiet; pending and error states remain visible. */
+.ll-save-state { font-size: 11px; color: var(--text-muted); }
+.ll-save-state[data-state="saved"] { opacity: 0; transition: opacity 300ms 1500ms; }
+.ll-save-state[data-state="unsaved"],
+.ll-save-state[data-state="error"] { opacity: 1; color: var(--muted-foreground); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-pane-separator, .ll-page-picker > svg, .ll-save-state { transition: none; }
+}

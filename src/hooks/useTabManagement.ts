@@ -543,9 +543,9 @@ export function useTabManagement(options: TabManagementOptions = {}) {
   /** Open a tab with known content — no IPC round-trip. Used for newly created notes. */
   const openTabWithContent = useCallback((entry: VaultEntry, content: string) => {
     const openEntry = normalizeOpenEntry(entry)
-    if (!openEntry) return
+    if (!openEntry) return Promise.resolve()
     requestedActiveTabPathRef.current = openEntry.path
-    void executeNavigationWithBoundary(openEntry.path, () => {
+    return executeNavigationWithBoundary(openEntry.path, () => {
       cacheNoteContent(openEntry.path, content, openEntry)
       setSingleTab(tabsRef, setTabs, { entry: openEntry, content })
       syncActiveTabPath(activeTabPathRef, setActiveTabPath, openEntry.path)
@@ -589,6 +589,41 @@ export function useTabManagement(options: TabManagementOptions = {}) {
     syncActiveTabPath(activeTabPathRef, setActiveTabPath, null)
   }, [])
 
+  /**
+   * Opt-in (LeadingLight split drops): saves and keeps the current page until the new page has
+   * loaded and `canCommit` still holds, so a failed save or read never empties the pane.
+   */
+  const openEntryWhenLoaded = useCallback(async (entry: VaultEntry, canCommit: () => boolean): Promise<boolean> => {
+    const openEntry = normalizeOpenEntry(entry)
+    if (!openEntry || openEntry.fileKind === 'binary') return false
+    requestedActiveTabPathRef.current = openEntry.path
+    let opened = false
+    const navigation = executeNavigationWithBoundary(openEntry.path, async () => {
+      const seq = ++navSeqRef.current
+      try {
+        const content = await loadContentForOpen({ entry: openEntry, forceReload: false, cachedEntry: getCachedNoteContentEntry(openEntry.path) })
+        if (navSeqRef.current !== seq || !canCommit()) return
+        setSingleTab(tabsRef, setTabs, { entry: openEntry, content })
+        syncActiveTabPath(activeTabPathRef, setActiveTabPath, openEntry.path)
+        opened = true
+      } catch (error) {
+        console.warn('Failed to load dropped note:', error)
+        // Stale or superseded requests stay quiet; the current one always tells the user.
+        if (navSeqRef.current !== seq || !canCommit()) return
+        const callbacks = { 'missing-active-vault': onMissingActiveVault, 'missing-path': onMissingNotePath, 'unreadable-content': onUnreadableNoteContent, 'load-failed': onUnreadableNoteContent }
+        runEntryFailureCallback({ callback: callbacks[getEntryLoadFailureKind(error)], entry: openEntry, error, warning: 'Failed to report dropped note load failure:' })
+      }
+    })
+    // Every navigation request advances this sequence synchronously; it identifies our request.
+    const requestSeq = beforeNavigateSeqRef.current
+    await navigation
+    // Hand the reservation back only if no newer request (even for the same note) took over.
+    if (!opened && beforeNavigateSeqRef.current === requestSeq) {
+      resetRequestedPathIfStillPending(requestedActiveTabPathRef, activeTabPathRef, openEntry.path)
+    }
+    return opened
+  }, [executeNavigationWithBoundary, onMissingActiveVault, onMissingNotePath, onUnreadableNoteContent])
+
   return {
     tabs,
     setTabs,
@@ -600,5 +635,6 @@ export function useTabManagement(options: TabManagementOptions = {}) {
     handleSwitchTab,
     handleReplaceActiveTab,
     closeAllTabs,
+    openEntryWhenLoaded,
   }
 }

@@ -1,3 +1,4 @@
+import { REMOTE_FEATURES_ENABLED } from '../../leadinglight/localPolicy'
 import { BookOpen, GearSix as Settings, Megaphone, Moon, Package, Sun, type IconProps } from '@phosphor-icons/react'
 import type { ComponentType, MouseEventHandler } from 'react'
 import type { McpStatus } from '../../hooks/useMcpStatus'
@@ -108,6 +109,13 @@ function BuildNumberButton({
   const className = compact
     ? 'h-6 min-w-0 gap-1 rounded-sm px-1 py-0.5 text-[12px] font-medium text-muted-foreground hover:bg-[var(--hover)] hover:text-foreground'
     : 'h-auto gap-1 rounded-sm px-1 py-0.5 text-[12px] font-medium text-muted-foreground hover:bg-[var(--hover)] hover:text-foreground'
+
+  if (!REMOTE_FEATURES_ENABLED) {
+    return <span className="inline-flex items-center gap-1 px-1 text-xs text-muted-foreground" data-testid="status-build-number" title="LeadingLight">
+      <Package size={13} weight="regular" aria-hidden="true" />
+      {compact ? null : (buildNumber ?? '0.1.0')}
+    </span>
+  }
 
   return (
     <ActionTooltip copy={{ label: translate(locale, 'status.update.check') }} side="top">
@@ -481,7 +489,7 @@ export function StatusBarSecondarySection(options: StatusBarSecondarySectionProp
           </Button>
         </ActionTooltip>
       )}
-      {onOpenFeedback && <FeedbackButton compact={compact} locale={locale} onOpenFeedback={onOpenFeedback} />}
+      {REMOTE_FEATURES_ENABLED && onOpenFeedback && <FeedbackButton compact={compact} locale={locale} onOpenFeedback={onOpenFeedback} />}
       {onOpenDocs && <DocsButton compact={compact} locale={locale} onOpenDocs={onOpenDocs} />}
       <ActionTooltip copy={themeTooltip} side="top" align="end" contentTestId="status-theme-mode-tooltip">
         <Button

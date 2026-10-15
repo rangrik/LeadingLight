@@ -268,10 +268,35 @@ fn native_menu_label(label: &str) -> Cow<'_, str> {
     }
 }
 
+fn is_local_menu_item(item: &ManifestMenuItem) -> bool {
+    !item
+        .command_id(manifest())
+        .is_some_and(crate::leadinglight::is_disabled_menu_command)
+}
+
+fn visible_menu_items(items: &[ManifestMenuItem]) -> Vec<&ManifestMenuItem> {
+    let mut visible: Vec<&ManifestMenuItem> = Vec::new();
+    for item in items.iter().filter(|item| is_local_menu_item(item)) {
+        if matches!(item, ManifestMenuItem::Separator)
+            && (visible.is_empty() || matches!(visible.last(), Some(ManifestMenuItem::Separator)))
+        {
+            continue;
+        }
+        visible.push(item);
+    }
+    if matches!(visible.last(), Some(ManifestMenuItem::Separator)) {
+        visible.pop();
+    }
+    visible
+}
+
 fn build_manifest_menu_item(
     app: &App,
     item: &ManifestMenuItem,
 ) -> Result<Option<MenuItem<tauri::Wry>>, Box<dyn Error>> {
+    if !is_local_menu_item(item) {
+        return Ok(None);
+    }
     let Some(id) = item.menu_item_id(manifest()) else {
         return Ok(None);
     };
@@ -307,16 +332,18 @@ fn append_manifest_item<'a>(
 fn build_manifest_menu(app: &App, label: &str) -> MenuResult {
     let section = manifest_section(label)?;
     let mut builder = SubmenuBuilder::new(app, section.label.as_str());
-    for item in &section.items {
+    for item in visible_menu_items(&section.items) {
         builder = append_manifest_item(app, builder, item)?;
     }
     Ok(builder.build()?)
 }
 
 fn build_app_menu(app: &App) -> MenuResult {
-    let mut builder = SubmenuBuilder::new(app, "Tolaria").about(None).separator();
+    let mut builder = SubmenuBuilder::new(app, "LeadingLight")
+        .about(None)
+        .separator();
 
-    for item in &manifest().app_menu {
+    for item in visible_menu_items(&manifest().app_menu) {
         builder = append_manifest_item(app, builder, item)?;
     }
 
@@ -464,6 +491,9 @@ fn emitted_menu_event_id(id: &str) -> Option<&'static str> {
 }
 
 pub fn emit_custom_menu_event(app_handle: &AppHandle, id: &str) -> Result<(), String> {
+    if crate::shutdown_save::is_saving(app_handle) {
+        return Ok(());
+    }
     if !custom_menu_ids().contains(id) {
         return Err(format!("Unknown custom menu event: {id}"));
     }
@@ -547,6 +577,34 @@ pub fn set_restore_deleted_item_enabled(app_handle: &AppHandle, enabled: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn leadinglight_visible_menus_omit_remote_actions_and_empty_separators() {
+        for items in manifest()
+            .menus
+            .iter()
+            .map(|section| &section.items)
+            .chain(std::iter::once(&manifest().app_menu))
+        {
+            let visible = visible_menu_items(items);
+            assert!(!matches!(
+                visible.first(),
+                Some(ManifestMenuItem::Separator)
+            ));
+            assert!(!matches!(visible.last(), Some(ManifestMenuItem::Separator)));
+            for item in visible {
+                assert!(is_local_menu_item(item));
+            }
+        }
+        let file = visible_menu_items(&manifest_section("File").unwrap().items);
+        assert!(file
+            .iter()
+            .any(|item| item.command_id(manifest()) == Some("file-save")));
+        let app = visible_menu_items(&manifest().app_menu);
+        assert!(!app
+            .iter()
+            .any(|item| item.command_id(manifest()) == Some("app-check-for-updates")));
+    }
 
     fn menu_item_by_id(id: &str) -> &'static ManifestMenuItem {
         manifest_menu_items()
