@@ -21,7 +21,7 @@ import {
 } from '../propertyPanelLayout'
 import { humanizePropertyKey } from '../../utils/propertyLabels'
 import { translate, type AppLocale } from '../../lib/i18n'
-import { canonicalFrontmatterKey } from '../../utils/systemMetadata'
+import { canonicalFrontmatterKey, frontmatterKeysMatch } from '../../utils/systemMetadata'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -816,13 +816,35 @@ function useMissingSuggestedRelationships(
   onAddProperty?: RelationshipPanelEditHandlers['onAddProperty'],
 ) {
   const existingRelKeys = useMemo(
-    () => new Set(relationshipEntries.map((g) => g.key.toLowerCase())),
+    () => new Set(relationshipEntries.map((g) => canonicalFrontmatterKey(g.key))),
     [relationshipEntries],
   )
   return useMemo(
-    () => (onAddProperty ? SUGGESTED_RELATIONSHIPS.filter((r) => !existingRelKeys.has(r.toLowerCase())) : []),
+    () => (onAddProperty ? SUGGESTED_RELATIONSHIPS.filter((r) => !existingRelKeys.has(canonicalFrontmatterKey(r))) : []),
     [onAddProperty, existingRelKeys],
   )
+}
+
+function storedRelationshipKey(relationshipEntries: RelationshipEntryGroup[], key: string): string | undefined {
+  const stored = relationshipEntries.find((group) => group.key === key)
+    ?? relationshipEntries.find((group) => frontmatterKeysMatch(group.key, key))
+  return stored?.key
+}
+
+// A typed name that matches a stored relationship adds to it instead of writing a second key.
+function useTypedRelationshipAdd(
+  relationshipEntries: RelationshipEntryGroup[],
+  addRef: ((key: string, ref: string) => void) | undefined,
+  addProperty: ((key: string, value: FrontmatterValue) => void) | undefined,
+) {
+  return useMemo(() => {
+    if (!addProperty) return undefined
+    return (key: string, value: FrontmatterValue) => {
+      const storedKey = storedRelationshipKey(relationshipEntries, key)
+      if (storedKey && addRef && typeof value === 'string') addRef(storedKey, value)
+      else addProperty(key, value)
+    }
+  }, [relationshipEntries, addRef, addProperty])
 }
 
 function useRelationshipPanelState(
@@ -833,7 +855,7 @@ function useRelationshipPanelState(
     vaultPath?: string
   } & RelationshipPanelEditHandlers,
 ) {
-  const { entry, frontmatter, entries, vaultPath, onAddProperty, onUpdateProperty, onUpdatePropertyAfterCreate, onDeleteProperty } = options
+  const { entry, frontmatter, entries, vaultPath, onAddProperty, onAddPropertyAfterCreate, onUpdateProperty, onUpdatePropertyAfterCreate, onDeleteProperty } = options
   const relationshipEntries = useMemo(() => extractRelationshipRefs(frontmatter), [frontmatter])
   const typeDerivedRelationshipEntries = useMemo(
     () =>
@@ -855,6 +877,16 @@ function useRelationshipPanelState(
     [...relationshipEntries, ...typeDerivedRelationshipEntries],
     onAddProperty,
   )
+  const addTypedRelationship = useTypedRelationshipAdd(
+    relationshipEntries,
+    onUpdateProperty ? mutations.handleAddRef : undefined,
+    onAddProperty,
+  )
+  const addTypedRelationshipAfterCreate = useTypedRelationshipAdd(
+    relationshipEntries,
+    (onUpdatePropertyAfterCreate ?? onUpdateProperty) ? mutations.handleAddRefAfterCreate : undefined,
+    onAddPropertyAfterCreate,
+  )
 
   return {
     relationshipEntries,
@@ -865,6 +897,8 @@ function useRelationshipPanelState(
     handleAddRefAfterCreate: mutations.handleAddRefAfterCreate,
     canEdit: mutations.canEdit,
     missingSuggestedRels,
+    addTypedRelationship,
+    addTypedRelationshipAfterCreate,
   }
 }
 
@@ -1155,6 +1189,8 @@ export function DynamicRelationshipsPanel(options: {
     handleAddRefAfterCreate,
     canEdit,
     missingSuggestedRels,
+    addTypedRelationship,
+    addTypedRelationshipAfterCreate,
   } = useRelationshipPanelState({
     entry,
     frontmatter,
@@ -1220,13 +1256,13 @@ export function DynamicRelationshipsPanel(options: {
         />
       ))}
       <RelationshipActionRow>
-        {onAddProperty ? (
+        {addTypedRelationship ? (
           <AddRelationshipForm
             entries={entries}
             sourceEntry={entry}
             vaultPath={resolvedVaultPath}
-            onAddProperty={onAddProperty}
-            onAddPropertyAfterCreate={onAddPropertyAfterCreate}
+            onAddProperty={addTypedRelationship}
+            onAddPropertyAfterCreate={addTypedRelationshipAfterCreate}
             onCreateAndOpenNote={onCreateAndOpenNote}
             locale={locale}
           />

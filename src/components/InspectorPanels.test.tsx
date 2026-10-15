@@ -659,14 +659,14 @@ describe('DynamicRelationshipsPanel', () => {
 })
 
 describe('BacklinksPanel', () => {
-  const onNavigate = vi.fn()
+  const onOpenEntry = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('renders nothing when empty', () => {
-    const { container } = render(<BacklinksPanel backlinks={[]} onNavigate={onNavigate} />)
+    const { container } = render(<BacklinksPanel backlinks={[]} onOpenEntry={onOpenEntry} />)
     expect(container.innerHTML).toBe('')
   })
 
@@ -676,24 +676,24 @@ describe('BacklinksPanel', () => {
   ]
 
   it('renders header and all backlinks immediately (no collapse)', () => {
-    render(<BacklinksPanel backlinks={twoBacklinks} onNavigate={onNavigate} />)
+    render(<BacklinksPanel backlinks={twoBacklinks} onOpenEntry={onOpenEntry} />)
     expect(screen.getByText('Backlinks')).toBeInTheDocument()
     expect(screen.getByText('Referencing Note')).toBeInTheDocument()
     expect(screen.getByText('Another Note')).toBeInTheDocument()
   })
 
-  it('navigates when clicking backlink', () => {
+  it('opens the clicked backlink entry itself', () => {
     const backlinks = [{ entry: makeEntry({ title: 'Reference' }), context: null }]
-    render(<BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />)
+    render(<BacklinksPanel backlinks={backlinks} onOpenEntry={onOpenEntry} />)
     fireEvent.click(screen.getByText('Reference'))
-    expect(onNavigate).toHaveBeenCalledWith('Reference')
+    expect(onOpenEntry).toHaveBeenCalledWith(backlinks[0].entry)
   })
 
   it('shows paragraph context preview when available', () => {
     const backlinks = [
       { entry: makeEntry({ title: 'Referencing Note' }), context: 'This references [[My Note]] in context.' },
     ]
-    render(<BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />)
+    render(<BacklinksPanel backlinks={backlinks} onOpenEntry={onOpenEntry} />)
     expect(screen.getByText('This references [[My Note]] in context.')).toBeInTheDocument()
   })
 
@@ -702,14 +702,14 @@ describe('BacklinksPanel', () => {
       entry: makeEntry({ title: 'Starred Note', icon: '⭐' }),
       context: null,
     }]
-    render(<BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />)
+    render(<BacklinksPanel backlinks={backlinks} onOpenEntry={onOpenEntry} />)
     expect(screen.getByText('⭐')).toBeInTheDocument()
     expect(screen.getByText('Starred Note')).toBeInTheDocument()
   })
 
   it('does not show emoji when backlink entry has no icon', () => {
     const backlinks = [{ entry: makeEntry({ title: 'Plain Note' }), context: null }]
-    render(<BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />)
+    render(<BacklinksPanel backlinks={backlinks} onOpenEntry={onOpenEntry} />)
     expect(screen.getByText('Plain Note')).toBeInTheDocument()
     const btn = screen.getByText('Plain Note').closest('button')
     const spans = btn?.querySelectorAll('span.shrink-0')
@@ -719,14 +719,14 @@ describe('BacklinksPanel', () => {
 })
 
 describe('ReferencedByPanel', () => {
-  const onNavigate = vi.fn()
+  const onOpenEntry = vi.fn()
 
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('renders nothing when empty', () => {
-    const { container } = render(<ReferencedByPanel typeEntryMap={{}} items={[]} onNavigate={onNavigate} />)
+    const { container } = render(<ReferencedByPanel typeEntryMap={{}} items={[]} onOpenEntry={onOpenEntry} />)
     expect(container.innerHTML).toBe('')
   })
 
@@ -736,7 +736,7 @@ describe('ReferencedByPanel', () => {
       { entry: makeEntry({ path: '/vault/essay/b.md', title: 'On Writing Well', isA: 'Essay' }), viaKey: 'Belongs to' },
       { entry: makeEntry({ path: '/vault/exp/c.md', title: 'SEO Experiment', isA: 'Experiment' }), viaKey: 'Related to' },
     ]
-    render(<ReferencedByPanel typeEntryMap={{}} items={items} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel typeEntryMap={{}} items={items} onOpenEntry={onOpenEntry} />)
 
     expect(screen.getByTestId('derived-relationships-separator')).toBeInTheDocument()
     expect(screen.getByText('Write Essays')).toBeInTheDocument()
@@ -749,20 +749,20 @@ describe('ReferencedByPanel', () => {
     expect(screen.queryByText('Events')).not.toBeInTheDocument()
   })
 
-  it('navigates when clicking a referenced-by entry', () => {
+  it('opens the clicked referenced-by entry itself', () => {
     const items: ReferencedByItem[] = [
       { entry: makeEntry({ path: '/vault/a.md', title: 'My Note' }), viaKey: 'Belongs to' },
     ]
-    render(<ReferencedByPanel typeEntryMap={{}} items={items} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel typeEntryMap={{}} items={items} onOpenEntry={onOpenEntry} />)
     fireEvent.click(screen.getByText('My Note'))
-    expect(onNavigate).toHaveBeenCalledWith('My Note')
+    expect(onOpenEntry).toHaveBeenCalledWith(items[0].entry)
   })
 
   it('dims archived entries in referenced-by', () => {
     const items: ReferencedByItem[] = [
       { entry: makeEntry({ path: '/vault/a.md', title: 'Old Note', archived: true }), viaKey: 'Has' },
     ]
-    render(<ReferencedByPanel typeEntryMap={{}} items={items} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel typeEntryMap={{}} items={items} onOpenEntry={onOpenEntry} />)
     expect(screen.getByTitle('Archived')).toBeInTheDocument()
   })
 
@@ -771,7 +771,7 @@ describe('ReferencedByPanel', () => {
       { entry: makeEntry({ path: '/vault/a.md', title: 'Child Note' }), viaKey: 'Belongs to' },
     ]
 
-    render(<ReferencedByPanel typeEntryMap={{}} items={items} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel typeEntryMap={{}} items={items} onOpenEntry={onOpenEntry} />)
 
     fireEvent.focus(screen.getByText('Children'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Derived inverse relationship, inverse of Belongs to.')
@@ -826,7 +826,7 @@ describe('GitHistoryPanel', () => {
 })
 
 describe('InstancesPanel', () => {
-  const onNavigate = vi.fn()
+  const onOpenEntry = vi.fn()
   const quarterType = makeEntry({
     path: '/vault/quarter.md', filename: 'quarter.md', title: 'Quarter',
     isA: 'Type', color: 'blue', icon: 'calendar',
@@ -840,14 +840,14 @@ describe('InstancesPanel', () => {
   it('renders nothing when entry is not a Type', () => {
     const entry = makeEntry({ title: 'Random Note', isA: 'Note' })
     const { container } = render(
-      <InstancesPanel entry={entry} entries={[]} typeEntryMap={{}} onNavigate={onNavigate} />
+      <InstancesPanel entry={entry} entries={[]} typeEntryMap={{}} onOpenEntry={onOpenEntry} />
     )
     expect(container.innerHTML).toBe('')
   })
 
   it('renders nothing when Type has zero instances', () => {
     const { container } = render(
-      <InstancesPanel entry={quarterType} entries={[]} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={quarterType} entries={[]} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
     expect(container.innerHTML).toBe('')
   })
@@ -859,7 +859,7 @@ describe('InstancesPanel', () => {
       makeEntry({ path: '/vault/quarter/q3.md', title: 'Q3 2026', isA: 'Quarter', modifiedAt: 2000 }),
     ]
     render(
-      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
     expect(screen.getByText('Instances (3)')).toBeInTheDocument()
     const buttons = screen.getAllByRole('button').filter(b => ['Q1 2026', 'Q2 2026', 'Q3 2026'].includes(b.textContent?.replace(/\s*\(.*\)/, '') ?? ''))
@@ -874,20 +874,21 @@ describe('InstancesPanel', () => {
       makeEntry({ path: '/vault/quarter/old.md', title: 'Q4 2024', isA: 'Quarter', archived: true, modifiedAt: 1000 }),
     ]
     render(
-      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
     expect(screen.getByTitle('Archived')).toBeInTheDocument()
   })
 
-  it('navigates when clicking an instance', () => {
+  it('opens the clicked instance itself when two instances share a title', () => {
     const instances = [
-      makeEntry({ path: '/vault/quarter/q1.md', title: 'Q1 2026', isA: 'Quarter', modifiedAt: 1000 }),
+      makeEntry({ path: '/vault/quarter/q1.md', title: 'Q1 2026', isA: 'Quarter', modifiedAt: 2000 }),
+      makeEntry({ path: '/vault/archive/q1.md', title: 'Q1 2026', isA: 'Quarter', modifiedAt: 1000 }),
     ]
     render(
-      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
-    fireEvent.click(screen.getByText('Q1 2026'))
-    expect(onNavigate).toHaveBeenCalledWith('Q1 2026')
+    fireEvent.click(screen.getAllByText('Q1 2026')[1])
+    expect(onOpenEntry).toHaveBeenCalledWith(instances[1])
   })
 
   it('caps display at 50 instances and shows count badge', () => {
@@ -900,7 +901,7 @@ describe('InstancesPanel', () => {
       })
     )
     render(
-      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={quarterType} entries={instances} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
     expect(screen.getByText('Instances (80)')).toBeInTheDocument()
     // Only 50 link buttons rendered
@@ -916,7 +917,7 @@ describe('InstancesPanel', () => {
       makeEntry({ path: '/vault/quarter/q1.md', title: 'Q1 2026', isA: 'Quarter', modifiedAt: 1000 }),
     ]
     const { container } = render(
-      <InstancesPanel entry={notAType} entries={instances} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
+      <InstancesPanel entry={notAType} entries={instances} typeEntryMap={typeEntryMap} onOpenEntry={onOpenEntry} />
     )
     expect(container.innerHTML).toBe('')
   })

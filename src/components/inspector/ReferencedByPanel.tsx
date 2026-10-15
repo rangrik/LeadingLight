@@ -14,10 +14,10 @@ export interface ReferencedByItem {
   viaKey: string
 }
 
-export function ReferencedByPanel({ items, typeEntryMap, onNavigate }: {
+export function ReferencedByPanel({ items, typeEntryMap, onOpenEntry }: {
   items: ReferencedByItem[]
   typeEntryMap: Record<string, VaultEntry>
-  onNavigate: (target: string) => void
+  onOpenEntry: (entry: VaultEntry) => void
 }) {
   const grouped = useMemo(() => {
     const map = new Map<string, { entriesByPath: Map<string, VaultEntry>; inverseKeys: Set<string> }>()
@@ -69,7 +69,7 @@ export function ReferencedByPanel({ items, typeEntryMap, onNavigate }: {
                       noteIcon={e.icon}
                       typeColor={getTypeColor(e.isA, te?.color)}
                       isArchived={e.archived}
-                      onClick={() => onNavigate(e.title)}
+                      onClick={() => onOpenEntry(e)}
                       title={e.archived ? 'Archived' : undefined}
                       TypeIcon={getTypeIcon(e.isA, te?.icon)}
                     />

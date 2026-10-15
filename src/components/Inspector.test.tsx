@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactElement } from 'react'
-import { render as rtlRender, screen, fireEvent } from '@testing-library/react'
+import { act, render as rtlRender, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { Inspector } from './Inspector'
 import type { VaultEntry, GitCommit, WorkspaceIdentity } from '../types'
@@ -455,14 +455,71 @@ This is a test note with some words to count.
     expect(screen.queryByText('Backlinks')).not.toBeInTheDocument()
   })
 
-  it('navigates when a backlink is clicked', async () => {
+  it('opens the exact backlink source when two pages share its title', async () => {
     const onNavigate = vi.fn()
-    renderSelectedInspector({
-      entries: [mockEntry, referrerEntry],
-      onNavigate,
+    const onOpenEntry = vi.fn().mockResolvedValue(true)
+    const twin = { ...referrerEntry, path: '/vault/archive/referrer.md' }
+    renderSelectedInspector({ entries: [mockEntry, referrerEntry, twin], onNavigate, onOpenEntry })
+
+    const rows = await screen.findAllByText('Referrer Note')
+    expect(within(screen.getByText('Backlinks')).getByText('(2)')).toBeInTheDocument()
+    fireEvent.click(rows[1])
+
+    expect(onOpenEntry).toHaveBeenCalledWith(twin)
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('without an opener, navigates by the exact path, never the title', async () => {
+    const onNavigate = vi.fn()
+    const twin = { ...referrerEntry, path: '/vault/archive/referrer.md' }
+    renderSelectedInspector({ entries: [mockEntry, referrerEntry, twin], onNavigate })
+
+    fireEvent.click((await screen.findAllByText('Referrer Note'))[1])
+
+    await vi.waitFor(() => expect(onNavigate).toHaveBeenCalledWith(twin.path))
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the caller empty text only when no page lists this one', async () => {
+    const emptyLabel = 'Nothing links here yet.'
+    const { unmount } = renderSelectedInspector({ entries: [mockEntry], backlinksEmptyLabel: emptyLabel })
+    expect(await screen.findByText(emptyLabel)).toBeInTheDocument()
+    unmount()
+
+    renderInspector({
+      entry: referencedByTargetEntry,
+      content: referencedByTargetContent,
+      entries: [referencedByTargetEntry, referencedByEssayEntry],
+      backlinksEmptyLabel: emptyLabel,
     })
-    fireEvent.click(await screen.findByText('Referrer Note'))
-    expect(onNavigate).toHaveBeenCalledWith('Referrer Note')
+    expect(await screen.findByText('On Writing Well')).toBeInTheDocument()
+    expect(screen.queryByText(emptyLabel)).not.toBeInTheDocument()
+  })
+
+  it('calls the opener on every click and stays quiet when an open fails', async () => {
+    const onNavigate = vi.fn()
+    // A plain function: vi.fn would mark the rejection handled and hide a missing catch.
+    let attempts = 0
+    const onOpenEntry = () => (++attempts === 1 ? Promise.reject(new Error('save failed')) : Promise.resolve(false))
+    renderSelectedInspector({ entries: [mockEntry, referrerEntry], onNavigate, onOpenEntry })
+
+    const row = await screen.findByText('Referrer Note')
+    fireEvent.click(row)
+    fireEvent.click(row)
+    await act(async () => {})
+
+    expect(attempts).toBe(2)
+    expect(onNavigate).not.toHaveBeenCalled()
+  })
+
+  it('scrolls Backlinks into view on request and reports back', async () => {
+    const scrollIntoView = vi.mocked(Element.prototype.scrollIntoView)
+    scrollIntoView.mockClear()
+    const onBacklinksRevealed = vi.fn()
+    renderSelectedInspector({ entries: [mockEntry, referrerEntry], revealBacklinks: true, onBacklinksRevealed })
+
+    await vi.waitFor(() => expect(onBacklinksRevealed).toHaveBeenCalledTimes(1))
+    expect(scrollIntoView.mock.contexts[0]).toHaveTextContent('Referrer Note')
   })
 
   it('shows git history with commit hashes and messages', () => {
@@ -570,16 +627,21 @@ This is a test note with some words to count.
       expect(screen.queryByText('Referenced by')).not.toBeInTheDocument()
     })
 
-    it('navigates when clicking a referenced-by entry', async () => {
-      const onNavigate = vi.fn()
+    it('opens the exact source when a same-titled page links by property and body', async () => {
+      const onOpenEntry = vi.fn().mockResolvedValue(true)
+      const twin = { ...referencedByEssayEntry, path: '/vault/archive/on-writing.md', outgoingLinks: ['responsibility/grow-newsletter'] }
       renderInspector({
         entry: referencedByTargetEntry,
         content: referencedByTargetContent,
-        entries: [referencedByTargetEntry, referencedByEssayEntry],
-        onNavigate,
+        entries: [referencedByTargetEntry, referencedByEssayEntry, twin],
+        onOpenEntry,
       })
-      fireEvent.click(await screen.findByText('On Writing Well'))
-      expect(onNavigate).toHaveBeenCalledWith('On Writing Well')
+
+      const rows = await screen.findAllByText('On Writing Well')
+      expect(rows).toHaveLength(2)
+      fireEvent.click(rows[1])
+
+      expect(onOpenEntry).toHaveBeenCalledWith(twin)
     })
 
     it('skips Type relationships in referenced-by computation', () => {

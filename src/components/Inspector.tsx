@@ -20,16 +20,30 @@ import {
   InspectorHeader,
   InvalidFrontmatterNotice,
 } from './inspector/InspectorChrome'
-import { useBacklinks, useReferencedBy } from './inspector/useInspectorData'
+import { getInspectorLinkSummary } from './inspector/useInspectorData'
 import { useInspectorFocusBoundary } from '../hooks/editorFocusOwnership'
 import { useInspectorPropertyActions } from './inspector/useInspectorPropertyActions'
 import type { AppLocale } from '../lib/i18n'
+import { resolveEntry } from '../utils/wikilink'
 
 export type FrontmatterValue = string | number | boolean | string[] | null
 
+/** Opens this exact page; resolves false when it did not open. */
+export type OpenInspectorEntry = (entry: VaultEntry) => Promise<boolean>
+
 const INSPECTOR_REFERENCE_DELAY_MS = 150
 
-interface InspectorProps {
+interface ReferenceRowProps {
+  /** Opens Backlinks, Referenced By and Instances rows by exact identity. */
+  onOpenEntry?: OpenInspectorEntry
+  /** Scroll Backlinks into view once ready, then call onBacklinksRevealed. */
+  revealBacklinks?: boolean
+  onBacklinksRevealed?: () => void
+  /** Caller's copy for Backlinks when no page lists this one at all. */
+  backlinksEmptyLabel?: string
+}
+
+interface InspectorProps extends ReferenceRowProps {
   collapsed: boolean
   onToggle: () => void
   entry: VaultEntry | null
@@ -202,36 +216,55 @@ function ValidFrontmatterPanels(options: {
   )
 }
 
-function InspectorReferencePanels({
-  entries,
-  entry,
-  onNavigate,
-  typeEntryMap,
-}: {
+type InspectorReferencePanelsProps = ReferenceRowProps & {
   entries: VaultEntry[]
   entry: VaultEntry
   onNavigate: (target: string) => void
   typeEntryMap: Record<string, VaultEntry>
-}) {
-  const referencedBy = useReferencedBy(entry, entries)
-  const backlinks = useBacklinks(entry, entries, referencedBy)
+}
+
+// Until onOpenEntry is wired: navigate by absolute path, only when it resolves back to this exact page.
+function exactPathOpener(entries: VaultEntry[], source: VaultEntry, onNavigate: (target: string) => void): OpenInspectorEntry {
+  return async (target) => {
+    if (resolveEntry(entries, target.path, source)?.path !== target.path) return false
+    onNavigate(target.path)
+    return true
+  }
+}
+
+function useEntryOpener({ entries, entry, onNavigate, onOpenEntry }: InspectorReferencePanelsProps) {
+  return useMemo(() => {
+    const open = onOpenEntry ?? exactPathOpener(entries, entry, onNavigate)
+    // The opener reports its own failures; on any failure the current page simply stays.
+    const settle = async (target: VaultEntry) => { await open(target) }
+    return (target: VaultEntry) => { void settle(target).catch(() => false) }
+  }, [entries, entry, onNavigate, onOpenEntry])
+}
+
+function InspectorReferencePanels(props: InspectorReferencePanelsProps) {
+  const { entries, entry, typeEntryMap, revealBacklinks, onBacklinksRevealed, backlinksEmptyLabel } = props
+  const { referencedBy, backlinks } = getInspectorLinkSummary(entry, entries)
+  const openEntry = useEntryOpener(props)
+  const backlinksRef = useRef<HTMLDivElement>(null)
+  const emptyLabel = referencedBy.length === 0 ? backlinksEmptyLabel : undefined
+
+  useEffect(() => {
+    if (!revealBacklinks) return
+    backlinksRef.current?.scrollIntoView({ block: 'nearest' })
+    onBacklinksRevealed?.()
+  }, [revealBacklinks, onBacklinksRevealed])
 
   return (
     <>
-      <InstancesPanel entry={entry} entries={entries} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
-      <ReferencedByPanel items={referencedBy} typeEntryMap={typeEntryMap} onNavigate={onNavigate} />
-      {backlinks.length > 0 && <Separator />}
-      <BacklinksPanel backlinks={backlinks} onNavigate={onNavigate} />
+      <InstancesPanel entry={entry} entries={entries} typeEntryMap={typeEntryMap} onOpenEntry={openEntry} />
+      <ReferencedByPanel items={referencedBy} typeEntryMap={typeEntryMap} onOpenEntry={openEntry} />
+      {(backlinks.length > 0 || !!emptyLabel) && <Separator />}
+      <BacklinksPanel ref={backlinksRef} backlinks={backlinks} onOpenEntry={openEntry} emptyLabel={emptyLabel} />
     </>
   )
 }
 
-function DeferredInspectorReferencePanels(props: {
-  entries: VaultEntry[]
-  entry: VaultEntry
-  onNavigate: (target: string) => void
-  typeEntryMap: Record<string, VaultEntry>
-}) {
+function DeferredInspectorReferencePanels(props: InspectorReferencePanelsProps) {
   const deferred = useDeferredInspectorReferences(props.entry, props.entries)
   if (!deferred) return null
 
@@ -331,6 +364,10 @@ function InspectorBody(options: Omit<InspectorProps, 'collapsed' | 'onToggle'>) 
     onToggleRawEditor,
     workspaces,
     locale = 'en',
+    onOpenEntry,
+    revealBacklinks,
+    onBacklinksRevealed,
+    backlinksEmptyLabel,
   } = options
   const frontmatter = useMemo(() => parseFrontmatter(content), [content])
   const frontmatterState = useMemo(() => detectFrontmatterState(content), [content])
@@ -384,6 +421,10 @@ function InspectorBody(options: Omit<InspectorProps, 'collapsed' | 'onToggle'>) 
         entry={entry}
         onNavigate={onNavigate}
         typeEntryMap={typeEntryMap}
+        onOpenEntry={onOpenEntry}
+        revealBacklinks={revealBacklinks}
+        onBacklinksRevealed={onBacklinksRevealed}
+        backlinksEmptyLabel={backlinksEmptyLabel}
       />
       <Separator />
       <NoteInfoPanel entry={entry} content={content} locale={locale} />

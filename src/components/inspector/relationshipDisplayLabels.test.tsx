@@ -93,6 +93,50 @@ describe('relationship display labels', () => {
     expect(screen.getByText('Project Beta')).toBeInTheDocument()
   })
 
+  it('does not suggest an empty relationship that is already stored in human form', () => {
+    render(
+      <DynamicRelationshipsPanel
+        frontmatter={{ 'Belongs to': ['[[project-alpha]]'] }}
+        entries={[makeEntry({ path: '/vault/project-alpha.md', filename: 'project-alpha.md', title: 'Project Alpha', isA: 'Project' })]}
+        typeEntryMap={{}}
+        onNavigate={onNavigate}
+        onAddProperty={vi.fn()}
+        onUpdateProperty={vi.fn()}
+        onDeleteProperty={vi.fn()}
+      />,
+    )
+
+    expect(screen.getAllByText('Belongs to')).toHaveLength(1)
+    expect(screen.getAllByTestId('suggested-relationship')).toHaveLength(2)
+  })
+
+  it('adds to the stored relationship when the typed name differs only in form', () => {
+    const onAddProperty = vi.fn()
+    const onUpdateProperty = vi.fn()
+    render(
+      <DynamicRelationshipsPanel
+        frontmatter={{ 'Belongs to': ['[[project-alpha]]'] }}
+        entries={[
+          makeEntry({ path: '/vault/project-alpha.md', filename: 'project-alpha.md', title: 'Project Alpha', isA: 'Project' }),
+          makeEntry({ path: '/vault/project-beta.md', filename: 'project-beta.md', title: 'Project Beta', isA: 'Project' }),
+        ]}
+        typeEntryMap={{}}
+        onNavigate={onNavigate}
+        onAddProperty={onAddProperty}
+        onUpdateProperty={onUpdateProperty}
+        onDeleteProperty={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('+ Add relationship'))
+    fireEvent.change(screen.getByPlaceholderText('Relationship name'), { target: { value: 'belongs_to' } })
+    fireEvent.change(screen.getByPlaceholderText('Note title'), { target: { value: 'Project Beta' } })
+    fireEvent.click(screen.getByTestId('submit-add-relationship'))
+
+    expect(onUpdateProperty).toHaveBeenCalledWith('Belongs to', ['[[project-alpha]]', '[[project-beta]]'])
+    expect(onAddProperty).not.toHaveBeenCalled()
+  })
+
   it('renders relationship rows as single-column stacks', () => {
     render(
       <DynamicRelationshipsPanel
@@ -113,7 +157,7 @@ describe('relationship display labels', () => {
       { entry: makeEntry({ path: '/vault/project-alpha.md', filename: 'project-alpha.md', title: 'Project Alpha', isA: 'Project' }), viaKey: 'belongs_to' },
     ]
 
-    render(<ReferencedByPanel items={items} typeEntryMap={{}} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel items={items} typeEntryMap={{}} onOpenEntry={vi.fn()} />)
 
     expect(screen.getByText('Children')).toBeInTheDocument()
     fireEvent.focus(screen.getByText('Children'))
@@ -130,7 +174,7 @@ describe('relationship display labels', () => {
       { entry: makeEntry({ path: '/vault/topic-alpha.md', filename: 'topic-alpha.md', title: 'Topic Alpha', isA: 'Note' }), viaKey: 'related_to' },
     ]
 
-    render(<ReferencedByPanel items={items} typeEntryMap={{}} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel items={items} typeEntryMap={{}} onOpenEntry={vi.fn()} />)
 
     expect(screen.getByText('Children')).toBeInTheDocument()
     expect(screen.getByText('Referenced by')).toBeInTheDocument()
@@ -144,7 +188,7 @@ describe('relationship display labels', () => {
       { entry: makeEntry({ path: '/vault/project-alpha.md', filename: 'project-alpha.md', title: 'Project Alpha', isA: 'Project' }), viaKey: 'belongs_to' },
     ]
 
-    render(<ReferencedByPanel items={items} typeEntryMap={{}} onNavigate={onNavigate} />)
+    render(<ReferencedByPanel items={items} typeEntryMap={{}} onOpenEntry={vi.fn()} />)
 
     expect(screen.getByText('Children')).toBeInTheDocument()
     expect(screen.queryByText('Events')).not.toBeInTheDocument()
