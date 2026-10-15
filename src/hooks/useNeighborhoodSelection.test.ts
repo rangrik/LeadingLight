@@ -151,4 +151,17 @@ describe('useSelectionSanitizer', () => {
     expect(setSelection).not.toHaveBeenCalled()
     expect(setNoteListFilter).not.toHaveBeenCalled()
   })
+
+  it('keeps the chosen selection until the vault settings have loaded', () => {
+    const allNotes: SidebarSelection = { kind: 'filter', filter: 'all' }
+    const setSelection = vi.fn()
+    const options = (ready: boolean) => ({
+      effectiveSelection: allNotes, neighborhoodHistoryRef: ref<SidebarSelection[]>([]), selection: inboxSelection,
+      selectionRef: ref(inboxSelection), setNoteListFilter: vi.fn(), setSelection, ready,
+    })
+    const { rerender } = renderHook(useSelectionSanitizer, { initialProps: options(false) })
+    expect(setSelection).not.toHaveBeenCalled()
+    rerender(options(true))
+    expect(setSelection).toHaveBeenCalledWith(allNotes)
+  })
 })

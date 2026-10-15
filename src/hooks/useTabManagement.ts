@@ -28,6 +28,8 @@ import { normalizeVaultEntry } from '../utils/vaultMetadataNormalization'
 interface Tab {
   entry: VaultEntry
   content: string
+  /** LeadingLight: the path this same page had before an in-place rename. Navigation never sets it. */
+  renamedFrom?: string
 }
 
 export {
@@ -540,18 +542,28 @@ export function useTabManagement(options: TabManagementOptions = {}) {
     syncActiveTabPath(activeTabPathRef, setActiveTabPath, path)
   }, [])
 
-  /** Open a tab with known content — no IPC round-trip. Used for newly created notes. */
-  const openTabWithContent = useCallback((entry: VaultEntry, content: string) => {
+  /** Open a tab with known content — no IPC round-trip. Used for newly created notes. Resolves whether it opened. */
+  const openTabWithContent = useCallback(async (entry: VaultEntry, content: string, canCommit?: () => boolean) => {
     const openEntry = normalizeOpenEntry(entry)
-    if (!openEntry) return Promise.resolve()
+    if (!openEntry) return false
     requestedActiveTabPathRef.current = openEntry.path
-    return executeNavigationWithBoundary(openEntry.path, () => {
+    let opened = false
+    const navigation = executeNavigationWithBoundary(openEntry.path, () => {
+      if (canCommit && !canCommit()) return
+      // The shown page supersedes older reads still loading in this lane.
+      navSeqRef.current += 1
       cacheNoteContent(openEntry.path, content, openEntry)
       setSingleTab(tabsRef, setTabs, { entry: openEntry, content })
       syncActiveTabPath(activeTabPathRef, setActiveTabPath, openEntry.path)
-    }).then((navigated) => {
-      if (!navigated) resetRequestedPathIfStillPending(requestedActiveTabPathRef, activeTabPathRef, openEntry.path)
+      opened = true
     })
+    const requestSeq = beforeNavigateSeqRef.current
+    await navigation
+    // Release the reservation only if no newer request (even for the same page) took over.
+    if (!opened && beforeNavigateSeqRef.current === requestSeq) {
+      resetRequestedPathIfStillPending(requestedActiveTabPathRef, activeTabPathRef, openEntry.path)
+    }
+    return opened
   }, [executeNavigationWithBoundary])
 
   const handleReplaceActiveTab = useCallback(async (entry: VaultEntry) => {
@@ -624,6 +636,16 @@ export function useTabManagement(options: TabManagementOptions = {}) {
     return opened
   }, [executeNavigationWithBoundary, onMissingActiveVault, onMissingNotePath, onUnreadableNoteContent])
 
+  /** Opt-in (LeadingLight finder): cancels any pending navigation and shows the loaded page again. */
+  const showLoadedEntry = useCallback((path: string) => {
+    if (!tabsRef.current.some((tab) => notePathsMatch(tab.entry.path, path))) return false
+    navSeqRef.current += 1
+    beforeNavigateSeqRef.current += 1
+    requestedActiveTabPathRef.current = path
+    syncActiveTabPath(activeTabPathRef, setActiveTabPath, path)
+    return true
+  }, [])
+
   return {
     tabs,
     setTabs,
@@ -636,5 +658,6 @@ export function useTabManagement(options: TabManagementOptions = {}) {
     handleReplaceActiveTab,
     closeAllTabs,
     openEntryWhenLoaded,
+    showLoadedEntry,
   }
 }

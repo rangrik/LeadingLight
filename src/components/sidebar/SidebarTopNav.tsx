@@ -1,4 +1,4 @@
-import { Archive, FileText, Tray } from '@phosphor-icons/react'
+import { Archive, FileText, MagnifyingGlass, Tray } from '@phosphor-icons/react'
 import type { SidebarSelection } from '../../types'
 import { isSelectionActive, NavItem } from '../SidebarParts'
 import { translate, type AppLocale } from '../../lib/i18n'
@@ -6,6 +6,7 @@ import { translate, type AppLocale } from '../../lib/i18n'
 interface SidebarTopNavProps {
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
+  onSearch?: () => void
   showInbox: boolean
   inboxCount: number
   activeCount: number
@@ -15,9 +16,10 @@ interface SidebarTopNavProps {
 }
 
 export function SidebarTopNav(options: SidebarTopNavProps) {
-  const { selection, onSelect, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
+  const { selection, onSelect, onSearch, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
   return (
     <div className="border-b border-border" data-testid="sidebar-top-nav" style={{ padding: '4px 6px' }}>
+      {onSearch && <NavItem icon={MagnifyingGlass} label={translate(locale, 'leadinglight.find.action')} onClick={onSearch} />}
       {showInbox && (
         <NavItem
           icon={Tray}

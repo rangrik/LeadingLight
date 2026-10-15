@@ -634,9 +634,11 @@ function persistOptimistic(request: PersistNewNoteRequest, cbs: PersistCallbacks
 
 interface PersistResolvedOptions {
   openTab?: boolean
+  focusEditor?: boolean
 }
 
-type PersistResolvedEntryFn = (resolved: ResolvedEntry, options?: PersistResolvedOptions) => Promise<void>
+/** Resolves whether the new page is shown. */
+type PersistResolvedEntryFn = (resolved: ResolvedEntry, options?: PersistResolvedOptions) => Promise<boolean>
 
 interface CreationDeps {
   defaultWorkspacePath?: string | null
@@ -653,9 +655,19 @@ interface NoteCreationRequest extends CreationDeps {
   title: string
   type: string
   creationPath?: 'plus_button' | 'quick_open' | 'wikilink'
+  /** Resolve true only once the page is shown, not merely written. */
+  reportShown?: boolean
 }
 
+/** Shown; written and listed but not shown (newer context, or the outgoing page could not be saved); or nothing written. */
+export type PageCreationOutcome = 'opened' | 'created' | 'failed'
+
 async function createNamedNote(options: NoteCreationRequest): Promise<boolean> {
+  const outcome = await createNamedNoteOutcome(options)
+  return options.reportShown ? outcome === 'opened' : outcome !== 'failed'
+}
+
+async function createNamedNoteOutcome(options: NoteCreationRequest): Promise<PageCreationOutcome> {
   const { creationPath, defaultWorkspacePath, destination, entries, focusEditor, persistResolvedEntry, setToastMessage, title, type, vaultPath, vaults } = options
   const template = resolveTemplate({ entries, typeName: type })
   const defaults = resolveTypeInstanceDefaults({ entries, typeName: type })
@@ -672,22 +684,21 @@ async function createNamedNote(options: NoteCreationRequest): Promise<boolean> {
   })
   if (plan.status === 'blocked') {
     setToastMessage(plan.message)
-    return false
+    return 'failed'
   }
 
   try {
-    await persistResolvedEntry(plan.resolved)
-    if (focusEditor) signalFocusEditor({ path: plan.resolved.entry.path })
+    const shown = await persistResolvedEntry(plan.resolved, { focusEditor })
     if (creationPath) {
       trackEvent('note_created', {
         has_type: type !== 'Note' ? 1 : 0,
         creation_path: creationPath,
       })
     }
-    return true
+    return shown ? 'opened' : 'created'
   } catch (error) {
     setToastMessage(createPersistFailureMessage(plan.resolved.entry, error))
-    return false
+    return 'failed'
   }
 }
 
@@ -774,6 +785,28 @@ async function createTypeSilently({
   }
 }
 
+/** A creation's destination, taken at the request. `open` resolves whether the page is now shown there. */
+export interface OpenReservation {
+  inSession: () => boolean
+  isActive: () => boolean
+  open: (entry: VaultEntry, content: string) => Promise<boolean>
+}
+
+/** Without a split target, keep the upstream behavior: open in the current pane. */
+function reserveCreationOpen(
+  reserveOpen: (() => OpenReservation) | undefined,
+  openTabWithContent: (entry: VaultEntry, content: string) => void,
+): OpenReservation {
+  return reserveOpen?.() ?? {
+    inSession: () => true,
+    isActive: () => true,
+    open: async (entry, content) => {
+      openTabWithContent(entry, content)
+      return true
+    },
+  }
+}
+
 interface ImmediateCreateDeps {
   addPendingSave?: (path: string) => void
   defaultWorkspacePath?: string | null
@@ -782,6 +815,7 @@ interface ImmediateCreateDeps {
   vaults?: readonly VaultOption[]
   pendingSlugs: Set<string>
   openTabWithContent: (entry: VaultEntry, content: string) => void
+  reserveOpen?: () => OpenReservation
   addEntry: (entry: VaultEntry) => void
   onNewNotePersisted?: (path: string) => void
   removePendingSave?: (path: string) => void
@@ -807,6 +841,12 @@ interface ImmediateCreateRequest extends ImmediateCreateOptions {
   type?: string
 }
 
+interface QueuedImmediateCreate {
+  request: ImmediateCreateRequest
+  deps: ImmediateCreateDeps
+  target: OpenReservation
+}
+
 interface ImmediateCreateQueueConfig {
   addPendingSave?: (path: string) => void
   defaultWorkspacePath?: string | null
@@ -815,6 +855,7 @@ interface ImmediateCreateQueueConfig {
   vaults?: readonly VaultOption[]
   addEntry: (entry: VaultEntry) => void
   openTabWithContent: (entry: VaultEntry, content: string) => void
+  reserveOpen?: () => OpenReservation
   onNewNotePersisted?: (path: string) => void
   removePendingSave?: (path: string) => void
   setToastMessage: (msg: string | null) => void
@@ -869,7 +910,7 @@ function immediateNoteRelativePath(slug: string, folderPath?: string): string {
   return folder ? `${folder}/${slug}.md` : `${slug}.md`
 }
 
-async function createNoteImmediate(deps: ImmediateCreateDeps, request: ImmediateCreateRequest): Promise<boolean> {
+async function createNoteImmediate({ deps, request, target }: QueuedImmediateCreate): Promise<boolean> {
   const noteType = request.type || 'Note'
   const noteFormat = normalizeNoteFormat(request.format)
   const untitledLabel = noteFormat === NOTE_FORMAT_SHEET ? 'Sheet' : noteType
@@ -909,11 +950,13 @@ async function createNoteImmediate(deps: ImmediateCreateDeps, request: Immediate
   })
   const didPersist = await persistImmediateEntry(deps, resolved.entry, resolved.content)
   if (!didPersist) return false
+  // The written file stays; its own vault lists it again when reopened.
+  if (!target.inSession()) return true
 
   cacheNoteContent(resolved.entry.path, resolved.content, resolved.entry)
-  deps.openTabWithContent(resolved.entry, resolved.content)
+  const opening = target.open(resolved.entry, resolved.content)
   addEntryWithMock(resolved.entry, resolved.content, deps.addEntry)
-  signalFocusEditor({ path: resolved.entry.path, selectTitle: true })
+  if (await opening && target.isActive()) signalFocusEditor({ path: resolved.entry.path, selectTitle: true })
   return true
 }
 
@@ -936,6 +979,7 @@ function useLatestImmediateCreateDeps(
     vaultPath,
     vaults,
     openTabWithContent,
+    reserveOpen,
     addEntry,
     addPendingSave,
     onNewNotePersisted,
@@ -951,6 +995,7 @@ function useLatestImmediateCreateDeps(
       vaults,
       pendingSlugs: pendingSlugsRef.current,
       openTabWithContent,
+      reserveOpen,
       addEntry,
       addPendingSave,
       onNewNotePersisted,
@@ -963,6 +1008,7 @@ function useLatestImmediateCreateDeps(
     vaultPath,
     vaults,
     openTabWithContent,
+    reserveOpen,
     addEntry,
     addPendingSave,
     onNewNotePersisted,
@@ -982,25 +1028,22 @@ function useImmediateCreateQueue(
   config: ImmediateCreateQueueConfig,
 ): (type?: string, options?: ImmediateCreateOptions) => void {
   const pendingSlugsRef = useRef<Set<string>>(new Set())
-  const queuedImmediateCreatesRef = useRef<ImmediateCreateRequest[]>([])
+  const queuedImmediateCreatesRef = useRef<QueuedImmediateCreate[]>([])
   const immediateCreateLockedRef = useRef(false)
   const immediateCreateTimerRef = useRef<number | null>(null)
   const queueMountedRef = useRef(true)
   const { latestDepsRef, syncDeps } = useLatestImmediateCreateDeps(config, pendingSlugsRef)
 
   const executeRequest = useCallback(
-    async (request: ImmediateCreateRequest): Promise<void> => {
-    const deps = latestDepsRef.current
-    if (!deps) return
-
+    async (queued: QueuedImmediateCreate): Promise<void> => {
     try {
-      const didCreate = await createNoteImmediate(deps, request)
-      trackImmediateCreate(request, didCreate)
+      const didCreate = await createNoteImmediate(queued)
+      trackImmediateCreate(queued.request, didCreate)
     } catch (error) {
       console.warn('Failed to create immediate note:', error)
     }
     },
-    [latestDepsRef],
+    [],
   )
 
   const scheduleQueuedBurst = useCallback(
@@ -1036,16 +1079,19 @@ function useImmediateCreateQueue(
   return useCallback(
     (type?: string, options: ImmediateCreateOptions = {}) => {
     syncDeps()
-    const request = { ...options, type }
+    const deps = latestDepsRef.current
+    if (!deps) return
+    // Vault and pane are fixed at the request, not when the queue reaches it.
+    const queued = { request: { ...options, type }, deps, target: reserveCreationOpen(deps.reserveOpen, deps.openTabWithContent) }
     if (immediateCreateLockedRef.current) {
-      queuedImmediateCreatesRef.current.push(request)
+      queuedImmediateCreatesRef.current.push(queued)
       return
     }
 
     immediateCreateLockedRef.current = true
-    void executeRequest(request).then(scheduleQueuedBurst)
+    void executeRequest(queued).then(scheduleQueuedBurst)
     },
-    [syncDeps, executeRequest, scheduleQueuedBurst],
+    [syncDeps, latestDepsRef, executeRequest, scheduleQueuedBurst],
   )
 }
 
@@ -1069,13 +1115,17 @@ export interface NoteCreationConfig {
 
 interface CreationTabDeps {
   openTabWithContent: (entry: VaultEntry, content: string) => void
+  reserveOpen?: () => OpenReservation
 }
 
-function usePersistResolvedEntry(config: NoteCreationConfig, openTabWithContent: CreationTabDeps['openTabWithContent']) {
+function usePersistResolvedEntry(config: NoteCreationConfig, { openTabWithContent, reserveOpen }: CreationTabDeps) {
   const { addEntry, removeEntry, addPendingSave, removePendingSave, onNewNotePersisted, onTypeStateChanged } = config
   const persistResolvedEntry = useCallback(
-    async (resolved: ResolvedEntry, options?: PersistResolvedOptions): Promise<void> => {
-      if (options?.openTab !== false) openTabWithContent(resolved.entry, resolved.content)
+    async (resolved: ResolvedEntry, options?: PersistResolvedOptions): Promise<boolean> => {
+      const opensPage = options?.openTab !== false
+      // With a split target the file is written before any editor shows it, so a refused write never binds an existing file.
+      const target = opensPage && reserveOpen ? reserveOpen() : null
+      if (opensPage && !target) openTabWithContent(resolved.entry, resolved.content)
       addEntryWithMock(resolved.entry, resolved.content, addEntry)
       try {
         await persistOptimistic(
@@ -1095,9 +1145,13 @@ function usePersistResolvedEntry(config: NoteCreationConfig, openTabWithContent:
         removeEntry(resolved.entry.path)
         throw error
       }
+      const shown = target ? target.inSession() && await target.open(resolved.entry, resolved.content) : opensPage
+      if (shown && options?.focusEditor && (target?.isActive() ?? true)) signalFocusEditor({ path: resolved.entry.path })
+      return shown
     },
     [
       openTabWithContent,
+      reserveOpen,
       addEntry,
       addPendingSave,
       removePendingSave,
@@ -1113,7 +1167,7 @@ type NamedCreationOptions = Pick<
   NoteCreationConfig,
   'defaultWorkspacePath' | 'entries' | 'setToastMessage' | 'vaultPath' | 'vaults'
 > & {
-  persistResolvedEntry: (resolved: ResolvedEntry, options?: PersistResolvedOptions) => Promise<void>
+  persistResolvedEntry: PersistResolvedEntryFn
 }
 
 function useCreateNoteFromWikilink(options: NamedCreationOptions) {
@@ -1190,6 +1244,7 @@ function useNamedCreationActions(options: NamedCreationOptions) {
         title,
         type,
         creationPath,
+        reportShown: true,
       }),
     [entries, vaultPath, defaultWorkspacePath, vaults, setToastMessage, persistResolvedEntry],
   )
@@ -1208,7 +1263,24 @@ function useNamedCreationActions(options: NamedCreationOptions) {
       }),
     [entries, vaultPath, defaultWorkspacePath, vaults, setToastMessage, persistResolvedEntry],
   )
+  // LeadingLight finder: tells "created but not shown" apart from a failed write.
+  const createPage = useCallback(
+    (title: string): Promise<PageCreationOutcome> =>
+      createNamedNoteOutcome({
+        entries,
+        vaultPath,
+        defaultWorkspacePath,
+        vaults,
+        setToastMessage,
+        persistResolvedEntry,
+        title,
+        type: 'Note',
+        creationPath: 'quick_open',
+      }),
+    [entries, vaultPath, defaultWorkspacePath, vaults, setToastMessage, persistResolvedEntry],
+  )
   return {
+    createPage,
     handleCreateNote,
     handleCreateNoteFromWikilink,
     handleCreateType,
@@ -1219,9 +1291,10 @@ function useNamedCreationActions(options: NamedCreationOptions) {
 
 export function useNoteCreation(config: NoteCreationConfig, tabDeps: CreationTabDeps) {
   const { addEntry, defaultWorkspacePath, entries, setToastMessage, addPendingSave, removePendingSave, vaultPath, vaults, onNewNotePersisted } = config
-  const { openTabWithContent } = tabDeps
-  const persistResolvedEntry = usePersistResolvedEntry(config, openTabWithContent)
+  const { openTabWithContent, reserveOpen } = tabDeps
+  const persistResolvedEntry = usePersistResolvedEntry(config, tabDeps)
   const {
+    createPage,
     handleCreateNote,
     handleCreateNoteFromWikilink,
     handleCreateType,
@@ -1238,6 +1311,7 @@ export function useNoteCreation(config: NoteCreationConfig, tabDeps: CreationTab
     addEntry,
     addPendingSave,
     openTabWithContent,
+    reserveOpen,
     onNewNotePersisted,
     removePendingSave,
     setToastMessage,
@@ -1245,6 +1319,7 @@ export function useNoteCreation(config: NoteCreationConfig, tabDeps: CreationTab
   useCreateNoteInFolderRequests(handleCreateNoteImmediate)
 
   return {
+    createPage,
     handleCreateNote,
     handleCreateNoteFromWikilink,
     handleCreateNoteImmediate,

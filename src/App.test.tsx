@@ -269,6 +269,14 @@ function configureNeighborhoodVault() {
   mockCommandResults.get_note_content = ({ path }: { path: string }) => neighborhoodContent[path] ?? ''
 }
 
+// Inbox and organizing are opt-in; tests of that workflow turn it on for the vault.
+function enableExplicitOrganization(vaultPath = '/vault') {
+  localStorage.setItem(`laputa:vault-config:${vaultPath}`, JSON.stringify({
+    zoom: null, view_mode: null, editor_mode: null, tag_colors: null, status_colors: null, property_display_modes: null,
+    inbox: { noteListProperties: null, explicitOrganization: true },
+  }))
+}
+
 function configureNeighborhoodFavoritesVault() {
   mockCommandResults.list_vault = neighborhoodEntries.map((entry) =>
     entry.path === '/vault/alpha.md'
@@ -1100,6 +1108,69 @@ describe('App', () => {
     })
   })
 
+  it('finds recently opened pages from one dialog, by shortcut or sidebar, across a restart', async () => {
+    configureNeighborhoodVault()
+    const first = render(<App />)
+    const noteList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    await clickNoteListItem(noteList, 'Alpha')
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md'))
+    await clickNoteListItem(noteList, 'Beta')
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/beta.md'))
+    await clickNoteListItem(noteList, 'Alpha')
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md'))
+
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Find a page' })
+    // Full-text search is the same finder, not a second dialog.
+    fireEvent.keyDown(window, { key: 'f', code: 'KeyF', metaKey: true, shiftKey: true })
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    // True visit order, the open page first; Gamma was never opened.
+    expect(within(dialog).getAllByRole('option').map(option => option.textContent)).toEqual(['Alpha', 'Beta'])
+
+    fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'ArrowDown' })
+    fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'Enter' })
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/beta.md'))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    first.unmount()
+
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Search' }, { timeout: SLOW_APP_READY_TIMEOUT_MS }))
+    const reopened = await screen.findByRole('dialog', { name: 'Find a page' })
+    await waitFor(() => expect(within(reopened).getAllByRole('option').map(option => option.textContent)).toEqual(['Beta', 'Alpha']))
+  }, SLOW_APP_READY_TIMEOUT_MS * 3)
+
+  it('creates and opens a page from the finder query', async () => {
+    configureNeighborhoodVault()
+    render(<App />)
+    await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Find a page' })
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'Delta plan' } })
+    expect(within(dialog).getByRole('option', { name: 'Create page “Delta plan”' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'Enter' })
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toMatch(/\/vault\/delta-plan\.md$/))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }, SLOW_APP_READY_TIMEOUT_MS * 2)
+
+  it('keeps the current page and the finder open when the chosen page cannot be read', async () => {
+    configureNeighborhoodVault()
+    mockCommandResults.get_note_content = ({ path }: { path: string }) => {
+      if (path === '/vault/gamma.md') throw new Error('stream did not contain valid UTF-8')
+      return neighborhoodContent[path] ?? ''
+    }
+    render(<App />)
+    const noteList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    await clickNoteListItem(noteList, 'Alpha')
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md'))
+
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
+    const dialog = await screen.findByRole('dialog', { name: 'Find a page' })
+    fireEvent.change(within(dialog).getByRole('combobox'), { target: { value: 'Gamma' } })
+    fireEvent.keyDown(within(dialog).getByRole('combobox'), { key: 'Enter' })
+    expect(await within(dialog).findByText('Couldn’t open “Gamma”.')).toBeInTheDocument()
+    expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md')
+  }, SLOW_APP_READY_TIMEOUT_MS * 2)
+
   it('pressing Escape in Neighborhood mode blurs the editor before unwinding note-list history', async () => {
     configureNeighborhoodVault()
 
@@ -1109,7 +1180,7 @@ describe('App', () => {
     const getHeader = () => getHeaderForNoteList(noteListContainer)
 
     await waitFor(() => {
-      expect(getHeader()).toHaveTextContent('Inbox')
+      expect(getHeader()).toHaveTextContent('Notes')
     })
 
     await enterNeighborhood(noteListContainer, 'Alpha')
@@ -1144,7 +1215,7 @@ describe('App', () => {
     await pressEscape()
 
     await waitFor(() => {
-      expect(getHeader()).toHaveTextContent('Inbox')
+      expect(getHeader()).toHaveTextContent('Notes')
     })
   }, 10_000)
 
@@ -1197,8 +1268,24 @@ describe('App', () => {
     })
   })
 
+  it('starts on Inbox when the vault opted in, and on All Notes otherwise', async () => {
+    enableExplicitOrganization()
+    const optedIn = render(<App />)
+    const noteList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    await waitFor(() => expect(getHeaderForNoteList(noteList)).toHaveTextContent('Inbox'))
+    expect(within(screen.getByTestId('sidebar-top-nav')).getByText('Inbox')).toBeInTheDocument()
+    optedIn.unmount()
+
+    localStorage.removeItem('laputa:vault-config:/vault')
+    render(<App />)
+    const calmList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    await waitFor(() => expect(getHeaderForNoteList(calmList)).toHaveTextContent('Notes'))
+    expect(within(screen.getByTestId('sidebar-top-nav')).queryByText('Inbox')).not.toBeInTheDocument()
+  }, SLOW_APP_READY_TIMEOUT_MS * 2)
+
   it('auto-advances to the next inbox item after organizing when the setting is enabled', async () => {
     configureNeighborhoodVault()
+    enableExplicitOrganization()
     mockCommandResults.get_settings = createSettings({ auto_advance_inbox_after_organize: true })
 
     render(<App />)
@@ -1210,9 +1297,10 @@ describe('App', () => {
 
     await clickNoteListItem(noteListContainer, 'Alpha')
 
+    // The editor loads lazily; when this test runs first it pays that cost.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Set note as organized' })).toBeInTheDocument()
-    })
+    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Set note as organized' }))
@@ -1226,6 +1314,7 @@ describe('App', () => {
 
   it('keeps the manually selected note after organizing finishes later', async () => {
     configureNeighborhoodVault()
+    enableExplicitOrganization()
     mockCommandResults.get_settings = createSettings({ auto_advance_inbox_after_organize: true })
 
     let resolveOrganizeSave!: () => void
@@ -1243,9 +1332,10 @@ describe('App', () => {
 
     await clickNoteListItem(noteListContainer, 'Alpha')
 
+    // The editor loads lazily; when this test runs first it pays that cost.
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Set note as organized' })).toBeInTheDocument()
-    })
+    }, { timeout: SLOW_APP_READY_TIMEOUT_MS })
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Set note as organized' }))

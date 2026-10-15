@@ -64,6 +64,8 @@ export interface EditorContentProps {
   onKeepMine?: (path: string) => void
   onKeepTheirs?: (path: string) => void
   onImageImportError?: (error: ImageImportError) => void
+  /** The rich editor's document identity from useEditorTabSwap. */
+  editorDocumentSessionRef: React.RefObject<number>
   locale?: AppLocale
 }
 

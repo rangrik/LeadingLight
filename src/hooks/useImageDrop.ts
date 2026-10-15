@@ -22,6 +22,9 @@ export type ImageImportError = UnsupportedImageImportError | {
   failedCount: number
   kind: 'remote-download'
   totalCount: number
+} | {
+  fileName: string
+  kind: 'copy-failed'
 }
 type ImageImportErrorHandler = (error: ImageImportError) => void
 type TauriDropEvent = TauriEvent<TauriDragDropPayload>
@@ -220,6 +223,13 @@ function logDroppedImageCopyFailure(error: unknown): void {
   console.warn('[image-drop] Failed to copy dropped image into vault:', error)
 }
 
+function reportCopyFailure(fileName: string, onImageImportError: ImageImportErrorHandler | undefined) {
+  return (error?: unknown) => {
+    if (error !== undefined) logDroppedImageCopyFailure(error)
+    onImageImportError?.({ kind: 'copy-failed', fileName })
+  }
+}
+
 function imageUrlFromUploadResult(result: UploadImageFileResult): string {
   return typeof result === 'string' ? result : result.props.url
 }
@@ -235,10 +245,12 @@ function insertHtmlDroppedImages({
       onImageImportError?.(unsupportedHeicImportError(file.name))
       continue
     }
+    const reportFailure = reportCopyFailure(file.name, onImageImportError)
     void uploadImageFile(file, vaultPath).then((result) => {
       const url = imageUrlFromUploadResult(result)
       if (url) onImageUrl(url)
-    }, logDroppedImageCopyFailure)
+      else reportFailure()
+    }, reportFailure)
   }
 }
 
@@ -263,7 +275,7 @@ function insertDroppedImages({
   if (!vaultPath || !onImageUrl) return
 
   for (const sourcePath of imagePaths.filter(isImagePath)) {
-    void copyImageToVault({ sourcePath, vaultPath }).then(onImageUrl, logDroppedImageCopyFailure)
+    void copyImageToVault({ sourcePath, vaultPath }).then(onImageUrl, reportCopyFailure(filenameFromPath(sourcePath), onImageImportError))
   }
 }
 
@@ -296,6 +308,17 @@ function handleNativeDropEvent({
   setIsDragOver(false)
 }
 
+type DropTarget = { documentPath?: string | null; documentSessionRef?: RefObject<number>; vaultPath?: string }
+
+/** Late copy results (image or error) reach the editor only while it still holds the drop's document and vault. */
+function dropTargetGuard(targetRef: RefObject<DropTarget | null>) {
+  const target = targetRef.current
+  const session = target?.documentSessionRef?.current
+  return <T>(handler: (value: T) => void) => (value: T) => {
+    if (target && targetRef.current === target && target.documentSessionRef?.current === session) handler(value)
+  }
+}
+
 async function registerNativeDropListeners(
   handler: (event: TauriDropEvent) => void,
 ): Promise<UnlistenFn[]> {
@@ -305,6 +328,10 @@ async function registerNativeDropListeners(
 
 interface UseImageDropOptions {
   containerRef: RefObject<HTMLDivElement | null>
+  /** Note shown in the editor; a drop finishing after it changes is not inserted. */
+  documentPath?: string | null
+  /** The editor's document identity; when given it replaces the path, so an untitled rename keeps the drop. */
+  documentSessionRef?: RefObject<number>
   /** Called when an image-like file is recognized but not supported by Tolaria. */
   onImageImportError?: ImageImportErrorHandler
   /** Called with an asset URL for each image dropped via Tauri native drag-drop. */
@@ -312,15 +339,23 @@ interface UseImageDropOptions {
   vaultPath?: string
 }
 
-export function useImageDrop({ containerRef, onImageImportError, onImageUrl, vaultPath }: UseImageDropOptions) {
+export function useImageDrop({ containerRef, documentPath, documentSessionRef, onImageImportError, onImageUrl, vaultPath }: UseImageDropOptions) {
   const dropClaimRef = useRef(createImageDropClaim())
   const [isDragOver, setIsDragOver] = useState(false)
   const onImageImportErrorRef = useRef(onImageImportError)
   useEffect(() => { onImageImportErrorRef.current = onImageImportError }, [onImageImportError])
   const onImageUrlRef = useRef(onImageUrl)
   useEffect(() => { onImageUrlRef.current = onImageUrl }, [onImageUrl])
-  const vaultPathRef = useRef(vaultPath)
-  useEffect(() => { vaultPathRef.current = vaultPath }, [vaultPath])
+  // A new object per vault, and per note path unless a document session identifies the note; cleared on change or unmount.
+  const targetRef = useRef<DropTarget | null>(null)
+  const notePath = documentSessionRef ? null : documentPath
+  useEffect(() => {
+    const target = { documentPath: notePath, documentSessionRef, vaultPath }
+    targetRef.current = target
+    return () => {
+      if (targetRef.current === target) targetRef.current = null
+    }
+  }, [notePath, documentSessionRef, vaultPath])
 
   // HTML5 DnD handles OS image files while allowing internal editor drags through.
   useEffect(() => {
@@ -354,11 +389,13 @@ export function useImageDrop({ containerRef, onImageImportError, onImageUrl, vau
       event.preventDefault()
       event.stopImmediatePropagation()
       if (!dropClaimRef.current.claim({ channel: 'dom', filenames: files.map(file => file.name) })) return
+      const guard = dropTargetGuard(targetRef)
+      const onImageImportError = onImageImportErrorRef.current
       insertHtmlDroppedImages({
         files,
-        onImageImportError: onImageImportErrorRef.current,
-        onImageUrl: currentOnImageUrl,
-        vaultPath: vaultPathRef.current,
+        onImageImportError: onImageImportError && guard(onImageImportError),
+        onImageUrl: guard(currentOnImageUrl),
+        vaultPath: targetRef.current?.vaultPath,
       })
     }
 
@@ -386,13 +423,16 @@ export function useImageDrop({ containerRef, onImageImportError, onImageUrl, vau
       try {
         const nextUnlisteners = await registerNativeDropListeners((event) => {
           if (!mounted) return
+          const guard = dropTargetGuard(targetRef)
+          const { current: onImageImportError } = onImageImportErrorRef
+          const { current: onImageUrl } = onImageUrlRef
           handleNativeDropEvent({
             dropClaim: dropClaimRef.current,
             event,
-            onImageImportError: onImageImportErrorRef.current,
-            onImageUrl: onImageUrlRef.current,
+            onImageImportError: onImageImportError && guard(onImageImportError),
+            onImageUrl: onImageUrl && guard(onImageUrl),
             setIsDragOver,
-            vaultPath: vaultPathRef.current,
+            vaultPath: targetRef.current?.vaultPath,
           })
         })
         if (mounted) unlisteners = nextUnlisteners

@@ -24,9 +24,11 @@ layout while preserving editor ownership. List drags reuse the upstream note MIM
 and claim only internal drops over the writing area, before editor and sidebar handlers.
 Folder moves and external text/file drops retain their existing routes.
 
-The upstream tab controller exposes one additional opt-in `openEntryWhenLoaded` operation.
-It saves the previous page and loads the requested page before committing a tab change;
-ordinary upstream selection APIs retain their behavior. Split placement checks request
+The upstream tab controller exposes an opt-in `openEntryWhenLoaded` operation.
+It saves the previous page and loads the requested page before committing a tab change.
+Known-content opens also report whether they committed and accept a completion guard; a
+successful commit cancels older reads, while canceled cleanup releases only its own reservation.
+Ordinary upstream selection APIs retain their behavior. Split placement checks request
 ownership, the current vault, layout and source existence before committing. Busy counts
 and reservation ownership prevent an older canceled operation from unlocking a newer save
 or permitting a second editor for the same note.
@@ -35,6 +37,28 @@ LeadingLight has a fresh bundle/config namespace and a separate default local va
 migrates or opens an inherited Tolaria/Laputa folder implicitly. Native commands reject remote
 features before dispatch. Frontend feature gates and CSP provide additional protection. See
 [local runtime policy](local-only-runtime.md) for implementation and verification details.
+
+## Finding and resumption
+
+The additive finder combines the inherited title matcher with the existing local full-text
+command. It owns request generations so an older response cannot cross a query or vault
+boundary. App integrates the sidebar command and successful-visit observer; the shared editor
+and Markdown persistence remain authoritative. Recent history is bounded, local, per-vault
+metadata containing paths and timestamps, never note bodies. The split controller exposes
+`openNoteWhenLoaded` for truthful finder navigation and `readyForVisits` for completed restoration
+in the current vault session. A new session is created on every vault transition, including
+leaving and returning to the same folder. See [finding and resumption](find-and-resume.md).
+
+Async creation and image drops retain request-time document ownership. They must revalidate
+that ownership after disk work before changing an editor or reporting document-specific errors.
+Successfully persisted files are retained when later navigation supersedes an operation.
+The finder uses `createPage` to distinguish a failed write, a written page that could not open,
+and a written page successfully opened. Named pages are written before binding an editor to
+their path, so a refused filename collision cannot expose the existing file to template autosave.
+Image-drop ownership uses the editor's document-session signal: an untitled page's automatic
+rename keeps that session, while replacing the document invalidates it. The split tab adapter
+records actual in-place renames with `renamedFrom`; similar headings or overlapping text in
+two separate files cannot establish document identity or bypass loading the destination file.
 
 ## Bringing in upstream changes
 
@@ -52,6 +76,8 @@ The manager owns task assignments, dependencies, Git and the single native build
 explicit file ownership and a private report under ignored `workspace_management/`. Shared-contract
 changes are communicated before edits. Completed work is reviewed by a different model when
 available. Do not use parallel installs or duplicate native caches to increase agent throughput.
+Opus 5.5 is the sole code implementer, including tests, scripts and configuration. Other models
+may coordinate, review and run QA, but route all code changes back to Opus.
 
 Use one `node_modules` and `src-tauri/target`, at most two Cargo jobs, and compact development
 profiles. Browser fixtures and native test vaults are synthetic and excluded from Git. Never delete

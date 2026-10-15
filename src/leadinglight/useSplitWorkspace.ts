@@ -56,16 +56,23 @@ export function useSplitWorkspace(options: Options) {
   }, [])
   const currentVaultRef = useRef(options.vaultPath)
   useLayoutEffect(() => { currentVaultRef.current = options.vaultPath }, [options.vaultPath])
+  // A new epoch on every vault change, so leaving and returning to a vault starts a new session.
+  const [session, setSession] = useState({ vaultPath: options.vaultPath, epoch: 0 })
+  if (session.vaultPath !== options.vaultPath) setSession({ vaultPath: options.vaultPath, epoch: session.epoch + 1 })
+  const sessionRef = useRef(session.epoch)
+  useLayoutEffect(() => { sessionRef.current = session.epoch }, [session.epoch])
   const entriesRef = useRef(options.entries)
   useLayoutEffect(() => { entriesRef.current = options.entries }, [options.entries])
   const [split, setSplit] = useState(false)
+  const splitRef = useRef(split)
+  useLayoutEffect(() => { splitRef.current = split }, [split])
   const [orientation, setOrientation] = useState<SplitOrientation>('horizontal')
   const [ratio, setRatio] = useState(50)
   // Visual slots (left/top, right/bottom). Pane IDs and their editors never move.
   const [order, setOrder] = useState<PaneOrder>([0, 1])
   const activeTabPathRef = useRef<string | null>(null)
   const requestedActiveTabPathRef = useRef<string | null>(null)
-  const restoredVaultRef = useRef<string | null>(null)
+  const restoreStartedRef = useRef(-1)
   // Saved pages whose restore read failed; stored until that pane gets a page.
   const pendingPathsRef = useRef<[string | null, string | null]>([null, null])
   const persistPausedRef = useRef(false)
@@ -73,7 +80,7 @@ export function useSplitWorkspace(options: Options) {
   // Interaction since this vault became current means the user's context beats the saved layout.
   const vaultInteractionRef = useRef(0)
   useLayoutEffect(() => { vaultInteractionRef.current = interactionVersionRef.current }, [options.vaultPath])
-  const [restoredVault, setRestoredVault] = useState<string | null>(null)
+  const [restoredEpoch, setRestoredEpoch] = useState(-1)
   const firstHistory = useNavigationHistory()
   const secondHistory = useNavigationHistory()
   const histories = [firstHistory, secondHistory] as const
@@ -135,6 +142,35 @@ export function useSplitWorkspace(options: Options) {
       endBusy(pane)
     })
   }, [beginBusy, endBusy, findPane, focusPane])
+  // Opens that are not the user's navigation (creation commits, startup restore), and the newest creation per pane.
+  const backgroundOpensRef = useRef<[number, number]>([0, 0])
+  const newestCreationRef = useRef<[number, number]>([0, 0])
+  const creationCountRef = useRef(0)
+  /** Opt-in for creation, taken at the user's request: a later open targets this pane, its page and the vault session. */
+  const reserveOpen = useCallback(() => {
+    interactionVersionRef.current += 1
+    const pane = activePaneRef.current
+    const id = ++creationCountRef.current
+    const navigation = requestGenerationRef.current[pane] - backgroundOpensRef.current[pane]
+    const epoch = sessionRef.current
+    const inSession = () => sessionRef.current === epoch
+    const visible = () => splitRef.current || activePaneRef.current === pane
+    // Earlier creations opening here do not cancel it; user navigation, a newer creation or closing the pane do.
+    const valid = () => inSession() && visible() && newestCreationRef.current[pane] < id
+      && requestGenerationRef.current[pane] - backgroundOpensRef.current[pane] === navigation
+    const open = async (entry: VaultEntry, content: string) => {
+      if (!valid() || findPane(entry.path) !== undefined) return false
+      newestCreationRef.current[pane] = id
+      backgroundOpensRef.current[pane] += 1
+      const request = ++requestGenerationRef.current[pane]
+      beginBusy(pane)
+      try {
+        return await controllersRef.current[pane].openTabWithContent(entry, content,
+          () => inSession() && visible() && requestGenerationRef.current[pane] === request)
+      } finally { endBusy(pane) }
+    }
+    return { inSession, isActive: () => activePaneRef.current === pane, open }
+  }, [beginBusy, endBusy, findPane])
   const setTabs = useCallback((action: SetStateAction<Tab[]>) => {
     const panes = controllersRef.current
     const previousPaneTabs = paneTabsRef.current
@@ -147,8 +183,10 @@ export function useSplitWorkspace(options: Options) {
       // Existing callers map content/metadata or rename paths without reordering.
       const exact = next.find(tab => notePathsMatch(tab.entry.path, oldTab.entry.path))
       const updated = exact ?? (next.length === previous.length ? next[previous.indexOf(oldTab)] : undefined)
-      paneTabsRef.current[pane] = updated ? [updated] : []
-      if (!updated || updated.entry.path !== oldTab.entry.path) requestGenerationRef.current[pane] += 1
+      const renamed = !!updated && updated.entry.path !== oldTab.entry.path
+      // The same tab with a new path is a rename; editors use this to keep async work bound to the page.
+      paneTabsRef.current[pane] = updated ? [renamed ? { ...updated, renamedFrom: oldTab.entry.path } : updated] : []
+      if (!updated || renamed) requestGenerationRef.current[pane] += 1
       panes[pane].setTabs(paneTabsRef.current[pane])
       if (updated && updated.entry.path !== oldTab.entry.path) panes[pane].handleSwitchTab(updated.entry.path)
       if (!updated) panes[pane].closeAllTabs()
@@ -170,6 +208,7 @@ export function useSplitWorkspace(options: Options) {
   const closePane = useCallback(async (pane: PaneId) => {
     const path = controllersRef.current[pane].activeTabPathRef.current
     layoutVersionRef.current += 1
+    requestGenerationRef.current[pane] += 1
     beginBusy(pane)
     try {
       if (path) await beforeNavigate?.(path, '')
@@ -240,6 +279,38 @@ export function useSplitWorkspace(options: Options) {
     focusPane(pane)
     return true
   }, [beginBusy, endBusy, findPane, focusPane, order, orientation, placePane, split])
+  /** Finder selection into the active pane: true only once the page is loaded and shown. */
+  const openNoteWhenLoaded = useCallback(async (entry: VaultEntry) => {
+    const epoch = sessionRef.current
+    const listed = () => sessionRef.current === epoch && entriesRef.current.some(item => notePathsMatch(item.path, entry.path))
+    if (entry.fileKind === 'binary' || !listed()) return false
+    interactionVersionRef.current += 1
+    const owner = ([0, 1] as const).find(pane => paneTabsRef.current[pane].some(tab => notePathsMatch(tab.entry.path, entry.path)))
+    if (owner !== undefined) {
+      // Choosing a loaded page again cancels a replacement still pending in its pane.
+      requestGenerationRef.current[owner] += 1
+      controllersRef.current[owner].showLoadedEntry(entry.path)
+      if (!splitRef.current && owner !== activePaneRef.current) {
+        layoutVersionRef.current += 1
+        setSplit(true)
+      }
+      focusPane(owner)
+      return true
+    }
+    // Still loading elsewhere: its own request decides, so do not claim it opened.
+    if (findPane(entry.path) !== undefined) return false
+    const pane = activePaneRef.current
+    const request = ++requestGenerationRef.current[pane]
+    const current = () => requestGenerationRef.current[pane] === request && listed()
+    let opened = false
+    beginBusy(pane)
+    try {
+      opened = await controllersRef.current[pane].openEntryWhenLoaded(entry, current)
+    } finally { endBusy(pane) }
+    if (!opened || !current()) return false
+    if (activePaneRef.current === pane) focusPane(pane)
+    return true
+  }, [beginBusy, endBusy, findPane, focusPane])
 
   const firstPush = firstHistory.push
   const secondPush = secondHistory.push
@@ -261,9 +332,10 @@ export function useSplitWorkspace(options: Options) {
 
   // isVaultLoading stays true until the listing for this exact vault is authoritative.
   useEffect(() => {
-    if (options.restoreWorkspace === false || !options.vaultPath || options.isVaultLoading || restoredVaultRef.current === options.vaultPath) return
+    if (options.restoreWorkspace === false || !options.vaultPath || options.isVaultLoading || restoreStartedRef.current === session.epoch) return
     const vaultPath = options.vaultPath
-    restoredVaultRef.current = vaultPath
+    const epoch = session.epoch
+    restoreStartedRef.current = epoch
     const snapshot = readWorkspaceSnapshot(vaultPath)
     // Saved pages missing from an authoritative listing are gone.
     const listed = snapshot.paths.map(path => options.entries.find(item => notePathsMatch(item.path, path)))
@@ -274,11 +346,13 @@ export function useSplitWorkspace(options: Options) {
         // A pane the user already filled keeps its page; never duplicate a page open elsewhere.
         if (!entry || controller.activeTabPathRef.current || controller.requestedActiveTabPathRef.current || findPane(entry.path) !== undefined) return null
         requestGenerationRef.current[pane] += 1
+        backgroundOpensRef.current[pane] += 1
         await controller.handleSelectNote(entry)
         // A failed read leaves the pane empty; keep storing the saved page instead of nothing.
         return controllersRef.current[pane].activeTabPathRef.current ? null : entry.path
       }))
-      if (currentVaultRef.current !== vaultPath) return
+      // A restore from an earlier visit to this vault must not settle or rearrange the current one.
+      if (sessionRef.current !== epoch) return
       pendingPathsRef.current = failedPaths as [string | null, string | null]
       if (interactionVersionRef.current === vaultInteractionRef.current) {
         setSplit(snapshot.split)
@@ -287,16 +361,16 @@ export function useSplitWorkspace(options: Options) {
         focusPane(snapshot.active)
       }
       persistPausedRef.current = false
-      setRestoredVault(vaultPath)
+      setRestoredEpoch(epoch)
     }
     void restore()
-  }, [options.vaultPath, options.isVaultLoading, options.entries, options.restoreWorkspace, findPane, focusPane])
+  }, [session.epoch, options.vaultPath, options.isVaultLoading, options.entries, options.restoreWorkspace, findPane, focusPane])
   useEffect(() => {
     // A pane that gets a page no longer needs its failed saved page.
     const pending = pendingPathsRef.current
     if (first.activeTabPath) pending[0] = null
     if (second.activeTabPath) pending[1] = null
-    if (options.restoreWorkspace === false || !options.vaultPath || restoredVault !== options.vaultPath || persistPausedRef.current) return
+    if (options.restoreWorkspace === false || !options.vaultPath || restoredEpoch !== session.epoch || persistPausedRef.current) return
     // Stored in visual order, so a restart maps slot N back to pane N.
     const paths = [first.activeTabPath ?? pending[0], second.activeTabPath ?? pending[1]]
     try {
@@ -304,11 +378,14 @@ export function useSplitWorkspace(options: Options) {
         paths: [paths[order[0]], paths[order[1]]], active: order.indexOf(activePane), split, orientation, ratio,
       }))
     } catch { /* Restricted storage still permits editing; restoration is best effort. */ }
-  }, [activePane, first.activeTabPath, second.activeTabPath, options.vaultPath, options.restoreWorkspace, order, orientation, ratio, restoredVault, split])
+  }, [activePane, first.activeTabPath, second.activeTabPath, options.vaultPath, options.restoreWorkspace, order, orientation, ratio, restoredEpoch, session.epoch, split])
 
   return { tabs, setTabs, activeTabPath, activeTabPathRef, requestedActiveTabPathRef, handleSelectNote,
-    handleReplaceActiveTab, handleSwitchTab, openTabWithContent, closeAllTabs,
+    handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
     splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, openSplit, resize, placePane, placeNote,
+      openNoteWhenLoaded,
+      // Recents may count visits only after this vault session's restore has settled.
+      readyForVisits: options.restoreWorkspace === false || restoredEpoch === session.epoch,
       paths: [first.activeTabPath, second.activeTabPath] as const,
       canGoBack: histories[activePane].canGoBack,
       canGoForward: histories[activePane].canGoForward,

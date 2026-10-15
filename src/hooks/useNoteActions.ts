@@ -812,6 +812,7 @@ function buildNoteActionsResult({
     handleSelectNote,
     handleNavigateWikilink,
     handleCreateNote: creation.handleCreateNote,
+    createPage: creation.createPage,
     handleCreateNoteImmediate: creation.handleCreateNoteImmediate,
     handleCreateNoteForRelationship: creation.handleCreateNoteForRelationship,
     handleCreateType: creation.handleCreateType,
@@ -939,7 +940,7 @@ export function useNoteActions(config: NoteActionsConfig) {
     setToastMessage,
   })
   const updateTabContent = useTabContentUpdater(tabMgmt.setTabs)
-  const creation = useNoteCreation(config, { openTabWithContent: tabMgmt.openTabWithContent })
+  const creation = useNoteCreation(config, { openTabWithContent: tabMgmt.openTabWithContent, reserveOpen: tabMgmt.reserveOpen })
   const rename = useConfiguredNoteRename({ config, handlePathRenamed, tabMgmt, updateTabContent })
   const handleNavigateWikilink = useWikilinkNavigation({ creation, entries, handleSelectNote, tabMgmt })
   const runFrontmatterOp = useFrontmatterRunner({

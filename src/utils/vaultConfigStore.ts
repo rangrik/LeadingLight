@@ -17,21 +17,29 @@ const DEFAULT_CONFIG: VaultConfig = {
 
 let config: VaultConfig = DEFAULT_CONFIG
 let saveFn: SaveFn | null = null
+// Which vault the loaded config belongs to, so callers can tell "not loaded yet" from "unset".
+let boundVaultPath: string | null = null
 const listeners: Set<Listener> = new Set()
 
 export function getVaultConfig(): VaultConfig {
   return config
 }
 
-export function bindVaultConfigStore(initial: VaultConfig, save: SaveFn): void {
+export function getVaultConfigPath(): string | null {
+  return boundVaultPath
+}
+
+export function bindVaultConfigStore(initial: VaultConfig, save: SaveFn, vaultPath: string | null = null): void {
   config = normalizeVaultConfig(initial)
   saveFn = save
+  boundVaultPath = vaultPath
   notify()
 }
 
 export function resetVaultConfigStore(): void {
   config = DEFAULT_CONFIG
   saveFn = null
+  boundVaultPath = null
   notify()
 }
 

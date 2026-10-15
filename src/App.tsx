@@ -7,9 +7,9 @@ import { useNativeSaveBeforeClose } from './leadinglight/useNativeSaveBeforeClos
 import { ResizeHandle } from './components/ResizeHandle'
 import { CreateTypeDialog } from './components/CreateTypeDialog'
 import { CreateViewDialog } from './components/CreateViewDialog'
-import { QuickOpenPalette } from './components/QuickOpenPalette'
+import { QuickFind } from './leadinglight/QuickFind'
+import { useRecentPages } from './leadinglight/useRecentPages'
 import { CommandPalette } from './components/CommandPalette'
-import { SearchPanel } from './components/SearchPanel'
 import { Toast } from './components/Toast'
 import { CommitDialog } from './components/CommitDialog'
 import { PulseView } from './components/PulseView'
@@ -341,7 +341,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     () => vaultSwitcher.allVaults.map((vault) => vault.path),
     [vaultSwitcher.allVaults],
   )
-  const { config: vaultConfig, updateConfig } = useVaultConfig(resolvedPath)
+  const { config: vaultConfig, updateConfig, loaded: vaultConfigLoaded } = useVaultConfig(resolvedPath)
   const gitFeaturesEnabled = areGitFeaturesEnabled(settings)
   const automaticGitEnabled = gitFeaturesEnabled && !noteWindowParams
   const handleGitSetupPreferenceChange = useCallback((preference: GitSetupPreference) => {
@@ -418,6 +418,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     selectionRef,
     setNoteListFilter,
     setSelection,
+    ready: vaultConfigLoaded,
   })
 
   const handleNeighborhoodHistoryBack = useNeighborhoodHistoryBack({
@@ -553,12 +554,13 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     if (!noteWindowParams && resolvedPath) vault.markVaultUnavailable(resolvedPath)
   }, [noteWindowParams, resolvedPath, vault])
 
+  // Split restore, recents and the finder wait for this exact vault's listing, not a cached or previous one.
+  const vaultListingReady = settingsLoaded && vault.loadedVaultPath === resolvedPath && !vault.isLoading
   const notes = useNoteActions({
     addEntry: vault.addEntry,
     removeEntry: vault.removeEntry,
     entries: visibleEntries,
-    // Split restore waits for an authoritative listing of this exact vault, not a cached or previous one.
-    isVaultLoading: !(settingsLoaded && vault.loadedVaultPath === resolvedPath && !vault.isLoading),
+    isVaultLoading: !vaultListingReady,
     restoreWorkspace: !noteWindowParams,
     flushBeforeNoteSwitch: flushEditorStateBeforeAction,
     flushBeforeNoteMutation: flushEditorStateBeforeMutation,
@@ -580,7 +582,10 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     replaceEntry: vault.replaceEntry,
     onInternalVaultWrite: markRecentVaultWrite,
     onFrontmatterPersisted: refreshGitModifiedFiles,
-    onPathRenamed: (oldPath, newPath) => appSave.trackRenamedPath(oldPath, newPath),
+    onPathRenamed: (oldPath, newPath) => {
+      appSave.trackRenamedPath(oldPath, newPath)
+      recentPages.renamePage(oldPath, newPath)
+    },
     onOpenExternalFile: fileActions.openExternalFile,
   })
   const {
@@ -592,6 +597,20 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   } = notes
   const noteActiveTabPath = notes.activeTabPath
   const noteActiveTabPathRef = notes.activeTabPathRef
+  const recentPages = useRecentPages({
+    vaultPath: resolvedPath,
+    ready: vaultListingReady && !noteWindowParams,
+    entries: visibleEntries,
+    tabs: notes.tabs,
+    workspace: notes.splitWorkspace,
+  })
+  const [findSession, setFindSession] = useState(0)
+  const { showQuickOpen, openQuickOpen } = dialogs
+  const openFind = useCallback(() => {
+    // Each opening starts a fresh search; repeating the shortcut keeps the current one.
+    if (!showQuickOpen) setFindSession(session => session + 1)
+    openQuickOpen()
+  }, [openQuickOpen, showQuickOpen])
 
   const noteTabsRef = useRef(notes.tabs)
   useEffect(() => {
@@ -1571,8 +1590,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     modifiedCount: gitModifiedCount,
     activeNoteModified,
     selection: effectiveSelection,
-    onQuickOpen: dialogs.openQuickOpen, onCommandPalette: dialogs.openCommandPalette,
-    onSearch: dialogs.openSearch,
+    onQuickOpen: openFind, onCommandPalette: dialogs.openCommandPalette,
+    onSearch: openFind,
     onFindInNote: findInNoteCommand,
     onReplaceInNote: activeDeletedFile ? undefined : replaceInNoteCommand,
     onTurnCurrentBlockInto: activeDeletedFile ? undefined : turnCurrentBlockIntoCommand,
@@ -1774,7 +1793,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           {sidebarVisible && (
             <>
               <div className="app__sidebar" style={{ width: layout.sidebarWidth }}>
-                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={folderActions.renameFolder} onDeleteFolder={folderActions.requestDeleteFolder} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
+                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={folderActions.renameFolder} onDeleteFolder={folderActions.requestDeleteFolder} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
               </div>
               <ResizeHandle onResize={layout.handleSidebarResize} />
             </>
@@ -1892,7 +1911,18 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         <GitSetupDialog open={gitFeaturesEnabled && shouldShowGitSetupDialog} onInitGit={handleInitGitRepo} onDismiss={dismissGitSetupDialog} onNeverForVault={neverForVaultGitSetupDialog} />
         <DeleteProgressNotice count={deleteActions.pendingDeleteCount} />
         <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
-        <QuickOpenPalette open={dialogs.showQuickOpen} entries={visibleEntries} isLoading={vault.isLoading} onSelect={notes.handleSelectNote} onCreateNote={(title) => notes.handleCreateNote(title, 'Note', 'quick_open')} onClose={dialogs.closeQuickOpen} locale={appLocale} />
+        <QuickFind
+          key={findSession}
+          open={dialogs.showQuickOpen}
+          vaultPath={resolvedPath}
+          entries={visibleEntries}
+          ready={vaultListingReady}
+          recentPaths={recentPages.recentPaths}
+          onOpen={notes.splitWorkspace.openNoteWhenLoaded}
+          onCreate={notes.createPage}
+          onClose={dialogs.closeQuickOpen}
+          locale={appLocale}
+        />
         <CommandPalette
           open={dialogs.showCommandPalette}
           commands={commands}
@@ -1904,7 +1934,6 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           locale={appLocale}
           onClose={dialogs.closeCommandPalette}
         />
-        <SearchPanel open={dialogs.showSearch} vaultPath={resolvedPath} entries={visibleEntries} onSelectNote={notes.handleSelectNote} onClose={dialogs.closeSearch} />
         <CreateTypeDialog open={dialogs.showCreateTypeDialog} onClose={dialogs.closeCreateType} onCreate={handleCreateType} />
         <NoteRetargetingDialogs
           dialogState={noteRetargetingUi.dialogState}

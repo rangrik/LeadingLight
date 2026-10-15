@@ -22,12 +22,17 @@ drag directly from All Notes, resize, rotate, close a pane, reopen the
 app and verify the Markdown files and restored workspace. Failed saves must remain recoverable.
 No layout action may discard pending text. Vault changes must not restore paths from another vault.
 
-## Milestone 2 — dependable everyday writing
+## Milestone 2 — find a page and resume writing
 
 Preserve the upstream rich editor: headings, lists, checklists, links, quotes, code blocks,
 tables, images, undo/redo, Markdown shortcuts and raw Markdown access. Capture a new thought
-without selecting a type or folder. Search and recent pages make returning easy. Attachments
-remain local. Saving status is quiet but unambiguous; errors explain the next useful action.
+without selecting a type or folder. One visible Search action finds titles, aliases, filenames
+and note text; its empty state offers actual recent visits. Organization starts off unless the
+user has explicitly enabled it. Delayed creation and image copying retain their original page
+and vault. Attachments remain local. Saving status is quiet but unambiguous; errors explain
+the next useful action. See [finding and resumption](find-and-resume.md) for contracts.
+
+The identity is a bright lighthouse on a pale sky-blue tile, with a warm lamp and coral roof.
 
 ## Milestone 3 — connected and recoverable
 
@@ -52,6 +57,8 @@ of its installed desktop app informed pane framing, compact navigation and docum
 Mobbin searches did not return a verified Capacities result. Supplemental references were
 [Notion's document layout](https://mobbin.com/screens/eb1f804d-2396-44b5-ac66-0a4ad3923afd) and
 [selection toolbar](https://mobbin.com/screens/f496e09a-815b-4c2e-9253-3db3b53db191).
+The finder also draws on the compact hierarchy of Notion’s [recent pages](https://mobbin.com/screens/b1273bdd-d65d-44be-a422-ffc0f601bacd)
+and [search results](https://mobbin.com/screens/6573e834-dc7c-42e4-812f-be159ac1f887), while keeping the flow local and simple.
 
 This plan records intended acceptance; the release verification record distinguishes tested
 behavior from remaining work.

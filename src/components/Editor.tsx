@@ -254,6 +254,9 @@ function imageImportErrorMessage(error: ImageImportError, locale: AppLocale | un
       totalCount: error.totalCount,
     })
   }
+  if (error.kind === 'copy-failed') {
+    return translate(locale ?? 'en', 'editor.imageImport.copyFailed', { filename: error.fileName })
+  }
   return translate(locale ?? 'en', 'editor.imageImport.unsupportedHeic', {
     filename: error.fileName,
   })
@@ -387,7 +390,7 @@ function useEditorSetup(options: EditorSetupParams) {
         pendingRawExitContent,
       })
 
-      const { editorContentPath, handleEditorChange, flushPendingEditorChange, editorMountedRef } = useEditorTabSwap({
+      const { editorContentPath, handleEditorChange, flushPendingEditorChange, editorMountedRef, documentSessionRef } = useEditorTabSwap({
         tabs: tabsForEditorSwap,
         activeTabPath: richEditorActiveTabPath,
         editor,
@@ -453,6 +456,7 @@ function useEditorSetup(options: EditorSetupParams) {
         showDiffToggle,
         sheetFlushRef,
         richEditorContentReady,
+        editorDocumentSessionRef: documentSessionRef,
       }
     }
 
@@ -508,6 +512,7 @@ function useEditorSetup(options: EditorSetupParams) {
       diffContent: string | null
       diffLoading: boolean
       richEditorContentReady: boolean
+      editorDocumentSessionRef: React.RefObject<number>
       handleToggleDiffExclusive: () => void | Promise<void>
       rawMode: boolean
       handleToggleRawExclusive: () => void
@@ -592,6 +597,7 @@ function useEditorSetup(options: EditorSetupParams) {
       diffContent,
       diffLoading,
       richEditorContentReady,
+      editorDocumentSessionRef,
       handleToggleDiffExclusive,
       rawMode,
       handleToggleRawExclusive,
@@ -689,6 +695,7 @@ function useEditorSetup(options: EditorSetupParams) {
               diffContent={diffContent}
               diffLoading={diffLoading}
               richEditorContentReady={richEditorContentReady}
+              editorDocumentSessionRef={editorDocumentSessionRef}
               onToggleDiff={handleToggleDiffExclusive}
               rawMode={rawMode}
               onToggleRaw={handleToggleRawExclusive}

@@ -5,6 +5,7 @@ import { initTagColors } from '../utils/tagStyles'
 import { initDisplayModeOverrides } from '../utils/propertyTypes'
 import {
   getVaultConfig,
+  getVaultConfigPath,
   bindVaultConfigStore,
   resetVaultConfigStore,
   updateVaultConfigField,
@@ -52,6 +53,7 @@ function applyToModules(c: VaultConfig): void {
 
 export function useVaultConfig(vaultPath: string) {
   const config = useSyncExternalStore(subscribeVaultConfig, getVaultConfig, getVaultConfig)
+  const loadedVaultPath = useSyncExternalStore(subscribeVaultConfig, getVaultConfigPath, getVaultConfigPath)
 
   useEffect(() => {
     resetVaultConfigStore()
@@ -59,7 +61,7 @@ export function useVaultConfig(vaultPath: string) {
     const loaded = loadFromStorage(vaultPath)
     const migrated = migrateLocalStorageToVaultConfig(loaded)
     const needsSave = migrated !== loaded
-    bindVaultConfigStore(migrated, (c) => saveToStorage(vaultPath, c))
+    bindVaultConfigStore(migrated, (c) => saveToStorage(vaultPath, c), vaultPath)
     applyToModules(migrated)
     if (needsSave) saveToStorage(vaultPath, migrated)
 
@@ -73,5 +75,6 @@ export function useVaultConfig(vaultPath: string) {
     applyToModules(next)
   }, [])
 
-  return { config, updateConfig: update }
+  // False until this vault's own saved config is in the store.
+  return { config, updateConfig: update, loaded: loadedVaultPath === vaultPath }
 }

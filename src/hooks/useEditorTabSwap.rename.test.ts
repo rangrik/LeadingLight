@@ -59,7 +59,8 @@ function renderRenameHarness(options?: { onContentChange?: ReturnType<typeof vi.
   const editor = makeMockEditor('# Fresh Title\n\nBody typed live')
   const onContentChange = options?.onContentChange ?? vi.fn()
   const untitledTab = makeTab('untitled-note-123.md', 'Untitled Note 123', 'Body')
-  const renamedTab = makeTab('fresh-title.md', 'Fresh Title', 'Body')
+  // A real rename updates the tab in place, and the split workspace records the previous path.
+  const renamedTab = { ...makeTab('fresh-title.md', 'Fresh Title', 'Body'), renamedFrom: untitledTab.entry.path }
 
   const hook = renderHook(
     ({ tabs, activeTabPath }) => useEditorTabSwap({
@@ -97,6 +98,7 @@ async function expectRenameSessionContinues(options: { renamedTabArrivesLate: bo
   } = renderRenameHarness()
 
   await settleRenameHarness(editor)
+  const session = result.current.documentSessionRef.current
 
   if (options.renamedTabArrivesLate) {
     rerender({ tabs: [untitledTab], activeTabPath: renamedTab.entry.path })
@@ -108,6 +110,8 @@ async function expectRenameSessionContinues(options: { renamedTabArrivesLate: bo
 
   expect(editor.replaceBlocks).not.toHaveBeenCalled()
   expect(editor.tryParseMarkdownToBlocks).not.toHaveBeenCalled()
+  // Same document: late work bound to it (an image copy) must still land.
+  expect(result.current.documentSessionRef.current).toBe(session)
 
   act(() => {
     result.current.handleEditorChange()
@@ -135,7 +139,7 @@ describe('useEditorTabSwap untitled rename continuity', () => {
     const untitledTab = makeTab('untitled-note-123.md', 'Untitled Note 123', 'Body')
     const otherTab = makeTab('fresh-title.md', 'Fresh Title', 'Different body')
 
-    const { rerender } = renderHook(
+    const { result, rerender } = renderHook(
       ({ tabs, activeTabPath }) => useEditorTabSwap({
         tabs,
         activeTabPath,
@@ -147,11 +151,41 @@ describe('useEditorTabSwap untitled rename continuity', () => {
     await act(() => new Promise(r => setTimeout(r, 0)))
     editor.replaceBlocks.mockClear()
     editor.tryParseMarkdownToBlocks.mockClear()
+    const session = result.current.documentSessionRef.current
 
     rerender({ tabs: [otherTab], activeTabPath: otherTab.entry.path })
     await act(() => new Promise(r => setTimeout(r, 0)))
 
     expect(editor.tryParseMarkdownToBlocks).toHaveBeenCalled()
+    expect(result.current.documentSessionRef.current).toBe(session + 1)
+  })
+
+  it('swaps to a different page whose text only extends the untitled draft', async () => {
+    setupMountedEditorMocks()
+
+    const editor = makeMockEditor('# Fresh Title')
+    const untitledTab = makeTab('untitled-note-123.md', 'Untitled Note 123', '')
+    const existingTab = makeTab('fresh-title.md', 'Fresh Title', 'Existing text')
+
+    const { result, rerender } = renderHook(
+      ({ tabs, activeTabPath }) => useEditorTabSwap({
+        tabs,
+        activeTabPath,
+        editor: editor as never,
+      }),
+      { initialProps: { tabs: [untitledTab], activeTabPath: untitledTab.entry.path } },
+    )
+
+    await act(() => new Promise(r => setTimeout(r, 0)))
+    editor.tryParseMarkdownToBlocks.mockClear()
+    const session = result.current.documentSessionRef.current
+
+    rerender({ tabs: [existingTab], activeTabPath: existingTab.entry.path })
+    await act(() => new Promise(r => setTimeout(r, 0)))
+
+    // Keeping the draft's blocks here would save them over "Existing text".
+    expect(editor.tryParseMarkdownToBlocks).toHaveBeenCalled()
+    expect(result.current.documentSessionRef.current).toBe(session + 1)
   })
 
   it('keeps the live editor session when the renamed tab arrives one render after the path switch', async () => {

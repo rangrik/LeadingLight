@@ -277,8 +277,10 @@ export function SingleEditorView(options: {
   vaultPath?: string
   editable?: boolean
   locale?: AppLocale
+  /** The editor's document identity, so a late image copy survives an untitled rename. */
+  documentSessionRef?: React.RefObject<number>
 }) {
-  const { currentContent = '', editor, entries, onNavigateWikilink, onChange, onImageImportError, onRecoveryFallback, sourceEntry, vaultPath, editable = true, locale = 'en' } = options
+  const { currentContent = '', documentSessionRef, editor, entries, onNavigateWikilink, onChange, onImageImportError, onRecoveryFallback, sourceEntry, vaultPath, editable = true, locale = 'en' } = options
   const { cssVars } = useEditorTheme()
   const themeMode = useDocumentThemeMode()
   const previousThemeModeRef = useRef(themeMode)
@@ -304,6 +306,8 @@ export function SingleEditorView(options: {
   const onImageUrl = useInsertImageCallback(editor)
   const { isDragOver } = useImageDrop({
     containerRef,
+    documentPath: sourceEntry?.path ?? null,
+    documentSessionRef,
     onImageImportError,
     onImageUrl,
     vaultPath,

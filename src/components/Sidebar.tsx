@@ -29,6 +29,7 @@ interface SidebarProps {
   entries: VaultEntry[]
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
+  onSearch?: () => void
   onSelectNote?: (entry: VaultEntry) => void
   onCreateType?: (type: string) => void
   onCreateNewType?: () => void
@@ -77,6 +78,7 @@ interface SidebarNavigationProps
   | 'entries'
   | 'selection'
   | 'onSelect'
+  | 'onSearch'
   | 'onSelectFavorite'
   | 'onReorderFavorites'
   | 'views'
@@ -387,6 +389,7 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
       <SidebarTopNav
         selection={props.selection}
         onSelect={props.onSelect}
+        onSearch={props.onSearch}
         showInbox={props.showInbox ?? true}
         inboxCount={props.inboxCount ?? 0}
         activeCount={props.activeCount}
@@ -614,6 +617,7 @@ function SidebarRuntimeNavigation({
       entries={props.entries}
       selection={props.selection}
       onSelect={props.onSelect}
+      onSearch={props.onSearch}
       onSelectFavorite={props.onSelectFavorite}
       onReorderFavorites={props.onReorderFavorites}
       views={props.views}

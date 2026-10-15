@@ -2,7 +2,7 @@ import { CircleNotch, FolderOpen, HardDrive, Plus } from '@phosphor-icons/react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { OnboardingShell } from '@/components/OnboardingShell'
-import leadinglightIcon from '@/assets/leadinglight-icon.svg'
+import leadinglightIcon from '@/assets/leadinglight-icon.png'
 import { createTranslator, type AppLocale } from '@/lib/i18n'
 import { LEADINGLIGHT_NAME } from './brand'
 

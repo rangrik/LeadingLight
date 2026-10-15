@@ -59,6 +59,8 @@ export { RICH_EDITOR_CHANGE_DEBOUNCE_MS } from './editorChangeDebounce'
 interface Tab {
   entry: VaultEntry
   content: string
+  /** Set by the tab controller when this same page was renamed in place from that path. */
+  renamedFrom?: string
 }
 
 type PendingLocalContent = { path: string; content: string }
@@ -98,6 +100,7 @@ interface RunTabSwapEffectOptions {
   suppressChangeRef: MutableRefObject<boolean>
   editorContentPathRef: EditorContentPathRef
   pendingLocalContentRef: MutableRefObject<PendingLocalContent | null>
+  documentSessionRef: MutableRefObject<number>
   flushPendingEditorChange: () => boolean
   vaultPath?: string
 }
@@ -188,6 +191,8 @@ function isUntitledRenameTransition(
   editor: ReturnType<typeof useCreateBlockNote>,
 ): boolean {
   if (!prevPath || !nextPath || !activeTab || !isUntitledPath(prevPath)) return false
+  // Only a recorded rename may keep the live blocks; a different file with a similar title and text must load.
+  if (activeTab.renamedFrom !== prevPath) return false
 
   const currentHeading = getH1TextFromBlocks(editor.document)
   if (!currentHeading || slugifyPathStem(currentHeading) !== pathStem(nextPath)) return false
@@ -336,6 +341,7 @@ function syncActivePathTransition(options: {
   editorMountedRef: MutableRefObject<boolean>
   prevActivePathRef: MutableRefObject<string | null>
   editorContentPathRef: EditorContentPathRef
+  documentSessionRef: MutableRefObject<number>
 }) {
   const {
     prevPath,
@@ -348,6 +354,7 @@ function syncActivePathTransition(options: {
     editorMountedRef,
     prevActivePathRef,
     editorContentPathRef,
+    documentSessionRef,
   } = options
 
   cachePreviousTabOnPathChange({
@@ -361,7 +368,7 @@ function syncActivePathTransition(options: {
   })
   if (shouldWaitForActiveTab({ pathChanged, activeTabPath, activeTab })) return true
 
-  if (!preserveUntitledRenameState({
+  const renamed = preserveUntitledRenameState({
     prevPath,
     activeTabPath,
     activeTab,
@@ -369,13 +376,11 @@ function syncActivePathTransition(options: {
     editor,
     editorMountedRef,
     editorContentPathRef,
-  })) {
-    prevActivePathRef.current = activeTabPath
-    return false
-  }
-
+  })
+  // A recorded rename keeps the same document; any other path change replaces it.
+  if (pathChanged && activeTab?.renamedFrom !== prevPath) documentSessionRef.current += 1
   prevActivePathRef.current = activeTabPath
-  return true
+  return renamed
 }
 
 function markRawModeReswapPending(options: {
@@ -927,6 +932,7 @@ function shouldSkipScheduledTabSwap(options: {
   editorContentPathRef: EditorContentPathRef
   rawSwapPendingRef: MutableRefObject<boolean>
   pendingLocalContentRef: MutableRefObject<PendingLocalContent | null>
+  documentSessionRef: MutableRefObject<number>
 }) {
   const {
     state,
@@ -937,6 +943,7 @@ function shouldSkipScheduledTabSwap(options: {
     editorContentPathRef,
     rawSwapPendingRef,
     pendingLocalContentRef,
+    documentSessionRef,
   } = options
 
   if (state.pathChanged) {
@@ -954,6 +961,7 @@ function shouldSkipScheduledTabSwap(options: {
     editorMountedRef,
     prevActivePathRef,
     editorContentPathRef,
+    documentSessionRef,
   })) {
     return true
   }
@@ -998,6 +1006,7 @@ function runTabSwapEffect(options: RunTabSwapEffectOptions) {
     editorContentPathRef: options.editorContentPathRef,
     rawSwapPendingRef: options.rawSwapPendingRef,
     pendingLocalContentRef: options.pendingLocalContentRef,
+    documentSessionRef: options.documentSessionRef,
   })) {
     return
   }
@@ -1041,6 +1050,7 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
     suppressChangeRef,
     editorContentPathRef,
     pendingLocalContentRef,
+    documentSessionRef,
     vaultPathRef,
     flushPendingEditorChange,
   } = options
@@ -1063,6 +1073,7 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
       suppressChangeRef,
       editorContentPathRef,
       pendingLocalContentRef,
+      documentSessionRef,
       flushPendingEditorChange,
       vaultPath: vaultPathRef.current,
       })
@@ -1087,6 +1098,7 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
     tabsRef,
     tabs,
     pendingLocalContentRef,
+    documentSessionRef,
     vaultPathRef,
     flushPendingEditorChange,
   ])
@@ -1150,6 +1162,8 @@ function usePrepareParsedBlocks(options: {
 export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange, rawMode, vaultPath }: UseEditorTabSwapOptions) {
   const tabCacheRef = useRef<Map<string, CachedTabState>>(new Map())
   const pendingLocalContentRef = useRef<PendingLocalContent | null>(null)
+  // Which document the editor holds: unchanged by an untitled rename, advanced when content is replaced.
+  const documentSessionRef = useRef(0)
   const prevActivePathRef = useRef<string | null>(null)
   const activeTabPathLatestRef = useLatestRef(activeTabPath)
   const editorContentSignal = useEditorContentPathSignal(activeTabPath)
@@ -1202,6 +1216,7 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
     suppressChangeRef,
     editorContentPathRef,
     pendingLocalContentRef,
+    documentSessionRef,
     vaultPathRef,
     flushPendingEditorChange,
   })
@@ -1212,5 +1227,6 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
     handleEditorChange: handleForegroundEditorChange,
     flushPendingEditorChange,
     editorMountedRef,
+    documentSessionRef,
   }
 }

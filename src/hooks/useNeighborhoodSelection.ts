@@ -34,6 +34,8 @@ interface UseSelectionSanitizerOptions extends NeighborhoodRefs {
   selection: SidebarSelection
   setNoteListFilter: (filter: NoteListFilter) => void
   setSelection: (selection: SidebarSelection) => void
+  /** False while the vault's settings load; unloaded settings must not overwrite the selection. */
+  ready?: boolean
 }
 
 interface UseNeighborhoodHistoryBackOptions {
@@ -87,20 +89,21 @@ export function useSelectionSanitizer({
   selectionRef,
   setNoteListFilter,
   setSelection,
+  ready = true,
 }: UseSelectionSanitizerOptions): void {
   useEffect(() => {
     selectionRef.current = effectiveSelection
   }, [effectiveSelection, selectionRef])
 
   useEffect(() => {
-    if (selectionsEqual(effectiveSelection, selection)) return
+    if (!ready || selectionsEqual(effectiveSelection, selection)) return
 
     if (effectiveSelection.kind !== 'entity') {
       neighborhoodHistoryRef.current = []
     }
     setSelection(effectiveSelection)
     setNoteListFilter('open')
-  }, [effectiveSelection, neighborhoodHistoryRef, selection, setNoteListFilter, setSelection])
+  }, [effectiveSelection, neighborhoodHistoryRef, ready, selection, setNoteListFilter, setSelection])
 }
 
 export function useNeighborhoodHistoryBack({

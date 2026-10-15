@@ -4,7 +4,7 @@ export const INBOX_SELECTION: SidebarSelection = { kind: 'filter', filter: 'inbo
 export const ALL_NOTES_SELECTION: SidebarSelection = { kind: 'filter', filter: 'all' }
 
 export function isExplicitOrganizationEnabled(explicitOrganization?: boolean | null): boolean {
-  return explicitOrganization !== false
+  return explicitOrganization === true
 }
 
 export function getDefaultSelectionForOrganization(explicitOrganization?: boolean | null): SidebarSelection {

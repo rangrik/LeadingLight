@@ -1,22 +1,25 @@
 # LeadingLight identity
 
-The mark is a page opening into light. A flowing gap through the ivory page leads toward a
-sage fold and a small amber opening. The dark forest tile keeps the silhouette clear in the
-Dock and in light or dark interfaces. It replaces the temporary stock lighthouse icon.
+The mark is a bright ivory lighthouse with a coral roof, a warm amber lamp and a soft
+beam over a pale sky-blue tile. The open, light palette makes the application easy to
+recognize in the Dock without a dark background.
 
-- Master: `src/assets/leadinglight-icon.svg` — a clean, scalable source asset.
-- Native exports: `src-tauri/icons/`, generated with `pnpm tauri icon src/assets/leadinglight-icon.svg`.
-- In-app use: local welcome screen and browser favicon both use the master.
-- Palette: forest `#263C34`, ivory `#F7F6F3`, sage `#8FA68E`, amber `#E8BE76`.
+- Master: `src/assets/leadinglight-icon.png`, original generated RGBA artwork.
+- Native exports: `src-tauri/icons/`, generated with `pnpm tauri icon src/assets/leadinglight-icon.png`.
+- In-app use: local welcome screen and browser favicon use the same master.
+- Palette: ivory, powder blue, coral and honey gold.
 
-A built-in image-generation concept informed the silhouette. The production artwork is a
-vector reconstruction, with opaque flat fills and transparent outer padding; no generated
-raster texture or transparency artifacts are shipped. Both the 32px icon and 256px export
-were visually checked.
+The production artwork was created with built-in image generation on 2026-10-15, then
+refined once for clean outer transparency and simpler detail. Native sizes are deterministic
+exports of that master; the artwork was not reconstructed with a different silhouette.
+The 256px, 64px and 32px exports were checked on light and dark browser surfaces;
+the outer transparency renders cleanly and the small lighthouse remains recognizable.
 
-Generation brief: a calm notes app icon, an upright ivory page turning into a sage fold,
-a curved opening toward warm light, dark forest rounded tile, strong small-size silhouette,
-no text, lighthouse, rays, sparkle, or ornamental detail.
+Generation brief: an original, optimistic macOS notes-app icon; a tapered ivory lighthouse,
+coral roof, warm amber lantern and one pale-gold beam; a light powder-blue and ivory rounded
+tile with gentle satin depth and transparent outer padding. No lettering, dark forest tile,
+night scene, torch, flame, folded page or decorative sparkle. The refinement preserved the
+composition while simplifying the base and cleaning the outer transparency.
 
 See `src/assets/leadinglight-icon.LICENSE` for artwork licensing. Retained upstream branding
 assets remain in historical source where needed for merges; they are not this app's identity.

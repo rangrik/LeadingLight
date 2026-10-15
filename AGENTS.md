@@ -18,9 +18,12 @@ reduce merge churn; its organization-specific service requirements do not govern
 - Reuse shadcn/Radix and Phosphor. No bespoke replacements for existing standard controls.
 
 ## Team and coordination
-- This Codex chat is manager/integrator. Opus 5.5 xhigh is primary developer. Fable 5.1 xhigh
-  handles design/product when needed. Astra is senior tech lead and secondary developer.
-  Sol 6.1 ultra handles small tasks/computer use. Opus max handles any reverse engineering.
+- Standing owner rule: Opus 5.5 is the only code implementer. All application code, tests,
+  scripts and config are written by Opus 5.5 (xhigh; max for any reverse engineering).
+- This Codex chat is manager/integrator: briefs, ownership, running checks, review, integration,
+  builds, commits and publication. It does not write code. Astra gives read-only technical review.
+  Sol 6.1 runs UI QA (browser and native) and computer use, without writing tests. Fable 5.1
+  handles design/product when needed.
 - Use workspace_management/ for private task briefs, agent IDs, findings and handoffs.
   Each agent owns a separate report. Manager owns the board and integration. No other agent
   commits, pushes, installs dependencies, launches servers or starts native builds unless assigned.

@@ -6,8 +6,9 @@ Your pages are Markdown files in a folder you control. LeadingLight has its own 
 settings. It disables telemetry, automatic updates, cloud AI, remote templates and note sync.
 The application source is public; your notes are not part of this repository.
 
-The first milestone adds two independently editable pages side by side or stacked, with
-resizable panes and restored workspace state. See [the product plan](docs/leadinglight/PRODUCT.md)
+LeadingLight provides two independently editable pages side by side or stacked, with
+resizable panes and restored workspace state. A unified local finder searches titles and page
+text, and recent visits make it easy to return to a page. See [the product plan](docs/leadinglight/PRODUCT.md)
 and [the fork architecture](docs/leadinglight/ARCHITECTURE.md) for scope and maintenance.
 The [verification record](docs/leadinglight/VERIFICATION.md) documents tested behavior and limits.
 
@@ -22,7 +23,8 @@ the preview shows where it will land. Each pane stays editable.
 Drag the divider to resize; double-click it to return to equal sizes. Closing a pane keeps its
 page available when you reopen the split.
 
-`⌘P` finds a page, `⌘S` saves immediately, and `⌘⌥1` / `⌘⌥2` focuses either pane. On Windows
+Click **Search** or press `⌘P` to find a page by title, alias, filename or text. Before you type,
+the finder offers recently opened pages. `⌘S` saves immediately, and `⌘⌥1` / `⌘⌥2` focuses either pane. On Windows
 and Linux, use Ctrl instead of Command. Rich text and Markdown shortcuts use the inherited
 editor; the Markdown files remain readable in other tools.
 
@@ -47,7 +49,7 @@ and major-version migration holds are listed explicitly in [dependency status](d
 ## Attribution
 
 LeadingLight is an independent fork of Tolaria by Luca Rossi and contributors. It retains the
-AGPL-3.0-or-later license. LeadingLight's page-and-light mark is its own identity; interface icons use Phosphor. Capacities and
+AGPL-3.0-or-later license. LeadingLight's bright lighthouse mark is its own identity; interface icons use Phosphor. Capacities and
 Notion are interaction references; LeadingLight is not affiliated with either product.
 
 ---

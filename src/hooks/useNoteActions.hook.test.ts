@@ -156,16 +156,12 @@ describe('useNoteActions hook', () => {
     expect(createdEntry.path).toContain(expectedPathFragment)
   })
 
-  it('handleCreateNote opens tab immediately (before addEntry resolves)', () => {
-    const callOrder: string[] = []
-    const trackedAddEntry = vi.fn(() => { callOrder.push('addEntry') })
-    const config = makeConfig()
-    config.addEntry = trackedAddEntry
+  // LeadingLight: the file is written before the page opens, so a refused write never binds an existing file.
+  it('handleCreateNote opens the tab once its file is written', async () => {
+    const { result } = renderHook(() => useNoteActions(makeConfig()))
 
-    const { result } = renderHook(() => useNoteActions(config))
-
-    act(() => {
-      result.current.handleCreateNote('Fast Note', 'Note')
+    await act(async () => {
+      await result.current.handleCreateNote('Fast Note', 'Note')
     })
 
     // Tab should be open with the new note
@@ -467,23 +463,23 @@ describe('useNoteActions hook', () => {
     expect(createdEntry.isA).toBe('Project')
   })
 
-  it('handleCreateNote leaves Project body empty without an explicit type template', () => {
+  it('handleCreateNote leaves Project body empty without an explicit type template', async () => {
     const { result } = renderHook(() => useNoteActions(makeConfig()))
 
-    act(() => {
-      result.current.handleCreateNote('My Project', 'Project')
+    await act(async () => {
+      await result.current.handleCreateNote('My Project', 'Project')
     })
 
     const tabContent = result.current.tabs[0].content
     expect(tabContent).toBe('---\ntitle: My Project\ntype: Project\n---\n')
   })
 
-  it('handleCreateNote uses custom template from type entry', () => {
+  it('handleCreateNote uses custom template from type entry', async () => {
     const typeEntry = makeEntry({ isA: 'Type', title: 'Recipe', template: '## Ingredients\n\n## Steps\n\n' })
     const { result } = renderHook(() => useNoteActions(makeConfig([typeEntry])))
 
-    act(() => {
-      result.current.handleCreateNote('Pasta', 'Recipe')
+    await act(async () => {
+      await result.current.handleCreateNote('Pasta', 'Recipe')
     })
 
     const tabContent = result.current.tabs[0].content

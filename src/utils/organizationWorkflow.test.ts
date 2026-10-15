@@ -8,9 +8,17 @@ import {
 } from './organizationWorkflow'
 
 describe('organizationWorkflow', () => {
-  it('treats the setting as enabled by default', () => {
-    expect(isExplicitOrganizationEnabled(undefined)).toBe(true)
-    expect(isExplicitOrganizationEnabled(null)).toBe(true)
+  it('keeps unspecified organization off and starts in All Notes', () => {
+    for (const setting of [undefined, null]) {
+      expect(isExplicitOrganizationEnabled(setting)).toBe(false)
+      expect(getDefaultSelectionForOrganization(setting)).toEqual(ALL_NOTES_SELECTION)
+      expect(sanitizeSelectionForOrganization(INBOX_SELECTION, setting)).toEqual(ALL_NOTES_SELECTION)
+    }
+  })
+
+  it('preserves an explicit opt-in and its Inbox selection', () => {
+    expect(isExplicitOrganizationEnabled(true)).toBe(true)
+    expect(sanitizeSelectionForOrganization(INBOX_SELECTION, true)).toEqual(INBOX_SELECTION)
   })
 
   it('treats explicit false as disabled', () => {

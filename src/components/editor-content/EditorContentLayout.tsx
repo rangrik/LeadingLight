@@ -447,6 +447,7 @@ type EditorCanvasProps = Pick<
   | 'vaultPath'
   | 'locale'
   | 'onImageImportError'
+  | 'editorDocumentSessionRef'
 >
 
 function EditorCanvas(props: EditorCanvasProps) {
@@ -481,6 +482,7 @@ function StandardEditorCanvas(options: EditorCanvasProps) {
     vaultPath,
     locale,
     onImageImportError,
+    editorDocumentSessionRef,
   } = options
   if (!isSheet && !richEditorContentReady) return null
 
@@ -510,6 +512,7 @@ function StandardEditorCanvas(options: EditorCanvasProps) {
       <div className="editor-content-wrapper" data-note-pdf-export-root="true">
         <SingleEditorView
           currentContent={activeTab?.content ?? ''}
+          documentSessionRef={editorDocumentSessionRef}
           editor={editor}
           entries={entries}
           onNavigateWikilink={onNavigateWikilink}
@@ -659,6 +662,7 @@ export function EditorContentLayout(model: EditorContentModel) {
             onToggleRaw={model.onToggleRaw}
             onRawContentChange={onRawContentChange}
             onImageImportError={onImageImportError}
+            editorDocumentSessionRef={model.editorDocumentSessionRef}
             sheetFlushRef={sheetFlushRef}
             isDeletedPreview={isDeletedPreview}
             isSheet={isSheet}
