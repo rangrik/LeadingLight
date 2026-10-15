@@ -126,8 +126,9 @@ async function expectLoadedVaultSearch(page: Page): Promise<void> {
   await expect(page.getByText('Large Vault Note')).toBeVisible()
 
   await sendShortcut(page, 'p', ['Control'])
-  await expect(page.getByTestId('quick-open-palette')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('quick-open-palette').getByText('Large Vault Note')).toBeVisible()
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  await expect(finder).toBeVisible({ timeout: 5_000 })
+  await expect(finder.getByRole('option').getByText('Large Vault Note')).toBeVisible()
 }
 
 test('slow vault open keeps one startup shell visible while notes load', async ({ page }) => {

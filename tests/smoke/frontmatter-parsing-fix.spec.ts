@@ -1,43 +1,73 @@
-import { test, expect } from '@playwright/test'
-import { sendShortcut } from './helpers'
+import fs from 'fs'
+import path from 'path'
+import { test, expect, type Page } from '@playwright/test'
+import { createFixtureVaultCopy, openFixtureVault, removeFixtureVaultCopy } from '../helpers/fixtureVault'
 
-const QUICK_OPEN_INPUT = 'input[placeholder="Search notes..."]'
+// Disposable pages typed with the canonical `type:` key. No title contains its type,
+// so only a correctly parsed type can make a badge pass.
+const SEEDED_TYPED_PAGES = [
+  { file: 'weekly-review.md', title: 'Weekly Review', type: 'Procedure' },
+  { file: 'grow-newsletter.md', title: 'Grow Newsletter', type: 'Responsibility' },
+  { file: 'laputa-launch.md', title: 'Laputa Launch', type: 'Project' },
+]
 
-async function openQuickOpen(page: import('@playwright/test').Page) {
-  await page.locator('body').click()
-  await sendShortcut(page, 'p', ['Control'])
-  await expect(page.locator(QUICK_OPEN_INPUT)).toBeVisible()
+let tempVaultDir: string
+
+function seedTypedPages(vaultPath: string): void {
+  for (const { file, title, type } of SEEDED_TYPED_PAGES) {
+    fs.writeFileSync(path.join(vaultPath, file), `---\ntype: ${type}\n---\n# ${title}\n\nSynthetic page for type parsing.\n`)
+  }
+}
+
+// The finder shows titles only; the pane's "Choose a page" picker keeps the type badge.
+async function openPagePicker(page: Page): Promise<void> {
+  await page.locator('.ll-pane').first().getByRole('button', { name: 'Choose a page' }).click()
+  await expect(page.getByTestId('quick-open-palette').getByRole('textbox')).toBeVisible()
+}
+
+/** The badge on the one row whose title is exactly `title` reads exactly `type`. */
+async function expectTypeBadge(page: Page, query: string, title: string, type: string): Promise<void> {
+  const picker = page.getByTestId('quick-open-palette')
+  await picker.getByRole('textbox').fill(query)
+  const row = picker.getByRole('button').filter({ has: page.getByText(title, { exact: true }) })
+  await expect(row).toHaveCount(1)
+  await expect(row.locator('[data-slot="badge"]')).toHaveText(type)
 }
 
 test.describe('Frontmatter parsing: type badge displays correctly', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    tempVaultDir = createFixtureVaultCopy()
+    seedTypedPages(tempVaultDir)
+    await openFixtureVault(page, tempVaultDir)
+    await openPagePicker(page)
+  })
+
+  test.afterEach(() => {
+    removeFixtureVaultCopy(tempVaultDir)
   })
 
   test('procedure note shows type badge in Quick Open', async ({ page }) => {
-    await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('Weekly')
-    await page.waitForTimeout(400)
-    // The Badge component renders the type name as text content
-    const badge = page.locator('.fixed.inset-0').locator('text=Procedure')
-    await expect(badge.first()).toBeVisible({ timeout: 3000 })
+    await expectTypeBadge(page, 'Weekly', 'Weekly Review', 'Procedure')
   })
 
   test('responsibility note shows type badge in Quick Open', async ({ page }) => {
-    await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('Newsletter')
-    await page.waitForTimeout(400)
-    const badge = page.locator('.fixed.inset-0').locator('text=Responsibility')
-    await expect(badge.first()).toBeVisible({ timeout: 3000 })
+    await expectTypeBadge(page, 'Newsletter', 'Grow Newsletter', 'Responsibility')
   })
 
   test('project note shows type badge in Quick Open', async ({ page }) => {
-    await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('Laputa')
-    await page.waitForTimeout(400)
-    const badge = page.locator('.fixed.inset-0').locator('text=Project')
-    await expect(badge.first()).toBeVisible({ timeout: 3000 })
+    await expectTypeBadge(page, 'Laputa', 'Laputa Launch', 'Project')
+  })
+
+  test('legacy "Is A:" key shows its type badge in Quick Open', async ({ page }) => {
+    // Unmodified shared fixture page: `Is A: Event`, title "Team Meeting".
+    await expectTypeBadge(page, 'Team', 'Team Meeting', 'Event')
+  })
+})
+
+test.describe('Frontmatter parsing: sidebar', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/')
+    await page.waitForLoadState('networkidle')
   })
 
   test('sidebar shows type sections', async ({ page }) => {

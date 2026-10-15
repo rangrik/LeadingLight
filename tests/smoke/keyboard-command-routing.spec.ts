@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { APP_COMMAND_IDS } from '../../src/hooks/appCommandCatalog'
+import { areAiFeaturesEnabled } from '../../src/lib/aiFeatures'
 import { RUNTIME_STYLE_NONCE } from '../../src/lib/runtimeStyleNonce'
 import {
   dispatchShortcutEvent,
@@ -11,18 +12,41 @@ import {
   openFixtureVaultDesktopHarness,
   removeFixtureVaultCopy,
 } from '../helpers/fixtureVault'
+import { installFixtureVaultDesktopBridgeInBrowser } from '../helpers/fixtureVaultDesktopBridge'
 
 let tempVaultDir: string
 
-const GLOBAL_SEARCH_INPUT = 'input[placeholder="Search in all notes..."]'
+// Fork policy decides, not saved settings: even a user who turned AI on gets none in LeadingLight.
+const AI_WORKSPACE_ALLOWED = areAiFeaturesEnabled({ ai_features_enabled: true })
+
+// Inbox and organizing are opt-in; this is the vault setting a user turns on.
+const ORGANIZING_VAULT_CONFIG = { inbox: { noteListProperties: null, explicitOrganization: true } }
+
+// Page-text hits must be listed pages, so they name real fixture files under the searched vault.
 const GLOBAL_SEARCH_RESULTS = [
-  { title: 'First Search Result', path: '/vault/first-search-result.md', snippet: 'first', score: 1, note_type: null },
-  { title: 'Second Search Result', path: '/vault/second-search-result.md', snippet: 'second', score: 0.9, note_type: null },
-  { title: 'Third Search Result', path: '/vault/third-search-result.md', snippet: 'third', score: 0.8, note_type: null },
+  { title: 'Team Meeting', file: 'event/team-meeting.md', snippet: 'Weekly sync first', score: 1, note_type: null },
+  { title: 'Note C', file: 'note/note-c.md', snippet: 'Weekly sync second', score: 0.9, note_type: null },
+  { title: 'Note B', file: 'note/note-b.md', snippet: 'Weekly sync third', score: 0.8, note_type: null },
 ]
 
 async function openAlphaProjectInEditor(page: Page) {
   await openFixtureVaultDesktopHarness(page, tempVaultDir)
+  await page.getByText('Alpha Project', { exact: true }).first().click()
+  await page.locator('.bn-editor').click()
+}
+
+async function openAlphaProjectWithOrganizing(page: Page) {
+  await openFixtureVaultDesktopHarness(page, tempVaultDir)
+  // The harness resets storage on every load, so the saved setting goes in a later script and a reload.
+  await page.addInitScript(({ key, value }) => { localStorage.setItem(key, value) }, {
+    key: `laputa:vault-config:${tempVaultDir}`,
+    value: JSON.stringify(ORGANIZING_VAULT_CONFIG),
+  })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await expect(page.getByTestId('sidebar-top-nav').getByText('Inbox', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await page.waitForFunction(() => typeof window.__laputaTest?.dispatchBrowserMenuCommand === 'function')
+  await page.evaluate(installFixtureVaultDesktopBridgeInBrowser)
+  await page.waitForFunction(() => Boolean(window.__TAURI_INTERNALS__))
   await page.getByText('Alpha Project', { exact: true }).first().click()
   await page.locator('.bn-editor').click()
 }
@@ -86,15 +110,19 @@ async function openQuickOpenFromKeyboard(page: Page): Promise<void> {
     bubbles: true,
     cancelable: true,
   })
-  await expect(page.getByTestId('quick-open-palette')).toBeVisible({ timeout: 5_000 })
+  await expect(finder(page)).toBeVisible({ timeout: 5_000 })
+}
+
+function finder(page: Page) {
+  return page.getByRole('dialog', { name: 'Find a page' })
 }
 
 function selectedQuickOpenTitle(page: Page) {
-  return page.getByTestId('quick-open-palette').locator('div.bg-accent > button:has([data-testid="note-search-item-icon"])').first()
+  return finder(page).locator('[role="option"][aria-selected="true"] span.truncate').first()
 }
 
 function quickOpenTitleAt(page: Page, index: number) {
-  return page.getByTestId('quick-open-palette').locator('button:has([data-testid="note-search-item-icon"])').nth(index)
+  return finder(page).locator('[role="option"] span.truncate').nth(index)
 }
 
 async function installGlobalSearchResultsHarness(page: Page): Promise<void> {
@@ -107,16 +135,22 @@ async function installGlobalSearchResultsHarness(page: Page): Promise<void> {
       get: () => handlers,
       set: (nextHandlers) => Object.assign(handlers, nextHandlers),
     })
-    handlers.search_vault = () => ({ results, elapsed_ms: 1 })
+    handlers.search_vault = (args) => {
+      const root = String(args?.vaultPath ?? '').replace(/\/+$/, '')
+      return {
+        results: results.map(({ file, ...result }) => ({ ...result, path: `${root}/${file}` })),
+        elapsed_ms: 1,
+      }
+    }
   }, GLOBAL_SEARCH_RESULTS)
 }
 
 function searchResultRow(page: Page, title: string) {
-  return page.locator('[role="option"]').filter({ hasText: title }).first()
+  return finder(page).locator('[role="option"]').filter({ hasText: title }).first()
 }
 
 async function expectSelectedSearchResult(page: Page, title: string): Promise<void> {
-  await expect(searchResultRow(page, title)).toHaveClass(/bg-accent/)
+  await expect(searchResultRow(page, title)).toHaveAttribute('aria-selected', 'true')
 }
 
 test.describe('keyboard command routing', () => {
@@ -157,10 +191,10 @@ test.describe('keyboard command routing', () => {
     await openFixtureVaultDesktopHarness(page, tempVaultDir)
 
     await openQuickOpenFromKeyboard(page)
-    await expect(page.locator('input[placeholder="Search notes..."]')).toBeFocused()
+    await expect(finder(page).getByRole('combobox')).toBeFocused()
 
     await page.keyboard.press('Escape')
-    await expect(page.getByTestId('quick-open-palette')).not.toBeVisible({ timeout: 5_000 })
+    await expect(finder(page)).not.toBeVisible({ timeout: 5_000 })
 
     await dispatchShortcutEvent(page, {
       key: 'o',
@@ -172,8 +206,8 @@ test.describe('keyboard command routing', () => {
       bubbles: true,
       cancelable: true,
     })
-    await expect(page.getByTestId('quick-open-palette')).toBeVisible({ timeout: 5_000 })
-    await expect(page.locator('input[placeholder="Search notes..."]')).toBeFocused()
+    await expect(finder(page)).toBeVisible({ timeout: 5_000 })
+    await expect(finder(page).getByRole('combobox')).toBeFocused()
   })
 
   test('quick open ignores a stationary pointer until it moves', async ({ page }) => {
@@ -189,7 +223,7 @@ test.describe('keyboard command routing', () => {
     if (!secondTitleBox) throw new Error('Quick open did not render a second note box')
 
     await page.keyboard.press('Escape')
-    await expect(page.getByTestId('quick-open-palette')).not.toBeVisible({ timeout: 5_000 })
+    await expect(finder(page)).not.toBeVisible({ timeout: 5_000 })
     await page.mouse.move(
       secondTitleBox.x + secondTitleBox.width / 2,
       secondTitleBox.y + secondTitleBox.height / 2,
@@ -216,24 +250,26 @@ test.describe('keyboard command routing', () => {
       bubbles: true,
       cancelable: true,
     })
-    const input = page.locator(GLOBAL_SEARCH_INPUT)
-    await expect(input).toBeVisible({ timeout: 5_000 })
-    await input.fill('search')
-    await expect(searchResultRow(page, 'Third Search Result')).toBeVisible({ timeout: 5_000 })
+    // Full-text search opens the one finder; its page-text matches follow title matches.
+    const input = finder(page).getByRole('combobox')
+    await expect(input).toBeFocused({ timeout: 5_000 })
+    await input.fill('weekly sync')
+    await expect(searchResultRow(page, 'Note B')).toBeVisible({ timeout: 5_000 })
+    await expect(finder(page).getByRole('group', { name: 'In page text' }).getByRole('option')).toHaveCount(3)
 
-    await expectSelectedSearchResult(page, 'First Search Result')
+    await expectSelectedSearchResult(page, 'Team Meeting')
     await page.keyboard.press('ArrowDown')
-    await expectSelectedSearchResult(page, 'Second Search Result')
+    await expectSelectedSearchResult(page, 'Note C')
     await page.waitForTimeout(550)
     await page.keyboard.press('ArrowDown')
-    await expectSelectedSearchResult(page, 'Third Search Result')
+    await expectSelectedSearchResult(page, 'Note B')
     await page.waitForTimeout(550)
     await page.keyboard.press('ArrowUp')
-    await expectSelectedSearchResult(page, 'Second Search Result')
+    await expectSelectedSearchResult(page, 'Note C')
   })
 
   test('desktop menu-command bridge toggles organized state through the shared command path', async ({ page }) => {
-    await openAlphaProjectInEditor(page)
+    await openAlphaProjectWithOrganizing(page)
 
     await expect(page.getByRole('button', { name: 'Set note as organized' })).toBeVisible({ timeout: 5_000 })
 
@@ -245,7 +281,10 @@ test.describe('keyboard command routing', () => {
   })
 
   test('app command bridge undoes and redoes organized state through action history', async ({ page }) => {
-    await openAlphaProjectInEditor(page)
+    await openAlphaProjectWithOrganizing(page)
+    // Inside the editor, undo belongs to the text; app action history is undone from outside it.
+    await page.getByTestId('note-list-container').focus()
+    await expect(page.getByTestId('note-list-container')).toBeFocused()
 
     await triggerMenuCommand(page, APP_COMMAND_IDS.noteToggleOrganized)
     await expect(page.getByRole('button', { name: 'Set note as not organized' })).toBeVisible({ timeout: 5_000 })
@@ -282,6 +321,7 @@ test.describe('keyboard command routing', () => {
   })
 
   test('desktop menu-command bridge toggles the AI panel, while the wrong modifier event does not', async ({ page }) => {
+    test.skip(!AI_WORKSPACE_ALLOWED, 'LeadingLight policy disables remote AI; the next test proves it stays unavailable')
     await openAlphaProjectInEditor(page)
 
     await dispatchShortcutEvent(page, {
@@ -303,5 +343,22 @@ test.describe('keyboard command routing', () => {
 
     await triggerMenuCommand(page, APP_COMMAND_IDS.viewToggleAiChat)
     await expect(page.getByTestId('ai-panel')).not.toBeVisible({ timeout: 5_000 })
+  })
+
+  test('LeadingLight never shows the AI workspace from its shortcut, a wrong modifier or the menu command', async ({ page }) => {
+    test.skip(AI_WORKSPACE_ALLOWED, 'Only meaningful while fork policy disables remote AI')
+    await openAlphaProjectInEditor(page)
+
+    const aiShortcut = { key: 'l', code: 'KeyL', ctrlKey: false, shiftKey: true, bubbles: true, cancelable: true }
+    await dispatchShortcutEvent(page, { ...aiShortcut, metaKey: false, altKey: true })
+    await dispatchShortcutEvent(page, { ...aiShortcut, metaKey: true, altKey: false })
+    await triggerMenuCommand(page, APP_COMMAND_IDS.viewToggleAiChat)
+
+    // Commands run in order: once a later command visibly works, the AI ones were handled already.
+    await expectPropertiesPanelToggle(page, async () => {
+      await triggerMenuCommand(page, APP_COMMAND_IDS.viewToggleProperties)
+    })
+    await expect(page.getByTestId('ai-panel')).toHaveCount(0)
+    await expect(page.getByTitle('Close AI workspace')).toHaveCount(0)
   })
 })

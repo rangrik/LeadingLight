@@ -36,9 +36,10 @@ async function copiedText(page: Page): Promise<string> {
 
 async function openNoteWithQuickOpen(page: Page, title: string, expectedFilename: string): Promise<void> {
   await sendShortcut(page, 'p', ['Control'])
-  await expect(page.getByTestId('quick-open-palette')).toBeVisible({ timeout: 5_000 })
-  await page.locator('input[placeholder="Search notes..."]').fill(title)
-  await expect(page.getByTestId('quick-open-palette').getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 })
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  await expect(finder).toBeVisible({ timeout: 5_000 })
+  await finder.getByRole('combobox').fill(title)
+  await expect(finder.getByRole('option').getByText(title, { exact: true })).toBeVisible({ timeout: 5_000 })
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(expectedFilename, { timeout: 5_000 })
 }

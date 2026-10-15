@@ -1,35 +1,51 @@
+import fs from 'fs'
+import path from 'path'
 import { test, expect } from '@playwright/test'
-import { sendShortcut } from './helpers'
+import { createFixtureVaultCopy, openFixtureVaultDesktopHarness, removeFixtureVaultCopy } from '../helpers/fixtureVault'
 
-const QUICK_OPEN_INPUT = 'input[placeholder="Search notes..."]'
+// The demo vault's curated exact-match scenario, copied into a disposable vault per test.
+const EXACT_MATCH_SCENARIO = [
+  'topic-writing.md',
+  'writing-for-clarity-vs-writing-for-credit.md',
+  'writing-weekly-rhythm.md',
+]
 
-async function openQuickOpen(page: import('@playwright/test').Page) {
-  await page.locator('body').click()
-  await sendShortcut(page, 'p', ['Control'])
-  await expect(page.locator(QUICK_OPEN_INPUT)).toBeVisible()
+let tempVaultDir: string
+
+function finder(page: import('@playwright/test').Page) {
+  return page.getByRole('dialog', { name: 'Find a page' })
 }
 
-/**
- * Get the title text of the first (selected) search result in the Quick Open palette.
- * The selected item has `bg-accent` class, and the title is in a nested `.truncate` span.
- */
+// These tests rank results; shortcut routing has its own specs, so open the finder from the sidebar.
+async function openQuickOpen(page: import('@playwright/test').Page) {
+  await page.getByTestId('sidebar-top-nav').getByRole('button', { name: 'Search', exact: true }).click()
+  await expect(finder(page).getByRole('combobox')).toBeFocused()
+}
+
+/** Title of the selected (keyboard-chosen) result in the finder. */
 async function getFirstResultTitle(page: import('@playwright/test').Page): Promise<string> {
-  // The selected result row contains the title in a span.truncate
-  const titleSpan = page.getByTestId('quick-open-palette').locator('[class*="bg-accent"] span.truncate')
+  const titleSpan = finder(page).locator('[role="option"][aria-selected="true"] span.truncate')
   await titleSpan.first().waitFor({ timeout: 3000 })
   return (await titleSpan.first().textContent()) ?? ''
 }
 
 test.describe('Exact match search ranking', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/')
-    await page.waitForLoadState('networkidle')
+    tempVaultDir = createFixtureVaultCopy()
+    for (const file of EXACT_MATCH_SCENARIO) {
+      fs.copyFileSync(path.resolve('demo-vault-v2', file), path.join(tempVaultDir, file))
+    }
+    await openFixtureVaultDesktopHarness(page, tempVaultDir)
+  })
+
+  test.afterEach(() => {
+    removeFixtureVaultCopy(tempVaultDir)
   })
 
   test('exact title match appears as first result', async ({ page }) => {
     await openQuickOpen(page)
     // "Writing" is a Topic note in the demo vault; other notes have "Writing" as a prefix
-    await page.locator(QUICK_OPEN_INPUT).fill('Writing')
+    await finder(page).getByRole('combobox').fill('Writing')
     await page.waitForTimeout(300)
 
     const firstTitle = await getFirstResultTitle(page)
@@ -38,7 +54,7 @@ test.describe('Exact match search ranking', () => {
 
   test('case-insensitive exact match appears first', async ({ page }) => {
     await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('writing')
+    await finder(page).getByRole('combobox').fill('writing')
     await page.waitForTimeout(300)
 
     const firstTitle = await getFirstResultTitle(page)
@@ -47,11 +63,11 @@ test.describe('Exact match search ranking', () => {
 
   test('partial matches still appear below exact match', async ({ page }) => {
     await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('Writing')
+    await finder(page).getByRole('combobox').fill('Writing')
     await page.waitForTimeout(300)
 
-    // Should have multiple results (exact + prefix/fuzzy matches)
-    const resultRows = page.locator('[class*="cursor-pointer"][class*="items-center"]')
+    // Should have multiple title results (exact + prefix/fuzzy matches)
+    const resultRows = finder(page).getByRole('group', { name: 'Pages' }).getByRole('option')
     const count = await resultRows.count()
     expect(count).toBeGreaterThan(1)
 
@@ -62,7 +78,7 @@ test.describe('Exact match search ranking', () => {
 
   test('arrow keys navigate search results past the exact match', async ({ page }) => {
     await openQuickOpen(page)
-    await page.locator(QUICK_OPEN_INPUT).fill('Writing')
+    await finder(page).getByRole('combobox').fill('Writing')
     await page.waitForTimeout(300)
 
     // First result should be selected (exact match)

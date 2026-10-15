@@ -87,10 +87,15 @@ async function injectViewEntryIntoVaultList(page: Page, vaultPath: string): Prom
 
 async function openQuickOpenEntry(page: Page, title: string): Promise<void> {
   await triggerShortcutCommand(page, APP_COMMAND_IDS.fileQuickOpen)
-  const input = page.locator('input[placeholder="Search notes..."]')
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  const input = finder.getByRole('combobox')
   await expect(input).toBeVisible({ timeout: 5_000 })
   await input.fill(title)
+  // A page row, never the "Create page" row, is chosen for Enter.
+  await expect(finder.getByRole('group').getByRole('option', { selected: true })).toContainText(title)
   await page.keyboard.press('Enter')
+  // The finder closes only once the page is really open.
+  await expect(finder).toBeHidden({ timeout: 5_000 })
 }
 
 async function appendRawEditorLine(page: Page, line: string): Promise<void> {

@@ -51,10 +51,11 @@ async function seedTypeDerivedFixtures(page: Page, vaultPath: string): Promise<v
 async function openNoteViaQuickOpen(page: Page, query: string): Promise<void> {
   await page.locator('body').click()
   await sendShortcut(page, 'p', ['Control'])
-  const searchInput = page.locator('input[placeholder="Search notes..."]')
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  const searchInput = finder.getByRole('combobox')
   await expect(searchInput).toBeVisible()
   await searchInput.fill(query)
-  const result = page.getByTestId('quick-open-palette').getByText(query).first()
+  const result = finder.getByRole('group').getByRole('option').getByText(query).first()
   await expect(result).toBeVisible()
   await result.click()
   await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(query.toLowerCase(), { timeout: 5_000 })

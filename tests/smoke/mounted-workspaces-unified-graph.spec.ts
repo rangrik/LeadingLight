@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
+import { MULTI_WORKSPACE_ENABLED } from '../../src/leadinglight/localPolicy'
 import { sendShortcut } from './helpers'
 
 const PRIMARY_VAULT_PATH = '/Users/mock/Field Notes'
@@ -189,33 +190,89 @@ async function openGlobalSearch(page: Page): Promise<void> {
   await expect(page.locator(GLOBAL_SEARCH_INPUT)).toBeVisible()
 }
 
-test('mounted workspaces share the graph across note list, quick open, and search @smoke', async ({ page }) => {
-  await installMountedWorkspaceMocks(page)
+// Historical upstream (Tolaria) behavior, kept as written. LeadingLight turns mounted workspaces
+// off by product policy (src/leadinglight/localPolicy.ts), so this runs only if that is re-enabled.
+test.describe('upstream mounted workspaces', () => {
+  test.skip(!MULTI_WORKSPACE_ENABLED, 'LeadingLight disables mounted workspaces by product policy')
 
-  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  test('mounted workspaces share the graph across note list, quick open, and search @smoke', async ({ page }) => {
+    await installMountedWorkspaceMocks(page)
 
-  await page.getByText('All Notes', { exact: true }).click()
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
 
-  const noteList = page.getByTestId('note-list-container')
-  await expect(noteList.getByText('Primary Signal').first()).toBeVisible()
-  await expect(noteList.getByText('Research Beacon').first()).toBeVisible()
-  await expect(noteList.getByText('FN').first()).toBeVisible()
-  await expect(noteList.getByText('RL').first()).toBeVisible()
+    await page.getByText('All Notes', { exact: true }).click()
 
-  await openQuickOpen(page)
-  await page.locator(QUICK_OPEN_INPUT).fill('Beacon')
-  const quickOpen = page.getByTestId('quick-open-palette')
-  await expect(quickOpen.getByText('Research Beacon')).toBeVisible()
-  await expect(quickOpen.getByTestId('note-search-workspace-badge').filter({ hasText: 'RL' })).toBeVisible()
-  await page.keyboard.press('Escape')
+    const noteList = page.getByTestId('note-list-container')
+    await expect(noteList.getByText('Primary Signal').first()).toBeVisible()
+    await expect(noteList.getByText('Research Beacon').first()).toBeVisible()
+    await expect(noteList.getByText('FN').first()).toBeVisible()
+    await expect(noteList.getByText('RL').first()).toBeVisible()
 
-  await openGlobalSearch(page)
-  await page.locator(GLOBAL_SEARCH_INPUT).fill(SEARCH_NEEDLE)
-  await expect(page.getByText('Primary Signal')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByText('Research Beacon')).toBeVisible()
-  await expect(page.getByTestId('search-result-workspace-badge').filter({ hasText: 'FN' })).toBeVisible()
-  await expect(page.getByTestId('search-result-workspace-badge').filter({ hasText: 'RL' })).toBeVisible()
+    await openQuickOpen(page)
+    await page.locator(QUICK_OPEN_INPUT).fill('Beacon')
+    const quickOpen = page.getByTestId('quick-open-palette')
+    await expect(quickOpen.getByText('Research Beacon')).toBeVisible()
+    await expect(quickOpen.getByTestId('note-search-workspace-badge').filter({ hasText: 'RL' })).toBeVisible()
+    await page.keyboard.press('Escape')
 
-  const searchCalls = await page.evaluate(() => (window as MockWindow).__mountedWorkspaceSearchCalls ?? [])
-  expect(new Set(searchCalls)).toEqual(new Set([PRIMARY_VAULT_PATH, RESEARCH_VAULT_PATH]))
+    await openGlobalSearch(page)
+    await page.locator(GLOBAL_SEARCH_INPUT).fill(SEARCH_NEEDLE)
+    await expect(page.getByText('Primary Signal')).toBeVisible({ timeout: 5_000 })
+    await expect(page.getByText('Research Beacon')).toBeVisible()
+    await expect(page.getByTestId('search-result-workspace-badge').filter({ hasText: 'FN' })).toBeVisible()
+    await expect(page.getByTestId('search-result-workspace-badge').filter({ hasText: 'RL' })).toBeVisible()
+
+    const searchCalls = await page.evaluate(() => (window as MockWindow).__mountedWorkspaceSearchCalls ?? [])
+    expect(new Set(searchCalls)).toEqual(new Set([PRIMARY_VAULT_PATH, RESEARCH_VAULT_PATH]))
+  })
+})
+
+const finder = (page: Page) => page.getByRole('dialog', { name: 'Find a page' })
+
+async function searchCallsSince(page: Page, start: number): Promise<string[]> {
+  return page.evaluate((from) => ((window as MockWindow).__mountedWorkspaceSearchCalls ?? []).slice(from), start)
+}
+
+async function findInPageText(page: Page, query: string): Promise<void> {
+  await page.locator('body').click()
+  await sendShortcut(page, 'f', ['Control', 'Shift'])
+  await finder(page).getByRole('combobox').fill(query)
+  await expect(finder(page).getByText('Searching page text…')).toHaveCount(0, { timeout: 5_000 })
+  await expect(finder(page).getByText('Couldn’t search page text.')).toHaveCount(0)
+}
+
+// LeadingLight: the same mocks still ask for mounted workspaces, but policy keeps one vault at a time.
+test.describe('mounted workspaces stay off in LeadingLight', () => {
+  test.skip(MULTI_WORKSPACE_ENABLED, 'Mounted workspaces are enabled; the upstream test covers them')
+
+  test('only the current vault is listed and searched, before and after switching @smoke', async ({ page }) => {
+    await installMountedWorkspaceMocks(page)
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await page.getByText('All Notes', { exact: true }).click()
+
+    const noteList = page.getByTestId('note-list-container')
+    await expect(noteList.getByText('Primary Signal').first()).toBeVisible()
+    await expect(noteList.getByText('Research Beacon')).toHaveCount(0)
+
+    // Both mocked vaults contain the needle; only the current vault may answer.
+    const textHits = finder(page).getByRole('group', { name: 'In page text' }).getByRole('option')
+    await findInPageText(page, SEARCH_NEEDLE)
+    await expect(textHits.filter({ hasText: 'Primary Signal' })).toBeVisible({ timeout: 5_000 })
+    await expect(finder(page).getByText('Research Beacon')).toHaveCount(0)
+    expect(new Set(await searchCallsSince(page, 0))).toEqual(new Set([PRIMARY_VAULT_PATH]))
+    await page.keyboard.press('Escape')
+    await expect(finder(page)).toBeHidden()
+
+    // Switching vaults replaces the page set; nothing from the previous vault is listed or searched.
+    const callsBeforeSwitch = (await searchCallsSince(page, 0)).length
+    await page.getByTestId('status-vault-trigger').click()
+    await page.getByTestId('vault-menu-item-Research Lab').click()
+    await expect(noteList.getByText('Research Beacon').first()).toBeVisible({ timeout: 5_000 })
+    await expect(noteList.getByText('Primary Signal')).toHaveCount(0)
+
+    await findInPageText(page, SEARCH_NEEDLE)
+    await expect(textHits.filter({ hasText: 'Research Beacon' })).toBeVisible({ timeout: 5_000 })
+    await expect(finder(page).getByText('Primary Signal')).toHaveCount(0)
+    expect(new Set(await searchCallsSince(page, callsBeforeSwitch))).toEqual(new Set([RESEARCH_VAULT_PATH]))
+  })
 })

@@ -7,8 +7,11 @@ import { executeCommand, openCommandPalette, sendShortcut } from './helpers'
 const IGNORED_DIR = 'ignored-local'
 const IGNORED_TITLE = 'Ignored Local Note'
 const IGNORED_NEEDLE = 'gitignored-visibility-needle'
-const QUICK_OPEN_INPUT = 'input[placeholder="Search notes..."]'
-const GLOBAL_SEARCH_INPUT = 'input[placeholder="Search in all notes..."]'
+
+// Quick open and full-text search are one finder: titles first, then page text.
+function finder(page: Page) {
+  return page.getByRole('dialog', { name: 'Find a page' })
+}
 
 let tempVaultDir: string
 
@@ -79,13 +82,13 @@ async function reloadVaultFromCommandPalette(page: Page): Promise<void> {
 async function openQuickOpen(page: Page): Promise<void> {
   await page.locator('body').click()
   await sendShortcut(page, 'p', ['Control'])
-  await expect(page.locator(QUICK_OPEN_INPUT)).toBeVisible()
+  await expect(finder(page).getByRole('combobox')).toBeVisible()
 }
 
 async function expectQuickOpenResult(page: Page, visible: boolean): Promise<void> {
   await openQuickOpen(page)
-  await page.locator(QUICK_OPEN_INPUT).fill(IGNORED_TITLE)
-  const result = page.getByTestId('quick-open-palette').getByText(IGNORED_TITLE, { exact: true })
+  await finder(page).getByRole('combobox').fill(IGNORED_TITLE)
+  const result = finder(page).getByRole('option').getByText(IGNORED_TITLE, { exact: true })
   await expect(result).toHaveCount(visible ? 1 : 0, { timeout: 5_000 })
   await page.keyboard.press('Escape')
 }
@@ -93,9 +96,17 @@ async function expectQuickOpenResult(page: Page, visible: boolean): Promise<void
 async function expectGlobalSearchResult(page: Page, visible: boolean): Promise<void> {
   await page.locator('body').click()
   await sendShortcut(page, 'f', ['Control', 'Shift'])
-  await expect(page.locator(GLOBAL_SEARCH_INPUT)).toBeVisible()
-  await page.locator(GLOBAL_SEARCH_INPUT).fill(IGNORED_NEEDLE)
-  const result = page.getByText(IGNORED_TITLE, { exact: true })
+  const searchInput = finder(page).getByRole('combobox')
+  await expect(searchInput).toBeVisible()
+  const searched = page.waitForResponse((response) =>
+    response.url().includes('/api/vault/search') && response.url().includes(IGNORED_NEEDLE))
+  await searchInput.fill(IGNORED_NEEDLE)
+  // Page-text search is debounced; absence only counts once it has answered without error.
+  await searched
+  await expect(finder(page).getByText('Searching page text…')).toHaveCount(0, { timeout: 5_000 })
+  await expect(finder(page).getByText('Couldn’t search page text.')).toHaveCount(0)
+  // Search results only: once visible, the note list legitimately shows the same title too.
+  const result = finder(page).getByRole('group', { name: 'In page text' }).getByRole('option').getByText(IGNORED_TITLE, { exact: true })
   await expect(result).toHaveCount(visible ? 1 : 0, { timeout: 5_000 })
   await page.keyboard.press('Escape')
 }

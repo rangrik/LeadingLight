@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { createFixtureVaultCopy, openFixtureVault, removeFixtureVaultCopy } from '../helpers/fixtureVault'
-import { executeCommand, openCommandPalette, sendShortcut } from './helpers'
+import { executeCommand, openCommandPalette } from './helpers'
 
 let tempVaultDir: string
 
@@ -14,9 +14,36 @@ test.afterEach(async () => {
   removeFixtureVaultCopy(tempVaultDir)
 })
 
+function noteList(page: Page) {
+  return page.getByTestId('note-list-container')
+}
+
+function activePane(page: Page) {
+  return page.locator('.ll-pane[data-pane-active="true"]')
+}
+
+/** Filters the note list as a user would, so a row outside the virtualized viewport is rendered. */
+async function filterNoteList(page: Page, query: string) {
+  const input = page.getByPlaceholder('Search notes...')
+  if (!(await input.isVisible())) {
+    await page.getByTitle('Search notes').click()
+    await expect(input).toBeVisible()
+  }
+  await input.fill(query)
+  await expect(page.getByTestId('note-list-search-loading')).toHaveCount(0, { timeout: 5_000 })
+}
+
+/** Opens the row titled exactly `title` and waits until that document is loaded in the active pane. */
 async function openNote(page: Page, title: string) {
-  const noteList = page.locator('[data-testid="note-list-container"]')
-  await noteList.getByText(title, { exact: true }).click()
+  await filterNoteList(page, title)
+  const row = noteList(page).locator('[role="option"][data-note-path]').filter({ has: page.getByText(title, { exact: true }) })
+  await expect(row).toHaveCount(1)
+  const notePath = await row.getAttribute('data-note-path')
+  if (!notePath) throw new Error(`Note list row for "${title}" has no path`)
+  await row.click()
+  await expect(activePane(page)).toHaveAttribute('data-note-path', notePath, { timeout: 5_000 })
+  await expect(activePane(page).locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
+  await expect(activePane(page).getByRole('button', { name: 'Open the raw editor' })).toBeVisible()
 }
 
 async function openRawMode(page: Page) {
@@ -55,14 +82,18 @@ async function setRawEditorContent(page: Page, content: string) {
   }, content)
 }
 
+function finder(page: Page) {
+  return page.getByRole('dialog', { name: 'Find a page' })
+}
+
+// Mouse route through the visible sidebar Search; the finder's keyboard routes have their own specs.
 async function openQuickOpen(page: Page) {
-  await page.locator('body').click()
-  await sendShortcut(page, 'p', ['Control'])
-  await expect(page.locator('input[placeholder="Search notes..."]')).toBeVisible({ timeout: 5_000 })
+  await page.getByTestId('sidebar-top-nav').getByRole('button', { name: 'Search', exact: true }).click()
+  await expect(finder(page).getByRole('combobox')).toBeVisible({ timeout: 5_000 })
 }
 
 function quickOpenSelectedTitle(page: Page) {
-  return page.getByTestId('quick-open-palette').locator('[class*="bg-accent"] span.truncate').first()
+  return finder(page).getByRole('option', { selected: true }).locator('span.truncate').first()
 }
 
 async function focusHeadingEnd(page: Page, title: string) {
@@ -121,7 +152,6 @@ test('deleting the H1 does not resurrect the legacy title section', async ({ pag
 
 test('edited H1 titles drive note list, search, and wikilink autocomplete', async ({ page }) => {
   const updatedTitle = 'Updated Display Title'
-  const noteList = page.locator('[data-testid="note-list-container"]')
 
   await openNote(page, 'Note B')
   await openRawMode(page)
@@ -135,11 +165,15 @@ test('edited H1 titles drive note list, search, and wikilink autocomplete', asyn
   await openBlockNoteMode(page)
 
   await expect(page.getByRole('heading', { name: updatedTitle, level: 1 })).toBeVisible({ timeout: 5_000 })
-  await expect(noteList.getByText(updatedTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
-  await expect(noteList.getByText('Note B', { exact: true })).toHaveCount(0)
+  // Filtered lists are short enough to render fully, so presence and absence are both real.
+  await filterNoteList(page, updatedTitle)
+  await expect(noteList(page).getByText(updatedTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
+  await filterNoteList(page, 'Note B')
+  await expect(noteList(page).getByText(updatedTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
+  await expect(noteList(page).getByText('Note B', { exact: true })).toHaveCount(0)
 
   await openQuickOpen(page)
-  const quickOpenInput = page.locator('input[placeholder="Search notes..."]')
+  const quickOpenInput = finder(page).getByRole('combobox')
   await quickOpenInput.fill(updatedTitle)
   await expect(quickOpenSelectedTitle(page)).toHaveText(updatedTitle, { timeout: 5_000 })
   await page.keyboard.press('Escape')
@@ -152,7 +186,6 @@ test('edited H1 titles drive note list, search, and wikilink autocomplete', asyn
 })
 
 test('rapid H1 typing stays stable while editing an existing note', async ({ page }) => {
-  const noteList = page.locator('[data-testid="note-list-container"]')
   const firstTitle = 'Alpha Project Fast Typing Check'
   const finalTitle = 'Alpha Project Fast Typing Flow'
 
@@ -169,8 +202,12 @@ test('rapid H1 typing stays stable while editing an existing note', async ({ pag
   await page.keyboard.press('Meta+s')
 
   await expect(page.getByRole('heading', { name: finalTitle, level: 1 })).toBeVisible({ timeout: 5_000 })
-  await expect(noteList.getByText(finalTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
-  await expect(noteList.getByText('Alpha Project', { exact: true })).toHaveCount(0)
+  // The edited page can sort outside the virtualized viewport; filter instead of relying on order.
+  await filterNoteList(page, finalTitle)
+  await expect(noteList(page).getByText(finalTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
+  await filterNoteList(page, 'Alpha Project')
+  await expect(noteList(page).getByText(finalTitle, { exact: true })).toBeVisible({ timeout: 5_000 })
+  await expect(noteList(page).getByText('Alpha Project', { exact: true })).toHaveCount(0)
 
   await openNote(page, 'Spring 2026')
   await openNote(page, finalTitle)

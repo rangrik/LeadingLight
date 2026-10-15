@@ -86,9 +86,12 @@ test.afterEach(() => {
 
 test('previews standalone HTML and exposes source through the breadcrumb and keyboard', async ({ page }) => {
   await triggerShortcutCommand(page, APP_COMMAND_IDS.fileQuickOpen)
-  const quickOpenInput = page.locator('input[placeholder="Search notes..."]')
-  await expect(quickOpenInput).toBeVisible({ timeout: 5_000 })
-  await quickOpenInput.fill(HTML_FILENAME)
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  const finderInput = finder.getByRole('combobox')
+  await expect(finderInput).toBeVisible({ timeout: 5_000 })
+  await finderInput.fill(HTML_FILENAME)
+  // A page row, never the "Create page" row, is chosen for Enter.
+  await expect(finder.getByRole('group').getByRole('option', { selected: true })).toContainText(HTML_FILENAME)
   await page.keyboard.press('Enter')
 
   const preview = page.getByTestId('html-file-preview')

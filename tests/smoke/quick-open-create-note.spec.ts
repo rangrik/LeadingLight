@@ -29,7 +29,7 @@ async function openNoteWithCmdO(page: import('@playwright/test').Page): Promise<
     bubbles: true,
     cancelable: true,
   })
-  await expect(page.getByTestId('quick-open-palette')).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByRole('dialog', { name: 'Find a page' })).toBeVisible({ timeout: 5_000 })
 }
 
 test('quick open creates a note when the typed title has no matches @smoke', async ({ page }) => {
@@ -38,12 +38,13 @@ test('quick open creates a note when the typed title has no matches @smoke', asy
 
   await openFixtureVaultDesktopHarness(page, tempVaultDir)
   await openNoteWithCmdO(page)
-  await page.locator('input[placeholder="Search notes..."]').fill(title)
+  const finder = page.getByRole('dialog', { name: 'Find a page' })
+  await finder.getByRole('combobox').fill(title)
 
-  await expect(page.getByRole('button', { name: `Create note "${title}"` })).toBeVisible()
+  await expect(finder.getByRole('option', { name: `Create page “${title}”` })).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Enter')
 
-  await expect(page.getByTestId('quick-open-palette')).not.toBeVisible({ timeout: 5_000 })
+  await expect(finder).not.toBeVisible({ timeout: 5_000 })
   await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText('new-research-brief', { timeout: 5_000 })
   await expect.poll(() => fs.existsSync(notePath), { timeout: 5_000 }).toBe(true)
   const content = fs.readFileSync(notePath, 'utf8')
