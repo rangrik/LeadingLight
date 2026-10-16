@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react'
 import { render, screen, fireEvent, act, within, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { BreadcrumbBar } from './BreadcrumbBar'
+import { PageHistoryActionContext } from '../leadinglight/pageHistory/pageHistoryContext'
 import { formatShortcutDisplay } from '../hooks/appCommandCatalog'
 import type { VaultEntry } from '../types'
 
@@ -185,7 +186,7 @@ function mockCollapsedBreadcrumbOverflow() {
     }
     return DOMRect.fromRect({ x: 0, y: 0, width: 500, height: 52 })
   })
-  const scrollWidths = vi.spyOn(Object.getPrototypeOf(document.createElement('div')), 'scrollWidth', 'get').mockImplementation(function () {
+  const scrollWidths = vi.spyOn(Object.getPrototypeOf(document.createElement('div')), 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
     return this.classList.contains('breadcrumb-bar__actions') ? 400 : 500
   })
 
@@ -210,7 +211,7 @@ function mockOscillatingBreadcrumbOverflow() {
     }
     return DOMRect.fromRect({ x: 0, y: 0, width: 500, height: 52 })
   })
-  const scrollWidths = vi.spyOn(Object.getPrototypeOf(document.createElement('div')), 'scrollWidth', 'get').mockImplementation(function () {
+  const scrollWidths = vi.spyOn(Object.getPrototypeOf(document.createElement('div')), 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) {
     return this.classList.contains('breadcrumb-bar__actions') ? 400 : 500
   })
 
@@ -982,5 +983,23 @@ describe('BreadcrumbBar — table of contents toggle', () => {
     } finally {
       restoreMeasurement()
     }
+  })
+})
+
+// Seam: a pane's page menu -> Earlier versions. Catches the action shown outside a pane, or focus not returning to the menu trigger.
+describe('BreadcrumbBar — earlier versions', () => {
+  it('offers Earlier versions only inside a pane and hands it the menu trigger', async () => {
+    const { unmount } = renderBreadcrumb()
+    expect(within(await openOverflowMenu()).queryByRole('menuitem', { name: 'Earlier versions…' })).not.toBeInTheDocument()
+    unmount()
+
+    const openHistory = vi.fn()
+    render(<PageHistoryActionContext.Provider value={openHistory}><BreadcrumbBar entry={baseEntry} {...defaultProps} /></PageHistoryActionContext.Provider>)
+    const menu = await openOverflowMenu()
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Earlier versions…' }))
+    // Opened only after the menu has closed, so the dialog's focus is not taken back by the menu.
+    expect(openHistory).not.toHaveBeenCalled()
+    await waitFor(() => expect(openHistory).toHaveBeenCalledWith(screen.getByRole('button', { name: 'More note actions' })))
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 })

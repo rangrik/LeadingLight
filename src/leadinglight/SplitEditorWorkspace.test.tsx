@@ -6,10 +6,12 @@ import type { EditorProps } from '../components/Editor'
 import type { SplitWorkspaceController } from './useSplitWorkspace'
 import type { VaultEntry } from '../types'
 import { NOTE_DRAG_MIME_TYPE, readDraggedNotePath, writeNoteDragData } from '../utils/noteDragDrop'
+import { usePageHistoryAction } from './pageHistory/pageHistoryContext'
 
 const activity = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), raw: vi.fn(), flush: vi.fn() }))
 vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(props: EditorProps) {
   const { activeTabPath: path, rawToggleRef, flushPendingEditorContentRef } = props
+  const openHistory = usePageHistoryAction()
   useEffect(() => {
     activity.mount(path)
     return () => { activity.unmount(path) }
@@ -20,6 +22,7 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
   }, [path, rawToggleRef, flushPendingEditorContentRef])
   return <>
     <div contentEditable suppressContentEditableWarning data-testid={`editor-${path}`}>{path}</div>
+    {openHistory && <button data-testid={`history-${path}`} onClick={event => openHistory(event.currentTarget)}>history</button>}
     {!props.inspectorCollapsed && <div data-testid={`inspector-${path}`} tabIndex={-1} data-inspector-overlay={props.inspectorOverlay ? '' : undefined} />}
   </>
 } }))
@@ -90,6 +93,18 @@ describe('split editor integration', () => {
     fireEvent.keyDown(window, { key: '¡', code: 'Digit1', metaKey: true, altKey: true })
     expect(props.workspace.focusPane).toHaveBeenLastCalledWith(0)
     expect(document.activeElement).toBe(screen.getByTestId('editor-/left.md'))
+  })
+})
+
+// Seam: a pane's page menu -> Earlier versions. Catches history opening for the other pane's page or pane.
+describe('earlier versions from a pane', () => {
+  it('opens history for the page and pane it was asked from', () => {
+    const onOpenPageHistory = vi.fn()
+    render(<SplitEditorWorkspace {...fixture()} onOpenPageHistory={onOpenPageHistory} />)
+    fireEvent.click(screen.getByTestId('history-/right.md'))
+    expect(onOpenPageHistory).toHaveBeenLastCalledWith('/right.md', 1, screen.getByTestId('history-/right.md'))
+    fireEvent.click(screen.getByTestId('history-/left.md'))
+    expect(onOpenPageHistory).toHaveBeenLastCalledWith('/left.md', 0, screen.getByTestId('history-/left.md'))
   })
 })
 

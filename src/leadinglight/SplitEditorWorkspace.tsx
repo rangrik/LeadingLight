@@ -21,6 +21,7 @@ import { PageDropOverlay } from './PageDropOverlay'
 import { pageLabel } from './pageLabel'
 import { includesPath, usePaneSettlement, type PageSettlement } from './saveHold/paneSettlement'
 import type { EditorIdleCheck } from '../components/editorContentFlushRegistration'
+import { PageHistoryActionContext } from './pageHistory/pageHistoryContext'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -51,6 +52,10 @@ interface Props extends EditorProps {
   settlementRef?: MutableRefObject<PageSettlement | null>
   /** A page's own save notice, shown under its pane header. */
   renderPageNotice?: (path: string) => ReactNode
+  /** Earlier versions of the page shown in a pane; offered in that pane's page menu. */
+  onOpenPageHistory?: (path: string, pane: PaneId, returnFocus: HTMLElement | null) => void
+  /** A quiet note beside the pane's Saved state. */
+  renderPaneStatus?: (path: string, pane: PaneId) => ReactNode
 }
 export function SplitEditorWorkspace(props: Props) {
   const { workspace, unsavedPaths } = props
@@ -60,6 +65,17 @@ export function SplitEditorWorkspace(props: Props) {
     idleRefs, closePageAndReserveOpen: workspace.closePageAndReserveOpen, settlementRef: props.settlementRef })
   const activeRef = useRef(workspace.activePane)
   useLayoutEffect(() => { activeRef.current = workspace.activePane }, [workspace.activePane])
+  // One stable action per pane, naming that pane's page when it runs, so editors do not re-render for it.
+  const historyRef = useRef({ open: props.onOpenPageHistory, paths: workspace.paths })
+  useLayoutEffect(() => { historyRef.current = { open: props.onOpenPageHistory, paths: workspace.paths } })
+  const openHistoryIn = useCallback((pane: PaneId, returnFocus: HTMLElement | null) => {
+    const { open, paths } = historyRef.current
+    const path = paths[pane]
+    if (open && path) open(path, pane, returnFocus)
+  }, [])
+  const historyZero = useCallback((returnFocus: HTMLElement | null) => openHistoryIn(0, returnFocus), [openHistoryIn])
+  const historyOne = useCallback((returnFocus: HTMLElement | null) => openHistoryIn(1, returnFocus), [openHistoryIn])
+  const historyActions = [historyZero, historyOne] as const
   const containerRef = useRef<HTMLDivElement>(null)
   const [pickerPane, setPickerPane] = useState<PaneId | null>(null)
   const pickerTriggerRef = useRef<HTMLButtonElement | null>(null)
@@ -242,6 +258,7 @@ export function SplitEditorWorkspace(props: Props) {
                   setPickerPane(pane)
                 }}>{tab && <DotsSixVertical className="ll-page-grip" aria-hidden="true" />}<span>{tab ? pageLabel(tab.entry, locale) : t('leadinglight.split.choose')}</span><CaretDown /></Button>
               {tab && path && <span className="ll-save-state" data-state={unsavedPaths.has(path) ? 'unsaved' : 'saved'} role="status">{t(unsavedPaths.has(path) ? 'leadinglight.split.unsaved' : 'leadinglight.split.saved')}</span>}
+              {tab && path && props.renderPaneStatus?.(path, pane)}
               {tab && <Button variant="ghost" size="sm" className="ll-backlinks-count" data-count={backlinkCount} aria-label={backlinkLabel} title={backlinkLabel}
                 onClick={() => showBacklinks(pane)}><ArrowBendUpLeft aria-hidden="true" />{backlinkCount}</Button>}
               <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.create')} title={t('leadinglight.split.create')} onClick={() => { activate(pane); props.onCreateNote?.() }}><Plus /></Button>
@@ -249,6 +266,7 @@ export function SplitEditorWorkspace(props: Props) {
             </div>
             {tab && path && props.renderPageNotice?.(path)}
             {tab ? <div className="contents" inert={blocked} data-recovery-blocked={blocked ? '' : undefined}>
+              <PageHistoryActionContext.Provider value={props.onOpenPageHistory ? historyActions[pane] : null}>
               <LazyEditor {...props} {...paneRefs[pane]} tabs={[tab]} activeTabPath={path} entries={editorEntries}
               onContentChange={settlement.contentChanges[pane]}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
@@ -261,6 +279,7 @@ export function SplitEditorWorkspace(props: Props) {
               onOpenEntry={entry => openBacklink(pane, entry)}
               revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
               backlinksEmptyLabel={t('inspector.backlinks.empty')} />
+              </PageHistoryActionContext.Provider>
             </div>
               : <div className="ll-pane-empty">
                 <p>{t(props.emptyVault ? 'leadinglight.split.emptyVault' : 'leadinglight.split.empty')}</p>

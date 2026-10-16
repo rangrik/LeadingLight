@@ -6,7 +6,7 @@ import { createTranslator, type AppLocale, type TranslationKey } from '../lib/i1
 import { canWritePathToVault, isPathInsideVaultRoot } from '../utils/vaultPathContainment'
 import {
   sha256Hex,
-  type CopyOutcome, type HoldInfo, type HoldKind, type OriginalRequest, type ResolutionRefusalReason, type SaveOutcome,
+  type CopyOutcome, type HistoryNote, type HoldInfo, type HoldKind, type OriginalRequest, type ResolutionRefusalReason, type SaveOutcome,
 } from '../leadinglight/saveOutcome'
 import { errorMessage } from '../utils/vaultErrors'
 import type { VaultEntry } from '../types'
@@ -37,6 +37,18 @@ interface EditorSaveConfig {
   locale?: AppLocale
   /** Pending text was given a document change it missed; derived metadata must follow it. */
   onContentRebased?: (path: string, content: string) => void
+  /** A committed save whose earlier version was not kept; the save itself is settled as usual. */
+  onHistoryNote?: (vaultPath: string, note: HistoryNote) => void
+}
+
+/** Hands a history note to the UI; nothing it does can change how the save settles. */
+function reportHistory(config: EditorSaveConfig, vaultPath: string, note: HistoryNote | null) {
+  if (!note) return
+  try {
+    config.onHistoryNote?.(vaultPath, note)
+  } catch (error) {
+    console.warn('[save] The history note could not be shown:', error)
+  }
 }
 
 export type MutationRefusal =
@@ -498,6 +510,7 @@ export function useEditorSave(options: EditorSaveConfig) {
         if (outcome.durable) for (const key of [...store.notDurable]) { if (currentPath(key) === lane) store.notDurable.delete(key) }
         else store.notDurable.add(lane)
         emitRecovery()
+        reportHistory(optionsRef.current, request.vaultPath, outcome.history)
         if (!own) return false
         pending.current.delete(own[0])
         recordOutcome(target, own[1].seq, 'saved')
@@ -776,6 +789,7 @@ function useSaveRecovery(deps: SaveRecoveryDeps): SaveRecoveryApi {
       return false
     }
     if (outcome.status === 'committed' || (outcome.status === 'failed' && outcome.reason === 'publish')) {
+      if (outcome.status === 'committed') reportHistory(d.optionsRef.current, hold.request.vaultPath, outcome.history)
       if (outcome.status === 'committed' && !hold.adopted && hold.submitted !== null) {
         const target = d.currentPath(hold.request.path)
         d.commitSaved(target, hold.submitted)

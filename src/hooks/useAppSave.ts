@@ -524,6 +524,7 @@ function useUntitledRenameCoordinator(options: {
       flushEditorBuffers?: (path: string) => void
       /** Shown when a property write or manual rename is refused because the page is busy. */
       pageBusyMessage?: string
+      onHistoryNote?: EditorPersistenceOptions['onHistoryNote']
     }
 
     interface EditorPersistenceOptions {
@@ -542,6 +543,7 @@ function useUntitledRenameCoordinator(options: {
       canPersist: boolean
       persistenceScope: string | readonly string[]
       locale: AppLocale
+      onHistoryNote?: Parameters<typeof useEditorSaveWithLinks>[0]['onHistoryNote']
     }
 
     function useAppSaveStateRefs({
@@ -822,7 +824,7 @@ function useHandleSaveAction({
 }
 
 function useEditorPersistence(options: EditorPersistenceOptions) {
-  const { updateEntry, setTabs, setToastMessage, loadModifiedFiles, trackUnsaved, clearUnsaved, onInternalVaultWrite, reloadViews, refreshPendingUntitledRename, scheduleUntitledRename, resolveCurrentPath, resolvePathBeforeSave, canPersist, persistenceScope, locale } = options
+  const { updateEntry, setTabs, setToastMessage, loadModifiedFiles, trackUnsaved, clearUnsaved, onInternalVaultWrite, reloadViews, refreshPendingUntitledRename, scheduleUntitledRename, resolveCurrentPath, resolvePathBeforeSave, canPersist, persistenceScope, locale, onHistoryNote } = options
   const onAfterSave = useCallback(() => {
     loadModifiedFiles()
   }, [loadModifiedFiles])
@@ -867,6 +869,7 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         canPersist,
         persistenceScope,
         locale,
+        onHistoryNote,
       })
 
       const handleContentChange = useCallback(
@@ -1017,7 +1020,7 @@ function useAppSaveServices(
   refs: ReturnType<typeof useAppSaveStateRefs>,
   canPersist: boolean,
 ) {
-  const { updateEntry, setTabs, handleSwitchTab, setToastMessage, loadModifiedFiles, reloadViews, trackUnsaved, clearUnsaved, replaceEntry, resolvedPath, writableVaultPaths, initialH1AutoRenameEnabled, onInternalVaultWrite, locale = 'en' } = options
+  const { updateEntry, setTabs, handleSwitchTab, setToastMessage, loadModifiedFiles, reloadViews, trackUnsaved, clearUnsaved, replaceEntry, resolvedPath, writableVaultPaths, initialH1AutoRenameEnabled, onInternalVaultWrite, locale = 'en', onHistoryNote } = options
   const { tabsRef, activeTabPathRef } = refs
   const {
     pendingUntitledRenameRef,
@@ -1064,6 +1067,7 @@ function useAppSaveServices(
     canPersist,
     persistenceScope: writableVaultPaths && writableVaultPaths.length > 0 ? writableVaultPaths : resolvedPath,
     locale,
+    onHistoryNote,
   })
   const replaceRenamedEntry = useReplaceRenamedEntry({
     registerRenamedPath,

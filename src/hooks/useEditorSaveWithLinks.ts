@@ -251,6 +251,7 @@ export function useEditorSaveWithLinks(config: {
   persistenceScope?: string | readonly string[]
   disabledSaveMessage?: string
   locale?: AppLocale
+  onHistoryNote?: Parameters<typeof useEditorSave>[0]['onHistoryNote']
 }) {
   const { updateEntry } = config
   const scheduleMetadataSync = useEditorMetadataSync(updateEntry)

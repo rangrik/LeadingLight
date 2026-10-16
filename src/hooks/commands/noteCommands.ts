@@ -353,6 +353,23 @@ function buildExportNotePdfCommand(config: NoteCommandsConfig): CommandAction {
   })
 }
 
+/** Earlier versions of the page in the active pane. */
+export function buildPageHistoryCommand(config: {
+  activeTabPath: string | null
+  activeFileKind?: 'markdown' | 'text' | 'binary'
+  locale?: AppLocale
+  onOpenPageHistory?: (path: string) => void
+}): CommandAction {
+  return createNoteCommand({
+    id: 'open-page-history',
+    label: translate(config.locale ?? 'en', 'leadinglight.history.menu'),
+    keywords: ['earlier', 'versions', 'history', 'previous', 'restore', 'recover', 'copy', 'backup'],
+    enabled: config.activeTabPath !== null && config.activeFileKind !== 'binary' && !!config.onOpenPageHistory,
+    path: config.activeTabPath,
+    run: (path) => config.onOpenPageHistory?.(path),
+  })
+}
+
 function buildOpenActiveFileExternalCommand(config: NoteCommandsConfig): CommandAction {
   return buildActivePathCommand(config, {
     id: 'open-active-file-external',

@@ -49,7 +49,9 @@ import {
   ArrowsClockwise,
   ArrowsInLineHorizontal,
   ArrowsOutLineHorizontal,
+  ClockCounterClockwise,
 } from '@phosphor-icons/react'
+import { usePageHistoryAction } from '../leadinglight/pageHistory/pageHistoryContext'
 import { slugify } from '../hooks/useNoteCreation'
 import { useDragRegion } from '../hooks/useDragRegion'
 import {
@@ -1103,6 +1105,7 @@ function BreadcrumbOverflowMenu(options: Pick<
           {translate(locale, 'editor.toolbar.copyNoteDeepLink')}
         </DropdownMenuItem>
         <CopyGitUrlMenuItem action={entryAction(onCopyGitUrl, entry)} locale={locale} />
+        <PageHistoryMenuItem locale={locale} />
         {showMarkdownActions && (
           <DropdownMenuItem disabled={!runArchiveAction} onSelect={runArchiveAction}>
             <ArchiveMenuIcon archived={entry.archived} />
@@ -1130,6 +1133,24 @@ function CopyGitUrlMenuItem({
     <DropdownMenuItem onSelect={action}>
       <GitBranch size={16} />
       {translate(locale, 'editor.toolbar.copyNoteGitUrl')}
+    </DropdownMenuItem>
+  )
+}
+
+/** Earlier versions of this pane's page; shown only inside a pane that offers it. */
+function PageHistoryMenuItem({ locale }: { locale: AppLocale }) {
+  const openHistory = usePageHistoryAction()
+  if (!openHistory) return null
+  return (
+    <DropdownMenuItem data-testid="page-history-menu-item" onSelect={event => {
+      // The menu's own trigger takes focus back when Earlier versions closes.
+      const menu = event.target instanceof Element ? event.target.closest('[role="menu"]') : null
+      const trigger = document.getElementById(menu?.getAttribute('aria-labelledby') ?? '')
+      // After the menu has closed, so the dialog does not open inside its dismissal.
+      window.setTimeout(() => openHistory(trigger), 0)
+    }}>
+      <ClockCounterClockwise size={16} />
+      {translate(locale, 'leadinglight.history.menu')}
     </DropdownMenuItem>
   )
 }

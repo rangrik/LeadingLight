@@ -22,6 +22,8 @@ import { PendingCaptureField } from './leadinglight/PendingCaptureField'
 import type { ReceiptStatus } from './hooks/useEditorSave'
 import { useLocalTrash } from './leadinglight/useLocalTrash'
 import { TrashDialog } from './leadinglight/TrashDialog'
+import { usePageHistoryHealth } from './leadinglight/pageHistory/usePageHistoryHealth'
+import { usePageHistoryUi } from './leadinglight/pageHistory/usePageHistoryUi'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
 import { Toast } from './components/Toast'
@@ -973,7 +975,10 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     flushPendingEditorContentRef.current?.(path)
     flushPendingRawContentRef.current?.(path)
   }, [])
+  // Earlier versions warnings belong to this vault session; a committed note only raises one.
+  const historyHealth = usePageHistoryHealth(resolvedPath)
   const appSave = useAppSave({
+    onHistoryNote: historyHealth.noteSaved,
     flushEditorBuffers,
     updateEntry: vault.updateEntry, setTabs: notes.setTabs, handleSwitchTab: notes.handleSwitchTab, setToastMessage,
     loadModifiedFiles: refreshGitModifiedFiles, reloadViews: async () => { await vault.reloadViews() },
@@ -1501,6 +1506,14 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     pageTitle: pageTitleFor,
     locale: appLocale,
   })
+  const pageHistory = usePageHistoryUi({
+    vaultPath: resolvedPath, entries: visibleEntries, folders: vault.folders, locale: appLocale, health: historyHealth,
+    focusPane: notes.splitWorkspace.focusPane, reserveOpen: notes.reserveOpen, addEntry: addVaultEntry,
+    onCopyCreated: () => { void reloadVault() },
+  })
+  const { open: openPageHistory } = pageHistory
+  const openActivePageHistory = useCallback((path: string) => openPageHistory(path, notes.splitWorkspace.activePane, null),
+    [openPageHistory, notes.splitWorkspace.activePane])
   const renderSaveHold = (path: string, named = false) => (
     <SaveHoldBanner key={path} view={saveHold.viewFor(path)} actions={saveHold} locale={appLocale} named={named} title={pageTitleFor(path)} />
   )
@@ -1892,6 +1905,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     redoLabel: notes.redoLabel,
     onOpenSettings: handleOpenSettings,
     onOpenFeedback: openFeedback,
+    onOpenPageHistory: activeDeletedFile ? undefined : openActivePageHistory,
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2182,6 +2196,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
               blockedPaths={saveHold.blockedPaths}
               settlementRef={settlementRef}
               renderPageNotice={renderSaveHold}
+              onOpenPageHistory={openPageHistory}
+              renderPaneStatus={pageHistory.renderStatus}
               onToast={setToastMessage}
               locale={appLocale}
             />
@@ -2272,6 +2288,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         <McpSetupDialog open={mcpSetupDialog.open} status={mcpSetupDialog.status} busyAction={mcpSetupDialog.busyAction} manualConfigSnippet={mcpSetupDialog.manualConfigSnippet} opencodeManualConfigSnippet={mcpSetupDialog.opencodeManualConfigSnippet} manualConfigLoading={mcpSetupDialog.manualConfigLoading} manualConfigError={mcpSetupDialog.manualConfigError} locale={appLocale} onClose={mcpSetupDialog.closeDialog} onConnect={mcpSetupDialog.connect} onCopyManualConfig={mcpSetupDialog.copyManualConfig} onCopyOpenCodeManualConfig={mcpSetupDialog.copyOpenCodeManualConfig} onDisconnect={mcpSetupDialog.disconnect} onLoadManualConfig={mcpSetupDialog.loadManualConfig} />
         <CloneVaultModal key={dialogs.showCloneVault ? 'clone-open' : 'clone-closed'} open={dialogs.showCloneVault} onClose={dialogs.closeCloneVault} onVaultCloned={vaultSwitcher.handleVaultCloned} />
         <TrashDialog open={trashOpen} onOpenChange={setTrashOpen} vaultPath={resolvedPath} locale={appLocale} restore={restoreFromTrash} onOpenPage={openRestoredPage} />
+        {pageHistory.dialog}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog
             open={true}

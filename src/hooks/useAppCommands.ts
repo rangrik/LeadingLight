@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { AiAgentId, AiAgentsStatus } from '../lib/aiAgents'
 import type { AppLocale, UiLanguagePreference } from '../lib/i18n'
 import type { ThemeMode } from '../lib/themeMode'
@@ -6,6 +6,7 @@ import type { VaultAiGuidanceStatus } from '../lib/vaultAiGuidance'
 import { useAppKeyboard } from './useAppKeyboard'
 import { useCommandRegistry } from './useCommandRegistry'
 import type { CommandAction } from './useCommandRegistry'
+import { buildPageHistoryCommand } from './commands/noteCommands'
 import { useKeyboardNavigation } from './useKeyboardNavigation'
 import { useMenuEvents } from './useMenuEvents'
 import type { NoteWidthMode, SidebarSelection, SidebarFilter, VaultEntry } from '../types'
@@ -139,6 +140,8 @@ interface AppCommandsConfig {
   noteListColumnsLabel?: string
   onRestoreDeletedNote?: () => void
   canRestoreDeletedNote?: boolean
+  /** Earlier versions of the active pane's page. */
+  onOpenPageHistory?: (path: string) => void
 }
 
 type CommandRegistryConfig = Parameters<typeof useCommandRegistry>[0]
@@ -645,7 +648,12 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
 
   useMenuEvents({ ...menuEventHandlers, onArchiveNote: toggleArchive })
 
-  const commands = useCommandRegistry(createCommandRegistryConfig(config))
+  const registryCommands = useCommandRegistry(createCommandRegistryConfig(config))
+  const { activeTabPath, entries, locale, onOpenPageHistory } = config
+  const activeFileKind = entries.find(entry => entry.path === activeTabPath)?.fileKind
+  const commands = useMemo(() => onOpenPageHistory
+    ? [...registryCommands, buildPageHistoryCommand({ activeTabPath, activeFileKind, locale, onOpenPageHistory })]
+    : registryCommands, [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory])
 
   useKeyboardNavigation({
     activeTabPath: config.activeTabPath,
