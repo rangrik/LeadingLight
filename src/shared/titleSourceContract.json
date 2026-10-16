@@ -1,0 +1,81 @@
+{
+  "fixtures": [
+    {
+      "name": "leading H1 wins over a different frontmatter title",
+      "filename": "lantern.md",
+      "content": "---\ntitle: Frontmatter Name\n---\n# Heading Name\n\nBody text.\n",
+      "title": "Heading Name",
+      "titleSource": "h1"
+    },
+    {
+      "name": "H1 after leading blank lines",
+      "filename": "plan.md",
+      "content": "\n\n# Plan\n\nSteps.\n",
+      "title": "Plan",
+      "titleSource": "h1"
+    },
+    {
+      "name": "frontmatter title without an H1",
+      "filename": "untitled-page-1797000000.md",
+      "content": "---\ntitle: Lantern\n---\nBody text.\n",
+      "title": "Lantern",
+      "titleSource": "frontmatter"
+    },
+    {
+      "name": "frontmatter title equal to the filename fallback stays authored",
+      "filename": "untitled-page-1797000000.md",
+      "content": "---\ntitle: Untitled Page 1797000000\n---\nhello\n",
+      "title": "Untitled Page 1797000000",
+      "titleSource": "frontmatter"
+    },
+    {
+      "name": "whitespace-only frontmatter title counts as no title",
+      "filename": "untitled-page-1797000000.md",
+      "content": "---\ntitle: \"   \"\n---\nhello\n",
+      "title": "Untitled Page 1797000000",
+      "titleSource": "filename"
+    },
+    {
+      "name": "surrounding whitespace is trimmed from a frontmatter title",
+      "filename": "untitled-page-1797000000.md",
+      "content": "---\ntitle: \"  Lantern  \"\n---\nhello\n",
+      "title": "Lantern",
+      "titleSource": "frontmatter"
+    },
+    {
+      "name": "paragraph then a later H1 is not a title",
+      "filename": "untitled-page-1797000000.md",
+      "content": "First thought here.\n\n# A subheading\n",
+      "title": "Untitled Page 1797000000",
+      "titleSource": "filename"
+    },
+    {
+      "name": "empty generated capture",
+      "filename": "untitled-page-1797000000.md",
+      "content": "",
+      "title": "Untitled Page 1797000000",
+      "titleSource": "filename"
+    },
+    {
+      "name": "body-only generated capture",
+      "filename": "untitled-page-1797000000-2.md",
+      "content": "hello world\n",
+      "title": "Untitled Page 1797000000 2",
+      "titleSource": "filename"
+    },
+    {
+      "name": "empty H1 marker is not a title",
+      "filename": "untitled-note-1797000000.md",
+      "content": "---\ntype: Note\n---\n# \n\n",
+      "title": "Untitled Note 1797000000",
+      "titleSource": "filename"
+    },
+    {
+      "name": "ordinary manual filename",
+      "filename": "harbor-notes.md",
+      "content": "Some text.\n",
+      "title": "Harbor Notes",
+      "titleSource": "filename"
+    }
+  ]
+}

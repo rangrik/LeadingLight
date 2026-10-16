@@ -119,22 +119,47 @@ fn markdown_h1_text(line: TextSlice<'_>) -> Option<&str> {
         .and_then(|text| non_empty_trimmed(TextSlice(text)))
 }
 
+/// Which precedence rule produced a display title.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TitleSource {
+    H1,
+    Frontmatter,
+    Filename,
+}
+
+impl TitleSource {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            TitleSource::H1 => "h1",
+            TitleSource::Frontmatter => "frontmatter",
+            TitleSource::Filename => "filename",
+        }
+    }
+}
+
 /// Extract the display title for a note.
 /// Priority: H1 on first non-empty line → frontmatter `title:` → filename-derived title.
 pub(super) fn extract_title(fm_title: Option<&str>, content: &str, filename: &str) -> String {
+    extract_title_and_source(fm_title, content, filename).0
+}
+
+/// Same precedence as `extract_title`, also reporting which rule won.
+pub(super) fn extract_title_and_source(
+    fm_title: Option<&str>,
+    content: &str,
+    filename: &str,
+) -> (String, TitleSource) {
     // 1. H1 on first non-empty line of body
     if let Some(h1) = extract_h1_title(content) {
-        return h1;
+        return (h1, TitleSource::H1);
     }
-    // 2. frontmatter title (legacy, backward compat)
-    if let Some(title) = fm_title {
-        if !title.is_empty() {
-            return title.to_string();
-        }
+    // 2. frontmatter title (legacy, backward compat); blank counts as none, like live and bridge
+    if let Some(title) = fm_title.map(str::trim).filter(|title| !title.is_empty()) {
+        return (title.to_string(), TitleSource::Frontmatter);
     }
     // 3. filename slug
     let stem = filename.strip_suffix(".md").unwrap_or(filename);
-    slug_to_title(stem)
+    (slug_to_title(stem), TitleSource::Filename)
 }
 
 /// Check if a line is useful for snippet extraction (not blank, heading, code fence, or rule).

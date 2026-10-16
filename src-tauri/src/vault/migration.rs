@@ -2,6 +2,8 @@ use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
+use super::rename::is_app_folder;
+
 const LEGACY_IS_A_PREFIXES: [&str; 4] = ["is_a:", "\"Is A\":", "'Is A':", "Is A:"];
 
 fn has_legacy_is_a(fm_content: &str) -> bool {
@@ -99,6 +101,7 @@ pub fn migrate_is_a_to_type(vault_path: &str) -> Result<usize, String> {
     for entry in WalkDir::new(vault)
         .follow_links(true)
         .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !is_app_folder(e.file_name()))
         .filter_map(|e| e.ok())
     {
         let path = entry.path();
@@ -231,6 +234,27 @@ mod tests {
         );
         let count = migrate_is_a_to_type(tmp.path().to_str().unwrap()).unwrap();
         assert_eq!(count, 2, "should migrate exactly 2 files");
+    }
+
+    #[test]
+    fn test_migrate_vault_leaves_trash_and_recovery_copies_alone() {
+        let tmp = tempdir().unwrap();
+        let legacy = "---\nis_a: Person\n---\n";
+        let kept: Vec<_> = [".leadinglight/trash/abc", "note/.leadinglight-a1B2c3"]
+            .iter()
+            .map(|folder| {
+                let dir = tmp.path().join(folder);
+                fs::create_dir_all(&dir).unwrap();
+                write_file(&dir, "kept.md", legacy)
+            })
+            .collect();
+        assert_eq!(
+            migrate_is_a_to_type(tmp.path().to_str().unwrap()).unwrap(),
+            0
+        );
+        for path in kept {
+            assert_eq!(fs::read_to_string(path).unwrap(), legacy);
+        }
     }
 
     #[test]

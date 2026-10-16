@@ -1,0 +1,227 @@
+{
+  "description": "Favorite key patching shared by the native command and the editor rebase. expected is the patched note, the unchanged note when nothing is needed, or null when the note must be refused.",
+  "cases": [
+    {
+      "name": "adds both keys to a block",
+      "content": "---\ntitle: Plan\nstatus: draft\n---\n# Plan\n",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\ntitle: Plan\nstatus: draft\n_favorite: true\n_favorite_index: 3\n---\n# Plan\n"
+    },
+    {
+      "name": "replaces existing keys in place",
+      "content": "---\n_favorite: false\ntitle: Plan\n_favorite_index: 9\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\ntitle: Plan\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "removes both keys",
+      "content": "---\ntitle: Plan\n_favorite: true\n_favorite_index: 2\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\ntitle: Plan\n---\nBody"
+    },
+    {
+      "name": "prepends a block to a page without one",
+      "content": "Body only\n",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\n_favorite_index: 3\n---\nBody only\n"
+    },
+    {
+      "name": "keeps CRLF and comments",
+      "content": "---\r\n# kept comment\r\ntitle: Plan # trailing\r\n---\r\nBody\r\n",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\r\n# kept comment\r\ntitle: Plan # trailing\r\n_favorite: true\r\n_favorite_index: 3\r\n---\r\nBody\r\n"
+    },
+    {
+      "name": "already in the requested state",
+      "content": "---\n_favorite: True\n_favorite_index: 3\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: True\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "page without keys or block stays as it is",
+      "content": "Body",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "Body"
+    },
+    {
+      "name": "nested _favorite belongs to its parent when starring",
+      "content": "---\ntitle: Plan\nmetadata:\n  _favorite: keep\n  x: 1\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\ntitle: Plan\nmetadata:\n  _favorite: keep\n  x: 1\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "nested _favorite belongs to its parent when unstarring",
+      "content": "---\ntitle: Plan\nmetadata:\n  _favorite: keep\n  x: 1\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\ntitle: Plan\nmetadata:\n  _favorite: keep\n  x: 1\n---\nBody"
+    },
+    {
+      "name": "literal scalar text is not a key when starring",
+      "content": "---\nnote: |\n  _favorite: x\n  _favorite_index: 9\nnext: 1\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\nnote: |\n  _favorite: x\n  _favorite_index: 9\nnext: 1\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "folded scalar text is not a key when unstarring",
+      "content": "---\nnote: >\n  _favorite: x\n_favorite: true\n_favorite_index: 4\nnext: 1\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\nnote: >\n  _favorite: x\nnext: 1\n---\nBody"
+    },
+    {
+      "name": "quoted top-level keys are the Favorite keys",
+      "content": "---\n\"_favorite\": false\n'_favorite_index': 9\ntitle: Plan\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\n_favorite_index: 3\ntitle: Plan\n---\nBody"
+    },
+    {
+      "name": "quoted top-level keys are removed",
+      "content": "---\ntitle: Plan\n\"_favorite\": true\n'_favorite_index': 2\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\ntitle: Plan\n---\nBody"
+    },
+    {
+      "name": "an indentless list before the keys is kept",
+      "content": "---\ntags:\n- a\n- b\n_favorite: true\n_favorite_index: 2\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\ntags:\n- a\n- b\n---\nBody"
+    },
+    {
+      "name": "a Favorite value spread over lines is replaced whole",
+      "content": "---\n_favorite:\n  true\ntitle: Plan\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\ntitle: Plan\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "keeps an indented comment after _favorite when starring",
+      "content": "---\n_favorite: false\n  # keep this note\ntitle: Plan\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\n  # keep this note\ntitle: Plan\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "keeps an indented comment after _favorite when unstarring",
+      "content": "---\n_favorite: false\n  # keep this note\ntitle: Plan\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\n  # keep this note\ntitle: Plan\n---\nBody"
+    },
+    {
+      "name": "keeps CRLF comments after _favorite_index when starring",
+      "content": "---\r\ntitle: Plan\r\n_favorite: true\r\n_favorite_index: 2\r\n  # pinned by hand\r\n\r\n    # second note\r\nstatus: draft\r\n---\r\nBody\r\n",
+      "state": { "favorite": true, "favoriteIndex": 5 },
+      "expected": "---\r\ntitle: Plan\r\n_favorite: true\r\n_favorite_index: 5\r\n  # pinned by hand\r\n\r\n    # second note\r\nstatus: draft\r\n---\r\nBody\r\n"
+    },
+    {
+      "name": "keeps CRLF comments after both keys when unstarring",
+      "content": "---\r\n_favorite: true\r\n  # star note\r\n_favorite_index: 2\r\n  # index note\r\ntitle: Plan\r\n---\r\nBody\r\n",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\r\n  # star note\r\n  # index note\r\ntitle: Plan\r\n---\r\nBody\r\n"
+    },
+    {
+      "name": "refuses a comment inside a Favorite value",
+      "content": "---\n_favorite_index:\n  # why\n  2\ntitle: Plan\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "empty block",
+      "content": "---\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "comment-only block",
+      "content": "---\n# just a note\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\n# just a note\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "app-written list and multi-paragraph template are kept",
+      "content": "---\naliases:\n  - \"A\"\n  - \"B\"\ntemplate: |\n  ## Goal\n\n  Steps\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\naliases:\n  - \"A\"\n  - \"B\"\ntemplate: |\n  ## Goal\n\n  Steps\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "anchors and aliases elsewhere are kept",
+      "content": "---\nbase: &b 1\nother: *b\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": "---\nbase: &b 1\nother: *b\n_favorite: true\n_favorite_index: 3\n---\nBody"
+    },
+    {
+      "name": "refuses removing a value another key refers to",
+      "content": "---\n_favorite: &f true\n_favorite_index: 1\nother: *f\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": null
+    },
+    {
+      "name": "refuses a closed block with an unfinished sequence",
+      "content": "---\ntitle: [unfinished\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses a closed block with an unfinished quote",
+      "content": "---\ntitle: \"unfinished\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses an invalid block even when nothing would change",
+      "content": "---\ntitle: \"unfinished\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": null
+    },
+    {
+      "name": "refuses an unclosed block",
+      "content": "---\ntitle: Plan\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses changing a flow-mapping root",
+      "content": "---\n{title: Plan}\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "a flow-mapping root that needs no change stays",
+      "content": "---\n{title: Plan}\n---\nBody",
+      "state": { "favorite": false, "favoriteIndex": null },
+      "expected": "---\n{title: Plan}\n---\nBody"
+    },
+    {
+      "name": "refuses a sequence root",
+      "content": "---\n- a\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses a scalar root",
+      "content": "---\nhello\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses duplicate keys",
+      "content": "---\ntitle: a\ntitle: b\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses nested duplicate keys",
+      "content": "---\nm:\n  a: 1\n  a: 2\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses tab indentation",
+      "content": "---\nm:\n\tb: 1\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    },
+    {
+      "name": "refuses a nested mapping on one line",
+      "content": "---\na: b: c\n---\nBody",
+      "state": { "favorite": true, "favoriteIndex": 3 },
+      "expected": null
+    }
+  ]
+}

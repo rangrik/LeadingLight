@@ -1,6 +1,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -10,6 +11,7 @@ use walkdir::WalkDir;
 use super::filename_rules::validate_filename_stem;
 use super::path_identity::vault_relative_markdown_stem;
 use super::rename_transaction::RenameWorkspace;
+use crate::frontmatter::favorite::STAGING_PREFIX;
 use crate::frontmatter::{extract_frontmatter_title, update_frontmatter_content, FrontmatterValue};
 
 /// Result of a rename operation
@@ -122,12 +124,17 @@ fn replace_wikilinks_in_content(content: &str, re: &Regex, new_target: &str) -> 
 /// LeadingLight's local Trash: deleted pages must keep their exact bytes.
 const LOCAL_TRASH_STORE_DIR: &str = ".leadinglight";
 
+/// The Trash and Favorite staging or recovery folders, whose copies must keep their exact bytes.
+pub(crate) fn is_app_folder(name: &OsStr) -> bool {
+    name == LOCAL_TRASH_STORE_DIR || name.to_string_lossy().starts_with(STAGING_PREFIX)
+}
+
 /// Collect all .md file paths in vault eligible for wikilink replacement.
 fn collect_md_files(vault_path: &Path, exclude: &Path) -> Vec<std::path::PathBuf> {
     WalkDir::new(vault_path)
         .follow_links(true)
         .into_iter()
-        .filter_entry(|e| e.depth() == 0 || e.file_name() != LOCAL_TRASH_STORE_DIR)
+        .filter_entry(|e| e.depth() == 0 || !is_app_folder(e.file_name()))
         .filter_map(|e| e.ok())
         .map(|e| e.into_path())
         .filter(|p| is_replaceable_md_file(p, exclude))
@@ -1042,13 +1049,15 @@ mod tests {
     }
 
     #[test]
-    fn leadinglight_trash_store_is_never_rewritten_by_rename() {
+    fn leadinglight_trash_and_recovery_copies_are_never_rewritten_by_rename() {
         let dir = TempDir::new().unwrap();
         let vault = dir.path();
         let stored = ".leadinglight/trash/0123456789abcdef0123456789abcdef/kept.md";
+        let recovery = "note/.leadinglight-a1B2c3/ref.md";
         let link = "See [[Weekly Review]].\n";
         create_test_file(vault, "note/ref.md", link);
         create_test_file(vault, stored, link);
+        create_test_file(vault, recovery, link);
 
         let (_old_path, result) = rename_test_note_file(
             vault,
@@ -1062,6 +1071,7 @@ mod tests {
 
         assert_eq!(result.updated_files, 1);
         assert_eq!(fs::read_to_string(vault.join(stored)).unwrap(), link);
+        assert_eq!(fs::read_to_string(vault.join(recovery)).unwrap(), link);
     }
 
     #[test]

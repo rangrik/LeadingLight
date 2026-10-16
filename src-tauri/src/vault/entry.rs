@@ -87,6 +87,9 @@ pub struct VaultEntry {
     /// Used by the frontend to decide whether to show the TitleField.
     #[serde(rename = "hasH1")]
     pub has_h1: bool,
+    /// Which rule gave the title: "h1", "frontmatter" or "filename". Derived, never written to disk.
+    #[serde(rename = "titleSource", default, skip_serializing_if = "Option::is_none")]
+    pub title_source: Option<String>,
     /// File kind: "markdown", "text", or "binary".
     /// Determines how the frontend renders and opens the file.
     #[serde(rename = "fileKind", default = "default_file_kind")]

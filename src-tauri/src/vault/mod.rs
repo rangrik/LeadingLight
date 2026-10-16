@@ -1,3 +1,4 @@
+pub(crate) mod atomic_replace;
 mod attachment_rename;
 mod cache;
 mod config_seed;
@@ -15,6 +16,8 @@ pub(crate) mod path_identity;
 mod remote_image;
 mod rename;
 mod rename_transaction;
+#[cfg(test)]
+mod title_source_contract_tests;
 mod title_sync;
 mod trash;
 mod type_templates;
@@ -59,7 +62,10 @@ use file::read_file_metadata;
 use frontmatter::{
     extract_fm_and_rels, resolve_is_a, resolve_note_display, resolve_note_width, Frontmatter,
 };
-use parsing::{count_body_words, extract_outgoing_links, extract_snippet, extract_title};
+use parsing::{
+    count_body_words, extract_outgoing_links, extract_snippet, extract_title,
+    extract_title_and_source,
+};
 use type_templates::TypeTemplateSource;
 
 use gray_matter::engine::YAML;
@@ -164,7 +170,8 @@ pub fn parse_md_file(path: &Path, git_dates: Option<(u64, u64)>) -> Result<Vault
     let parsed = matter.parse(&content);
     let (frontmatter, mut relationships, properties) = extract_fm_and_rels(parsed.data, &content);
 
-    let title = derive_markdown_title_from_content(&content, &filename);
+    let (title, title_source) =
+        extract_title_and_source(frontmatter.title.as_deref(), &content, &filename);
     let has_h1 = parsing::extract_h1_title(&content).is_some();
     let snippet = extract_snippet(&content);
     let word_count = count_body_words(&content);
@@ -205,6 +212,7 @@ pub fn parse_md_file(path: &Path, git_dates: Option<(u64, u64)>) -> Result<Vault
         outgoing_links,
         properties,
         has_h1,
+        title_source: Some(title_source.as_str().to_string()),
         file_kind: "markdown".to_string(),
         ..VaultEntry::default()
     };

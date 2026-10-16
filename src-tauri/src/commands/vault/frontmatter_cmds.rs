@@ -1,7 +1,54 @@
+use std::path::Path;
+
 use crate::frontmatter;
+use crate::frontmatter::favorite::{FavoriteState, FavoriteWriteOutcome, RefusalReason};
 use crate::frontmatter::FrontmatterValue;
 
 use super::boundary::{with_existing_paths, with_validated_path, ValidatedPathMode};
+
+pub(crate) fn set_note_favorite_blocking(
+    path: String,
+    favorite: bool,
+    favorite_index: Option<u32>,
+    vault_path: Option<String>,
+) -> Result<FavoriteWriteOutcome, String> {
+    let state = match (favorite, favorite_index) {
+        (true, Some(index)) => FavoriteState::On(index),
+        (true, None) => return Err("A favorite needs its position".to_string()),
+        (false, _) => FavoriteState::Off,
+    };
+    let validated = with_validated_path(
+        &path,
+        vault_path.as_deref(),
+        ValidatedPathMode::Existing,
+        |validated_path| Ok(validated_path.to_string()),
+    );
+    // Boundary refusals are reported as data, so nothing reads as an unknown failure.
+    let outcome = match validated {
+        Ok(validated) if frontmatter::is_markdown_path(Path::new(&validated)) => {
+            frontmatter::favorite::set_note_favorite(Path::new(&validated), state)
+        }
+        Ok(_) => FavoriteWriteOutcome::refused(RefusalReason::InvalidFrontmatter),
+        Err(_) if !Path::new(&path).exists() => {
+            FavoriteWriteOutcome::refused(RefusalReason::Missing)
+        }
+        Err(_) => FavoriteWriteOutcome::refused(RefusalReason::OutsideVault),
+    };
+    Ok(outcome)
+}
+
+#[tauri::command]
+pub async fn set_note_favorite(
+    path: String,
+    favorite: bool,
+    favorite_index: Option<u32>,
+    vault_path: Option<String>,
+) -> Result<FavoriteWriteOutcome, String> {
+    super::off_main_thread(move || {
+        set_note_favorite_blocking(path, favorite, favorite_index, vault_path)
+    })
+    .await
+}
 
 pub(crate) fn update_frontmatter_blocking(
     path: String,
@@ -135,6 +182,38 @@ mod tests {
         assert!(std::fs::read_to_string(second)
             .unwrap()
             .contains("_archived: true"));
+    }
+
+    #[tokio::test]
+    async fn set_note_favorite_command_returns_boundary_refusals_as_data() {
+        let vault = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let vault_arg = Some(vault.path().to_string_lossy().into_owned());
+        let outside_note = note_path(&outside, "outside.md");
+        write_note(&outside_note, "# Outside\n");
+        let image = note_path(&vault, "image.png");
+        write_note(&image, "not markdown");
+        let note = note_path(&vault, "note.md");
+        write_note(&note, "# Note\n");
+
+        let refused = |reason| -> Result<FavoriteWriteOutcome, String> {
+            Ok(FavoriteWriteOutcome::refused(reason))
+        };
+        let favorite =
+            |path: &str| set_note_favorite(path.to_string(), true, Some(1), vault_arg.clone());
+        assert_eq!(favorite(&outside_note).await, refused(RefusalReason::OutsideVault));
+        assert_eq!(favorite(&image).await, refused(RefusalReason::InvalidFrontmatter));
+        assert_eq!(std::fs::read_to_string(&outside_note).unwrap(), "# Outside\n");
+
+        let committed = favorite(&note).await.unwrap();
+        let content = "---\n_favorite: true\n_favorite_index: 1\n---\n# Note\n".to_string();
+        let expected = FavoriteWriteOutcome::Committed {
+            content: content.clone(),
+            written: true,
+            durable: true,
+        };
+        assert_eq!(committed, expected);
+        assert_eq!(std::fs::read_to_string(&note).unwrap(), content);
     }
 
     #[test]

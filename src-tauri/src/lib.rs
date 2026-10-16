@@ -292,6 +292,7 @@ macro_rules! app_invoke_handler {
             commands::save_note_content,
             commands::update_frontmatter,
             commands::delete_frontmatter_property,
+            commands::set_note_favorite,
             commands::rename_note,
             commands::rename_note_filename,
             commands::move_note_to_folder,

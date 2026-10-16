@@ -1,3 +1,4 @@
+pub(crate) mod favorite;
 pub(crate) mod keys;
 mod ops;
 #[cfg(test)]
@@ -11,7 +12,7 @@ pub(crate) use ops::frontmatter_body;
 pub use ops::{extract_frontmatter_title, update_frontmatter_content};
 pub use yaml::{format_yaml_key, FrontmatterValue};
 
-fn is_markdown_path(path: &Path) -> bool {
+pub(crate) fn is_markdown_path(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| {
