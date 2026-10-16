@@ -69,4 +69,19 @@ the result still explains where the kept copy can be found.
 
 An unresolved recovery record prevents a successful close or vault-switch drain. This preserves
 normal interactive recovery; the process-local outcome registry is not a durable journal of
-unsaved typing. Automatic earlier-version history is a separate increment.
+unsaved typing.
+
+## Automatic history boundary
+
+Automatic page history runs inside this save path without
+becoming part of its outcome. After the new bytes are staged and before the exact recheck, the
+save may keep the text it is replacing as an earlier version. A capture never retries, holds,
+delays publication on a busy lock or turns a committed save into a failure. When it could not
+keep a version, the committed result carries a `notKept` note. The save queue settles that
+receipt normally and passes the note to a quiet history warning, separate from the page's save
+state. A replayed or checked result carries no note and cannot clear that warning.
+
+History does not replace draft recovery. An unsaved or uncertain draft follows the recovery
+described above. Earlier versions are saved text only, selected by policy rather than every
+edit. Close, quit and vault switching wait for page saves, not for history maintenance. See
+[local page history](local-page-history.md) and [ADR 007](ADR-007-local-page-history.md).

@@ -110,7 +110,18 @@ note and attachment link rewrites lease each linked page before their authoritat
 no-clobber publication and current file ownership, sequence and content proof before resolution.
 The registered root and stored parents are revalidated before later recovery reads. See
 [ADR 006](ADR-006-qualified-page-saves.md) for the contract, frontend settlement boundary and
-explicit limits. This storage module does not yet imply automatic version history.
+explicit limits.
+
+Automatic page history extends the same module. The
+ordinary save captures the text it replaces between staging and the exact recheck. Every history
+failure becomes a `notKept` note on an unchanged save result. Versions are filed by recorded
+vault-relative path under `.leadinglight/history/versions/`. One per-vault process and OS lock
+serializes capture, retention and copy-source verification, and a bounded inventory under that
+lock authorizes each capture; no cache does. Previews and copies verify the complete payload
+first, and copies reuse the no-clobber draft-copy pipeline. The interface lives in
+`src/leadinglight/pageHistory/` and reaches upstream code through one menu item, one palette
+command, a pane status slot and an optional save-hook note. See
+[ADR 007](ADR-007-local-page-history.md) and [local page history](local-page-history.md).
 
 Manual renames retain the mounted rich editor through the pane's explicit `renamedFrom` record.
 The swap hook verifies that the editor still holds that old path, flushes its pending text through

@@ -321,3 +321,54 @@ external-writer/crash limitations are in [ADR 006](ADR-006-qualified-page-saves.
 typing and the outcome registry are process-local; automatic earlier-version history remains
 the next increment. Force termination, power loss, native All Notes row dragging, actual IME
 and the complete vault-switch fault matrix are not newly qualified by this release.
+
+# Version 0.5.0 — automatic local page history
+
+Validated on macOS on 2026-10-16 using disposable synthetic vaults. Selected earlier text is kept
+inside the local vault, verified before preview or copying, and recovered as a separate page.
+There is no account, telemetry or remote storage. See [local page history](local-page-history.md)
+and [ADR 007](ADR-007-local-page-history.md) for capture, retention and location semantics.
+
+Seven browser acceptance scenarios passed in one final run, one worker and no retries. They
+covered real disk capture, formatted/source preview, exact-byte copies, explicit opening in the
+requesting pane, independent pane entry points, command-palette routing, focus restoration and a
+560 × 720 layout. They also checked passive previews without network requests, BOM/CRLF and
+truncation, moved/deleted locations, explicit folder choice, damaged or missing versions, a lost
+copy reply without duplication, stale responses, and history warnings separate from page saving.
+The first run exposed a focus-restoration defect; a regression test and correction preceded the
+passing final run. No smoke assertion was weakened.
+
+The packaged Mac app was tested with a fresh isolated configuration and vault. Mouse input opened
+two different pages, edited one and kept the other unchanged. Earlier versions showed the prior
+text in formatted and source views. Save as a copy produced exactly the original 77 bytes; the
+current page retained the new text. Open copy replaced only the requesting pane and focused its
+editor. Escape returned focus to that pane's menu, and the native command palette opened history
+for the active page. All saved locations listed its relative path. Normal Command-Q and relaunch
+preserved the changed text, both panes and readable history. The QA app was closed afterwards;
+the running personal installation was neither inspected nor replaced.
+
+A separate cross-reader acceptance test drove the real Node bridge and native save paths in both
+directions. Each reader listed, previewed and copied the other writer's version, matching all row
+fields and exact 54-byte BOM/CRLF/Unicode payloads while leaving the current originals unchanged.
+The test is ignored in ordinary Cargo runs and was explicitly executed; missing Node was checked
+to fail rather than silently pass. It does not prove concurrent bridge/native locking.
+
+Focused native history tests passed 39 cases, with three explicit acceptance/performance tests
+ignored by default; the cross-reader test above was run separately. The native safety checkpoint
+also passed 1,270 library tests and one integration test, strict Clippy and formatting. Final
+Node bridge checks passed 30 tests. UI regression runs covered session invalidation, copy replies,
+health ordering and focus; broader and narrow runs overlap and are not a unique total. TypeScript,
+changed-source lint, the production frontend and packaged macOS builds passed. Normal local Git
+hooks remain required; no cloud analyzer or coverage percentage is claimed for this milestone.
+
+A warm debug-build measurement with 50 alternating-page saves at 1,000 retained versions recorded
+108.1 ms median, 116.1 ms at the 95th percentile and 118.9 ms maximum save time. This informed the
+initial 1,000-version total limit; the store also limits retained versions per location to 200
+and counted storage to 512 MiB. These are synthetic warm-cache measurements, not release-build or
+cold-storage guarantees. An authoritative bounded scan, rather than a cache, authorizes capture.
+
+No dependencies were added. New interface strings use the English source locale and existing
+fallback; full translated catalogs are not claimed. Native compact-window, fault-injection and
+IME matrices were not repeated here; browser and unit evidence cover their stated cases only.
+Windows/Linux runtime, force-kill and power-loss recovery remain unqualified. History is selective,
+location-based and text-only; it is not a complete backup or a record of every edit.
