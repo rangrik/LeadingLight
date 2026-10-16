@@ -16,6 +16,7 @@ pub(crate) mod path_identity;
 mod remote_image;
 mod rename;
 mod rename_transaction;
+pub(crate) mod staged_file;
 #[cfg(test)]
 mod title_source_contract_tests;
 mod title_sync;

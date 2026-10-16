@@ -2,18 +2,15 @@
 //! complete staged copy in one step. Every outcome says truthfully what is on disk.
 
 use std::borrow::Cow;
-use std::fs;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use serde::Serialize;
 use serde_yaml::{Mapping, Value};
 
-use crate::vault::atomic_replace::{self, PublishError};
+use crate::vault::staged_file::{self, Mismatch, NativePlatform, Original, Platform, Published};
 
-/// Staging and kept recovery folders sit beside the page under this name prefix.
-pub(crate) const STAGING_PREFIX: &str = ".leadinglight-";
+/// Still exported here because the watcher and the rename walker import it from this path.
+pub(crate) use crate::vault::staged_file::STAGING_PREFIX;
 
 const KEYS: [&str; 2] = ["_favorite", "_favorite_index"];
 
@@ -66,6 +63,16 @@ pub enum FavoriteWriteOutcome {
 impl FavoriteWriteOutcome {
     pub fn refused(reason: RefusalReason) -> Self {
         Self::Refused { reason }
+    }
+}
+
+impl From<Mismatch> for RefusalReason {
+    fn from(mismatch: Mismatch) -> Self {
+        match mismatch {
+            Mismatch::Missing => Self::Missing,
+            Mismatch::Linked => Self::Link,
+            Mismatch::Changed => Self::ChangedOnDisk,
+        }
     }
 }
 
@@ -283,73 +290,8 @@ pub fn apply_favorite_content(
     )))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct FileIdentity {
-    device: u64,
-    inode: u64,
-    len: u64,
-    modified: Option<SystemTime>,
-}
-
-fn identity(meta: &fs::Metadata) -> FileIdentity {
-    #[cfg(unix)]
-    let (device, inode) = {
-        use std::os::unix::fs::MetadataExt;
-        (meta.dev(), meta.ino())
-    };
-    #[cfg(not(unix))]
-    let (device, inode) = (0, 0);
-    FileIdentity {
-        device,
-        inode,
-        len: meta.len(),
-        modified: meta.modified().ok(),
-    }
-}
-
-fn link_count(meta: &fs::Metadata) -> u64 {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        meta.nlink()
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = meta;
-        1
-    }
-}
-
-/// A single-link regular file at `path`, or the refusal that applies.
-fn plain_file(path: &Path) -> Result<fs::Metadata, RefusalReason> {
-    let meta = fs::symlink_metadata(path).map_err(|_| RefusalReason::Missing)?;
-    if meta.file_type().is_symlink() || link_count(&meta) > 1 {
-        return Err(RefusalReason::Link);
-    }
-    if !meta.is_file() {
-        return Err(RefusalReason::Missing);
-    }
-    Ok(meta)
-}
-
-/// The refusal for a page that is gone, linked or changed since it was read.
-fn recheck(path: &Path, expected: &FileIdentity) -> Result<(), RefusalReason> {
-    let meta = plain_file(path)?;
-    if identity(&meta) == *expected {
-        Ok(())
-    } else {
-        Err(RefusalReason::ChangedOnDisk)
-    }
-}
-
-fn proven_unchanged(path: &Path, expected: &FileIdentity, bytes: &[u8]) -> bool {
-    recheck(path, expected).is_ok() && fs::read(path).is_ok_and(|current| current == bytes)
-}
-
 pub struct Prepared {
-    original: PathBuf,
-    identity: FileIdentity,
-    original_bytes: Vec<u8>,
+    original: Original,
     content: String,
     staging: tempfile::TempDir,
     staged: PathBuf,
@@ -365,10 +307,10 @@ const STAGE_FAILED: FavoriteWriteOutcome = FavoriteWriteOutcome::Failed {
 };
 
 pub fn prepare(path: &Path, state: FavoriteState) -> Step {
-    if let Err(reason) = plain_file(path) {
-        return Step::Done(FavoriteWriteOutcome::refused(reason));
+    if let Err(mismatch) = staged_file::plain_file(path) {
+        return Step::Done(FavoriteWriteOutcome::refused(mismatch.into()));
     }
-    let Ok((original_bytes, identity)) = read_with_identity(path) else {
+    let Ok(original) = Original::read(path) else {
         return Step::Done(STAGE_FAILED);
     };
     let invalid = || {
@@ -376,7 +318,7 @@ pub fn prepare(path: &Path, state: FavoriteState) -> Step {
             RefusalReason::InvalidFrontmatter,
         ))
     };
-    let Ok(text) = String::from_utf8(original_bytes.clone()) else {
+    let Ok(text) = String::from_utf8(original.bytes.clone()) else {
         return invalid();
     };
     let content = match apply_favorite_content(&text, state) {
@@ -390,11 +332,9 @@ pub fn prepare(path: &Path, state: FavoriteState) -> Step {
         }
         Ok(Some(content)) => content,
     };
-    match stage(path, &content) {
+    match staged_file::stage(path, content.as_bytes()) {
         Ok((staging, staged)) => Step::Ready(Prepared {
-            original: path.to_path_buf(),
-            identity,
-            original_bytes,
+            original,
             content,
             staging,
             staged,
@@ -403,125 +343,37 @@ pub fn prepare(path: &Path, state: FavoriteState) -> Step {
     }
 }
 
-fn read_with_identity(path: &Path) -> std::io::Result<(Vec<u8>, FileIdentity)> {
-    let mut file = fs::File::open(path)?;
-    let mut bytes = Vec::new();
-    file.read_to_end(&mut bytes)?;
-    Ok((bytes, identity(&file.metadata()?)))
-}
-
-/// A uniquely named sibling folder keeps the staged copy on the original's volume.
-fn stage(path: &Path, content: &str) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
-    let parent = path.parent().ok_or(std::io::ErrorKind::NotFound)?;
-    let name = path.file_name().ok_or(std::io::ErrorKind::NotFound)?;
-    let staging = tempfile::Builder::new()
-        .prefix(STAGING_PREFIX)
-        .tempdir_in(parent)?;
-    // Written before any page text, so Git skips the copy even under a parent `!` rule.
-    fs::write(staging.path().join(".gitignore"), "*\n")?;
-    let staged = staging.path().join(name);
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&staged)?;
-    file.write_all(content.as_bytes())?;
-    file.set_permissions(fs::metadata(path)?.permissions())?;
-    file.sync_all()?;
-    Ok((staging, staged))
-}
-
-pub trait Platform {
-    fn publish(&self, original: &Path, staged: &Path) -> Result<PathBuf, PublishError>;
-    fn sync_dir(&self, dir: &Path) -> std::io::Result<()>;
-}
-
-pub struct NativePlatform;
-
-impl Platform for NativePlatform {
-    fn publish(&self, original: &Path, staged: &Path) -> Result<PathBuf, PublishError> {
-        atomic_replace::replace_item(original, staged)
-    }
-
-    fn sync_dir(&self, dir: &Path) -> std::io::Result<()> {
-        atomic_replace::sync_dir(dir)
-    }
-}
-
 fn shown(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn same_path(left: &Path, right: &Path) -> bool {
-    match (fs::canonicalize(left), fs::canonicalize(right)) {
-        (Ok(left), Ok(right)) => left == right,
-        _ => left == right,
-    }
-}
-
-/// The recheck is not a compare-and-swap: an outside writer can still act before the publish,
-/// and the macOS publish does not refuse a page removed in that gap.
+/// Favorite's qualified rule rechecks identity only before publishing.
 pub fn commit(prepared: Prepared, platform: &impl Platform) -> FavoriteWriteOutcome {
     let Prepared {
         original,
-        identity,
-        original_bytes,
         content,
         staging,
         staged,
     } = prepared;
-    if let Err(reason) = recheck(&original, &identity) {
-        return FavoriteWriteOutcome::refused(reason);
+    if let Err(mismatch) = original.recheck_identity() {
+        return FavoriteWriteOutcome::refused(mismatch.into());
     }
-    let published = platform.publish(&original, &staged);
-    if let Err(error) = &published {
-        log::warn!(
-            "Favorite publish failed for {}: {}",
-            original.display(),
-            error.message
-        );
-    }
-    match published {
-        Ok(resulting) if same_path(&resulting, &original) => {
-            let durable = original
-                .parent()
-                .is_some_and(|dir| platform.sync_dir(dir).is_ok());
-            drop(staging);
-            FavoriteWriteOutcome::Committed {
-                content,
-                written: true,
-                durable,
-            }
-        }
-        Ok(resulting) => {
-            let _ = staging.keep();
-            FavoriteWriteOutcome::Uncertain {
-                original_at: None,
-                staged_at: Some(shown(&resulting)),
-            }
-        }
-        // Foundation can name the original's own path as where it now is.
-        Err(error)
-            if error
-                .original_at
-                .as_deref()
-                .is_none_or(|at| same_path(at, &original))
-                && proven_unchanged(&original, &identity, &original_bytes) =>
-        {
-            FavoriteWriteOutcome::Failed {
-                reason: FailureReason::Publish,
-            }
-        }
-        Err(error) => {
-            // Anything not proven unchanged keeps every file for recovery.
-            let staged_at = fs::symlink_metadata(&staged)
-                .is_ok()
-                .then(|| shown(&staged));
-            let _ = staging.keep();
-            FavoriteWriteOutcome::Uncertain {
-                original_at: error.original_at.as_deref().map(shown),
-                staged_at,
-            }
-        }
+    match staged_file::publish(&original, staging, &staged, platform) {
+        Published::Committed { durable } => FavoriteWriteOutcome::Committed {
+            content,
+            written: true,
+            durable,
+        },
+        Published::Failed => FavoriteWriteOutcome::Failed {
+            reason: FailureReason::Publish,
+        },
+        Published::Uncertain {
+            original_at,
+            staged_at,
+        } => FavoriteWriteOutcome::Uncertain {
+            original_at: original_at.as_deref().map(shown),
+            staged_at: staged_at.as_deref().map(shown),
+        },
     }
 }
 
@@ -535,7 +387,9 @@ pub fn set_note_favorite(path: &Path, state: FavoriteState) -> FavoriteWriteOutc
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use crate::vault::atomic_replace::PublishError;
     use std::cell::Cell;
+    use std::fs;
 
     const BODY: &str = "# Plan\n\nKeep this body.\n";
 

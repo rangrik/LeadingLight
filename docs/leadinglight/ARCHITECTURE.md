@@ -92,6 +92,17 @@ components beginning with `.leadinglight-`, matching the rename and migration wa
 payload events must not look like external page edits; publication is observed at the page path.
 Other hidden namespaces, including saved views under `.laputa`, retain their existing behavior.
 
+`vault/staged_file.rs` owns the shared filesystem steps: plain-file checks, a captured file
+identity and its bytes, sibling staging, publication and conservative failure classification.
+Favorite remains a thin adapter and keeps its identity-only check before publication. The
+separate exact recheck also compares bytes and revalidates the path after reading; it supports
+the forthcoming ordinary-save transaction without coupling it to Favorite result types.
+After a failed publication, only an exact unchanged original permits the failed result;
+otherwise staging is retained as uncertain. A successful publication with a failed directory
+sync remains committed. The final check and replacement are separate operations, so this is
+not a filesystem compare-and-swap or a power-loss guarantee. Native metadata replacement
+continues through the unchanged `atomic_replace` module.
+
 Manual renames retain the mounted rich editor through the pane's explicit `renamedFrom` record.
 The swap hook verifies that the editor still holds that old path, flushes its pending text through
 canonical routing, and advances the reactive content path without replacing the live blocks.
