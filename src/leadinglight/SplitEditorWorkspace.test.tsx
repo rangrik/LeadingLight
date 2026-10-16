@@ -21,7 +21,7 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
   return <div contentEditable suppressContentEditableWarning data-testid={`editor-${path}`}>{path}</div>
 } }))
 
-const entry = (path: string) => ({ path, title: path, filename: path, fileKind: 'markdown' }) as VaultEntry
+const entry = (path: string) => ({ path, title: path, filename: path, fileKind: 'markdown', aliases: [], outgoingLinks: [], relationships: {} }) as unknown as VaultEntry
 function fixture() {
   const entries = [entry('/left.md'), entry('/right.md')]
   const workspace: SplitWorkspaceController = {

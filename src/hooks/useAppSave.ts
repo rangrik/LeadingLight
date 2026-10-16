@@ -561,8 +561,10 @@ function useUntitledRenameCoordinator(options: {
       setToastMessage: AppSaveDeps['setToastMessage']
       flushPendingUntitledRename: (path?: string) => Promise<boolean>
       locale: AppLocale
+      /** Pages whose unsaved tab text must not be written directly (a Trash move holds them). */
+      skipFallback?: (path: string) => boolean
     }) {
-      const { canPersist, resolveCurrentPath, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale } = options
+      const { canPersist, resolveCurrentPath, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, skipFallback } = options
   const t = useMemo(() => createTranslator(locale), [locale])
 
   return useCallback(
@@ -580,7 +582,7 @@ function useUntitledRenameCoordinator(options: {
       await flushEditorContent(currentPath, {
         savePendingForPath,
           getTabContent: (p) => tabsRef.current.find((t) => t.entry.path === p)?.content,
-        isUnsaved: (p) => unsavedPathsRef.current.has(p),
+        isUnsaved: (p) => unsavedPathsRef.current.has(p) && !skipFallback?.(p),
           onSaved: (p) => {
             clearUnsaved(p)
           },
@@ -600,6 +602,7 @@ function useUntitledRenameCoordinator(options: {
       clearUnsaved,
       setToastMessage,
       flushPendingUntitledRename,
+      skipFallback,
       t,
     ],
   )
@@ -750,6 +753,11 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         handleContentChange: handleContentChangeRaw,
         savePendingForPath: savePendingForPathRaw,
         savePending,
+        holdAutosave,
+        releaseAutosave,
+        hasPendingWrite,
+        drainHeld: drainHeldRaw,
+        isHeld,
       } = useEditorSaveWithLinks({
         updateEntry,
         setTabs,
@@ -784,12 +792,24 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         },
         [savePendingForPathRaw, persistenceScope, resolveCurrentPath],
       )
+      const drainHeld = useCallback(
+        (path: string) => {
+        const currentPath = resolveCurrentPath(path)
+        return canWritePathToVault(currentPath, persistenceScope) ? drainHeldRaw(currentPath) : Promise.resolve(false)
+        },
+        [drainHeldRaw, persistenceScope, resolveCurrentPath],
+      )
 
       return {
         handleSaveRaw,
         handleContentChange,
         savePendingForPath,
         savePending,
+        holdAutosave,
+        releaseAutosave,
+        hasPendingWrite,
+        drainHeld,
+        isHeld,
       }
     }
 
@@ -833,8 +853,10 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
       handleSaveRaw: (unsavedFallback?: { path: string; content: string }) => Promise<boolean>
       tabs: TabState[]
       unsavedPaths: Set<string>
+      drainHeld: (path: string) => Promise<boolean>
+      isHeld: (path: string) => boolean
     }) {
-      const { contentChangeRef, handleContentChange, canPersist, cancelPendingUntitledRename, pendingUntitledRenameRef, activeTabPath, resolveCurrentPath, resolvePathBeforeSave, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, handleRenameNote, handleRenameFilename, resolvedPath, replaceRenamedEntry, loadModifiedFiles, handleSaveRaw, tabs, unsavedPaths } = options
+      const { contentChangeRef, handleContentChange, canPersist, cancelPendingUntitledRename, pendingUntitledRenameRef, activeTabPath, resolveCurrentPath, resolvePathBeforeSave, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, handleRenameNote, handleRenameFilename, resolvedPath, replaceRenamedEntry, loadModifiedFiles, handleSaveRaw, tabs, unsavedPaths, drainHeld, isHeld } = options
   useAppSaveEffects({
     contentChangeRef,
     handleContentChange,
@@ -843,17 +865,10 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
     activeTabPath,
   })
 
-  const flushBeforeAction = useFlushBeforeAction({
-    canPersist,
-    resolveCurrentPath,
-    savePendingForPath,
-    tabsRef,
-    unsavedPathsRef,
-    clearUnsaved,
-    setToastMessage,
-    flushPendingUntitledRename,
-    locale,
-  })
+  const flushOptions = { canPersist, resolveCurrentPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale }
+  const flushBeforeAction = useFlushBeforeAction({ ...flushOptions, savePendingForPath, skipFallback: isHeld })
+  // Only the Trash move writes the pages it holds.
+  const flushForTrash = useFlushBeforeAction({ ...flushOptions, savePendingForPath: drainHeld })
   const { handleFilenameRename, handleTitleSync } = useRenameHandlers({
     resolveCurrentPath,
     resolvePathBeforeSave,
@@ -880,6 +895,7 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
     handleSave,
     handleTitleSync,
     flushBeforeAction,
+    flushForTrash,
   }
 }
 
@@ -910,7 +926,7 @@ function useAppSaveServices(
     onInternalVaultWrite,
     initialH1AutoRenameEnabled,
   })
-  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending } = useEditorPersistence({
+  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, drainHeld, isHeld } = useEditorPersistence({
     updateEntry,
     setTabs,
     setToastMessage,
@@ -931,7 +947,34 @@ function useAppSaveServices(
     registerRenamedPath,
     replaceEntry,
   })
-  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, replaceRenamedEntry }
+  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, drainHeld, isHeld, replaceRenamedEntry }
+}
+
+type TrashBoundaryServices = Pick<ReturnType<typeof useAppSaveServices>, 'holdAutosave' | 'releaseAutosave' | 'hasPendingWrite' | 'cancelPendingUntitledRename' | 'resolveCurrentPath' | 'resolvePathBeforeSave'>
+
+/**
+ * LeadingLight Trash: automatic writes are held while a page moves; `prepareForTrash` writes its
+ * latest text, settles automatic renames and returns the path to move.
+ */
+function useTrashSaveBoundary(services: TrashBoundaryServices, flushForTrash: (path: string) => Promise<void>) {
+  const { holdAutosave, releaseAutosave, hasPendingWrite, cancelPendingUntitledRename, resolveCurrentPath, resolvePathBeforeSave } = services
+  const prepareForTrash = useCallback(async (path: string) => {
+    await flushForTrash(path)
+    let settled = await resolvePathBeforeSave(resolveCurrentPath(path))
+    if (settled !== path) {
+      holdAutosave([settled])
+      await flushForTrash(settled)
+      settled = await resolvePathBeforeSave(resolveCurrentPath(settled))
+    }
+    // A rename must not start while the file is moving.
+    cancelPendingUntitledRename(settled)
+    return settled
+  }, [cancelPendingUntitledRename, flushForTrash, holdAutosave, resolveCurrentPath, resolvePathBeforeSave])
+  const releaseHeldWrites = useCallback((paths: readonly string[], action: 'discard' | 'resume' | 'release') => {
+    if (action === 'discard') for (const path of paths) cancelPendingUntitledRename(path)
+    releaseAutosave(paths, action)
+  }, [cancelPendingUntitledRename, releaseAutosave])
+  return { holdWrites: holdAutosave, releaseHeldWrites, prepareForTrash, hasPendingWrite }
 }
 
 export function useAppSave(options: AppSaveDeps) {
@@ -940,8 +983,9 @@ export function useAppSave(options: AppSaveDeps) {
   const canPersist = resolvedPath.trim().length > 0
   const refs = useAppSaveStateRefs({ tabs, activeTabPath, unsavedPaths })
   const { tabsRef, unsavedPathsRef } = refs
-  const { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, replaceRenamedEntry } = useAppSaveServices(options, refs, canPersist)
-  const { handleFilenameRename, handleSave, handleTitleSync, flushBeforeAction } = useAppSaveHandlers({
+  const services = useAppSaveServices(options, refs, canPersist)
+  const { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, replaceRenamedEntry, drainHeld, isHeld } = services
+  const { handleFilenameRename, handleSave, handleTitleSync, flushBeforeAction, flushForTrash } = useAppSaveHandlers({
     contentChangeRef,
     handleContentChange,
     canPersist,
@@ -965,7 +1009,10 @@ export function useAppSave(options: AppSaveDeps) {
     handleSaveRaw,
     tabs,
     unsavedPaths,
+    drainHeld,
+    isHeld,
   })
+  const trashBoundary = useTrashSaveBoundary(services, flushForTrash)
 
   return {
     contentChangeRef,
@@ -977,5 +1024,6 @@ export function useAppSave(options: AppSaveDeps) {
     savePendingForPath,
     trackRenamedPath: registerRenamedPath,
     flushBeforeAction,
+    ...trashBoundary,
   }
 }

@@ -83,7 +83,7 @@ describe('Sidebar Type row actions', () => {
     openProjectsContextMenu()
     expect(screen.getByText('Change display name…')).toBeInTheDocument()
     expect(screen.getByText('Customize icon & color…')).toBeInTheDocument()
-    expect(screen.getByText('Delete type')).toBeInTheDocument()
+    expect(screen.getByText('Move type to Trash')).toBeInTheDocument()
   })
 
   it('sizes the type context menu to visible actions instead of filling the viewport', () => {
@@ -119,7 +119,7 @@ describe('Sidebar Type row actions', () => {
     const onDeleteType = vi.fn()
     renderSidebar({ onDeleteType })
     fireEvent.contextMenu(getProjectsHeader())
-    fireEvent.click(screen.getByText('Delete type'))
+    fireEvent.click(screen.getByText('Move type to Trash'))
     expect(onDeleteType).toHaveBeenCalledWith('Project')
   })
 

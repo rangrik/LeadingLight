@@ -13,6 +13,7 @@ const GROUP_LABEL_KEYS = {
 
 const STATIC_LABEL_KEYS: Partial<Record<string, TranslationKey>> = {
   'search-notes': 'command.navigation.searchNotes',
+  'go-today': 'leadinglight.today.command',
   'go-all': 'command.navigation.goAllNotes',
   'go-archived': 'command.navigation.goArchived',
   'go-changes': 'command.navigation.goChanges',

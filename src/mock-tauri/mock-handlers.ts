@@ -18,6 +18,7 @@ import type {
 } from '../types'
 import { MOCK_CONTENT } from './mock-content'
 import { MOCK_ENTRIES } from './mock-entries'
+import { mockTrashHandlers } from './mock-trash'
 
 function syncWindowContent(): void {
   if (typeof window !== 'undefined') {
@@ -426,6 +427,7 @@ function handleMoveNoteToWorkspace(args: {
 }
 
 export const mockHandlers = {
+  ...mockTrashHandlers,
   read_vault_snapshot: () => MOCK_ENTRIES,
   record_startup_milestone: ({ name, detail }: { name: string; detail?: number | null }) => ({
     name,
@@ -605,6 +607,14 @@ export const mockHandlers = {
   stream_ai_agent: () => null,
   abort_ai_agent_stream: () => false,
   save_note_content: (args: { path: string; content: string }) => {
+    MOCK_CONTENT[args.path] = args.content
+    mockSavedSinceCommit.add(args.path)
+    syncWindowContent()
+    return null
+  },
+  // Matches native exclusive creation: an existing page is never replaced.
+  create_note_content: (args: { path: string; content: string }) => {
+    if (MOCK_CONTENT[args.path] !== undefined) throw new Error(`File already exists: ${args.path}`)
     MOCK_CONTENT[args.path] = args.content
     mockSavedSinceCommit.add(args.path)
     syncWindowContent()

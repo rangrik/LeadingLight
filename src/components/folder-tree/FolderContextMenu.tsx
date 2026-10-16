@@ -103,8 +103,8 @@ export function FolderContextMenu(props: FolderContextMenuProps) {
       {canMutateFolder && (
         <FolderMenuAction icon={<PencilSimple size={14} className="shrink-0" />} label={translate(locale, 'sidebar.action.renameFolderMenu')} onClick={() => onRename(menu.path)} />
       )}
-      {canMutateFolder && (
-        <FolderMenuAction destructive icon={<Trash size={14} className="shrink-0" />} label={translate(locale, 'sidebar.action.deleteFolderMenu')} onClick={() => onDelete?.(menu.path)} testId="delete-folder-menu-item" />
+      {canMutateFolder && onDelete && (
+        <FolderMenuAction destructive icon={<Trash size={14} className="shrink-0" />} label={translate(locale, 'sidebar.action.deleteFolderMenu')} onClick={() => onDelete(menu.path)} testId="delete-folder-menu-item" />
       )}
     </div>
   )

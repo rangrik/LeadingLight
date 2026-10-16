@@ -252,7 +252,7 @@ describe('BreadcrumbBar — delete', () => {
 
     const menu = await expectOverflowMenuWaitsForClick()
 
-    expect(within(menu).getByRole('menuitem', { name: 'Delete this note' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Move to Trash' })).toBeInTheDocument()
   })
 
   it('opens from the keyboard and dismisses with Escape', async () => {
@@ -271,14 +271,14 @@ describe('BreadcrumbBar — delete', () => {
   it('shows delete in the overflow menu', async () => {
     render(<BreadcrumbBar entry={baseEntry} {...defaultProps} onDelete={vi.fn()} />)
     const menu = await openOverflowMenu()
-    expect(within(menu).getByRole('menuitem', { name: 'Delete this note' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Move to Trash' })).toBeInTheDocument()
   })
 
   it('calls onDelete from the overflow menu', async () => {
     const onDelete = vi.fn()
     render(<BreadcrumbBar entry={baseEntry} {...defaultProps} onDelete={onDelete} />)
     const menu = await openOverflowMenu()
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Delete this note' }))
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move to Trash' }))
     expect(onDelete).toHaveBeenCalledOnce()
   })
 })
@@ -406,7 +406,7 @@ describe('BreadcrumbBar — standalone HTML actions', () => {
 
     const menu = await openOverflowMenu()
     expect(within(menu).getByRole('menuitem', { name: 'Export note as PDF' })).toBeInTheDocument()
-    expect(within(menu).getByRole('menuitem', { name: 'Delete this note' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: 'Move to Trash' })).toBeInTheDocument()
     expect(within(menu).queryByRole('menuitem', { name: 'Archive this note' })).not.toBeInTheDocument()
   })
 })
@@ -765,7 +765,7 @@ describe('BreadcrumbBar — action buttons always right-aligned', () => {
       const menu = await openOverflowMenu()
       const menuLabels = within(menu).getAllByRole('menuitem').map((item) => item.textContent)
       expect(menuLabels[0]).toBe('Git diff')
-      expect(menuLabels.slice(-3)).toEqual(['Copy note deeplink', 'Archive this note', 'Delete this note'])
+      expect(menuLabels.slice(-3)).toEqual(['Copy note deeplink', 'Archive this note', 'Move to Trash'])
     } finally {
       restoreMeasurement()
     }

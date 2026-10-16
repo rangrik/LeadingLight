@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, unlinkSync } from "node:fs";
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
@@ -12,6 +12,7 @@ import {
 	vaultCommandContext,
 } from "./vault-api-commands.ts";
 import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
+import { listTrash, moveToTrash, restoreFromTrash } from "./vault-api-trash.ts";
 
 function sendJson(
 	res: ServerResponse,
@@ -64,6 +65,30 @@ async function saveVaultContent(
 
 	mkdirSync(path.dirname(filePath), { recursive: true });
 	writeUtf8File(filePath, content);
+	sendJson(res, null);
+}
+
+// Like native create_note_content: never replaces an existing file.
+async function createVaultContent(
+	req: IncomingMessage,
+	res: ServerResponse,
+): Promise<void> {
+	const { path: filePath, content } = await readJsonBody<{
+		path?: string;
+		content?: string;
+	}>(req);
+	if (!filePath || content === undefined) {
+		sendJson(res, { error: "Missing path or content" }, 400);
+		return;
+	}
+	mkdirSync(path.dirname(filePath), { recursive: true });
+	try {
+		writeFileSync(filePath, content, { encoding: "utf-8", flag: "wx" });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+		sendJson(res, { error: `File already exists: ${filePath}` }, 409);
+		return;
+	}
 	sendJson(res, null);
 }
 
@@ -162,6 +187,13 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 		},
 	],
 	[
+		"create",
+		{
+			write: ({ req, res }) => createVaultContent(req, res),
+			fallback: "Create failed",
+		},
+	],
+	[
 		"rename",
 		{
 			write: ({ req, res }) => renameVaultNoteTitle(req, res),
@@ -176,8 +208,28 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 		},
 	],
 	["delete", { write: deleteVaultNote, fallback: "Delete failed" }],
+	["trash-move", { write: (request) => runTrashRoute(request, (body) => moveToTrash(body.vault_path, body.paths ?? [])), fallback: "Trash failed" }],
+	["trash-list", { write: (request) => runTrashRoute(request, (body) => listTrash(body.vault_path)), fallback: "Trash failed" }],
+	["trash-restore", { write: (request) => runTrashRoute(request, (body) => restoreFromTrash(body.vault_path, body.ids ?? [])), fallback: "Restore failed" }],
 	["command", { write: executeVaultCommand, fallback: "Vault command failed" }],
 ]);
+interface TrashBody {
+	vault_path: string;
+	paths?: string[];
+	ids?: string[];
+}
+async function runTrashRoute(
+	{ req, res }: VaultRequest,
+	run: (body: TrashBody) => unknown,
+): Promise<void> {
+	const body = await readJsonBody<TrashBody>(req);
+	// A vault that is not on disk falls back to the in-memory browser mock.
+	if (!body.vault_path || !pathExists(body.vault_path)) {
+		sendJson(res, { error: "Missing vault path" }, 400);
+		return;
+	}
+	sendJson(res, run(body));
+}
 async function deleteVaultNote({ req, res }: VaultRequest): Promise<void> {
 	const { path: filePath } = await readJsonBody<{ path?: string }>(req);
 	if (!filePath) {

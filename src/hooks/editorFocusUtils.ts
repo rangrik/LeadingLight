@@ -106,11 +106,22 @@ function selectTitleWithRetries(
   requestAnimationFrame(() => selectTitleWithRetries(editor, t0, attempt + 1))
 }
 
+function placeCursorAtEnd(editor: FocusableEditor): void {
+  const lastBlockId = editor.document?.at(-1)?.id
+  if (typeof lastBlockId !== 'string') return
+  try {
+    editor.setTextCursorPosition?.(lastBlockId, 'end')
+  } catch (error) {
+    console.warn('[editor] Could not place the caret at the end:', error)
+  }
+}
+
 export function focusEditorWithRetries(
   editor: FocusableEditor,
   selectTitle: boolean,
   t0: number | undefined,
   attempt = 0,
+  cursorAtEnd = false,
 ): void {
   const scope = editorScopeForEditor(editor)
   if (scope instanceof HTMLElement && scope.dataset.paneActive === 'false') return
@@ -118,9 +129,10 @@ export function focusEditorWithRetries(
   editor.focus()
   const hasFocus = ensureEditableFocus(editor)
   if (!hasFocus && attempt < MAX_FOCUS_ATTEMPTS) {
-    requestAnimationFrame(() => focusEditorWithRetries(editor, selectTitle, t0, attempt + 1))
+    requestAnimationFrame(() => focusEditorWithRetries(editor, selectTitle, t0, attempt + 1, cursorAtEnd))
     return
   }
+  if (hasFocus && cursorAtEnd) placeCursorAtEnd(editor)
   if (!selectTitle) {
     logFocusTiming(t0, 'focus')
     return

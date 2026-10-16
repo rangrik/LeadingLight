@@ -32,7 +32,22 @@ interface VaultApiGetRequest {
 
 interface VaultApiPostRequest {
   body: Record<string, unknown>
-  kind: 'delete' | 'rename' | 'rename-filename' | 'save'
+  kind: 'create' | 'delete' | 'rename' | 'rename-filename' | 'save' | 'trash-list' | 'trash-move' | 'trash-restore'
+}
+
+const TRASH_COMMANDS = new Map<string, { kind: VaultApiPostRequest['kind'], key?: 'paths' | 'ids' }>([
+  ['move_to_local_trash', { kind: 'trash-move', key: 'paths' }],
+  ['list_local_trash', { kind: 'trash-list' }],
+  ['restore_from_local_trash', { kind: 'trash-restore', key: 'ids' }],
+])
+
+/** Local Trash for synthetic fixture vaults, through the dev server. */
+function buildTrashRequest(cmd: string, payload: Record<string, unknown>): VaultApiRequest | null {
+  const route = TRASH_COMMANDS.get(cmd)
+  if (!route || !payload.vaultPath) return null
+  const body: Record<string, unknown> = { vault_path: payload.vaultPath }
+  if (route.key) body[route.key] = payload[route.key]
+  return { kind: route.kind, body }
 }
 
 type VaultApiRequest = VaultApiGetRequest | VaultApiPostRequest
@@ -121,6 +136,12 @@ function buildPostRequest(cmd: string, args: Record<string, unknown>): VaultApiR
       path: payload.path,
     })
   }
+  if (cmd === 'create_note_content') {
+    return buildRequiredPathPostRequest('create', payload, {
+      content: payload.content,
+      path: payload.path,
+    })
+  }
   if (cmd === 'rename_note') {
     return buildRequiredPostRequest('rename', payload.old_path, {
       new_title: payload.new_title,
@@ -136,7 +157,7 @@ function buildPostRequest(cmd: string, args: Record<string, unknown>): VaultApiR
     })
   }
   if (cmd === 'delete_note') return buildRequiredPathPostRequest('delete', payload, { path: payload.path })
-  return null
+  return buildTrashRequest(cmd, payload)
 }
 
 function buildVaultApiRequest(cmd: string, args?: Record<string, unknown>): VaultApiRequest | null {
@@ -156,8 +177,15 @@ function buildFetchOptions(request: { body: Record<string, unknown> }): RequestI
   }
 }
 
+/** Raised for a refused write so the caller sees it instead of a silent in-memory fallback. */
+class VaultApiRefusal extends Error {}
+
 async function fetchVaultApiResponse(request: VaultApiRequest) {
   const res = await fetchVaultApiRequest(request)
+  if (res.status === 409) {
+    const body = await res.json().catch(() => ({})) as { error?: string }
+    throw new VaultApiRefusal(body.error ?? 'File already exists')
+  }
   if (!res.ok) return undefined
   return res.json()
 }
@@ -187,6 +215,7 @@ function fetchVaultApiGetRequest(request: VaultApiGetRequest): Promise<Response>
 }
 
 function fetchVaultApiPostRequest(request: VaultApiPostRequest): Promise<Response> {
+  if (request.kind.startsWith('trash-') || request.kind === 'create') return fetch(`/api/vault/${request.kind}`, buildFetchOptions(request))
   if (request.kind === 'delete') return fetch('/api/vault/delete', buildFetchOptions(request))
   if (request.kind === 'rename') return fetch('/api/vault/rename', buildFetchOptions(request))
   if (request.kind === 'rename-filename') return fetch('/api/vault/rename-filename', buildFetchOptions(request))
@@ -211,6 +240,7 @@ export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>
     if (cmd === 'validate_note_content') return (data.content === args?.content) as T
     return data as T
   } catch (err) {
+    if (err instanceof VaultApiRefusal) throw err
     console.warn(`[mock-tauri] Vault API call failed for ${cmd}, falling back to mock:`, err)
     return undefined
   }

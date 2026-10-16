@@ -23,3 +23,18 @@ The native coordinator tests cover acknowledgments from multiple windows, stale 
 Editor/shutdown integration tests use the real composition, rich-buffer and native-close hooks to verify that active or unreconciled composition and serialization errors cannot acknowledge success, and that retry publishes the retained text. Additional tests cover autosave deadlines during composition, unrelated metadata renders, per-editor barrier isolation and safe timer/cleanup failures.
 
 Native acceptance uses synthetic notes: type into each pane and close immediately, relaunch and verify both files; repeat with Cmd+Q. A simulated save failure or stalled renderer must keep the window open and report the error.
+
+## Local Trash barrier
+
+Moving a page to Trash first holds ordinary writes for that document. The transaction waits
+for tracked editor imports, flushes rich-text buffers, drains held saves, and settles any initial
+name change before calling the native move. The move records confirmed IDs before checking for
+late editor changes. A changed or uncertain page remains editable; its older saved copy remains
+recoverable in Trash. Only an unchanged, confirmed move discards the held write and closes its page.
+Other panes and the split layout remain intact.
+
+Quit and workspace switching synchronously stop new Trash requests, wait for the queue to settle,
+and then flush the current pane owners. A canceled or failed transition permits editing again.
+Queued requests and Undo retain their original vault session; leaving and returning to the same
+folder does not reactivate an old Undo action. These barriers complement the native transaction
+contract in [ADR 003](ADR-003-local-trash.md).

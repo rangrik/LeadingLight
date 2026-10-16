@@ -12,6 +12,8 @@ export interface FocusEventDetail {
   t0?: number
   selectTitle?: boolean
   path?: string | null
+  /** Places the caret after the last block, ready to continue writing. */
+  cursorAtEnd?: boolean
 }
 
 interface PendingFocusRequest {
@@ -49,12 +51,13 @@ interface EditorFocusContext {
   editorMountedRef: React.RefObject<boolean>,
   selectTitle: boolean,
   t0: number | undefined,
+  cursorAtEnd?: boolean,
 }
 
 function scheduleEditorFocus(context: EditorFocusContext, onFocused?: () => void): void {
-  const { editor, editorMountedRef, selectTitle, t0 } = context
+  const { editor, editorMountedRef, selectTitle, t0, cursorAtEnd } = context
   const focus = () => {
-    focusEditorWithRetries(editor, selectTitle, t0)
+    focusEditorWithRetries(editor, selectTitle, t0, 0, cursorAtEnd)
     if (editorHasFocus()) onFocused?.()
   }
   if (editorMountedRef.current) {
@@ -179,7 +182,7 @@ export function useEditorFocus(
       const t0 = detail?.t0
       const selectTitle = detail?.selectTitle ?? false
       const targetPath = detail?.path ?? null
-      const context = { editor, editorMountedRef, selectTitle, t0 }
+      const context = { editor, editorMountedRef, selectTitle, t0, cursorAtEnd: detail?.cursorAtEnd }
 
       if (!targetPath) {
         scheduleEditorFocus(context)

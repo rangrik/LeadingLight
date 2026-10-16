@@ -28,6 +28,7 @@ interface AppCommandsConfig {
   onQuickOpen: () => void
   onCommandPalette: () => void
   onSearch: () => void
+  onOpenToday?: () => void
   onFindInNote?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -149,6 +150,7 @@ type CommandRegistrySelectionState = Pick<
   | 'onZoomReset'
   | 'zoomLevel'
   | 'onSelect'
+  | 'onOpenToday'
   | 'onRenameFolder'
   | 'onDeleteFolder'
   | 'onRevealSelectedFolder'
@@ -308,6 +310,7 @@ function createKeyboardActions(
     onToggleFavorite: config.onToggleFavorite,
     onToggleOrganized: config.onToggleOrganized,
     onOpenInNewWindow: config.onOpenInNewWindow,
+    onOpenToday: config.onOpenToday,
     activeTabPathRef: config.activeTabPathRef,
     multiSelectionCommandRef: config.multiSelectionCommandRef,
   }
@@ -458,6 +461,7 @@ function createCommandRegistrySelectionConfig(
     onZoomReset: config.onZoomReset,
     zoomLevel: config.zoomLevel,
     onSelect: config.onSelect,
+    onOpenToday: config.onOpenToday,
     onRenameFolder: config.onRenameFolder,
     onDeleteFolder: config.onDeleteFolder,
     onRevealSelectedFolder: config.onRevealSelectedFolder,

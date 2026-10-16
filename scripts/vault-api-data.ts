@@ -384,6 +384,24 @@ function frontmatterPropertyValue(
 		: wikiLinkFreeString({ value: singleArrayValue });
 }
 
+/** Same rules as native `extract_outgoing_links`: body `[[target]]` / `[[target|label]]`, sorted, unique. */
+export function extractOutgoingLinks(body: string): string[] {
+	const links: string[] = [];
+	let from = 0;
+	while (from + 3 < body.length) {
+		const start = body.indexOf("[[", from);
+		if (start === -1) break;
+		const end = body.indexOf("]]", start + 2);
+		if (end === -1) break;
+		const inner = body.slice(start + 2, end);
+		const pipe = inner.indexOf("|");
+		const target = pipe === -1 ? inner : inner.slice(0, pipe);
+		if (target) links.push(target);
+		from = end + 2;
+	}
+	return [...new Set(links)].sort();
+}
+
 export function parseMarkdownFile(filePath: string): VaultEntry | null {
 	try {
 		const raw = readUtf8File(filePath);
@@ -435,7 +453,7 @@ export function parseMarkdownFile(filePath: string): VaultEntry | null {
 			sort: frontmatterString(fm, "sort"),
 			view: frontmatterString(fm, "view"),
 			visible: frontmatterBool(fm, "visible"),
-			outgoingLinks: [],
+			outgoingLinks: extractOutgoingLinks(content),
 			properties: frontmatterProperties(fm),
 		};
 	} catch {

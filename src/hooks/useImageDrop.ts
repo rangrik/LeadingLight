@@ -6,6 +6,7 @@ import { isTauri } from '../mock-tauri'
 import { cleanupTauriEventListeners } from '../utils/tauriEventCleanup'
 import { attachmentAssetUrlFromPath } from '../utils/vaultAttachments'
 import { createImageDropClaim } from '../utils/imageDropClaim'
+import { trackEditorWork } from '../leadinglight/editorWork'
 
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif']
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'tiff']
@@ -246,11 +247,11 @@ function insertHtmlDroppedImages({
       continue
     }
     const reportFailure = reportCopyFailure(file.name, onImageImportError)
-    void uploadImageFile(file, vaultPath).then((result) => {
+    void trackEditorWork(uploadImageFile(file, vaultPath).then((result) => {
       const url = imageUrlFromUploadResult(result)
       if (url) onImageUrl(url)
       else reportFailure()
-    }, reportFailure)
+    }, reportFailure))
   }
 }
 
@@ -275,7 +276,7 @@ function insertDroppedImages({
   if (!vaultPath || !onImageUrl) return
 
   for (const sourcePath of imagePaths.filter(isImagePath)) {
-    void copyImageToVault({ sourcePath, vaultPath }).then(onImageUrl, reportCopyFailure(filenameFromPath(sourcePath), onImageImportError))
+    void trackEditorWork(copyImageToVault({ sourcePath, vaultPath }).then(onImageUrl, reportCopyFailure(filenameFromPath(sourcePath), onImageImportError)))
   }
 }
 

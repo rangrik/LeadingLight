@@ -309,6 +309,18 @@
         "accelerator": "CmdOrCtrl+Right"
       }
     },
+    "goToday": {
+      "id": "go-today",
+      "route": { "kind": "handler", "handler": "onOpenToday" },
+      "menuOwned": false,
+      "shortcut": {
+        "combo": "command-or-ctrl-shift",
+        "key": "d",
+        "code": "KeyD",
+        "display": "⌘⇧D",
+        "accelerator": "CmdOrCtrl+Shift+D"
+      }
+    },
     "goAllNotes": {
       "id": "go-all-notes",
       "route": { "kind": "filter", "value": "all" },

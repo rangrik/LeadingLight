@@ -35,6 +35,10 @@ interface EditorRightPanelProps {
   onToggleAIChat?: () => void
   onToggleTableOfContents?: () => void
   onNavigateWikilink: (target: string) => void
+  onOpenEntry?: (entry: VaultEntry) => Promise<boolean>
+  revealBacklinks?: boolean
+  onBacklinksRevealed?: () => void
+  backlinksEmptyLabel?: string
   onViewCommitDiff: (commitHash: string) => Promise<void>
   onUpdateFrontmatter?: (
     path: string,
@@ -206,11 +210,11 @@ export function EditorRightPanel(options: EditorRightPanelProps) {
 }
 
 function renderExpandedInspector(options: EditorRightPanelProps) {
-  const { inspectorCollapsed, inspectorWidth, inspectorEntry, inspectorContent, entries, gitHistory, vaultPath, onToggleInspector, onNavigateWikilink, onViewCommitDiff, onUpdateFrontmatter, onDeleteProperty, onAddProperty, onCreateMissingType, onCreateAndOpenNote, onChangeWorkspace, onInitializeProperties, onToggleRawEditor, workspaces, locale } = options
+  const { inspectorCollapsed, inspectorWidth, inspectorEntry, inspectorContent, entries, gitHistory, vaultPath, onToggleInspector, onNavigateWikilink, onOpenEntry, revealBacklinks, onBacklinksRevealed, backlinksEmptyLabel, onViewCommitDiff, onUpdateFrontmatter, onDeleteProperty, onAddProperty, onCreateMissingType, onCreateAndOpenNote, onChangeWorkspace, onInitializeProperties, onToggleRawEditor, workspaces, locale } = options
   const currentInspectorEntry = resolveInspectorEntry(inspectorEntry, entries)
   return (
     <div className="shrink-0 flex flex-col min-h-0" style={{ width: inspectorWidth, height: '100%' }}>
-      <Inspector collapsed={inspectorCollapsed} onToggle={onToggleInspector} entry={currentInspectorEntry} content={inspectorContent} entries={entries} gitHistory={gitHistory} vaultPath={vaultPath} onNavigate={onNavigateWikilink} onViewCommitDiff={onViewCommitDiff} onUpdateFrontmatter={onUpdateFrontmatter} onDeleteProperty={onDeleteProperty} onAddProperty={onAddProperty} onCreateMissingType={onCreateMissingType} onCreateAndOpenNote={onCreateAndOpenNote} onChangeWorkspace={onChangeWorkspace} onInitializeProperties={onInitializeProperties} onToggleRawEditor={onToggleRawEditor} workspaces={workspaces} locale={locale} />
+      <Inspector collapsed={inspectorCollapsed} onToggle={onToggleInspector} entry={currentInspectorEntry} content={inspectorContent} entries={entries} gitHistory={gitHistory} vaultPath={vaultPath} onNavigate={onNavigateWikilink} onOpenEntry={onOpenEntry} revealBacklinks={revealBacklinks} onBacklinksRevealed={onBacklinksRevealed} backlinksEmptyLabel={backlinksEmptyLabel} onViewCommitDiff={onViewCommitDiff} onUpdateFrontmatter={onUpdateFrontmatter} onDeleteProperty={onDeleteProperty} onAddProperty={onAddProperty} onCreateMissingType={onCreateMissingType} onCreateAndOpenNote={onCreateAndOpenNote} onChangeWorkspace={onChangeWorkspace} onInitializeProperties={onInitializeProperties} onToggleRawEditor={onToggleRawEditor} workspaces={workspaces} locale={locale} />
     </div>
   )
 }

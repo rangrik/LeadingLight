@@ -124,6 +124,7 @@ interface CommandRegistryConfig {
   onZoomReset: () => void
   zoomLevel: number
   onSelect: (sel: SidebarSelection) => void
+  onOpenToday?: () => void
   onRenameFolder?: () => void
   onDeleteFolder?: () => void
   onRevealSelectedFolder?: () => void
@@ -162,7 +163,7 @@ export function useCommandRegistry(config: CommandRegistryConfig): import('./com
     selectedViewName, onMoveSelectedViewUp, onMoveSelectedViewDown, canMoveSelectedViewUp, canMoveSelectedViewDown,
     activeNoteModified,
     onZoomIn, onZoomOut, onZoomReset, zoomLevel,
-    onSelect, onRenameFolder, onDeleteFolder, onRevealSelectedFolder, onCopySelectedFolderPath,
+    onSelect, onOpenToday, onRenameFolder, onDeleteFolder, onRevealSelectedFolder, onCopySelectedFolderPath,
     showInbox,
     onGoBack, onGoForward, canGoBack, canGoForward,
     onCheckForUpdates, onCreateType,
@@ -201,6 +202,7 @@ export function useCommandRegistry(config: CommandRegistryConfig): import('./com
   const navigationCommands = useMemo(() => buildNavigationCommands({
     onQuickOpen,
     onSelect,
+    onOpenToday,
     selection,
     onRenameFolder,
     onDeleteFolder,
@@ -212,7 +214,7 @@ export function useCommandRegistry(config: CommandRegistryConfig): import('./com
     canGoBack,
     canGoForward,
   }), [
-    onQuickOpen, onSelect, selection, onRenameFolder, onDeleteFolder,
+    onQuickOpen, onSelect, onOpenToday, selection, onRenameFolder, onDeleteFolder,
     onRevealSelectedFolder, onCopySelectedFolderPath, showInbox,
     onGoBack, onGoForward, canGoBack, canGoForward,
   ])

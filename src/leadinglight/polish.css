@@ -45,6 +45,11 @@
 .ll-save-state[data-state="unsaved"],
 .ll-save-state[data-state="error"] { opacity: 1; color: var(--muted-foreground); }
 
+/* Backlinks count: quiet, and quieter still at zero. */
+.ll-backlinks-count { height: 26px; gap: 4px; padding-inline: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+.ll-backlinks-count[data-count="0"] { opacity: 0.6; }
+.ll-backlinks-count:hover, .ll-backlinks-count:focus-visible { color: var(--foreground); opacity: 1; }
+
 @media (prefers-reduced-motion: reduce) {
   .ll-pane-separator, .ll-page-picker > svg, .ll-save-state { transition: none; }
 }

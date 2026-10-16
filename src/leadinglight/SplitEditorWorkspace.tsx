@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type MutableRefObject, type PointerEvent } from 'react'
-import { Columns, Rows, X, CaretDown, Plus, DotsSixVertical } from '@phosphor-icons/react'
+import { Columns, Rows, X, CaretDown, Plus, DotsSixVertical, ArrowBendUpLeft } from '@phosphor-icons/react'
 import { LazyEditor } from '../components/LazyEditor'
+import { getInspectorLinkSummary } from '../components/inspector/useInspectorData'
+import type { VaultEntry } from '../types'
 import type { EditorProps } from '../components/Editor'
 import { Button } from '../components/ui/button'
 import { QuickOpenPalette } from '../components/QuickOpenPalette'
@@ -47,6 +49,18 @@ export function SplitEditorWorkspace(props: Props) {
   const locale = props.locale ?? 'en'
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
   const activate = (pane: PaneId) => { activeRef.current = pane; workspace.focusPane(pane) }
+  // Backlinks: the pane asking first becomes active, so the source opens there and nowhere else.
+  const [revealPane, setRevealPane] = useState<PaneId | null>(null)
+  const clearReveal = useCallback(() => setRevealPane(null), [])
+  const showBacklinks = (pane: PaneId) => {
+    activate(pane)
+    setRevealPane(pane)
+    if (props.inspectorCollapsed) props.onToggleInspector()
+  }
+  const openBacklink = (pane: PaneId, entry: VaultEntry) => {
+    activate(pane)
+    return workspace.openNoteWhenLoaded(entry)
+  }
   const closePicker = useCallback(() => {
     setPickerPane(null)
     if (returnPickerFocusRef.current) pickerTriggerRef.current?.focus()
@@ -145,6 +159,8 @@ export function SplitEditorWorkspace(props: Props) {
         const path = workspace.paths[pane]
         const tab = props.tabs.find(item => item.entry.path === path)
         const active = workspace.activePane === pane
+        const backlinkCount = tab ? getInspectorLinkSummary(tab.entry, props.entries).backlinks.length : 0
+        const backlinkLabel = translate(locale, 'leadinglight.backlinks.show', { count: backlinkCount })
         return <Fragment key={pane}>
           {index === 1 && <div className="ll-pane-separator" role="separator" tabIndex={0}
             aria-label={t('leadinglight.split.resize')} aria-orientation={workspace.orientation === 'horizontal' ? 'vertical' : 'horizontal'}
@@ -188,6 +204,8 @@ export function SplitEditorWorkspace(props: Props) {
                   setPickerPane(pane)
                 }}>{tab && <DotsSixVertical className="ll-page-grip" aria-hidden="true" />}<span>{tab?.entry.title || t('leadinglight.split.choose')}</span><CaretDown /></Button>
               {tab && path && <span className="ll-save-state" data-state={unsavedPaths.has(path) ? 'unsaved' : 'saved'} role="status">{t(unsavedPaths.has(path) ? 'leadinglight.split.unsaved' : 'leadinglight.split.saved')}</span>}
+              {tab && <Button variant="ghost" size="sm" className="ll-backlinks-count" data-count={backlinkCount} aria-label={backlinkLabel} title={backlinkLabel}
+                onClick={() => showBacklinks(pane)}><ArrowBendUpLeft aria-hidden="true" />{backlinkCount}</Button>}
               <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.create')} title={t('leadinglight.split.create')} onClick={() => { activate(pane); props.onCreateNote?.() }}><Plus /></Button>
               {workspace.split && <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.close')} title={t('leadinglight.split.close')} onClick={() => { void workspace.closePane(pane).catch(() => {}) }}><X /></Button>}
             </div>
@@ -197,7 +215,10 @@ export function SplitEditorWorkspace(props: Props) {
               pendingCommitDiffRequest={active ? props.pendingCommitDiffRequest : undefined}
               vaultPath={vaultPathForEntry(tab.entry, props.vaultPath ?? '')}
               onGoBack={workspace.goBack} onGoForward={workspace.goForward} canGoBack={workspace.canGoBack} canGoForward={workspace.canGoForward}
-              onNavigateWikilink={target => { activate(pane); props.onNavigateWikilink(target) }} />
+              onNavigateWikilink={target => { activate(pane); props.onNavigateWikilink(target) }}
+              onOpenEntry={entry => openBacklink(pane, entry)}
+              revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
+              backlinksEmptyLabel={t('inspector.backlinks.empty')} />
               : <div className="ll-pane-empty"><p>{t('leadinglight.split.empty')}</p><span>{t('leadinglight.split.emptyHint')}</span><Button variant="outline" onClick={() => { activate(pane); props.onCreateNote?.() }}>{t('leadinglight.split.create')}</Button></div>}
           </section>
         </Fragment>

@@ -46,6 +46,8 @@ export function useEditorSave(options: EditorSaveConfig) {
   const pending = useRef(new Map<string, PendingContent>())
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const inFlight = useRef(new Map<string, Promise<boolean>>())
+  // Pages being moved to Trash: only explicit drains write them, so nothing recreates a moved file.
+  const held = useRef(new Set<string>())
   const scopeKey = persistenceScopeKey(options.persistenceScope)
   const scopeRef = useRef(scopeKey)
   const t = useMemo(() => createTranslator(options.locale ?? 'en'), [options.locale])
@@ -86,9 +88,11 @@ export function useEditorSave(options: EditorSaveConfig) {
       cancelTimer(path)
     }
   }, [cancelTimer, currentPath, scopeKey])
-  const flushPath = useCallback(async function flushDocument(path: string, drain = true): Promise<boolean> {
+  const flushPath = useCallback(async function flushDocument(path: string, drain = true, force = false): Promise<boolean> {
     cancelTimer(path)
     if (optionsRef.current.canPersist === false) return false
+    // A page moving to Trash is written only by the move's own drain; its text stays pending meanwhile.
+    if (!force && (held.current.has(path) || held.current.has(currentPath(path)))) return false
     const lane = currentPath(path)
     const existing = [...inFlight.current].find(([key]) => currentPath(key) === lane)?.[1]
     if (existing) {
@@ -97,7 +101,7 @@ export function useEditorSave(options: EditorSaveConfig) {
       const stillDebouncing = [...timers.current.keys()].some(key => currentPath(key) === lane)
       // An autosave whose idle timer already expired waits behind the older write.
       // Only a newer, still-running timer may defer the next snapshot again.
-      return findPending(path) && (drain || !stillDebouncing) ? flushDocument(path, drain) : saved
+      return findPending(path) && (drain || !stillDebouncing) ? flushDocument(path, drain, force) : saved
     }
     const item = findPending(path)
     if (!item) return false
@@ -123,13 +127,17 @@ export function useEditorSave(options: EditorSaveConfig) {
     try { saved = await promise } finally {
       if (inFlight.current.get(lane) === promise) inFlight.current.delete(lane)
     }
-    return drain && findPending(path) ? flushDocument(path, drain) : saved
+    return drain && findPending(path) ? flushDocument(path, drain, force) : saved
   }, [cancelTimer, currentPath, findPending, saveNote])
   const savePendingForPath = useCallback((path: string) => flushPath(path), [flushPath])
+  /** The Trash move's own drain: writes a held page's latest text. */
+  const drainHeld = useCallback((path: string) => flushPath(path, true, true), [flushPath])
+  const isHeld = useCallback((path: string) => held.current.has(path) || held.current.has(currentPath(path)), [currentPath])
   const savePending = useCallback(async () => {
     let saved = false
     // Await every lane even if one fails: the other page must still reach disk.
-    const results = await Promise.allSettled([...pending.current.keys()].map(path => savePendingForPath(path)))
+    const lanes = [...pending.current.keys()].filter(path => !isHeld(path))
+    const results = await Promise.allSettled(lanes.map(path => savePendingForPath(path)))
     let failure: unknown
     for (const result of results) {
       if (result.status === 'fulfilled') saved = result.value || saved
@@ -137,19 +145,13 @@ export function useEditorSave(options: EditorSaveConfig) {
     }
     if (failure) throw failure
     return saved
-  }, [savePendingForPath])
+  }, [isHeld, savePendingForPath])
   const showFailure = useCallback((error: unknown) => {
     const message = errorMessage(error)
     const invalid = /os error 123|filename, directory name, or volume label syntax is incorrect|path is invalid on this platform/i.test(message)
     optionsRef.current.setToastMessage(invalid ? t('save.error.invalidPath') : t('save.error.failed', { error: message }))
   }, [t])
-  const handleContentChange = useCallback((path: string, content: string) => {
-    const target = currentPath(path)
-    if (!canWritePathToVault(target, optionsRef.current.persistenceScope ?? '')) return
-    const old = findPending(path)
-    const key = old?.[0] ?? target
-    pending.current.set(key, { path: target, content })
-    updateTabs(target, content)
+  const scheduleAutosave = useCallback((key: string) => {
     cancelTimer(key)
     if (optionsRef.current.canPersist === false) return
     timers.current.set(key, setTimeout(() => {
@@ -158,7 +160,41 @@ export function useEditorSave(options: EditorSaveConfig) {
         if (saved) optionsRef.current.onAfterSave?.()
       }).catch(error => { console.error('Auto-save failed:', error); showFailure(error) })
     }, AUTO_SAVE_DEBOUNCE_MS))
-  }, [cancelTimer, currentPath, findPending, flushPath, showFailure, updateTabs])
+  }, [cancelTimer, flushPath, showFailure])
+  const handleContentChange = useCallback((path: string, content: string) => {
+    const target = currentPath(path)
+    if (!canWritePathToVault(target, optionsRef.current.persistenceScope ?? '')) return
+    const old = findPending(path)
+    const key = old?.[0] ?? target
+    pending.current.set(key, { path: target, content })
+    updateTabs(target, content)
+    scheduleAutosave(key)
+  }, [currentPath, findPending, scheduleAutosave, updateTabs])
+  const holdAutosave = useCallback((paths: readonly string[]) => {
+    for (const path of paths) {
+      held.current.add(path)
+      held.current.add(currentPath(path))
+    }
+  }, [currentPath])
+  /**
+   * `discard` drops text already copied to Trash (the caller checked nothing newer arrived);
+   * `resume` saves held text again; `release` only lifts the hold.
+   */
+  const releaseAutosave = useCallback((paths: readonly string[], action: 'discard' | 'resume' | 'release') => {
+    for (const path of paths) {
+      held.current.delete(path)
+      held.current.delete(currentPath(path))
+      const item = findPending(path)
+      if (!item || action === 'release') continue
+      if (action === 'discard') {
+        cancelTimer(path)
+        pending.current.delete(item[0])
+      } else {
+        scheduleAutosave(item[0])
+      }
+    }
+  }, [cancelTimer, currentPath, findPending, scheduleAutosave])
+  const hasPendingWrite = useCallback((path: string) => !!findPending(path) || [...inFlight.current.keys()].some(key => currentPath(key) === currentPath(path)), [currentPath, findPending])
   const handleSave = useCallback(async (fallback?: PendingContent): Promise<boolean> => {
     cancelTimer()
     const config = optionsRef.current
@@ -170,7 +206,7 @@ export function useEditorSave(options: EditorSaveConfig) {
     try {
       const hadPendingFallback = fallback ? !!findPending(fallback.path) : false
       let saved = await savePending()
-      if (fallback && !hadPendingFallback && !saved) {
+      if (fallback && !hadPendingFallback && !saved && !isHeld(fallback.path)) {
         pending.current.set(fallback.path, fallback)
         saved = await savePendingForPath(fallback.path)
       }
@@ -178,6 +214,6 @@ export function useEditorSave(options: EditorSaveConfig) {
       config.onAfterSave?.()
       return true
     } catch (error) { console.error('Save failed:', error); showFailure(error); return false }
-  }, [cancelTimer, findPending, savePending, savePendingForPath, showFailure, t])
-  return { handleContentChange, handleSave, savePending, savePendingForPath }
+  }, [cancelTimer, findPending, isHeld, savePending, savePendingForPath, showFailure, t])
+  return { handleContentChange, handleSave, savePending, savePendingForPath, holdAutosave, releaseAutosave, hasPendingWrite, drainHeld, isHeld }
 }

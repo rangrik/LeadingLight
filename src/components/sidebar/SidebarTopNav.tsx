@@ -1,4 +1,4 @@
-import { Archive, FileText, MagnifyingGlass, Tray } from '@phosphor-icons/react'
+import { Archive, CalendarDot, FileText, MagnifyingGlass, Trash, Tray } from '@phosphor-icons/react'
 import type { SidebarSelection } from '../../types'
 import { isSelectionActive, NavItem } from '../SidebarParts'
 import { translate, type AppLocale } from '../../lib/i18n'
@@ -7,6 +7,10 @@ interface SidebarTopNavProps {
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
   onSearch?: () => void
+  onOpenToday?: () => void
+  /** False until the vault listing and restored layout are ready. */
+  canOpenToday?: boolean
+  onOpenTrash?: () => void
   showInbox: boolean
   inboxCount: number
   activeCount: number
@@ -16,10 +20,11 @@ interface SidebarTopNavProps {
 }
 
 export function SidebarTopNav(options: SidebarTopNavProps) {
-  const { selection, onSelect, onSearch, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
+  const { selection, onSelect, onSearch, onOpenToday, canOpenToday = true, onOpenTrash, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
   return (
     <div className="border-b border-border" data-testid="sidebar-top-nav" style={{ padding: '4px 6px' }}>
       {onSearch && <NavItem icon={MagnifyingGlass} label={translate(locale, 'leadinglight.find.action')} onClick={onSearch} />}
+      {onOpenToday && <NavItem icon={CalendarDot} label={translate(locale, 'leadinglight.today.action')} onClick={onOpenToday} disabled={loading || !canOpenToday} />}
       {showInbox && (
         <NavItem
           icon={Tray}
@@ -64,6 +69,7 @@ export function SidebarTopNav(options: SidebarTopNavProps) {
         activeBadgeClassName="bg-primary text-primary-foreground"
         onClick={() => onSelect({ kind: 'filter', filter: 'archived' })}
       />
+      {onOpenTrash && <NavItem icon={Trash} label={translate(locale, 'leadinglight.trash.action')} onClick={onOpenTrash} />}
     </div>
   )
 }

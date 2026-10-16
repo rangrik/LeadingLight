@@ -30,6 +30,9 @@ interface SidebarProps {
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
   onSearch?: () => void
+  onOpenToday?: () => void
+  canOpenToday?: boolean
+  onOpenTrash?: () => void
   onSelectNote?: (entry: VaultEntry) => void
   onCreateType?: (type: string) => void
   onCreateNewType?: () => void
@@ -79,6 +82,9 @@ interface SidebarNavigationProps
   | 'selection'
   | 'onSelect'
   | 'onSearch'
+  | 'onOpenToday'
+  | 'canOpenToday'
+  | 'onOpenTrash'
   | 'onSelectFavorite'
   | 'onReorderFavorites'
   | 'views'
@@ -390,6 +396,9 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         selection={props.selection}
         onSelect={props.onSelect}
         onSearch={props.onSearch}
+        onOpenToday={props.onOpenToday}
+        canOpenToday={props.canOpenToday}
+        onOpenTrash={props.onOpenTrash}
         showInbox={props.showInbox ?? true}
         inboxCount={props.inboxCount ?? 0}
         activeCount={props.activeCount}
@@ -618,6 +627,9 @@ function SidebarRuntimeNavigation({
       selection={props.selection}
       onSelect={props.onSelect}
       onSearch={props.onSearch}
+      onOpenToday={props.onOpenToday}
+      canOpenToday={props.canOpenToday}
+      onOpenTrash={props.onOpenTrash}
       onSelectFavorite={props.onSelectFavorite}
       onReorderFavorites={props.onReorderFavorites}
       views={props.views}

@@ -1,0 +1,29 @@
+/* LeadingLight Trash dialog and move notice. Every rule targets .ll-* selectors only. */
+
+.ll-trash-dialog { max-width: 560px; }
+.ll-trash-list { display: flex; flex-direction: column; gap: 2px; max-height: min(60vh, 520px); overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.ll-trash-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 6px; border-radius: calc(var(--radius) - 2px); }
+.ll-trash-row:hover { background: var(--state-hover-subtle); }
+.ll-trash-icon { flex: none; margin-top: 2px; width: 16px; height: 16px; color: var(--muted-foreground); }
+.ll-trash-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; }
+.ll-trash-title { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }
+.ll-trash-meta { font-size: 12px; color: var(--muted-foreground); }
+.ll-trash-note { display: flex; align-items: flex-start; gap: 4px; font-size: 12px; color: var(--muted-foreground); }
+.ll-trash-note > svg { flex: none; margin-top: 2px; }
+.ll-trash-result { font-size: 12px; color: var(--foreground); }
+.ll-trash-result[data-phase="failed"] { color: var(--destructive); }
+.ll-trash-actions { flex: none; }
+.ll-trash-restored { display: flex; flex-direction: column; gap: 4px; }
+.ll-trash-restored-row { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: calc(var(--radius) - 2px); background: var(--state-hover-subtle); font-size: 13px; }
+.ll-trash-restored-row p { flex: 1; margin: 0; }
+.ll-trash-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 6px; font-size: 13px; color: var(--muted-foreground); }
+
+.ll-trash-notice {
+  position: fixed; bottom: 32px; left: 50%; z-index: 1100; display: flex; align-items: center; gap: 8px;
+  max-width: min(560px, calc(100vw - 32px)); padding: 8px 8px 8px 16px; border-radius: var(--radius);
+  background: var(--secondary); color: var(--foreground); font-size: 13px;
+  box-shadow: 0 4px 16px var(--shadow-dialog); transform: translateX(-50%);
+}
+.ll-trash-notice-text { display: flex; flex: 1; flex-direction: column; gap: 2px; }
+.ll-trash-activity { padding: 8px 16px; color: var(--muted-foreground); pointer-events: none; }
+.ll-trash-notice-text p { margin: 0; }

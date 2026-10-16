@@ -204,6 +204,29 @@ export function useSplitWorkspace(options: Options) {
     setOrder([0, 1])
     pendingPathsRef.current = [null, null]
   }, [focusPane])
+  /**
+   * Pages moved to Trash: a pane showing one is emptied and a pending open of one is canceled.
+   * Every other page, the layout and the other pane stay exactly as they are.
+   */
+  const closePages = useCallback((paths: readonly string[]) => {
+    const gone = (path: string | null) => !!path && paths.some(item => notePathsMatch(item, path))
+    for (const pane of [0, 1] as const) {
+      const controller = controllersRef.current[pane]
+      const shown = paneTabsRef.current[pane][0]?.entry.path ?? null
+      if (gone(pendingPathsRef.current[pane])) pendingPathsRef.current[pane] = null
+      if (gone(shown)) {
+        requestGenerationRef.current[pane] += 1
+        paneTabsRef.current[pane] = []
+        controller.closeAllTabs()
+      } else if (gone(controller.requestedActiveTabPathRef.current)) {
+        requestGenerationRef.current[pane] += 1
+        if (!shown || !controller.showLoadedEntry(shown)) controller.closeAllTabs()
+      }
+    }
+    activeTabPathRef.current = controllersRef.current[activePaneRef.current].activeTabPathRef.current
+  }, [])
+  /** Pages held by the panes right now, not as of the last render; flushes before quit use this. */
+  const currentTabs = useCallback(() => [...paneTabsRef.current[0], ...paneTabsRef.current[1]], [])
   const beforeNavigate = options.beforeNavigate
   const closePane = useCallback(async (pane: PaneId) => {
     const path = controllersRef.current[pane].activeTabPathRef.current
@@ -382,7 +405,8 @@ export function useSplitWorkspace(options: Options) {
 
   return { tabs, setTabs, activeTabPath, activeTabPathRef, requestedActiveTabPathRef, handleSelectNote,
     handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
-    splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, openSplit, resize, placePane, placeNote,
+    splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
+      currentTabs,
       openNoteWhenLoaded,
       // Recents may count visits only after this vault session's restore has settled.
       readyForVisits: options.restoreWorkspace === false || restoredEpoch === session.epoch,

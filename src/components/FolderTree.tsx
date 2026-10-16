@@ -240,7 +240,7 @@ export const FolderTree = memo(function FolderTree(options: FolderTreeProps) {
           <FolderContextMenu
             menu={contextMenu}
             menuRef={menuRef}
-            onDelete={handleDeleteFromMenu}
+            onDelete={onDeleteFolder ? handleDeleteFromMenu : undefined}
             onReveal={handleRevealFromMenu}
             onCopyPath={handleCopyPathFromMenu}
             onCreateFolder={handleCreateFolderFromMenu}

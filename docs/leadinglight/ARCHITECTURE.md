@@ -60,6 +60,25 @@ rename keeps that session, while replacing the document invalidates it. The spli
 records actual in-place renames with `renamedFrom`; similar headings or overlapping text in
 two separate files cannot establish document identity or bypass loading the destination file.
 
+## Daily pages, connections and recovery
+
+Milestone 3 adds three bounded integrations. `useTodayPage` computes a local calendar date on
+request and opens `Daily/YYYY-MM-DD.md`. `exactPage` creates that path exclusively before binding
+an editor, or reads the existing file after a refused create. An editable title does not determine
+the daily page's identity. Requests retain their original vault session and pane reservation.
+
+Inspector connection rows resolve through the same wikilink resolver as editor navigation.
+Known source entries open by exact path through the awaited split controller; duplicate titles
+cannot redirect a backlink click. The page-header count and Inspector rows share one cached
+summary. Relationship suggestions compare canonical keys while preserving the stored key and values.
+
+`useLocalTrash` coordinates page removal with the save queue and split controller. The native
+`leadinglight_trash` module owns file transactions, locking and interruption recovery. Trash is
+local to each vault and excluded from ordinary page discovery. See
+[ADR 003](ADR-003-local-trash.md) for the storage contract, collision handling and guarantee limits.
+The browser development bridge uses disposable filesystem fixtures to exercise the same visible
+flows; native transaction guarantees are qualified separately with Rust and native-app tests.
+
 ## Bringing in upstream changes
 
 1. Commit a clean, verified LeadingLight state. Fetch `upstream main --no-tags`.

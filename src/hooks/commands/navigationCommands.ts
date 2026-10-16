@@ -5,6 +5,7 @@ import type { SidebarSelection } from '../../types'
 interface NavigationCommandsConfig {
   onQuickOpen: () => void
   onSelect: (sel: SidebarSelection) => void
+  onOpenToday?: () => void
   selection?: SidebarSelection
   onRenameFolder?: () => void
   onDeleteFolder?: () => void
@@ -82,6 +83,7 @@ function buildBaseCommands(config: NavigationCommandsConfig): CommandAction[] {
   const {
     onQuickOpen,
     onSelect,
+    onOpenToday,
     onGoBack,
     onGoForward,
     canGoBack,
@@ -96,6 +98,7 @@ function buildBaseCommands(config: NavigationCommandsConfig): CommandAction[] {
     { id: 'go-pulse', label: 'Go to History', group: 'Navigation', keywords: ['activity', 'history', 'commits', 'git', 'feed'], enabled: true, execute: () => onSelect({ kind: 'filter', filter: 'pulse' }) },
     { id: 'go-back', label: 'Go Back', group: 'Navigation', shortcut: getAppCommandShortcutDisplay(APP_COMMAND_IDS.viewGoBack), keywords: ['previous', 'history', 'back'], enabled: !!canGoBack, execute: () => onGoBack?.() },
     { id: 'go-forward', label: 'Go Forward', group: 'Navigation', shortcut: getAppCommandShortcutDisplay(APP_COMMAND_IDS.viewGoForward), keywords: ['next', 'history', 'forward'], enabled: !!canGoForward, execute: () => onGoForward?.() },
+    ...(onOpenToday ? [{ id: 'go-today', label: 'Open Today', group: 'Navigation' as const, shortcut: getAppCommandShortcutDisplay(APP_COMMAND_IDS.goToday), keywords: ['today', 'daily', 'journal', 'date'], enabled: true, execute: onOpenToday }] : []),
   ]
 }
 

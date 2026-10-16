@@ -10,6 +10,7 @@ import {
   type ImageImportError,
   type UploadImageFileResult,
 } from '../hooks/useImageDrop'
+import { trackEditorWork } from '../leadinglight/editorWork'
 import { DEFAULT_AI_AGENT, type AiAgentId, type AiAgentReadiness } from '../lib/aiAgents'
 import type { AiTarget } from '../lib/aiTargets'
 import { translate, type AppLocale } from '../lib/i18n'
@@ -75,6 +76,13 @@ export interface EditorProps {
   isVaultLoading?: boolean
   entries: VaultEntry[]
   onNavigateWikilink: (target: string) => void
+  /** Opens a backlink source by its exact entry; resolves whether it is now shown. */
+  onOpenEntry?: (entry: VaultEntry) => Promise<boolean>
+  /** Scrolls the Inspector's backlinks into view once, then calls onBacklinksRevealed. */
+  revealBacklinks?: boolean
+  onBacklinksRevealed?: () => void
+  /** Shown under Backlinks when no other page lists this one. */
+  backlinksEmptyLabel?: string
   onUnsupportedAiPaste?: (message: string) => void
   onLoadDiff?: (path: string) => Promise<string>
   onLoadDiffAtCommit?: (path: string, commitHash: string) => Promise<string>
@@ -309,7 +317,7 @@ function useEditorSetup(options: EditorSetupParams) {
     domAttributes: RICH_EDITOR_BIDI_DOM_ATTRIBUTES,
     uploadFile: async (file: File) => {
       try {
-        return await uploadImageFile(file, vaultPathRef.current)
+        return await trackEditorWork(uploadImageFile(file, vaultPathRef.current))
       } catch (error) {
         return handleEditorImageUploadFailure(file, error, onImageImportErrorRef.current)
       }
@@ -528,6 +536,10 @@ function useEditorSetup(options: EditorSetupParams) {
       inspectorCollapsed: boolean
       onToggleInspector: () => void
       onNavigateWikilink: (target: string) => void
+      onOpenEntry?: (entry: VaultEntry) => Promise<boolean>
+      revealBacklinks?: boolean
+      onBacklinksRevealed?: () => void
+      backlinksEmptyLabel?: string
       handleEditorChange: () => void
       onToggleFavorite?: (path: string) => void
       onToggleOrganized?: (path: string) => void
@@ -613,6 +625,10 @@ function useEditorSetup(options: EditorSetupParams) {
       inspectorCollapsed,
       onToggleInspector,
       onNavigateWikilink,
+      onOpenEntry,
+      revealBacklinks,
+      onBacklinksRevealed,
+      backlinksEmptyLabel,
       handleEditorChange,
       onToggleFavorite,
       onToggleOrganized,
@@ -761,6 +777,10 @@ function useEditorSetup(options: EditorSetupParams) {
           onToggleAIChat={onToggleAIChat}
           onToggleTableOfContents={onToggleTableOfContents}
           onNavigateWikilink={onNavigateWikilink}
+          onOpenEntry={onOpenEntry}
+          revealBacklinks={revealBacklinks}
+          onBacklinksRevealed={onBacklinksRevealed}
+          backlinksEmptyLabel={backlinksEmptyLabel}
           onViewCommitDiff={handleViewCommitDiff}
           onUpdateFrontmatter={onUpdateFrontmatter}
           onDeleteProperty={onDeleteProperty}

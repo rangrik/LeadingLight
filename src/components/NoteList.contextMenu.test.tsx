@@ -109,7 +109,7 @@ describe('NoteList context menu', () => {
     clickBuildLaputaAction('Archive this note')
     expect(onBulkArchive).toHaveBeenCalledWith([mockEntries[0].path])
 
-    clickBuildLaputaAction('Delete this note')
+    clickBuildLaputaAction('Move to Trash')
     expect(onBulkDeletePermanently).toHaveBeenCalledWith([mockEntries[0].path])
   }, 20_000)
 

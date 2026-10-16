@@ -71,6 +71,7 @@ export interface AppCommandHandlers {
   onReloadVault?: () => void
   onRepairVault?: () => void
   onRestoreDeletedNote?: () => void
+  onOpenToday?: () => void
   activeTabPathRef: MutableRefObject<string | null>
   multiSelectionCommandRef?: MutableRefObject<NoteListMultiSelectionCommands | null>
 }
@@ -114,6 +115,7 @@ type SimpleHandlerKey = keyof Pick<
   | 'onRepairVault'
   | 'onOpenInNewWindow'
   | 'onRestoreDeletedNote'
+  | 'onOpenToday'
 >
 
 type ActiveTabHandlerKey = keyof Pick<
@@ -162,6 +164,7 @@ const SIMPLE_HANDLER_EXECUTORS: readonly [SimpleHandlerKey, SimpleHandlerExecuto
   ['onRepairVault', (handlers) => handlers.onRepairVault?.()],
   ['onOpenInNewWindow', (handlers) => handlers.onOpenInNewWindow?.()],
   ['onRestoreDeletedNote', (handlers) => handlers.onRestoreDeletedNote?.()],
+  ['onOpenToday', (handlers) => handlers.onOpenToday?.()],
 ]
 
 const ACTIVE_TAB_HANDLER_EXECUTORS: readonly [ActiveTabHandlerKey, ActiveTabHandlerExecutor][] = [

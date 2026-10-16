@@ -9,6 +9,7 @@ import {
 } from '../lib/gitignoredVisibilityEvents'
 import { resolveEntry } from '../utils/wikilink'
 import { useNoteCreation } from './useNoteCreation'
+import { useExactPageCreation, type ExactPageOutcome, type ExactPageRequest } from '../leadinglight/exactPage'
 import {
   useNoteRename,
   performRename,
@@ -790,6 +791,7 @@ function useRenamedNotePathResolver(onPathRenamed?: (oldPath: string, newPath: s
 
 interface NoteActionsResultParts {
   actionHistory: ActionHistoryController
+  createPageAt: (request: ExactPageRequest) => Promise<ExactPageOutcome>
   creation: ReturnType<typeof useNoteCreation>
   frontmatterActions: ReturnType<typeof useFrontmatterActionHandlers>
   handleNavigateWikilink: (target: string) => void
@@ -800,6 +802,7 @@ interface NoteActionsResultParts {
 
 function buildNoteActionsResult({
   actionHistory,
+  createPageAt,
   creation,
   frontmatterActions,
   handleNavigateWikilink,
@@ -813,6 +816,7 @@ function buildNoteActionsResult({
     handleNavigateWikilink,
     handleCreateNote: creation.handleCreateNote,
     createPage: creation.createPage,
+    createPageAt,
     handleCreateNoteImmediate: creation.handleCreateNoteImmediate,
     handleCreateNoteForRelationship: creation.handleCreateNoteForRelationship,
     handleCreateType: creation.handleCreateType,
@@ -941,6 +945,12 @@ export function useNoteActions(config: NoteActionsConfig) {
   })
   const updateTabContent = useTabContentUpdater(tabMgmt.setTabs)
   const creation = useNoteCreation(config, { openTabWithContent: tabMgmt.openTabWithContent, reserveOpen: tabMgmt.reserveOpen })
+  const createPageAt = useExactPageCreation({
+    addEntry: config.addEntry,
+    markInternalWrite: config.onInternalVaultWrite,
+    onNewNotePersisted: config.onNewNotePersisted,
+    reserveOpen: tabMgmt.reserveOpen,
+  })
   const rename = useConfiguredNoteRename({ config, handlePathRenamed, tabMgmt, updateTabContent })
   const handleNavigateWikilink = useWikilinkNavigation({ creation, entries, handleSelectNote, tabMgmt })
   const runFrontmatterOp = useFrontmatterRunner({
@@ -968,6 +978,7 @@ export function useNoteActions(config: NoteActionsConfig) {
 
   return buildNoteActionsResult({
     actionHistory,
+    createPageAt,
     creation,
     frontmatterActions,
     handleNavigateWikilink,

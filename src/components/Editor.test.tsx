@@ -380,7 +380,7 @@ describe('Editor', () => {
 
     expect(screen.getByRole('button', { name: 'Open the raw editor' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'More note actions' }))
-    expect(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Delete this note' })).toBeInTheDocument()
+    expect(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Move to Trash' })).toBeInTheDocument()
   })
 
   it('keeps editor chrome visible while active note content is loading', () => {
