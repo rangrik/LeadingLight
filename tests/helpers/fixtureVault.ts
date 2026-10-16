@@ -412,7 +412,7 @@ async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folde
         const resolvedPath = readCommandString(
           commandArgs,
           'path',
-          readCommandValue(commandArgs, 'vaultPath', resolvedVaultPath),
+          readCommandString(commandArgs, 'vaultPath', resolvedVaultPath),
         )
         const query = encodeURIComponent(readCommandString(commandArgs, 'query'))
         const mode = encodeURIComponent(readCommandString(commandArgs, 'mode', 'all'))
@@ -560,7 +560,11 @@ export async function openFixtureVault(
 async function installFixtureVaultDesktopBridge({ page }: FixturePageArgs): Promise<void> {
   await page.evaluate(installFixtureVaultDesktopBridgeInBrowser)
 
-  await page.waitForFunction(() => Boolean(window.__TAURI_INTERNALS__))
+  // Ready once the bridge's invoke entry point exists; the app declares no type for this global.
+  await page.waitForFunction(() => {
+    const internals = '__TAURI_INTERNALS__' in window ? window.__TAURI_INTERNALS__ : undefined
+    return typeof internals === 'object' && internals !== null && 'invoke' in internals && typeof internals.invoke === 'function'
+  })
 }
 
 /**
