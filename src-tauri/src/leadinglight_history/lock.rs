@@ -56,9 +56,18 @@ pub(super) struct CopyLock {
 
 impl CopyLock {
     pub(super) fn acquire(root: &Path) -> Result<Self, LockError> {
-        let deadline = Instant::now() + LOCK_WAIT;
+        Self::open(root, Some(Instant::now() + LOCK_WAIT))
+    }
+
+    /// One attempt and no waiting, so an ordinary save never stalls behind page history.
+    pub(super) fn try_acquire(root: &Path) -> Result<Self, LockError> {
+        Self::open(root, None)
+    }
+
+    fn open(root: &Path, deadline: Option<Instant>) -> Result<Self, LockError> {
+        let retry = || deadline.map_or(Err(LockError::Busy), wait_or_busy);
         while !claimed().insert(root.to_path_buf()) {
-            wait_or_busy(deadline)?;
+            retry()?;
         }
         let claim = Claim(root.to_path_buf());
         let base = real_folder(&root.join(STORE_DIR))?;
@@ -66,7 +75,7 @@ impl CopyLock {
         loop {
             match file.try_lock() {
                 Ok(()) => break,
-                Err(fs::TryLockError::WouldBlock) => wait_or_busy(deadline)?,
+                Err(fs::TryLockError::WouldBlock) => retry()?,
                 Err(fs::TryLockError::Error(error)) => return Err(unavailable(error)),
             }
         }
@@ -89,18 +98,21 @@ fn wait_or_busy(deadline: Instant) -> Result<(), LockError> {
 }
 
 /// A real folder only, created when missing: a linked store could write outside the vault.
-/// Its entry is synced, so an intent written inside it cannot be lost with the folder.
-fn real_folder(path: &Path) -> Result<PathBuf, LockError> {
-    match fs::create_dir(path) {
-        Err(error) if error.kind() != ErrorKind::AlreadyExists => return Err(unavailable(error)),
-        _ => {}
-    }
+/// A folder created here has its entry synced, so nothing written inside is lost with it.
+pub(super) fn real_folder(path: &Path) -> Result<PathBuf, LockError> {
+    let created = match fs::create_dir(path) {
+        Ok(()) => true,
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => false,
+        Err(error) => return Err(unavailable(error)),
+    };
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.is_dir() => {}
         _ => return Err(unavailable(format!("{} is not a folder", path.display()))),
     }
-    let parent = path.parent().unwrap_or(path);
-    NativePlatform.sync_dir(parent).map_err(unavailable)?;
+    if created {
+        let parent = path.parent().unwrap_or(path);
+        NativePlatform.sync_dir(parent).map_err(unavailable)?;
+    }
     Ok(path.to_path_buf())
 }
 

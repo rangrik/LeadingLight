@@ -1,14 +1,21 @@
 //! S0 safer saves: one immutable request per save, in-memory holds, and exact recovery.
-//! Native keeps no page text; only copy intents are written to disk.
+//! S1a adds automatic earlier versions, kept inside the vault's hidden history store.
 
 mod copy;
+pub(crate) mod history_outcome;
+#[cfg(all(test, unix))]
+mod history_tests;
+mod inventory;
 mod lock;
 pub(crate) mod outcome;
 mod page_write;
+mod policy;
 mod registry;
 mod resolve;
+mod retention;
 #[cfg(all(test, unix))]
 mod tests;
+mod versions;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,12 +24,13 @@ use sha2::{Digest as _, Sha256};
 
 use crate::vault::staged_file::STAGING_PREFIX;
 
-pub(crate) use copy::copy_draft;
+pub(crate) use copy::{copy_draft, copy_version};
 pub(crate) use outcome::OriginalRequest;
 pub(crate) use page_write::{check_save, legacy_save, save_page};
 pub(crate) use registry::Lease;
 use registry::{Digest, Registry};
 pub(crate) use resolve::{discard, release_with_copy};
+pub(crate) use versions::{health as history_health, list_locations, list_versions, read_version};
 
 static REGISTRY: Registry = Registry::new();
 

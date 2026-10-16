@@ -6,11 +6,13 @@ use std::io::ErrorKind;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 
+use super::history_outcome::HistoryNote;
 use super::outcome::{
     ConflictReason, FailedReason, HoldInfo, HoldKind, OriginalRequest, Refusal, SaveOutcome,
     SaveRequestState, Terminal,
 };
 use super::registry::{Admission, Digest, Hold, Lookup, Proof, Registry};
+use super::versions::{self, Captured};
 use super::{
     binding_digest, hex, page_key, remove_staging_folder, well_formed, PageTarget, VaultRoots,
     REGISTRY,
@@ -131,6 +133,14 @@ fn write(
     let Ok((staging, staged)) = staged_file::stage(path, content) else {
         return refused(Refusal::StageFailed);
     };
+    // After staging, so the page's own bytes already have their space. Optional and isolated:
+    // whatever happens here, the steps below run exactly as they would without it.
+    let history = versions::context(request, target).map(|context| {
+        (
+            versions::capture(&context, &original.bytes, content, platform),
+            context,
+        )
+    });
     platform.after_stage(path);
     let fingerprint = original.fingerprint();
     match fingerprint.recheck() {
@@ -146,7 +156,13 @@ fn write(
         }
     }
     match staged_file::publish(&original, staging, &staged, platform) {
-        Published::Committed { durable } => (committed(true, durable), None),
+        Published::Committed { durable } => {
+            let note = history.and_then(|(captured, context)| {
+                versions::remember_written(&context, content);
+                history_note(captured)
+            });
+            (committed_with(true, durable, note), None)
+        }
         Published::Failed => (
             SaveOutcome::Failed {
                 reason: FailedReason::Publish,
@@ -167,10 +183,21 @@ fn write(
 }
 
 fn committed(written: bool, durable: bool) -> SaveOutcome {
+    committed_with(written, durable, None)
+}
+
+fn committed_with(written: bool, durable: bool, history: Option<HistoryNote>) -> SaveOutcome {
     SaveOutcome::Committed {
         written,
         durable,
-        history: None,
+        history,
+    }
+}
+
+fn history_note(captured: Captured) -> Option<HistoryNote> {
+    match captured {
+        Captured::NotKept(reason) => Some(HistoryNote::NotKept { reason }),
+        _ => None,
     }
 }
 

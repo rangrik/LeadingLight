@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::history_outcome::HistoryNote;
+
 /// One save attempt, made by the frontend before invoke and never changed afterwards.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -96,11 +98,11 @@ pub enum ConflictReason {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum SaveOutcome {
-    /// `history` is S1's hook and is always null in S0.
+    /// `history` only ever reports a version that could not be kept; null makes no claim.
     Committed {
         written: bool,
         durable: bool,
-        history: Option<()>,
+        history: Option<HistoryNote>,
     },
     Refused(Refusal),
     /// A publish was attempted and the original is proven unchanged.
@@ -207,6 +209,14 @@ pub enum ResolutionOutcome {
 impl SaveOutcome {
     pub(crate) fn refused(refusal: Refusal) -> Self {
         Self::Refused(refusal)
+    }
+
+    /// The same result without its one-time history note: a replay or Check never repeats it.
+    pub(crate) fn without_note(mut self) -> Self {
+        if let Self::Committed { history, .. } = &mut self {
+            *history = None;
+        }
+        self
     }
 
     pub(crate) fn terminal(&self) -> Terminal {

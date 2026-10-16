@@ -314,7 +314,7 @@ impl Registry {
         let key = key.clone();
         let holds = hold.is_some();
         entry.state = State::Done {
-            outcome,
+            outcome: outcome.without_note(),
             key: Some(key.clone()),
             hold: hold.map(Box::new),
         };

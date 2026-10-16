@@ -9,11 +9,13 @@ use std::path::{Component, Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tempfile::TempPath;
 
+use super::history_outcome::{VersionCopyOutcome, VersionCopyRefusal};
 use super::lock::{write_file, CopyLock, LockError};
 use super::outcome::{
     ConfirmedSnapshot, CopyOutcome, CopyRefusal, DraftSnapshot, OriginalRequest, ResolutionRefusal,
 };
 use super::registry::Digest;
+use super::versions::{self, Unverified};
 use super::{
     binding_digest, digest_of, hex, is_uuid, lease, remove_staging_folder, well_formed, Lease,
     VaultRoots, REGISTRY,
@@ -42,7 +44,8 @@ struct Intent {
 }
 
 struct Job<'a> {
-    draft: &'a DraftSnapshot,
+    /// Exactly the bytes the copy must hold: a draft's text or a verified version.
+    bytes: &'a [u8],
     roots: &'a VaultRoots,
     intent_path: PathBuf,
     lock: &'a CopyLock,
@@ -92,7 +95,7 @@ pub(super) fn copy_with(
         folder.unwrap_or_default().as_bytes(),
     ]));
     let job = Job {
-        draft,
+        bytes: draft.content.as_bytes(),
         roots,
         intent_path: intent_path(&lock, operation_id),
         lock: &lock,
@@ -117,10 +120,109 @@ pub(super) fn copy_with(
             folder.map_or_else(|| default_folder(request), PathBuf::from),
         ),
         Ok(Some(intent)) if intent.args != fresh.args => refused(CopyRefusal::OperationMismatch),
-        Ok(Some(intent)) => resume(&job, intent, folder, request),
+        Ok(Some(intent)) => resume(&job, intent, folder, default_folder(request)),
         Err(()) => CopyOutcome::Uncertain {
             candidate_path: None,
         },
+    }
+}
+
+/// Save a verified earlier version as a new page. The bytes are read and verified while the
+/// lock keeps pruning away, then they follow the same no-clobber steps as a draft copy.
+pub(crate) fn copy_version(
+    id: &str,
+    sha256_hex: &str,
+    folder: Option<&str>,
+    operation_id: &str,
+    roots: &VaultRoots,
+) -> VersionCopyOutcome {
+    let refused = |reason| VersionCopyOutcome::Refused { reason };
+    if !is_uuid(operation_id) {
+        return refused(VersionCopyRefusal::OperationMismatch);
+    }
+    let lock = match CopyLock::acquire(&roots.canonical) {
+        Ok(lock) => lock,
+        Err(LockError::Busy) => return refused(VersionCopyRefusal::Busy),
+        Err(LockError::Unavailable(message)) => return VersionCopyOutcome::Failed { message },
+    };
+    let (bytes, meta) = match versions::read_verified(&lock.dir, id, sha256_hex) {
+        Ok(verified) => verified,
+        Err(Unverified::Missing) => return refused(VersionCopyRefusal::Missing),
+        Err(Unverified::Damaged) => return refused(VersionCopyRefusal::Damaged),
+    };
+    // One operation ID names one copy, whatever its kind.
+    if !matches!(read_intent(&intent_path(&lock, operation_id)), Ok(None)) {
+        return refused(VersionCopyRefusal::OperationMismatch);
+    }
+    let args = hex(&digest_of(&[
+        b"version",
+        id.as_bytes(),
+        sha256_hex.as_bytes(),
+        &[u8::from(folder.is_some())],
+        folder.unwrap_or_default().as_bytes(),
+    ]));
+    let job = Job {
+        bytes: &bytes,
+        roots,
+        intent_path: lock.dir.join(format!("version-copy-{operation_id}.json")),
+        lock: &lock,
+        platform: &NativePlatform,
+    };
+    let recorded = Path::new(&meta.recorded_path);
+    let default = recorded.parent().map(Path::to_path_buf).unwrap_or_default();
+    let fresh = Intent {
+        args,
+        binding: String::new(),
+        seq: 0,
+        content_sha256: meta.sha256.clone(),
+        destination: PathBuf::new(),
+        name: page_name(&meta.recorded_path),
+        staged: PathBuf::new(),
+        identity: None,
+        candidate: None,
+        durable: false,
+    };
+    let outcome = match read_intent(&job.intent_path) {
+        Ok(None) => create(&job, fresh, folder.map_or(default, PathBuf::from)),
+        Ok(Some(intent)) if intent.args != fresh.args => {
+            return refused(VersionCopyRefusal::OperationMismatch)
+        }
+        Ok(Some(intent)) => resume(&job, intent, folder, default),
+        Err(()) => CopyOutcome::Uncertain {
+            candidate_path: None,
+        },
+    };
+    version_outcome(outcome)
+}
+
+fn version_outcome(outcome: CopyOutcome) -> VersionCopyOutcome {
+    match outcome {
+        CopyOutcome::Created {
+            path,
+            relative_path,
+            durable,
+        } => VersionCopyOutcome::Created {
+            path,
+            relative_path,
+            durable,
+        },
+        CopyOutcome::FolderUnavailable { recorded_folder } => {
+            VersionCopyOutcome::FolderUnavailable { recorded_folder }
+        }
+        CopyOutcome::Refused { reason } => VersionCopyOutcome::Refused {
+            reason: match reason {
+                CopyRefusal::Busy => VersionCopyRefusal::Busy,
+                CopyRefusal::OutsideVault => VersionCopyRefusal::OutsideVault,
+                CopyRefusal::NameUnavailable => VersionCopyRefusal::NameUnavailable,
+                CopyRefusal::OperationMismatch | CopyRefusal::RequestMismatch => {
+                    VersionCopyRefusal::OperationMismatch
+                }
+            },
+        },
+        CopyOutcome::Failed { message } => VersionCopyOutcome::Failed { message },
+        CopyOutcome::Uncertain { candidate_path } => {
+            VersionCopyOutcome::Uncertain { candidate_path }
+        }
     }
 }
 
@@ -209,11 +311,10 @@ fn create(job: &Job<'_>, mut intent: Intent, folder: PathBuf) -> CopyOutcome {
         Ok(dir) => dir,
         Err(outcome) => return outcome,
     };
-    let (staging, staged) =
-        match stage_in(&dir, Path::new("draft"), job.draft.content.as_bytes(), None) {
-            Ok(staged) => staged,
-            Err(error) => return failed(error),
-        };
+    let (staging, staged) = match stage_in(&dir, Path::new("draft"), job.bytes, None) {
+        Ok(staged) => staged,
+        Err(error) => return failed(error),
+    };
     intent.destination = dir.clone();
     intent.staged = staged.clone();
     intent.identity = fs::symlink_metadata(&staged)
@@ -258,7 +359,7 @@ fn resume(
     job: &Job<'_>,
     mut intent: Intent,
     folder: Option<&str>,
-    request: &OriginalRequest,
+    default: PathBuf,
 ) -> CopyOutcome {
     let roots = job.roots;
     if let Some(candidate) = intent.candidate.clone() {
@@ -286,12 +387,11 @@ fn resume(
     if !staged_here || !same_file(&intent, &intent.staged) {
         return uncertain(None);
     }
-    // Never published: clear the old attempt and start again from this draft.
+    // Never published: clear the old attempt and start again from these bytes.
     let _ = fs::remove_file(&intent.staged);
     remove_staging_folder(&intent.staged);
     let _ = fs::remove_file(&job.intent_path);
-    let folder = folder.map_or_else(|| default_folder(request), PathBuf::from);
-    create(job, intent, folder)
+    create(job, intent, folder.map_or(default, PathBuf::from))
 }
 
 /// Still a real folder under the recorded destination inside the vault, so nothing read or

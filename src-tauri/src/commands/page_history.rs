@@ -1,13 +1,107 @@
-//! S0 save and recovery commands. Each runs off the main thread and answers its expected cases
-//! as data; `Err` only means the arguments could not be read.
+//! S0 save and recovery commands and S1a page history. Each runs off the main thread and answers
+//! its expected cases as data; `Err` only means the arguments could not be read.
 
 use super::blocking::run_blocking;
 use super::vault::VaultBoundary;
+use crate::leadinglight_history::history_outcome::{
+    HealthState, HistoryHealth, HistoryRefusal, ListLocationsOutcome, ListVersionsOutcome,
+    ReadVersionOutcome, VersionCopyOutcome, VersionCopyRefusal,
+};
 use crate::leadinglight_history::outcome::{
     ConfirmedSnapshot, CopyOutcome, CopyRefusal, DraftSnapshot, OriginalRequest, ResolutionOutcome,
     ResolutionRefusal, SaveOutcome, SaveRequestState,
 };
 use crate::leadinglight_history::{self as history, VaultRoots};
+
+fn history_roots(vault_path: &str) -> Option<VaultRoots> {
+    VaultBoundary::from_request(Some(vault_path))
+        .ok()
+        .map(|boundary| boundary.roots())
+}
+
+#[tauri::command]
+pub async fn list_page_versions(
+    vault_path: String,
+    path: String,
+    cursor: Option<String>,
+) -> Result<ListVersionsOutcome, String> {
+    run_blocking(move || {
+        let page = VaultBoundary::from_request(Some(&vault_path))
+            .and_then(|boundary| Ok((boundary.page_target(&path)?, boundary.roots())));
+        match page {
+            Ok((target, roots)) => history::list_versions(&roots, &target, cursor.as_deref()),
+            Err(_) => ListVersionsOutcome::Refused {
+                reason: HistoryRefusal::OutsideVault,
+            },
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn list_saved_locations(
+    vault_path: String,
+    cursor: Option<String>,
+) -> Result<ListLocationsOutcome, String> {
+    run_blocking(move || match history_roots(&vault_path) {
+        Some(roots) => history::list_locations(&roots, cursor.as_deref()),
+        None => ListLocationsOutcome::Refused {
+            reason: HistoryRefusal::OutsideVault,
+        },
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn read_page_version(
+    vault_path: String,
+    id: String,
+    sha256: String,
+) -> Result<ReadVersionOutcome, String> {
+    run_blocking(move || match history_roots(&vault_path) {
+        Some(roots) => history::read_version(&roots, &id, &sha256),
+        None => ReadVersionOutcome::Refused {
+            reason: HistoryRefusal::OutsideVault,
+        },
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn save_page_version_as_copy(
+    vault_path: String,
+    id: String,
+    sha256: String,
+    folder: Option<String>,
+    operation_id: String,
+) -> Result<VersionCopyOutcome, String> {
+    run_blocking(move || match history_roots(&vault_path) {
+        Some(roots) => {
+            history::copy_version(&id, &sha256, folder.as_deref(), &operation_id, &roots)
+        }
+        None => VersionCopyOutcome::Refused {
+            reason: VersionCopyRefusal::OutsideVault,
+        },
+    })
+    .await
+}
+
+/// A vault that cannot be checked now answers `unknown`, which neither raises nor clears.
+#[tauri::command]
+pub async fn page_history_health(vault_path: String) -> Result<HistoryHealth, String> {
+    run_blocking(move || match history_roots(&vault_path) {
+        Some(roots) => history::history_health(&roots),
+        None => HistoryHealth {
+            state: HealthState::Unknown,
+            reason: None,
+            used_bytes: None,
+            budget_bytes: 0,
+            unreadable: 0,
+            attention: Vec::new(),
+        },
+    })
+    .await
+}
 
 fn vault_roots(request: &OriginalRequest) -> Option<VaultRoots> {
     VaultBoundary::from_request(Some(&request.vault_path))

@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use super::copy::copy_with;
+use super::history_outcome::{HistoryNote, NotKeptReason};
 use super::outcome::*;
 use super::page_write::{check_with, save_with, Holds, Steps};
 use super::registry::{BUSY_MESSAGE, HELD_MESSAGE};
@@ -507,9 +508,21 @@ fn publish_results_are_truthful_and_check_reproves_uncertain_saves() {
         synced: false,
         ..scripted(&nothing, &native)
     };
-    assert_eq!(run(&unsynced, &quiet, "new"), proven);
+    // The failed history sync is reported once; a replay or Check repeats only the save.
+    let noted = SaveOutcome::Committed {
+        written: true,
+        durable: false,
+        history: Some(HistoryNote::NotKept {
+            reason: NotKeptReason::Unavailable,
+        }),
+    };
+    assert_eq!(run(&unsynced, &quiet, "new"), noted);
     fs::write(&other, "later edit").unwrap();
     assert_eq!(save(&quiet, "new"), proven);
+    assert_eq!(
+        check_save(&quiet),
+        SaveRequestState::Done { outcome: proven }
+    );
     assert_eq!(fs::read_to_string(&other).unwrap(), "later edit");
 }
 
