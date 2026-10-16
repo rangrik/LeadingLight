@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { uploadImageFile, useImageDrop } from './useImageDrop'
+import { uploadImageFile, useImageDrop, type ImageImportError } from './useImageDrop'
 import { createRef } from 'react'
 
 let tauriMode = false
@@ -294,7 +294,7 @@ describe('useImageDrop — Tauri native drag-drop', () => {
   })
 
   function renderImageDropTauri(opts?: {
-    onImageImportError?: (error: { fileName: string; format: string; kind: string }) => void
+    onImageImportError?: (error: ImageImportError) => void
     onImageUrl?: (url: string) => void
     vaultPath?: string
   }) {
@@ -387,6 +387,26 @@ describe('useImageDrop — Tauri native drag-drop', () => {
       sourcePath: '/tmp/photo.png',
     })
     expect(invoke).toHaveBeenCalledTimes(1)
+  })
+
+  // Seam: native drops skip DOM inert. Catches an image copied into a page blocked for a final save choice.
+  it('refuses a native drop into an inert editor before copying anything', async () => {
+    const { invoke } = await import('@tauri-apps/api/core')
+    vi.mocked(invoke).mockClear()
+    const onImageUrl = vi.fn()
+    const blocked = document.createElement('div')
+    blocked.setAttribute('inert', '')
+    document.body.appendChild(blocked)
+    blocked.appendChild(container)
+    renderImageDropTauri({ onImageUrl, vaultPath: '/vault' })
+    await waitForNativeDropListeners()
+
+    act(() => { emitNativeDropEvent({ type: 'drop', paths: ['/tmp/photo.png'], position: { x: 1, y: 1 } } satisfies NativeDropPayload) })
+    await new Promise(resolve => setTimeout(resolve, 0))
+
+    expect(invoke).not.toHaveBeenCalled()
+    expect(onImageUrl).not.toHaveBeenCalled()
+    blocked.remove()
   })
 
   it('imports an HTML5 filesystem image once without delegating it to BlockNote', async () => {

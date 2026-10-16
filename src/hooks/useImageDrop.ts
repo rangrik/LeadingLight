@@ -424,6 +424,11 @@ export function useImageDrop({ containerRef, documentPath, documentSessionRef, o
       try {
         const nextUnlisteners = await registerNativeDropListeners((event) => {
           if (!mounted) return
+          // Native drops skip DOM inert, so a page blocked for a final save choice refuses here, before copying.
+          if (containerRef.current?.closest('[inert]')) {
+            setIsDragOver(false)
+            return
+          }
           const guard = dropTargetGuard(targetRef)
           const { current: onImageImportError } = onImageImportErrorRef
           const { current: onImageUrl } = onImageUrlRef
@@ -448,7 +453,7 @@ export function useImageDrop({ containerRef, documentPath, documentSessionRef, o
       cleanupTauriEventListeners(unlisteners)
       unlisteners = []
     }
-  }, [])
+  }, [containerRef])
 
   return { isDragOver }
 }

@@ -1,93 +1,71 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { flushEditorContent, type FlushDeps } from './autoSave'
+import { flushEditorContent, UnsavedTabTextError, type FlushDeps } from './autoSave'
+import type { ContentReceipt, ReceiptStatus } from '../hooks/useEditorSave'
 
-const mockInvokeFn = vi.fn(() => Promise.resolve(null))
+// Seam: the fallback writer. Unsaved tab text must go through the queue and be called saved only by its own receipt.
+const receipt: ContentReceipt = Object.freeze({ path: '/vault/note.md', content: 'edited body', session: 0, seq: 3 })
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(),
-}))
-
-vi.mock('../mock-tauri', () => ({
-  isTauri: () => false,
-  mockInvoke: (cmd: string, args?: Record<string, unknown>) => mockInvokeFn(cmd, args),
-  updateMockContent: vi.fn(),
-}))
-
-async function expectUnsavedContentFlushes(deps: FlushDeps, content: string) {
-  ;(deps.getTabContent as ReturnType<typeof vi.fn>).mockReturnValue(content)
-  ;(deps.isUnsaved as ReturnType<typeof vi.fn>).mockReturnValue(true)
-
-  await flushEditorContent('/vault/note.md', deps)
-
-  expect(mockInvokeFn).toHaveBeenCalledWith('save_note_content', {
-    path: '/vault/note.md',
-    content,
-  })
-  expect(deps.onSaved).toHaveBeenCalledWith('/vault/note.md', content)
+function makeDeps(status: ReceiptStatus = 'settled'): FlushDeps {
+  return {
+    savePendingForPath: vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true),
+    getTabContent: vi.fn().mockReturnValue('edited body'),
+    isUnsaved: vi.fn().mockReturnValue(true),
+    admitContent: vi.fn().mockReturnValue(receipt),
+    receiptStatus: vi.fn().mockReturnValue(status),
+    onSaved: vi.fn(),
+  }
 }
 
 describe('flushEditorContent', () => {
   let deps: FlushDeps
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-    deps = {
-      savePendingForPath: vi.fn().mockResolvedValue(false),
-      getTabContent: vi.fn().mockReturnValue(undefined),
-      isUnsaved: vi.fn().mockReturnValue(false),
-      onSaved: vi.fn(),
-    }
-  })
+  beforeEach(() => { deps = makeDeps() })
 
-  it('flushes via savePendingForPath when pending content matches path', async () => {
-    ;(deps.savePendingForPath as ReturnType<typeof vi.fn>).mockResolvedValue(true)
-
+  it('stops after the pending flush when the queue already had the page', async () => {
+    deps.savePendingForPath = vi.fn().mockResolvedValue(true)
     await flushEditorContent('/vault/note.md', deps)
-
-    expect(deps.savePendingForPath).toHaveBeenCalledWith('/vault/note.md')
-    // Should NOT check tab content or persist — pending flush handled it
     expect(deps.getTabContent).not.toHaveBeenCalled()
-    expect(mockInvokeFn).not.toHaveBeenCalled()
+    expect(deps.admitContent).not.toHaveBeenCalled()
   })
 
-  it('saves tab content when note is unsaved (newly created)', async () => {
-    await expectUnsavedContentFlushes(deps, '# New note content')
-  })
-
-  it('saves tab content when note is marked unsaved (dirty editor)', async () => {
-    await expectUnsavedContentFlushes(deps, 'edited body')
-  })
-
-  it('does not save when note is not unsaved (clean editor)', async () => {
-    ;(deps.getTabContent as ReturnType<typeof vi.fn>).mockReturnValue('same content')
-    ;(deps.isUnsaved as ReturnType<typeof vi.fn>).mockReturnValue(false)
-
+  it('queues unsaved tab text and reports it saved once its own receipt settled', async () => {
     await flushEditorContent('/vault/note.md', deps)
+    expect(deps.admitContent).toHaveBeenCalledWith('/vault/note.md', 'edited body')
+    expect(deps.savePendingForPath).toHaveBeenCalledTimes(2)
+    expect(deps.receiptStatus).toHaveBeenCalledWith(receipt)
+    expect(deps.onSaved).toHaveBeenCalledWith('/vault/note.md', 'edited body')
+  })
 
-    expect(mockInvokeFn).not.toHaveBeenCalled()
+  it('writes nothing and says so when the queue refuses the text', async () => {
+    deps.admitContent = vi.fn().mockReturnValue(null)
+    await expect(flushEditorContent('/vault/note.md', deps)).rejects.toBeInstanceOf(UnsavedTabTextError)
+    expect(deps.savePendingForPath).toHaveBeenCalledTimes(1)
     expect(deps.onSaved).not.toHaveBeenCalled()
   })
 
-  it('does nothing when note is not open in any tab', async () => {
-    // getTabContent returns undefined (no tab for this path)
+  it('never reports a save its receipt cannot prove', async () => {
+    deps = makeDeps('unproven')
+    await expect(flushEditorContent('/vault/note.md', deps)).rejects.toBeInstanceOf(UnsavedTabTextError)
+    expect(deps.onSaved).not.toHaveBeenCalled()
+  })
+
+  it('leaves newer queued text to the queue without calling it saved', async () => {
+    deps = makeDeps('pending')
     await flushEditorContent('/vault/note.md', deps)
-
-    expect(mockInvokeFn).not.toHaveBeenCalled()
     expect(deps.onSaved).not.toHaveBeenCalled()
   })
 
-  it('propagates errors from persistContent', async () => {
-    ;(deps.getTabContent as ReturnType<typeof vi.fn>).mockReturnValue('content')
-    ;(deps.isUnsaved as ReturnType<typeof vi.fn>).mockReturnValue(true)
-    mockInvokeFn.mockRejectedValueOnce(new Error('Disk full'))
-
-    await expect(flushEditorContent('/vault/note.md', deps)).rejects.toThrow('Disk full')
-    expect(deps.onSaved).not.toHaveBeenCalled()
+  it('does nothing for a clean or closed page', async () => {
+    deps.isUnsaved = vi.fn().mockReturnValue(false)
+    await flushEditorContent('/vault/note.md', deps)
+    deps.getTabContent = vi.fn().mockReturnValue(undefined)
+    await flushEditorContent('/vault/note.md', deps)
+    expect(deps.admitContent).not.toHaveBeenCalled()
   })
 
-  it('propagates errors from savePendingForPath', async () => {
-    ;(deps.savePendingForPath as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Save failed'))
-
-    await expect(flushEditorContent('/vault/note.md', deps)).rejects.toThrow('Save failed')
+  it('propagates a refused queue save', async () => {
+    deps.savePendingForPath = vi.fn().mockResolvedValueOnce(false).mockRejectedValue(new Error('The file is read-only.'))
+    await expect(flushEditorContent('/vault/note.md', deps)).rejects.toThrow('The file is read-only.')
+    expect(deps.onSaved).not.toHaveBeenCalled()
   })
 })

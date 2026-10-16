@@ -1073,6 +1073,71 @@ describe('useEditorTabSwap raw mode sync', () => {
       expect.stringContaining('Edit 2'),
     )
   })
+
+  const ferry = makeTab('ferry.md', 'Ferry')
+  const tide = makeTab('tide.md', 'Tide')
+  const createFerryTideHarness = (onContentChange: (path: string, content: string) => void) => createSwapHarness({
+    initialProps: { tabs: [ferry, tide], activeTabPath: 'ferry.md', rawMode: false },
+    onContentChange,
+    setupEditor: (editor) => {
+      editor.tryParseMarkdownToBlocks.mockImplementation((...[markdown]: unknown[]) => [
+        makeTextParagraphBlock(String(markdown).includes('Ferry') ? 'Ferry words' : 'Tide words'),
+      ])
+      editor.blocksToMarkdownLossy.mockImplementation(() => JSON.stringify(editor._docRef.current))
+    },
+  })
+
+  it('shows the reopened page, and files edits under it, when it re-renders before its swap lands', async () => {
+    const onContentChange = vi.fn()
+    const { docRef, rerender, rerenderWith, result } = await createFerryTideHarness(onContentChange)
+    await rerenderWith({ rawMode: true })
+    await rerenderWith({ rawMode: false })
+    await rerenderWith({ activeTabPath: 'tide.md' })
+
+    // Back to Ferry, then a same-page render (a fresh read of the page) before the swap runs.
+    rerender({ tabs: [ferry, tide], activeTabPath: 'ferry.md', rawMode: false })
+    rerender({ tabs: [{ ...ferry }, tide], activeTabPath: 'ferry.md', rawMode: false })
+    await flushEditorTick()
+    act(() => {
+      result.current.handleEditorChange()
+      result.current.flushPendingEditorChange()
+    })
+
+    expect(JSON.stringify(docRef.current)).toContain('Ferry words')
+    expect(onContentChange).toHaveBeenCalledWith('ferry.md', expect.stringContaining('Ferry words'))
+    expect(JSON.stringify(onContentChange.mock.calls)).not.toContain('Tide words')
+  })
+
+  it('keeps typing that starts when the page reports ready, though a retried swap was pending', async () => {
+    const onContentChange = vi.fn()
+    const { docRef, rerender, rerenderWith, result } = await createFerryTideHarness(onContentChange)
+    await rerenderWith({ activeTabPath: 'tide.md' })
+    const frames: FrameRequestCallback[] = []
+    vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => frames.push(callback))
+    // A person starts typing as soon as the page reports ready.
+    const typeOnReady = () => {
+      docRef.current = [...docRef.current, makeTextParagraphBlock('Typed when ready')]
+      result.current.handleEditorChange()
+    }
+    window.addEventListener('laputa:editor-tab-swapped', typeOnReady, { once: true })
+
+    rerender({ tabs: [ferry, tide], activeTabPath: 'ferry.md', rawMode: false })
+    flushQueuedFrames(frames)
+    await flushEditorTick() // Ferry's swap applies; its completion waits for the next frame
+    rerender({ tabs: [{ ...ferry }, tide], activeTabPath: 'ferry.md', rawMode: false }) // schedules a retry
+    flushQueuedFrames(frames) // the first swap's completion and readiness
+    act(() => { result.current.handleEditorChange() }) // an edit event before the retry lands
+    expect(result.current.hasPendingEditorChange()).toBe(false)
+    await flushEditorTick() // the retry applies
+    flushQueuedFrames(frames) // the retry's completion and readiness
+    await flushEditorTick()
+    act(() => { result.current.flushPendingEditorChange() })
+    window.removeEventListener('laputa:editor-tab-swapped', typeOnReady)
+
+    expect(JSON.stringify(docRef.current)).toContain('Typed when ready')
+    expect(onContentChange).toHaveBeenCalledWith('ferry.md', expect.stringContaining('Typed when ready'))
+    expect(onContentChange.mock.calls.map(([path]) => path)).toEqual(['ferry.md'])
+  })
 })
 
 describe('useEditorTabSwap scroll position', () => {

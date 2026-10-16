@@ -20,6 +20,9 @@ type Tab = {
   content: string
 }
 
+/** True when none of the editor's buffers for `path` holds text other than `content`. */
+export type EditorIdleCheck = (path: string, content: string) => boolean
+
 export function useRegisterEditorContentFlushes(options: {
   activeTab: Tab | null
   flushPendingEditorChange: () => boolean
@@ -29,6 +32,8 @@ export function useRegisterEditorContentFlushes(options: {
   rawMode: boolean
   onContentChange?: (path: string, content: string) => void
   flushPendingRawContentRef?: React.MutableRefObject<((path: string) => void) | null>
+  hasPendingEditorChange?: () => boolean
+  editorIdleRef?: React.MutableRefObject<EditorIdleCheck | null>
 }) {
   const {
     activeTab,
@@ -39,6 +44,8 @@ export function useRegisterEditorContentFlushes(options: {
     rawMode,
     onContentChange,
     flushPendingRawContentRef,
+    hasPendingEditorChange,
+    editorIdleRef,
   } = options
   useRegisterRichContentFlush({
     activeTab,
@@ -53,6 +60,14 @@ export function useRegisterEditorContentFlushes(options: {
     onContentChange,
     flushPendingRawContentRef,
   })
+  // A final recovery choice asks this after flushing; newer words make it refuse, never drop them.
+  const isIdle = useCallback<EditorIdleCheck>((path, content) => {
+    if (!activeTab || activeTab.entry.path !== path) return true
+    if (hasPendingEditorChange?.()) return false
+    const raw = rawLatestContentRef.current
+    return !rawMode || raw === null || raw === content
+  }, [activeTab, hasPendingEditorChange, rawLatestContentRef, rawMode])
+  useRegisteredFlushRef(editorIdleRef, isIdle)
 }
 
 function useRegisterRichContentFlush({
@@ -116,9 +131,9 @@ function useRegisterRawContentFlush({
   useRegisteredFlushRef(flushPendingRawContentRef, flushPendingRawContent)
 }
 
-function useRegisteredFlushRef(
-  ref: React.MutableRefObject<((path: string) => void) | null> | undefined,
-  flush: (path: string) => void,
+function useRegisteredFlushRef<T>(
+  ref: React.MutableRefObject<T | null> | undefined,
+  flush: T,
 ) {
   useEffect(() => {
     if (!ref) return

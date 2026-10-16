@@ -208,6 +208,15 @@ function serializedEditorChange(options: {
   }
 }
 
+/** The editor's current ProseMirror document, or undefined when it cannot be read (no view, or inside a transaction). */
+function readEditorDocument(editor: ReturnType<typeof useCreateBlockNote>): unknown {
+  try {
+    return (editor as { prosemirrorState?: { doc?: unknown } }).prosemirrorState?.doc
+  } catch {
+    return undefined
+  }
+}
+
 function useEditorChangeHandler(options: {
   editor: ReturnType<typeof useCreateBlockNote>
   tabsRef: MutableRefObject<Tab[]>
@@ -258,12 +267,20 @@ function useEditorChangeHandler(options: {
     onContentChangeRef.current?.(path, next.content)
   }, [editor, editorContentPathRef, onContentChangeRef, pendingLocalContentRef, prevActivePathRef, tabCacheRef, tabsRef, vaultPathRef])
 
-  const { handleEditorChange, flushPendingEditorChange: flushChange } = useDebouncedEditorChange({ onFlush: propagateEditorChange, suppressChangeRef })
+  const { handleEditorChange: markChanged, flushPendingEditorChange: flushChange, hasPendingEditorChange } = useDebouncedEditorChange({ onFlush: propagateEditorChange, suppressChangeRef })
+  // TipTap reports a change when only editability flips; the same document object means nothing was typed.
+  const lastDocRef = useRef<unknown>(undefined)
+  const handleEditorChange = useCallback(() => {
+    const doc = readEditorDocument(editor)
+    if (doc !== undefined && doc === lastDocRef.current) return
+    lastDocRef.current = doc
+    markChanged()
+  }, [editor, markChanged])
   const flushPendingEditorChange = useCallback(() => {
     assertEditorCompositionReady(editor)
     return flushChange()
   }, [editor, flushChange])
-  return { handleEditorChange, flushPendingEditorChange }
+  return { handleEditorChange, flushPendingEditorChange, hasPendingEditorChange }
 }
 
 function cachePreviousTabOnPathChange(options: {
@@ -507,6 +524,8 @@ function handleStableActivePath(options: StableActivePathOptions) {
   const contentResolution = resolveStableActivePathContent(options)
   if (contentResolution !== null) return contentResolution
   if (rawSwapPendingRef.current) return true
+  // The editor still holds another page, so swap again instead of filing its text under this one.
+  if (options.editorContentPathRef.current !== activeTabPath) return false
 
   cacheStableActivePath(options)
   return true
@@ -617,9 +636,13 @@ function preserveRenamedDocument(options: {
   return true
 }
 
-function signalTabSwap(options: { path: string }) {
-  const { path } = options
-  requestNextFrame(() => signalEditorTabSwapped(path))
+function signalTabSwap(options: { path: string; shouldAbort?: () => boolean }) {
+  const { path, shouldAbort } = options
+  requestNextFrame(() => {
+    // A swap replaced since this was queued must not report the page ready.
+    if (shouldAbort?.()) return
+    signalEditorTabSwapped(path)
+  })
 }
 
 function requestNextFrame(callback: FrameRequestCallback): void {
@@ -669,6 +692,7 @@ function applyBlankTabState(options: {
   editor: ReturnType<typeof useCreateBlockNote>
   suppressChangeRef: MutableRefObject<boolean>
   editorContentPathRef: EditorContentPathRef
+  shouldAbort: () => boolean
 }): boolean {
   const {
     cache,
@@ -677,6 +701,7 @@ function applyBlankTabState(options: {
     editor,
     suppressChangeRef,
     editorContentPathRef,
+    shouldAbort,
   } = options
 
   cacheEditorState(cache, targetPath, {
@@ -684,11 +709,11 @@ function applyBlankTabState(options: {
     scrollTop: 0,
     sourceContent: content,
   })
-  if (!applyBlankStateToEditor({ editor, suppressChangeRef, editorContentPathRef, targetPath })) {
+  if (!applyBlankStateToEditor({ editor, suppressChangeRef, editorContentPathRef, targetPath, shouldAbort })) {
     return false
   }
 
-  signalTabSwap({ path: targetPath })
+  signalTabSwap({ path: targetPath, shouldAbort })
   return true
 }
 
@@ -731,11 +756,12 @@ function scheduleEmptyHeadingSwap(options: {
 
   if (!startsWithEmptyHeading({ content })) return false
 
+  const shouldAbort = () => shouldAbortSwap({ prevActivePathRef, suppressChangeRef, swapSeqRef, tabsRef, token })
   const documentBeforeParseSignature = editorDocumentSignature(editor.document)
   void resolveEmptyHeadingBlocks(editor, content, vaultPath, targetPath)
     .then((blocks) => {
       if (!blocks) return
-      if (shouldAbortSwap({ prevActivePathRef, suppressChangeRef, swapSeqRef, tabsRef, token })) return
+      if (shouldAbort()) return
       if (editorChangedDuringUntitledEmptyHeadingParse(editor, targetPath, documentBeforeParseSignature)) {
         suppressChangeRef.current = false
         return
@@ -745,8 +771,8 @@ function scheduleEmptyHeadingSwap(options: {
       // next render of the same tab looks stale and swaps the same blocks in again, which moves
       // the caret out of the new note's title.
       cacheResolvedEditorState(cache, targetPath, { blocks, scrollTop: 0, sourceContent: content }, vaultPath)
-      if (!applyBlocksToEditor({ editor, blocks, scrollTop: 0, suppressChangeRef, editorContentPathRef, targetPath })) return
-      signalTabSwap({ path: targetPath })
+      if (!applyBlocksToEditor({ editor, blocks, scrollTop: 0, suppressChangeRef, editorContentPathRef, targetPath, shouldAbort })) return
+      signalTabSwap({ path: targetPath, shouldAbort })
     })
     .catch((err: unknown) => {
       if (swapSeqRef.current === token.seq) suppressChangeRef.current = false
@@ -789,10 +815,11 @@ function scheduleTabSwap(options: {
   } = options
 
   const token = createSwapToken(swapSeqRef, targetPath, activeTab.content)
+  const shouldAbort = () => shouldAbortSwap({ prevActivePathRef, suppressChangeRef, swapSeqRef, tabsRef, token })
   suppressChangeRef.current = true
 
   const doSwap = () => {
-    if (shouldAbortSwap({ prevActivePathRef, suppressChangeRef, swapSeqRef, tabsRef, token })) return
+    if (shouldAbort()) return
     if (clearStaleSwap({ targetPath, prevActivePathRef, suppressChangeRef })) return
     rawSwapPendingRef.current = false
     if (clearDomSelection) clearEditorDomSelection(editorScopeForEditor(editor))
@@ -805,6 +832,7 @@ function scheduleTabSwap(options: {
         editor,
         suppressChangeRef,
         editorContentPathRef,
+        shouldAbort,
       })
       return
     }
@@ -1134,7 +1162,7 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
   const onContentChangeRef = useLatestRef(onContentChange)
   const tabsRef = useLatestRef(tabs)
   const vaultPathRef = useLatestRef(vaultPath)
-  const { handleEditorChange, flushPendingEditorChange } = useEditorChangeHandler({
+  const { handleEditorChange, flushPendingEditorChange, hasPendingEditorChange } = useEditorChangeHandler({
     editor,
     tabsRef,
     onContentChangeRef,
@@ -1182,6 +1210,7 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
     editorContentVersion: editorContentSignal.version,
     handleEditorChange: handleForegroundEditorChange,
     flushPendingEditorChange,
+    hasPendingEditorChange,
     editorMountedRef,
     documentSessionRef,
   }

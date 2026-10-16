@@ -329,6 +329,7 @@ function resetMockCommandResults() {
     get_modified_files: [],
     get_note_content: mockAllContent['/vault/project/test.md'] || '',
     save_note_content: null,
+    save_page_content: null,
     reload_vault_entry: ({ path }: { path: string }) => mockEntries.find((entry) => entry.path === path) ?? null,
     sync_vault_asset_scope_for_window: null,
     get_file_history: [],
@@ -1781,6 +1782,11 @@ describe('App', () => {
       if (native.saveFails) throw new Error('disk full')
       disk.set(path, content)
       return null
+    }
+    mockCommandResults.save_page_content = ({ request, content }: { request: { path: string }, content: string }) => {
+      if (native.saveFails) return { status: 'refused', reason: 'stageFailed' }
+      disk.set(request.path, content)
+      return { status: 'committed', written: true, durable: true, history: null }
     }
     mockCommandResults.get_note_content = ({ path }: { path: string }) => disk.get(path) ?? ''
     mockCommandResults.list_vault = () => [...disk.keys()].map(path => ({ ...mockEntries[0], path, filename: path.split('/').pop() }))

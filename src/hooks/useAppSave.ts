@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEditorSaveWithLinks } from './useEditorSaveWithLinks'
-import { UnmergedDraftError, type DocumentMutation, type MutationAdmission } from './useEditorSave'
+import { UnmergedDraftError, type ContentReceipt, type DocumentMutation, type MutationAdmission, type ReceiptStatus } from './useEditorSave'
 import { flushEditorContent } from '../utils/autoSave'
 import { extractH1TitleFromContent } from '../utils/noteTitle'
 import { isTauri } from '../mock-tauri'
@@ -599,8 +599,11 @@ function useUntitledRenameCoordinator(options: {
       locale: AppLocale
       /** Pages whose unsaved tab text must not be written directly (a Trash move holds them). */
       skipFallback?: (path: string) => boolean
+      /** Unsaved tab text goes through the same queue and counts as saved only by its own receipt. */
+      admitContent: (path: string, content: string) => ContentReceipt | null
+      receiptStatus: (receipt: ContentReceipt) => ReceiptStatus
     }) {
-      const { canPersist, resolveCurrentPath, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, skipFallback } = options
+      const { canPersist, resolveCurrentPath, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, skipFallback, admitContent, receiptStatus } = options
   const t = useMemo(() => createTranslator(locale), [locale])
 
   return useCallback(
@@ -619,6 +622,8 @@ function useUntitledRenameCoordinator(options: {
         savePendingForPath,
           getTabContent: (p) => tabsRef.current.find((t) => t.entry.path === p)?.content,
         isUnsaved: (p) => unsavedPathsRef.current.has(p) && !skipFallback?.(p),
+        admitContent,
+        receiptStatus,
           onSaved: (p) => {
             clearUnsaved(p)
           },
@@ -639,6 +644,8 @@ function useUntitledRenameCoordinator(options: {
       setToastMessage,
       flushPendingUntitledRename,
       skipFallback,
+      admitContent,
+      receiptStatus,
       t,
     ],
   )
@@ -841,6 +848,8 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         receiptStatus,
         drainHeld: drainHeldRaw,
         isHeld,
+        isSaveBlocked,
+        recovery,
         mutateDocument,
         holdMutationAdmission,
         whenMutationsIdle,
@@ -899,6 +908,8 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         receiptStatus,
         drainHeld,
         isHeld,
+        isSaveBlocked,
+        recovery,
         mutateDocument,
         holdMutationAdmission,
         whenMutationsIdle,
@@ -925,7 +936,8 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
 
     function useAppSaveHandlers(options: {
       contentChangeRef: MutableRefObject<(path: string, content: string) => void>
-      handleContentChange: (path: string, content: string) => void
+      handleContentChange: (path: string, content: string) => ContentReceipt | null
+      receiptStatus: (receipt: ContentReceipt) => ReceiptStatus
       canPersist: boolean
       cancelPendingUntitledRename: (path?: string) => boolean
       pendingUntitledRenameRef: MutableRefObject<PendingUntitledRename | null>
@@ -952,7 +964,7 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
       queueUnsavedTabText: (path: string) => void
       withRenameBarrier: RunManualRename
     }) {
-      const { contentChangeRef, handleContentChange, canPersist, cancelPendingUntitledRename, pendingUntitledRenameRef, activeTabPath, resolveCurrentPath, resolvePathBeforeSave, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, handleRenameNote, handleRenameFilename, resolvedPath, replaceRenamedEntry, loadModifiedFiles, handleSaveRaw, tabs, unsavedPaths, drainHeld, isHeld, queueUnsavedTabText, withRenameBarrier } = options
+      const { contentChangeRef, handleContentChange, receiptStatus, canPersist, cancelPendingUntitledRename, pendingUntitledRenameRef, activeTabPath, resolveCurrentPath, resolvePathBeforeSave, savePendingForPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, handleRenameNote, handleRenameFilename, resolvedPath, replaceRenamedEntry, loadModifiedFiles, handleSaveRaw, tabs, unsavedPaths, drainHeld, isHeld, queueUnsavedTabText, withRenameBarrier } = options
   useAppSaveEffects({
     contentChangeRef,
     handleContentChange,
@@ -966,7 +978,7 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
     queueUnsavedTabText(path)
     return savePendingForPath(path)
   }, [queueUnsavedTabText, savePendingForPath])
-  const flushOptions = { canPersist, resolveCurrentPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale }
+  const flushOptions = { canPersist, resolveCurrentPath, tabsRef, unsavedPathsRef, clearUnsaved, setToastMessage, flushPendingUntitledRename, locale, admitContent: handleContentChange, receiptStatus }
   const flushBeforeAction = useFlushBeforeAction({ ...flushOptions, savePendingForPath: savePendingInLane, skipFallback: isHeld })
   // Only the Trash move writes the pages it holds.
   const flushForTrash = useFlushBeforeAction({ ...flushOptions, savePendingForPath: drainHeld })
@@ -1036,7 +1048,7 @@ function useAppSaveServices(
     }
     scheduleUntitledRename(path, content)
   }, [guards, resolveCurrentPath, scheduleUntitledRename])
-  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage } = useEditorPersistence({
+  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage } = useEditorPersistence({
     updateEntry,
     setTabs,
     setToastMessage,
@@ -1057,7 +1069,7 @@ function useAppSaveServices(
     registerRenamedPath,
     replaceEntry,
   })
-  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, scheduleUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, replaceRenamedEntry, guards, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage }
+  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, scheduleUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, replaceRenamedEntry, guards, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage }
 }
 
 type AppSaveServices = ReturnType<typeof useAppSaveServices>
@@ -1181,7 +1193,7 @@ export function useAppSave(options: AppSaveDeps) {
   const refs = useAppSaveStateRefs({ tabs, activeTabPath, unsavedPaths })
   const { tabsRef, unsavedPathsRef } = refs
   const services = useAppSaveServices(options, refs, canPersist)
-  const { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, receiptStatus, replaceRenamedEntry, drainHeld, isHeld, guards, pageMutation, holdMutationAdmission, whenMutationsIdle } = services
+  const { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, receiptStatus, replaceRenamedEntry, drainHeld, isHeld, recovery, guards, pageMutation, holdMutationAdmission, whenMutationsIdle } = services
   const queueUnsavedTabText = useUnsavedTabQueue(services, refs)
   const mutateExistingDocument = useExistingDocumentMutation(services, tabsRef, queueUnsavedTabText, options.flushEditorBuffers)
   const { pageBusyMessage } = options
@@ -1195,6 +1207,7 @@ export function useAppSave(options: AppSaveDeps) {
   const { handleFilenameRename, handleSave, handleTitleSync, flushBeforeAction, flushForTrash } = useAppSaveHandlers({
     contentChangeRef,
     handleContentChange,
+    receiptStatus,
     canPersist,
     cancelPendingUntitledRename,
     pendingUntitledRenameRef,
@@ -1232,6 +1245,8 @@ export function useAppSave(options: AppSaveDeps) {
     savePending,
     savePendingForPath,
     receiptStatus,
+    /** Save holds, retriable failures and the guarded final resolution, for the recovery UI. */
+    saveRecovery: recovery,
     trackRenamedPath: registerRenamedPath,
     flushBeforeAction,
     mutateExistingDocument,

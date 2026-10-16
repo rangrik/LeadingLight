@@ -22,15 +22,13 @@ interface AppliedEditorContentCommit {
   scrollTop: number
   suppressChangeRef: MutableRefObject<boolean>
   targetPath: string
+  /** True once a newer swap owns the editor, so this one must not finish or lift its hold. */
+  shouldAbort?: () => boolean
 }
 
 interface ApplyBlocksToEditorOptions extends AppliedEditorContentCommit {
   editor: ReturnType<typeof useCreateBlockNote>
   blocks: EditorBlocks
-}
-
-interface ApplyBlocksToEditorProgressivelyOptions extends ApplyBlocksToEditorOptions {
-  shouldAbort?: () => boolean
 }
 
 interface ApplyBlankStateToEditorOptions extends Omit<AppliedEditorContentCommit, 'scrollTop'> {
@@ -264,7 +262,7 @@ export function applyBlocksToEditor(options: ApplyBlocksToEditorOptions): boolea
 }
 
 export async function applyBlocksToEditorProgressively(
-  options: ApplyBlocksToEditorProgressivelyOptions,
+  options: ApplyBlocksToEditorOptions,
 ): Promise<boolean> {
   const { blocks, editor, shouldAbort, suppressChangeRef, targetPath } = options
   if (blocks.length < PROGRESSIVE_BLOCK_APPLY_THRESHOLD) return applyBlocksToEditor(options)
@@ -310,7 +308,7 @@ export async function applyBlocksToEditorProgressively(
   })
   commitAppliedEditorContent(options, () => {
     setEditorEditable(editor, previousEditable)
-  }, shouldAbort)
+  })
   return true
 }
 
@@ -340,11 +338,11 @@ export function applyHtmlStateToEditor(options: ApplyMarkupStateToEditorOptions)
 function commitAppliedEditorContent(
   options: AppliedEditorContentCommit,
   onCommitted?: () => void,
-  shouldAbort?: () => boolean,
 ) {
   const {
     editorContentPathRef,
     scrollTop,
+    shouldAbort,
     suppressChangeRef,
     targetPath,
   } = options

@@ -31,6 +31,8 @@ function fixture() {
     activePane: 0, split: true, orientation: 'horizontal', ratio: 50, paths: ['/left.md', '/right.md'], order: [0, 1], placePane: vi.fn(() => true), placeNote: vi.fn(async () => true),
     pendingPanes: [false, false], suspendPersistence: vi.fn(), focusPane: vi.fn(), selectNoteInPane: vi.fn(async () => {}),
     closePane: vi.fn(), openSplit: vi.fn(), resize: vi.fn(), canGoBack: false, canGoForward: false, goBack: vi.fn(), goForward: vi.fn(),
+    closePages: vi.fn(), closePageAndReserveOpen: vi.fn(() => null), currentTabs: vi.fn(() => []),
+    markNavigation: vi.fn(() => ({ pane: 0 as const, current: () => true })), openNoteWhenLoaded: vi.fn(async () => true), readyForVisits: true,
   }
   const props = { workspace, unsavedPaths: new Set<string>(), tabs: entries.map(item => ({ entry: item, content: `# ${item.title}` })),
     activeTabPath: '/left.md', entries, onNavigateWikilink: vi.fn(), inspectorCollapsed: true, onToggleInspector: vi.fn(),
@@ -51,6 +53,20 @@ describe('split editor integration', () => {
     props.flushPendingEditorContentRef.current?.('/right.md')
     expect(activity.flush).toHaveBeenCalledWith('/left.md')
     expect(activity.flush).toHaveBeenCalledWith('/right.md')
+  })
+  // Seam: a final save choice blocks only its own pane. Catches typing or page commands reaching it, or the other pane frozen too.
+  it('blocks input and page commands only in the pane inside a final save choice', () => {
+    activity.raw.mockClear()
+    const props = fixture()
+    render(<SplitEditorWorkspace {...props} blockedPaths={new Set(['/left.md'])} renderPageNotice={path => <p>notice {path}</p>} />)
+    expect(screen.getByTestId('editor-/left.md').closest('[inert]')).not.toBeNull()
+    expect(screen.getByText('notice /left.md').closest('[inert]')).toBeNull()
+    expect(screen.getByTestId('editor-/right.md').closest('[inert]')).toBeNull()
+    props.rawToggleRef.current()
+    expect(activity.raw).not.toHaveBeenCalled()
+    fireEvent.pointerDown(screen.getByTestId('editor-/right.md'))
+    props.rawToggleRef.current()
+    expect(activity.raw).toHaveBeenLastCalledWith('/right.md')
   })
   it('keeps both editor instances mounted when orientation or ratio changes', () => {
     activity.mount.mockClear(); activity.unmount.mockClear()
@@ -345,7 +361,7 @@ describe('dragging a note from the list', () => {
     return { props, view }
   }
   // jsdom has no DragEvent; browsers hide the payload (getData) until drop.
-  function drag(type: string, target: EventTarget, { x = 0, y = 0, data = '', types = [NOTE_DRAG_MIME_TYPE, 'text/plain'], synthetic = false } = {}) {
+  function drag(type: string, target: Element, { x = 0, y = 0, data = '', types = [NOTE_DRAG_MIME_TYPE, 'text/plain'], synthetic = false } = {}) {
     const transfer = { types, dropEffect: 'none', getData: () => data }
     const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
     Object.defineProperty(event, 'dataTransfer', { value: transfer })

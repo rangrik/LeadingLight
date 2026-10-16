@@ -8,7 +8,10 @@ import { ResizeHandle } from './components/ResizeHandle'
 import { CreateTypeDialog } from './components/CreateTypeDialog'
 import { CreateViewDialog } from './components/CreateViewDialog'
 import { QuickFind } from './leadinglight/QuickFind'
-import { isFindable } from './leadinglight/pageLabel'
+import { isFindable, pageLabel } from './leadinglight/pageLabel'
+import { SaveHoldBanner } from './leadinglight/saveHold/SaveHoldBanner'
+import { includesPath, type PageSettlement } from './leadinglight/saveHold/paneSettlement'
+import { useSaveHoldActions } from './leadinglight/saveHold/useSaveHoldActions'
 import { requestEditorFocus } from './hooks/useEditorFocus'
 import { isPlainCaptureRequest, type ImmediateCreateOptions, type PlainCreateOutcome } from './hooks/useNoteCreation'
 import type { MutateExistingDocument, RunManualRename, RunPageExclusive } from './hooks/useAppSave'
@@ -1483,6 +1486,29 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     const entry = latestEntriesRef.current.find(candidate => notePathsMatch(candidate.path, path))
     return entry ? openNoteWhenLoaded(entry) : false
   }, [openNoteWhenLoaded])
+  // Pages whose text could not be saved: their notices, choices and the guarded final settlement.
+  const settlementRef = useRef<PageSettlement | null>(null)
+  const { reloadVault, addEntry: addVaultEntry } = vault
+  const pageTitleFor = (path: string) => {
+    const entry = visibleEntries.find(candidate => notePathsMatch(candidate.path, path))
+    return entry ? pageLabel(entry, appLocale) : path.split('/').pop() ?? path
+  }
+  const saveHold = useSaveHoldActions({
+    recovery: appSave.saveRecovery, flushBuffers: flushEditorBuffers, settlementRef, clearUnsaved,
+    onCopyCreated: () => { void reloadVault() },
+    addEntry: addVaultEntry,
+    notify: setToastMessage,
+    pageTitle: pageTitleFor,
+    locale: appLocale,
+  })
+  const renderSaveHold = (path: string, named = false) => (
+    <SaveHoldBanner key={path} view={saveHold.viewFor(path)} actions={saveHold} locale={appLocale} named={named} title={pageTitleFor(path)} />
+  )
+  const { split: workspaceSplit, paths: panePaths, activePane } = notes.splitWorkspace
+  const shownPanePaths = workspaceSplit ? panePaths : [panePaths[activePane]]
+  // A page with unsaved text and no visible pane still gets its note, so nothing waits unseen.
+  const awaySaveHolds = [...saveHold.snapshot.holds, ...saveHold.snapshot.retriable]
+    .map(item => item.lane).filter(lane => !includesPath(shownPanePaths, lane))
 
   const handleDeleteType = useCallback((typeName: string) => {
     const request = resolveTypeDeleteRequest(vault.entries, typeName)
@@ -2153,6 +2179,9 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
               onKeepTheirs={conflictFlow.handleKeepTheirs}
               flushPendingEditorContentRef={flushPendingEditorContentRef}
               flushPendingRawContentRef={flushPendingRawContentRef}
+              blockedPaths={saveHold.blockedPaths}
+              settlementRef={settlementRef}
+              renderPageNotice={renderSaveHold}
               onToast={setToastMessage}
               locale={appLocale}
             />
@@ -2173,6 +2202,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           />
         ) : null}
         <GitSetupDialog open={gitFeaturesEnabled && shouldShowGitSetupDialog} onInitGit={handleInitGitRepo} onDismiss={dismissGitSetupDialog} onNeverForVault={neverForVaultGitSetupDialog} />
+        {awaySaveHolds.length > 0 && <div className="ll-save-hold-list">{awaySaveHolds.map(lane => renderSaveHold(lane, true))}</div>}
         {trash.notice && <TrashNotice key={[...trash.notice.outcome.moved, ...trash.notice.outcome.uncertain].map(item => item.id).join() || 'notice'} outcome={trash.notice.outcome} locale={appLocale} onUndo={trash.notice.undo} onDismiss={trash.dismissNotice} />}
         <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
         <QuickFind

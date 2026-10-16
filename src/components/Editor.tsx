@@ -33,7 +33,7 @@ import { schema } from './editorSchema'
 import { useRightPanelExclusion } from './useRightPanelExclusion'
 import type { RawEditorFindRequest } from './RawEditorFindBar'
 import { resolvePendingRawExitContent, resolveRawModeContent } from './editorRawModeSync'
-import { useRegisterEditorContentFlushes } from './editorContentFlushRegistration'
+import { useRegisterEditorContentFlushes, type EditorIdleCheck } from './editorContentFlushRegistration'
 import { useRawModeWithFlush } from './useRawModeWithFlush'
 import { createImeCompositionKeyGuardExtension } from './imeCompositionKeyGuardExtension'
 import { createMarkdownHighlightShortcutExtension } from './markdownHighlightShortcutExtension'
@@ -173,6 +173,8 @@ export interface EditorProps {
   flushPendingEditorContentRef?: React.MutableRefObject<((path: string) => void) | null>
   /** Registers a hook that flushes the raw editor buffer into app state before external actions. */
   flushPendingRawContentRef?: React.MutableRefObject<((path: string) => void) | null>
+  /** Registers whether the editor's buffers hold only the given text, before a final recovery choice. */
+  editorIdleRef?: React.MutableRefObject<EditorIdleCheck | null>
   locale?: AppLocale
 }
 
@@ -406,7 +408,7 @@ function useEditorSetup(options: EditorSetupParams) {
       const trackedContentChange = useCallback((path: string, content: string) => {
         handedRef.current = { path, content, receipt: onContentChange?.(path, content) || null }
       }, [onContentChange])
-      const { editorContentPath, handleEditorChange, flushPendingEditorChange, editorMountedRef, documentSessionRef } = useEditorTabSwap({
+      const { editorContentPath, handleEditorChange, flushPendingEditorChange, hasPendingEditorChange, editorMountedRef, documentSessionRef } = useEditorTabSwap({
         tabs: tabsForEditorSwap,
         activeTabPath: richEditorActiveTabPath,
         editor,
@@ -483,6 +485,7 @@ function useEditorSetup(options: EditorSetupParams) {
         handleToggleRawExclusive,
         handleEditorChange,
         flushPendingEditorChange,
+        hasPendingEditorChange,
         handleViewCommitDiff,
         isLoadingNewTab,
         activeStatus,
@@ -907,6 +910,8 @@ export const Editor = memo(function Editor(props: EditorProps) {
     rawMode: runtime.rawMode,
     onContentChange: props.onContentChange,
     flushPendingRawContentRef: props.flushPendingRawContentRef,
+    hasPendingEditorChange: runtime.hasPendingEditorChange,
+    editorIdleRef: props.editorIdleRef,
   })
   const rightPanel = useRightPanelExclusion(props)
   const { tableOfContentsToggleRef } = props

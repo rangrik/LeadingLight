@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useEditorSave } from './useEditorSave'
 
-const mockInvokeFn = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<null>>(() => Promise.resolve(null))
+const COMMITTED = { status: 'committed', written: true, durable: true, history: null }
+const STAGE_FAILED = { status: 'refused', reason: 'stageFailed' }
+/** The S0 page writer call for this page and text. */
+const pageSave = (path: string, content: string) => ['save_page_content', { request: expect.objectContaining({ path }), content }] as const
+const mockInvokeFn = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(() => Promise.resolve(COMMITTED))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('../mock-tauri', () => ({
@@ -23,7 +27,7 @@ function renderQueue(initial: { scope?: string, renames?: Map<string, string> } 
 
 beforeEach(() => {
   mockInvokeFn.mockReset()
-  mockInvokeFn.mockResolvedValue(null)
+  mockInvokeFn.mockResolvedValue(COMMITTED)
 })
 
 // Seam: a pending draft counts as delivered only on the queue's own record of these exact bytes, in this session.
@@ -40,8 +44,9 @@ describe('save queue admission receipt', () => {
   })
 
   it('admits new Today text at once behind an older write, and settles only after the latest text is saved', async () => {
-    let failOlder: (error: Error) => void = () => {}
-    mockInvokeFn.mockImplementationOnce(() => new Promise((_resolve, reject) => { failOlder = reject }))
+    // The older write is refused before publication; the newer text stays and saves normally.
+    let failOlder: () => void = () => {}
+    mockInvokeFn.mockImplementationOnce(() => new Promise(resolve => { failOlder = () => resolve(STAGE_FAILED) }))
     const { result } = renderQueue()
     act(() => { result.current.handleContentChange(TODAY, '# Today\n\nolder') })
     let older: Promise<boolean> = Promise.resolve(false)
@@ -52,10 +57,11 @@ describe('save queue admission receipt', () => {
     expect(receipt).toMatchObject({ content: '# Today\n\nolder\n\ndraft' })
     expect(result.current.receiptStatus(receipt!)).toBe('pending')
 
-    await act(async () => { failOlder(new Error('disk full')); await older.catch(() => false) })
+    await vi.waitFor(() => expect(mockInvokeFn).toHaveBeenCalledTimes(1))
+    await act(async () => { failOlder(); await older.catch(() => false) })
     expect(result.current.receiptStatus(receipt!)).toBe('pending')
     await act(async () => { await result.current.savePendingForPath(TODAY) })
-    expect(mockInvokeFn).toHaveBeenLastCalledWith('save_note_content', { path: TODAY, content: '# Today\n\nolder\n\ndraft' })
+    expect(mockInvokeFn).toHaveBeenLastCalledWith(...pageSave(TODAY, '# Today\n\nolder\n\ndraft'))
     expect(result.current.receiptStatus(receipt!)).toBe('settled')
   })
 
@@ -67,7 +73,7 @@ describe('save queue admission receipt', () => {
     renames.set('/vault/untitled-page-1.md', '/vault/harbor.md')
     expect(result.current.receiptStatus(receipt!)).toBe('pending')
     await act(async () => { await result.current.savePendingForPath('/vault/harbor.md') })
-    expect(mockInvokeFn).toHaveBeenLastCalledWith('save_note_content', { path: '/vault/harbor.md', content: 'draft' })
+    expect(mockInvokeFn).toHaveBeenLastCalledWith(...pageSave('/vault/harbor.md', 'draft'))
     expect(result.current.receiptStatus(receipt!)).toBe('settled')
   })
 

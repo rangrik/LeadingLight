@@ -238,7 +238,7 @@ function SearchRow({ search, isSearching, searchInputRef, locale, onSearchChange
   locale: AppLocale
 }) {
   const [draft, setDraft] = useState(search)
-  const debounceRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
   const cancelDebounce = useCallback(() => {
     if (debounceRef.current === null) return

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { test, expect, type Locator, type Page, type Request } from '@playwright/test'
+import { test, expect, type Locator, type Page, type Request, type Route } from '@playwright/test'
 import { APP_COMMAND_IDS } from '../../src/hooks/appCommandCatalog'
 import { createFixtureVaultCopy, openFixtureVaultTauri, removeFixtureVaultCopy } from '../helpers/fixtureVault'
 import { triggerMenuCommand, triggerShortcutCommand } from './testBridge'
@@ -22,8 +22,13 @@ const SETTLED_AFTER_MS = 3_500
 interface PropertyWriteGate {
   heldContent: string | null
   overlapping: string[]
+  /** Ordinary saves of this page seen at the page save route, so its watch is shown to be live. */
+  pageSaves: number
   lastNoteSaveAt: number
+  /** During the test: the held write continues to the real backend. */
   release: () => void
+  /** Cleanup: a still-held write is aborted, and every admitted request is answered on return. */
+  dispose: () => Promise<void>
 }
 
 let vault: string
@@ -33,17 +38,26 @@ test.beforeEach(() => {
   vault = createFixtureVaultCopy()
 })
 
-test.afterEach(() => {
-  activeGate?.release()
-  activeGate = null
-  removeFixtureVaultCopy(vault)
+// No new vault work is admitted, every admitted write is answered, the page closes, then the vault goes.
+test.afterEach(async ({ page }) => {
+  try {
+    // Registered last, so it runs before the gate's routes for every later request.
+    if (!page.isClosed()) await page.route('**/api/vault/**', route => route.abort().catch(() => undefined))
+    await activeGate?.dispose()
+    activeGate = null
+    await page.close({ runBeforeUnload: false })
+  } finally {
+    removeFixtureVaultCopy(vault)
+  }
 })
 
+// The legacy writer sends {path, content}; the page save route sends {request: {path, …}, content}.
 function readSaveBody(request: Request): { notePath: string, content: string } {
   try {
-    const body = request.postDataJSON() as { path?: unknown, content?: unknown } | null
+    const body = request.postDataJSON() as { path?: unknown, content?: unknown, request?: { path?: unknown } } | null
+    const notePath = body?.request?.path ?? body?.path
     return {
-      notePath: typeof body?.path === 'string' ? body.path : '',
+      notePath: typeof notePath === 'string' ? notePath : '',
       content: typeof body?.content === 'string' ? body.content : '',
     }
   } catch {
@@ -51,28 +65,62 @@ function readSaveBody(request: Request): { notePath: string, content: string } {
   }
 }
 
-// Holds only the property command's own write: the first save of this page carrying the new value.
+// Settles only once the request is answered, so cleanup can join it before the vault goes.
+async function forward(route: Route): Promise<void> {
+  await route.continue()
+  await route.request().response().catch(() => null)
+}
+
+// Holds only the property command's own write, the first legacy save of this page carrying the new
+// value. Ordinary saves now use the page save route, so overlap is watched at both writers.
 async function holdPropertyWrite(page: Page): Promise<PropertyWriteGate> {
-  let releaseWrite = () => {}
-  const released = new Promise<void>((resolve) => { releaseWrite = resolve })
-  const gate: PropertyWriteGate = { heldContent: null, overlapping: [], lastNoteSaveAt: Date.now(), release: () => releaseWrite() }
+  // The first decision wins: a release in the test continues, so a later dispose only waits.
+  let decide: (decision: 'continue' | 'abort') => void = () => {}
+  const decision = new Promise<'continue' | 'abort'>((resolve) => { decide = resolve })
+  // Every admitted handler, so cleanup can join them while later requests are refused.
+  const handlers: Promise<unknown>[] = []
+  const tracked = (handle: (route: Route) => Promise<unknown>) => (route: Route) => {
+    const run = handle(route)
+    handlers.push(run)
+    return run
+  }
+  const gate: PropertyWriteGate = {
+    heldContent: null,
+    overlapping: [],
+    pageSaves: 0,
+    lastNoteSaveAt: Date.now(),
+    release: () => decide('continue'),
+    dispose: async () => {
+      decide('abort')
+      await Promise.allSettled(handlers)
+    },
+  }
   let holding = false
-  await page.route('**/api/vault/save', async (route) => {
+  await page.route('**/api/vault/save-page-content', tracked(async (route) => {
     const { notePath, content } = readSaveBody(route.request())
-    if (!notePath.endsWith(NOTE_PATH_SUFFIX)) return route.continue()
+    if (!notePath.endsWith(NOTE_PATH_SUFFIX)) return forward(route)
+    gate.lastNoteSaveAt = Date.now()
+    gate.pageSaves += 1
+    if (holding) gate.overlapping.push(content)
+    return forward(route)
+  }))
+  await page.route('**/api/vault/save', tracked(async (route) => {
+    const { notePath, content } = readSaveBody(route.request())
+    if (!notePath.endsWith(NOTE_PATH_SUFFIX)) return forward(route)
     gate.lastNoteSaveAt = Date.now()
     if (gate.heldContent === null && content.includes(NEW_STATUS)) {
       gate.heldContent = content
       holding = true
-      await released
+      const decided = await decision
       holding = false
       gate.lastNoteSaveAt = Date.now()
-      // The page may already be closing when afterEach releases a failed test.
-      return route.continue().catch(() => undefined)
+      // A write still held at cleanup is aborted, so it never reaches a removed vault.
+      if (decided === 'abort') return route.abort().catch(() => undefined)
+      return forward(route).catch(() => undefined)
     }
     if (holding) gate.overlapping.push(content)
-    return route.continue()
-  })
+    return forward(route)
+  }))
   activeGate = gate
   return gate
 }
@@ -153,6 +201,7 @@ test('a property change that read the old page keeps rich text saved while it wa
   await expect(page.locator('.bn-editor')).toContainText(ORIGINAL_SENTENCE)
   await expect(badge).toHaveText(NEW_STATUS)
   expect(gate.overlapping, 'saves written while the property write was in progress').toEqual([])
+  expect(gate.pageSaves, 'the newer text never reached the page save route, so overlap there went unseen').toBeGreaterThan(0)
 })
 
 test('a property change that read the old page keeps raw Markdown, saved and still unsaved', async ({ page }) => {
@@ -182,4 +231,5 @@ test('a property change that read the old page keeps raw Markdown, saved and sti
   await expect.poll(async () => pageState(await rawContent.innerText(), newerText)).toEqual(expectedState(newerText))
   await expect(badge).toHaveText(NEW_STATUS)
   expect(gate.overlapping, 'saves written while the property write was in progress').toEqual([])
+  expect(gate.pageSaves, 'the newer text never reached the page save route, so overlap there went unseen').toBeGreaterThan(0)
 })

@@ -19,12 +19,12 @@ vi.mock('../mock-tauri', () => ({
   isTauri: () => false,
   updateMockContent: vi.fn(),
   // A stand-in for the native transaction: it reads disk when called and publishes when released.
-  mockInvoke: (cmd: string, args: { path: string; content?: string; favorite?: boolean; favoriteIndex?: number | null }) => {
-    if (cmd === 'save_note_content') {
-      if (native.failSave) return Promise.reject(new Error('disk full'))
-      native.disk.set(args.path, args.content ?? '')
+  mockInvoke: (cmd: string, args: { path: string; request?: { path: string }; content?: string; favorite?: boolean; favoriteIndex?: number | null }) => {
+    if (cmd === 'save_page_content') {
+      if (native.failSave) return Promise.resolve({ status: 'refused', reason: 'stageFailed' })
+      native.disk.set(args.request?.path ?? '', args.content ?? '')
       native.saves.push(args.content ?? '')
-      return Promise.resolve(null)
+      return Promise.resolve({ status: 'committed', written: true, durable: true, history: null })
     }
     if (cmd === 'get_note_content') return new Promise(resolve => { native.release = () => resolve(native.disk.get(args.path)) })
     native.calls++

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type MutableRefObject, type PointerEvent } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type MutableRefObject, type PointerEvent, type ReactNode } from 'react'
 import { Columns, Rows, X, CaretDown, Plus, DotsSixVertical, ArrowBendUpLeft } from '@phosphor-icons/react'
 import { LazyEditor } from '../components/LazyEditor'
 import { getInspectorLinkSummary } from '../components/inspector/useInspectorData'
@@ -19,6 +19,8 @@ import { useInspectorOverlay } from './useInspectorOverlay'
 import { notePathsMatch } from '../utils/notePathIdentity'
 import { PageDropOverlay } from './PageDropOverlay'
 import { pageLabel } from './pageLabel'
+import { includesPath, usePaneSettlement, type PageSettlement } from './saveHold/paneSettlement'
+import type { EditorIdleCheck } from '../components/editorContentFlushRegistration'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -31,6 +33,7 @@ function editorRefs() {
     turnCurrentBlockIntoRef: ref<((target: RichEditorBlockTypeDefinition) => void) | null>(null),
     flushPendingEditorContentRef: ref<((path: string) => void) | null>(null),
     flushPendingRawContentRef: ref<((path: string) => void) | null>(null),
+    editorIdleRef: ref<EditorIdleCheck | null>(null),
   }
 }
 interface Props extends EditorProps {
@@ -42,10 +45,19 @@ interface Props extends EditorProps {
   transitionPending?: boolean
   workspace: SplitWorkspaceController
   unsavedPaths: Set<string>
+  /** Pages inside a final recovery choice: their pane takes no input or page commands. */
+  blockedPaths?: ReadonlySet<string>
+  /** Filled with the panes' side of a final recovery choice. */
+  settlementRef?: MutableRefObject<PageSettlement | null>
+  /** A page's own save notice, shown under its pane header. */
+  renderPageNotice?: (path: string) => ReactNode
 }
 export function SplitEditorWorkspace(props: Props) {
   const { workspace, unsavedPaths } = props
   const paneRefs = useMemo(() => [editorRefs(), editorRefs()] as const, [])
+  const idleRefs = useMemo(() => [paneRefs[0].editorIdleRef, paneRefs[1].editorIdleRef] as const, [paneRefs])
+  const settlement = usePaneSettlement({ paths: workspace.paths, blockedPaths: props.blockedPaths, onContentChange: props.onContentChange,
+    idleRefs, closePageAndReserveOpen: workspace.closePageAndReserveOpen, settlementRef: props.settlementRef })
   const activeRef = useRef(workspace.activePane)
   useLayoutEffect(() => { activeRef.current = workspace.activePane }, [workspace.activePane])
   const containerRef = useRef<HTMLDivElement>(null)
@@ -109,16 +121,32 @@ export function SplitEditorWorkspace(props: Props) {
 
   const { rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef, pdfExportRef,
     turnCurrentBlockIntoRef, flushPendingEditorContentRef, flushPendingRawContentRef } = props
+  const { isBlocked } = settlement
+  // A shown page with unsaved words stays writable when a list refresh no longer has its file.
+  const editorEntries = useMemo(() => {
+    const kept = workspace.paths.flatMap(path => {
+      const tab = path && unsavedPaths.has(path) ? props.tabs.find(item => item.entry.path === path) : undefined
+      return tab && !props.entries.some(entry => entry.path === tab.entry.path) ? [tab.entry] : []
+    })
+    return kept.length ? [...props.entries, ...kept] : props.entries
+  }, [workspace.paths, unsavedPaths, props.tabs, props.entries])
+  // A focused editor that turns inert may keep focus; move it out so keys cannot reach the page.
+  useLayoutEffect(() => {
+    const focused = document.activeElement
+    if (focused instanceof HTMLElement && focused.closest('[data-recovery-blocked]')) focused.blur()
+  }, [props.blockedPaths])
   useEffect(() => {
-    if (rawToggleRef) rawToggleRef.current = () => paneRefs[activeRef.current].rawToggleRef.current()
-    if (diffToggleRef) diffToggleRef.current = () => paneRefs[activeRef.current].diffToggleRef.current()
+    // A pane inside a final recovery choice takes no page command; the other pane still does.
+    const pane = () => isBlocked(activeRef.current) ? null : paneRefs[activeRef.current]
+    if (rawToggleRef) rawToggleRef.current = () => pane()?.rawToggleRef.current()
+    if (diffToggleRef) diffToggleRef.current = () => pane()?.diffToggleRef.current()
     if (tableOfContentsToggleRef) tableOfContentsToggleRef.current = () => paneRefs[activeRef.current].tableOfContentsToggleRef.current()
-    if (findInNoteRef) findInNoteRef.current = options => paneRefs[activeRef.current].findInNoteRef.current?.(options)
-    if (pdfExportRef) pdfExportRef.current = source => paneRefs[activeRef.current].pdfExportRef.current?.(source)
-    if (turnCurrentBlockIntoRef) turnCurrentBlockIntoRef.current = target => paneRefs[activeRef.current].turnCurrentBlockIntoRef.current?.(target)
+    if (findInNoteRef) findInNoteRef.current = options => pane()?.findInNoteRef.current?.(options)
+    if (pdfExportRef) pdfExportRef.current = source => pane()?.pdfExportRef.current?.(source)
+    if (turnCurrentBlockIntoRef) turnCurrentBlockIntoRef.current = target => pane()?.turnCurrentBlockIntoRef.current?.(target)
     if (flushPendingEditorContentRef) flushPendingEditorContentRef.current = path => paneRefs.forEach(pane => pane.flushPendingEditorContentRef.current?.(path))
     if (flushPendingRawContentRef) flushPendingRawContentRef.current = path => paneRefs.forEach(pane => pane.flushPendingRawContentRef.current?.(path))
-  }, [paneRefs, rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef,
+  }, [paneRefs, isBlocked, rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef,
     pdfExportRef, turnCurrentBlockIntoRef, flushPendingEditorContentRef, flushPendingRawContentRef])
 
   useEffect(() => {
@@ -170,6 +198,7 @@ export function SplitEditorWorkspace(props: Props) {
         const active = workspace.activePane === pane
         const backlinkCount = tab ? getInspectorLinkSummary(tab.entry, props.entries).backlinks.length : 0
         const backlinkLabel = translate(locale, 'leadinglight.backlinks.show', { count: backlinkCount })
+        const blocked = includesPath(props.blockedPaths, path)
         return <Fragment key={pane}>
           {index === 1 && <div className="ll-pane-separator" role="separator" tabIndex={0}
             aria-label={t('leadinglight.split.resize')} aria-orientation={workspace.orientation === 'horizontal' ? 'vertical' : 'horizontal'}
@@ -218,7 +247,10 @@ export function SplitEditorWorkspace(props: Props) {
               <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.create')} title={t('leadinglight.split.create')} onClick={() => { activate(pane); props.onCreateNote?.() }}><Plus /></Button>
               {workspace.split && <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.close')} title={t('leadinglight.split.close')} onClick={() => { void workspace.closePane(pane).catch(() => {}) }}><X /></Button>}
             </div>
-            {tab ? <LazyEditor {...props} {...paneRefs[pane]} tabs={[tab]} activeTabPath={path}
+            {tab && path && props.renderPageNotice?.(path)}
+            {tab ? <div className="contents" inert={blocked} data-recovery-blocked={blocked ? '' : undefined}>
+              <LazyEditor {...props} {...paneRefs[pane]} tabs={[tab]} activeTabPath={path} entries={editorEntries}
+              onContentChange={settlement.contentChanges[pane]}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
               inspectorOverlay={inspector.floats(pane)}
               showAIChat={active && props.showAIChat} aiWorkspaceSurface={active ? props.aiWorkspaceSurface : undefined}
@@ -229,6 +261,7 @@ export function SplitEditorWorkspace(props: Props) {
               onOpenEntry={entry => openBacklink(pane, entry)}
               revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
               backlinksEmptyLabel={t('inspector.backlinks.empty')} />
+            </div>
               : <div className="ll-pane-empty">
                 <p>{t(props.emptyVault ? 'leadinglight.split.emptyVault' : 'leadinglight.split.empty')}</p>
                 {props.emptyVault && <span>{t('leadinglight.split.emptyVaultHint')}</span>}

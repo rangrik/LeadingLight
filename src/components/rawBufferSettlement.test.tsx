@@ -43,8 +43,11 @@ beforeEach(() => {
   disk.set(PATH, '---\ntitle: Plan\n---\nbody')
   const held = new Promise<void>(resolve => { release = resolve })
   vi.mocked(invoke).mockImplementation(async (cmd: string, raw?: unknown) => {
-    const args = raw as { path: string; content: string }
-    if (cmd === 'save_note_content') disk.set(args.path, args.content)
+    const args = raw as { path: string; content: string; request: { path: string } }
+    if (cmd === 'save_page_content') {
+      disk.set(args.request.path, args.content)
+      return { status: 'committed', written: true, durable: true, history: null }
+    }
     if (cmd === 'update_frontmatter') {
       const after = disk.get(args.path)!.replace('\n---\n', '\nstatus: done\n---\n') // read first, write later
       await held

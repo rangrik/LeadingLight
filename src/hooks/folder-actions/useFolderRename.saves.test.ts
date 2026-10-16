@@ -12,6 +12,11 @@ import { useFolderRename } from './useFolderRename'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('../../mock-tauri', () => ({ isTauri: () => true, mockInvoke: vi.fn(), updateMockContent: vi.fn() }))
+// The real hash finishes outside fake time, which made save timing depend on the machine.
+vi.mock('../../leadinglight/saveOutcome', async importOriginal => ({
+  ...await importOriginal<typeof import('../../leadinglight/saveOutcome')>(),
+  sha256Hex: async () => 'a'.repeat(64),
+}))
 
 // Seam: a folder move against page saves and page renames. Catches writes or renames landing at the old folder after a move.
 const ON = { favorite: true, favoriteIndex: 1 } as const
@@ -38,8 +43,11 @@ function gate() {
 
 function installNative() {
   vi.mocked(invoke).mockImplementation(async (cmd: string, raw?: unknown) => {
-    const args = (raw ?? {}) as { path: string; content: string }
-    if (cmd === 'save_note_content') return void disk.set(args.path, args.content)
+    const args = (raw ?? {}) as { path: string; content: string; request: { path: string } }
+    if (cmd === 'save_page_content') {
+      disk.set(args.request.path, args.content)
+      return { status: 'committed', written: true, durable: true, history: null }
+    }
     if (cmd === 'get_note_content') {
       if (readFails) throw new Error('unreadable')
       return disk.get(args.path) ?? ''

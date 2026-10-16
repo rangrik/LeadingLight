@@ -53,7 +53,10 @@ export function useDebouncedEditorChange({
     }
   }, [clearTimer, tryBackgroundFlush])
 
-  return { handleEditorChange, flushPendingEditorChange }
+  // Read-only, so a final recovery choice can refuse instead of flushing or dropping newer words.
+  const hasPendingEditorChange = useCallback(() => pendingRef.current, [])
+
+  return { handleEditorChange, flushPendingEditorChange, hasPendingEditorChange }
 }
 
 export function consumeRawModeTransition(

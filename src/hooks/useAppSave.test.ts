@@ -1,14 +1,17 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import type { SetStateAction } from 'react'
 import { useAppSave } from './useAppSave'
 import { AUTO_SAVE_DEBOUNCE_MS } from './useEditorSave'
 import type { VaultEntry } from '../types'
 import { isTauri } from '../mock-tauri'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, type InvokeArgs } from '@tauri-apps/api/core'
 
-const { startTransitionMock } = vi.hoisted(() => ({
+const { startTransitionMock, answerPageWrites } = vi.hoisted(() => ({
   startTransitionMock: vi.fn((callback: () => void) => callback()),
+  // The S0 page writer commits by default; every other command answers nothing, as before.
+  answerPageWrites: (command: string) => Promise.resolve(
+    command === 'save_page_content' ? { status: 'committed', written: true, durable: true, history: null } : undefined),
 }))
 
 vi.mock('react', async (importOriginal) => {
@@ -20,13 +23,35 @@ vi.mock('react', async (importOriginal) => {
 })
 
 vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn().mockResolvedValue(undefined),
+  invoke: vi.fn(answerPageWrites),
 }))
 vi.mock('../mock-tauri', () => ({
   isTauri: vi.fn(() => false),
-  mockInvoke: vi.fn().mockResolvedValue(undefined),
+  mockInvoke: vi.fn(answerPageWrites),
   updateMockContent: vi.fn(),
 }))
+// The real hash finishes outside fake time, which made rename timing depend on the machine.
+vi.mock('../leadinglight/saveOutcome', async importOriginal => ({
+  ...await importOriginal<typeof import('../leadinglight/saveOutcome')>(),
+  sha256Hex: async () => 'a'.repeat(64),
+}))
+
+type Tab = { entry: VaultEntry; content: string }
+type RenameResult = { new_path: string; updated_files: number }
+type UntitledRenameOptions = {
+  initialContent?: string
+  diskContent?: string
+  autoRenameResult?: Promise<RenameResult | null> | RenameResult | null
+}
+/** The untitled-rename harness before anything is rendered. */
+type UntitledRenameHarness = {
+  entry: VaultEntry
+  oldPath: string
+  newPath: string
+  setTabs: Mock<(updater: SetStateAction<Tab[]>) => void>
+  getTabs: () => Tab[]
+  setTabsState: (nextTabs: Tab[]) => void
+}
 
 function makeEntry(path: string, title = 'Test', filename = 'test.md'): VaultEntry {
   return { path, title, filename, content: '', outgoingLinks: [], snippet: '', wordCount: 0, isA: 'Note', status: null, createdAt: null, modifiedAt: null, icon: null, tags: [] } as unknown as VaultEntry
@@ -46,6 +71,17 @@ function makeWorkspace(path: string, alias = 'workspace'): NonNullable<VaultEntr
     defaultForNewNotes: false,
   }
 }
+
+const COMMITTED = { status: 'committed', written: true, durable: true, history: null }
+/** The S0 page writer call for this page and text. */
+const pageSave = (path: string, content: string) => ['save_page_content', { request: expect.objectContaining({ path }), content }] as const
+/** Every S0 page write so far, as `[command, { path, content }]`. */
+const pageWrites = () => vi.mocked(invoke).mock.calls
+  .filter(([command]) => command === 'save_page_content')
+  .map(([command, args]) => {
+    const { request, content } = args as { request: { path: string }; content: string }
+    return [command, { path: request.path, content }]
+  })
 
 describe('useAppSave', () => {
   const deps = {
@@ -95,12 +131,9 @@ describe('useAppSave', () => {
     return { promise, resolve }
   }
 
-  function setupUntitledRenameHarness(options?: {
-    initialContent?: string
-    diskContent?: string
-    autoRenameResult?: Promise<{ new_path: string; updated_files: number } | null> | { new_path: string; updated_files: number } | null
-    render?: boolean
-  }) {
+  function setupUntitledRenameHarness(options: UntitledRenameOptions & { render: false }): UntitledRenameHarness
+  function setupUntitledRenameHarness(options?: UntitledRenameOptions): UntitledRenameHarness & ReturnType<typeof renderSave>
+  function setupUntitledRenameHarness(options?: UntitledRenameOptions & { render?: boolean }) {
     vi.useFakeTimers()
     vi.mocked(isTauri).mockReturnValue(true)
 
@@ -114,11 +147,11 @@ describe('useAppSave', () => {
       tabsState = typeof updater === 'function' ? updater(tabsState) : updater
     })
 
-    vi.mocked(invoke).mockImplementation(async (command: string, args?: Record<string, unknown>) => {
-      if (command === 'save_note_content') return undefined
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
+      if (command === 'save_page_content') return COMMITTED
       if (command === 'auto_rename_untitled') return options?.autoRenameResult ?? { new_path: newPath, updated_files: 0 }
       if (command === 'reload_vault_entry') return makeEntry(newPath, 'Fresh Title', 'fresh-title.md')
-      if (command === 'get_note_content' && args?.path === newPath) return diskContent
+      if (command === 'get_note_content' && args && 'path' in args && args.path === newPath) return diskContent
       return undefined
     })
 
@@ -185,7 +218,7 @@ describe('useAppSave', () => {
   }
 
   function expectNoSaveNoteContent() {
-    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith('save_note_content', expect.anything())
+    expect(vi.mocked(invoke)).not.toHaveBeenCalledWith('save_page_content', expect.anything())
     expect(deps.clearUnsaved).not.toHaveBeenCalled()
   }
 
@@ -256,9 +289,8 @@ describe('useAppSave', () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const path = 'C:\\Users\\@raflymln\\notes\\untitled-note-1777236475.md'
     const entry = makeEntry(path, 'Untitled Note 1777236475', 'untitled-note-1777236475.md')
-    vi.mocked(invoke).mockRejectedValueOnce(
-      new Error('The filename, directory name, or volume label syntax is incorrect. (os error 123)'),
-    )
+    // S0 reports the OS staging error as a refusal; nothing was published.
+    vi.mocked(invoke).mockResolvedValueOnce({ status: 'refused', reason: 'stageFailed' })
 
     const { result } = renderSave({
       resolvedPath: 'C:\\Users\\@raflymln\\notes',
@@ -273,9 +305,7 @@ describe('useAppSave', () => {
     })
 
     expect(saved).toBe(false)
-    expect(deps.setToastMessage).toHaveBeenCalledWith(
-      'Save failed: The note path is invalid on this platform. Rename the note or move it to a valid folder, then try again.',
-    )
+    expect(deps.setToastMessage).toHaveBeenCalledWith("Save failed: The new text couldn't be prepared on disk.")
     expect(deps.clearUnsaved).not.toHaveBeenCalled()
     expect(vi.mocked(invoke)).not.toHaveBeenCalledWith('auto_rename_untitled', expect.anything())
     consoleSpy.mockRestore()
@@ -385,11 +415,11 @@ describe('useAppSave', () => {
   it('debounces untitled H1 auto-rename until the user pauses typing', async () => {
     vi.useFakeTimers()
     vi.mocked(isTauri).mockReturnValue(true)
-    vi.mocked(invoke).mockImplementation(async (command: string, args?: Record<string, unknown>) => {
-      if (command === 'save_note_content') return undefined
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
+      if (command === 'save_page_content') return COMMITTED
       if (command === 'auto_rename_untitled') return { new_path: '/vault/fresh-title.md', updated_files: 0 }
       if (command === 'reload_vault_entry') return makeEntry('/vault/fresh-title.md', 'Fresh Title', 'fresh-title.md')
-      if (command === 'get_note_content' && args?.path === '/vault/fresh-title.md') return '# Fresh Title\n\nBody'
+      if (command === 'get_note_content' && args && 'path' in args && args.path === '/vault/fresh-title.md') return '# Fresh Title\n\nBody'
       return undefined
     })
 
@@ -445,11 +475,11 @@ describe('useAppSave', () => {
     const content = '# test\n\nBody'
     const entry = makeEntry(oldPath, 'Untitled Note 1783087381', 'untitled-note-1783087381.md')
 
-    vi.mocked(invoke).mockImplementation(async (command: string, args?: Record<string, unknown>) => {
-      if (command === 'save_note_content') return undefined
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
+      if (command === 'save_page_content') return COMMITTED
       if (command === 'auto_rename_untitled') return { new_path: newPath, updated_files: 0 }
       if (command === 'reload_vault_entry') return makeEntry(newPath, 'test', 'test.md')
-      if (command === 'get_note_content' && args?.path === newPath) return content
+      if (command === 'get_note_content' && args && 'path' in args && args.path === newPath) return content
       return undefined
     })
 
@@ -506,10 +536,7 @@ describe('useAppSave', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('save_note_content', {
-      path: oldPath,
-      content: revisedTitleContent,
-    })
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith(...pageSave(oldPath, revisedTitleContent))
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000)
@@ -522,7 +549,7 @@ describe('useAppSave', () => {
     vi.useFakeTimers()
     vi.mocked(isTauri).mockReturnValue(true)
     vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === 'save_note_content') return undefined
+      if (command === 'save_page_content') return COMMITTED
       if (command === 'auto_rename_untitled') {
         throw new Error('auto_rename_untitled should not run when disabled')
       }
@@ -576,7 +603,7 @@ describe('useAppSave', () => {
     vi.useFakeTimers()
     vi.mocked(isTauri).mockReturnValue(true)
     vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === 'save_note_content') return undefined
+      if (command === 'save_page_content') return COMMITTED
       if (command === 'auto_rename_untitled') return { new_path: '/vault/fresh-title.md', updated_files: 0 }
       return undefined
     })
@@ -620,13 +647,13 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
 
-    const saveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: '# Fresh Title\n\nBody\n\nMore text' },
-    ])
+    ]))
+    const saveCalls = pageWrites()
     expect(saveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: '# Fresh Title\n\nBody\n\nMore text' },
     ])
   })
@@ -656,13 +683,13 @@ describe('useAppSave', () => {
       await Promise.resolve()
     })
 
-    const saveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: '# Fresh Title\n\nBody\n\nTyped during rename' },
-    ])
+    ]))
+    const saveCalls = pageWrites()
     expect(saveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: '# Fresh Title\n\nBody\n\nTyped during rename' },
     ])
   })
@@ -676,7 +703,7 @@ describe('useAppSave', () => {
     const entry = makeEntry(oldPath, 'Fresh Title', 'fresh-title.md')
 
     vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === 'save_note_content') return undefined
+      if (command === 'save_page_content') return COMMITTED
       return undefined
     })
 
@@ -702,13 +729,13 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
 
-    const saveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: '# Fresh Title\n\nBody\n\nMore text' },
-    ])
+    ]))
+    const saveCalls = pageWrites()
     expect(saveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: '# Fresh Title\n\nBody\n\nMore text' },
     ])
     expect(deps.replaceEntry).toHaveBeenCalledWith(
@@ -728,7 +755,7 @@ describe('useAppSave', () => {
     const entry = makeEntry(oldPath, 'Fresh Title', 'fresh-title.md')
 
     vi.mocked(invoke).mockImplementation(async (command: string) => {
-      if (command === 'save_note_content') return undefined
+      if (command === 'save_page_content') return COMMITTED
       return undefined
     })
 
@@ -755,13 +782,13 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
 
-    const saveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: '# Fresh Title\n\nBody\n\nAlias edit' },
-    ])
+    ]))
+    const saveCalls = pageWrites()
     expect(saveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: aliasOldPath, content: '# Fresh Title\n\nBody\n\nAlias edit' },
     ])
   })
@@ -816,7 +843,7 @@ describe('useAppSave', () => {
     let currentTabs = [{ entry, content: '# Fresh Title\n\nBody' }]
 
     const { result, rerender } = renderHook(
-      ({ currentTabs, currentActiveTabPath }: { currentTabs: typeof currentTabs; currentActiveTabPath: string | null }) => useAppSave({
+      ({ currentTabs, currentActiveTabPath }: { currentTabs: Tab[]; currentActiveTabPath: string | null }) => useAppSave({
         ...deps,
         setTabs,
         tabs: currentTabs,
@@ -888,10 +915,7 @@ describe('useAppSave', () => {
       await result.current.handleSave()
     })
 
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('save_note_content', {
-      path: viewPath,
-      content: viewContent,
-    })
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith(...pageSave(viewPath, viewContent))
     expect(deps.handleRenameNote).not.toHaveBeenCalled()
   })
 
@@ -912,10 +936,7 @@ describe('useAppSave', () => {
       await result.current.handleSave()
     })
 
-    expect(vi.mocked(invoke)).toHaveBeenCalledWith('save_note_content', {
-      path: notePath,
-      content: noteContent,
-    })
+    expect(vi.mocked(invoke)).toHaveBeenCalledWith(...pageSave(notePath, noteContent))
     expect(deps.handleRenameNote).not.toHaveBeenCalled()
   })
 
@@ -942,13 +963,13 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS - 200)
     })
 
-    const saveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: bufferedContent },
-    ])
+    ]))
+    const saveCalls = pageWrites()
     expect(saveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: bufferedContent },
     ])
   })
@@ -968,10 +989,10 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS + 2_500)
     })
 
-    const saveCallsBeforeRename = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(saveCallsBeforeRename).toHaveLength(1)
+    await vi.waitFor(() => expect(pageWrites()).toHaveLength(1))
+    const saveCallsBeforeRename = pageWrites()
     expect(saveCallsBeforeRename[0]).toEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: initialContent },
     ])
 
@@ -980,7 +1001,7 @@ describe('useAppSave', () => {
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
 
-    const saveCallsWhileRenamePending = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
+    const saveCallsWhileRenamePending = pageWrites()
     expect(saveCallsWhileRenamePending).toHaveLength(1)
 
     await act(async () => {
@@ -989,13 +1010,13 @@ describe('useAppSave', () => {
       await Promise.resolve()
     })
 
-    const finalSaveCalls = vi.mocked(invoke).mock.calls.filter(([command]) => command === 'save_note_content')
-    expect(finalSaveCalls.at(-1)).toEqual([
-      'save_note_content',
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
+      'save_page_content',
       { path: newPath, content: bodyDuringRename },
-    ])
+    ]))
+    const finalSaveCalls = pageWrites()
     expect(finalSaveCalls).not.toContainEqual([
-      'save_note_content',
+      'save_page_content',
       { path: oldPath, content: bodyDuringRename },
     ])
   })

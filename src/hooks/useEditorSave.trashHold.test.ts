@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { AUTO_SAVE_DEBOUNCE_MS, useEditorSave } from './useEditorSave'
 
-const writes = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<null>>(() => Promise.resolve(null))
+const COMMITTED = { status: 'committed', written: true, durable: true, history: null }
+const writes = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>(() => Promise.resolve(COMMITTED))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('../mock-tauri', () => ({
@@ -15,13 +16,13 @@ const page = '/vault/plan.md'
 const written = () => writes.mock.calls.map(([, args]) => args?.content)
 
 function setup() {
-  return renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn() })).result
+  return renderHook(() => useEditorSave({ updateVaultContent: vi.fn(), setTabs: vi.fn(), setToastMessage: vi.fn(), persistenceScope: '/vault' })).result
 }
 
 beforeEach(() => {
   vi.useFakeTimers()
   writes.mockReset()
-  writes.mockResolvedValue(null)
+  writes.mockResolvedValue(COMMITTED)
 })
 afterEach(() => { vi.useRealTimers() })
 
@@ -53,7 +54,7 @@ describe('save hold while a page moves to Trash', () => {
       save.current.releaseAutosave(['/vault/other.md'], 'resume')
     })
     await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS + 10) })
-    expect(written()).toEqual(['still here'])
+    await vi.waitFor(() => expect(written()).toEqual(['still here']))
     expect(save.current.hasPendingWrite(page)).toBe(false)
   })
 

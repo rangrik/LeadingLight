@@ -30,7 +30,7 @@ export function scheduleParsedBlockSwap(options: {
   swapSeqRef: MutableRefObject<number>
   tabsRef: MutableRefObject<Tab[]>
   token: SwapToken
-  signalTabSwap: (options: { path: string }) => void
+  signalTabSwap: (options: { path: string; shouldAbort: () => boolean }) => void
   vaultPath?: string
 }) {
   const {
@@ -62,7 +62,7 @@ export function scheduleParsedBlockSwap(options: {
         shouldAbort,
       })
       if (!applied || shouldAbort()) return
-      signalTabSwap({ path: targetPath })
+      signalTabSwap({ path: targetPath, shouldAbort })
     })
     .catch((err: unknown) => {
       if (swapSeqRef.current === token.seq) suppressChangeRef.current = false

@@ -10,6 +10,9 @@ const CAPTURE = /^untitled-page-\d+(?:-\d+)?\.md$/
 const HARBOR = 'harbor/lantern.md'
 const HARBOR_SENTENCE = 'The harbor lantern faces the breakwater.'
 const SUCCESS = /^(Saved|Nothing to save)$/
+// Pages are created through the fixture's legacy writer; their text is saved through the page save route.
+const LEGACY_SAVE = 'save'
+const PAGE_SAVE = 'save-page-content'
 
 let vault: string
 const abs = (relative: string) => path.join(vault, relative)
@@ -30,7 +33,7 @@ const focusedPagePath = (page: Page) => page.evaluate(() => {
   return active.closest('section[data-note-path]')?.getAttribute('data-note-path') ?? null
 })
 
-interface Notice { kind: 'notice' | 'mark' | 'persisted', text: string, batch?: number, how?: 'shown' | 'changed' }
+interface Notice { kind: 'notice' | 'mark' | 'persisted' | 'refused', text: string, batch?: number, how?: 'shown' | 'changed' }
 
 /**
  * Read-only, runs in the page: logs every notice text outside the pages and the draft card that appeared
@@ -113,6 +116,15 @@ async function noticesBetween(page: Page, from: string, to?: string): Promise<st
   return log.slice(start + 1, end).filter(entry => entry.kind === 'notice').map(entry => entry.text)
 }
 
+// Failure notices after the first refused write since the mark (or ever, without a mark).
+async function reportsAfterRefusal(page: Page, from?: string): Promise<string[]> {
+  const log = await allNotices(page)
+  const start = from ? log.findIndex(entry => entry.kind === 'mark' && entry.text === from) : -1
+  const refused = log.findIndex((entry, index) => index > start && entry.kind === 'refused')
+  if (refused < 0) return []
+  return log.slice(refused + 1).filter(entry => entry.kind === 'notice' && !SUCCESS.test(entry.text)).map(entry => entry.text)
+}
+
 // The first success after the mark must come after a finished disk write of exactly this text.
 async function expectSuccessOnlyAfterWrite(page: Page, from: string, text: string) {
   await expect.poll(async () => (await noticesBetween(page, from)).filter(notice => SUCCESS.test(notice)), {
@@ -125,10 +137,12 @@ async function expectSuccessOnlyAfterWrite(page: Page, from: string, text: strin
   expect(written, 'success was announced before the text reached disk').toContain(text)
 }
 
+// The legacy writer sends {path, content}; the page save route sends {request: {path, …}, content}.
 function savedBody(request: Request): { path: string, content: string } {
   try {
-    const body = request.postDataJSON() as { path?: unknown, content?: unknown } | null
-    return { path: typeof body?.path === 'string' ? body.path : '', content: typeof body?.content === 'string' ? body.content : '' }
+    const body = request.postDataJSON() as { path?: unknown, content?: unknown, request?: { path?: unknown } } | null
+    const target = body?.request?.path ?? body?.path
+    return { path: typeof target === 'string' ? target : '', content: typeof body?.content === 'string' ? body.content : '' }
   } catch {
     return { path: '', content: '' }
   }
@@ -141,34 +155,66 @@ interface CaptureWrites {
   write: 'fail' | 'pass'
   heldCreate: string | null
   failedCreates: string[]
-  failedWrites: string[]
+  /** Each refused write of the page's text, with the route that carried it. */
+  failedWrites: Array<{ route: string, target: string }>
+  /** The route of each write of the page's text that reached disk. */
+  writtenVia: string[]
   releaseCreate: () => void
-  /** Cleanup: a still-held create is aborted, and every handler has finished on return. */
+  /** Cleanup: a still-held create is aborted, and every admitted request is answered on return. */
   dispose: () => Promise<void>
 }
 
 let activeWrites: CaptureWrites | null = null
 
+// Settles only once the request is answered, so cleanup can join it before the vault goes.
+async function forward(route: Route): Promise<void> {
+  await route.continue()
+  await route.request().response().catch(() => null)
+}
+
 // Installed before New page, so no write of the new page can slip past the intended outcome.
 async function controlCaptureWrites(page: Page, modes: Pick<CaptureWrites, 'create' | 'write'>): Promise<CaptureWrites> {
   let decide: (decision: 'continue' | 'abort') => void = () => {}
   const decision = new Promise<'continue' | 'abort'>((resolve) => { decide = resolve })
+  // Every admitted handler, so cleanup can join them while later requests are refused.
+  const handlers: Promise<unknown>[] = []
+  const tracked = (handle: (route: Route) => Promise<unknown>) => (route: Route) => {
+    const run = handle(route)
+    handlers.push(run)
+    return run
+  }
   const gate: CaptureWrites = {
     ...modes,
     heldCreate: null,
     failedCreates: [],
     failedWrites: [],
+    writtenVia: [],
     releaseCreate: () => decide('continue'),
     dispose: async () => {
       decide('abort')
-      await page.unrouteAll({ behavior: 'wait' })
+      await Promise.allSettled(handlers)
     },
   }
   const refuse = (route: Route, error: string) =>
     route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error }) })
-  await page.route('**/api/vault/save', async (route) => {
+  // Either writer of an existing page's text follows the write mode, so neither can slip text past it.
+  const writeText = async (route: Route, via: string, refusal: () => Promise<void>, accepted: (body: unknown) => boolean) => {
     const { path: target, content } = savedBody(route.request())
-    if (!CAPTURE.test(path.basename(target))) return route.continue()
+    if (gate.write === 'fail') {
+      gate.failedWrites.push({ route: via, target })
+      await addEntry(page, 'refused', via)
+      return refusal()
+    }
+    const response = await route.fetch()
+    if (response.ok() && accepted(await response.json().catch(() => null))) {
+      gate.writtenVia.push(via)
+      await addEntry(page, 'persisted', content)
+    }
+    return route.fulfill({ response })
+  }
+  await page.route(`**/api/vault/${LEGACY_SAVE}`, tracked(async (route) => {
+    const { path: target } = savedBody(route.request())
+    if (!CAPTURE.test(path.basename(target))) return forward(route)
     if (!fs.existsSync(target)) {
       if (gate.create === 'fail') {
         gate.failedCreates.push(target)
@@ -178,17 +224,19 @@ async function controlCaptureWrites(page: Page, modes: Pick<CaptureWrites, 'crea
         gate.heldCreate = target
         if ((await decision) === 'abort') return route.abort()
       }
-      return route.continue()
+      return forward(route)
     }
-    if (gate.write === 'fail') {
-      gate.failedWrites.push(target)
-      // Numbered, so each refusal shows a notice of its own.
-      return refuse(route, `The disk refused write ${gate.failedWrites.length}.`)
-    }
-    const response = await route.fetch()
-    if (response.ok()) await addEntry(page, 'persisted', content)
-    return route.fulfill({ response })
-  })
+    // Numbered, so each refusal shows a notice of its own.
+    return writeText(route, LEGACY_SAVE, () => refuse(route, `The disk refused write ${gate.failedWrites.length}.`), () => true)
+  }))
+  // The page save route never creates a page, so only writes to an existing page are controlled here.
+  await page.route(`**/api/vault/${PAGE_SAVE}`, tracked(async (route) => {
+    const { path: target } = savedBody(route.request())
+    if (!CAPTURE.test(path.basename(target)) || !fs.existsSync(target)) return forward(route)
+    // A refusal before anything is published: native's stageFailed answer, not a lost reply.
+    const stageFailed = () => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ status: 'refused', reason: 'stageFailed' }) })
+    return writeText(route, PAGE_SAVE, stageFailed, body => (body as { status?: unknown } | null)?.status === 'committed')
+  }))
   activeWrites = gate
   return gate
 }
@@ -218,10 +266,14 @@ test.describe('Save while typed words are not yet safely on disk', () => {
     expect(captures()).toEqual([])
   })
 
-  // Inner hooks finish before the file-level one deletes the vault.
-  test.afterEach(async () => {
+  // Inner hooks finish before the file-level one deletes the vault: no new vault work is admitted,
+  // every admitted write is answered, then the page closes.
+  test.afterEach(async ({ page }) => {
+    // Registered last, so it runs before the gate's routes for every later request.
+    if (!page.isClosed()) await page.route('**/api/vault/**', route => route.abort().catch(() => undefined))
     await activeWrites?.dispose()
     activeWrites = null
+    await page.close({ runBeforeUnload: false })
   })
 
   test('Save with a draft whose page could not be created refuses without any success notice, then Try again saves it once', async ({ page }) => {
@@ -260,6 +312,7 @@ test.describe('Save while typed words are not yet safely on disk', () => {
     await addEntry(page, 'mark', 'save-after-retry')
     await save(page)
     await expectSuccessOnlyAfterWrite(page, 'save-after-retry', text)
+    expect(writes.writtenVia, 'the text never reached disk through the page save route').toContain(PAGE_SAVE)
     expect(await noticesBetween(page, 'save-refused', 'save-after-retry'), 'success was announced while the draft had no page')
       .not.toContainEqual(expect.stringMatching(SUCCESS))
     expect(read(created).trim()).toBe(text)
@@ -284,18 +337,18 @@ test.describe('Save while typed words are not yet safely on disk', () => {
     await expect(pane(page)).toHaveAttribute('data-note-path', abs(created))
     await expect(pane(page).locator('.bn-editor')).toContainText(text)
     // The page's own first write is refused and reported before Save, so Save meets nothing in flight.
-    await expect.poll(async () => (await allNotices(page)).some(entry => entry.kind === 'notice' && /refused write 1\b/.test(entry.text)), {
+    await expect.poll(() => reportsAfterRefusal(page), {
       message: 'the page text was never written, or its failure was never reported',
-    }).toBe(true)
+    }).not.toEqual([])
+    expect(writes.failedWrites[0], 'the first write of the text was not refused at the page save route').toMatchObject({ route: PAGE_SAVE })
     expect(read(created), 'the refused write left the new file empty').toBe('')
-    const refusedBefore = writes.failedWrites.length
-    const earlierRefusal = (notice: string) => Number(/refused write (\d+)\b/.exec(notice)?.[1] ?? Infinity) <= refusedBefore
+    // A refusal carries no message of its own, so the earlier report leaves the screen before Save.
+    for (const notice of new Set(await reportsAfterRefusal(page))) await expect(page.getByText(notice, { exact: true })).toHaveCount(0)
 
     await addEntry(page, 'mark', 'save-refused-write')
     await save(page)
-    // Save has finished once it reports a failure of its own, not one from before it was pressed.
-    await expect.poll(async () => (await noticesBetween(page, 'save-refused-write'))
-      .filter(notice => !SUCCESS.test(notice) && !earlierRefusal(notice)), {
+    // Save has finished once it reports a failure of its own: one after a write refused since Save.
+    await expect.poll(() => reportsAfterRefusal(page, 'save-refused-write'), {
       message: 'Save never reported that the page text was not saved',
     }).not.toEqual([])
     expect(await noticesBetween(page, 'save-refused-write'), 'success was announced while the disk refused the text')

@@ -38,3 +38,35 @@ and then flush the current pane owners. A canceled or failed transition permits 
 Queued requests and Undo retain their original vault session; leaving and returning to the same
 folder does not reactivate an old Undo action. These barriers complement the native transaction
 contract in [ADR 003](ADR-003-local-trash.md).
+
+## Qualified saves and draft recovery
+
+Ordinary editor saves now use `save_page_content`. The native coordinator stages the complete
+replacement beside the page, verifies the original identity and bytes again, then publishes it.
+A lost reply remains unresolved until Check again queries that operation. It never means the
+app may safely repeat the write. A committed save with a failed directory sync remains committed;
+its durability warning does not cause another write. The transaction contract and its external
+writer and crash limits are recorded in [ADR 006](ADR-006-qualified-page-saves.md).
+
+The existing frontend queue owns pending text, exact save receipts and recovery records. A
+page-specific notice explains an unsaved or uncertain result. Saving a new copy preserves the
+original draft and does not finish recovery by itself. Typing more makes that earlier copy
+ineligible to settle the newer draft. Keeping a copy requires native proof of its ownership,
+current bytes and exact copied revision; discarding requires an explicit confirmation.
+
+A final choice captures the receiving vault session and displayed request before any wait.
+It briefly blocks input to that page, waits for admitted imports, flushes editor buffers and
+joins existing page work once. A changed request or session cancels the old choice. Native
+proof is followed by a separate synchronous editor close and receipt settlement; a failed or
+stale close retains recovery. Closing clears the note-open and parsed-block caches so reopening
+cannot silently restore an old cached body. The other pane remains usable throughout.
+
+Keeping a copy reads its current entry and content by exact path before settling the draft.
+A failed read leaves recovery available. After the guarded close, the split controller reserves
+the pane that actually showed the original and opens the prepared copy there. It does not wait
+for the full page list or replace the other active pane. A later navigation cancels that open;
+the result still explains where the kept copy can be found.
+
+An unresolved recovery record prevents a successful close or vault-switch drain. This preserves
+normal interactive recovery; the process-local outcome registry is not a durable journal of
+unsaved typing. Automatic earlier-version history is a separate increment.

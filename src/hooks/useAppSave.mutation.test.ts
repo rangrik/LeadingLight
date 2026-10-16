@@ -31,13 +31,16 @@ const BUSY = 'This page is busy. Try again in a moment.'
 function installNative() {
   vi.mocked(invoke).mockImplementation(async (cmd: string, raw?: InvokeArgs) => {
     const args = (raw ?? {}) as { path: string; content: string; favorite: boolean; favoriteIndex: number | null; args?: { notePath: string } }
-    if (cmd === failing) throw new Error(`${cmd} failed`)
-    if (cmd === 'save_note_content') {
+    if (cmd === 'save_page_content') {
+      // A failing page write is a refusal before publication, as the S0 writer reports it.
+      if (failing === cmd) return { status: 'refused', reason: 'stageFailed' }
+      const { request, content } = raw as unknown as { request: { path: string }; content: string }
       await gates.save?.promise
-      disk.set(args.path, args.content)
-      log.push(`save:${args.path}:${args.content}`)
-      return null
+      disk.set(request.path, content)
+      log.push(`save:${request.path}:${content}`)
+      return { status: 'committed', written: true, durable: true, history: null }
     }
+    if (cmd === failing) throw new Error(`${cmd} failed`)
     if (cmd === 'set_note_favorite') {
       log.push(`favorite:${args.path}`)
       await gates.favorite.promise
@@ -373,14 +376,18 @@ describe('the Favorite seam in the app save coordinator', () => {
   })
 
   it.each([
-    ['the save before it fails', 'save_note_content', 'notRun'],
+    ['the save before it fails', 'save_page_content', 'notRun'],
     ['the native write rejects', 'update_frontmatter', 'unknown'],
   ])('lets the page go when %s (L3)', async (_case, command, kind) => {
     const { app } = setup(page, '---\ntitle: Plan\n---\nbody')
     act(() => { app.current.handleContentChange(page, '---\ntitle: Plan\n---\nnew body') })
     failing = command
     expect(await writeStatus(app, page)).toBe(kind)
-    expect(app.current.mutateExistingDocument(page, favoriteMutation(ON)).admitted).toBe(true)
+    const admission = app.current.mutateExistingDocument(page, favoriteMutation(ON))
+    expect(admission.admitted).toBe(true)
+    // The admitted change finishes inside this test, so nothing it logs reaches the next one.
+    failing = null
+    await act(async () => { gates.favorite.open(); if (admission.admitted) await admission.done })
   })
 
   it('makes a folder move wait for a manual rename that is already running (L2)', async () => {

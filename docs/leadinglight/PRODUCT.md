@@ -49,12 +49,23 @@ Version 0.3.0 adds three connected writing features:
 The verification record identifies the qualified behavior and remaining limits. The narrow-pane
 Inspector floats above the page without squeezing its writing area or enlarging the native window.
 
+## Milestone 4 — capture without waiting
+
+Version 0.4.0 accepts typing immediately after New page or Today, even while the local file is
+being created. The pending field belongs to the requested pane and vault. It hands the complete
+text to that page's editor and retains a receipt until the save is proven. Naming remains optional;
+a failed create keeps the captured words available for retry. Normal close and vault switching
+cannot silently abandon an unresolved capture.
+
+The next release strengthens ordinary saves and explicit draft recovery before adding automatic
+local page history. Its qualification is recorded separately in VERIFICATION.md.
+
 ## Following increments
 
 Continue in useful, independently verified releases, reusing working inherited capabilities:
 
-1. Capture and resumption: a direct route into writing, useful pinned pages, and clear empty
-   states. Naming and organization remain optional.
+1. Capture and resumption: continue polishing the delivered immediate capture, useful pinned
+   pages and clear empty states. Naming and organization remain optional.
 2. Automatic local version history: bounded checkpoints, verified previews and recovery into a
    new copy. Keep older writing reachable after a rename or removal, explain any gap in recovery,
    and never silently replace a current draft. Follow with local backups and Markdown import/export

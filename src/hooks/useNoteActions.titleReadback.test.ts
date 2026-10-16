@@ -25,8 +25,11 @@ beforeEach(() => {
   renameGate = { promise: new Promise<void>(resolve => { open = resolve }), open }
   readFails = false
   vi.mocked(invoke).mockImplementation(async (cmd: string, raw?: unknown) => {
-    const args = (raw ?? {}) as { path: string; content: string; key: string; value: string }
-    if (cmd === 'save_note_content') return void disk.set(args.path, args.content)
+    const args = (raw ?? {}) as { path: string; content: string; key: string; value: string; request: { path: string } }
+    if (cmd === 'save_page_content') {
+      disk.set(args.request.path, args.content)
+      return { status: 'committed', written: true, durable: true, history: null }
+    }
     if (cmd === 'get_note_content') {
       if (readFails && args.path === RENAMED) throw new Error('unreadable')
       return disk.get(args.path) ?? ''
