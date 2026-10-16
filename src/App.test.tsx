@@ -1776,14 +1776,18 @@ describe('App', () => {
   // Like the native worker: a rename or move reads the body first and publishes it only when let go.
   function installStagingDisk() {
     const disk = new Map([[PAGE, mockAllContent[PAGE]]])
-    const native = { release: () => {}, renames: 0, moves: 0, saveFails: false }
+    const native = { release: () => {}, renames: 0, moves: 0, saveFails: false,
+      moveSnapshots: [] as string[], relocateContent: (content: string) => content }
     const released = new Promise<void>(resolve => { native.release = resolve })
-    const publish = async (from: string, to: string) => {
+    const publish = async (from: string, to: string, relocation = false) => {
       const staged = disk.get(from) ?? ''
+      if (relocation) native.moveSnapshots.push(staged)
+      const content = relocation ? native.relocateContent(staged) : staged
       await released
       disk.delete(from)
-      disk.set(to, staged)
-      return { new_path: to, updated_files: 0, failed_updates: 0 }
+      disk.set(to, content)
+      return { new_path: to, updated_files: 0, failed_updates: 0,
+        ...(relocation ? { source_before_content: staged, source_content: content, updated_open_pages: [], unrefreshed_open_paths: [] } : {}) }
     }
     mockCommandResults.save_note_content = ({ path, content }: { path: string, content: string }) => {
       if (native.saveFails) throw new Error('disk full')
@@ -1803,7 +1807,7 @@ describe('App', () => {
     }
     mockCommandResults.move_note_to_folder = ({ old_path, folder_path }: { old_path: string, folder_path: string }) => {
       native.moves += 1
-      return publish(old_path, `/vault/${folder_path}/${old_path.split('/').pop()}`)
+      return publish(old_path, `/vault/${folder_path}/${old_path.split('/').pop()}`, true)
     }
     return { disk, native }
   }
@@ -1820,27 +1824,47 @@ describe('App', () => {
     return state
   }
 
-  it('runs page moves through the rename barrier, and close waits for one already running', async () => {
+  it('honors rename admission for page moves, saves accepted words first, and close waits while later moves refuse', async () => {
     const { disk, native } = installStagingDisk()
     const app = await renderReadyApp()
+    await act(() => appWiring.notes!.handleSelectNote(appWiring.noteActions!.entries[0]))
     const move = () => appWiring.moveNoteToFolder!(PAGE, 'topic', '/vault', () => {})
     const reopen = app.holdManualRenameAdmission()
-    await act(async () => { expect(await move()).toBeNull() })
-    reopen()
-    expect(native.moves).toBe(0)
-    expect(await screen.findByText(BUSY)).toBeInTheDocument()
+    try {
+      const refused = startTracked(move)
+      await flushTasks()
+      expect(refused.settled).toBe(true)
+      await refused.done
+      expect(native.moves).toBe(0)
+      expect(await screen.findByText('Finish the current page action before moving a page.')).toBeInTheDocument()
+    } finally { reopen(); if (native.moves) native.release() }
 
+    const accepted = `${NEWEST}\n\n![Image](./image.png)`
+    const rebased = accepted.replace('./image.png', '../project/image.png')
+    native.relocateContent = content => content.replace('./image.png', '../project/image.png')
+    act(() => { app.handleContentChange(PAGE, accepted) })
     const moving = startTracked(move)
-    await flushTasks()
-    expect(native.moves).toBe(1)
-    act(() => { app.handleContentChange(PAGE, NEWEST) })
-    const closing = startTracked(() => appWiring.closeFlush!())
-    await flushTasks()
-    expect(closing.settled).toBe(false)
+    try {
+      await waitFor(() => { expect(native.moves).toBe(1) }, { timeout: 2000 })
+      expect(native.moveSnapshots).toEqual([accepted])
+      expect(shellInert()).toBe(true)
+      expect(app.hasPendingWrite(PAGE)).toBe(false)
+      const closing = startTracked(() => appWiring.closeFlush!())
+      await flushTasks()
+      expect(closing.settled).toBe(false)
+      await act(async () => { expect(await move()).toBeNull() })
+      expect(native.moves).toBe(1)
 
-    await act(async () => { native.release(); await moving.done; await closing.done })
-    expect(Object.fromEntries(disk)).toEqual({ [MOVED]: NEWEST })
-  })
+      await act(async () => { native.release(); await moving.done; await closing.done })
+      expect(Object.fromEntries(disk)).toEqual({ [MOVED]: rebased })
+      expect(appWiring.notes!.splitWorkspace.currentTabs()).toEqual([
+        expect.objectContaining({ entry: expect.objectContaining({ path: MOVED }), content: rebased }),
+      ])
+      act(() => { appWiring.appSave!.handleContentChange(MOVED, `${rebased}\n\nContinued writing.`) })
+      await act(async () => { await appWiring.appSave!.handleSave() })
+      expect(Object.fromEntries(disk)).toEqual({ [MOVED]: `${rebased}\n\nContinued writing.` })
+    } finally { native.release(); await act(async () => { await moving.done }) }
+  }, 10_000)
 
   it('close waits for a page rename that started first, refuses new ones, then saves the newest text at the new name', async () => {
     const { disk, native } = installStagingDisk()

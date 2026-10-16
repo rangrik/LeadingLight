@@ -575,6 +575,12 @@ another destination in the same picker after refusal. Browser receipts are contr
 these cases prove editor lifecycle, not native filesystem transformation. No non-local browser
 requests were observed in the successful mixed-pane case.
 
+The full release gate exposed an obsolete App integration fixture and a missing standalone
+rename-admission check. Filing now checks that hold before taking its own holds. The updated
+App regression stages accepted words before the input pause, supplies an exact native receipt,
+and proves that close waits, later moves refuse, and continued writing uses only the new path.
+All 87 focused App/save-mutation/relocation tests passed after the correction.
+
 ## Isolated native evidence
 
 The packaged Mac candidate moved a rich page while its incoming page stayed in Markdown in

@@ -1179,6 +1179,7 @@ function usePageExclusive(services: AppSaveServices, admit: AdmitExistingDocumen
 
 /** A folder move holds new manual renames first, then joins the ones already running. */
 function useManualRenameAdmission(guards: PageChangeGuards) {
+  const isManualRenameAdmissionHeld = useCallback(() => guards.manualRenameHolds.size > 0, [guards])
   const holdManualRenameAdmission = useCallback(() => {
     const hold = {}
     guards.manualRenameHolds.add(hold)
@@ -1187,7 +1188,7 @@ function useManualRenameAdmission(guards: PageChangeGuards) {
   const whenManualRenamesIdle = useCallback(async () => {
     while (guards.manualRenames.size > 0) await Promise.all([...guards.manualRenames])
   }, [guards])
-  return { holdManualRenameAdmission, whenManualRenamesIdle }
+  return { holdManualRenameAdmission, whenManualRenamesIdle, isManualRenameAdmissionHeld }
 }
 
 export function useAppSave(options: AppSaveDeps) {
@@ -1206,7 +1207,7 @@ export function useAppSave(options: AppSaveDeps) {
     else console.warn('[save] A page change was refused because the page is busy')
   }, [pageBusyMessage, setToastMessage])
   const runPageExclusive = usePageExclusive(services, mutateExistingDocument, onPageBusy)
-  const { holdManualRenameAdmission, whenManualRenamesIdle } = useManualRenameAdmission(guards)
+  const { holdManualRenameAdmission, whenManualRenamesIdle, isManualRenameAdmissionHeld } = useManualRenameAdmission(guards)
   const withRenameBarrier = useRenameBarrier({ guards, pageMutation, resolveCurrentPath, setToastMessage, locale, onPageBusy, writes: services, flushEditorBuffers: options.flushEditorBuffers })
   const { handleFilenameRename, handleSave, handleTitleSync, flushBeforeAction, flushForTrash } = useAppSaveHandlers({
     contentChangeRef,
@@ -1260,6 +1261,7 @@ export function useAppSave(options: AppSaveDeps) {
     withManualRename: withRenameBarrier,
     holdManualRenameAdmission,
     whenManualRenamesIdle,
+    isManualRenameAdmissionHeld,
     ...trashBoundary,
   }
 }

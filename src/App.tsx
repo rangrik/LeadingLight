@@ -1726,7 +1726,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const relocation = usePageRelocation({
     vaultPath: resolvedPath, locale: appLocale, entries: visibleEntries, unsavedPaths: vault.unsavedPaths,
     workspace: notes.splitWorkspace, saves: appSave, structural: folderMoveRef, settlement: settlementRef,
-    blocked: () => trashBlockedRef.current || trash.busy,
+    blocked: () => trashBlockedRef.current || trash.busy || appSave.isManualRenameAdmissionHeld(),
     begin: beginBackupGuard,
     joinEarlier: async () => {
       await templateBoundaryRef.current.whenIdle()
