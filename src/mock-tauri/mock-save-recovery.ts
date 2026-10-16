@@ -7,6 +7,7 @@ import {
   type CopyOutcome,
   type CopyRefusalReason,
   type DraftSnapshot,
+  type HistoryNote,
   type HoldInfo,
   type HoldKind,
   type HoldRefusalReason,
@@ -18,6 +19,7 @@ import {
   type SaveRequestState,
   type SaveTerminal,
 } from '../leadinglight/saveOutcome.ts'
+import { memoryPageHistory, type MemoryPageHistory } from './mock-history.ts'
 
 export const SAVE_RECOVERY_COMMANDS = [
   'save_page_content',
@@ -34,9 +36,9 @@ export const VAULT_API_MARKER = 'leadinglight-vault-api'
 /** A malformed argument. Native answers `Err`, which the frontend treats as no reply. */
 export class SaveRecoveryArgumentError extends Error {}
 
-/** Steps 3–7 of one admitted save, as the store saw them. */
+/** Steps 3–7 of one admitted save, as the store saw them. `history` is this save's capture note. */
 export type PageWrite =
-  | { status: 'committed'; written: boolean; durable: boolean }
+  | { status: 'committed'; written: boolean; durable: boolean; history: HistoryNote | null }
   | { status: 'refused'; reason: 'readOnly' | 'readFailed' | 'stageFailed' }
   | { status: 'hold'; reason: HoldRefusalReason }
   | { status: 'failed' }
@@ -140,6 +142,8 @@ interface RequestRecord {
 }
 
 const refused = (reason: PlainRefusalReason): SaveOutcome => ({ status: 'refused', reason })
+/** A stored answer given again says nothing about history now (§7); nothing else changes. */
+const stored = (outcome: SaveOutcome): SaveOutcome => (outcome.status === 'committed' ? { ...outcome, history: null } : outcome)
 const copyRefused = (reason: CopyRefusalReason): CopyOutcome => ({ status: 'refused', reason })
 const resolutionRefused = (reason: ResolutionRefusalReason): ResolutionOutcome => ({ status: 'refused', reason })
 
@@ -148,7 +152,7 @@ function written(write: PageWrite, request: OriginalRequest): [SaveOutcome, Hold
   const info = (hold: Hold): HoldInfo =>
     ({ requestId: request.requestId, kind: hold.kind, seq: request.seq, submittedSha256: request.submittedSha256 })
   switch (write.status) {
-    case 'committed': return [{ status: 'committed', written: write.written, durable: write.durable, history: null }, null]
+    case 'committed': return [{ status: 'committed', written: write.written, durable: write.durable, history: write.history }, null]
     case 'refused': return [refused(write.reason), null]
     case 'failed': return [{ status: 'failed', reason: 'publish' }, null]
     case 'hold': {
@@ -199,7 +203,7 @@ export function createSaveRecovery(store: SaveRecoveryStore) {
 
   function replay(entry: RequestRecord, digest: string): SaveOutcome {
     if (entry.digest !== digest) return refused('requestMismatch')
-    return entry.state === 'done' && entry.outcome ? entry.outcome : refused('requestVoided')
+    return entry.state === 'done' && entry.outcome ? stored(entry.outcome) : refused('requestVoided')
   }
 
   function heldBy(key: string): SaveOutcome | null {
@@ -272,7 +276,7 @@ export function createSaveRecovery(store: SaveRecoveryStore) {
       return { state: 'retired', terminal, resolved: entry.actions.size > 0 }
     }
     if (entry.outcome.status === 'uncertain' && entry.hold) settle(entry)
-    return { state: 'done', outcome: entry.outcome }
+    return { state: 'done', outcome: stored(entry.outcome) }
   }
 
   async function saveDraftAsNewPage(args: unknown): Promise<CopyOutcome> {
@@ -372,8 +376,11 @@ function copyName(page: string, index: number): string {
  * The in-memory mock vault. Its pages have no links, modes, folders or staging, so only missing
  * pages hold, every write is durable, and a copy never asks for another folder.
  * `homes` are the mock's own roots, which count as inside any memory vault.
+ * `history` keeps earlier versions of these pages; a save it could not keep answers its note.
  */
-export function memoryStore(pages: MemoryPages, homes: readonly string[] = []): SaveRecoveryStore {
+export function memoryStore(pages: MemoryPages, homes: readonly string[] = [], history: MemoryPageHistory = memoryPageHistory): SaveRecoveryStore {
+  history.usePages(pages, homes)
+  const encoder = new TextEncoder()
   const copies = new Map<string, CopyJob & { path: string }>()
   const copyKey = (root: string, operationId: string) => `${trimSlash(root)}\n${operationId}`
   const homeOf = (root: string, target: string) => [root, ...homes].map(trimSlash)
@@ -385,9 +392,13 @@ export function memoryStore(pages: MemoryPages, homes: readonly string[] = []): 
     writePage(request, content) {
       const current = pages.read(request.path)
       if (current === undefined) return { status: 'hold', reason: 'missing' }
-      if (current === content) return { status: 'committed', written: false, durable: true }
+      if (current === content) return { status: 'committed', written: false, durable: true, history: null }
+      // Optional and never the save's outcome (S1a §2); only its note rides along.
+      const after = encoder.encode(content)
+      const note = history.capture({ vaultPath: request.vaultPath, page: request.path, before: encoder.encode(current), after })
       pages.write(request.path, content)
-      return { status: 'committed', written: true, durable: true }
+      history.committed({ vaultPath: request.vaultPath, page: request.path, after })
+      return { status: 'committed', written: true, durable: true, history: note }
     },
     reprove: () => 'uncertain',
     rootIsUsable: root => trimSlash(root).startsWith('/'),

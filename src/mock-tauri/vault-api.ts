@@ -4,6 +4,7 @@
  * through it instead of returning hardcoded mock data.
  */
 
+import { HISTORY_COMMANDS } from './mock-history'
 import { VAULT_API_MARKER } from './mock-save-recovery'
 
 let vaultApiAvailable: boolean | null = null
@@ -251,12 +252,14 @@ const SAVE_RECOVERY_ROUTES = new Map([
   ['discard_hold', '/api/vault/discard-hold'],
 ])
 
+// Page history (S1a) for a vault on disk; its versions live beside that vault's pages.
+const HISTORY_ROUTES = new Map<string, string>(HISTORY_COMMANDS.map(command => [command, `/api/vault/${command.replaceAll('_', '-')}`]))
+
 const UNAVAILABLE = 'The dev vault server is not answering, so nothing was written.'
 
 // The mock vault answers itself; any other vault is answered from disk or the caller sees no reply.
-async function trySaveRecoveryApi<T>(route: string, args: Record<string, unknown>): Promise<T | undefined> {
-  const request = args.request as { vaultPath?: unknown } | undefined
-  if (!diskSession() || isMemoryPath(request?.vaultPath)) return undefined
+async function tryDiskCommandApi<T>(route: string, args: Record<string, unknown>, vaultPath: unknown): Promise<T | undefined> {
+  if (!diskSession() || isMemoryPath(vaultPath)) return undefined
   if (!await checkVaultApi()) throw new Error(UNAVAILABLE)
   const res = await fetch(route, buildFetchOptions({ body: args }))
   const body = await res.json().catch(() => null) as { error?: unknown } | null
@@ -266,7 +269,9 @@ async function trySaveRecoveryApi<T>(route: string, args: Record<string, unknown
 
 export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
   const recoveryRoute = SAVE_RECOVERY_ROUTES.get(cmd)
-  if (recoveryRoute) return args ? trySaveRecoveryApi<T>(recoveryRoute, args) : undefined
+  if (recoveryRoute) return args ? tryDiskCommandApi<T>(recoveryRoute, args, (args.request as { vaultPath?: unknown } | undefined)?.vaultPath) : undefined
+  const historyRoute = HISTORY_ROUTES.get(cmd)
+  if (historyRoute) return args ? tryDiskCommandApi<T>(historyRoute, args, args.vaultPath) : undefined
   const request = buildVaultApiRequest(cmd, args)
   if (!request) return undefined
   const closed = !isGetRequest(request) && failsClosed(request.body)

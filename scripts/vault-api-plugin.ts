@@ -12,8 +12,9 @@ import {
 	vaultCommandContext,
 } from "./vault-api-commands.ts";
 import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
-import { heldPathRefusal, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
+import { heldPathRefusal, runDiskHistory, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
 import { listTrash, moveToTrash, restoreFromTrash } from "./vault-api-trash.ts";
+import { HISTORY_COMMANDS } from "../src/mock-tauri/mock-history.ts";
 import { type SaveRecoveryCommand, VAULT_API_MARKER } from "../src/mock-tauri/mock-save-recovery.ts";
 
 function sendJson(
@@ -202,6 +203,17 @@ async function runSaveRecoveryRoute({ req, res }: VaultRequest, command: SaveRec
 	const response = await runDiskSaveRecovery(command, await readJsonBody<unknown>(req));
 	sendJson(res, response.payload, response.statusCode);
 }
+// The S1a page-history commands, the same way: `list_page_versions` at `list-page-versions`.
+const HISTORY_ROUTES: [string, VaultRoute][] = HISTORY_COMMANDS.map((command): [string, VaultRoute] => [
+	command.replaceAll("_", "-"),
+	{
+		write: async ({ req, res }) => {
+			const response = await runDiskHistory(command, await readJsonBody<unknown>(req));
+			sendJson(res, response.payload, response.statusCode);
+		},
+		fallback: "Page history failed",
+	},
+]);
 const VAULT_ROUTES = new Map<string, VaultRoute>([
 	["list", { cmd: "list_vault", fallback: "Vault read failed" }],
 	["content", { cmd: "get_note_content", fallback: "Vault read failed" }],
@@ -242,6 +254,7 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 	["trash-restore", { write: (request) => runTrashRoute(request, (body) => restoreFromTrash(body.vault_path, body.ids ?? [])), fallback: "Restore failed" }],
 	["command", { write: executeVaultCommand, fallback: "Vault command failed" }],
 	...SAVE_RECOVERY_ROUTES,
+	...HISTORY_ROUTES,
 ]);
 interface TrashBody {
 	vault_path: string;

@@ -27,8 +27,18 @@ import path from "node:path";
 import type {
 	ConfirmedSnapshot,
 	CopyOutcome,
+	HistoryNote,
 	ResolutionRefusalReason,
 } from "../src/leadinglight/saveOutcome.ts";
+import {
+	createPageHistory,
+	HistoryArgumentError,
+	type HistoryCommand,
+	type PageHistoryOptions,
+	runHistoryCommand,
+	type VersionCopyJob,
+	type VersionCopyOutcome,
+} from "../src/mock-tauri/mock-history.ts";
 import {
 	type CopyJob,
 	createSaveRecovery,
@@ -38,6 +48,7 @@ import {
 	type SaveRecoveryCommand,
 	type SaveRecoveryStore,
 } from "../src/mock-tauri/mock-save-recovery.ts";
+import { diskHistoryStore } from "./vault-api-history.ts";
 
 interface Identity {
 	dev: string;
@@ -72,17 +83,27 @@ interface Intent {
 	candidate: string | null;
 	durable: boolean;
 }
-interface CopyContext {
-	job: CopyJob;
+/** The exact bytes to copy and the page they belong to; read only when a new copy is made. */
+interface CopySource {
+	bytes: Buffer;
+	page: string;
+}
+interface CopyContext<R> {
+	/** The vault path as given, for the answer. */
+	root: string;
 	rootReal: string;
 	dir: string;
 	file: string;
+	folder: string | null;
+	source: () => CopySource | R;
 }
+const isSource = (value: unknown): value is CopySource =>
+	typeof value === "object" && value !== null && "bytes" in value;
 
 /** The answer for a vault that is not on disk; the browser treats it as a failed command. */
 export const NOT_DISK_VAULT = "notDiskVault";
 
-const sha256 = (bytes: Buffer) =>
+const sha256 = (bytes: Uint8Array) =>
 	createHash("sha256").update(bytes).digest("hex");
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException).code;
 const identityOf = (stats: BigIntStats): Identity => ({
@@ -233,7 +254,17 @@ const hold = (
 	reason: "missing" | "parentMissing" | "linked" | "symlink",
 ): PageWrite => ({ status: "hold", reason });
 
-function writePage(page: string, content: string): PageWrite {
+/** S1a §2: optional and never the page's answer; it never throws. */
+interface PageHistoryHook {
+	capture(before: Buffer, after: Buffer): HistoryNote | null;
+	committed(after: Buffer): void;
+}
+
+function writePage(
+	page: string,
+	content: string,
+	history?: PageHistoryHook,
+): PageWrite {
 	const folder = path.dirname(page);
 	if (!isFolder(folder)) return hold("parentMissing");
 	let leaf: BigIntStats | null;
@@ -256,7 +287,12 @@ function writePage(page: string, content: string): PageWrite {
 	}
 	const next = Buffer.from(content, "utf8");
 	if (next.equals(original.bytes))
-		return { status: "committed", written: false, durable: true };
+		return {
+			status: "committed",
+			written: false,
+			durable: true,
+			history: null,
+		};
 	const staged = stage(
 		folder,
 		path.basename(page),
@@ -264,6 +300,8 @@ function writePage(page: string, content: string): PageWrite {
 		Number(leaf.mode & 0o7777n),
 	);
 	if (!staged) return { status: "refused", reason: "stageFailed" };
+	// After staging, so the page's new bytes already have their space; kept even if the recheck fails.
+	const note = history?.capture(original.bytes, next) ?? null;
 	if (!unchanged(page, original)) {
 		rmSync(staged.dir, { recursive: true, force: true });
 		return { status: "conflict" };
@@ -286,7 +324,9 @@ function writePage(page: string, content: string): PageWrite {
 	}
 	const durable = syncFolder(folder);
 	rmSync(staged.dir, { recursive: true, force: true });
-	return { status: "committed", written: true, durable };
+	history?.committed(next);
+	// Only the save that tried to keep the earlier text carries its note (§7).
+	return { status: "committed", written: true, durable, history: note };
 }
 
 /** Removes an emptied `.leadinglight-*` staging folder and its `.gitignore`, never anything else. */
@@ -484,34 +524,36 @@ function destinationOf(
 		: canonical;
 }
 
-function created(
-	context: CopyContext,
+function created<R>(
+	context: CopyContext<R>,
 	candidate: string,
 	durable: boolean,
 ): CopyOutcome {
 	const relative = path.relative(context.rootReal, candidate);
 	return {
 		status: "created",
-		path: joinRaw(context.job.root, relative),
+		path: joinRaw(context.root, relative),
 		relativePath: relative.split(path.sep).join("/"),
 		durable,
 	};
 }
 
-function create(context: CopyContext, intent: Intent): CopyOutcome {
-	const { job } = context;
+function create<R>(context: CopyContext<R>, intent: Intent): CopyOutcome | R {
+	const source = context.source();
+	if (!isSource(source)) return source;
 	const dir = destinationOf(
-		job.folder === null
-			? path.dirname(job.page)
-			: joinRaw(job.root, job.folder),
+		context.folder === null
+			? path.dirname(source.page)
+			: joinRaw(context.root, context.folder),
 		context.rootReal,
 	);
 	if (typeof dir !== "string") return dir;
-	const staged = stage(dir, "draft", Buffer.from(job.content, "utf8"), null);
+	const staged = stage(dir, "draft", source.bytes, null);
 	if (!staged) return failed("The copy could not be prepared.");
 	const stats = lstatSync(staged.file, { bigint: true });
 	const record: Intent = {
 		...intent,
+		name: path.basename(source.page) || "Untitled.md",
 		destination: dir,
 		staged: staged.file,
 		identity: { dev: String(stats.dev), ino: String(stats.ino) },
@@ -553,7 +595,7 @@ function create(context: CopyContext, intent: Intent): CopyOutcome {
 }
 
 /** Finishes or reports an earlier attempt with the same operation and arguments. */
-function resume(context: CopyContext, intent: Intent): CopyOutcome {
+function resume<R>(context: CopyContext<R>, intent: Intent): CopyOutcome | R {
 	const safe = (folder: string) =>
 		realFolderInside(folder, intent, context.rootReal);
 	if (intent.candidate) {
@@ -590,8 +632,16 @@ function resume(context: CopyContext, intent: Intent): CopyOutcome {
 	return create(context, intent);
 }
 
-function copyDraft(job: CopyJob): CopyOutcome {
-	const rootReal = realRoot(job.root);
+/** S0's no-clobber pipeline: an intent before any name is taken, then an exact retry or `uncertain`. */
+function copyBytes<R>(run: {
+	root: string;
+	intentFile: string;
+	args: string;
+	folder: string | null;
+	record: Pick<Intent, "binding" | "seq" | "contentSha256">;
+	source: () => CopySource | R;
+}): CopyOutcome | R {
+	const rootReal = realRoot(run.root);
 	if (!rootReal) return { status: "refused", reason: "outsideVault" };
 	let dir: string;
 	try {
@@ -599,11 +649,13 @@ function copyDraft(job: CopyJob): CopyOutcome {
 	} catch (error) {
 		return failed(`Page history is unavailable: ${(error as Error).message}`);
 	}
-	const context: CopyContext = {
-		job,
+	const context: CopyContext<R> = {
+		root: run.root,
 		rootReal,
 		dir,
-		file: path.join(dir, `copy-${job.operationId}.json`),
+		file: path.join(dir, run.intentFile),
+		folder: run.folder,
+		source: run.source,
 	};
 	let recorded: Intent | null;
 	try {
@@ -611,23 +663,72 @@ function copyDraft(job: CopyJob): CopyOutcome {
 	} catch {
 		return { status: "uncertain", candidatePath: null };
 	}
-	if (recorded && recorded.args !== job.args)
+	if (recorded && recorded.args !== run.args)
 		return { status: "refused", reason: "operationMismatch" };
 	if (recorded) return resume(context, recorded);
-	const name = path.basename(job.page) || "Untitled.md";
 	const fresh: Intent = {
-		args: job.args,
-		binding: job.binding,
-		seq: job.seq,
-		contentSha256: job.contentSha256,
+		args: run.args,
+		...run.record,
 		destination: "",
-		name,
+		name: "",
 		staged: "",
 		identity: null,
 		candidate: null,
 		durable: false,
 	};
 	return create(context, fresh);
+}
+
+function copyDraft(job: CopyJob): CopyOutcome {
+	return copyBytes<never>({
+		root: job.root,
+		intentFile: `copy-${job.operationId}.json`,
+		args: job.args,
+		folder: job.folder,
+		record: {
+			binding: job.binding,
+			seq: job.seq,
+			contentSha256: job.contentSha256,
+		},
+		source: () => ({ bytes: Buffer.from(job.content, "utf8"), page: job.page }),
+	});
+}
+
+/** S1a §6: the same pipeline from verified version bytes, under its own `version-copy-` intent. */
+function copyVersion(
+	job: VersionCopyJob,
+	rootReal: string,
+): VersionCopyOutcome {
+	// One operation ID names one copy, whatever its kind (native `copy_version`).
+	try {
+		if (
+			lstatOrNull(
+				path.join(historyDir(rootReal), `copy-${job.operationId}.json`),
+			)
+		)
+			return { status: "refused", reason: "operationMismatch" };
+	} catch (error) {
+		return {
+			status: "failed",
+			message: `Page history is unavailable: ${(error as Error).message}`,
+		};
+	}
+	const outcome = copyBytes<never>({
+		root: job.vaultPath,
+		intentFile: `version-copy-${job.operationId}.json`,
+		args: job.args,
+		folder: job.folder,
+		record: { binding: "", seq: 0, contentSha256: job.contentSha256 },
+		// The vault's own spelling, as a draft copy has it; the destination is still checked canonically.
+		source: () => ({
+			bytes: Buffer.from(job.bytes),
+			page: joinRaw(job.vaultPath, job.recordedPath.split("/").join(path.sep)),
+		}),
+	});
+	// The pipeline itself refuses only outsideVault, nameUnavailable or operationMismatch.
+	return outcome.status === "refused" && outcome.reason === "requestMismatch"
+		? { status: "failed", message: "The copy request was not understood." }
+		: (outcome as VersionCopyOutcome);
 }
 
 /** Keep-copy proof: this request's published copy, still the same single file in a safe folder, still the confirmed draft. */
@@ -685,7 +786,23 @@ const diskStore: SaveRecoveryStore = {
 			return null;
 		}
 	},
-	writePage: (request, content) => writePage(request.path, content),
+	// Notes wait for the parser migration (m5-s1-parser-approved.md), so answers keep `history: null`.
+	writePage: (request, content) =>
+		writePage(request.path, content, {
+			capture: (before, after) =>
+				diskPageHistory.capture({
+					vaultPath: request.vaultPath,
+					page: request.path,
+					before,
+					after,
+				}),
+			committed: (after) =>
+				diskPageHistory.committed({
+					vaultPath: request.vaultPath,
+					page: request.path,
+					after,
+				}),
+		}),
 	reprove: (request, proof) =>
 		reprove(
 			request.path,
@@ -699,6 +816,22 @@ const diskStore: SaveRecoveryStore = {
 
 /** One registry for this dev-server process, like native's for the app's process. */
 export const diskSaveRecovery = createSaveRecovery(diskStore);
+
+/** A page history on disk roots; tests pass small limits and a clock. */
+export const createDiskPageHistory = (options: PageHistoryOptions = {}) =>
+	createPageHistory(
+		diskHistoryStore({
+			realRoot,
+			canonicalPage,
+			historyDir,
+			syncFolder,
+			copyVersion,
+		}),
+		{ sha256, ...options },
+	);
+
+/** This process's page history, on the same synthetic disk roots as its saves. */
+export const diskPageHistory = createDiskPageHistory();
 
 /** Native refuses other mutations of a held page, or of a folder holding one; this is that refusal. */
 export function heldPathRefusal(paths: readonly unknown[]): string | null {
@@ -730,17 +863,39 @@ const ROOTLESS = new Set<SaveRecoveryCommand>([
 	"discard_hold",
 ]);
 
+/** False for a vault that was never on disk: the browser treats that answer as a failed command. */
+function onDisk(vaultPath: unknown, rootless = false): boolean {
+	if (typeof vaultPath !== "string") return true;
+	if (realRoot(vaultPath)) diskVaults.add(vaultPath);
+	return diskVaults.has(vaultPath) || rootless;
+}
+
+export async function runDiskHistory(
+	command: HistoryCommand,
+	body: unknown,
+): Promise<{ payload: unknown; statusCode: number }> {
+	if (!onDisk((body as { vaultPath?: unknown } | null)?.vaultPath))
+		return { payload: { error: NOT_DISK_VAULT }, statusCode: 404 };
+	try {
+		return {
+			payload: await runHistoryCommand(diskPageHistory, command, body),
+			statusCode: 200,
+		};
+	} catch (error) {
+		if (error instanceof HistoryArgumentError)
+			return { payload: { error: error.message }, statusCode: 400 };
+		throw error;
+	}
+}
+
 export async function runDiskSaveRecovery(
 	command: SaveRecoveryCommand,
 	body: unknown,
 ): Promise<{ payload: unknown; statusCode: number }> {
 	const vaultPath = (body as { request?: { vaultPath?: unknown } } | null)
 		?.request?.vaultPath;
-	if (typeof vaultPath === "string") {
-		if (realRoot(vaultPath)) diskVaults.add(vaultPath);
-		else if (!diskVaults.has(vaultPath) && !ROOTLESS.has(command))
-			return { payload: { error: NOT_DISK_VAULT }, statusCode: 404 };
-	}
+	if (!onDisk(vaultPath, ROOTLESS.has(command)))
+		return { payload: { error: NOT_DISK_VAULT }, statusCode: 404 };
 	try {
 		return {
 			payload: await runSaveRecoveryCommand(diskSaveRecovery, command, body),

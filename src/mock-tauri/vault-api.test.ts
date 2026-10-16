@@ -121,6 +121,24 @@ describe('tryVaultApi', () => {
       expect(fetchMock).toHaveBeenCalledTimes(5)
     })
 
+    it('answers page history from disk or fails, never from memory, and keeps the mock vault in memory', async () => {
+      const args = { vaultPath: '/fixture' }
+      const fetchMock = replying(
+        jsonResponse({ state: 'on', reason: null, usedBytes: 0, budgetBytes: 1, unreadable: 0, attention: [] }),
+        jsonResponse({ error: 'notDiskVault' }, 404),
+      )
+      globalThis.fetch = fetchMock as typeof fetch
+      const { tryVaultApi } = await import('./vault-api')
+      servedByDevVault()
+
+      await expect(tryVaultApi('page_history_health', args)).resolves.toMatchObject({ state: 'on' })
+      const [url, init] = fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit]
+      expect([requestUrl(url), requestBody(init)]).toEqual(['/api/vault/page-history-health', args])
+      await expect(tryVaultApi('page_history_health', args)).rejects.toThrow('notDiskVault')
+      await expect(tryVaultApi('read_page_version', { vaultPath: '/fixture', id: 'x', sha256: 'y' })).rejects.toThrow('no server')
+      await expect(tryVaultApi('list_saved_locations', { vaultPath: '/Users/mock', cursor: null })).resolves.toBeUndefined()
+    })
+
     it('fails a legacy write when the server is unavailable, errs or goes away; only the mock vault falls back', async () => {
       const save = { path: '/fixture/alpha.md', content: 'new' }
       globalThis.fetch = vi.fn(async () => jsonResponse({ ok: false }, 503)) as typeof fetch

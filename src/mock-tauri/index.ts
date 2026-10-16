@@ -7,6 +7,7 @@
 import { MOCK_CONTENT } from './mock-content'
 import { mockHandlers, addMockEntry, updateMockContent, trackMockChange } from './mock-handlers'
 import { setNoteFavorite, type SetNoteFavoriteArgs } from './mock-favorite'
+import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-history'
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { tryVaultApi } from './vault-api'
 
@@ -36,6 +37,10 @@ const registeredMockHandlers: Record<string, MockHandler> = {
   ...Object.fromEntries(SAVE_RECOVERY_COMMANDS.map(command => [command, async (args?: unknown) =>
     (await tryVaultApi(command, args as Record<string, unknown> | undefined))
       ?? Reflect.apply(Reflect.get(mockHandlers, command) as MockHandler, undefined, [args])])),
+  // Page history the same way; the mock vault's own history shares its pages with its saves.
+  ...Object.fromEntries(HISTORY_COMMANDS.map(command => [command, async (args?: unknown) =>
+    (await tryVaultApi(command, args as Record<string, unknown> | undefined))
+      ?? runHistoryCommand(memoryPageHistory, command, args)])),
 }
 
 export function isTauri(): boolean {

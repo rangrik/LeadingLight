@@ -18,6 +18,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+	createDiskPageHistory,
 	heldPathRefusal,
 	diskSaveRecovery as recovery,
 	runDiskSaveRecovery,
@@ -157,6 +158,83 @@ test("a missing page or folder is held and never recreated; its copy lands besid
 			status: "folderUnavailable",
 			recordedFolder: `${vault}${path.sep}later`,
 		});
+	}));
+
+// Seam: a vault opened through a link. Catches a gone folder named from the real root, which the UI cannot shorten.
+test("a version copy names a gone folder in the vault's own spelling, like a draft copy, and still lands only inside the real vault", () =>
+	withVault(async (vault, at) => {
+		const outside = await mkdtemp(path.join(os.tmpdir(), "ll-vault-link-"));
+		const link = path.join(outside, "vault");
+		symlinkSync(vault, link);
+		try {
+			const history = createDiskPageHistory({ schedule: () => {} });
+			mkdirSync(at("shelf/box"), { recursive: true });
+			const page = path.join(link, "shelf", "box", "a.md");
+			writeFileSync(page, "earlier");
+			const [before, after] = [Buffer.from("earlier"), Buffer.from("later")];
+			assert.equal(
+				history.capture({ vaultPath: link, page, before, after }),
+				null,
+			);
+			const [row] = history.listPageVersions({
+				vaultPath: link,
+				path: page,
+				cursor: null,
+			}).versions;
+			await rm(at("shelf"), { recursive: true });
+			const copy = (folder, operationId = randomUUID()) =>
+				history.savePageVersionAsCopy({
+					vaultPath: link,
+					id: row.id,
+					sha256: row.sha256,
+					folder,
+					operationId,
+				});
+			assert.deepEqual(copy(null), {
+				status: "folderUnavailable",
+				recordedFolder: path.join(link, "shelf", "box"),
+			});
+
+			const orphan = envelope(link, path.join(link, "lost", "p.md"), "text");
+			assert.equal(
+				(await recovery.savePageContent({ request: orphan, content: "text" }))
+					.reason,
+				"parentMissing",
+			);
+			assert.deepEqual(
+				await recovery.saveDraftAsNewPage({
+					request: orphan,
+					draft: { seq: 1, content: "text" },
+					operationId: randomUUID(),
+					folder: null,
+				}),
+				{
+					status: "folderUnavailable",
+					recordedFolder: path.join(link, "lost"),
+				},
+			);
+
+			const operationId = randomUUID();
+			const created = copy(path.join(link, "notes"), operationId);
+			assert.deepEqual(
+				[created.status, created.path, created.relativePath],
+				["created", path.join(link, "notes", "a-2.md"), "notes/a-2.md"],
+			);
+			assert.deepEqual(copy(path.join(link, "notes"), operationId), created);
+			assert.deepEqual(readdirSync(at("notes")), ["a-2.md"]);
+			assert.equal(readFileSync(at("notes/a-2.md"), "utf8"), "earlier");
+
+			// A recorded folder that now resolves outside is refused, and nothing is written there.
+			mkdirSync(path.join(outside, "box"));
+			symlinkSync(outside, at("shelf"));
+			assert.deepEqual(copy(null), {
+				status: "refused",
+				reason: "outsideVault",
+			});
+			assert.deepEqual(readdirSync(path.join(outside, "box")), []);
+		} finally {
+			await rm(outside, { recursive: true, force: true });
+		}
 	}));
 
 test("links are held or refused and never followed", () =>
