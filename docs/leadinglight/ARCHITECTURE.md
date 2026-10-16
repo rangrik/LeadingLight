@@ -87,6 +87,11 @@ The browser bridge and server build import this leaf directly; it must not impor
 components or invocation code. `favoriteTransaction.ts` retains the application coordination and
 compatible exports. This keeps the shared parsing boundary independent of the desktop UI.
 
+The filesystem watcher excludes both the exact `.leadinglight` store and sibling staging
+components beginning with `.leadinglight-`, matching the rename and migration walkers. Temporary
+payload events must not look like external page edits; publication is observed at the page path.
+Other hidden namespaces, including saved views under `.laputa`, retain their existing behavior.
+
 Manual renames retain the mounted rich editor through the pane's explicit `renamedFrom` record.
 The swap hook verifies that the editor still holds that old path, flushes its pending text through
 canonical routing, and advances the reactive content path without replacing the live blocks.

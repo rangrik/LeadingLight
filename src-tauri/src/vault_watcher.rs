@@ -5,6 +5,8 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 
+use crate::frontmatter::favorite::STAGING_PREFIX;
+
 pub const VAULT_CHANGED_EVENT: &str = "vault-changed";
 
 #[derive(Clone, Serialize)]
@@ -19,8 +21,10 @@ fn has_ignored_component(path: &Path) -> bool {
         let component = part.as_os_str();
         component == OsStr::new(".git")
             || component == OsStr::new("node_modules")
-            // LeadingLight's local Trash; its own commands report every change.
+            // LeadingLight's local Trash and `.leadinglight-*` staging folders, as the vault walkers
+            // skip them; their copies are not pages, and moving one into place is seen on the page.
             || component == OsStr::new(".leadinglight")
+            || component.to_string_lossy().starts_with(STAGING_PREFIX)
     })
 }
 
@@ -392,6 +396,33 @@ mod tests {
             Path::new("/vault/.laputa/views/a.yml"),
             None
         ));
+    }
+
+    #[test]
+    fn ignores_leadinglight_staging_folders_at_any_depth() {
+        for path in [
+            "/vault/.leadinglight-a1B2c3",
+            "/vault/.leadinglight-a1B2c3/plan.md",
+            "/vault/projects/.leadinglight-Zz9q/staged.md",
+            "/vault/projects/deep/.leadinglight-x7/attachments/image.png",
+        ] {
+            assert!(!is_watchable_path(Path::new(path), None), "{path}");
+        }
+    }
+
+    #[test]
+    fn keeps_names_near_app_folders_watchable() {
+        for path in [
+            "/vault/.leadinglightx/plan.md",
+            "/vault/.leadinglight_old/plan.md",
+            "/vault/leadinglight-notes/plan.md",
+            "/vault/notes/leadinglight-plan.md",
+            "/vault/notes/my.leadinglight-ideas.md",
+            "/vault/projects/attachments/image.png",
+            "/vault/.laputa/views/work.yml",
+        ] {
+            assert!(is_watchable_path(Path::new(path), None), "{path}");
+        }
     }
 
     #[test]
