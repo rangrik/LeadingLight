@@ -274,3 +274,50 @@ single-vault limitation, and memory-only pending drafts are documented in
 [ADR 005](ADR-005-immediate-capture.md). Automatic local version history is a subsequent milestone.
 The user's running installed app was not replaced or used for QA; a production update is staged
 separately until it can be installed safely.
+
+# Version 0.4.1 — safer saves and draft recovery
+
+Validated on macOS on 2026-10-16 with disposable local Markdown folders. Ordinary page saves
+now distinguish committed writes, refusals and uncertain results. Recovery stays attached to
+the affected page, with Check again, Save as a new page and confirmed Discard actions.
+
+The final browser acceptance run passes all 25 cases with one worker and no retries: thirteen
+save/recovery flows, eight immediate-capture flows, two failed-save boundaries and two property
+write races. These check exact disk bytes, independent panes, lost replies without replaying a
+write, changed copies, newer typing, missing files/folders, refusal to write through an outside
+symlink, and opening a verified copy while the full page list is still loading. Reopening after
+Discard reads the current disk contents instead of an old cache. Escape and Cancel restore focus.
+
+A rapid-switch regression exposed an old page's blocks being cached under the newly selected
+path. A separate controlled-frame regression reproduced premature readiness followed by loss of
+new typing. The corrections retain document identity and bind deferred completion/readiness to
+the current swap. The final affected editor/save group passes 705 tests in 63 files. These are
+hook/component tests with a mock editor at the timing seam; they do not establish exhaustive
+browser or native scheduling coverage.
+
+The isolated, signed 0.4.1 Mac bundle passed mouse-driven two-pane writing and recovery checks.
+A read-only page kept its draft and allowed continued typing after copying; the older copy could
+not settle newer text. Keeping the current copy opened it in the original pane. Removing a
+synthetic source file left its draft editable, and recovery created a separate file without
+recreating the missing original. Discard required confirmation; Escape and Cancel preserved the
+draft and returned focus to its trigger. Reopen, immediate Save and rich/Markdown toggling did
+not resurrect discarded words. The other pane's file hash remained unchanged throughout.
+
+Typing immediately before Command-Q reached disk before native shutdown acknowledged success.
+Relaunch restored both pages, their split and recovered text. A second quit with a read-only
+target was cancelled with the draft still visible; repairing permissions allowed Save and a
+subsequent clean quit. The personal installed app and real vault were never used for QA.
+
+Application/build-script TypeScript and changed-code lint pass. A separately checked historical
+TabSwap test file retains fifteen older mock-typing errors outside the new regressions; the
+focused recovery test type project passes. English fallback remains intentional: locale
+validation reports 177 absent keys per target locale, including 46 new English recovery keys.
+No cloud translation, telemetry or remote note feature was added. The earlier upstream-suite
+and platform qualification limits still apply.
+
+Native checks cover the local save registry, exact request binding, file staging, copy proof,
+writer leases and the disabled obsolete writer commands. The qualified save contract and its
+external-writer/crash limitations are in [ADR 006](ADR-006-qualified-page-saves.md). Pending
+typing and the outcome registry are process-local; automatic earlier-version history remains
+the next increment. Force termination, power loss, native All Notes row dragging, actual IME
+and the complete vault-switch fault matrix are not newly qualified by this release.
