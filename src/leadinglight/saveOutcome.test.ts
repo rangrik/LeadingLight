@@ -7,10 +7,12 @@ import {
 const SHA = 'a'.repeat(64)
 const request = { requestId: 'r1', vaultPath: '/vault', session: '3', path: '/vault/plan.md', seq: 4, submittedSha256: SHA }
 const hold = { requestId: 'r1', kind: 'conflict', seq: 4, submittedSha256: SHA }
+const noted = (history: unknown) => ({ status: 'committed', written: true, durable: true, history })
 
 describe('save outcome wire shapes', () => {
   it.each([
     { status: 'committed', written: true, durable: false, history: null },
+    ...['tooLarge', 'full', 'lowSpace', 'busy', 'unavailable'].map(reason => noted({ status: 'notKept', reason })),
     { status: 'refused', reason: 'readFailed' },
     { status: 'refused', reason: 'held', heldBy: 'r0', heldRequest: request, heldKind: 'uncertain' },
     { status: 'refused', reason: 'symlink', hold: { ...hold, kind: 'linked' } },
@@ -24,6 +26,9 @@ describe('save outcome wire shapes', () => {
   it.each([
     null, 'committed', { status: 'committed', written: true, durable: true },
     { status: 'committed', written: true, durable: true, history: {} },
+    noted({ status: 'kept', reason: 'busy' }), noted({ status: 'notKept', reason: 'diskFull' }),
+    noted({ status: 'notKept' }), noted('busy'), noted([]),
+    { status: 'committed', written: 1, durable: true, history: { status: 'notKept', reason: 'busy' } },
     { status: 'refused', reason: 'dropped' },
     { status: 'refused', reason: 'held', heldBy: 'r0', heldKind: 'conflict' },
     { status: 'refused', reason: 'missing', hold: { ...hold, seq: -1 } },
@@ -38,6 +43,9 @@ describe('save outcome wire shapes', () => {
       .toEqual({ state: 'done', outcome: { status: 'failed', reason: 'publish' } })
     expect(parseSaveRequestState({ state: 'retired', terminal: 'refused', resolved: true }))
       .toEqual({ state: 'retired', terminal: 'refused', resolved: true })
+    expect(parseSaveRequestState({ state: 'done', outcome: noted({ status: 'notKept', reason: 'lowSpace' }) }))
+      .toEqual({ state: 'done', outcome: noted({ status: 'notKept', reason: 'lowSpace' }) })
+    expect(parseSaveRequestState({ state: 'done', outcome: noted({ status: 'notKept', reason: 'gone' }) })).toBeNull()
     expect(parseSaveRequestState({ state: 'done', outcome: { status: 'nope' } })).toBeNull()
     expect(parseCopyOutcome({ status: 'created', path: '/vault/plan-2.md', relativePath: 'plan-2.md', durable: true }))
       .toEqual({ status: 'created', path: '/vault/plan-2.md', relativePath: 'plan-2.md', durable: true })

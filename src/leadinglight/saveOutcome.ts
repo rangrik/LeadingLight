@@ -21,9 +21,12 @@ export type PlainRefusalReason =
   | 'outsideVault' | 'readOnly' | 'readFailed' | 'stageFailed' | 'busy' | 'requestMismatch' | 'requestVoided'
 export type HoldRefusalReason = 'missing' | 'parentMissing' | 'linked' | 'symlink'
 
+/** The page was saved but its earlier version was not kept. Null history says nothing about history. */
+export interface HistoryNote { status: 'notKept'; reason: 'tooLarge' | 'full' | 'lowSpace' | 'busy' | 'unavailable' }
+
 /** Every refusal means no publication was attempted; none certifies the bytes on disk. */
 export type SaveOutcome =
-  | { status: 'committed'; written: boolean; durable: boolean; history: null }
+  | { status: 'committed'; written: boolean; durable: boolean; history: HistoryNote | null }
   | { status: 'refused'; reason: PlainRefusalReason }
   | { status: 'refused'; reason: 'held'; heldBy: string; heldRequest: OriginalRequest; heldKind: HoldKind }
   | { status: 'refused'; reason: HoldRefusalReason; hold: HoldInfo }
@@ -69,6 +72,7 @@ const HOLD_KINDS: readonly HoldKind[] = ['missing', 'linked', 'conflict', 'uncer
 const PLAIN_REASONS: readonly PlainRefusalReason[] =
   ['outsideVault', 'readOnly', 'readFailed', 'stageFailed', 'busy', 'requestMismatch', 'requestVoided']
 const HOLD_REASONS: readonly HoldRefusalReason[] = ['missing', 'parentMissing', 'linked', 'symlink']
+const HISTORY_REASONS: readonly HistoryNote['reason'][] = ['tooLarge', 'full', 'lowSpace', 'busy', 'unavailable']
 const TERMINALS: readonly SaveTerminal[] = ['committed', 'refused', 'failed', 'conflict', 'uncertain']
 const COPY_REASONS: readonly CopyRefusalReason[] =
   ['busy', 'outsideVault', 'nameUnavailable', 'operationMismatch', 'requestMismatch']
@@ -114,14 +118,20 @@ function parseRefusal(value: Fields): SaveOutcome | null {
   return heldRequest && { status: 'refused', reason, heldBy: value.heldBy, heldRequest, heldKind: value.heldKind }
 }
 
+function parseCommitted(value: Fields): SaveOutcome | null {
+  const { written, durable, history } = value
+  if (typeof written !== 'boolean' || typeof durable !== 'boolean') return null
+  if (history === null) return { status: 'committed', written, durable, history: null }
+  if (!isFields(history) || history.status !== 'notKept' || !isOneOf(HISTORY_REASONS, history.reason)) return null
+  return { status: 'committed', written, durable, history: { status: 'notKept', reason: history.reason } }
+}
+
 /** The outcome, or null for any other shape, which callers treat as no reply. */
 export function parseSaveOutcome(value: unknown): SaveOutcome | null {
   if (!isFields(value)) return null
   switch (value.status) {
     case 'committed':
-      return typeof value.written === 'boolean' && typeof value.durable === 'boolean' && value.history === null
-        ? { status: 'committed', written: value.written, durable: value.durable, history: null }
-        : null
+      return parseCommitted(value)
     case 'refused':
       return parseRefusal(value)
     case 'failed':
