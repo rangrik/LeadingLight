@@ -34,6 +34,7 @@ fn with_note_path_in_vault<T>(
         request.vault_path,
         request.note_path,
         |requested_root, validated_path| {
+            let _lease = crate::leadinglight_history::lease(&[validated_path])?;
             action(ValidatedNotePath {
                 vault_path: requested_root,
                 note_path: validated_path,
@@ -275,6 +276,7 @@ pub(crate) fn auto_rename_untitled_blocking(
         &args.vault_path,
         &args.note_path,
         |requested_root, validated_path| {
+            let _lease = crate::leadinglight_history::lease(&[validated_path])?;
             vault::auto_rename_untitled(vault::AutoRenameUntitledRequest {
                 vault_path: requested_root,
                 note_path: validated_path,

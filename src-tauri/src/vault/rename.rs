@@ -185,14 +185,38 @@ fn replace_wikilinks_in_files(
     summary
 }
 
+#[cfg(test)]
+type LinkedReadHook = Box<dyn Fn(&Path)>;
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam: runs after a linked page is read and before it is written back.
+    static AFTER_LINKED_READ: std::cell::RefCell<Option<LinkedReadHook>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 fn rewrite_wikilinks_in_file(path: &Path, re: &Regex, replacement: &str) -> Result<bool, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let read = || {
+        fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))
+    };
+    // Pages without the link are skipped before any lease is taken.
+    if !re.is_match(&read()?) {
+        return Ok(false);
+    }
+    // Leased from read to write, so no save lands in between; a busy or held page is not touched.
+    let _lease = crate::leadinglight_history::lease(&[path])?;
+    let content = read()?;
 
     let Some(new_content) = replace_wikilinks_in_content(&content, re, replacement) else {
         return Ok(false);
     };
 
+    #[cfg(test)]
+    AFTER_LINKED_READ.with_borrow(|hook| {
+        if let Some(hook) = hook {
+            hook(path);
+        }
+    });
     fs::write(path, &new_content)
         .map(|_| true)
         .map_err(|e| format!("Failed to write {}: {}", path.display(), e))
@@ -1523,6 +1547,51 @@ mod tests {
         assert!(
             !content.contains("# Brand New Title"),
             "H1 must NOT match new title"
+        );
+    }
+
+    /// Seam: a linked page stays leased from its read to its write. Catches a save landing in
+    /// between and then being overwritten by the rename's stale copy.
+    #[test]
+    fn a_save_during_a_linked_page_rewrite_is_refused_not_overwritten() {
+        use crate::leadinglight_history::outcome::{Refusal, SaveOutcome};
+        use crate::leadinglight_history::{page_key, save_page, OriginalRequest, PageTarget};
+
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "plan.md", "# Plan\n");
+        create_test_file(vault, "linked.md", "See [[plan]].\n");
+        let saved = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let (outcome, root) = (saved.clone(), vault.to_string_lossy().into_owned());
+        AFTER_LINKED_READ.set(Some(Box::new(move |path: &Path| {
+            let text = "See [[plan]] today.\n";
+            let digest = crate::vault::staged_file::sha256(text.as_bytes());
+            let request = OriginalRequest {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                vault_path: root.clone(),
+                session: "window".to_string(),
+                path: path.to_string_lossy().into_owned(),
+                seq: 1,
+                submitted_sha256: digest.iter().map(|byte| format!("{byte:02x}")).collect(),
+            };
+            let target = PageTarget {
+                path: path.to_path_buf(),
+                key: page_key(path).unwrap(),
+            };
+            *outcome.borrow_mut() = Some(save_page(&request, text, Some(&target)));
+        })));
+        let result = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("plan.md").to_str().unwrap(),
+            new_filename_stem: "goals",
+        });
+        AFTER_LINKED_READ.set(None);
+
+        assert_eq!(*saved.borrow(), Some(SaveOutcome::refused(Refusal::Busy)));
+        assert_eq!(result.unwrap().updated_files, 1);
+        assert_eq!(
+            fs::read_to_string(vault.join("linked.md")).unwrap(),
+            "See [[goals]].\n"
         );
     }
 

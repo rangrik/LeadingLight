@@ -96,12 +96,21 @@ Other hidden namespaces, including saved views under `.laputa`, retain their exi
 identity and its bytes, sibling staging, publication and conservative failure classification.
 Favorite remains a thin adapter and keeps its identity-only check before publication. The
 separate exact recheck also compares bytes and revalidates the path after reading; it supports
-the forthcoming ordinary-save transaction without coupling it to Favorite result types.
+the ordinary-save transaction without coupling it to Favorite result types.
 After a failed publication, only an exact unchanged original permits the failed result;
 otherwise staging is retained as uncertain. A successful publication with a failed directory
 sync remains committed. The final check and replacement are separate operations, so this is
 not a filesystem compare-and-swap or a power-loss guarantee. Native metadata replacement
 continues through the unchanged `atomic_replace` module.
+
+`leadinglight_history` adds the native ordinary-save transaction and its outcome registry.
+Requests bind a vault, page, session and exact submitted snapshot. Queries never replay a write;
+uncertain results keep recovery available. Internal mutations use overlapping-path leases, and
+note and attachment link rewrites lease each linked page before their authoritative read. Draft copies use local intents,
+no-clobber publication and current file ownership, sequence and content proof before resolution.
+The registered root and stored parents are revalidated before later recovery reads. See
+[ADR 006](ADR-006-qualified-page-saves.md) for the contract, frontend settlement boundary and
+explicit limits. This storage module does not yet imply automatic version history.
 
 Manual renames retain the mounted rich editor through the pane's explicit `renamedFrom` record.
 The swap hook verifies that the editor still holds that old path, flushes its pending text through

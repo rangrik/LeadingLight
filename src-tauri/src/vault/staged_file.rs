@@ -19,28 +19,55 @@ pub(crate) enum Mismatch {
     Changed,
 }
 
+/// What a recheck that reads the page found; a failed read proves nothing either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Recheck {
+    Differs(Mismatch),
+    Unreadable,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct FileIdentity {
+pub(crate) struct FileIdentity {
     device: u64,
     inode: u64,
     len: u64,
     modified: Option<SystemTime>,
 }
 
-fn identity(meta: &fs::Metadata) -> FileIdentity {
+/// Device and inode; `None` where the platform gives no stable file number.
+pub(crate) fn device_inode(meta: &fs::Metadata) -> Option<(u64, u64)> {
     #[cfg(unix)]
-    let (device, inode) = {
+    {
         use std::os::unix::fs::MetadataExt;
-        (meta.dev(), meta.ino())
-    };
+        Some((meta.dev(), meta.ino()))
+    }
     #[cfg(not(unix))]
-    let (device, inode) = (0, 0);
+    {
+        let _ = meta;
+        None
+    }
+}
+
+fn identity(meta: &fs::Metadata) -> FileIdentity {
+    let (device, inode) = device_inode(meta).unwrap_or((0, 0));
     FileIdentity {
         device,
         inode,
         len: meta.len(),
         modified: meta.modified().ok(),
     }
+}
+
+/// The identity of whatever is at `path`, without following a final symlink.
+pub(crate) fn file_identity(path: &Path) -> Option<FileIdentity> {
+    fs::symlink_metadata(path).ok().map(|meta| identity(&meta))
+}
+
+pub(crate) fn sha256(bytes: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut digest = [0; 32];
+    digest.copy_from_slice(&Sha256::digest(bytes));
+    digest
 }
 
 fn link_count(meta: &fs::Metadata) -> u64 {
@@ -104,12 +131,45 @@ impl Original {
 
     /// Same file and exact same bytes; the path is checked again so a swap during the read shows.
     pub(crate) fn recheck_exact(&self) -> Result<(), Mismatch> {
-        self.recheck_identity()?;
-        let (bytes, seen) = read_with_identity(&self.path).map_err(|_| Mismatch::Changed)?;
-        if seen != self.identity || bytes != self.bytes {
-            return Err(Mismatch::Changed);
+        self.fingerprint()
+            .recheck()
+            .map_err(|recheck| match recheck {
+                Recheck::Differs(mismatch) => mismatch,
+                Recheck::Unreadable => Mismatch::Changed,
+            })
+    }
+
+    pub(crate) fn fingerprint(&self) -> Fingerprint {
+        Fingerprint {
+            path: self.path.clone(),
+            identity: self.identity.clone(),
+            sha256: sha256(&self.bytes),
         }
-        self.recheck_identity()
+    }
+}
+
+/// What was read, without the text, so it can be proven unchanged later.
+#[derive(Debug, Clone)]
+pub(crate) struct Fingerprint {
+    path: PathBuf,
+    identity: FileIdentity,
+    sha256: [u8; 32],
+}
+
+impl Fingerprint {
+    /// Same file, then the same bytes through one handle, then the same file again.
+    pub(crate) fn recheck(&self) -> Result<(), Recheck> {
+        let same_file = || match plain_file(&self.path) {
+            Ok(meta) if identity(&meta) == self.identity => Ok(()),
+            Ok(_) => Err(Recheck::Differs(Mismatch::Changed)),
+            Err(mismatch) => Err(Recheck::Differs(mismatch)),
+        };
+        same_file()?;
+        let (bytes, seen) = read_with_identity(&self.path).map_err(|_| Recheck::Unreadable)?;
+        if seen != self.identity || sha256(&bytes) != self.sha256 {
+            return Err(Recheck::Differs(Mismatch::Changed));
+        }
+        same_file()
     }
 }
 
@@ -117,9 +177,20 @@ impl Original {
 pub(crate) fn stage(path: &Path, bytes: &[u8]) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
     let parent = path.parent().ok_or(std::io::ErrorKind::NotFound)?;
     let name = path.file_name().ok_or(std::io::ErrorKind::NotFound)?;
+    let permissions = fs::metadata(path)?.permissions();
+    stage_in(parent, name.as_ref(), bytes, Some(permissions))
+}
+
+/// Stages `bytes` as `name` in a new `.leadinglight-*` folder inside `dir`.
+pub(crate) fn stage_in(
+    dir: &Path,
+    name: &Path,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+) -> std::io::Result<(tempfile::TempDir, PathBuf)> {
     let staging = tempfile::Builder::new()
         .prefix(STAGING_PREFIX)
-        .tempdir_in(parent)?;
+        .tempdir_in(dir)?;
     // Written before any page text, so Git skips the copy even under a parent `!` rule.
     fs::write(staging.path().join(".gitignore"), "*\n")?;
     let staged = staging.path().join(name);
@@ -128,7 +199,9 @@ pub(crate) fn stage(path: &Path, bytes: &[u8]) -> std::io::Result<(tempfile::Tem
         .create_new(true)
         .open(&staged)?;
     file.write_all(bytes)?;
-    file.set_permissions(fs::metadata(path)?.permissions())?;
+    if let Some(permissions) = permissions {
+        file.set_permissions(permissions)?;
+    }
     file.sync_all()?;
     Ok((staging, staged))
 }

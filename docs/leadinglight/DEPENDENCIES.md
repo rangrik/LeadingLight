@@ -7,6 +7,10 @@ the stable registry release. It validates Favorite frontmatter before a narrow p
 reformatting the document. The lockfile also normalizes inherited Tiptap peer resolutions to
 the already declared 3.22.5 version; this does not upgrade the editor to its latest major.
 
+The safer-save native increment adds `sha2` 0.11.1 for request binding and copy verification.
+Its minimal lockfile changes preserve Cargo lock format 3. The October 16 native checks use the
+existing Rust toolchain and pass with `--locked`; the compatibility exceptions below still apply.
+
 ## Deliberately held for compatibility
 
 These are not claimed to be latest. Updating the editor requires rebasing the inherited correctness patches; other major upgrades need separate migration and regression verification after the first usable split-pane milestone.

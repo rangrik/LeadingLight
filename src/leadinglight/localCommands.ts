@@ -18,6 +18,8 @@ const REMOTE_COMMANDS = new Set([
 
 export function isLocalCommandVisible(command: { id: string }): boolean {
   if (!SEPARATE_WINDOWS_ENABLED && command.id === 'open-in-new-window') return false
+  // Bulk repair rewrites pages around the save queue, so it stays hidden.
+  if (command.id === 'repair-vault') return false
   if (REMOTE_FEATURES_ENABLED) return true
   return !REMOTE_COMMANDS.has(command.id)
     && !command.id.startsWith('switch-ai-agent-')

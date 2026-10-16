@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::frontmatter;
 use crate::frontmatter::favorite::{FavoriteState, FavoriteWriteOutcome, RefusalReason};
 use crate::frontmatter::FrontmatterValue;
+use crate::leadinglight_history::lease;
 
 use super::boundary::{with_existing_paths, with_validated_path, ValidatedPathMode};
 
@@ -26,6 +27,7 @@ pub(crate) fn set_note_favorite_blocking(
     // Boundary refusals are reported as data, so nothing reads as an unknown failure.
     let outcome = match validated {
         Ok(validated) if frontmatter::is_markdown_path(Path::new(&validated)) => {
+            let _lease = lease(&[&validated])?;
             frontmatter::favorite::set_note_favorite(Path::new(&validated), state)
         }
         Ok(_) => FavoriteWriteOutcome::refused(RefusalReason::InvalidFrontmatter),
@@ -60,7 +62,10 @@ pub(crate) fn update_frontmatter_blocking(
         &path,
         vault_path.as_deref(),
         ValidatedPathMode::Existing,
-        |validated_path| frontmatter::update_frontmatter(validated_path, &key, value),
+        |validated_path| {
+            let _lease = lease(&[validated_path])?;
+            frontmatter::update_frontmatter(validated_path, &key, value)
+        },
     )
 }
 
@@ -83,7 +88,10 @@ pub(crate) fn delete_frontmatter_property_blocking(
         &path,
         vault_path.as_deref(),
         ValidatedPathMode::Existing,
-        |validated_path| frontmatter::delete_frontmatter_property(validated_path, &key),
+        |validated_path| {
+            let _lease = lease(&[validated_path])?;
+            frontmatter::delete_frontmatter_property(validated_path, &key)
+        },
     )
 }
 
@@ -103,6 +111,7 @@ pub fn batch_archive_notes(
     vault_path: Option<String>,
 ) -> Result<usize, String> {
     with_existing_paths(&paths, vault_path.as_deref(), |validated_paths| {
+        let _lease = lease(&validated_paths)?;
         let mut count = 0;
         for path in &validated_paths {
             frontmatter::update_frontmatter(path, "_archived", FrontmatterValue::Bool(true))?;

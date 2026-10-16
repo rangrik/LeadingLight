@@ -19,12 +19,13 @@ describe('LeadingLight command surfaces', () => {
       onOpenAiAgents: action, onInstallMcp: action, onCheckForUpdates: action,
       onToggleAIChat: action, onRestoreGettingStarted: action,
       onOpenVault: action, onCreateEmptyVault: action, onExportNoteAsPdf: action,
+      onReloadVault: action, onRepairVault: action,
     }))
     const ids = result.current.map(command => command.id)
-    for (const id of ['open-ai-agents', 'toggle-ai-panel', 'new-ai-chat', 'install-mcp', 'check-updates', 'restore-getting-started', 'git-pull', 'commit-push', 'open-contribute']) {
+    for (const id of ['open-ai-agents', 'toggle-ai-panel', 'new-ai-chat', 'install-mcp', 'check-updates', 'restore-getting-started', 'git-pull', 'commit-push', 'open-contribute', 'repair-vault']) {
       expect(ids).not.toContain(id)
     }
-    for (const id of ['search-notes', 'save-note', 'open-vault', 'create-empty-vault']) {
+    for (const id of ['search-notes', 'save-note', 'open-vault', 'create-empty-vault', 'reload-vault']) {
       expect(ids).toContain(id)
     }
     expect(isLocalCommandVisible({ id: 'switch-ai-agent-codex' })).toBe(false)

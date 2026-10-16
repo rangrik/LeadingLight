@@ -232,20 +232,48 @@ fn markdown_files(vault: &Path) -> impl Iterator<Item = PathBuf> {
         .map(|entry| entry.into_path())
 }
 
+#[cfg(test)]
+type LinkedReadHook = Box<dyn Fn(&Path)>;
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam: runs after a linked page is read and before it is written back.
+    static AFTER_LINKED_READ: std::cell::RefCell<Option<LinkedReadHook>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// `Err` when the page cannot be read or written, or is saving, held or leased.
+fn update_file(path: &Path, rewrite: &ReferenceRewrite<'_>) -> Result<bool, ()> {
+    let read = || fs::read_to_string(path).map_err(drop);
+    let links = |content: &str| rewrite_references(content, rewrite) != content;
+    // Pages without the link are skipped before any lease is taken.
+    if !links(&read()?) {
+        return Ok(false);
+    }
+    // Leased from read to write, so no save lands in between; a busy or held page is not touched.
+    let _lease = crate::leadinglight_history::lease(&[path]).map_err(drop)?;
+    let content = read()?;
+    let rewritten = rewrite_references(&content, rewrite);
+    if rewritten == content {
+        return Ok(false);
+    }
+    #[cfg(test)]
+    AFTER_LINKED_READ.with_borrow(|hook| {
+        if let Some(hook) = hook {
+            hook(path);
+        }
+    });
+    fs::write(path, rewritten).map(|()| true).map_err(drop)
+}
+
 fn update_references(vault: &Path, rewrite: &ReferenceRewrite<'_>) -> (usize, usize) {
     let mut updated = 0;
     let mut failed = 0;
     for path in markdown_files(vault) {
-        let Ok(content) = fs::read_to_string(&path) else {
-            failed += 1;
-            continue;
-        };
-        let rewritten = rewrite_references(&content, rewrite);
-        if rewritten != content {
-            match fs::write(path, rewritten) {
-                Ok(()) => updated += 1,
-                Err(_) => failed += 1,
-            }
+        match update_file(&path, rewrite) {
+            Ok(true) => updated += 1,
+            Ok(false) => {}
+            Err(()) => failed += 1,
         }
     }
     (updated, failed)
@@ -379,6 +407,43 @@ mod tests {
             fs::read_to_string(dir.path().join("second.md")).unwrap(),
             "![[attachments/旅行.png]]\n"
         );
+    }
+
+    /// Seam: a linked page stays leased from its read to its write. Catches a save landing in
+    /// between and then being overwritten by the rename's stale copy.
+    #[test]
+    fn a_save_during_a_linked_page_rewrite_is_refused_not_overwritten() {
+        use crate::leadinglight_history::{legacy_save, page_key, PageTarget};
+
+        fn save(path: &Path, root: &str) -> Result<(), String> {
+            let target = PageTarget {
+                path: path.to_path_buf(),
+                key: page_key(path).unwrap(),
+            };
+            legacy_save(&target, root, "mine\n")
+        }
+        let (dir, source) = attachment_fixture("a.png");
+        let (page, root) = (dir.path().join("linked.md"), dir.path().to_string_lossy());
+        fs::write(&page, "![[attachments/a.png]]\n").unwrap();
+        let during = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let (seen, vault) = (during.clone(), root.to_string());
+        AFTER_LINKED_READ.set(Some(Box::new(move |path: &Path| {
+            *seen.borrow_mut() = Some(save(path, &vault));
+        })));
+        let result = rename_attachment(AttachmentRenameRequest {
+            requested_name: "b.png",
+            source_path: source.to_str().unwrap(),
+            vault_path: &root,
+        });
+        AFTER_LINKED_READ.set(None);
+
+        assert_eq!(*during.borrow(), Some(Err("refused: busy".to_string())));
+        assert_eq!(result.unwrap().updated_files, 1);
+        assert_eq!(
+            fs::read_to_string(&page).unwrap(),
+            "![[attachments/b.png]]\n"
+        );
+        assert_eq!(save(&page, &root), Ok(()), "the lease ends with the rename");
     }
 
     #[test]

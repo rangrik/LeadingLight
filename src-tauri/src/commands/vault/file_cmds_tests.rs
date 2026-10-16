@@ -89,6 +89,10 @@ async fn note_content_commands_accept_windows_sensitive_valid_segments() {
         .join("notes with spaces")
         .join("résumé note.md");
 
+    // Legacy save no longer creates missing pages, so the page is created first.
+    create_note_content(note.clone(), String::new(), Some(root.clone()))
+        .await
+        .unwrap();
     save_note_content(
         note.clone(),
         "# Windows-Sensitive Path\n\nBody\n".to_string(),

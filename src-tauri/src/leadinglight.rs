@@ -20,6 +20,7 @@ pub fn is_disabled_menu_command(command: &str) -> bool {
             | "vault-commit-push"
             | "vault-pull"
             | "vault-install-mcp"
+            | "vault-repair"
     )
 }
 
@@ -57,6 +58,12 @@ pub fn is_disabled_command(command: &str) -> bool {
             | "get_mcp_config_snippet"
             | "get_opencode_mcp_config_snippet"
             | "sync_mcp_bridge_vault"
+            // Bulk repair and Git working-tree changes rewrite pages around the save queue.
+            | "repair_vault"
+            | "migrate_is_a_to_type"
+            | "git_resolve_conflict"
+            | "git_discard_file"
+            | "git_commit_conflict_resolution"
     )
 }
 
@@ -108,12 +115,43 @@ mod tests {
         for command in [
             "get_note_content",
             "save_note_content",
+            "save_page_content",
+            "check_save_outcome",
+            "save_draft_as_new_page",
+            "release_hold_with_copy",
+            "discard_hold",
             "create_empty_vault",
             "save_image",
             "get_file_history",
         ] {
             assert!(!is_disabled_command(command), "{command}");
         }
+    }
+
+    /// Seam: native dispatch and the native menu. Catches bulk repair or a Git working-tree change
+    /// rewriting pages around the save queue, while Trash and read-only history stay available.
+    #[test]
+    fn obsolete_page_writers_are_denied_at_dispatch_and_in_the_menu() {
+        for command in [
+            "repair_vault",
+            "migrate_is_a_to_type",
+            "git_resolve_conflict",
+            "git_discard_file",
+            "git_commit_conflict_resolution",
+        ] {
+            assert!(is_disabled_command(command), "{command}");
+        }
+        assert!(is_disabled_menu_command("vault-repair"));
+        for command in [
+            "move_to_local_trash",
+            "batch_delete_notes_async",
+            "list_local_trash",
+            "restore_from_local_trash",
+            "get_file_history",
+        ] {
+            assert!(!is_disabled_command(command), "{command}");
+        }
+        assert!(!is_disabled_menu_command("vault-reload"));
     }
 
     #[test]

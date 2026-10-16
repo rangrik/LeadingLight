@@ -1,4 +1,5 @@
 use crate::commands::expand_tilde;
+use crate::leadinglight_history::{page_key, PageTarget, VaultRoots};
 use crate::vault::filename_rules::validate_view_filename_stem;
 use crate::vault_list;
 use std::ffi::OsString;
@@ -107,6 +108,26 @@ impl VaultBoundary {
             expanded
         } else {
             self.requested_root.join(expanded)
+        }
+    }
+
+    /// S0 page check: the folder must resolve inside the vault; the page itself is never followed.
+    pub(crate) fn page_target(&self, raw_path: &str) -> Result<PageTarget, String> {
+        let path = self.requested_path(raw_path);
+        let dotted = path
+            .components()
+            .any(|part| matches!(part, Component::CurDir | Component::ParentDir));
+        let key = page_key(&path)
+            .filter(|_| !dotted)
+            .ok_or_else(|| ACTIVE_VAULT_PATH_ERROR.to_string())?;
+        self.ensure_within_root(&key)?;
+        Ok(PageTarget { path, key })
+    }
+
+    pub(crate) fn roots(&self) -> VaultRoots {
+        VaultRoots {
+            requested: self.requested_root.clone(),
+            canonical: self.canonical_root.clone(),
         }
     }
 
@@ -345,6 +366,25 @@ fn validate_for_mode(
         ValidatedPathMode::Existing => boundary.validate_existing_path(path),
         ValidatedPathMode::Writable => boundary.validate_writable_path(path),
     }
+}
+
+/// Legacy save: the same root lookup as a writable path, then the S0 page check.
+pub(crate) fn legacy_page_target(
+    path: &str,
+    vault_path: Option<&str>,
+) -> Result<(PageTarget, String), String> {
+    let registered = match vault_path {
+        None => find_registered_root_for_absolute_path(path)?,
+        Some(_) => None,
+    };
+    let boundary = match registered {
+        Some(root) => VaultBoundary {
+            requested_root: root.requested,
+            canonical_root: root.canonical,
+        },
+        None => VaultBoundary::from_request(vault_path)?,
+    };
+    Ok((boundary.page_target(path)?, boundary.requested_root_str()))
 }
 
 pub(crate) fn with_existing_paths<T>(

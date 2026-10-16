@@ -1,10 +1,12 @@
 use crate::commands::expand_tilde;
+use crate::leadinglight_history::lease;
 use crate::vault::filename_rules::validate_folder_name;
 use crate::vault::{self, FolderNode, VaultEntry};
 use std::path::{Path, PathBuf};
 
 use super::boundary::{
-    with_boundary, with_existing_paths, with_requested_root, with_validated_path, ValidatedPathMode,
+    legacy_page_target, with_boundary, with_existing_paths, with_requested_root,
+    with_validated_path, ValidatedPathMode,
 };
 
 const LOCALIZED_ERROR_PREFIX: &str = "tolaria:i18n-error:";
@@ -249,9 +251,9 @@ pub async fn save_note_content(
     vault_path: Option<PathBuf>,
 ) -> Result<(), String> {
     crate::commands::blocking::run_blocking(move || {
-        with_writable_note_path(path, vault_path, |validated_path| {
-            vault::save_note_content(validated_path, &content)
-        })
+        let vault_path = vault_path.map(|root| root.to_string_lossy().into_owned());
+        let (target, root) = legacy_page_target(&path.to_string_lossy(), vault_path.as_deref())?;
+        crate::leadinglight_history::legacy_save(&target, &root, &content)
     })
     .await?
 }
@@ -281,7 +283,10 @@ pub fn delete_note(path: PathBuf) -> Result<String, String> {
         path.to_string_lossy().as_ref(),
         None,
         ValidatedPathMode::Existing,
-        vault::delete_note,
+        |validated_path| {
+            let _lease = lease(&[validated_path])?;
+            vault::delete_note(validated_path)
+        },
     )
 }
 
@@ -292,6 +297,7 @@ pub fn batch_delete_notes(paths: Vec<PathBuf>) -> Result<Vec<String>, String> {
         .map(|path| path.to_string_lossy().into_owned())
         .collect::<Vec<_>>();
     with_existing_paths(&raw_paths, None, |validated_paths| {
+        let _lease = lease(&validated_paths)?;
         vault::batch_delete_notes(&validated_paths)
     })
 }
@@ -364,6 +370,7 @@ pub(crate) fn sync_note_title_blocking(
         vault_path.as_deref(),
         ValidatedPathMode::Existing,
         |validated_path| {
+            let _lease = lease(&[validated_path])?;
             let action = vault::sync_title_on_open(validated_path)?;
             Ok(matches!(action, SyncAction::Updated { .. }))
         },

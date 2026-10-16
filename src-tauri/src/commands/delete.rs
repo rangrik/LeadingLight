@@ -1,3 +1,4 @@
+use crate::leadinglight_history::lease;
 use crate::leadinglight_trash::{
     self, LocalTrashItem, LocalTrashMoveReport, LocalTrashRestoreReport,
 };
@@ -13,8 +14,11 @@ pub async fn batch_delete_notes_async(
 ) -> Result<Vec<String>, String> {
     let boundary = VaultBoundary::from_request(vault_path.as_deref())?;
     let validated_paths = boundary.validate_existing_paths(&paths)?;
-    crate::commands::blocking::run_blocking(move || vault::batch_delete_notes(&validated_paths))
-        .await?
+    crate::commands::blocking::run_blocking(move || {
+        let _lease = lease(&validated_paths)?;
+        vault::batch_delete_notes(&validated_paths)
+    })
+    .await?
 }
 
 /// Trash is per vault, so the vault is required rather than inferred.
@@ -33,6 +37,8 @@ pub async fn move_to_local_trash(
 ) -> Result<LocalTrashMoveReport, String> {
     let root = local_trash_root(&vault_path)?;
     crate::commands::blocking::run_blocking(move || {
+        let targets: Vec<PathBuf> = paths.iter().map(|path| root.join(path)).collect();
+        let _lease = lease(&targets)?;
         leadinglight_trash::move_to_trash(&root, &paths)
     })
     .await?

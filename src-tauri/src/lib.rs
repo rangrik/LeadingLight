@@ -26,6 +26,7 @@ mod html_block_protocol;
 pub mod kiro_cli;
 mod kiro_discovery;
 pub mod leadinglight;
+mod leadinglight_history;
 mod leadinglight_trash;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
 mod linux_appimage;
@@ -290,6 +291,11 @@ macro_rules! app_invoke_handler {
             commands::validate_note_content,
             commands::create_note_content,
             commands::save_note_content,
+            commands::save_page_content,
+            commands::check_save_outcome,
+            commands::save_draft_as_new_page,
+            commands::release_hold_with_copy,
+            commands::discard_hold,
             commands::update_frontmatter,
             commands::delete_frontmatter_property,
             commands::set_note_favorite,
