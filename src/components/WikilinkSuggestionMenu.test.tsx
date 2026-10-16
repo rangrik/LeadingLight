@@ -9,6 +9,21 @@ const item: WikilinkSuggestionItem = {
 }
 
 describe('WikilinkSuggestionMenu', () => {
+  it('distinguishes duplicate titles by folder and activates the selected path once', () => {
+    const workClick = vi.fn()
+    const homeClick = vi.fn()
+    render(<WikilinkSuggestionMenu loadingState="loaded" selectedIndex={0} items={[
+      { title: 'Plan', secondaryLabel: 'work/shared', path: '/vault/work/shared/plan.md', onItemClick: workClick },
+      { title: 'Plan', secondaryLabel: 'home/shared', path: '/vault/home/shared/plan.md', onItemClick: homeClick },
+    ]} />)
+    const home = screen.getByRole('button', { name: 'Plan home/shared' })
+    fireEvent.pointerDown(home)
+    fireEvent.mouseDown(home)
+    fireEvent.click(home)
+    expect(homeClick).toHaveBeenCalledOnce()
+    expect(workClick).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Plan work/shared' })).toBeVisible()
+  })
   it('runs the item click once when the controller callback invokes the item action', () => {
     const itemClick = vi.fn()
     const controllerClick = vi.fn((clickedItem: WikilinkSuggestionItem) => clickedItem.onItemClick())

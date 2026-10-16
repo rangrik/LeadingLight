@@ -21,7 +21,7 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
     if (flushPendingEditorContentRef) flushPendingEditorContentRef.current = target => { if (target === path) activity.flush(path) }
   }, [path, rawToggleRef, flushPendingEditorContentRef])
   return <>
-    <div contentEditable suppressContentEditableWarning data-mode={props.editorModeControl?.mode} data-testid={`editor-${path}`}>{path}</div>
+    <div contentEditable suppressContentEditableWarning data-mode={props.editorModeControl?.mode} data-wikilink-preferences={JSON.stringify(props.wikilinkPreferredPaths)} data-testid={`editor-${path}`}>{path}</div>
     {openHistory && <button data-testid={`history-${path}`} onClick={event => openHistory(event.currentTarget)}>history</button>}
     {!props.inspectorCollapsed && <div data-testid={`inspector-${path}`} tabIndex={-1} data-inspector-overlay={props.inspectorOverlay ? '' : undefined} />}
   </>
@@ -47,6 +47,33 @@ function fixture() {
 }
 
 describe('split editor integration', () => {
+  it('provides the other visible loaded page before recents without remounting or moving focus', () => {
+    activity.mount.mockClear(); activity.unmount.mockClear()
+    const props = fixture()
+    const recent = entry('/recent.md')
+    const inputs = { ...props, entries: [...props.entries, recent], vaultPath: '/', wikilinkPreferredPaths: ['/left.md', '/recent.md'] }
+    const { rerender } = render(<SplitEditorWorkspace {...inputs} />)
+    const left = screen.getByTestId('editor-/left.md')
+    left.focus()
+    expect(left).toHaveAttribute('data-wikilink-preferences', JSON.stringify(['/right.md', '/recent.md']))
+    expect(screen.getByTestId('editor-/right.md')).toHaveAttribute('data-wikilink-preferences', JSON.stringify(['/left.md', '/recent.md']))
+    rerender(<SplitEditorWorkspace {...inputs} workspace={{ ...props.workspace, pendingPanes: [false, true] }} />)
+    expect(left).toHaveAttribute('data-wikilink-preferences', JSON.stringify(['/recent.md']))
+    expect(document.activeElement).toBe(left)
+    expect(activity.mount).toHaveBeenCalledTimes(2)
+    expect(activity.unmount).not.toHaveBeenCalled()
+    rerender(<SplitEditorWorkspace {...inputs} workspace={{ ...props.workspace, split: false }} />)
+    expect(left).toHaveAttribute('data-wikilink-preferences', JSON.stringify(['/recent.md']))
+    expect(document.activeElement).toBe(left)
+  })
+
+  it('ignores unloaded and deleted retained other-pane pages as contextual preferences', () => {
+    const props = fixture()
+    const { rerender } = render(<SplitEditorWorkspace {...props} vaultPath="/" tabs={[props.tabs[0]]} />)
+    expect(screen.getByTestId('editor-/left.md')).toHaveAttribute('data-wikilink-preferences', '[]')
+    rerender(<SplitEditorWorkspace {...props} vaultPath="/" entries={[props.entries[0]]} unsavedPaths={new Set(['/right.md'])} wikilinkPreferredPaths={['/right.md']} />)
+    expect(screen.getByTestId('editor-/left.md')).toHaveAttribute('data-wikilink-preferences', '[]')
+  })
   it('routes global commands to the focused pane and flushes by document path', () => {
     const props = fixture()
     render(<SplitEditorWorkspace {...props} />)

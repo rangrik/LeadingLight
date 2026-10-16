@@ -1,6 +1,6 @@
 [package]
 name = "leadinglight"
-version = "0.7.0"
+version = "0.8.0"
 description = "A quiet, local Markdown writing workspace"
 authors = ["LeadingLight contributors", "Luca Rossi (Tolaria)"]
 license = "AGPL-3.0-or-later"

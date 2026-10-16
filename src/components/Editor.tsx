@@ -77,6 +77,8 @@ export interface EditorProps {
   activeTabPath: string | null
   isVaultLoading?: boolean
   entries: VaultEntry[]
+  /** Existing pages to promote only for empty rich [[ discovery. */
+  wikilinkPreferredPaths?: readonly string[]
   onNavigateWikilink: (target: string) => void
   /** Opens a backlink source by its exact entry; resolves whether it is now shown. */
   onOpenEntry?: (entry: VaultEntry) => Promise<boolean>
@@ -552,6 +554,7 @@ function useEditorSetup(options: EditorSetupParams) {
       isLoadingNewTab: boolean
       isVaultLoading?: boolean
       entries: VaultEntry[]
+      wikilinkPreferredPaths?: readonly string[]
       editor: ReturnType<typeof useCreateBlockNote>
       diffMode: boolean
       diffContent: string | null
@@ -740,6 +743,7 @@ function useEditorSetup(options: EditorSetupParams) {
                 />
         ) : (
           <EditorContent
+              wikilinkPreferredPaths={options.wikilinkPreferredPaths}
               editorModeControl={options.editorModeControl}
               activeTab={activeTab}
               activeTabPath={activeTabPath}

@@ -24,6 +24,7 @@ import {
 import type { VaultEntry } from '../types'
 import type { WikilinkSuggestionItem } from './WikilinkSuggestionMenu'
 import { getTolariaSlashMenuItems } from './tolariaEditorFormattingConfig'
+import { contextualWikilinkPaths, orderWikilinkSuggestions } from '../leadinglight/wikilinkContext'
 
 const EMOJI_SHORTCODE_RESULT_LIMIT = 80
 const WIKILINK_AUTOCOMPLETE_RESULT_LIMIT = 20
@@ -156,12 +157,13 @@ interface SuggestionMenuItemsOptions {
   sourceEntry?: VaultEntry
   typeEntryMap: Record<string, VaultEntry>
   vaultPath?: string
+  wikilinkPreferredPaths?: readonly string[]
 }
 
 function matchedWikilinkItems(
   options: Pick<
     SuggestionMenuItemsOptions,
-    'baseItems' | 'insertWikilink' | 'runEditorAction' | 'sourceEntry' | 'typeEntryMap' | 'vaultPath'
+    'baseItems' | 'insertWikilink' | 'runEditorAction' | 'sourceEntry' | 'typeEntryMap' | 'vaultPath' | 'wikilinkPreferredPaths'
   >,
   normalizedQuery: string,
   triggerCharacter: WikilinkAutocompleteTrigger,
@@ -173,8 +175,16 @@ function matchedWikilinkItems(
   )
   if (!candidates) return null
 
+  const ordered = triggerCharacter === '[[' && normalizedQuery === ''
+    ? orderWikilinkSuggestions(candidates, contextualWikilinkPaths({
+      entries: candidates.map(item => item.entry),
+      vaultPath: options.vaultPath,
+      sourcePath: options.sourceEntry?.path,
+      recentPaths: options.wikilinkPreferredPaths,
+    }))
+    : candidates
   const items = attachClickHandlers(
-    candidates,
+    ordered,
     (target) => options.insertWikilink(target, triggerCharacter),
     options.vaultPath ?? '',
     options.sourceEntry,
@@ -182,6 +192,7 @@ function matchedWikilinkItems(
   return guardSuggestionMenuItems(
     enrichSuggestionItems(items, normalizedQuery, options.typeEntryMap, {
       showWorkspace: hasMultipleSuggestionWorkspaces(options.baseItems),
+      vaultPath: options.vaultPath,
     }),
     options.runEditorAction,
   )
@@ -200,6 +211,7 @@ function useWikilinkSuggestionItems(
     sourceEntry,
     typeEntryMap,
     vaultPath,
+    wikilinkPreferredPaths,
   } = options
   return useCallback(
     (query: string, triggerCharacter: WikilinkAutocompleteTrigger) => {
@@ -213,6 +225,7 @@ function useWikilinkSuggestionItems(
         sourceEntry,
         typeEntryMap,
         vaultPath,
+        wikilinkPreferredPaths,
       }, normalizedQuery, triggerCharacter)
       if (!matchedItems) return null
       if (
@@ -244,6 +257,7 @@ function useWikilinkSuggestionItems(
       sourceEntry,
       typeEntryMap,
       vaultPath,
+      wikilinkPreferredPaths,
     ],
   )
 }

@@ -493,3 +493,57 @@ qualification. Compact native window resizing remains unqualified by automation;
 minimum-size result is separate. The full locale validator reports 461 missing keys per non-English
 catalog, including 69 new English keys, under the fork's English fallback policy. Complete
 translations, whole-upstream coverage and notarized distribution are not claimed.
+
+# Milestone 9 — contextual page links
+
+Validated on macOS on 2026-10-16 for version 0.8.0, with disposable synthetic workspaces.
+The rich `[[` menu offers the other visible loaded page before actual recent visits. Source,
+missing, binary and other-vault paths receive no promotion. Typed-query relevance, `@`, explicit
+unresolved creation, the 20-result limit and canonical link serialization retain their contracts.
+Duplicate titles show vault-relative folders, or filenames when their folders also match.
+
+## Automated and source checks
+
+- 170 targeted tests passed across 14 files: preference eligibility/order/limit, stable editor
+  mount and focus, optional folder labels, once-only activation, canonical paths, existing
+  creation, tables, rich paste and link activation. App TypeScript and touched-file lint passed.
+- Five Chrome browser cases passed with one worker and zero retries. They cover a visible peer
+  outranking a newer actual visit, mouse and Enter insertion into the originating pane, closing
+  the other pane, exact duplicate-folder choice and navigation, Escape/Search and continued
+  typing, checklist/table rich–raw–rich/reopen, and structured Markdown/selected-label URL paste.
+- The two new-feature browser assertions failed on the prior behavior; the three neighboring
+  writing flows already passed. The final combined run passed all five. Browser tests observed
+  no requests outside localhost during these flows.
+- A bounded independent source review found no concrete blocker. Preferences are synchronous
+  metadata; the changes add no editor remount, focus request, native command, storage,
+  dependency or remote service. Canonical targets and guarded insertion callbacks are unchanged.
+
+## Native acceptance
+
+The isolated packaged Mac app passed real-pointer selection and Enter selection with continued
+writing in the original pane. Disk checks confirmed exactly one inserted target for each action.
+The menu distinguished `work/shared` and `home/shared` pages titled Plan; the selected work link
+survived raw/rich switching and Command-click opened its exact destination. Both destination
+files remained byte-identical to their originals.
+
+Escape, switching panes, Search while the menu was open, and closing the other pane retained
+correct typing ownership and preference ordering. Checklist and table link insertion, checking
+an item, editing a neighboring cell, mode switching and reopening preserved their contents.
+Native paste produced a heading and checklist, and a URL pasted over selected text preserved
+its label. No external link was followed; this native observation is not a network-traffic audit.
+Exactly four seeded pages changed intentionally; all other seeded files and attachments stayed
+unchanged. The complete set of 32 files, including generated local history, was byte-identical
+across a normal quit and restart.
+
+The restarted app restored the left page in Markdown and the right page in rich text, both
+saved. Returning the left page to rich text displayed the checked item, intact table, pasted
+task and label link without changing the right page.
+
+## Limits
+
+An AX-only automated button action did not insert a suggestion; a real pointer action and Enter
+passed. This does not qualify VoiceOver or every accessibility activation route. No new claim
+is made for native IME, native All Notes dragging, power loss, forced termination or other
+operating systems. Raw autocomplete does not gain contextual ordering in this increment.
+No new UI copy or dependency versions changed; the existing English fallback and documented
+compatibility exceptions remain. Whole-repository upstream coverage was not measured.

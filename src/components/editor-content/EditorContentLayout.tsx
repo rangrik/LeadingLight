@@ -438,6 +438,7 @@ type EditorCanvasProps = Pick<
   | 'editor'
   | 'activeTab'
   | 'entries'
+  | 'wikilinkPreferredPaths'
   | 'onNavigateWikilink'
   | 'onEditorChange'
   | 'onToggleRaw'
@@ -511,6 +512,7 @@ function StandardEditorCanvas(options: EditorCanvasProps) {
     <EditorFindScope className="editor-scroll-area" style={cssVars as React.CSSProperties}>
       <div className="editor-content-wrapper" data-note-pdf-export-root="true">
         <SingleEditorView
+          wikilinkPreferredPaths={options.wikilinkPreferredPaths}
           currentContent={activeTab?.content ?? ''}
           documentSessionRef={editorDocumentSessionRef}
           editor={editor}
@@ -649,6 +651,7 @@ export function EditorContentLayout(model: EditorContentModel) {
             locale={locale}
           />
           <EditorCanvas
+            wikilinkPreferredPaths={model.wikilinkPreferredPaths}
             showEditor={showEditor}
             isHtmlPreview={isHtmlPreview}
             richEditorContentReady={richEditorContentReady}

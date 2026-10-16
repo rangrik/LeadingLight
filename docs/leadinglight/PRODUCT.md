@@ -90,6 +90,14 @@ local Markdown Type documents; a new template needs only a name and starting tex
 Save keeps unfinished edits visible, and closing or quitting refuses to discard them silently.
 Templates are optional: New page still opens a blank page immediately.
 
+## Milestone 9 — connect without leaving the page
+
+Version 0.8.0 makes the existing rich `[[` menu easier to use. Before typing a query, the other
+visible page comes first, followed by recent visits. Typing a query retains relevance ordering.
+Pages with the same title show distinguishing folder labels, so choosing a link does not depend
+on remembering which identical row was intended. Selecting a result inserts into the page being
+written; following a link remains a separate action.
+
 ## Following increments
 
 Continue in useful, independently verified releases, reusing working inherited capabilities:

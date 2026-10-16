@@ -269,6 +269,7 @@ export function SingleEditorView(options: {
   currentContent?: string
   editor: ReturnType<typeof useCreateBlockNote>
   entries: VaultEntry[]
+  wikilinkPreferredPaths?: readonly string[]
   onNavigateWikilink: (target: string) => void
   onChange?: () => void
   onImageImportError?: (error: ImageImportError) => void
@@ -412,6 +413,7 @@ export function SingleEditorView(options: {
 
   const insertWikilink = useInsertWikilink(editor, runEditorAction)
   const suggestionMenuItems = useSuggestionMenuItems({
+    wikilinkPreferredPaths: options.wikilinkPreferredPaths,
     baseItems,
     editor,
     entries,

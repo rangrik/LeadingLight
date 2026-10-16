@@ -5,6 +5,7 @@ import './WikilinkSuggestionMenu.css'
 
 export interface WikilinkSuggestionItem {
   title: string
+  secondaryLabel?: string
   onItemClick: () => void
   noteType?: string
   typeColor?: string

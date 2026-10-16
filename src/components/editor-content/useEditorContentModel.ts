@@ -23,6 +23,7 @@ export interface EditorContentProps {
   isLoadingNewTab: boolean
   isVaultLoading?: boolean
   entries: VaultEntry[]
+  wikilinkPreferredPaths?: readonly string[]
   editor: ReturnType<typeof useCreateBlockNote>
   diffMode: boolean
   diffContent: string | null

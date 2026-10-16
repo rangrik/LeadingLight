@@ -23,6 +23,7 @@ import { pageLabel } from './pageLabel'
 import { includesPath, usePaneSettlement, type PageSettlement } from './saveHold/paneSettlement'
 import type { EditorIdleCheck } from '../components/editorContentFlushRegistration'
 import { PageHistoryActionContext } from './pageHistory/pageHistoryContext'
+import { contextualWikilinkPaths } from './wikilinkContext'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -154,6 +155,19 @@ export function SplitEditorWorkspace(props: Props) {
     })
     return kept.length ? [...props.entries, ...kept] : props.entries
   }, [workspace.paths, unsavedPaths, props.tabs, props.entries])
+  const wikilinkPreferences = useMemo(() => ([0, 1] as const).map(pane => {
+    const other = pane === 0 ? 1 : 0
+    const otherPath = workspace.paths[other]
+    const otherLoaded = workspace.split && !workspace.pendingPanes[other]
+      && props.tabs.some(tab => notePathsMatch(tab.entry.path, otherPath))
+    return contextualWikilinkPaths({
+      entries: props.entries,
+      vaultPath: props.vaultPath,
+      sourcePath: workspace.paths[pane],
+      otherPanePath: otherLoaded ? otherPath : null,
+      recentPaths: props.wikilinkPreferredPaths,
+    })
+  }), [workspace.paths, workspace.split, workspace.pendingPanes, props.tabs, props.entries, props.vaultPath, props.wikilinkPreferredPaths])
   // A focused editor that turns inert may keep focus; move it out so keys cannot reach the page.
   useLayoutEffect(() => {
     const focused = document.activeElement
@@ -276,6 +290,7 @@ export function SplitEditorWorkspace(props: Props) {
             {tab ? <div className="contents" inert={blocked} data-recovery-blocked={blocked ? '' : undefined}>
               <PageHistoryActionContext.Provider value={props.onOpenPageHistory ? historyActions[pane] : null}>
               <LazyEditor {...props} {...paneRefs[pane]} editorModeControl={{ mode: workspace.editorModes[pane], begin: modeBegins[pane] }} tabs={[tab]} activeTabPath={path} entries={editorEntries}
+                wikilinkPreferredPaths={wikilinkPreferences[pane]}
               onContentChange={settlement.contentChanges[pane]}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
               inspectorOverlay={inspector.floats(pane)}

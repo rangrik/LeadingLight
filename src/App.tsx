@@ -2192,6 +2192,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           )}
           <div className={`app__editor${aiActivity.highlightElement === 'editor' || aiActivity.highlightElement === 'tab' ? ' ai-highlight' : ''}`}>
             <SplitEditorWorkspace
+              wikilinkPreferredPaths={recentPages.recentPaths}
               transitionPending={workspaceTransitionPending || isClosing || trash.busy || backupGuarded}
               onCreatePage={title => notes.handleCreateNote(title, 'Note', 'quick_open')}
               workspace={notes.splitWorkspace}

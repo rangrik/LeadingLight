@@ -79,6 +79,13 @@ describe('NoteSearchList', () => {
     expect(screen.getByText('Gamma Experiment')).toBeInTheDocument()
   })
 
+  it('keeps optional folder cues in the accessible row and leaves ordinary rows unchanged', () => {
+    renderList({ listItems: [{ id: 'plan', title: 'Plan', secondaryLabel: 'work/shared' }, { id: 'plain', title: 'Plain' }] })
+    expect(screen.getByRole('button', { name: 'Plan work/shared' })).toBeVisible()
+    expect(screen.getByText('work/shared')).toHaveAttribute('title', 'work/shared')
+    expect(screen.getByRole('button', { name: 'Plain' })).toHaveTextContent(/^Plain$/)
+  })
+
   it('shows type badge when noteType is present', () => {
     render(
       <NoteSearchList

@@ -180,7 +180,7 @@ local to each vault and excluded from ordinary page discovery. See
 The browser development bridge uses disposable filesystem fixtures to exercise the same visible
 flows; native transaction guarantees are qualified separately with Rust and native-app tests.
 
-Manual backup and restore are implemented, but runtime qualification and release are pending.
+Manual backup and restore shipped in 0.6.0; see VERIFICATION.md for qualification and limits.
 
 - **Where it lives.** `src/leadinglight/backup/` and the native `leadinglight_backup` module.
 - **Backup.** A backup is a new plain folder whose manifest is published last.
@@ -212,8 +212,8 @@ The manager owns task assignments, dependencies, Git and the single native build
 explicit file ownership and a private report under ignored `workspace_management/`. Shared-contract
 changes are communicated before edits. Completed work is reviewed by a different model when
 available. Do not use parallel installs or duplicate native caches to increase agent throughput.
-Opus 5.5 is the sole code implementer, including tests, scripts and configuration. Other models
-may coordinate, review and run QA, but route all code changes back to Opus.
+The owner authorizes Codex implementation, including tests, scripts and configuration. Opus
+sessions must not be started or resumed. Review and QA retain their separate assigned ownership.
 
 Use one `node_modules` and `src-tauri/target`, at most two Cargo jobs, and compact development
 profiles. Browser fixtures and native test vaults are synthetic and excluded from Git. Never delete
@@ -238,3 +238,18 @@ LeadingLight opts into floating-Inspector window constraints through `useAppWind
 Both the immediate constraint update and the layout effect omit Inspector width from the native
 minimum, so opening Properties does not enlarge a narrow window. Sidebar and note-list minimums
 still apply; callers that do not opt in retain the inherited constraint calculation.
+
+## Contextual page links
+
+The existing rich `[[` menu receives optional preferred paths from App's vault-scoped recent
+visits and the split workspace's other visible, loaded page. `wikilinkContext.ts` filters those
+preferences against eligible current-vault entries, excludes the source from promotion and
+deduplicates paths. Promotion applies only to empty discovery before the existing result limit;
+typed-query ranking and `@` behavior remain unchanged. No editor key or focus request depends
+on these preferences.
+
+Duplicate titles receive display-only vault-relative folder labels. If two files share both a
+title and folder, their relative filenames distinguish them. Shared list components accept an
+optional secondary label; other callers retain their current rendering. Canonical link targets,
+aliases, link resolution, save queues and Markdown serialization keep their existing ownership.
+There is no new storage, native command, dependency or remote lookup.

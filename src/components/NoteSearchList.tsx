@@ -9,6 +9,7 @@ import type { WorkspaceIdentity } from '../types'
 
 export interface NoteSearchResultItem {
   title: string
+  secondaryLabel?: string
   noteIcon?: string | null
   noteType?: string
   typeColor?: string
@@ -118,7 +119,10 @@ function NoteSearchListItem<T extends NoteSearchResultItem>({
             />
           )}
           <NoteTitleIcon icon={item.noteIcon} size={14} testId="note-search-item-icon" />
-          <span className="truncate">{item.title}</span>
+          <span className="min-w-0 truncate">
+            <span className="block truncate">{item.title}</span>
+            {item.secondaryLabel && <>{' '}<span className="block truncate text-xs text-muted-foreground" title={item.secondaryLabel}>{item.secondaryLabel}</span></>}
+          </span>
         </span>
         {(item.noteType || item.workspace) && (
           <span className="ml-2 flex shrink-0 items-center gap-1.5">
