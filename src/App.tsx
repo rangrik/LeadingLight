@@ -31,6 +31,7 @@ import { editorWorkSettled } from './leadinglight/editorWork'
 import { useBackupUi } from './leadinglight/backup/useBackupUi'
 import { TemplateDialog } from './leadinglight/templates/TemplateDialog'
 import { useTemplateUi, type TemplateBoundary } from './leadinglight/templates/useTemplateUi'
+import { usePageRelocation } from './leadinglight/relocation/usePageRelocation'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
 import { Toast } from './components/Toast'
@@ -76,7 +77,7 @@ import { useAppNavigation } from './hooks/useAppNavigation'
 import { useAiActivity } from './hooks/useAiActivity'
 import { useBulkActions } from './hooks/useBulkActions'
 import { useFolderActions } from './hooks/useFolderActions'
-import { admitPageMove, holdFolderForMove } from './hooks/folder-actions/folderActionUtils'
+import { holdFolderForMove } from './hooks/folder-actions/folderActionUtils'
 import { useFileActions } from './hooks/useFileActions'
 import { useDeepLinks } from './hooks/useDeepLinks'
 import { useNoteGitUrls } from './hooks/useNoteGitUrls'
@@ -1722,15 +1723,26 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       ?? vault.entries.find((entry) => entry.path === notes.activeTabPath)
       ?? null
   }, [notes.activeTabPath, notes.tabs, vault.entries])
-  // Sidebar drops and the Move to folder command move pages through the manual rename barrier.
-  const { withManualRename } = appSave
-  const { handleMoveNoteToFolder } = notes
-  const moveNoteToFolder = useCallback<typeof handleMoveNoteToFolder>((...args) => admitPageMove({
-    withManualRename,
-    holdWrites,
-    saveHeld: prepareForTrash,
-    releaseWrites: paths => releaseHeldWrites(paths, 'resume'),
-  }, handleMoveNoteToFolder)(...args), [handleMoveNoteToFolder, holdWrites, prepareForTrash, releaseHeldWrites, withManualRename])
+  const relocation = usePageRelocation({
+    vaultPath: resolvedPath, locale: appLocale, entries: visibleEntries, unsavedPaths: vault.unsavedPaths,
+    workspace: notes.splitWorkspace, saves: appSave, structural: folderMoveRef, settlement: settlementRef,
+    blocked: () => trashBlockedRef.current || trash.busy,
+    begin: beginBackupGuard,
+    joinEarlier: async () => {
+      await templateBoundaryRef.current.whenIdle()
+      await whenManualRenamesIdle()
+      await whenTrashIdle()
+      await whenMutationsIdle()
+    },
+    assertClear: () => { pendingCapture.assertClear(); templateBoundaryRef.current.assertClear() },
+    flushBuffers: flushEditorBuffers,
+    commitSource: (oldPath, entry) => {
+      notes.commitFolderRelocation(oldPath, entry.path)
+      vault.replaceEntry(oldPath, entry)
+      markRecentVaultWrite(entry.path)
+    },
+    setTabs: notes.setTabs, refresh: vault.reloadVault, notify: setToastMessage,
+  })
   const noteRetargetingUi = useNoteRetargetingUi({
     activeEntry: activeCommandEntry,
     activeNoteBlocked: !!activeDeletedFile,
@@ -1741,7 +1753,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     setToastMessage,
     vaultPath: resolvedPath,
     updateFrontmatter: notes.handleUpdateFrontmatter,
-    moveNoteToFolder,
+    moveNoteToFolder: relocation.move,
+    captureFolderContext: relocation.captureContext,
   })
 
   const canToggleRichEditor = !!activeCommandEntry
@@ -2192,6 +2205,10 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           )}
           <div className={`app__editor${aiActivity.highlightElement === 'editor' || aiActivity.highlightElement === 'tab' ? ' ai-highlight' : ''}`}>
             <SplitEditorWorkspace
+              onOpenMovePage={(path, pane) => {
+                notes.splitWorkspace.focusPane(pane)
+                noteRetargetingUi.openMovePageToFolderDialog(path)
+              }}
               wikilinkPreferredPaths={recentPages.recentPaths}
               transitionPending={workspaceTransitionPending || isClosing || trash.busy || backupGuarded}
               onCreatePage={title => notes.handleCreateNote(title, 'Note', 'quick_open')}
@@ -2327,6 +2344,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         />
         <CreateTypeDialog open={dialogs.showCreateTypeDialog} onClose={dialogs.closeCreateType} onCreate={handleCreateType} />
         <NoteRetargetingDialogs
+          locale={appLocale}
+          folderBusy={relocation.busy}
           dialogState={noteRetargetingUi.dialogState}
           dialogEntry={noteRetargetingUi.dialogEntry}
           typeOptions={noteRetargetingUi.typeOptions}

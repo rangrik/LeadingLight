@@ -1539,5 +1539,19 @@
   "leadinglight.templates.failure.unconfirmed": "The write could not be confirmed. Check again to see whether your changes were saved.",
   "leadinglight.templates.abandonHint": "A file may already have been written. Closing this flow will keep that file and stop checking it. Your unsaved draft will be discarded.",
   "leadinglight.templates.abandon": "Close and keep any file",
-  "leadinglight.templates.conflictHint": "Review the current template below. Use my draft keeps your text for editing; Save template will then replace the text shown here."
+  "leadinglight.templates.conflictHint": "Review the current template below. Use my draft keeps your text for editing; Save template will then replace the text shown here.",
+  "leadinglight.relocation.menu": "Move to folder…",
+  "leadinglight.relocation.title": "Move to folder",
+  "leadinglight.relocation.description": "Choose an existing folder for “{title}”. Your writing is saved before the page moves.",
+  "leadinglight.relocation.search": "Search folders",
+  "leadinglight.relocation.empty": "No folders match this search.",
+  "leadinglight.relocation.current": "Current folder",
+  "leadinglight.relocation.working": "Saving your writing and moving the page…",
+  "leadinglight.relocation.busy": "Finish the current page action before moving a page.",
+  "leadinglight.relocation.changed": "The page changed while this dialog was open. Close it and choose Move to folder again.",
+  "leadinglight.relocation.notSaved": "The page was not moved. Finish any active text composition and resolve unsaved changes, then try again.",
+  "leadinglight.relocation.refused": "The page could not be moved. Your saved writing is still in its original folder. Check the destination and try again.",
+  "leadinglight.relocation.unknown": "The move could not be confirmed. Your writing was saved first. Reopen the page from the current page list to check its location; this move will not be repeated automatically.",
+  "leadinglight.relocation.moved": "Page moved to the selected folder.",
+  "leadinglight.relocation.movedWarning": "The page moved, but some linked pages or the page list could not be refreshed. Reopen any closed page from the page list and check its links."
 }

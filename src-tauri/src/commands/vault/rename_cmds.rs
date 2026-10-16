@@ -1,11 +1,9 @@
 use crate::commands::expand_tilde;
-use crate::vault::{self, DetectedRename, RenameResult};
+use crate::vault::{self, DetectedRename, FolderMoveResult, RenameResult};
 use serde::Deserialize;
 use std::path::Path;
 
-use super::boundary::{
-    with_boundary, with_existing_path_in_requested_vault, with_validated_path, ValidatedPathMode,
-};
+use super::boundary::{with_boundary, with_existing_path_in_requested_vault};
 
 struct RequestedNotePath<'a> {
     vault_path: &'a str,
@@ -75,6 +73,8 @@ pub struct MoveNoteToFolderCommandArgs {
     vault_path: String,
     old_path: String,
     folder_path: String,
+    #[serde(default)]
+    open_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -201,40 +201,55 @@ pub async fn rename_note_filename(
     super::off_main_thread(move || rename_note_filename_blocking(args)).await
 }
 
-fn run_folder_move(args: MoveNoteToFolderCommandArgs) -> Result<RenameResult, String> {
-    let request = RequestedNotePath::new(&args.vault_path, &args.old_path);
-    with_note_path_in_vault(request, |note| {
-        let trimmed_folder_path = args.folder_path.trim();
-        let folder_absolute_path = Path::new(note.vault_path).join(trimmed_folder_path);
-        with_validated_path(
-            folder_absolute_path.to_string_lossy().as_ref(),
-            Some(args.vault_path.as_str()),
-            ValidatedPathMode::Existing,
-            |validated_folder_path| {
-                let validated_folder = Path::new(validated_folder_path);
-                if !validated_folder.is_dir() {
-                    return Err(format!("Folder does not exist: {}", trimmed_folder_path));
-                }
-                vault::move_note_to_folder(vault::MoveNoteToFolderRequest {
-                    vault_path: note.vault_path,
-                    old_path: note.note_path,
-                    destination_folder_path: validated_folder_path,
-                })
+fn run_folder_move(args: MoveNoteToFolderCommandArgs) -> Result<FolderMoveResult, String> {
+    if args.open_paths.len() > 128 {
+        return Err("Too many open pages to safely move a page".to_string());
+    }
+    // One strict requested boundary: do not fall back to another registered vault.
+    with_boundary(Some(&args.vault_path), |boundary| {
+        let source = boundary
+            .validate_existing_paths(std::slice::from_ref(&args.old_path))?
+            .remove(0);
+        let mut seen = std::collections::HashSet::new();
+        let mut open_paths = Vec::new();
+        for validated in boundary.validate_existing_paths(&args.open_paths)? {
+            let path = std::path::PathBuf::from(validated);
+            let identity = path.canonicalize().map_err(|e| e.to_string())?;
+            if seen.insert(identity) {
+                open_paths.push(path);
+            }
+        }
+        let folder = args.folder_path.trim();
+        let destination = if folder.is_empty() {
+            boundary.requested_root().to_path_buf()
+        } else {
+            boundary.child_path(folder)?
+        };
+        if !destination.is_dir() {
+            return Err(format!("Folder does not exist: {}", folder));
+        }
+        let _lease = crate::leadinglight_history::lease(&[Path::new(&source)])?;
+        vault::move_note_to_folder_with_open_pages(
+            vault::MoveNoteToFolderRequest {
+                vault_path: &boundary.requested_root().to_string_lossy(),
+                old_path: &source,
+                destination_folder_path: &destination.to_string_lossy(),
             },
+            &open_paths,
         )
     })
 }
 
 pub(crate) fn move_note_to_folder_blocking(
     args: MoveNoteToFolderCommandArgs,
-) -> Result<RenameResult, String> {
+) -> Result<FolderMoveResult, String> {
     run_folder_move(args)
 }
 
 #[tauri::command]
 pub async fn move_note_to_folder(
     args: MoveNoteToFolderCommandArgs,
-) -> Result<RenameResult, String> {
+) -> Result<FolderMoveResult, String> {
     super::off_main_thread(move || move_note_to_folder_blocking(args)).await
 }
 
@@ -387,6 +402,7 @@ mod tests {
             vault_path: vault.clone(),
             old_path: renamed.new_path.clone(),
             folder_path: "Projects".to_string(),
+            open_paths: Vec::new(),
         })
         .await
         .unwrap();
@@ -475,6 +491,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn leadinglight_folder_receipt_rejects_open_paths_outside_requested_vault() {
+        let dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let note = write_note(&dir, "page.md", "# Page\n");
+        let other = write_note(&outside, "other.md", "# Synthetic outside\n");
+        fs::create_dir(dir.path().join("filed")).unwrap();
+        let result = move_note_to_folder(MoveNoteToFolderCommandArgs {
+            vault_path: vault_path(&dir),
+            old_path: note.clone(),
+            folder_path: "filed".to_string(),
+            open_paths: vec![other],
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(note).unwrap(), "# Page\n");
+        assert!(!dir.path().join("filed/page.md").exists());
+    }
+
+    #[tokio::test]
     async fn move_note_to_folder_accepts_empty_folder_as_vault_root() {
         let dir = TempDir::new().unwrap();
         let vault = vault_path(&dir);
@@ -484,6 +519,7 @@ mod tests {
             vault_path: vault,
             old_path: note,
             folder_path: "  ".to_string(),
+            open_paths: Vec::new(),
         })
         .await
         .unwrap();

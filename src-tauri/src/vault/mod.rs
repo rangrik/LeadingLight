@@ -49,7 +49,7 @@ pub use remote_image::download_remote_image;
 pub use rename::{
     auto_rename_untitled, detect_renames, move_note_to_folder, move_note_to_workspace, rename_note,
     rename_note_filename, update_wikilinks_for_renames, AutoRenameUntitledRequest, DetectedRename,
-    MoveNoteToFolderRequest, MoveNoteToWorkspaceRequest, RenameNoteFilenameRequest,
+    move_note_to_folder_with_open_pages, FolderMoveResult, MoveNoteToFolderRequest, MoveNoteToWorkspaceRequest, RenameNoteFilenameRequest,
     RenameNoteRequest, RenameResult,
 };
 pub use title_sync::{sync_title_on_open, SyncAction};

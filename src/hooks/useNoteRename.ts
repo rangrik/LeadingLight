@@ -44,6 +44,15 @@ interface FolderMoveRequest {
   vaultPath: string
 }
 
+/** Folder relocation's stronger boundary owns validation and editor settlement. */
+export function performFolderRelocation(request: FolderMoveRequest & { openPaths: string[] }): Promise<unknown> {
+  return invokeStructuredRenameCommand({
+    command: 'move_note_to_folder',
+    args: { vaultPath: request.vaultPath, oldPath: request.path, folderPath: request.folderPath, openPaths: request.openPaths },
+    mockArgs: { vault_path: request.vaultPath, old_path: request.path, folder_path: request.folderPath, open_paths: request.openPaths },
+  })
+}
+
 interface WorkspaceMoveRequest {
   path: string
   sourceVaultPath: string
@@ -53,6 +62,7 @@ interface WorkspaceMoveRequest {
 
 interface LoadNoteContentRequest {
   path: string
+  vaultPath?: string
 }
 
 interface ReloadTabsAfterRenameRequest {
@@ -272,8 +282,9 @@ export function workspaceMoveReplacementTarget({
     : localTarget
 }
 
-export async function loadNoteContent({ path }: LoadNoteContentRequest): Promise<string> {
-  return isTauri() ? invoke<string>('get_note_content', { path }) : mockInvoke<string>('get_note_content', { path })
+export async function loadNoteContent({ path, vaultPath }: LoadNoteContentRequest): Promise<string> {
+  const args = vaultPath ? { path, vaultPath } : { path }
+  return isTauri() ? invoke<string>('get_note_content', args) : mockInvoke<string>('get_note_content', args)
 }
 
 /** Null when the moved file can't be read back; the move itself has still happened. */
@@ -626,11 +637,14 @@ function useLocalRenameHandler(context: LocalRenameHandlerContext, mode: 'title'
 }
 
 export function useNoteRename(config: NoteRenameConfig, tabDeps: RenameTabDeps) {
-  const { entries, setToastMessage } = config
+  const { entries, setToastMessage, onPathRenamed } = config
   const { tabsRef, applyRenameResult } = useRenameResultApplier(config, tabDeps)
   const handlerContext = { applyRenameResult, entries, setToastMessage, tabsRef }
   const handleRenameNote = useLocalRenameHandler(handlerContext, 'title')
   const handleRenameFilename = useLocalRenameHandler(handlerContext, 'filename')
+  const commitFolderRelocation = useCallback((oldPath: string, newPath: string) => {
+    if (!notePathsMatch(oldPath, newPath)) onPathRenamed?.(oldPath, newPath)
+  }, [onPathRenamed])
 
   const handleMoveNoteToFolder = useCallback(
     async (
@@ -673,6 +687,7 @@ export function useNoteRename(config: NoteRenameConfig, tabDeps: RenameTabDeps) 
   })
 
   return {
+    commitFolderRelocation,
     handleRenameNote,
     handleRenameFilename,
     handleMoveNoteToFolder,

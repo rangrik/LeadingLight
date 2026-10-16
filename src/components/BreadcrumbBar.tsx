@@ -52,6 +52,7 @@ import {
   ClockCounterClockwise,
 } from '@phosphor-icons/react'
 import { usePageHistoryAction } from '../leadinglight/pageHistory/pageHistoryContext'
+import { usePageRelocationAction } from '../leadinglight/relocation/pageRelocationContext'
 import { slugify } from '../hooks/useNoteCreation'
 import { useDragRegion } from '../hooks/useDragRegion'
 import {
@@ -1106,6 +1107,7 @@ function BreadcrumbOverflowMenu(options: Pick<
         </DropdownMenuItem>
         <CopyGitUrlMenuItem action={entryAction(onCopyGitUrl, entry)} locale={locale} />
         <PageHistoryMenuItem locale={locale} />
+        <PageRelocationMenuItem locale={locale} />
         {showMarkdownActions && (
           <DropdownMenuItem disabled={!runArchiveAction} onSelect={runArchiveAction}>
             <ArchiveMenuIcon archived={entry.archived} />
@@ -1153,6 +1155,16 @@ function PageHistoryMenuItem({ locale }: { locale: AppLocale }) {
       {translate(locale, 'leadinglight.history.menu')}
     </DropdownMenuItem>
   )
+}
+
+function PageRelocationMenuItem({ locale }: { locale: AppLocale }) {
+  const move = usePageRelocationAction()
+  if (!move) return null
+  return <DropdownMenuItem data-testid="page-move-folder-menu-item" onSelect={event => {
+    const menu = event.target instanceof Element ? event.target.closest('[role="menu"]') : null
+    const trigger = document.getElementById(menu?.getAttribute('aria-labelledby') ?? '')
+    window.setTimeout(() => move(trigger), 0)
+  }}><FolderOpen size={16} />{translate(locale, 'leadinglight.relocation.menu')}</DropdownMenuItem>
 }
 
 function BreadcrumbSeparator() {

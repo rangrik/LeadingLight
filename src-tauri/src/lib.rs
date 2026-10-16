@@ -28,6 +28,7 @@ mod kiro_discovery;
 pub mod leadinglight;
 mod leadinglight_backup;
 mod leadinglight_history;
+mod leadinglight_relocation_links;
 mod leadinglight_trash;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
 mod linux_appimage;

@@ -1,8 +1,11 @@
 import type { VaultEntry } from '../../types'
 import type { RetargetOption } from './RetargetNoteDialog'
 import { RetargetNoteDialog } from './RetargetNoteDialog'
+import { translate, type AppLocale } from '../../lib/i18n'
 
 interface NoteRetargetingDialogsProps {
+  locale?: AppLocale
+  folderBusy?: boolean
   dialogState: { kind: 'type' | 'folder'; notePath: string } | null
   dialogEntry: VaultEntry | null
   typeOptions: RetargetOption[]
@@ -18,13 +21,9 @@ function typeDialogDescription(entry: VaultEntry | null): string {
     : 'Select a type for the active note.'
 }
 
-function folderDialogDescription(entry: VaultEntry | null): string {
-  return entry
-    ? `Choose a destination folder for "${entry.title}".`
-    : 'Select a destination folder for the active note.'
-}
-
 export function NoteRetargetingDialogs({
+  locale = 'en',
+  folderBusy,
   dialogState,
   dialogEntry,
   typeOptions,
@@ -48,10 +47,13 @@ export function NoteRetargetingDialogs({
       />
       <RetargetNoteDialog
         open={dialogState?.kind === 'folder'}
-        title="Move Note to Folder"
-        description={folderDialogDescription(dialogEntry)}
-        searchPlaceholder="Search folders"
-        emptyMessage="No other folders available."
+        busy={folderBusy}
+        workingLabel={translate(locale, 'leadinglight.relocation.working')}
+        currentLabel={translate(locale, 'leadinglight.relocation.current')}
+        title={translate(locale, 'leadinglight.relocation.title')}
+        description={translate(locale, 'leadinglight.relocation.description', { title: dialogEntry?.title ?? '' })}
+        searchPlaceholder={translate(locale, 'leadinglight.relocation.search')}
+        emptyMessage={translate(locale, 'leadinglight.relocation.empty')}
         options={folderOptions}
         onClose={onClose}
         onSelect={onSelectFolder}

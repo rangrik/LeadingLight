@@ -999,6 +999,7 @@ function buildNoteActionsResult({
     handleRenameNote: rename.handleRenameNote,
     handleRenameFilename: rename.handleRenameFilename,
     handleMoveNoteToFolder: rename.handleMoveNoteToFolder,
+    commitFolderRelocation: rename.commitFolderRelocation,
     handleMoveNoteToWorkspace: rename.handleMoveNoteToWorkspace,
     applyFavoriteState,
     actionHistory,

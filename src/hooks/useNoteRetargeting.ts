@@ -42,7 +42,7 @@ function canRetargetEntryToFolder(params: {
     folderPath: string
     vaultPath: string
 }): boolean {
-  if (!params.entry) return false
+  if (!params.entry || (params.entry.fileKind && params.entry.fileKind !== 'markdown')) return false
   return (
     folderPathForRetargetEntry({
       entry: params.entry,

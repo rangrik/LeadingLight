@@ -24,6 +24,7 @@ import { includesPath, usePaneSettlement, type PageSettlement } from './saveHold
 import type { EditorIdleCheck } from '../components/editorContentFlushRegistration'
 import { PageHistoryActionContext } from './pageHistory/pageHistoryContext'
 import { contextualWikilinkPaths } from './wikilinkContext'
+import { PageRelocationContext } from './relocation/pageRelocationContext'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -40,6 +41,7 @@ function editorRefs() {
   }
 }
 interface Props extends EditorProps {
+  onOpenMovePage?: (path: string, pane: PaneId, returnFocus: HTMLElement | null) => void
   onCreatePage?: (title: string) => unknown | Promise<unknown>
   /** Opens the finder on real recent pages; absent when there is nothing to resume. */
   onResume?: () => void
@@ -288,6 +290,10 @@ export function SplitEditorWorkspace(props: Props) {
             </div>
             {tab && path && props.renderPageNotice?.(path)}
             {tab ? <div className="contents" inert={blocked} data-recovery-blocked={blocked ? '' : undefined}>
+              <PageRelocationContext.Provider value={props.onOpenMovePage && (!tab.entry.fileKind || tab.entry.fileKind === 'markdown') ? returnFocus => {
+                activate(pane)
+                props.onOpenMovePage?.(tab.entry.path, pane, returnFocus)
+              } : null}>
               <PageHistoryActionContext.Provider value={props.onOpenPageHistory ? historyActions[pane] : null}>
               <LazyEditor {...props} {...paneRefs[pane]} editorModeControl={{ mode: workspace.editorModes[pane], begin: modeBegins[pane] }} tabs={[tab]} activeTabPath={path} entries={editorEntries}
                 wikilinkPreferredPaths={wikilinkPreferences[pane]}
@@ -303,6 +309,7 @@ export function SplitEditorWorkspace(props: Props) {
               revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
               backlinksEmptyLabel={t('inspector.backlinks.empty')} />
               </PageHistoryActionContext.Provider>
+              </PageRelocationContext.Provider>
             </div>
               : <div className="ll-pane-empty">
                 <p>{t(props.emptyVault ? 'leadinglight.split.emptyVault' : 'leadinglight.split.empty')}</p>

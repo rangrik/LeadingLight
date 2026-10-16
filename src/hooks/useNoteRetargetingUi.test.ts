@@ -17,6 +17,8 @@ function renderUi(overrides: {
   folders?: FolderNode[]
   selection?: SidebarSelection
   vaultPath?: string
+  captureFolderContext?: (path: string) => () => boolean
+  moveNoteToFolder?: Parameters<typeof useNoteRetargetingUi>[0]['moveNoteToFolder']
 } = {}) {
   return renderHook(() => useNoteRetargetingUi({
     activeEntry: overrides.activeEntry ?? activeEntry,
@@ -28,11 +30,28 @@ function renderUi(overrides: {
     setToastMessage: vi.fn(),
     vaultPath: overrides.vaultPath ?? vaultPath,
     updateFrontmatter: vi.fn(),
-    moveNoteToFolder: vi.fn(),
+    moveNoteToFolder: overrides.moveNoteToFolder ?? vi.fn(),
+    captureFolderContext: overrides.captureFolderContext,
   }))
 }
 
 describe('useNoteRetargetingUi', () => {
+  it('keeps the explicitly requested page and refuses a changed navigation context', async () => {
+    const other = makeEntry({ path: `${vaultPath}/other.md`, filename: 'other.md', title: 'Other' })
+    const current = vi.fn(() => true)
+    const captureFolderContext = vi.fn(() => current)
+    const moveNoteToFolder = vi.fn(async () => ({ new_path: `${vaultPath}/projects/other.md` }))
+    const { result } = renderUi({ entries: [activeEntry, other], folders: [{ name: 'projects', path: 'projects', children: [] }], captureFolderContext, moveNoteToFolder })
+    act(() => { result.current.openMovePageToFolderDialog(other.path) })
+    expect(captureFolderContext).toHaveBeenCalledWith(other.path)
+    expect(result.current.dialogEntry?.path).toBe(other.path)
+    current.mockReturnValue(false)
+    await act(async () => { expect(await result.current.selectFolder('projects')).toBe(false) })
+    expect(moveNoteToFolder).not.toHaveBeenCalled()
+    current.mockReturnValue(true)
+    await act(async () => { expect(await result.current.selectFolder('projects')).toBe(true) })
+    expect(moveNoteToFolder).toHaveBeenCalledWith(other.path, 'projects', vaultPath, expect.any(Function))
+  })
   it('offers the vault root as a folder move destination for nested notes', () => {
     const { result } = renderUi()
 

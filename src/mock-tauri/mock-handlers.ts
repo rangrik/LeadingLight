@@ -359,36 +359,51 @@ function handleMoveNoteToFolder(args: {
   vault_path: string
   old_path: string
   folder_path: string
+  open_paths?: string[]
 }) {
-  const oldEntry = MOCK_ENTRIES.find(e => e.path === args.old_path)
-  const oldContent = readMockContent({ path: args.old_path })
-  const oldTitle = oldEntry?.title ?? ''
-  const oldFilename = args.old_path.split('/').pop() ?? ''
-  const normalizedFolderPath = args.folder_path.trim().replace(/^\/+|\/+$/g, '')
-
-  if (!normalizedFolderPath) {
-    throw new Error('Folder path cannot be empty')
-  }
-
   const vaultRoot = args.vault_path.replace(/\/+$/, '')
-  const newPath = `${vaultRoot}/${normalizedFolderPath}/${oldFilename}`
-  if (newPath === args.old_path) {
-    return { new_path: args.old_path, updated_files: 0, failed_updates: 0 }
+  const source = args.old_path
+  const folder = args.folder_path.trim().replace(/^\/+|\/+$/g, '')
+  if (!source.startsWith(`${vaultRoot}/`) || folder.split('/').includes('..') || folder.includes('\\')) throw new Error('Invalid folder path')
+  if (!Object.hasOwn(MOCK_CONTENT, source)) throw new Error('The page could not be found')
+  const open = [...new Set(args.open_paths ?? [])].filter(path => path !== source)
+  if (open.length > 128 || open.some(path => !path.startsWith(`${vaultRoot}/`) || !Object.hasOwn(MOCK_CONTENT, path))) throw new Error('Invalid open pages')
+  const before = new Map(Object.entries(MOCK_CONTENT).filter(([path]) => path.startsWith(`${vaultRoot}/`)))
+  const content = readMockContent({ path: source })
+  const filename = source.split('/').pop() ?? ''
+  const newPath = `${vaultRoot}/${folder ? `${folder}/` : ''}${filename}`
+  const receipt = {
+    source_before_content: content, source_content: content,
+    updated_open_pages: [] as Array<{ path: string; before_content: string; content: string }>,
+    unrefreshed_open_paths: [] as string[],
   }
-  if (Object.hasOwn(MOCK_CONTENT, newPath)) {
-    throw new Error('A note with that name already exists')
-  }
-
-  deleteMockContent({ path: args.old_path })
-  writeMockContent({ path: newPath, content: oldContent })
-
-  const oldPathStem = relativePathStem({ path: args.old_path, vaultPath: args.vault_path })
-  const newPathStem = relativePathStem({ path: newPath, vaultPath: args.vault_path })
+  if (newPath === source) return { new_path: source, updated_files: 0, failed_updates: 0, ...receipt }
+  if (Object.hasOwn(MOCK_CONTENT, newPath)) throw new Error('A note with that name already exists')
+  // The memory preview only simulates plain pages and wikilinks; the native parser
+  // owns reference rebasing. Refuse unsupported forms before mutating this preview.
+  const needsNative = /!\[|\]\s*\(|^\s*\[[^\]]+\]:|<\s*(?:img|a)\b/im
+  if ([...before.values()].some(text => needsNative.test(text))) throw new Error('Move this page in the desktop app to preserve its local references.')
+  const oldTitle = MOCK_ENTRIES.find(entry => entry.path === source)?.title ?? ''
+  const oldPathStem = relativePathStem({ path: source, vaultPath: vaultRoot })
+  const newPathStem = relativePathStem({ path: newPath, vaultPath: vaultRoot })
+  deleteMockContent({ path: source })
+  const selfTargets = oldPathStem.includes('/') ? [oldPathStem, `${oldPathStem}.md`] : []
+  receipt.source_content = replaceRenamedWikilinks({ content, oldTargets: selfTargets, newPathStem })
+  writeMockContent({ path: newPath, content: receipt.source_content })
   const oldTargets = canonicalRenameTargets({ oldTitle, oldPathStem })
-  const updatedFiles = updateMockRenameReferences({ newPath, newPathStem, oldTargets })
-
+  let updatedFiles = 0
+  for (const [path, body] of before) {
+    if (path === source) continue
+    const replaced = replaceRenamedWikilinks({ content: body, oldTargets, newPathStem })
+    if (replaced !== body) { writeMockContent({ path, content: replaced }); updatedFiles += 1 }
+  }
+  receipt.updated_open_pages = open.flatMap(path => {
+    const old = before.get(path)!
+    const current = readMockContent({ path })
+    return current === old ? [] : [{ path, before_content: old, content: current }]
+  })
   syncWindowContent()
-  return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0 }
+  return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0, ...receipt }
 }
 
 function handleMoveNoteToWorkspace(args: {

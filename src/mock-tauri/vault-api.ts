@@ -274,6 +274,14 @@ async function tryDiskCommandApi<T>(route: string, args: Record<string, unknown>
 }
 
 export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
+  // The desktop is the preservation boundary for folder moves. A disk-session browser
+  // must never turn an unsupported native operation into an in-memory success.
+  if (cmd === 'move_note_to_folder' && args && diskSession()) {
+    const payload = commandArgs(args)
+    if (!isMemoryPath(payload.vault_path ?? payload.vaultPath)) {
+      throw new VaultApiRefusal('Move this page in the desktop app to preserve its local references.')
+    }
+  }
   const recoveryRoute = SAVE_RECOVERY_ROUTES.get(cmd)
   if (recoveryRoute) return args ? tryDiskCommandApi<T>(recoveryRoute, args, (args.request as { vaultPath?: unknown } | undefined)?.vaultPath) : undefined
   const historyRoute = HISTORY_ROUTES.get(cmd)

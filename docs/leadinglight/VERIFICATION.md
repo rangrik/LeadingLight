@@ -547,3 +547,57 @@ is made for native IME, native All Notes dragging, power loss, forced terminatio
 operating systems. Raw autocomplete does not gain contextual ordering in this increment.
 No new UI copy or dependency versions changed; the existing English fallback and documented
 compatibility exceptions remain. Whole-repository upstream coverage was not measured.
+
+# M10 optional filing — 0.9.0
+
+## Behavior and automated evidence
+
+The page overflow menu offers **Move to folder…** through the existing searchable picker.
+Both panes are saved before a move, and committed source/incoming text reopens in the original
+panes and modes. Occupied destinations are refused. An unknown reply closes stale editors
+instead of recreating the original path or automatically repeating the move.
+
+Two native regressions first reproduced broken outgoing relative images and incoming ordinary
+Markdown links. The corrected native suite passed 129 LeadingLight tests with five pre-existing
+helper/timing exclusions. The rename filter passed 51 tests; the separately run six command
+tests overlap that set. A later reserved-character image regression failed, was corrected,
+and the final pure relocation module passed all 22 tests. Source spans preserve Markdown
+formatting, reference definitions, fragments, code and frontmatter; portable attachment forms
+retain their renderer semantics. Unsupported or ambiguous source references fail closed.
+
+The UI's initial focused run passed 159 tests across ten files. Independent review found a
+same-dialog retry problem after a proven refusal; an actual browser regression reproduced it.
+The correction passed ten focused adapter/UI tests, including real held-save-queue behavior,
+stale navigation, failed reopen and same-dialog retry. TypeScript and changed-file lint passed.
+Four final Chrome cases passed with one worker and no retries: mixed-pane latest text and exact
+receipt reopen, keyboard collision refusal and continued writing, a lost committed reply, and
+another destination in the same picker after refusal. Browser receipts are controlled fixtures;
+these cases prove editor lifecycle, not native filesystem transformation. No non-local browser
+requests were observed in the successful mixed-pane case.
+
+## Isolated native evidence
+
+The packaged Mac candidate moved a rich page while its incoming page stayed in Markdown in
+the other pane. New words in both panes and subsequent edits persisted. Source-relative and
+vault-root images remained visible; ordinary and wiki incoming links updated and Command-click
+opened the canonical moved page. An occupied destination retained its exact sentinel content.
+A page originally in a folder containing `#` moved with its nearby image still visible.
+
+Disk checks confirmed the two intended source moves and the edited incoming page. The other
+12 seeded files, including attachments, were byte-identical to their baselines. All 28 files,
+including generated local history, were unchanged across a normal quit and restart into the
+corrected 0.9.0 artifact. It restored the rich left pane and Markdown right pane with their text.
+That artifact also passed a collision followed by another destination in the same open picker,
+updated both incoming targets again, and saved continued typing. Final disk checks retained
+all five writing markers and all 12 unrelated baseline files.
+
+## Limits
+
+Filing does not preserve an editor's prior undo stack or exact caret bookmark. Partial incoming
+failures are reported, and unconfirmed pages stay closed until a fresh open. This is not a
+transaction against arbitrary external editors or a power-loss guarantee. Native IME, forced
+termination, other operating systems and general native row dragging are not qualified here.
+The disk browser preview deliberately refuses filing; its memory preview only supports plain
+pages and wikilinks. HTML destinations and ambiguous reference forms may require simplifying
+the page before moving it. English source copy uses the existing fallback. Existing dependency
+compatibility exceptions remain; whole-upstream coverage was not measured.

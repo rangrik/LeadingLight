@@ -253,3 +253,22 @@ title and folder, their relative filenames distinguish them. Shared list compone
 optional secondary label; other callers retain their current rendering. Canonical link targets,
 aliases, link resolution, save queues and Markdown serialization keep their existing ownership.
 There is no new storage, native command, dependency or remote lookup.
+
+## Optional page filing
+
+The page menu and existing folder actions share a dedicated relocation coordinator under
+`src/leadinglight/relocation`. It captures the originating vault and page, holds new actions and
+input, drains accepted writes, and retires visible editors through existing pane reservations.
+Folder moves use exact native before/after receipts to reopen pages in their original panes
+and modes. Unconfirmed replies never trigger an automatic replay or an old-path write.
+
+`leadinglight_relocation_links.rs` uses CommonMark source spans to change only destinations.
+It preserves source-relative image and ordinary Markdown referents, recognizes the renderer's
+portable attachment forms, and refuses unsupported outgoing syntax before source publication.
+`vault/rename.rs` retains no-clobber publication and accounts for every requested open page,
+with leases and exact rechecks around incoming updates. Other filename/title rename paths
+retain their existing behavior. See ADR 011 for the contract and its limits.
+
+The disk browser preview explicitly refuses this operation until equivalent filesystem and
+reference guarantees exist. Controlled browser receipts test editor lifecycle separately from
+native filesystem acceptance. No vault content leaves the machine.

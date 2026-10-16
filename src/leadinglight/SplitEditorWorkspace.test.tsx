@@ -7,11 +7,13 @@ import type { SplitWorkspaceController } from './useSplitWorkspace'
 import type { VaultEntry } from '../types'
 import { NOTE_DRAG_MIME_TYPE, readDraggedNotePath, writeNoteDragData } from '../utils/noteDragDrop'
 import { usePageHistoryAction } from './pageHistory/pageHistoryContext'
+import { usePageRelocationAction } from './relocation/pageRelocationContext'
 
 const activity = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), raw: vi.fn(), flush: vi.fn() }))
 vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(props: EditorProps) {
   const { activeTabPath: path, rawToggleRef, flushPendingEditorContentRef } = props
   const openHistory = usePageHistoryAction()
+  const movePage = usePageRelocationAction()
   useEffect(() => {
     activity.mount(path)
     return () => { activity.unmount(path) }
@@ -23,6 +25,7 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
   return <>
     <div contentEditable suppressContentEditableWarning data-mode={props.editorModeControl?.mode} data-wikilink-preferences={JSON.stringify(props.wikilinkPreferredPaths)} data-testid={`editor-${path}`}>{path}</div>
     {openHistory && <button data-testid={`history-${path}`} onClick={event => openHistory(event.currentTarget)}>history</button>}
+    {movePage && <button data-testid={`move-${path}`} onClick={event => movePage(event.currentTarget)}>move</button>}
     {!props.inspectorCollapsed && <div data-testid={`inspector-${path}`} tabIndex={-1} data-inspector-overlay={props.inspectorOverlay ? '' : undefined} />}
   </>
 } }))
@@ -150,6 +153,17 @@ describe('earlier versions from a pane', () => {
     fireEvent.click(screen.getByTestId('history-/left.md'))
     expect(onOpenPageHistory).toHaveBeenLastCalledWith('/left.md', 0, screen.getByTestId('history-/left.md'))
   })
+})
+
+it('binds Move to folder to the exact pane and page that opened its menu', () => {
+  const onOpenMovePage = vi.fn()
+  const props = fixture()
+  render(<SplitEditorWorkspace {...props} onOpenMovePage={onOpenMovePage} />)
+  fireEvent.click(screen.getByTestId('move-/right.md'))
+  expect(props.workspace.focusPane).toHaveBeenLastCalledWith(1)
+  expect(onOpenMovePage).toHaveBeenLastCalledWith('/right.md', 1, screen.getByTestId('move-/right.md'))
+  fireEvent.click(screen.getByTestId('move-/left.md'))
+  expect(onOpenMovePage).toHaveBeenLastCalledWith('/left.md', 0, screen.getByTestId('move-/left.md'))
 })
 
 describe('empty pane', () => {

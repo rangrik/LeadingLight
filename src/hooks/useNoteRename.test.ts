@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { isTauri, mockInvoke } from '../mock-tauri'
+import { invoke } from '@tauri-apps/api/core'
 import type { VaultEntry } from '../types'
 import {
   needsRenameOnSave,
   buildRenamedEntry,
   renameToastMessage,
   useNoteRename,
+  performFolderRelocation,
+  loadNoteContent,
 } from './useNoteRename'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
@@ -39,6 +42,27 @@ const makeWorkspace = (path: string, alias = 'workspace'): NonNullable<VaultEntr
   mounted: true,
   available: true,
   defaultForNewNotes: false,
+})
+
+describe('folder relocation command boundary', () => {
+  it.each([false, true])('forwards the frozen open paths and explicit proof vault (native=%s)', async native => {
+    vi.clearAllMocks()
+    vi.mocked(isTauri).mockReturnValue(native)
+    const path = '/vault/drafts/page.md'
+    const openPaths = [path, '/vault/incoming.md']
+    await performFolderRelocation({ path, folderPath: 'filed', vaultPath: '/vault', openPaths })
+    if (native) expect(invoke).toHaveBeenCalledWith('move_note_to_folder', {
+      args: { oldPath: path, folderPath: 'filed', vaultPath: '/vault', openPaths },
+    })
+    else expect(mockInvoke).toHaveBeenCalledWith('move_note_to_folder', {
+      old_path: path, folder_path: 'filed', vault_path: '/vault', open_paths: openPaths,
+    })
+    await loadNoteContent({ path, vaultPath: '/vault' })
+    expect(native ? invoke : mockInvoke).toHaveBeenLastCalledWith('get_note_content', { path, vaultPath: '/vault' })
+    await loadNoteContent({ path })
+    expect(native ? invoke : mockInvoke).toHaveBeenLastCalledWith('get_note_content', { path })
+    vi.mocked(isTauri).mockReturnValue(false)
+  })
 })
 
 describe('needsRenameOnSave', () => {

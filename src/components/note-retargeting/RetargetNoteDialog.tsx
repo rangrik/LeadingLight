@@ -1,5 +1,5 @@
 import { Check, StackSimple } from '@phosphor-icons/react'
-import { useMemo, useState, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,9 @@ export interface RetargetOption {
 }
 
 interface RetargetNoteDialogProps {
+  busy?: boolean
+  workingLabel?: string
+  currentLabel?: string
   open: boolean
   title: string
   description: string
@@ -44,6 +47,8 @@ function nextHighlightIndex(current: number, total: number, direction: 'next' | 
 }
 
 interface RetargetOptionsProps {
+  disabled?: boolean
+  currentLabel?: string
   effectiveHighlightedIndex: number
   emptyMessage: string
   options: RetargetOption[]
@@ -53,6 +58,8 @@ interface RetargetOptionsProps {
 }
 
 function RetargetOptions({
+  disabled,
+  currentLabel = 'Current',
   effectiveHighlightedIndex,
   emptyMessage,
   options,
@@ -69,6 +76,7 @@ function RetargetOptions({
         <Button
           key={option.id}
           type="button"
+          disabled={disabled}
           variant="ghost"
           className={cn(
             'h-auto w-full justify-start rounded-md px-3 py-2 text-left',
@@ -87,7 +95,7 @@ function RetargetOptions({
               {option.detail && <span className="truncate text-xs text-muted-foreground">{option.detail}</span>}
             </span>
           </div>
-          {option.current && <span className="shrink-0 text-xs font-medium text-muted-foreground">Current</span>}
+          {option.current && <span className="shrink-0 text-xs font-medium text-muted-foreground">{currentLabel}</span>}
         </Button>
       ))}
     </div>
@@ -99,6 +107,9 @@ export function RetargetNoteDialog(functionOptions: RetargetNoteDialogProps) {
     functionOptions
   const [query, setQuery] = useState('')
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
+  const submitting = useRef(false)
+  const [localBusy, setLocalBusy] = useState(false)
+  const pending = functionOptions.busy || localBusy
 
   const filteredOptions = useMemo(() => options.filter((option) => matchesQuery(option, query)), [options, query])
 
@@ -113,21 +124,29 @@ export function RetargetNoteDialog(functionOptions: RetargetNoteDialogProps) {
   }
 
   const submitSelection = async (optionId: string) => {
-    const shouldClose = await onSelect(optionId)
-    if (!shouldClose) return
-    resetDialogState()
-    onClose()
+    if (submitting.current || functionOptions.busy) return
+    submitting.current = true
+    setLocalBusy(true)
+    try {
+      const shouldClose = await onSelect(optionId)
+      if (!shouldClose) return
+      resetDialogState()
+      onClose()
+    } finally {
+      submitting.current = false
+      setLocalBusy(false)
+    }
   }
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault()
-      setHighlightedIndex((current) => nextHighlightIndex(current, filteredOptions.length, 'next'))
+      setHighlightedIndex(nextHighlightIndex(effectiveHighlightedIndex, filteredOptions.length, 'next'))
       return
     }
     if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setHighlightedIndex((current) => nextHighlightIndex(current, filteredOptions.length, 'previous'))
+      setHighlightedIndex(nextHighlightIndex(effectiveHighlightedIndex, filteredOptions.length, 'previous'))
       return
     }
     if (event.key === 'Enter' && effectiveHighlightedIndex >= 0) {
@@ -141,17 +160,20 @@ export function RetargetNoteDialog(functionOptions: RetargetNoteDialogProps) {
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) return
+        if (nextOpen || submitting.current || functionOptions.busy) return
         resetDialogState()
         onClose()
       }}
     >
-      <DialogContent className="max-w-xl gap-3" showCloseButton={true}>
+      <DialogContent className="max-w-xl gap-3" showCloseButton={!pending} data-backup-dialog="" aria-busy={pending}
+        onEscapeKeyDown={event => { if (submitting.current || functionOptions.busy) event.preventDefault() }}
+        onInteractOutside={event => { if (submitting.current || functionOptions.busy) event.preventDefault() }}>
         <DialogHeader className="gap-1">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <Input
+          disabled={pending}
           autoFocus
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -161,6 +183,8 @@ export function RetargetNoteDialog(functionOptions: RetargetNoteDialogProps) {
         />
         <ScrollArea className="max-h-80 rounded-md border">
           <RetargetOptions
+            disabled={pending}
+            currentLabel={functionOptions.currentLabel}
             effectiveHighlightedIndex={effectiveHighlightedIndex}
             emptyMessage={emptyMessage}
             options={filteredOptions}
@@ -169,6 +193,7 @@ export function RetargetNoteDialog(functionOptions: RetargetNoteDialogProps) {
             testIdPrefix={testIdPrefix}
           />
         </ScrollArea>
+        {pending && functionOptions.workingLabel && <p role="status" className="text-sm text-muted-foreground">{functionOptions.workingLabel}</p>}
       </DialogContent>
     </Dialog>
   )

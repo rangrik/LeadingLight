@@ -43,3 +43,8 @@ These are not claimed to be latest. Updating the editor requires rebasing the in
 | typescript | 5.9.3 | 7.0.2 |
 | vite | 7.3.5 | 8.3.4 |
 | vitest | 4.1.10 | 5.0.4 |
+
+Page relocation adds `pulldown-cmark` 0.13.4 with default features disabled. The Cargo registry
+reported 0.13.4 as latest when checked on October 16, 2026. It supplies CommonMark source spans
+for local destination edits; it does not serialize or reformat entire pages. Its lockfile adds
+`unicase` 2.10.0. This addition does not change the compatibility exceptions listed above.

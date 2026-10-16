@@ -25,6 +25,26 @@ pub struct RenameResult {
     pub failed_updates: usize,
 }
 
+/// Exact local bytes committed by a folder move, bounded to pages the caller has open.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MovedOpenPage {
+    pub path: String,
+    pub before_content: String,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FolderMoveResult {
+    pub new_path: String,
+    pub updated_files: usize,
+    pub failed_updates: usize,
+    pub source_before_content: String,
+    pub source_content: String,
+    pub updated_open_pages: Vec<MovedOpenPage>,
+    /// A failed rewrite cannot authorize a stale live editor to resume writing.
+    pub unrefreshed_open_paths: Vec<String>,
+}
+
 #[derive(Clone, Copy)]
 pub struct RenameNoteRequest<'a> {
     pub vault_path: &'a str,
@@ -449,50 +469,196 @@ pub fn rename_note_filename(
     Ok(finalize_rename(vault, &old_targets, committed.new_file()))
 }
 
-/// Move a note into a different folder while preserving its filename and content.
+/// Compatibility entry point for callers that do not keep live editor snapshots.
 pub fn move_note_to_folder(request: MoveNoteToFolderRequest<'_>) -> Result<RenameResult, String> {
+    let result = move_note_to_folder_with_open_pages(request, &[])?;
+    Ok(RenameResult {
+        new_path: result.new_path,
+        updated_files: result.updated_files,
+        failed_updates: result.failed_updates,
+    })
+}
+
+/// Preserve destinations across a folder move and return exact committed live-page text.
+/// Command callers hold the source lease before this authoritative read.
+pub fn move_note_to_folder_with_open_pages(
+    request: MoveNoteToFolderRequest<'_>,
+    open_paths: &[std::path::PathBuf],
+) -> Result<FolderMoveResult, String> {
     let vault = Path::new(request.vault_path);
     let old_file = Path::new(request.old_path);
     let destination_dir = Path::new(request.destination_folder_path);
-
     recover_pending_rename_transactions(vault)?;
     ensure_existing_note(old_file)?;
-
-    if !destination_dir.exists() {
+    if !destination_dir.is_dir() {
         return Err(format!(
             "Folder does not exist: {}",
             request.destination_folder_path
         ));
     }
-    if !destination_dir.is_dir() {
-        return Err(format!(
-            "Folder is not a directory: {}",
-            request.destination_folder_path
-        ));
-    }
-
-    let old_filename = old_file
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let content = fs::read_to_string(old_file)
-        .map_err(|e| format!("Failed to read {}: {}", request.old_path, e))?;
-    let fm_title = extract_frontmatter_title(&content);
-    let old_title = super::extract_title(fm_title.as_deref(), &content, &old_filename);
-    let new_file = destination_dir.join(&old_filename);
-
+    super::staged_file::plain_file(old_file)
+        .map_err(|_| "The page must be a regular, unlinked file before moving".to_string())?;
+    let original = super::staged_file::Original::read(old_file).map_err(|e| e.to_string())?;
+    let content = String::from_utf8(original.bytes.clone()).map_err(|e| e.to_string())?;
+    let old_filename = old_file.file_name().ok_or("The page has no filename")?;
+    let new_file = destination_dir.join(old_filename);
+    let mut result = FolderMoveResult {
+        new_path: new_file.to_string_lossy().into_owned(),
+        updated_files: 0,
+        failed_updates: 0,
+        source_before_content: content.clone(),
+        source_content: content.clone(),
+        updated_open_pages: Vec::new(),
+        unrefreshed_open_paths: Vec::new(),
+    };
     if new_file == old_file {
-        return Ok(unchanged_result(old_file));
+        return Ok(result);
     }
-
+    // Any unsupported source form refuses before the original path is changed.
+    let rebased = crate::leadinglight_relocation_links::rebase_outgoing(
+        &content, vault, old_file, &new_file,
+    )?;
+    let fm_title = extract_frontmatter_title(&content);
+    let old_title = super::extract_title(
+        fm_title.as_deref(),
+        &content,
+        &old_filename.to_string_lossy(),
+    );
     let workspace = RenameWorkspace::new(vault)?;
+    let staged = workspace.stage_note_content(&rebased)?;
+    original
+        .recheck_exact()
+        .map_err(|_| "The page changed before it could be moved".to_string())?;
     let committed = workspace
         .operation(request.old_path, old_file)
-        .rename_exact(workspace.stage_note_content(&content)?, &new_file)?;
-
+        .rename_exact(staged, &new_file)?;
+    result.source_content = rebased;
     let old_path_stem = to_path_stem(old_file, vault);
     let old_targets = collect_legacy_wikilink_targets(&old_title, &old_path_stem);
-    Ok(finalize_rename(vault, &old_targets, committed.new_file()))
+    let pattern = build_wikilink_pattern(&old_targets);
+    let new_target = to_path_stem(committed.new_file(), vault);
+    // Every requested page must be accounted for, including a failed or skipped walk entry.
+    let mut unchecked: HashSet<std::path::PathBuf> = open_paths
+        .iter()
+        .filter(|path| path.as_path() != old_file && path.as_path() != new_file)
+        .cloned()
+        .collect();
+    // Unlike the legacy walker, folder relocation never follows a link outside the vault.
+    for entry in WalkDir::new(vault)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'))
+    {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                result.failed_updates += 1;
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !entry.file_type().is_file() || !is_replaceable_md_file(path, &new_file) {
+            continue;
+        }
+        let requested = unchecked.remove(path);
+        match rewrite_relocated_reference(
+            path,
+            vault,
+            old_file,
+            &new_file,
+            pattern.as_ref(),
+            &new_target,
+        ) {
+            Ok(Some(page)) => {
+                result.updated_files += 1;
+                if requested {
+                    result.updated_open_pages.push(page);
+                }
+            }
+            Ok(None) => {}
+            Err(_) => {
+                result.failed_updates += 1;
+                if requested {
+                    result
+                        .unrefreshed_open_paths
+                        .push(path.to_string_lossy().into_owned());
+                }
+            }
+        }
+    }
+    result.unrefreshed_open_paths.extend(
+        unchecked
+            .into_iter()
+            .map(|path| path.to_string_lossy().into_owned()),
+    );
+    result.unrefreshed_open_paths.sort();
+    Ok(result)
+}
+
+fn relocated_reference_content(
+    content: &str,
+    path: &Path,
+    vault: &Path,
+    old_file: &Path,
+    new_file: &Path,
+    pattern: Option<&Regex>,
+    new_target: &str,
+) -> Result<String, String> {
+    let markdown = crate::leadinglight_relocation_links::retarget_incoming(
+        content, vault, path, old_file, new_file,
+    )?;
+    Ok(pattern
+        .and_then(|re| replace_wikilinks_in_content(&markdown, re, new_target))
+        .unwrap_or(markdown))
+}
+
+fn rewrite_relocated_reference(
+    path: &Path,
+    vault: &Path,
+    old_file: &Path,
+    new_file: &Path,
+    pattern: Option<&Regex>,
+    new_target: &str,
+) -> Result<Option<MovedOpenPage>, String> {
+    use super::staged_file::{self, NativePlatform, Original, Published};
+    let initial = fs::read_to_string(path).map_err(|e| e.to_string())?;
+    if relocated_reference_content(
+        &initial, path, vault, old_file, new_file, pattern, new_target,
+    )? == initial
+    {
+        return Ok(None);
+    }
+    let _lease = crate::leadinglight_history::lease(&[path])?;
+    staged_file::plain_file(path).map_err(|_| "The linked page is not a plain file".to_string())?;
+    let original = Original::read(path).map_err(|e| e.to_string())?;
+    let before = String::from_utf8(original.bytes.clone()).map_err(|e| e.to_string())?;
+    let content = relocated_reference_content(
+        &before, path, vault, old_file, new_file, pattern, new_target,
+    )?;
+    if before == content {
+        return Ok(None);
+    }
+    #[cfg(test)]
+    AFTER_LINKED_READ.with_borrow(|hook| {
+        if let Some(hook) = hook {
+            hook(path);
+        }
+    });
+    let (staging, staged) =
+        staged_file::stage(path, content.as_bytes()).map_err(|e| e.to_string())?;
+    original
+        .recheck_exact()
+        .map_err(|_| "The linked page changed during the move".to_string())?;
+    match staged_file::publish(&original, staging, &staged, &NativePlatform) {
+        Published::Committed { .. } => Ok(Some(MovedOpenPage {
+            path: path.to_string_lossy().into_owned(),
+            before_content: before,
+            content,
+        })),
+        Published::Failed | Published::Uncertain { .. } => {
+            Err("The linked page could not be refreshed safely".to_string())
+        }
+    }
 }
 
 /// Move a note into another workspace while preserving its vault-relative path.
@@ -1432,6 +1598,240 @@ mod tests {
     #[test]
     fn test_move_note_to_folder_rejects_existing_destination() {
         assert_move_note_to_folder_error("A note with that name already exists");
+    }
+
+    #[test]
+    fn leadinglight_folder_move_keeps_source_relative_image_and_note_targets() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("drafts/page.md");
+        create_test_file(vault, "drafts/image.png", "synthetic image bytes");
+        create_test_file(vault, "drafts/reference.md", "# Nearby reference\n");
+        create_test_file(vault, "attachments/app.png", "synthetic app attachment");
+        create_test_file(vault, "drafts/page.md", "# Moving page\n\n![Nearby](./image.png)\n\n[Reference](./reference.md)\n\n![App](attachments/app.png)\n");
+        fs::create_dir(vault.join("filed")).unwrap();
+
+        let result = move_note_to_folder(MoveNoteToFolderRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            destination_folder_path: vault.join("filed").to_str().unwrap(),
+        })
+        .unwrap();
+        let moved = Path::new(&result.new_path);
+        let content = fs::read_to_string(moved).unwrap();
+        // Resolve the saved destinations as the rich renderer does for ordinary
+        // source-relative Markdown. The referents, not a chosen URL spelling, matter.
+        for (label, original) in [
+            ("Nearby", "drafts/image.png"),
+            ("Reference", "drafts/reference.md"),
+        ] {
+            let pattern = Regex::new(&format!(r"\[{}\]\(([^)]+)\)", label)).unwrap();
+            let destination = pattern.captures(&content).unwrap()[1].to_owned();
+            let resolved = moved.parent().unwrap().join(destination);
+            assert_eq!(
+                fs::read(&resolved).ok(),
+                Some(fs::read(vault.join(original)).unwrap()),
+                "the saved {label} destination must still reach its original local file"
+            );
+            assert_eq!(
+                resolved.canonicalize().unwrap(),
+                vault.join(original).canonicalize().unwrap()
+            );
+        }
+        assert!(content.contains("![App](attachments/app.png)"));
+        assert_eq!(
+            fs::read(vault.join("attachments/app.png")).unwrap(),
+            b"synthetic app attachment"
+        );
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn leadinglight_folder_move_keeps_incoming_markdown_and_wikilink_targets() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("drafts/page.md");
+        create_test_file(
+            vault,
+            "drafts/page.md",
+            "# Moving page\n\nKeep these words.\n",
+        );
+        create_test_file(
+            vault,
+            "reference.md",
+            "[Moving page](drafts/page.md)\n\n[[drafts/page]]\n",
+        );
+        fs::create_dir(vault.join("filed")).unwrap();
+        let result = move_note_to_folder(MoveNoteToFolderRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            destination_folder_path: vault.join("filed").to_str().unwrap(),
+        })
+        .unwrap();
+        let reference = fs::read_to_string(vault.join("reference.md")).unwrap();
+        assert!(reference.contains("[[filed/page]]"));
+        let pattern = Regex::new(r"\[Moving page\]\(([^)]+)\)").unwrap();
+        let destination = pattern.captures(&reference).unwrap()[1].to_owned();
+        assert_eq!(
+            fs::read(vault.join(destination)).ok(),
+            Some(fs::read(result.new_path).unwrap()),
+            "an incoming ordinary Markdown link must still reach the moved page"
+        );
+    }
+
+    #[test]
+    fn leadinglight_folder_move_receipt_contains_only_requested_committed_pages() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("drafts/page.md");
+        let open = vault.join("open.md");
+        let before = "# Page\n\n![Near](./image.png)\n";
+        let link_before = "[Page](drafts/page.md) [[drafts/page]]\n";
+        create_test_file(vault, "drafts/page.md", before);
+        create_test_file(vault, "drafts/image.png", "synthetic");
+        create_test_file(vault, "open.md", link_before);
+        create_test_file(vault, "closed.md", link_before);
+        fs::create_dir(vault.join("filed")).unwrap();
+        let result = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: source.to_str().unwrap(),
+                destination_folder_path: vault.join("filed").to_str().unwrap(),
+            },
+            std::slice::from_ref(&open),
+        )
+        .unwrap();
+        assert_eq!(result.source_before_content, before);
+        assert_eq!(
+            result.source_content,
+            fs::read_to_string(&result.new_path).unwrap()
+        );
+        assert_eq!(result.updated_files, 2);
+        assert_eq!(result.failed_updates, 0);
+        assert!(result.unrefreshed_open_paths.is_empty());
+        assert_eq!(result.updated_open_pages.len(), 1);
+        let page = &result.updated_open_pages[0];
+        assert_eq!(page.path, open.to_string_lossy());
+        assert_eq!(page.before_content, link_before);
+        assert_eq!(page.content, fs::read_to_string(open).unwrap());
+        assert_ne!(page.content, page.before_content);
+    }
+
+    #[test]
+    fn leadinglight_folder_move_does_not_overwrite_a_busy_incoming_page() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("drafts/page.md");
+        let open = vault.join("open.md");
+        let before = "[Page](drafts/page.md)\n";
+        create_test_file(vault, "drafts/page.md", "# Page\n");
+        create_test_file(vault, "open.md", before);
+        fs::create_dir(vault.join("filed")).unwrap();
+        let _lease = crate::leadinglight_history::lease(&[&open]).unwrap();
+        let result = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: source.to_str().unwrap(),
+                destination_folder_path: vault.join("filed").to_str().unwrap(),
+            },
+            std::slice::from_ref(&open),
+        )
+        .unwrap();
+        assert_eq!(result.updated_files, 0);
+        assert_eq!(result.failed_updates, 1);
+        assert_eq!(
+            result.unrefreshed_open_paths,
+            vec![open.to_string_lossy().into_owned()]
+        );
+        assert!(result.updated_open_pages.is_empty());
+        assert_eq!(fs::read_to_string(open).unwrap(), before);
+        assert!(Path::new(&result.new_path).exists());
+        assert!(!source.exists());
+    }
+
+    #[test]
+    fn leadinglight_folder_move_accounts_for_open_pages_skipped_by_the_walker() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "drafts/page.md", "# Page\n");
+        create_test_file(vault, "open.MD", "[Page](drafts/page.md)\n");
+        create_test_file(vault, ".git/info/notes.md", "[[drafts/page]]\n");
+        fs::create_dir(vault.join("filed")).unwrap();
+        let open = vault.join("open.MD");
+        let result = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: vault.join("drafts/page.md").to_str().unwrap(),
+                destination_folder_path: vault.join("filed").to_str().unwrap(),
+            },
+            std::slice::from_ref(&open),
+        )
+        .unwrap();
+        assert_eq!(
+            result.unrefreshed_open_paths,
+            vec![open.to_string_lossy().into_owned()]
+        );
+        assert_eq!(
+            fs::read_to_string(vault.join(".git/info/notes.md")).unwrap(),
+            "[[drafts/page]]\n"
+        );
+    }
+
+    #[test]
+    fn leadinglight_folder_move_keeps_a_linked_page_changed_before_publication() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "drafts/page.md", "# Page\n");
+        create_test_file(vault, "open.md", "[Page](drafts/page.md)\n");
+        fs::create_dir(vault.join("filed")).unwrap();
+        let open = vault.join("open.md");
+        AFTER_LINKED_READ.set(Some(Box::new(|path| {
+            fs::write(path, "External synthetic edit\n").unwrap();
+        })));
+        let outcome = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: vault.join("drafts/page.md").to_str().unwrap(),
+                destination_folder_path: vault.join("filed").to_str().unwrap(),
+            },
+            std::slice::from_ref(&open),
+        );
+        AFTER_LINKED_READ.set(None);
+        let result = outcome.unwrap();
+        assert_eq!(result.failed_updates, 1);
+        assert_eq!(
+            result.unrefreshed_open_paths,
+            vec![open.to_string_lossy().into_owned()]
+        );
+        assert_eq!(
+            fs::read_to_string(open).unwrap(),
+            "External synthetic edit\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn leadinglight_folder_move_does_not_follow_external_incoming_symlinks() {
+        use std::os::unix::fs::symlink;
+        let dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "drafts/page.md", "# Page\n");
+        let before = "[[drafts/page]] [Page](drafts/page.md)\n";
+        create_test_file(outside.path(), "private.md", before);
+        symlink(outside.path(), vault.join("linked-folder")).unwrap();
+        symlink(outside.path().join("private.md"), vault.join("linked.md")).unwrap();
+        fs::create_dir(vault.join("filed")).unwrap();
+        move_note_to_folder(MoveNoteToFolderRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("drafts/page.md").to_str().unwrap(),
+            destination_folder_path: vault.join("filed").to_str().unwrap(),
+        })
+        .unwrap();
+        assert_eq!(
+            fs::read_to_string(outside.path().join("private.md")).unwrap(),
+            before
+        );
     }
 
     #[test]
