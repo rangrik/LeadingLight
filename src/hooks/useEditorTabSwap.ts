@@ -1104,14 +1104,19 @@ function useTabSwapEffect(options: UseTabSwapEffectOptions) {
   ])
 }
 
-function useInvalidateSwapsOnUnmount(
-  pendingSwapRef: MutableRefObject<(() => void) | null>,
-  swapSeqRef: MutableRefObject<number>,
-) {
+function useInvalidateSwapsOnUnmount(options: {
+  pendingSwapRef: MutableRefObject<(() => void) | null>
+  swapSeqRef: MutableRefObject<number>
+  suppressChangeRef: MutableRefObject<boolean>
+  prevActivePathRef: MutableRefObject<string | null>
+}) {
+  const { pendingSwapRef, swapSeqRef, suppressChangeRef, prevActivePathRef } = options
   useEffect(() => () => {
     // Deferred swaps (rAF/setTimeout) must not touch the DOM after unmount.
     invalidatePendingSwap({ pendingSwapRef, swapSeqRef })
-  }, [pendingSwapRef, swapSeqRef])
+    // A canceled swap can never release its hold, so a remount (StrictMode replay) must open the page again.
+    if (suppressChangeRef.current) prevActivePathRef.current = null
+  }, [pendingSwapRef, swapSeqRef, suppressChangeRef, prevActivePathRef])
 }
 
 function useForegroundWorkTracker(
@@ -1192,7 +1197,7 @@ export function useEditorTabSwap({ tabs, activeTabPath, editor, onContentChange,
   const { foregroundWorkAtRef, handleForegroundEditorChange } = useForegroundWorkTracker(activeTabPath, handleEditorChange)
   const prepareParsedBlocks = usePrepareParsedBlocks({ editor, tabCacheRef, vaultPathRef })
   useEditorMountState(editor, editorMountedRef, pendingSwapRef)
-  useInvalidateSwapsOnUnmount(pendingSwapRef, swapSeqRef)
+  useInvalidateSwapsOnUnmount({ pendingSwapRef, swapSeqRef, suppressChangeRef, prevActivePathRef })
   useParsedBlockPreload({
     activeTabPathRef: activeTabPathLatestRef,
     editorMountedRef,
