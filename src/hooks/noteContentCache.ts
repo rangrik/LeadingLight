@@ -457,6 +457,8 @@ async function loadCachedContentIfFresh(entry: VaultEntry, cachedEntry: NoteCont
   markNoteOpenTrace(entry.path, 'freshnessCheckStart')
   const isFresh = await validateCachedNoteContent(cachedEntry)
   markNoteOpenTrace(entry.path, 'freshnessCheckEnd')
+  // A clear or newer entry during the check wins: this answer neither restores nor evicts, and the opener reads afresh.
+  if (prefetchCache.get(entry.path) !== cachedEntry) return null
   if (isFresh) {
     rememberNoteContent(cachedEntry)
     return cachedEntry.value
