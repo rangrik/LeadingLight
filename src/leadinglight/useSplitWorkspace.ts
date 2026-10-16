@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigationHistory } from '../hooks/useNavigationHistory'
+import type { OpenReservation } from '../hooks/useNoteCreation'
 import { useTabManagement, type Tab } from '../hooks/useTabManagement'
 import type { VaultEntry } from '../types'
 import { notePathsMatch } from '../utils/notePathIdentity'
@@ -147,10 +148,9 @@ export function useSplitWorkspace(options: Options) {
   const backgroundOpensRef = useRef<[number, number]>([0, 0])
   const newestCreationRef = useRef<[number, number]>([0, 0])
   const creationCountRef = useRef(0)
-  /** Opt-in for creation, taken at the user's request: a later open targets this pane, its page and the vault session. */
-  const reserveOpen = useCallback(() => {
+  /** A later open targets this pane, its page and the vault session. */
+  const reserveOpenIn = useCallback((pane: PaneId): OpenReservation => {
     interactionVersionRef.current += 1
-    const pane = activePaneRef.current
     const id = ++creationCountRef.current
     const navigation = requestGenerationRef.current[pane] - backgroundOpensRef.current[pane]
     const epoch = sessionRef.current
@@ -172,6 +172,8 @@ export function useSplitWorkspace(options: Options) {
     }
     return { inSession, isActive: () => activePaneRef.current === pane, open }
   }, [beginBusy, endBusy, findPane])
+  /** Opt-in for creation, taken at the user's request, in the active pane. */
+  const reserveOpen = useCallback(() => reserveOpenIn(activePaneRef.current), [reserveOpenIn])
   /** Taken at a command: current until the person navigates or closes that pane, or the vault changes. Creation opens do not count. */
   const markNavigation = useCallback(() => {
     const pane = activePaneRef.current
@@ -235,6 +237,15 @@ export function useSplitWorkspace(options: Options) {
     }
     activeTabPathRef.current = controllersRef.current[activePaneRef.current].activeTabPathRef.current
   }, [])
+  /**
+   * Recovery: closes a page and reserves the pane that showed it, never another; null when none did.
+   * Reserved after the close, with no wait between, so the close does not cancel it. Focus does not move.
+   */
+  const closePageAndReserveOpen = useCallback((path: string): OpenReservation | null => {
+    const owner = ([0, 1] as const).find(pane => notePathsMatch(paneTabsRef.current[pane][0]?.entry.path ?? null, path))
+    closePages([path])
+    return owner === undefined ? null : reserveOpenIn(owner)
+  }, [closePages, reserveOpenIn])
   /** Pages held by the panes right now, not as of the last render; flushes before quit use this. */
   const currentTabs = useCallback(() => [...paneTabsRef.current[0], ...paneTabsRef.current[1]], [])
   const beforeNavigate = options.beforeNavigate
@@ -421,6 +432,7 @@ export function useSplitWorkspace(options: Options) {
   return { tabs, setTabs, activeTabPath, activeTabPathRef, requestedActiveTabPathRef, handleSelectNote,
     handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
     splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
+      closePageAndReserveOpen,
       currentTabs,
       markNavigation,
       openNoteWhenLoaded,
