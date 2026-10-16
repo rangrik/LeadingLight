@@ -15,6 +15,8 @@ export type MainWindowPaneVisibility = {
   sidebarWidth?: number
   noteListWidth?: number
   inspectorWidth?: number
+  /** The page can float the Inspector when narrow, so the window needs no extra width for it. */
+  inspectorFloats?: boolean
 }
 
 export function getMainWindowMinWidth({
@@ -24,12 +26,13 @@ export function getMainWindowMinWidth({
   sidebarWidth,
   noteListWidth,
   inspectorWidth,
+  inspectorFloats = false,
 }: MainWindowPaneVisibility): number {
   let minWidth = EDITOR_ONLY_MAIN_WINDOW_MIN_WIDTH
 
   if (sidebarVisible) minWidth += getPaneWidth(sidebarWidth, MAIN_WINDOW_SIDEBAR_MIN_WIDTH)
   if (noteListVisible) minWidth += getPaneWidth(noteListWidth, MAIN_WINDOW_NOTE_LIST_MIN_WIDTH)
-  if (!inspectorCollapsed) minWidth += getPaneWidth(inspectorWidth, MAIN_WINDOW_INSPECTOR_MIN_WIDTH)
+  if (!inspectorCollapsed && !inspectorFloats) minWidth += getPaneWidth(inspectorWidth, MAIN_WINDOW_INSPECTOR_MIN_WIDTH)
 
   return minWidth
 }
@@ -63,6 +66,7 @@ export function useMainWindowSizeConstraints({
   sidebarWidth,
   noteListWidth,
   inspectorWidth,
+  inspectorFloats,
 }: MainWindowSizeConstraintsOptions): void {
   const minWidth = getMainWindowMinWidth({
     sidebarVisible,
@@ -71,6 +75,7 @@ export function useMainWindowSizeConstraints({
     sidebarWidth,
     noteListWidth,
     inspectorWidth,
+    inspectorFloats,
   })
 
   useEffect(() => {

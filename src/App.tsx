@@ -1356,6 +1356,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   } = useAppWindowControls({
     layout,
     windowMode: Boolean(noteWindowParams) || aiWorkspaceWindow,
+    // LeadingLight panes float the Inspector when narrow, so opening it never grows the window.
+    inspectorFloats: true,
   })
   const turnCurrentBlockIntoRef = useRef<((target: RichEditorBlockTypeDefinition) => void) | null>(null)
 

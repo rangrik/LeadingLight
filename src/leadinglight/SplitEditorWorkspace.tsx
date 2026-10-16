@@ -15,6 +15,7 @@ import type { PaneId, SplitWorkspaceController } from './useSplitWorkspace'
 import { arrowEdge, DROP_EDGES, offeredEdges, type DropEdge } from './pageTabDrag'
 import { usePageTabDrag } from './usePageTabDrag'
 import { useNoteListDrop } from './useNoteListDrop'
+import { useInspectorOverlay } from './useInspectorOverlay'
 import { notePathsMatch } from '../utils/notePathIdentity'
 import { PageDropOverlay } from './PageDropOverlay'
 import './splitWorkspace.css'
@@ -148,6 +149,9 @@ export function SplitEditorWorkspace(props: Props) {
   }, 0)
   // Rendered in visual order with stable keys, so React moves panes without remounting editors.
   const visiblePanes: readonly PaneId[] = workspace.split ? workspace.order : [workspace.activePane]
+  const inspector = useInspectorOverlay({ areaRef: containerRef, visiblePanes, activePane: workspace.activePane,
+    activePath: workspace.paths[workspace.activePane] ?? null, inspectorOpen: !props.inspectorCollapsed,
+    inspectorWidth: props.inspectorWidth, revealPane, onClose: props.onToggleInspector })
   return <div className={`ll-workspace${pageDrag.drag ? ' ll-workspace--dragging' : ''}`} inert={props.transitionPending} aria-busy={props.transitionPending}>
     <div className="ll-workspace-toolbar">
       <span className="ll-workspace-hint">{t('leadinglight.split.workspace')}</span>
@@ -181,7 +185,7 @@ export function SplitEditorWorkspace(props: Props) {
             onPointerDownCapture={event => {
               // The page tab activates on click or drop, so a canceled drag changes nothing.
               if (!(event.target instanceof Element && event.target.closest('[data-page-tab]'))) activate(pane)
-            }} onFocusCapture={() => activate(pane)}>
+            }} onFocusCapture={() => activate(pane)} onKeyDown={inspector.closeOnEscape}>
             <div className="ll-pane-header">
               <Button variant="ghost" className="ll-page-picker justify-between" aria-label={t('leadinglight.split.choose')}
                 aria-haspopup="dialog" aria-expanded={pickerPane === pane} data-placeholder={!tab ? '' : undefined}
@@ -211,6 +215,7 @@ export function SplitEditorWorkspace(props: Props) {
             </div>
             {tab ? <LazyEditor {...props} {...paneRefs[pane]} tabs={[tab]} activeTabPath={path}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
+              inspectorOverlay={inspector.floats(pane)}
               showAIChat={active && props.showAIChat} aiWorkspaceSurface={active ? props.aiWorkspaceSurface : undefined}
               pendingCommitDiffRequest={active ? props.pendingCommitDiffRequest : undefined}
               vaultPath={vaultPathForEntry(tab.entry, props.vaultPath ?? '')}

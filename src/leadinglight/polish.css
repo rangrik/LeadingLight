@@ -50,6 +50,13 @@
 .ll-backlinks-count[data-count="0"] { opacity: 0.6; }
 .ll-backlinks-count:hover, .ll-backlinks-count:focus-visible { color: var(--foreground); opacity: 1; }
 
+/* A narrow page keeps its width; the Inspector floats over its right edge instead. */
+.ll-inspector-overlay { position: absolute; inset-block: 0; inset-inline-end: 0; z-index: 10; max-width: calc(100% - 24px); box-shadow: -12px 0 32px -16px rgb(0 0 0 / 0.3); }
+.ll-inspector-overlay:focus { outline: none; }
+.ll-inspector-overlay:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+/* While floating, page pop-ups (BlockNote toolbars, z 40) stay in the page's own layer, under the Inspector. */
+:has(> .ll-inspector-overlay) > :not(.ll-inspector-overlay) { isolation: isolate; }
+
 @media (prefers-reduced-motion: reduce) {
   .ll-pane-separator, .ll-page-picker > svg, .ll-save-state { transition: none; }
 }

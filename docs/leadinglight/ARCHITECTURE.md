@@ -108,3 +108,16 @@ Use current stable Tauri and current compatible packages. The inherited BlockNot
 protect editor correctness and must be rebased and tested before that cluster changes versions.
 Track held major-version upgrades explicitly in DEPENDENCIES.md. A package being held temporarily
 must never be represented as latest. Lockfiles are committed for reproducible builds.
+
+## Inspector sizing
+
+The split workspace measures each visible pane. Below 400 pixels of remaining writing width,
+Properties floats inside that pane instead of taking space from the editor. The same editor and
+Inspector remain mounted while the window or divider changes size. The panel is a labelled,
+nonmodal region; Escape closes it when an inner field or menu has not consumed the key, and focus
+returns to its opener or page. The other pane remains usable. Wider panes retain an inline panel.
+
+LeadingLight opts into floating-Inspector window constraints through `useAppWindowControls`.
+Both the immediate constraint update and the layout effect omit Inspector width from the native
+minimum, so opening Properties does not enlarge a narrow window. Sidebar and note-list minimums
+still apply; callers that do not opt in retain the inherited constraint calculation.

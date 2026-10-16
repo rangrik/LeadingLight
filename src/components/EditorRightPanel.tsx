@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import { DEFAULT_AI_AGENT, type AiAgentId, type AiAgentReadiness } from '../lib/aiAgents'
 import type { AiTarget } from '../lib/aiTargets'
-import type { AppLocale } from '../lib/i18n'
+import { translate, type AppLocale } from '../lib/i18n'
 import type { VaultEntry, GitCommit, WorkspaceIdentity } from '../types'
 import type { NoteListItem } from '../utils/ai-context'
 import { Inspector, type FrontmatterValue } from './Inspector'
@@ -17,6 +17,7 @@ interface EditorRightPanelProps {
   showTableOfContents?: boolean
   inspectorCollapsed: boolean
   inspectorWidth: number
+  inspectorOverlay?: boolean
   editor: ReturnType<typeof useCreateBlockNote>
   defaultAiAgent?: AiAgentId
   defaultAiTarget?: AiTarget
@@ -210,10 +211,14 @@ export function EditorRightPanel(options: EditorRightPanelProps) {
 }
 
 function renderExpandedInspector(options: EditorRightPanelProps) {
-  const { inspectorCollapsed, inspectorWidth, inspectorEntry, inspectorContent, entries, gitHistory, vaultPath, onToggleInspector, onNavigateWikilink, onOpenEntry, revealBacklinks, onBacklinksRevealed, backlinksEmptyLabel, onViewCommitDiff, onUpdateFrontmatter, onDeleteProperty, onAddProperty, onCreateMissingType, onCreateAndOpenNote, onChangeWorkspace, onInitializeProperties, onToggleRawEditor, workspaces, locale } = options
+  const { inspectorCollapsed, inspectorWidth, inspectorOverlay, inspectorEntry, inspectorContent, entries, gitHistory, vaultPath, onToggleInspector, onNavigateWikilink, onOpenEntry, revealBacklinks, onBacklinksRevealed, backlinksEmptyLabel, onViewCommitDiff, onUpdateFrontmatter, onDeleteProperty, onAddProperty, onCreateMissingType, onCreateAndOpenNote, onChangeWorkspace, onInitializeProperties, onToggleRawEditor, workspaces, locale } = options
   const currentInspectorEntry = resolveInspectorEntry(inspectorEntry, entries)
+  // Same element either way, so a resize never remounts the Inspector mid-edit.
+  const overlay = inspectorOverlay
+    ? { role: 'region', 'aria-label': translate(locale ?? 'en', 'inspector.title.properties'), tabIndex: -1, 'data-inspector-overlay': '' }
+    : {}
   return (
-    <div className="shrink-0 flex flex-col min-h-0" style={{ width: inspectorWidth, height: '100%' }}>
+    <div className={inspectorOverlay ? 'll-inspector-overlay flex flex-col min-h-0' : 'shrink-0 flex flex-col min-h-0'} style={{ width: inspectorWidth, height: '100%' }} {...overlay}>
       <Inspector collapsed={inspectorCollapsed} onToggle={onToggleInspector} entry={currentInspectorEntry} content={inspectorContent} entries={entries} gitHistory={gitHistory} vaultPath={vaultPath} onNavigate={onNavigateWikilink} onOpenEntry={onOpenEntry} revealBacklinks={revealBacklinks} onBacklinksRevealed={onBacklinksRevealed} backlinksEmptyLabel={backlinksEmptyLabel} onViewCommitDiff={onViewCommitDiff} onUpdateFrontmatter={onUpdateFrontmatter} onDeleteProperty={onDeleteProperty} onAddProperty={onAddProperty} onCreateMissingType={onCreateMissingType} onCreateAndOpenNote={onCreateAndOpenNote} onChangeWorkspace={onChangeWorkspace} onInitializeProperties={onInitializeProperties} onToggleRawEditor={onToggleRawEditor} workspaces={workspaces} locale={locale} />
     </div>
   )

@@ -23,6 +23,8 @@ type WindowConstraintUpdater = (
 interface UseAppWindowControlsParams {
   layout: ReturnType<typeof useLayoutPanels>
   windowMode: boolean
+  /** Opt-in: the Inspector floats over narrow pages instead of widening the window. */
+  inspectorFloats?: boolean
 }
 
 interface AppWindowActionRefs {
@@ -61,6 +63,7 @@ function useAppWindowActionRefs(): AppWindowActionRefs {
 function useMainWindowConstraintUpdater(
   layout: ReturnType<typeof useLayoutPanels>,
   windowMode: boolean,
+  inspectorFloats: boolean,
 ): WindowConstraintUpdater {
   return useCallback((
     nextSidebarVisible: boolean,
@@ -76,11 +79,13 @@ function useMainWindowConstraintUpdater(
       sidebarWidth: layout.sidebarWidth,
       noteListWidth: layout.noteListWidth,
       inspectorWidth: layout.inspectorWidth,
+      inspectorFloats,
     })
 
     void applyMainWindowSizeConstraints(minWidth, { growToFit: !isWindows() })
       .catch((err: unknown) => { console.warn('[window] Size constraints failed:', err); })
   }, [
+    inspectorFloats,
     layout.inspectorCollapsed,
     layout.inspectorWidth,
     layout.noteListWidth,
@@ -92,6 +97,7 @@ function useMainWindowConstraintUpdater(
 export function useAppWindowControls({
   layout,
   windowMode,
+  inspectorFloats = false,
 }: UseAppWindowControlsParams): AppWindowControls {
   const {
     diffToggleRef,
@@ -106,7 +112,7 @@ export function useAppWindowControls({
   )
   const zoom = useZoom()
   const buildNumber = useBuildNumber()
-  const updateMainWindowConstraints = useMainWindowConstraintUpdater(layout, windowMode)
+  const updateMainWindowConstraints = useMainWindowConstraintUpdater(layout, windowMode, inspectorFloats)
 
   const handleSetViewMode = useCallback((mode: ViewMode) => {
     setViewMode(mode)
@@ -136,6 +142,7 @@ export function useAppWindowControls({
     sidebarWidth: layout.sidebarWidth,
     noteListWidth: layout.noteListWidth,
     inspectorWidth: layout.inspectorWidth,
+    inspectorFloats,
   })
 
   return {

@@ -789,6 +789,12 @@ body.tldraw-whiteboard-fullscreen-open {
   cursor: pointer;
 }
 
+/* BlockNote paints a fixed light grey here, which hides light text in dark mode. */
+.editor__blocknote-container [data-file-block] .bn-file-name-with-icon:hover,
+.editor__blocknote-container .ProseMirror-selectednode .bn-file-name-with-icon {
+  background-color: var(--state-hover);
+}
+
 /* Code blocks follow Tolaria's theme instead of BlockNote's fixed dark shell. */
 .editor__blocknote-container .bn-block-content[data-content-type="codeBlock"] {
   background-color: var(--editor-code-block-background) !important;

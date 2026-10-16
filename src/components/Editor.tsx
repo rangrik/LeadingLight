@@ -93,6 +93,8 @@ export interface EditorProps {
   inspectorCollapsed: boolean
   onToggleInspector: () => void
   inspectorWidth: number
+  /** Too narrow to share: the Inspector floats over the page instead of shrinking it. */
+  inspectorOverlay?: boolean
   defaultAiAgent?: AiAgentId
   defaultAiTarget?: AiTarget
   defaultAiAgentReadiness?: AiAgentReadiness
@@ -566,6 +568,7 @@ function useEditorSetup(options: EditorSetupParams) {
       onKeepTheirs?: (path: string) => void
       onInspectorResize: (delta: number) => void
       inspectorWidth: number
+      inspectorOverlay?: boolean
       defaultAiAgent: AiAgentId
       defaultAiTarget?: AiTarget
       defaultAiAgentReadiness?: AiAgentReadiness
@@ -656,6 +659,7 @@ function useEditorSetup(options: EditorSetupParams) {
       onKeepTheirs,
       onInspectorResize,
       inspectorWidth,
+      inspectorOverlay,
       defaultAiAgent,
       defaultAiTarget,
       defaultAiAgentReadiness,
@@ -753,12 +757,16 @@ function useEditorSetup(options: EditorSetupParams) {
               locale={locale}
             />
         )}
-        {(showTableOfContents || !inspectorCollapsed) && <ResizeHandle onResize={onInspectorResize} />}
+        {(showTableOfContents || !inspectorCollapsed) && (
+          // Hidden, not unmounted, while floating: a drag that crosses into floating still ends cleanly.
+          <div className={inspectorOverlay && !inspectorCollapsed ? 'hidden' : 'contents'}><ResizeHandle onResize={onInspectorResize} /></div>
+        )}
         <EditorRightPanel
           showAIChat={false}
           showTableOfContents={showTableOfContents}
           inspectorCollapsed={inspectorCollapsed}
           inspectorWidth={inspectorWidth}
+          inspectorOverlay={inspectorOverlay}
           editor={editor}
           defaultAiAgent={defaultAiAgent}
           defaultAiTarget={defaultAiTarget}

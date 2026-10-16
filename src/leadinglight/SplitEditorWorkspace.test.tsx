@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { SplitEditorWorkspace } from './SplitEditorWorkspace'
 import type { EditorProps } from '../components/Editor'
@@ -18,7 +18,10 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
     if (rawToggleRef) rawToggleRef.current = () => activity.raw(path)
     if (flushPendingEditorContentRef) flushPendingEditorContentRef.current = target => { if (target === path) activity.flush(path) }
   }, [path, rawToggleRef, flushPendingEditorContentRef])
-  return <div contentEditable suppressContentEditableWarning data-testid={`editor-${path}`}>{path}</div>
+  return <>
+    <div contentEditable suppressContentEditableWarning data-testid={`editor-${path}`}>{path}</div>
+    {!props.inspectorCollapsed && <div data-testid={`inspector-${path}`} tabIndex={-1} data-inspector-overlay={props.inspectorOverlay ? '' : undefined} />}
+  </>
 } }))
 
 const entry = (path: string) => ({ path, title: path, filename: path, fileKind: 'markdown', aliases: [], outgoingLinks: [], relationships: {} }) as unknown as VaultEntry
@@ -106,6 +109,37 @@ it('opens searchable bounded results in the clicked pane and returns focus on Es
   fireEvent.click(trigger)
   fireEvent.keyDown(window, { key: 'Escape' })
   expect(document.activeElement).toBe(trigger)
+})
+
+it('floats the Inspector only over a pane too narrow to share, and gives focus back when Escape closes it', () => {
+  const widths = [425, 900]
+  const resized: Array<() => void> = []
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { resized.push(callback) } observe() {} disconnect() {} })
+  const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return { width: this.dataset.paneId ? widths[Number(this.dataset.paneId)] : 0 } as DOMRect
+  })
+  const props = fixture()
+  const { rerender } = render(<SplitEditorWorkspace {...props} />)
+  const backlinks = screen.getAllByRole('button', { name: 'Backlinks (0)' })[0]
+  backlinks.focus()
+  fireEvent.click(backlinks)
+  rerender(<SplitEditorWorkspace {...props} inspectorCollapsed={false} />)
+  const overlay = screen.getByTestId('inspector-/left.md')
+  expect(overlay).toHaveAttribute('data-inspector-overlay')
+  expect(document.activeElement).toBe(overlay)
+  fireEvent.keyDown(overlay, { key: 'Escape' })
+  expect(props.onToggleInspector).toHaveBeenCalledTimes(2)
+  rerender(<SplitEditorWorkspace {...props} inspectorCollapsed />)
+  expect(document.activeElement).toBe(backlinks)
+
+  const right = { ...props, inspectorCollapsed: false, workspace: { ...props.workspace, activePane: 1 as const } }
+  rerender(<SplitEditorWorkspace {...right} />)
+  expect(screen.getByTestId('inspector-/right.md')).not.toHaveAttribute('data-inspector-overlay')
+  widths[1] = 500
+  act(() => resized.forEach(callback => callback()))
+  expect(screen.getByTestId('inspector-/right.md')).toHaveAttribute('data-inspector-overlay')
+  rect.mockRestore()
+  vi.unstubAllGlobals()
 })
 
 describe('dragging a page tab', () => {
