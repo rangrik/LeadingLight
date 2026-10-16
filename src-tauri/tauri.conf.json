@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "LeadingLight",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "identifier": "dev.rangrik.leadinglight",
   "build": {
     "frontendDist": "../dist",
