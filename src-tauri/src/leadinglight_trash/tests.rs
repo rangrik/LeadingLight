@@ -399,7 +399,7 @@ fn interrupted_restore_is_finished_only_with_proof() {
         .into_iter()
         .map(|item| item.id)
         .collect::<Vec<_>>();
-    assert_eq!(ids, [occupied_id.clone()]);
+    assert_eq!(ids, std::slice::from_ref(&occupied_id));
     assert!(!linked_dir.exists() && !copied_dir.exists());
     assert_eq!(fs::read(&linked).unwrap(), b"one");
     assert_eq!(fs::read(&copied).unwrap(), b"two");

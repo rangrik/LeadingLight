@@ -298,12 +298,11 @@ pub(crate) fn complete_shutdown_save(
                 }
             }
         }
-        Some(ShutdownAction::Exit(code)) => {
-            if !crate::macos_shutdown::reply(&app, true)? {
-                app.exit(code);
-            }
+        Some(ShutdownAction::Exit(code)) if !crate::macos_shutdown::reply(&app, true)? => {
+            app.exit(code);
         }
-        None => {}
+        // A sent AppKit terminate reply already ends the app.
+        Some(ShutdownAction::Exit(_)) | None => {}
     }
     Ok(())
 }
