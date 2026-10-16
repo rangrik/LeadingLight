@@ -2,6 +2,19 @@ import { useCallback, useEffect } from 'react'
 import type React from 'react'
 import { noteDisplaysAsSheet } from '../utils/noteFormat'
 
+type RawBufferRef = React.MutableRefObject<string | null>
+
+// The raw editor's own timer, keyed by its buffer ref, so a flush here can stop it.
+const rawTimerStops = new WeakMap<RawBufferRef, (handedOver: string) => void>()
+
+/** After this flush hands text over, a late timer would send it again and undo newer settles. */
+export function registerRawTimerStop(ref: RawBufferRef, stop: (handedOver: string) => void) {
+  rawTimerStops.set(ref, stop)
+  return () => {
+    if (rawTimerStops.get(ref) === stop) rawTimerStops.delete(ref)
+  }
+}
+
 type Tab = {
   entry: { path: string; display?: unknown; fileKind?: string | null }
   content: string
@@ -95,6 +108,7 @@ function useRegisterRawContentFlush({
     if (latestContent === null || latestContent === activeTab.content) return
 
     onContentChange?.(path, latestContent)
+    rawTimerStops.get(rawLatestContentRef)?.(latestContent)
     },
     [activeTab, onContentChange, rawLatestContentRef, rawMode],
   )

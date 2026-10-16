@@ -21,24 +21,30 @@ async function expectEditorFocused(page: Page): Promise<void> {
   }), { timeout: 5_000 }).toBe(true)
 }
 
+// New pages are one blank body block; nothing is typed here.
 async function createUntitledNote(page: Page): Promise<void> {
   await page.locator('body').click()
   await triggerMenuCommand(page, 'file-new-note')
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+(?:-\d+)?/i, {
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+(?:-\d+)?/i, {
     timeout: 5_000,
   })
-  const titleBlock = page.locator('.bn-block-content[data-content-type="heading"]').first()
-  await expect(titleBlock).toBeVisible({ timeout: 5_000 })
-  await titleBlock.click()
+  const firstBlock = page.locator('.bn-editor .bn-block-content').first()
+  await expect(firstBlock).toHaveAttribute('data-content-type', 'paragraph', { timeout: 5_000 })
+  await firstBlock.click()
   await expectEditorFocused(page)
 }
 
-async function openPropertiesPanel(page: Page): Promise<void> {
-  const openPanelButton = page.getByRole('button', { name: 'Open the properties panel' })
+// New pages have no frontmatter, so the Inspector first offers to start it (this sets type Note).
+async function initializePropertiesPanel(page: Page): Promise<void> {
+  // Shown only while the Inspector is collapsed.
+  const openPanelButton = page.getByTestId('breadcrumb-properties-button')
   if (await openPanelButton.count()) {
-    await openPanelButton.click()
+    await openPanelButton.first().click()
   }
+  await expect(page.getByText('This note has no properties yet')).toBeVisible()
+  await page.getByRole('button', { name: 'Initialize properties' }).click()
+  await expect(page.getByTestId('type-selector').getByRole('combobox')).toContainText('Note')
 }
 
 test.beforeEach(async ({ page }, testInfo) => {
@@ -60,6 +66,8 @@ test('@smoke newly created notes stay editable before any reselection', async ({
 
   await createUntitledNote(page)
 
+  await page.keyboard.type('# ')
+  await expect(page.locator('.bn-block-content[data-content-type="heading"]').first()).toBeVisible()
   await page.keyboard.type(title, { delay: 10 })
   await page.keyboard.press('Enter')
   await page.keyboard.type(bodyMarker, { delay: 10 })
@@ -69,7 +77,7 @@ test('@smoke newly created notes stay editable before any reselection', async ({
   await expect.poll(() => fs.existsSync(notePath), { timeout: 10_000 }).toBe(true)
   await expect.poll(() => fs.readFileSync(notePath, 'utf8'), { timeout: 10_000 }).toContain(bodyMarker)
 
-  await openPropertiesPanel(page)
+  await initializePropertiesPanel(page)
   await expect(page.getByTestId('add-property-row')).toBeVisible()
   await page.getByTestId('add-property-row').click()
   await expect(page.getByTestId('add-property-form')).toBeVisible()
@@ -98,7 +106,7 @@ test('@smoke untouched newly created notes can be renamed and updated before res
   await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(renamedStem, { timeout: 10_000 })
   await expect.poll(() => fs.existsSync(renamedPath), { timeout: 10_000 }).toBe(true)
 
-  await openPropertiesPanel(page)
+  await initializePropertiesPanel(page)
   await page.getByTestId('add-property-row').click()
   await expect(page.getByTestId('add-property-form')).toBeVisible()
   await page.getByPlaceholder('Property').fill('Owner')

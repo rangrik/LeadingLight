@@ -41,9 +41,13 @@ test('@smoke disabling H1 auto-rename keeps untitled filenames until manual sync
   await createUntitledNote(page)
 
   const filenameTrigger = page.getByTestId('breadcrumb-filename-trigger')
+  await expect(filenameTrigger).toContainText(/untitled-page-\d+/i, { timeout: 5_000 })
   const untitledStem = (await filenameTrigger.textContent())?.trim() ?? ''
-  expect(untitledStem).toMatch(/^untitled-note-\d+(?:-\d+)?$/i)
+  expect(untitledStem).toMatch(/^untitled-page-\d+(?:-\d+)?$/i)
 
+  // New pages are body-first; the H1 that auto-rename would use is the user's own `# `.
+  await page.keyboard.type('# ')
+  await expect(page.locator('.bn-editor [data-content-type="heading"]').first()).toBeVisible()
   await page.keyboard.type('Manual Sync Title', { delay: 20 })
   await page.keyboard.press('Enter')
   await page.waitForTimeout(2_700)

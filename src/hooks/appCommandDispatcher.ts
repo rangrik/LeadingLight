@@ -295,6 +295,22 @@ function dispatchDefinition(
   }
 }
 
+// Commands that act on the page behind a pending draft field; text editing, Save and New page are not here.
+const PAGE_HANDLERS: ReadonlySet<SimpleHandlerKey> = new Set<SimpleHandlerKey>([
+  'onFindInNote', 'onReplaceInNote', 'onToggleRawEditor', 'onToggleDiff', 'onExportNoteAsPdf', 'onToggleTableOfContents',
+])
+
+function pendingDraftHasKeyboard(): boolean {
+  const active = document.activeElement
+  return active instanceof Element && active.closest('[data-pending-capture="true"]') !== null
+}
+
+function actsOnPageBehindDraft(definition: AppCommandDefinition): boolean {
+  const { route } = definition
+  if (route.kind !== 'active-tab-handler' && !(route.kind === 'handler' && PAGE_HANDLERS.has(route.handler))) return false
+  return pendingDraftHasKeyboard()
+}
+
 export function dispatchAppCommand(id: AppCommandId, handlers: AppCommandHandlers): boolean {
   return executeAppCommand(id, handlers, 'direct')
 }
@@ -313,6 +329,7 @@ export function executeAppCommand(
   }
 
   const definition = Reflect.get(APP_COMMAND_DEFINITIONS, id) as AppCommandDefinition
+  if (actsOnPageBehindDraft(definition)) return false
   const dispatched = dispatchDefinition(definition, handlers)
   if (dispatched) {
     lastCommandDispatch = { id, source, timestamp }

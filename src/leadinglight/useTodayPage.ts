@@ -1,6 +1,6 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { VaultEntry } from '../types'
-import { requestEditorFocus } from '../hooks/useEditorFocus'
+import { requestEditorFocus, tryFocusReadyPage } from '../hooks/useEditorFocus'
 import { formatDateForDisplay, type DateDisplayFormat } from '../utils/dateDisplay'
 import { joinVaultPath, notePathsMatch } from '../utils/notePathIdentity'
 import type { ExactPageOutcome, ExactPageRequest } from './exactPage'
@@ -22,11 +22,21 @@ interface Options {
   ready: boolean
   entries: VaultEntry[]
   dateDisplayFormat: DateDisplayFormat
-  openNoteWhenLoaded: (entry: VaultEntry) => Promise<boolean>
+  openNoteWhenLoaded: (entry: VaultEntry, options?: { commitNow?: boolean }) => Promise<boolean>
   createPageAt: (request: ExactPageRequest) => Promise<ExactPageOutcome>
   onFailed: () => void
   now?: () => Date
 }
+
+/** Where a pending draft field learns what happened to the page. */
+export interface TodayOutcome {
+  failed: () => void
+  created: (path: string) => void
+  shown: (path: string) => void
+}
+
+/** Asked in the command turn, after the ready-page attempt; returns where to report, if a draft field took the keys. */
+export type HoldTodayInput = (path: string, ready: boolean) => TodayOutcome | null
 
 /** One page per local day at a fixed path; the path, not the editable title, is its identity. */
 export function useTodayPage(options: Options) {
@@ -40,7 +50,7 @@ export function useTodayPage(options: Options) {
   // Repeated requests for the same session and day join the one already running.
   const inFlight = useRef(new Map<string, Promise<void>>())
 
-  const openToday = useCallback((): Promise<void> => {
+  const openToday = useCallback((hold?: HoldTodayInput): Promise<void> => {
     const { vaultPath, ready, entries, dateDisplayFormat, openNoteWhenLoaded, createPageAt, onFailed, now } = latest.current
     if (!ready || !vaultPath) return Promise.resolve()
     const date = now?.() ?? new Date()
@@ -51,12 +61,33 @@ export function useTodayPage(options: Options) {
     const path = joinVaultPath(vaultPath, relativePath)
     const existing = entries.find(entry => notePathsMatch(entry.path, path))
     const title = formatDateForDisplay(date, dateDisplayFormat)
-    const open = existing
-      ? openNoteWhenLoaded(existing).then((shown): ExactPageOutcome => {
-        if (shown) requestEditorFocus({ path: existing.path, cursorAtEnd: true })
+    let open: Promise<ExactPageOutcome>
+    if (existing) {
+      const opening = openNoteWhenLoaded(existing, { commitNow: true })
+      // Same task turn as the command: a ready page takes the next key; otherwise a draft field may.
+      const focused = tryFocusReadyPage(existing.path)
+      const report = hold?.(existing.path, focused) ?? null
+      open = opening.then((shown): ExactPageOutcome => {
+        if (shown && report) report.shown(existing.path)
+        else if (!shown) report?.created(existing.path)
+        else if (!focused) requestEditorFocus({ path: existing.path, cursorAtEnd: true })
         return shown ? 'opened' : 'created'
+      }, (error: unknown) => {
+        report?.created(existing.path)
+        throw error
       })
-      : createPageAt({ vaultPath, relativePath, title, content: dailyPageContent(title) })
+    } else {
+      const report = hold?.(path, false) ?? null
+      open = createPageAt({ vaultPath, relativePath, title, content: dailyPageContent(title) }).then(outcome => {
+        if (outcome === 'opened') report?.shown(path)
+        else if (outcome === 'created') report?.created(path)
+        else report?.failed()
+        return outcome
+      }, (error: unknown) => {
+        report?.failed()
+        throw error
+      })
+    }
     const epoch = session.current.epoch
     // A failure from an earlier vault session is not news for the current one.
     const fail = () => { if (session.current.epoch === epoch) onFailed() }

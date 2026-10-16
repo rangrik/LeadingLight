@@ -2,6 +2,11 @@
 
 Audit date: 2026-10-15. Tauri Rust/API is 2.12.4; CLI is 2.12.3, the stable registry versions checked for this milestone. Compatible direct dependency upgrades and the Rust lockfile were refreshed.
 
+The capture-and-resume candidate adds `yaml` 2.9.1 as a direct dependency, verified against
+the stable registry release. It validates Favorite frontmatter before a narrow patch, without
+reformatting the document. The lockfile also normalizes inherited Tiptap peer resolutions to
+the already declared 3.22.5 version; this does not upgrade the editor to its latest major.
+
 ## Deliberately held for compatibility
 
 These are not claimed to be latest. Updating the editor requires rebasing the inherited correctness patches; other major upgrades need separate migration and regression verification after the first usable split-pane milestone.

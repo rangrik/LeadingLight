@@ -1,0 +1,6 @@
+.ll-capture { position: fixed; right: 16px; bottom: 16px; z-index: 30; display: flex; flex-direction: column; gap: 8px; width: min(360px, calc(100vw - 32px)); padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--popover); color: var(--popover-foreground); box-shadow: 0 4px 16px rgb(0 0 0 / 0.12); }
+.ll-capture[data-cover="true"] { padding: 24px 32px; border: none; border-radius: 0; background: var(--background); color: var(--foreground); box-shadow: none; }
+.ll-capture-field { flex: 1; min-height: 72px; max-height: 160px; resize: none; }
+.ll-capture[data-cover="true"] .ll-capture-field { max-height: none; padding: 0; border: none; box-shadow: none; font-size: 16px; line-height: 1.6; }
+.ll-capture-status { margin: 0; color: var(--muted-foreground); font-size: 12px; }
+.ll-capture-actions { display: flex; flex-wrap: wrap; gap: 6px; }

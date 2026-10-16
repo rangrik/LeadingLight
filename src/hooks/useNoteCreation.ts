@@ -830,11 +830,21 @@ type ImmediateCreationPath =
   | 'folder_header'
   | 'type_section'
 
+/** Where a New page with a pending draft field learns what happened; it then owns focus. */
+export interface PlainCreateOutcome {
+  failed: () => void
+  created: (path: string) => void
+  shown: (path: string) => void
+}
+
 export interface ImmediateCreateOptions {
   creationPath?: ImmediateCreationPath
   format?: NoteFormat
   folderPath?: string
   vaultPath?: string
+  /** New page: an empty untyped file, body first. An explicit type, folder or sheet wins. */
+  plain?: boolean
+  onOutcome?: PlainCreateOutcome
 }
 
 interface ImmediateCreateRequest extends ImmediateCreateOptions {
@@ -910,7 +920,64 @@ function immediateNoteRelativePath(slug: string, folderPath?: string): string {
   return folder ? `${folder}/${slug}.md` : `${slug}.md`
 }
 
+function isPlainCapture(request: ImmediateCreateRequest): boolean {
+  return request.plain === true && !request.type && !request.folderPath
+    && normalizeNoteFormat(request.format) !== NOTE_FORMAT_SHEET
+}
+
+export function isPlainCaptureRequest(type: string | undefined, options: ImmediateCreateOptions): boolean {
+  return isPlainCapture({ ...options, type })
+}
+
+// Zero bytes: no type, template, defaults or heading until the person writes one.
+function resolvePlainCapture(deps: ImmediateCreateDeps, request: ImmediateCreateRequest): ResolvedEntry {
+  const slug = generateUntitledFilename(deps.entries, 'Page', deps.pendingSlugs)
+  const creationVaultPath = resolveImmediateCreationVaultPath(deps, request)
+  const entry: VaultEntry = {
+    ...buildNewEntry({
+      path: joinVaultPath(creationVaultPath, immediateNoteRelativePath(slug)),
+      slug,
+      title: slug_to_title(slug),
+      type: 'Note',
+      status: null,
+    }),
+    isA: null,
+    titleSource: 'filename',
+    workspace: workspaceForVaultPath(creationVaultPath, deps.vaults, deps.defaultWorkspacePath),
+  }
+  return { entry, content: '' }
+}
+
 async function createNoteImmediate({ deps, request, target }: QueuedImmediateCreate): Promise<boolean> {
+  const plain = isPlainCapture(request)
+  const report = plain ? request.onOutcome : undefined
+  const resolved = plain ? resolvePlainCapture(deps, request) : resolveContextualNote(deps, request)
+  const path = resolved.entry.path
+  const didPersist = await persistImmediateEntry(deps, resolved.entry, resolved.content)
+  if (!didPersist) {
+    report?.failed()
+    return false
+  }
+  // The written file stays; its own vault lists it again when reopened.
+  if (!target.inSession()) {
+    report?.created(path)
+    return true
+  }
+
+  cacheNoteContent(path, resolved.content, resolved.entry)
+  const opening = target.open(resolved.entry, resolved.content)
+  addEntryWithMock(resolved.entry, resolved.content, deps.addEntry)
+  if (!report) {
+    if (await opening && target.isActive()) signalFocusEditor({ path, selectTitle: !plain })
+    return true
+  }
+  // The draft field keeps focus and hands it over itself.
+  if (await opening.catch(() => false)) report.shown(path)
+  else report.created(path)
+  return true
+}
+
+function resolveContextualNote(deps: ImmediateCreateDeps, request: ImmediateCreateRequest): ResolvedEntry {
   const noteType = request.type || 'Note'
   const noteFormat = normalizeNoteFormat(request.format)
   const untitledLabel = noteFormat === NOTE_FORMAT_SHEET ? 'Sheet' : noteType
@@ -935,7 +1002,7 @@ async function createNoteImmediate({ deps, request, target }: QueuedImmediateCre
     }),
     workspace: workspaceForVaultPath(creationVaultPath, deps.vaults, deps.defaultWorkspacePath),
   }
-  const resolved = applyTypeDefaults({
+  return applyTypeDefaults({
     entry,
     content: buildNoteContent({
       title: null,
@@ -948,16 +1015,6 @@ async function createNoteImmediate({ deps, request, target }: QueuedImmediateCre
     }),
     defaults,
   })
-  const didPersist = await persistImmediateEntry(deps, resolved.entry, resolved.content)
-  if (!didPersist) return false
-  // The written file stays; its own vault lists it again when reopened.
-  if (!target.inSession()) return true
-
-  cacheNoteContent(resolved.entry.path, resolved.content, resolved.entry)
-  const opening = target.open(resolved.entry, resolved.content)
-  addEntryWithMock(resolved.entry, resolved.content, deps.addEntry)
-  if (await opening && target.isActive()) signalFocusEditor({ path: resolved.entry.path, selectTitle: true })
-  return true
 }
 
 function trackImmediateCreate(request: ImmediateCreateRequest, didCreate: boolean): void {
@@ -1041,6 +1098,7 @@ function useImmediateCreateQueue(
       trackImmediateCreate(queued.request, didCreate)
     } catch (error) {
       console.warn('Failed to create immediate note:', error)
+      queued.request.onOutcome?.failed()
     }
     },
     [],

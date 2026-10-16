@@ -1,3 +1,4 @@
+import type { TitleSource } from '../types'
 import { parseFrontmatter } from './frontmatter'
 import { splitFrontmatter } from './wikilinks'
 
@@ -7,7 +8,7 @@ type MarkdownLine = string
 type NoteFilename = string
 
 interface ResolvedContentTitle {
-  source: 'h1' | 'frontmatter'
+  source: Exclude<TitleSource, 'filename'>
   title: DisplayTitle
 }
 
@@ -20,6 +21,7 @@ interface DisplayTitleInput {
 interface DisplayTitleState {
   title: DisplayTitle
   hasH1: boolean
+  titleSource: TitleSource
 }
 
 function replaceWikilinkAliases(text: MarkdownLine): MarkdownLine {
@@ -119,11 +121,13 @@ export function deriveDisplayTitleState({
     return {
       title: resolvedTitle.title,
       hasH1: resolvedTitle.source === 'h1',
+      titleSource: resolvedTitle.source,
     }
   }
 
   return {
     title: filenameStemToTitle(filename),
     hasH1: false,
+    titleSource: 'filename',
   }
 }

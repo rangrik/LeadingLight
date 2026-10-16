@@ -36,7 +36,8 @@ import { PropertyChips } from './note-item/PropertyChips'
 import { ChangeNoteContent } from './note-item/ChangeNoteContent'
 import { workspaceForEntry } from '../utils/workspaces'
 import { WorkspaceInitialsBadge } from './WorkspaceInitialsBadge'
-import { useDateDisplayFormat } from '../hooks/useAppPreferences'
+import { useAppLocale, useDateDisplayFormat } from '../hooks/useAppPreferences'
+import { isGeneratedCapture, pageLabel } from '../leadinglight/pageLabel'
 import { writeNoteDragData } from '../utils/noteDragDrop'
 
 const TYPE_ICON_MAP: Record<string, ComponentType<SVGAttributes<SVGSVGElement>>> = {
@@ -276,7 +277,8 @@ function InteractiveNoteDetails({
   return (
     <>
       <NoteTitleRow entry={entry} isBinary={false} isSelected={isSelected} noteStatus={noteStatus} />
-      <NoteSnippet snippet={entry.snippet} />
+      {/* A generated capture already shows its body as the label. */}
+      <NoteSnippet snippet={isGeneratedCapture(entry) ? null : entry.snippet} />
       <NotePropertySection
         entry={entry}
         displayProps={displayProps}
@@ -363,6 +365,7 @@ function NoteTitleRow({
   isSelected: boolean
   noteStatus: NoteStatus
 }) {
+  const locale = useAppLocale()
   return (
     <div
       className={cn(
@@ -374,7 +377,7 @@ function NoteTitleRow({
     >
       {hasStatusDot(noteStatus) && !isBinary && <StatusDot noteStatus={noteStatus} />}
       <NoteTitleIcon icon={entry.icon} size={15} className="mr-1" testId="note-title-icon" />
-      {entry.title}
+      {pageLabel(entry, locale)}
       {!isBinary && <StateBadge archived={entry.archived} />}
     </div>
   )

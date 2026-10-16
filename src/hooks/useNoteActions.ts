@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react'
 import type { VaultEntry, VaultPropertyValue } from '../types'
 import type { FrontmatterValue } from '../components/Inspector'
 import { cacheNoteContent } from './useTabManagement'
@@ -18,11 +18,21 @@ import {
   reloadTabsAfterRename,
   reloadVaultAfterRename,
 } from './useNoteRename'
-import { runFrontmatterAndApply, type FrontmatterOpOptions } from './frontmatterOps'
+import {
+  applyFrontmatterSuccess,
+  handleFrontmatterFailure,
+  propertyChange,
+  runFrontmatterAndApply,
+  type FrontmatterApplyCallbacks,
+  type FrontmatterOpOptions,
+} from './frontmatterOps'
 import { findByNotePath, notePathFilename, notePathsMatch } from '../utils/notePathIdentity'
 import type { VaultOption } from '../components/status-bar/types'
 import { canonicalFrontmatterKey } from '../utils/systemMetadata'
 import { useActionHistory, type ActionHistoryController, type ActionHistoryEntry } from './useActionHistory'
+import type { MutateExistingDocument, RunManualRename, RunPageExclusive } from './useAppSave'
+import { requestFavoriteState, type ApplyFavoriteState } from '../leadinglight/favoriteTransaction'
+import { createTranslator } from '../lib/i18n'
 
 export interface NoteActionsConfig {
   addEntry: (entry: VaultEntry) => void
@@ -59,6 +69,12 @@ export interface NoteActionsConfig {
   onTypeStateChanged?: () => void | Promise<void>
   /** Opens generated HTML in the system viewer without loading active content in Tolaria. */
   onOpenExternalFile?: (path: string) => void
+  /** The save queue's seam for changing an existing page; Favorites use it. */
+  mutateExistingDocument?: MutateExistingDocument
+  /** Runs a property write alone on its page, so it never overlaps a Favorite or another write. */
+  runPageExclusive?: RunPageExclusive
+  /** Runs the rename after a title edit through the manual rename barrier. */
+  runManualRename?: RunManualRename
 }
 
 function isTitleKey(key: string): boolean {
@@ -152,6 +168,8 @@ interface ApplyTitleRenamePathChangeParams {
   newPath: string
   newTitle: string
   path: string
+  /** The page's tab text when the native rename started. */
+  sourceContent: string | undefined
 }
 
 function tabPathsExceptRenamed(
@@ -169,8 +187,10 @@ async function applyTitleRenamePathChange({
   newPath,
   newTitle,
   path,
+  sourceContent,
 }: ApplyTitleRenamePathChangeParams): Promise<void> {
   const newFilename = notePathFilename(newPath)
+  const otherTabPaths = tabPathsExceptRenamed(deps.tabsRef.current, path, newPath)
   deps.onInternalVaultWrite?.(newPath)
   deps.onPathRenamed?.(path, newPath)
   deps.replaceEntry?.(path, {
@@ -178,32 +198,34 @@ async function applyTitleRenamePathChange({
     filename: newFilename,
     title: newTitle,
   } as Partial<VaultEntry> & { path: string })
-  const newContent = await loadNoteContent({ path: newPath })
+  // The file has moved, so its tab follows before the read; a failed read must not leave it behind.
   deps.setTabs((prev) =>
     prev.map((t) =>
       notePathsMatch(t.entry.path, path)
-        ? {
-            entry: {
-              ...t.entry,
-              path: newPath,
-              filename: newFilename,
-              title: newTitle,
-            },
-            content: newContent,
-          }
+        ? { entry: { ...t.entry, path: newPath, filename: newFilename, title: newTitle }, content: t.content }
         : t,
     ),
   )
   if (notePathsMatch(deps.activeTabPathRef.current, path)) deps.handleSwitchTab(newPath)
+  const newContent = await loadNoteContent({ path: newPath })
+  // The copy read back replaces only the text the rename started from; text typed meanwhile is newer.
+  deps.setTabs((prev) =>
+    prev.map((t) =>
+      notePathsMatch(t.entry.path, newPath) && t.content === sourceContent ? { ...t, content: newContent } : t,
+    ),
+  )
   await reloadTabsAfterRename({
-    tabPaths: tabPathsExceptRenamed(deps.tabsRef.current, path, newPath),
+    tabPaths: otherTabPaths,
     updateTabContent: deps.updateTabContent,
   })
 }
 
 async function renameAfterTitleChange({ path, newTitle, deps }: RenameAfterTitleChangeParams): Promise<void> {
-  const oldTitle = deps.tabsRef.current.find((t) => notePathsMatch(t.entry.path, path))?.entry.title
+  const tab = deps.tabsRef.current.find((t) => notePathsMatch(t.entry.path, path))
+  const oldTitle = tab?.entry.title
   deps.onInternalVaultWrite?.(path)
+  // What the rename stages is the saved file; the tab ref can predate the property write just settled.
+  const sourceContent = tab ? await loadNoteContent({ path }).catch(() => undefined) : undefined
   const result = await performRename({
     path,
     newTitle,
@@ -216,6 +238,7 @@ async function renameAfterTitleChange({ path, newTitle, deps }: RenameAfterTitle
       newPath: result.new_path,
       newTitle,
       deps,
+      sourceContent,
     })
   }
   await reloadVaultAfterRename(deps.reloadVault)
@@ -261,6 +284,7 @@ interface MaybeRenameAfterFrontmatterUpdateParams {
   key: string
   value: FrontmatterValue
   deps: TitleRenameDeps
+  config: NoteActionsConfig
 }
 
 async function flushBeforeNoteMutation(
@@ -292,13 +316,92 @@ async function maybeRenameAfterFrontmatterUpdate({
   key,
   value,
   deps,
+  config,
 }: MaybeRenameAfterFrontmatterUpdateParams): Promise<void> {
   if (!shouldRenameOnTitleUpdate(key, value)) return
-  try {
+  // Text the queue merged the write into is saved before the file moves.
+  const drain = config.runPageExclusive ? config.flushBeforeNoteMutation : undefined
+  const rename = async () => {
+    await drain?.(path)
     await renameAfterTitleChange({ path, newTitle: value, deps })
+  }
+  try {
+    await (config.runManualRename ? config.runManualRename(path, rename) : rename())
   } catch (err) {
     console.error('Failed to rename note after title change:', err)
   }
+}
+
+interface PropertyWrite {
+  op: 'update' | 'delete'
+  path: string
+  key: string
+  value?: FrontmatterValue
+  options?: FrontmatterOpOptions
+}
+
+/** Writes one property; the page's path once the write is on disk, else null. */
+type WritePropertyChange = (change: PropertyWrite) => Promise<string | null>
+
+const translate = createTranslator()
+
+/** The write runs as a change in the page's save queue, which merges it into any newer text. */
+async function writeInPageQueue(
+  config: NoteActionsConfig,
+  runPageExclusive: RunPageExclusive,
+  { op, path, key, value, options }: PropertyWrite,
+  { callbacks, activeTabPathRef }: { callbacks: FrontmatterApplyCallbacks; activeTabPathRef: MutableRefObject<string | null> },
+): Promise<string | null> {
+  let written: string | null = null
+  const fail = async (err: unknown) => {
+    await handleFrontmatterFailure({ op, path, err, callbacks, options })
+    return false
+  }
+  await runPageExclusive(path, async mutate => {
+    config.onInternalVaultWrite?.(path)
+    const admission = mutate(path, propertyChange(op, key, value))
+    if (!admission.admitted) return fail(new Error(`The page refused the property write: ${admission.reason}`))
+    const settled = await admission.done
+    if (!settled.current) return false
+    if (settled.kind !== 'returned') return fail(settled.error)
+    if (!activePathGuardAllowsMutation(settled.path, activeTabPathRef, options)) return false
+    applyFrontmatterSuccess({ op, path: settled.path, key, value, callbacks, options })
+    // The write is on disk, but newer edits that could not take it stay unsaved.
+    if (settled.integration === 'unmergedDraft') callbacks.toast(translate('save.error.unmergedDraft'))
+    config.onFrontmatterContentChanged?.(settled.path, settled.result)
+    written = settled.path
+    return true
+  })
+  return written
+}
+
+function usePropertyWriter(
+  config: NoteActionsConfig,
+  activeTabPathRef: MutableRefObject<string | null>,
+  { runFrontmatterOp, callbacks }: ReturnType<typeof useFrontmatterRunner>,
+): WritePropertyChange {
+  return useCallback(async (change) => {
+    const { op, path, key, value, options } = change
+    if (!activePathGuardAllowsMutation(path, activeTabPathRef, options)) return null
+    if (config.runPageExclusive) return writeInPageQueue(config, config.runPageExclusive, change, { callbacks, activeTabPathRef })
+    const written = await writeProperty(config, path, activeTabPathRef, options, () => runFrontmatterOp(op, path, key, value, options))
+    return written ? path : null
+  }, [activeTabPathRef, callbacks, config, runFrontmatterOp])
+}
+
+/** Without a save queue: saves the page's text, rechecks the active page, then writes one property. */
+async function writeProperty(
+  config: NoteActionsConfig,
+  path: string,
+  activeTabPathRef: MutableRefObject<string | null>,
+  options: FrontmatterOpOptions | undefined,
+  write: () => Promise<string | undefined>,
+): Promise<boolean> {
+  const canFlush = await flushBeforeNoteMutation(path, config.flushBeforeNoteMutation)
+  if (!canFlush) return false
+  if (!activePathGuardAllowsMutation(path, activeTabPathRef, options)) return false
+  config.onInternalVaultWrite?.(path)
+  return applyFrontmatterCallbacks({ config, path, newContent: await write() })
 }
 
 interface UpdateFrontmatterAndMaybeRenameParams {
@@ -307,7 +410,7 @@ interface UpdateFrontmatterAndMaybeRenameParams {
   key: string
   options?: FrontmatterOpOptions
   path: string
-  runFrontmatterOp: RunFrontmatterOp
+  writeChange: WritePropertyChange
   value: FrontmatterValue
 }
 
@@ -325,19 +428,14 @@ async function updateFrontmatterAndMaybeRename({
   key,
   options,
   path,
-  runFrontmatterOp,
+  writeChange,
   value,
 }: UpdateFrontmatterAndMaybeRenameParams): Promise<boolean> {
-  if (!activePathGuardAllowsMutation(path, deps.activeTabPathRef, options)) return false
-  const canFlush = await flushBeforeNoteMutation(path, config.flushBeforeNoteMutation)
-  if (!canFlush) return false
-  if (!activePathGuardAllowsMutation(path, deps.activeTabPathRef, options)) return false
+  const written = await writeChange({ op: 'update', path, key, value, options })
+  if (written === null) return false
 
-  config.onInternalVaultWrite?.(path)
-  const newContent = await runFrontmatterOp('update', path, key, value, options)
-  if (!applyFrontmatterCallbacks({ config, path, newContent })) return false
-
-  await maybeRenameAfterFrontmatterUpdate({ path, key, value, deps })
+  // After the page is let go, so the rename does not wait for this write.
+  await maybeRenameAfterFrontmatterUpdate({ path: written, key, value, deps, config })
   await notifyFrontmatterPersisted(config, key)
   return true
 }
@@ -522,7 +620,7 @@ function useFrontmatterActionHandlers(functionOptions: {
   handleSwitchTab: (path: string) => void
   setToastMessage: (msg: string | null) => void
   updateTabContent: (path: string, newContent: string) => void
-  runFrontmatterOp: RunFrontmatterOp
+  writeChange: WritePropertyChange
   actionHistory: ActionHistoryController
 }) {
   const {
@@ -535,7 +633,7 @@ function useFrontmatterActionHandlers(functionOptions: {
     handleSwitchTab,
     setToastMessage,
     updateTabContent,
-    runFrontmatterOp,
+    writeChange,
     actionHistory,
   } = functionOptions
   const applySnapshot = useCallback(
@@ -561,15 +659,13 @@ function useFrontmatterActionHandlers(functionOptions: {
         key,
         value: snapshot.value ?? null,
         options: { ...options, silent: true },
-        runFrontmatterOp,
+        writeChange,
       })
       return
     }
 
-    config.onInternalVaultWrite?.(currentPath)
-    const newContent = await runFrontmatterOp('delete', currentPath, key, undefined, { ...options, silent: true })
-    if (!applyFrontmatterCallbacks({ config, path: currentPath, newContent })) return
-    await notifyFrontmatterPersisted(config, key)
+    const deleted = await writeChange({ op: 'delete', path: currentPath, key, options: { ...options, silent: true } })
+    if (deleted !== null) await notifyFrontmatterPersisted(config, key)
     },
     [
     activeTabPathRef,
@@ -578,10 +674,10 @@ function useFrontmatterActionHandlers(functionOptions: {
     onPathRenamed,
     renameTabsRef,
     resolvePath,
-    runFrontmatterOp,
     setTabs,
     setToastMessage,
     updateTabContent,
+    writeChange,
     ],
   )
 
@@ -634,7 +730,7 @@ function useFrontmatterActionHandlers(functionOptions: {
       key,
       value,
       options,
-      runFrontmatterOp,
+      writeChange,
     })
     if (updated && shouldRecordHistory) {
       recordFrontmatterHistory(currentPath, key, before, { exists: true, value }, `Update ${key}`, options)
@@ -649,10 +745,10 @@ function useFrontmatterActionHandlers(functionOptions: {
       recordFrontmatterHistory,
       renameTabsRef,
       resolvePath,
-      runFrontmatterOp,
       setTabs,
       setToastMessage,
       updateTabContent,
+      writeChange,
     ],
   )
 
@@ -667,20 +763,14 @@ function useFrontmatterActionHandlers(functionOptions: {
             key,
           })
       : ABSENT_FRONTMATTER
-    if (!activePathGuardAllowsMutation(currentPath, activeTabPathRef, options)) return
-    const canFlush = await flushBeforeNoteMutation(currentPath, config.flushBeforeNoteMutation)
-    if (!canFlush) return
-    if (!activePathGuardAllowsMutation(currentPath, activeTabPathRef, options)) return
-
-    config.onInternalVaultWrite?.(currentPath)
-    const newContent = await runFrontmatterOp('delete', currentPath, key, undefined, options)
-    if (!applyFrontmatterCallbacks({ config, path: currentPath, newContent })) return
+    const deleted = await writeChange({ op: 'delete', path: currentPath, key, options })
+    if (deleted === null) return
     await notifyFrontmatterPersisted(config, key)
     if (shouldRecordHistory) {
       recordFrontmatterHistory(currentPath, key, before, ABSENT_FRONTMATTER, `Delete ${key}`, options)
     }
     },
-    [actionHistory, activeTabPathRef, config, recordFrontmatterHistory, resolvePath, runFrontmatterOp],
+    [actionHistory, config, recordFrontmatterHistory, resolvePath, writeChange],
   )
 
   const handleAddProperty = useCallback(
@@ -694,20 +784,14 @@ function useFrontmatterActionHandlers(functionOptions: {
             key,
           })
       : ABSENT_FRONTMATTER
-    if (!activePathGuardAllowsMutation(currentPath, activeTabPathRef, options)) return
-    const canFlush = await flushBeforeNoteMutation(currentPath, config.flushBeforeNoteMutation)
-    if (!canFlush) return
-    if (!activePathGuardAllowsMutation(currentPath, activeTabPathRef, options)) return
-
-    config.onInternalVaultWrite?.(currentPath)
-    const newContent = await runFrontmatterOp('update', currentPath, key, value, options)
-    if (!applyFrontmatterCallbacks({ config, path: currentPath, newContent })) return
+    const added = await writeChange({ op: 'update', path: currentPath, key, value, options })
+    if (added === null) return
     await notifyFrontmatterPersisted(config, key)
     if (shouldRecordHistory) {
       recordFrontmatterHistory(currentPath, key, before, { exists: true, value }, `Update ${key}`, options)
     }
     },
-    [actionHistory, activeTabPathRef, config, recordFrontmatterHistory, resolvePath, runFrontmatterOp],
+    [actionHistory, config, recordFrontmatterHistory, resolvePath, writeChange],
   )
 
   return {
@@ -733,35 +817,36 @@ function useFrontmatterRunner({
   setToastMessage: NoteActionsConfig['setToastMessage']
   updateEntry: NoteActionsConfig['updateEntry']
   updateTabContent: (path: string, newContent: string) => void
-}): RunFrontmatterOp {
-  return useCallback(
+}) {
+  const callbacks = useMemo<FrontmatterApplyCallbacks>(() => ({
+    cacheContent: cacheNoteContent,
+    updateTab: updateTabContent,
+    updateEntry,
+    toast: setToastMessage,
+    getEntry: (p) => findByNotePath(entries, p),
+    onMissingNotePath: (p) =>
+      handleMissingFrontmatterTarget({
+        activeTabPathRef,
+        closeAllTabs,
+        entries,
+        path: p,
+        reloadVault,
+        setToastMessage,
+      }),
+  }), [activeTabPathRef, closeAllTabs, entries, reloadVault, setToastMessage, updateEntry, updateTabContent])
+  const runFrontmatterOp = useCallback<RunFrontmatterOp>(
     (op, path, key, value, options) =>
       runFrontmatterAndApply({
-      op,
-      path,
-      key,
-      value,
-      callbacks: {
-        cacheContent: cacheNoteContent,
-        updateTab: updateTabContent,
-        updateEntry,
-        toast: setToastMessage,
-        getEntry: (p) => findByNotePath(entries, p),
-          onMissingNotePath: (p) =>
-            handleMissingFrontmatterTarget({
-          activeTabPathRef,
-          closeAllTabs,
-          entries,
-          path: p,
-          reloadVault,
-          setToastMessage,
-        }),
-        shouldApply: (p) => activePathGuardAllowsMutation(p, activeTabPathRef, options),
-      },
-      options,
-    }),
-    [activeTabPathRef, closeAllTabs, entries, reloadVault, setToastMessage, updateEntry, updateTabContent],
+        op,
+        path,
+        key,
+        value,
+        callbacks: { ...callbacks, shouldApply: (p) => activePathGuardAllowsMutation(p, activeTabPathRef, options) },
+        options,
+      }),
+    [activeTabPathRef, callbacks],
   )
+  return { runFrontmatterOp, callbacks }
 }
 
 function useRenamedNotePathResolver(onPathRenamed?: (oldPath: string, newPath: string) => void) {
@@ -791,6 +876,7 @@ function useRenamedNotePathResolver(onPathRenamed?: (oldPath: string, newPath: s
 
 interface NoteActionsResultParts {
   actionHistory: ActionHistoryController
+  applyFavoriteState: ApplyFavoriteState
   createPageAt: (request: ExactPageRequest) => Promise<ExactPageOutcome>
   creation: ReturnType<typeof useNoteCreation>
   frontmatterActions: ReturnType<typeof useFrontmatterActionHandlers>
@@ -802,6 +888,7 @@ interface NoteActionsResultParts {
 
 function buildNoteActionsResult({
   actionHistory,
+  applyFavoriteState,
   createPageAt,
   creation,
   frontmatterActions,
@@ -828,6 +915,7 @@ function buildNoteActionsResult({
     handleRenameFilename: rename.handleRenameFilename,
     handleMoveNoteToFolder: rename.handleMoveNoteToFolder,
     handleMoveNoteToWorkspace: rename.handleMoveNoteToWorkspace,
+    applyFavoriteState,
     actionHistory,
     canUndo: actionHistory.canUndo,
     canRedo: actionHistory.canRedo,
@@ -953,7 +1041,7 @@ export function useNoteActions(config: NoteActionsConfig) {
   })
   const rename = useConfiguredNoteRename({ config, handlePathRenamed, tabMgmt, updateTabContent })
   const handleNavigateWikilink = useWikilinkNavigation({ creation, entries, handleSelectNote, tabMgmt })
-  const runFrontmatterOp = useFrontmatterRunner({
+  const frontmatterRunner = useFrontmatterRunner({
     activeTabPathRef: tabMgmt.activeTabPathRef,
     closeAllTabs: tabMgmt.closeAllTabs,
     entries,
@@ -962,6 +1050,7 @@ export function useNoteActions(config: NoteActionsConfig) {
     updateEntry,
     updateTabContent,
   })
+  const writeChange = usePropertyWriter(config, tabMgmt.activeTabPathRef, frontmatterRunner)
   const frontmatterActions = useFrontmatterActionHandlers({
     config,
     onPathRenamed: handlePathRenamed,
@@ -972,12 +1061,18 @@ export function useNoteActions(config: NoteActionsConfig) {
     handleSwitchTab: tabMgmt.handleSwitchTab,
     setToastMessage,
     updateTabContent,
-    runFrontmatterOp,
+    writeChange,
     actionHistory,
   })
+  const { mutateExistingDocument } = config
+  const applyFavoriteState = useCallback<ApplyFavoriteState>(
+    (path, state) => requestFavoriteState(mutateExistingDocument, resolveActionPath(path), state),
+    [mutateExistingDocument, resolveActionPath],
+  )
 
   return buildNoteActionsResult({
     actionHistory,
+    applyFavoriteState,
     createPageAt,
     creation,
     frontmatterActions,

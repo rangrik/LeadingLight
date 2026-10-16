@@ -9,6 +9,8 @@ import { isSelectionActive } from '../SidebarParts'
 import { SidebarGroupHeader } from './SidebarGroupHeader'
 import { SIDEBAR_ITEM_PADDING, SIDEBAR_SECTION_CONTENT_PADDING_BOTTOM } from './sidebarStyles'
 import { translate, type AppLocale } from '../../lib/i18n'
+import { cueFor, duplicateCues, pageLabel } from '../../leadinglight/pageLabel'
+import { notePathsMatch } from '../../utils/notePathIdentity'
 
 const FAVORITE_TYPE_ICON_MAP: Record<string, string> = {
   Project: 'wrench',
@@ -36,11 +38,15 @@ function getFavoriteIcon(entry: VaultEntry, typeEntryMap: Record<string, VaultEn
 
 function SortableFavoriteItem({
   entry,
+  label,
+  cue,
   isActive,
   onSelect,
   typeEntryMap,
 }: {
   entry: VaultEntry
+  label: string
+  cue?: string
   isActive: boolean
   onSelect: () => void
   typeEntryMap: Record<string, VaultEntry>
@@ -71,6 +77,7 @@ function SortableFavoriteItem({
           gap: 4,
           ...(isActive ? { background: typeLightColor } : {}),
         }}
+        aria-current={isActive ? 'page' : undefined}
         onClick={onSelect}
       >
         <div className="flex min-w-0 flex-1 items-center" style={{ gap: 4 }}>
@@ -79,7 +86,8 @@ function SortableFavoriteItem({
             className="min-w-0 truncate border-0 bg-transparent p-0 text-left text-[13px] font-medium"
             style={{ marginLeft: 4, color: isActive ? typeColor : undefined }}
           >
-            {entry.title}
+            {label}
+            {cue && <span className="ml-1.5 text-xs font-normal text-muted-foreground">{cue}</span>}
           </span>
         </div>
       </button>
@@ -108,16 +116,20 @@ interface FavoritesSectionProps {
   onSelect: (selection: SidebarSelection) => void
   onSelectNote?: (entry: VaultEntry) => void
   onReorder?: (orderedPaths: string[]) => void
+  /** The page in the active pane. */
+  activePath?: string | null
+  vaultRootPath?: string
   collapsed: boolean
   locale?: AppLocale
   onToggle: () => void
 }
 
 export function FavoritesSection(options: FavoritesSectionProps) {
-  const { entries, selection, onSelect, onSelectNote, onReorder, collapsed, locale = 'en', onToggle } = options
+  const { entries, selection, onSelect, onSelectNote, onReorder, activePath, vaultRootPath = '', collapsed, locale = 'en', onToggle } = options
   const favorites = useMemo(() => sortFavorites(entries), [entries])
   const favoriteIds = useMemo(() => favorites.map((entry) => entry.path), [favorites])
   const typeEntryMap = useMemo(() => buildTypeEntryMap(entries), [entries])
+  const cues = useMemo(() => duplicateCues(favorites, vaultRootPath, locale), [favorites, vaultRootPath, locale])
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   const handleDragEnd = useCallback(
@@ -140,7 +152,20 @@ export function FavoritesSection(options: FavoritesSectionProps) {
     [onSelect, onSelectNote],
   )
 
-  if (favorites.length === 0) return null
+  // First use: one quiet line, only while a page is open that could be starred. Nothing is stored.
+  if (favorites.length === 0) {
+    if (!activePath) return null
+    return (
+      <div style={{ padding: '0 6px' }}>
+        <SidebarGroupHeader label={translate(locale, 'sidebar.group.favorites')} collapsed={collapsed} onToggle={onToggle} />
+        {!collapsed && (
+          <p className="text-xs text-muted-foreground" style={{ padding: SIDEBAR_ITEM_PADDING.withCount, paddingBottom: SIDEBAR_SECTION_CONTENT_PADDING_BOTTOM }}>
+            {translate(locale, 'leadinglight.favorites.emptyHint')}
+          </p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div style={{ padding: '0 6px' }}>
@@ -165,7 +190,9 @@ export function FavoritesSection(options: FavoritesSectionProps) {
                 <SortableFavoriteItem
                   key={entry.path}
                   entry={entry}
-                  isActive={isSelectionActive(selection, {
+                  label={pageLabel(entry, locale)}
+                  cue={cueFor(cues, entry)}
+                  isActive={notePathsMatch(activePath, entry.path) || isSelectionActive(selection, {
                     kind: 'entity',
                     entry,
                   })}

@@ -1,17 +1,29 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useEditorTabSwap } from './useEditorTabSwap'
+import type { VaultEntry } from '../types'
+
+// The hook only reads `path`; the other fields are a plain, fully typed page.
+function makeEntry(path: string, title: string, filename: string): VaultEntry {
+  return {
+    path, title, filename, isA: '', aliases: [], belongsTo: [], relatedTo: [], status: 'Active', archived: false,
+    modifiedAt: null, createdAt: null, fileSize: 0, snippet: '', wordCount: 0, relationships: {}, icon: null,
+    color: null, order: null, sidebarLabel: null, template: null, sort: null, view: null, visible: null,
+    organized: false, favorite: false, favoriteIndex: null, listPropertiesDisplay: [], outgoingLinks: [],
+    properties: {}, hasH1: false,
+  }
+}
 
 function makeTab(path: string, title: string, body: string) {
   return {
-    entry: { path, title, filename: `${title}.md`, type: 'Note', status: 'Active', aliases: [], isA: '' } as never,
+    entry: makeEntry(path, title, `${title}.md`),
     content: `---\ntitle: ${title}\n---\n\n# ${title}\n\n${body}`,
   }
 }
 
 function makeContentTab(path: string, content: string) {
   return {
-    entry: { path, title: path.replace(/\.md$/, ''), filename: path, type: 'Note', status: 'Active', aliases: [], isA: '' } as never,
+    entry: makeEntry(path, path.replace(/\.md$/, ''), path),
     content,
   }
 }
@@ -55,7 +67,7 @@ function setupMountedEditorMocks() {
   vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0 })
 }
 
-function renderRenameHarness(options?: { onContentChange?: ReturnType<typeof vi.fn> }) {
+function renderRenameHarness(options?: { onContentChange?: (path: string, content: string) => void }) {
   const editor = makeMockEditor('# Fresh Title\n\nBody typed live')
   const onContentChange = options?.onContentChange ?? vi.fn()
   const untitledTab = makeTab('untitled-note-123.md', 'Untitled Note 123', 'Body')
@@ -186,6 +198,30 @@ describe('useEditorTabSwap untitled rename continuity', () => {
     // Keeping the draft's blocks here would save them over "Existing text".
     expect(editor.tryParseMarkdownToBlocks).toHaveBeenCalled()
     expect(result.current.documentSessionRef.current).toBe(session + 1)
+  })
+
+  it('keeps the live page and its late typing through a rename unrelated to the title', async () => {
+    setupMountedEditorMocks()
+    const editor = makeMockEditor('# Note B\n\nSaved words\n\nLate words')
+    const onContentChange = vi.fn()
+    const noteB = makeTab('note-b.md', 'Note B', 'Saved words')
+    // Recorded by the pane: the same page under a name that ignores its title.
+    const ledger = { ...makeTab('harbor-ledger.md', 'Note B', 'Saved words'), renamedFrom: 'note-b.md' }
+    const { result, rerender } = renderHook(
+      ({ tabs, activeTabPath }) => useEditorTabSwap({ tabs, activeTabPath, editor: editor as never, onContentChange }),
+      { initialProps: { tabs: [noteB], activeTabPath: 'note-b.md' } },
+    )
+    await settleRenameHarness(editor)
+    // The last words are still inside the change delay when the rename lands.
+    act(() => { result.current.handleEditorChange() })
+
+    rerender({ tabs: [ledger], activeTabPath: 'harbor-ledger.md' })
+    await act(() => new Promise(r => setTimeout(r, 0)))
+
+    expect(onContentChange).toHaveBeenCalledWith('note-b.md', expect.stringContaining('Late words'))
+    expect(editor.tryParseMarkdownToBlocks).not.toHaveBeenCalled()
+    expect(editor.replaceBlocks).not.toHaveBeenCalled()
+    expect(result.current.editorContentPath).toBe('harbor-ledger.md')
   })
 
   it('keeps the live editor session when the renamed tab arrives one render after the path switch', async () => {

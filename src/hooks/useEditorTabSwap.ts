@@ -27,10 +27,7 @@ import {
 import {
   blankParagraphBlocks,
   extractEditorBody,
-  getH1TextFromBlocks,
   isUntitledPath,
-  pathStem,
-  slugifyPathStem,
 } from './editorTabContent'
 import { clearEditorDomSelection } from './editorDomSelection'
 import { editorDocumentSignature, isBlankEditorDocument } from './editorDocumentState'
@@ -170,39 +167,6 @@ function trySerializeEditorBody(
 function normalizeTabBody(options: { content: string }): string {
   const { content } = options
   return compactMarkdown(extractEditorBody(content))
-}
-
-function renameBodiesOverlap(options: {
-  currentBody: string
-  nextBody: string
-}): boolean {
-  const { currentBody, nextBody } = options
-  const current = currentBody.trimEnd()
-  const next = nextBody.trimEnd()
-  return current === next
-    || current.startsWith(next)
-    || next.startsWith(current)
-}
-
-function isUntitledRenameTransition(
-  prevPath: string | null,
-  nextPath: string | null,
-  activeTab: Tab | undefined,
-  editor: ReturnType<typeof useCreateBlockNote>,
-): boolean {
-  if (!prevPath || !nextPath || !activeTab || !isUntitledPath(prevPath)) return false
-  // Only a recorded rename may keep the live blocks; a different file with a similar title and text must load.
-  if (activeTab.renamedFrom !== prevPath) return false
-
-  const currentHeading = getH1TextFromBlocks(editor.document)
-  if (!currentHeading || slugifyPathStem(currentHeading) !== pathStem(nextPath)) return false
-  const currentBody = trySerializeEditorBody(editor, 'untitled rename comparison')
-  if (currentBody === null) return false
-
-  return renameBodiesOverlap({
-    currentBody,
-    nextBody: normalizeTabBody({ content: activeTab.content }),
-  })
 }
 
 function activeEditorChangePath(options: {
@@ -368,7 +332,7 @@ function syncActivePathTransition(options: {
   })
   if (shouldWaitForActiveTab({ pathChanged, activeTabPath, activeTab })) return true
 
-  const renamed = preserveUntitledRenameState({
+  const renamed = preserveRenamedDocument({
     prevPath,
     activeTabPath,
     activeTab,
@@ -623,15 +587,18 @@ function cacheStableActivePath(options: {
   } = options
 
   if (!activeTabPath || !activeTab || !editorMountedRef.current) return
+  const moved = editorContentPathRef.current !== activeTabPath
   editorContentPathRef.current = activeTabPath
   cacheEditorState(cache, activeTabPath, {
     blocks: editor.document,
     scrollTop: readEditorScrollTop(editor),
     sourceContent: activeTab.content,
   })
+  // Shown without a swap, so send the signal a swap would; readiness waits for it.
+  if (moved) signalTabSwap({ path: activeTabPath })
 }
 
-function preserveUntitledRenameState(options: {
+function preserveRenamedDocument(options: {
   prevPath: string | null
   activeTabPath: string | null
   activeTab: Tab | undefined
@@ -640,29 +607,13 @@ function preserveUntitledRenameState(options: {
   editorMountedRef: MutableRefObject<boolean>
   editorContentPathRef: EditorContentPathRef
 }) {
-  const {
-    prevPath,
-    activeTabPath,
-    activeTab,
-    cache,
-    editor,
-    editorMountedRef,
-    editorContentPathRef,
-  } = options
-
-  if (!prevPath || !activeTabPath) return false
-  if (!isUntitledRenameTransition(prevPath, activeTabPath, activeTab, editor)) return false
+  const { prevPath, activeTab, cache, editorMountedRef, editorContentPathRef } = options
+  // Only a recorded rename of the page the editor really holds keeps its live blocks.
+  if (!prevPath || activeTab?.renamedFrom !== prevPath) return false
+  if (editorContentPathRef.current !== prevPath || !editorMountedRef.current) return false
 
   cache.delete(prevPath)
-  cacheStableActivePath({
-    cache,
-    activeTabPath,
-    activeTab,
-    editor,
-    editorMountedRef,
-    editorContentPathRef,
-  })
-  requestNextFrame(() => signalEditorTabSwapped(activeTabPath))
+  cacheStableActivePath(options)
   return true
 }
 

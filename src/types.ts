@@ -63,10 +63,14 @@ export interface VaultEntry {
   properties: Record<string, VaultPropertyValue>
   /** Whether the note body has an H1 heading on the first non-empty line. */
   hasH1: boolean
+  /** Which rule gave `title`. Derived, never stored; absent means unknown. */
+  titleSource?: TitleSource
   /** File kind: "markdown", "text", or "binary". Determines editor behavior.
    *  Defaults to "markdown" when absent (for backwards compatibility). */
   fileKind?: 'markdown' | 'text' | 'binary'
 }
+
+export type TitleSource = 'h1' | 'frontmatter' | 'filename'
 
 export interface WorkspaceIdentity {
   id: string

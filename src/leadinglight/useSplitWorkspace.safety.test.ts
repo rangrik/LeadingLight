@@ -10,7 +10,8 @@ vi.mock('../mock-tauri', () => ({ isTauri: () => false, mockInvoke: vi.fn() }))
 
 const note = (name: string, extra: Partial<VaultEntry> = {}): VaultEntry => ({ path: `/vault/${name}.md`, filename: `${name}.md`,
   title: name, isA: 'Note', aliases: [], belongsTo: [], relatedTo: [], status: null, archived: false, modifiedAt: 1, createdAt: 1,
-  fileSize: 1, snippet: '', wordCount: 0, relationships: {}, icon: null, color: null, order: null, template: null, sort: null,
+  fileSize: 1, snippet: '', wordCount: 0, relationships: {}, icon: null, color: null, order: null, sidebarLabel: null, template: null, sort: null,
+  view: null, visible: null, organized: false, favorite: false, favoriteIndex: null, listPropertiesDisplay: [], properties: {}, hasH1: true,
   outgoingLinks: [], ...extra })
 const [a, b, c] = ['a', 'b', 'c'].map(name => note(name))
 const entries = [a, b, c]
@@ -93,6 +94,20 @@ describe('finder selection', () => {
     expect(hook.result.current.splitWorkspace.paths).toEqual([a.path, b.path])
   })
 
+  it('a keyboard command commits the switch to the pane already showing the page before it returns', async () => {
+    const hook = setup()
+    await act(() => hook.result.current.handleSelectNote(a))
+    act(() => hook.result.current.splitWorkspace.openSplit('horizontal'))
+    await act(() => hook.result.current.handleSelectNote(b))
+    act(() => hook.result.current.splitWorkspace.focusPane(0))
+    let activeOnReturn: number | undefined
+    act(() => {
+      void hook.result.current.splitWorkspace.openNoteWhenLoaded(b, { commitNow: true })
+      activeOnReturn = hook.result.current.splitWorkspace.activePane
+    })
+    expect(activeOnReturn).toBe(1)
+  })
+
   it.each([['a binary file', { ...c, fileKind: 'binary' as const }], ['an unlisted page', note('gone')]])('reports %s as not opened', async (_name, entry) => {
     const hook = setup()
     await act(() => hook.result.current.handleSelectNote(a))
@@ -149,6 +164,34 @@ describe('reserved creation open', () => {
     await act(async () => { saves[1](); await selecting })
     expect(duplicate).toBe(false)
     expect(hook.result.current.splitWorkspace.paths).toEqual([created.path, null])
+  })
+})
+
+// Seam: a draft may hand over only while the command still owns its pane; a later visit must not count.
+describe('command navigation mark', () => {
+  const created = note('created')
+  const setup = () => renderHook(({ vaultPath }) => useSplitWorkspace({ vaultPath, entries: [...entries, created], restoreWorkspace: false }),
+    { initialProps: { vaultPath: '/vault' } })
+
+  it('survives its own creation open but not navigation, closing the pane or leaving and returning to the vault', async () => {
+    const hook = setup()
+    await act(() => hook.result.current.handleSelectNote(a))
+    const mark = hook.result.current.splitWorkspace.markNavigation()
+    await act(async () => { await hook.result.current.reserveOpen().open(created, '') })
+    expect(mark.current()).toBe(true)
+    await act(() => hook.result.current.handleSelectNote(b))
+    await act(() => hook.result.current.handleSelectNote(created))
+    expect(mark.current()).toBe(false)
+
+    act(() => hook.result.current.splitWorkspace.openSplit('horizontal'))
+    const second = hook.result.current.splitWorkspace.markNavigation()
+    await act(() => hook.result.current.splitWorkspace.closePane(second.pane as 0 | 1))
+    expect(second.current()).toBe(false)
+
+    const returning = hook.result.current.splitWorkspace.markNavigation()
+    hook.rerender({ vaultPath: '/other' })
+    hook.rerender({ vaultPath: '/vault' })
+    expect(returning.current()).toBe(false)
   })
 })
 

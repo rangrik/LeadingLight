@@ -258,15 +258,19 @@ export function useEditorSaveWithLinks(config: {
   const saveContent = useCallback((path: string, content: string) => {
     scheduleMetadataSync(path, content, true)
   }, [scheduleMetadataSync])
-  const editor = useEditorSave({ ...config, updateVaultContent: saveContent })
+  const onContentRebased = useCallback((path: string, content: string) => {
+    scheduleMetadataSync(path, content, false)
+  }, [scheduleMetadataSync])
+  const editor = useEditorSave({ ...config, updateVaultContent: saveContent, onContentRebased })
   const { handleContentChange: rawOnChange } = editor
   const handleContentChange = useCallback((path: string, content: string) => {
     const typeTemplatePatch = deriveLiveTypeTemplatePatch(content)
     if (typeTemplatePatch) {
       flushSync(() => updateEntry(path, typeTemplatePatch))
     }
-    rawOnChange(path, content)
+    const receipt = rawOnChange(path, content)
     scheduleMetadataSync(path, content, false)
+    return receipt
   }, [rawOnChange, scheduleMetadataSync, updateEntry])
 
   return { ...editor, handleContentChange }

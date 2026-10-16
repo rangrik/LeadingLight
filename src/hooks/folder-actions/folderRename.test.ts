@@ -61,6 +61,7 @@ function tab(path: string): FolderTab {
 function setupRename(
 	selection: SidebarSelection = { kind: "folder", path: "projects/sub" },
 ) {
+	const hold = { commit: vi.fn(), release: vi.fn() };
 	const options = {
 		vaultPath: "/vault",
 		selection,
@@ -68,13 +69,14 @@ function setupRename(
 		setTabs: vi.fn(),
 		activeTabPathRef: { current: "/vault/projects/sub/note.md" },
 		handleSwitchTab: vi.fn(),
+		prepareFolderMove: vi.fn(async () => hold),
 		reloadFolders: vi.fn().mockResolvedValue([]),
 		reloadVault: vi.fn().mockResolvedValue([entry("/vault/work/sub/note.md")]),
 		setToastMessage: vi.fn(),
 	};
 	const hook = renderHook(() => useFolderRename(options));
 	act(() => hook.result.current.startFolderRename("projects"));
-	return { ...hook, options };
+	return { ...hook, options, hold };
 }
 
 describe("folder rename paths", () => {
@@ -259,10 +261,12 @@ describe("useFolderRename", () => {
 
 	it("reports invoke failure and preserves rename mode, tabs, active tab and selection", async () => {
 		vi.mocked(mockInvoke).mockRejectedValue(new Error("Permission denied"));
-		const { result, options } = setupRename();
+		const { result, options, hold } = setupRename();
 		await act(async () => {
 			expect(await result.current.renameFolder("projects", "work")).toBe(false);
 		});
+		expect(hold.commit).not.toHaveBeenCalled();
+		expect(hold.release).toHaveBeenCalledOnce();
 		expect(result.current.renamingFolderPath).toBe("projects");
 		expect(options.setToastMessage).toHaveBeenCalledExactlyOnceWith(
 			"Failed to rename folder: Error: Permission denied",
@@ -274,9 +278,9 @@ describe("useFolderRename", () => {
 		expect(options.handleSwitchTab).not.toHaveBeenCalled();
 	});
 
-	it("reloads before remapping tabs and selection after a successful trimmed rename", async () => {
+	it("remaps tabs and lets the pages go before reloading, then remaps the selection", async () => {
 		vi.mocked(mockInvoke).mockResolvedValue(renameResult);
-		const { result, options } = setupRename();
+		const { result, options, hold } = setupRename();
 		await act(async () => {
 			expect(await result.current.renameFolder("projects", "  work  ")).toBe(
 				true,
@@ -288,14 +292,13 @@ describe("useFolderRename", () => {
 			newName: "work",
 		});
 		expect(result.current.renamingFolderPath).toBeNull();
+		expect(hold.commit).toHaveBeenCalledExactlyOnceWith("/vault/work");
+		expect(hold.release).toHaveBeenCalledOnce();
 		expect(options.reloadFolders).toHaveBeenCalledTimes(1);
 		expect(options.reloadVault).toHaveBeenCalledTimes(1);
-		expect(options.reloadFolders.mock.invocationCallOrder[0]).toBeLessThan(
-			options.reloadVault.mock.invocationCallOrder[0],
-		);
-		expect(options.reloadVault.mock.invocationCallOrder[0]).toBeLessThan(
-			options.setTabs.mock.invocationCallOrder[0],
-		);
+		const order = [hold.commit, options.setTabs, hold.release, options.reloadFolders, options.reloadVault]
+			.map((spy) => spy.mock.invocationCallOrder[0]);
+		expect(order).toEqual([...order].sort((a, b) => a - b));
 		const updateTabs = options.setTabs.mock.calls[0][0];
 		expect(updateTabs([tab("/vault/projects/sub/note.md")])).toEqual([
 			tab("/vault/work/sub/note.md"),

@@ -1,5 +1,5 @@
 import type { FolderNode, SidebarSelection, VaultEntry } from '../types'
-import type { FolderTab } from './folder-actions/folderActionUtils'
+import type { FolderMoveHold, FolderTab } from './folder-actions/folderActionUtils'
 import { useFolderDelete } from './folder-actions/useFolderDelete'
 import { useFolderRename } from './folder-actions/useFolderRename'
 
@@ -11,6 +11,7 @@ interface UseFolderActionsInput {
   activeTabPathRef: React.MutableRefObject<string | null>
   handleSwitchTab: (path: string) => void
   closeAllTabs: () => void
+  prepareFolderMove: (folderPath: string) => Promise<FolderMoveHold>
   reloadVault: () => Promise<VaultEntry[]>
   reloadFolders: () => Promise<FolderNode[]>
   setToastMessage: (message: string | null) => void
@@ -25,6 +26,7 @@ export function useFolderActions(options: UseFolderActionsInput) {
     activeTabPathRef,
     handleSwitchTab,
     closeAllTabs,
+    prepareFolderMove,
     reloadVault,
     reloadFolders,
     setToastMessage,
@@ -32,6 +34,7 @@ export function useFolderActions(options: UseFolderActionsInput) {
   const renameActions = useFolderRename({
     activeTabPathRef,
     handleSwitchTab,
+    prepareFolderMove,
     reloadFolders,
     reloadVault,
     selection,

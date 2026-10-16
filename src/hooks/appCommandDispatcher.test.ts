@@ -313,6 +313,32 @@ describe('appCommandDispatcher', () => {
     expect(handlers.onDeleteNote).toHaveBeenCalledWith('/vault/test.md')
   })
 
+  // Seam: while a pending draft field has the keyboard, no command source may change the page behind it.
+  it('refuses page commands from any source while a pending draft field has the keyboard, and keeps text and Save working', () => {
+    const handlers = makeHandlers()
+    const draft = document.body.appendChild(document.createElement('div'))
+    draft.dataset.pendingCapture = 'true'
+    draft.appendChild(document.createElement('textarea')).focus()
+
+    expect(executeAppCommand(APP_COMMAND_IDS.noteDelete, handlers, 'native-menu')).toBe(false)
+    expect(executeAppCommand(APP_COMMAND_IDS.noteToggleFavorite, handlers, 'renderer-keyboard')).toBe(false)
+    expect(executeAppCommand(APP_COMMAND_IDS.editToggleRawEditor, handlers, 'app-event')).toBe(false)
+    expect(handlers.onDeleteNote).not.toHaveBeenCalled()
+    expect(handlers.onToggleFavorite).not.toHaveBeenCalled()
+    expect(handlers.onToggleRawEditor).not.toHaveBeenCalled()
+
+    for (const id of [APP_COMMAND_IDS.editUndo, APP_COMMAND_IDS.editPastePlainText, APP_COMMAND_IDS.fileSave, APP_COMMAND_IDS.fileNewNote]) {
+      expect(executeAppCommand(id, handlers, 'native-menu')).toBe(true)
+    }
+    expect(handlers.onUndo).toHaveBeenCalledOnce()
+    expect(handlers.onPastePlainText).toHaveBeenCalledOnce()
+    expect(handlers.onSave).toHaveBeenCalledOnce()
+    expect(handlers.onCreateNote).toHaveBeenCalledOnce()
+
+    draft.remove()
+    expect(executeAppCommand(APP_COMMAND_IDS.noteDelete, handlers, 'native-menu')).toBe(true)
+  })
+
   it('uses the current multi-selection for delete and organize commands', () => {
     const handlers = makeHandlers()
     const deleteSelected = vi.fn()

@@ -18,6 +18,7 @@ import { useNoteListDrop } from './useNoteListDrop'
 import { useInspectorOverlay } from './useInspectorOverlay'
 import { notePathsMatch } from '../utils/notePathIdentity'
 import { PageDropOverlay } from './PageDropOverlay'
+import { pageLabel } from './pageLabel'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -34,6 +35,10 @@ function editorRefs() {
 }
 interface Props extends EditorProps {
   onCreatePage?: (title: string) => unknown | Promise<unknown>
+  /** Opens the finder on real recent pages; absent when there is nothing to resume. */
+  onResume?: () => void
+  /** The vault has no pages at all, so the empty pane leads with creation. */
+  emptyVault?: boolean
   transitionPending?: boolean
   workspace: SplitWorkspaceController
   unsavedPaths: Set<string>
@@ -84,7 +89,7 @@ export function SplitEditorWorkspace(props: Props) {
     const entry = path && canDragPages ? props.entries.find(item => notePathsMatch(item.path, path)) : undefined
     if (!entry || entry.fileKind === 'binary') return null
     const owner = ([0, 1] as const).find(pane => notePathsMatch(workspace.paths[pane], entry.path))
-    return { entry, title: entry.title || entry.filename, edges: owner === undefined ? DROP_EDGES : offeredEdges(workspace, owner) }
+    return { entry, title: pageLabel(entry, locale), edges: owner === undefined ? DROP_EDGES : offeredEdges(workspace, owner) }
   }
   const noteDrop = useNoteListDrop({ areaRef: containerRef, vaultPath: props.vaultPath ?? '', describe: droppableNote, onDrop: (path, target) => {
     const note = droppableNote(path)
@@ -193,7 +198,7 @@ export function SplitEditorWorkspace(props: Props) {
                 title={tab ? t('leadinglight.split.dragHint') : undefined}
                 aria-keyshortcuts={tab ? 'Alt+Shift+ArrowLeft Alt+Shift+ArrowRight Alt+Shift+ArrowUp Alt+Shift+ArrowDown' : undefined}
                 onPointerDown={tab && canDragPages ? event => pageDrag.startPageDrag({
-                  event, pane, title: tab.entry.title || tab.entry.filename, edges: offeredEdges(workspace, pane), origin: dragOrigin(pane),
+                  event, pane, title: pageLabel(tab.entry, locale), edges: offeredEdges(workspace, pane), origin: dragOrigin(pane),
                 }) : undefined}
                 onKeyDown={tab && canDragPages ? event => {
                   const edge = event.altKey && event.shiftKey && !event.metaKey && !event.ctrlKey ? arrowEdge(event.key) : null
@@ -206,7 +211,7 @@ export function SplitEditorWorkspace(props: Props) {
                   pickerTriggerRef.current = event.currentTarget
                   returnPickerFocusRef.current = true
                   setPickerPane(pane)
-                }}>{tab && <DotsSixVertical className="ll-page-grip" aria-hidden="true" />}<span>{tab?.entry.title || t('leadinglight.split.choose')}</span><CaretDown /></Button>
+                }}>{tab && <DotsSixVertical className="ll-page-grip" aria-hidden="true" />}<span>{tab ? pageLabel(tab.entry, locale) : t('leadinglight.split.choose')}</span><CaretDown /></Button>
               {tab && path && <span className="ll-save-state" data-state={unsavedPaths.has(path) ? 'unsaved' : 'saved'} role="status">{t(unsavedPaths.has(path) ? 'leadinglight.split.unsaved' : 'leadinglight.split.saved')}</span>}
               {tab && <Button variant="ghost" size="sm" className="ll-backlinks-count" data-count={backlinkCount} aria-label={backlinkLabel} title={backlinkLabel}
                 onClick={() => showBacklinks(pane)}><ArrowBendUpLeft aria-hidden="true" />{backlinkCount}</Button>}
@@ -224,7 +229,19 @@ export function SplitEditorWorkspace(props: Props) {
               onOpenEntry={entry => openBacklink(pane, entry)}
               revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
               backlinksEmptyLabel={t('inspector.backlinks.empty')} />
-              : <div className="ll-pane-empty"><p>{t('leadinglight.split.empty')}</p><span>{t('leadinglight.split.emptyHint')}</span><Button variant="outline" onClick={() => { activate(pane); props.onCreateNote?.() }}>{t('leadinglight.split.create')}</Button></div>}
+              : <div className="ll-pane-empty">
+                <p>{t(props.emptyVault ? 'leadinglight.split.emptyVault' : 'leadinglight.split.empty')}</p>
+                {props.emptyVault && <span>{t('leadinglight.split.emptyVaultHint')}</span>}
+                <div className="ll-pane-empty-actions">
+                  <Button variant="outline" onClick={() => { activate(pane); props.onCreateNote?.() }}>{t('leadinglight.split.create')}</Button>
+                  {props.onResume && !props.emptyVault && <Button variant="ghost" onClick={event => {
+                    activate(pane)
+                    // WebKit does not focus a clicked button; the finder returns focus here on Escape.
+                    event.currentTarget.focus({ preventScroll: true })
+                    props.onResume?.()
+                  }}>{t('leadinglight.split.resume')}</Button>}
+                </div>
+              </div>}
           </section>
         </Fragment>
       })}

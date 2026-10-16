@@ -4,6 +4,12 @@ import { isMissingFrontmatterTargetError, type FrontmatterOpOptions } from './fr
 import { trackEvent } from '../lib/telemetry'
 import { findTypeDefinition } from '../utils/typeDefinitions'
 import type { ActionHistoryController, ActionHistoryEntry } from './useActionHistory'
+import { createTranslator } from '../lib/i18n'
+import {
+  type ApplyFavoriteState,
+  type FavoriteOutcome,
+  type FavoriteState as SavedFavoriteState,
+} from '../leadinglight/favoriteTransaction'
 
 interface EntryActionsConfig {
   entries: VaultEntry[]
@@ -21,6 +27,8 @@ interface EntryActionsConfig {
   /** Called before trash/archive to flush unsaved editor content to disk. */
   onBeforeAction?: (path: string) => Promise<void>
   actionHistory?: ActionHistoryController
+  /** When present, Favorites change both keys inside the page's save queue. */
+  applyFavoriteState?: ApplyFavoriteState
 }
 
 type ArchiveActionDeps = Pick<
@@ -493,62 +501,116 @@ function useApplyFavoriteState(deps: EntryStateActionDeps): FavoriteReplay {
   return applyFavoriteState
 }
 
-async function toggleFavoriteEntry(
-  entry: VaultEntry,
-  entries: VaultEntry[],
-  deps: FavoriteActionDeps,
-  applyFavoriteState: FavoriteReplay,
-): Promise<void> {
+function favoriteTransitionFor(entry: VaultEntry, entries: VaultEntry[]): FavoriteTransition {
   const before = { favorite: entry.favorite, favoriteIndex: entry.favoriteIndex }
   if (entry.favorite) {
-    await runFavoriteTransition(
-      deps,
-      {
-        path: entry.path,
-        action: 'unfavorite',
-        eventName: 'note_unfavorited',
-        label: 'Remove from Favorites',
-        before,
-        after: { favorite: false, favoriteIndex: null },
-        rollback: { favorite: true, favoriteIndex: entry.favoriteIndex },
-        rollbackToast: 'Failed to unfavorite — rolled back',
-      },
-      applyFavoriteState,
-    )
-    return
-  }
-  const newIndex = nextFavoriteIndex(entries)
-  await runFavoriteTransition(
-    deps,
-    {
+    return {
       path: entry.path,
-      action: 'favorite',
-      eventName: 'note_favorited',
-      label: 'Add to Favorites',
+      action: 'unfavorite',
+      eventName: 'note_unfavorited',
+      label: 'Remove from Favorites',
       before,
-      after: { favorite: true, favoriteIndex: newIndex },
-      rollback: { favorite: false, favoriteIndex: null },
-      rollbackToast: 'Failed to favorite — rolled back',
-    },
-    applyFavoriteState,
-  )
+      after: { favorite: false, favoriteIndex: null },
+      rollback: { favorite: true, favoriteIndex: entry.favoriteIndex },
+      rollbackToast: 'Failed to unfavorite — rolled back',
+    }
+  }
+  return {
+    path: entry.path,
+    action: 'favorite',
+    eventName: 'note_favorited',
+    label: 'Add to Favorites',
+    before,
+    after: { favorite: true, favoriteIndex: nextFavoriteIndex(entries) },
+    rollback: { favorite: false, favoriteIndex: null },
+    rollbackToast: 'Failed to favorite — rolled back',
+  }
 }
 
-function useFavoriteAction(deps: EntryStateActionDeps) {
-  const { entries, updateEntry, handleUpdateFrontmatter, handleDeleteProperty, setToastMessage, onFrontmatterPersisted, actionHistory } = deps
+const translateFavorite = createTranslator()
+
+type QueuedFavoriteDeps = Pick<EntryActionsConfig, 'updateEntry' | 'setToastMessage' | 'onFrontmatterPersisted' | 'actionHistory'> & {
+  applyFavoriteState: ApplyFavoriteState
+}
+
+function savedFavoriteState(state: FavoriteState): SavedFavoriteState {
+  return state.favorite ? { favorite: true, favoriteIndex: state.favoriteIndex ?? 1 } : { favorite: false, favoriteIndex: null }
+}
+
+/** Undo and redo succeed only on a committed change; otherwise the history item stays. */
+async function replayQueuedFavorite(deps: QueuedFavoriteDeps, path: string, state: FavoriteState): Promise<void> {
+  const request = deps.applyFavoriteState(path, savedFavoriteState(state))
+  if (request.status === 'refused') throw new Error(`Favorite change refused: ${request.reason}`)
+  const outcome = await request.done
+  if (!outcome.current) return
+  if (outcome.status !== 'committed') throw new Error(`Favorite change not saved: ${outcome.status}`)
+  deps.updateEntry(outcome.path, state)
+  deps.onFrontmatterPersisted?.()
+  if (outcome.integration === 'unmergedDraft') deps.setToastMessage(translateFavorite('favorite.unmergedDraft'))
+}
+
+function settleQueuedFavorite(deps: QueuedFavoriteDeps, transition: FavoriteTransition, outcome: FavoriteOutcome): void {
+  // A result from a closed vault session or an unmounted view must not touch the list, history or toasts.
+  if (!outcome.current) return
+  if (outcome.status === 'committed') {
+    deps.updateEntry(outcome.path, transition.after)
+    deps.onFrontmatterPersisted?.()
+    if (!outcome.durable) console.warn('[favorites] Saved, but the folder change was not confirmed on disk:', outcome.path)
+    // The newer draft has not taken the change yet, so this is not a finished toggle to undo.
+    if (outcome.integration === 'unmergedDraft') {
+      deps.setToastMessage(translateFavorite('favorite.unmergedDraft'))
+      return
+    }
+    recordEntryActionHistory(deps.actionHistory, {
+      id: `${transition.action}:${outcome.path}:${Date.now()}`,
+      label: transition.label,
+      path: outcome.path,
+      undo: () => replayQueuedFavorite(deps, outcome.path, transition.before),
+      redo: () => replayQueuedFavorite(deps, outcome.path, transition.after),
+    })
+    return
+  }
+  if (outcome.status === 'uncertain') {
+    deps.updateEntry(transition.path, outcome.onDisk ?? transition.before)
+    deps.setToastMessage(translateFavorite('favorite.uncertain', { path: outcome.originalAt ?? outcome.stagedAt ?? outcome.path }))
+    return
+  }
+  // Refused or failed after admission: the page is proven unchanged.
+  deps.updateEntry(transition.path, transition.before)
+  deps.setToastMessage(transition.rollbackToast)
+}
+
+async function runQueuedFavoriteTransition(deps: QueuedFavoriteDeps, transition: FavoriteTransition): Promise<void> {
+  const request = deps.applyFavoriteState(transition.path, savedFavoriteState(transition.after))
+  if (request.status === 'refused') {
+    if (request.reason !== 'busy') deps.setToastMessage(transition.rollbackToast)
+    return
+  }
+  trackEvent(transition.eventName)
+  deps.updateEntry(transition.path, transition.after)
+  settleQueuedFavorite(deps, transition, await request.done)
+}
+
+function useFavoriteAction(deps: EntryStateActionDeps & Pick<EntryActionsConfig, 'applyFavoriteState'>) {
+  const { entries, updateEntry, handleUpdateFrontmatter, handleDeleteProperty, setToastMessage, onFrontmatterPersisted, actionHistory, applyFavoriteState: queued } = deps
   const applyFavoriteState = useApplyFavoriteState(deps)
   return useCallback(
     async (path: string) => {
       const entry = entries.find((candidate) => candidate.path === path)
       if (!entry) return
-      await toggleFavoriteEntry(entry, entries, {
+      const transition = favoriteTransitionFor(entry, entries)
+      if (queued) {
+        await runQueuedFavoriteTransition({ updateEntry, setToastMessage, onFrontmatterPersisted, actionHistory, applyFavoriteState: queued }, transition)
+        return
+      }
+      await runFavoriteTransition({
         handleUpdateFrontmatter,
         handleDeleteProperty,
         onFrontmatterPersisted,
         updateEntry,
         setToastMessage,
         actionHistory,
-      }, applyFavoriteState)
+      }, transition, applyFavoriteState)
     },
     [
       applyFavoriteState,
@@ -559,6 +621,7 @@ function useFavoriteAction(deps: EntryStateActionDeps) {
       setToastMessage,
       onFrontmatterPersisted,
       actionHistory,
+      queued,
     ],
   )
 }

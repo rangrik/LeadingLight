@@ -21,7 +21,8 @@ import type { FrontmatterValue } from './Inspector'
 import type { FrontmatterOpOptions } from '../hooks/frontmatterOps'
 import { ResizeHandle } from './ResizeHandle'
 import { useDiffMode, type CommitDiffRequest } from '../hooks/useDiffMode'
-import { useEditorFocus } from '../hooks/useEditorFocus'
+import { insertDraftAtEnd, useEditorFocus } from '../hooks/useEditorFocus'
+import type { ContentReceipt } from '../hooks/useEditorSave'
 import { useDragRegion } from '../hooks/useDragRegion'
 import { formatShortcutDisplay } from '../hooks/appCommandCatalog'
 import { EditorRightPanel } from './EditorRightPanel'
@@ -133,7 +134,7 @@ export interface EditorProps {
   onDeleteNote?: (path: string) => void
   onArchiveNote?: (path: string) => void
   onUnarchiveNote?: (path: string) => void
-  onContentChange?: (path: string, content: string) => void
+  onContentChange?: (path: string, content: string) => ContentReceipt | null | void
   onSave?: () => void
   /** Called when the user explicitly renames the filename from the breadcrumb. */
   onRenameFilename?: (path: string, newFilenameStem: string) => void
@@ -246,7 +247,7 @@ interface EditorSetupParams {
   tabs: Tab[]
   activeTabPath: string | null
   vaultPath?: string
-  onContentChange?: (path: string, content: string) => void
+  onContentChange?: (path: string, content: string) => ContentReceipt | null | void
   onLoadDiff?: (path: string) => Promise<string>
   onLoadDiffAtCommit?: (path: string, commitHash: string) => Promise<string>
   pendingCommitDiffRequest?: CommitDiffRequest | null
@@ -400,11 +401,16 @@ function useEditorSetup(options: EditorSetupParams) {
         pendingRawExitContent,
       })
 
+      // What the editor last sent to the save queue and the queue's own receipt for it.
+      const handedRef = useRef<{ path: string; content: string; receipt: ContentReceipt | null } | null>(null)
+      const trackedContentChange = useCallback((path: string, content: string) => {
+        handedRef.current = { path, content, receipt: onContentChange?.(path, content) || null }
+      }, [onContentChange])
       const { editorContentPath, handleEditorChange, flushPendingEditorChange, editorMountedRef, documentSessionRef } = useEditorTabSwap({
         tabs: tabsForEditorSwap,
         activeTabPath: richEditorActiveTabPath,
         editor,
-        onContentChange,
+        onContentChange: trackedContentChange,
         rawMode,
         vaultPath,
       })
@@ -424,7 +430,24 @@ function useEditorSetup(options: EditorSetupParams) {
           }
         }
       }, [flushPendingEditorChange])
-      useEditorFocus(editor, editorMountedRef, activeTabPath)
+      // Raw, diff and preview views unmount the rich canvas; the focus endpoint refuses those.
+      const readyPath = richEditorContentReady && !rawMode && !activeTabIsSheet && editorContentPath === activeTabPath
+        ? activeTabPath
+        : null
+      const takeDraft = useCallback((text: string): ContentReceipt => {
+        if (!onContentChange || !readyPath) throw new Error('This page has no save queue')
+        handedRef.current = null
+        insertDraftAtEnd(editor, text)
+        handleEditorChange()
+        flushPendingEditorChange()
+        const handed = handedRef.current as { path: string; content: string; receipt: ContentReceipt | null } | null
+        // Only the queue's receipt for this page and exactly the document just sent counts.
+        if (!handed?.receipt || handed.path !== readyPath || handed.receipt.content !== handed.content) {
+          throw new Error('The save queue did not take the draft')
+        }
+        return handed.receipt
+      }, [editor, flushPendingEditorChange, handleEditorChange, onContentChange, readyPath])
+      useEditorFocus(editor, editorMountedRef, activeTabPath, readyPath, takeDraft)
 
       const { diffMode, diffContent, diffLoading, handleToggleDiff, handleViewCommitDiff } = useDiffMode({
         activeTabPath,
@@ -526,7 +549,7 @@ function useEditorSetup(options: EditorSetupParams) {
       handleToggleDiffExclusive: () => void | Promise<void>
       rawMode: boolean
       handleToggleRawExclusive: () => void
-      onContentChange?: (path: string, content: string) => void
+      onContentChange?: (path: string, content: string) => ContentReceipt | null | void
       onSave?: () => void
       activeStatus: NoteStatus
       showDiffToggle: boolean

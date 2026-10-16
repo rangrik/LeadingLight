@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { VaultEntry } from '../types'
+import { useEditorFocus } from '../hooks/useEditorFocus'
 import { dailyPagePath, useTodayPage } from './useTodayPage'
 import type { ExactPageOutcome } from './exactPage'
 
@@ -37,7 +38,73 @@ describe('Today page', () => {
     const { hook, createPageAt, openNoteWhenLoaded } = setup([entry('/vault/Daily/2026-10-15.md')])
     await act(() => hook.result.current.openToday())
     expect(createPageAt).not.toHaveBeenCalled()
-    expect(openNoteWhenLoaded).toHaveBeenCalledWith(expect.objectContaining({ path: '/vault/Daily/2026-10-15.md' }))
+    expect(openNoteWhenLoaded).toHaveBeenCalledWith(expect.objectContaining({ path: '/vault/Daily/2026-10-15.md' }), { commitNow: true })
+  })
+
+  describe('an existing page', () => {
+    const path = '/vault/Daily/2026-10-15.md'
+    afterEach(() => {
+      vi.useRealTimers()
+      document.body.innerHTML = ''
+    })
+
+    it('takes the keyboard before the next input when its editor is ready, with the caret at the end', async () => {
+      vi.useFakeTimers()
+      const pane = document.body.appendChild(document.createElement('section'))
+      Object.assign(pane.dataset, { paneId: '1', notePath: path, paneActive: 'true' })
+      const today = pane.appendChild(Object.assign(document.createElement('div'), { tabIndex: -1 }))
+      today.setAttribute('contenteditable', 'true')
+      const editor = { focus: () => today.focus(), prosemirrorView: { dom: today }, document: [{ id: 'end' }], setTextCursorPosition: vi.fn() }
+      renderHook(() => useEditorFocus(editor, { current: true }, path, path))
+      const { hook } = setup([entry(path)])
+
+      // No timer runs: only the command's own promise turn.
+      await hook.result.current.openToday()
+      expect(document.activeElement).toBe(today)
+      expect(editor.setTextCursorPosition).toHaveBeenCalledWith('end', 'end')
+    })
+
+    it('keeps the delayed focus request when no editor shows it ready', async () => {
+      vi.useFakeTimers()
+      const requests: unknown[] = []
+      const listen = (event: Event) => requests.push((event as CustomEvent).detail)
+      window.addEventListener('laputa:focus-editor', listen)
+      const { hook } = setup([entry(path)])
+
+      await hook.result.current.openToday()
+      vi.advanceTimersByTime(6_000)
+      window.removeEventListener('laputa:focus-editor', listen)
+      expect(requests).toEqual([{ path, cursorAtEnd: true }])
+    })
+
+    it('lets a draft field take the keys instead, and tells it when the page is shown', async () => {
+      vi.useFakeTimers()
+      const requests: unknown[] = []
+      const listen = (event: Event) => requests.push((event as CustomEvent).detail)
+      window.addEventListener('laputa:focus-editor', listen)
+      const report = { failed: vi.fn(), created: vi.fn(), shown: vi.fn() }
+      const hold = vi.fn(() => report)
+      const { hook } = setup([entry(path)])
+
+      await hook.result.current.openToday(hold)
+      vi.advanceTimersByTime(6_000)
+      window.removeEventListener('laputa:focus-editor', listen)
+      expect(hold).toHaveBeenCalledWith(path, false)
+      expect(report.shown).toHaveBeenCalledWith(path)
+      expect(requests).toEqual([])
+    })
+  })
+
+  it('asks for a draft field before any await while a new page is made, and reports a page made but not shown', async () => {
+    const { hook, finish } = setup()
+    const report = { failed: vi.fn(), created: vi.fn(), shown: vi.fn() }
+    const hold = vi.fn(() => report)
+    act(() => { void hook.result.current.openToday(hold) })
+    expect(hold).toHaveBeenCalledWith('/vault/Daily/2026-10-15.md', false)
+
+    await act(async () => finish('created'))
+    expect(report.created).toHaveBeenCalledWith('/vault/Daily/2026-10-15.md')
+    expect(report.shown).not.toHaveBeenCalled()
   })
 
   it('picks the new day after midnight', async () => {

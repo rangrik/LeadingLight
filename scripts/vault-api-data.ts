@@ -5,8 +5,9 @@ interface WikilinkValue {
 interface MarkdownTitleInput {
 	content: string;
 	frontmatter: Record<string, unknown>;
-	fallback: string;
+	filename: string;
 }
+type TitleSource = "h1" | "frontmatter" | "filename";
 
 import {
 	closeSync,
@@ -48,6 +49,10 @@ export interface VaultEntry {
 	visible: boolean | null;
 	outgoingLinks: string[];
 	properties: Record<string, string | number | boolean | null>;
+	hasH1: boolean;
+	titleSource: TitleSource;
+	favorite: boolean;
+	favoriteIndex: number | null;
 }
 
 /** Extract all [[wiki-links]] from a string. */
@@ -257,16 +262,58 @@ function frontmatterBool(
 	return parseYamlBool(getFrontmatterValue(frontmatter, keys));
 }
 
+/** Native `deserialize_bool_or_string` on the exact top-level `_favorite` key. */
+function favoriteFlag(value: unknown): boolean {
+	if (typeof value === "boolean") return value;
+	if (typeof value === "number") return value !== 0;
+	if (typeof value !== "string") return false;
+	return ["true", "yes", "1"].includes(value.toLowerCase());
+}
+
+/** Native reads `_favorite_index` as a whole number, or nothing. */
+function favoriteIndex(value: unknown): number | null {
+	return typeof value === "number" && Number.isInteger(value) ? value : null;
+}
+
+function stripTitleMarkdown(text: string): string {
+	return text
+		.replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1")
+		.replace(/\[\[([^\]]+)\]\]/g, "$1")
+		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+		.replace(/[*_`~]/g, "");
+}
+
+function leadingH1Title(body: string): string | null {
+	const firstLine = body
+		.split("\n")
+		.map((line) => line.trim())
+		.find(Boolean);
+	if (!firstLine?.startsWith("# ")) return null;
+	return stripTitleMarkdown(firstLine.slice(2)).trim() || null;
+}
+
+function filenameTitle(filename: string): string {
+	return filename
+		.replace(/\.[^.]+$/, "")
+		.split("-")
+		.filter(Boolean)
+		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+		.join(" ");
+}
+
+/** Native precedence (src/shared/titleSourceContract.json): leading H1, frontmatter title, filename. */
 function markdownTitle({
 	content,
 	frontmatter,
-	fallback,
-}: MarkdownTitleInput): string {
-	const title = frontmatterString(frontmatter, "title");
-	if (title) return title;
+	filename,
+}: MarkdownTitleInput): { title: string; titleSource: TitleSource } {
+	const h1 = leadingH1Title(content);
+	if (h1) return { title: h1, titleSource: "h1" };
 
-	const h1Match = content.match(/^#\s+(.+)$/m);
-	return h1Match ? h1Match[1].trim() : fallback;
+	const title = frontmatterString(frontmatter, "title")?.trim();
+	if (title) return { title, titleSource: "frontmatter" };
+
+	return { title: filenameTitle(filename), titleSource: "filename" };
 }
 
 function markdownBodyText({ content }: { content: string }): string {
@@ -410,12 +457,10 @@ export function parseMarkdownFile(filePath: string): VaultEntry | null {
 		const fm = data as Record<string, unknown>;
 
 		const filename = path.basename(filePath);
-		const basename = filename.replace(/\.md$/, "");
-
-		const title = markdownTitle({
+		const { title, titleSource } = markdownTitle({
 			content,
 			frontmatter: fm,
-			fallback: basename,
+			filename,
 		});
 		const isA = frontmatterString(fm, "is_a", "is a", "type");
 		const bodyText = markdownBodyText({ content });
@@ -455,6 +500,10 @@ export function parseMarkdownFile(filePath: string): VaultEntry | null {
 			visible: frontmatterBool(fm, "visible"),
 			outgoingLinks: extractOutgoingLinks(content),
 			properties: frontmatterProperties(fm),
+			hasH1: titleSource === "h1",
+			titleSource,
+			favorite: favoriteFlag(fm._favorite),
+			favoriteIndex: favoriteIndex(fm._favorite_index),
 		};
 	} catch {
 		return null;

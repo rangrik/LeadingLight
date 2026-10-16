@@ -345,6 +345,35 @@ describe('useNoteRename hook', () => {
     )
   })
 
+  // An authored title that happens to equal the old filename title must survive a manual rename.
+  it('handleRenameFilename keeps a frontmatter title equal to the old fallback', async () => {
+    const content = '---\ntitle: Untitled Page 1797000000\n---\nhello\n'
+    const entry = makeEntry({
+      path: '/vault/untitled-page-1797000000.md',
+      filename: 'untitled-page-1797000000.md',
+      title: 'Untitled Page 1797000000',
+      hasH1: false,
+      titleSource: 'frontmatter',
+    })
+    vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'rename_note_filename') return { new_path: '/vault/harbor.md', updated_files: 0, failed_updates: 0 }
+      if (cmd === 'get_note_content') return content
+      return ''
+    })
+
+    const { result } = renderUseNoteRename([entry])
+    const onEntryRenamed = vi.fn()
+    await act(async () => {
+      await result.current.handleRenameFilename(entry.path, 'harbor', '/vault', onEntryRenamed)
+    })
+
+    expect(onEntryRenamed).toHaveBeenCalledWith(
+      entry.path,
+      expect.objectContaining({ filename: 'harbor.md', title: 'Untitled Page 1797000000', titleSource: 'frontmatter' }),
+      content,
+    )
+  })
+
   it('preserves active tab metadata when filename rename lands after a stale vault reload', async () => {
     const entry = makeEntry({ path: '/vault/untitled-1.md', filename: 'untitled-1.md', title: 'Fresh Title' })
     let tabs = [{ entry, content: '# Fresh Title\n' }]

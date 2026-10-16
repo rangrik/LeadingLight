@@ -13,6 +13,8 @@ import {
 type SheetTransitionTab = {
   entry: VaultEntry
   content: string
+  /** Set by the pane when this same page was renamed in place from that path. */
+  renamedFrom?: string
 }
 
 interface RichEditorSheetSwapParams<Tab extends SheetTransitionTab> {
@@ -119,10 +121,12 @@ export function useRichEditorContentReadiness<Tab extends SheetTransitionTab>({
   )
   const activePath = activeTab?.entry.path ?? null
   useTitlePathTransitionFocus(activePath, preservesTitlePathTransition, editorOwnsFocus)
+  // The editor still holds this page under its old name; only a recorded rename proves that.
+  const renamedInPlace = activeTab?.renamedFrom === editorContentPath
   return richEditorContentIsReady(
     activePath,
     activeTabIsSheet,
     editorContentPath,
-    preservesTitlePathTransition,
+    preservesTitlePathTransition || renamedInPlace,
   )
 }

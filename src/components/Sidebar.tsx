@@ -30,9 +30,12 @@ interface SidebarProps {
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
   onSearch?: () => void
+  onCreatePage?: () => void
   onOpenToday?: () => void
   canOpenToday?: boolean
   onOpenTrash?: () => void
+  /** The page in the active pane; Favorites highlight it. */
+  activeNotePath?: string | null
   onSelectNote?: (entry: VaultEntry) => void
   onCreateType?: (type: string) => void
   onCreateNewType?: () => void
@@ -82,9 +85,11 @@ interface SidebarNavigationProps
   | 'selection'
   | 'onSelect'
   | 'onSearch'
+  | 'onCreatePage'
   | 'onOpenToday'
   | 'canOpenToday'
   | 'onOpenTrash'
+  | 'activeNotePath'
   | 'onSelectFavorite'
   | 'onReorderFavorites'
   | 'views'
@@ -134,6 +139,8 @@ type SidebarFavoritesNavigationProps = Pick<
   | 'onSelect'
   | 'onSelectFavorite'
   | 'onReorderFavorites'
+  | 'activeNotePath'
+  | 'vaultRootPath'
   | 'groupCollapsed'
   | 'toggleGroup'
   | 'locale'
@@ -206,6 +213,8 @@ function SidebarFavoritesNavigation(options: SidebarFavoritesNavigationProps) {
     onSelect,
     onSelectFavorite,
     onReorderFavorites,
+    activeNotePath,
+    vaultRootPath,
     groupCollapsed,
     toggleGroup,
     locale,
@@ -228,6 +237,8 @@ function SidebarFavoritesNavigation(options: SidebarFavoritesNavigationProps) {
         onSelect={onSelect}
         onSelectNote={onSelectFavorite}
         onReorder={onReorderFavorites}
+        activePath={activeNotePath}
+        vaultRootPath={vaultRootPath}
         collapsed={groupCollapsed.favorites}
         locale={locale}
         onToggle={() => toggleGroup('favorites')}
@@ -396,6 +407,7 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         selection={props.selection}
         onSelect={props.onSelect}
         onSearch={props.onSearch}
+        onCreatePage={props.onCreatePage}
         onOpenToday={props.onOpenToday}
         canOpenToday={props.canOpenToday}
         onOpenTrash={props.onOpenTrash}
@@ -406,7 +418,8 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         locale={props.locale ?? 'en'}
         loading={props.loading ?? false}
       />
-      {(props.loading || props.entries.some((entry) => entry.favorite && !entry.archived)) && (
+      {/* With no favorites yet, the group appears only beside an open page that could be starred. */}
+      {(props.loading || props.activeNotePath || props.entries.some((entry) => entry.favorite && !entry.archived)) && (
         <SidebarFavoritesNavigation
           loading={props.loading}
           entries={props.entries}
@@ -414,6 +427,8 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
           onSelect={props.onSelect}
           onSelectFavorite={props.onSelectFavorite}
           onReorderFavorites={props.onReorderFavorites}
+          activeNotePath={props.activeNotePath}
+          vaultRootPath={props.vaultRootPath}
           groupCollapsed={props.groupCollapsed}
           toggleGroup={props.toggleGroup}
           locale={props.locale}
@@ -627,9 +642,11 @@ function SidebarRuntimeNavigation({
       selection={props.selection}
       onSelect={props.onSelect}
       onSearch={props.onSearch}
+      onCreatePage={props.onCreatePage}
       onOpenToday={props.onOpenToday}
       canOpenToday={props.canOpenToday}
       onOpenTrash={props.onOpenTrash}
+      activeNotePath={props.activeNotePath}
       onSelectFavorite={props.onSelectFavorite}
       onReorderFavorites={props.onReorderFavorites}
       views={props.views}

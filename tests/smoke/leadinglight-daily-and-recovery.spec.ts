@@ -165,6 +165,41 @@ test.describe('Today', () => {
     expect(dailyFiles()).toEqual(['2026-10-15.md'])
     expect(read(alpha)).toBe(alphaBefore)
   })
+
+  test('the Today shortcut moves the keyboard to Today in the other pane and types only there', async ({ page }) => {
+    const tide = 'drafts/tide-table.md'
+    const tideBefore = read(tide)
+    const marker = 'Typed after the Today shortcut from the other pane.'
+
+    await todayButton(page).click()
+    await expect.poll(() => focusedPagePath(page)).toBe(abs(TODAY))
+    // Opened through the finder, so the long note list's virtual rows do not matter.
+    await page.getByRole('button', { name: 'Split right', exact: true }).click()
+    await pane(page, 2).getByText('Open a page here').click()
+    await search(page, 'Tide table')
+    await finder(page).getByRole('group', { name: 'Pages', exact: true }).getByRole('option')
+      .filter({ hasText: /^Tide table/ }).click()
+    await expect(finder(page)).toBeHidden()
+    await expect.poll(() => panePaths(page)).toEqual([abs(TODAY), abs(tide)])
+    await pane(page, 2).getByText('Low water at the north jetty.').click()
+    await expect.poll(() => focusedPagePath(page)).toBe(abs(tide))
+    const tideWrites = recordWrites(page, tide)
+
+    // Today is already open in pane one: the shortcut reuses it and moves the keyboard there.
+    await page.keyboard.press('ControlOrMeta+Shift+KeyD')
+    await expect.poll(() => focusedPagePath(page)).toBe(abs(TODAY))
+    await expect(pane(page, 1)).toHaveAttribute('data-pane-active', 'true')
+    expect(await panePaths(page)).toEqual([abs(TODAY), abs(tide)])
+    expect(dailyFiles()).toEqual(['2026-10-15.md'])
+
+    await page.keyboard.type(marker)
+    await expect(pane(page, 1).getByText(marker)).toBeVisible()
+    await expect.poll(() => read(TODAY)).toContain(marker)
+    await expect(saveState(pane(page, 1))).toHaveText('Saved')
+    expect(await panePaths(page)).toEqual([abs(TODAY), abs(tide)])
+    expect(tideWrites).toEqual([])
+    expect(read(tide)).toBe(tideBefore)
+  })
 })
 
 test.describe('Backlinks', () => {

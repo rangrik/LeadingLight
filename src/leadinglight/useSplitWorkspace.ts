@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
+import { flushSync } from 'react-dom'
 import { useNavigationHistory } from '../hooks/useNavigationHistory'
 import { useTabManagement, type Tab } from '../hooks/useTabManagement'
 import type { VaultEntry } from '../types'
@@ -171,6 +172,15 @@ export function useSplitWorkspace(options: Options) {
     }
     return { inSession, isActive: () => activePaneRef.current === pane, open }
   }, [beginBusy, endBusy, findPane])
+  /** Taken at a command: current until the person navigates or closes that pane, or the vault changes. Creation opens do not count. */
+  const markNavigation = useCallback(() => {
+    const pane = activePaneRef.current
+    const navigation = requestGenerationRef.current[pane] - backgroundOpensRef.current[pane]
+    const epoch = sessionRef.current
+    const current = () => sessionRef.current === epoch && (splitRef.current || activePaneRef.current === pane)
+      && requestGenerationRef.current[pane] - backgroundOpensRef.current[pane] === navigation
+    return { pane, current }
+  }, [])
   const setTabs = useCallback((action: SetStateAction<Tab[]>) => {
     const panes = controllersRef.current
     const previousPaneTabs = paneTabsRef.current
@@ -303,21 +313,26 @@ export function useSplitWorkspace(options: Options) {
     return true
   }, [beginBusy, endBusy, findPane, focusPane, order, orientation, placePane, split])
   /** Finder selection into the active pane: true only once the page is loaded and shown. */
-  const openNoteWhenLoaded = useCallback(async (entry: VaultEntry) => {
+  const openNoteWhenLoaded = useCallback(async (entry: VaultEntry, options: { commitNow?: boolean } = {}) => {
     const epoch = sessionRef.current
     const listed = () => sessionRef.current === epoch && entriesRef.current.some(item => notePathsMatch(item.path, entry.path))
     if (entry.fileKind === 'binary' || !listed()) return false
     interactionVersionRef.current += 1
     const owner = ([0, 1] as const).find(pane => paneTabsRef.current[pane].some(tab => notePathsMatch(tab.entry.path, entry.path)))
     if (owner !== undefined) {
-      // Choosing a loaded page again cancels a replacement still pending in its pane.
-      requestGenerationRef.current[owner] += 1
-      controllersRef.current[owner].showLoadedEntry(entry.path)
-      if (!splitRef.current && owner !== activePaneRef.current) {
-        layoutVersionRef.current += 1
-        setSplit(true)
+      const show = () => {
+        // Choosing a loaded page again cancels a replacement still pending in its pane.
+        requestGenerationRef.current[owner] += 1
+        controllersRef.current[owner].showLoadedEntry(entry.path)
+        if (!splitRef.current && owner !== activePaneRef.current) {
+          layoutVersionRef.current += 1
+          setSplit(true)
+        }
+        focusPane(owner)
       }
-      focusPane(owner)
+      // A keyboard command commits the switch now, so its ready editor can take the next key.
+      if (options.commitNow) flushSync(show)
+      else show()
       return true
     }
     // Still loading elsewhere: its own request decides, so do not claim it opened.
@@ -407,6 +422,7 @@ export function useSplitWorkspace(options: Options) {
     handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
     splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
       currentTabs,
+      markNavigation,
       openNoteWhenLoaded,
       // Recents may count visits only after this vault session's restore has settled.
       readyForVisits: options.restoreWorkspace === false || restoredEpoch === session.epoch,

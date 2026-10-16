@@ -37,4 +37,16 @@ describe('normalizeVaultEntries', () => {
       title: 'Valid',
     })
   })
+
+  // An unrecognised source must read as unknown, never as a filename fallback.
+  it('keeps known title sources and drops anything else', () => {
+    const entries = normalizeVaultEntries([
+      { path: '/vault/a.md', title: 'A', titleSource: 'frontmatter' },
+      { path: '/vault/b.md', title: 'B', titleSource: 'heading' },
+      { path: '/vault/c.md', title: 'C' },
+    ], '/vault')
+
+    expect(entries.map(entry => entry.titleSource)).toEqual(['frontmatter', undefined, undefined])
+    expect('titleSource' in entries[1]).toBe(false)
+  })
 })

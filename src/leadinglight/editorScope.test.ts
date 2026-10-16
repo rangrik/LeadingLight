@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { clearEditorDomSelection } from '../hooks/editorDomSelection'
-import { editorContainer, editorScopeForPath } from './editorScope'
+import { editorContainer, editorScopeForEditor, editorScopeForPath } from './editorScope'
 
 afterEach(() => { document.body.innerHTML = '' })
 describe('pane DOM ownership', () => {
@@ -27,5 +27,12 @@ describe('pane DOM ownership', () => {
   it('never falls back to another pane when a requested page is missing', () => {
     document.body.innerHTML = '<section data-pane-id="0" data-note-path="/left"><div class="editor__blocknote-container">left</div></section>'
     expect(editorScopeForPath('/missing').querySelector('.editor__blocknote-container')).toBeNull()
+  })
+  it('gives an unmounted editor no surface, never the other pane', () => {
+    document.body.innerHTML = '<section data-pane-id="0" data-note-path="/left"><div class="editor__blocknote-container"><div contenteditable="true">left</div></div></section>'
+    // Like Tiptap: once unmounted, reading the view's DOM throws.
+    const unmounted = { get prosemirrorView() { return { get dom(): HTMLElement { throw new Error('view not available') } } } }
+    expect(editorContainer(unmounted)).toBeNull()
+    expect(editorScopeForEditor(unmounted).querySelector('[contenteditable]')).toBeNull()
   })
 })

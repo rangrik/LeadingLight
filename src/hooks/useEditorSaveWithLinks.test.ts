@@ -139,6 +139,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
 
     // Same link, different surrounding text
@@ -165,6 +166,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
 
     // Now links change
@@ -192,6 +194,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
   })
 
@@ -226,6 +229,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
   })
 
@@ -259,6 +263,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
 
     act(() => {
@@ -271,6 +276,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/note.md', {
       title: 'Note',
       hasH1: false,
+      titleSource: 'filename',
     })
   })
 
@@ -398,8 +404,8 @@ describe('useEditorSaveWithLinks', () => {
   })
 
   it.each([
-    ['/old-title.md', '# Renamed Note\n\nBody', { title: 'Renamed Note', hasH1: true }],
-    ['/renamed-note.md', 'Body without a heading', { title: 'Renamed Note', hasH1: false }],
+    ['/old-title.md', '# Renamed Note\n\nBody', { title: 'Renamed Note', hasH1: true, titleSource: 'h1' }],
+    ['/renamed-note.md', 'Body without a heading', { title: 'Renamed Note', hasH1: false, titleSource: 'filename' }],
   ])('handleContentChange derives the displayed title for %s', (path, content, expected) => {
     const { result } = renderHookWithLinks()
 
@@ -425,6 +431,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith(path, {
       title: 'Focus Test',
       hasH1: false,
+      titleSource: 'filename',
     })
   })
 
@@ -443,6 +450,7 @@ describe('useEditorSaveWithLinks', () => {
     expect(updateEntry).toHaveBeenCalledWith('/old-title.md', {
       title: 'Renamed Note',
       hasH1: true,
+      titleSource: 'h1',
     })
   })
 

@@ -115,6 +115,11 @@ function normalizeFileKind(value: unknown): VaultEntry['fileKind'] {
   return undefined
 }
 
+function normalizeTitleSource(value: unknown): VaultEntry['titleSource'] {
+  if (value === 'h1' || value === 'frontmatter' || value === 'filename') return value
+  return undefined
+}
+
 function normalizeWorkspaceIdentity(value: unknown): WorkspaceIdentity | undefined {
   const source = recordFrom(value)
   const id = stringFrom(source.id).trim()
@@ -158,6 +163,7 @@ function normalizeVaultEntryRecord({ rawEntry, vaultPath, index, workspace }: En
   })
   const title = stringFrom(source.title).trim() || stripExtension(filename) || 'Untitled'
   const fileKind = normalizeFileKind(source.fileKind)
+  const titleSource = normalizeTitleSource(source.titleSource)
 
   const entry = {
     ...(source as Partial<VaultEntry>),
@@ -195,6 +201,9 @@ function normalizeVaultEntryRecord({ rawEntry, vaultPath, index, workspace }: En
   } as VaultEntry
 
   if (fileKind) entry.fileKind = fileKind
+  // An unknown source must stay unknown, so labels keep the real title.
+  if (titleSource) entry.titleSource = titleSource
+  else delete entry.titleSource
   return entry
 }
 

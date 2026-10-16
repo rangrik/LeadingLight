@@ -13,6 +13,9 @@ import { detectIntentionalMouseMovement, type MouseMovementSnapshot } from '../u
 import { hasNoteIconValue } from '../utils/noteIcon'
 import type { PageCreationOutcome } from '../hooks/useNoteCreation'
 import { normalizeNotePathForIdentity } from '../utils/notePathIdentity'
+import { relativePathStem } from '../utils/wikilink'
+import { vaultPathForEntry } from '../utils/workspaces'
+import { cueFor, duplicateCues, isFindable, pageLabel } from './pageLabel'
 import { useQuickFindBodySearch, type BodyMatch } from './useQuickFindBodySearch'
 
 const RECENT_ROWS = 10
@@ -38,8 +41,24 @@ type Row = PageRow | { kind: 'create', key: 'create' }
 interface Section { label: TranslationKey, rows: PageRow[] }
 
 const identity = (path: string) => normalizeNotePathForIdentity(path)
-// Binary files open through other routes; the page editors cannot load them.
-const isFindable = (entry: VaultEntry) => !entry.archived && entry.isA !== 'Config' && entry.fileKind !== 'binary'
+
+// "harbor/lantern.md" or "./Harbor/Lantern" → "harbor/lantern". Plain words are not path queries.
+function pathQueryStem(query: string): string | null {
+  const trimmed = query.trim()
+  if (!trimmed.includes('/') && !/\.md$/i.test(trimmed)) return null
+  const stem = trimmed.replace(/\\/g, '/').replace(/^\.?\/+/, '').replace(/\/{2,}/g, '/').replace(/\.md$/i, '')
+  return stem ? stem.toLocaleLowerCase() : null
+}
+
+/** Pages whose vault-relative path is the query, or ends with it at a folder boundary. */
+function pathMatches(entries: VaultEntry[], query: string, vaultPath: string): VaultEntry[] {
+  const wanted = pathQueryStem(query)
+  if (!wanted) return []
+  return entries.filter(entry => {
+    const stem = relativePathStem(entry.path, vaultPathForEntry(entry, vaultPath)).toLocaleLowerCase()
+    return stem === wanted || stem.endsWith(`/${wanted}`)
+  })
+}
 const pageRow = (entry: VaultEntry, snippet?: string): PageRow => ({ kind: 'page', key: identity(entry.path), entry, snippet })
 const hasTitle = (entry: VaultEntry, title: string) => entry.title.trim().toLocaleLowerCase() === title.toLocaleLowerCase()
 
@@ -138,12 +157,18 @@ function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreat
     [entries, creating, title],
   )
   const byPath = useMemo(() => new Map(findable.map(entry => [identity(entry.path), entry])), [findable])
+  const cues = useMemo(() => duplicateCues(findable, vaultPath, locale), [findable, vaultPath, locale])
+  const exactPaths = useMemo(() => pathMatches(findable, query, vaultPath), [findable, query, vaultPath])
   const { results } = useNoteSearch(findable, query, RECENT_ROWS + 2)
   const body = useQuickFindBodySearch(vaultPath, query, ready)
   const sections = !ready ? [] : title
-    ? querySections(byPath, results.map(result => result.entry), body.matches)
+    ? querySections(byPath, [...exactPaths, ...results.map(result => result.entry)], body.matches)
     : idleSections(byPath, recentPaths, results.map(result => result.entry))
-  const canCreate = ready && !!title && !findable.some(entry => hasTitle(entry, title))
+  const canCreate = ready && !!title && exactPaths.length === 0 && !findable.some(entry => hasTitle(entry, title))
+  const rowLabel = (entry: VaultEntry) => {
+    const cue = cueFor(cues, entry)
+    return <>{pageLabel(entry, locale)}{cue && <span className="ml-1.5 text-xs text-muted-foreground">{cue}</span>}</>
+  }
   const createRow = canCreate ? { kind: 'create', key: 'create' } as const : null
   const rows: Row[] = [...sections.flatMap(section => section.rows), ...(createRow ? [createRow] : [])]
   // A row the user picked stays picked while page-text matches arrive above it.
@@ -175,7 +200,7 @@ function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreat
     setBusy(null)
     // Created but not shown is not a failure: the file exists and appears in the list.
     if (outcome === 'created') setNotice({ role: 'status', text: t('leadinglight.find.created', { title }) })
-    else setNotice({ role: 'alert', text: row.kind === 'create' ? t('leadinglight.find.createFailed') : t('leadinglight.find.openFailed', { title: row.entry.title || row.entry.filename }) })
+    else setNotice({ role: 'alert', text: row.kind === 'create' ? t('leadinglight.find.createFailed') : t('leadinglight.find.openFailed', { title: pageLabel(row.entry, locale) }) })
   }
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     // Enter during IME composition confirms the text; it must not open or create.
@@ -236,7 +261,7 @@ function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreat
           {sections.map(section => (
             <div key={section.label} role="group" aria-labelledby={`${baseId}-${section.label}`}>
               <div id={`${baseId}-${section.label}`} className="px-2.5 pb-1 pt-2 text-xs font-medium text-muted-foreground">{t(section.label)}</div>
-              {section.rows.map(row => option(row, row.entry.title || row.entry.filename, pageIcon(row.entry), row.snippet))}
+              {section.rows.map(row => option(row, rowLabel(row.entry), pageIcon(row.entry), row.snippet))}
             </div>
           ))}
           {textNotice}

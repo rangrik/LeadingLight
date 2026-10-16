@@ -77,6 +77,36 @@ describe('split editor integration', () => {
   })
 })
 
+describe('empty pane', () => {
+  const withEmptyRight = (extra: Partial<ReturnType<typeof fixture>> & { onResume?: () => void, emptyVault?: boolean } = {}) => {
+    const props = fixture()
+    return { ...props, tabs: props.tabs.slice(0, 1), workspace: { ...props.workspace, paths: ['/left.md', null] as const }, ...extra }
+  }
+
+  // Seam: WebKit does not focus a clicked button, so Escape from the finder would land nowhere useful.
+  it('Resume activates its own pane and holds focus before opening the finder', () => {
+    let focusedAtOpen: Element | null = null
+    const onResume = vi.fn(() => { focusedAtOpen = document.activeElement })
+    const props = withEmptyRight({ onResume })
+    render(<SplitEditorWorkspace {...props} />)
+    const resume = screen.getByRole('button', { name: 'Resume a page' })
+    fireEvent.click(resume)
+    expect(props.workspace.focusPane).toHaveBeenLastCalledWith(1)
+    expect(onResume).toHaveBeenCalledOnce()
+    expect(focusedAtOpen).toBe(resume)
+  })
+
+  it('offers only creation when nothing can be resumed or the vault is empty', () => {
+    const { rerender } = render(<SplitEditorWorkspace {...withEmptyRight()} />)
+    expect(screen.getByText('Open a page here')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume a page' })).not.toBeInTheDocument()
+    rerender(<SplitEditorWorkspace {...withEmptyRight({ onResume: vi.fn(), emptyVault: true })} />)
+    expect(screen.getByText('Start with a thought.')).toBeInTheDocument()
+    expect(screen.getByText('Create a page and begin writing.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume a page' })).not.toBeInTheDocument()
+  })
+})
+
 it('takes pane-focus shortcuts before the editor while split, and leaves them to the editor otherwise', () => {
   const props = fixture()
   const { rerender } = render(<SplitEditorWorkspace {...props} />)

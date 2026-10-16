@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import titleSourceContract from '../shared/titleSourceContract.json'
 import {
   contentDefinesDisplayTitle,
   deriveDisplayTitleState,
@@ -62,6 +63,7 @@ describe('deriveDisplayTitleState', () => {
     expect(deriveDisplayTitleState({ content, filename: 'legacy-title.md', frontmatterTitle: 'Legacy Title' })).toEqual({
       title: 'Updated Title',
       hasH1: true,
+      titleSource: 'h1',
     })
   })
 
@@ -70,6 +72,7 @@ describe('deriveDisplayTitleState', () => {
     expect(deriveDisplayTitleState({ content, filename: 'legacy-title.md', frontmatterTitle: 'Legacy Title' })).toEqual({
       title: 'Legacy Title',
       hasH1: false,
+      titleSource: 'frontmatter',
     })
   })
 
@@ -78,6 +81,7 @@ describe('deriveDisplayTitleState', () => {
     expect(deriveDisplayTitleState({ content, filename: 'spring-2026.md' })).toEqual({
       title: 'Spring 2026',
       hasH1: false,
+      titleSource: 'frontmatter',
     })
   })
 
@@ -85,6 +89,7 @@ describe('deriveDisplayTitleState', () => {
     expect(deriveDisplayTitleState({ content: 'Body only', filename: 'renamed-note.md' })).toEqual({
       title: 'Renamed Note',
       hasH1: false,
+      titleSource: 'filename',
     })
   })
 
@@ -93,6 +98,14 @@ describe('deriveDisplayTitleState', () => {
     expect(deriveDisplayTitleState({ content, filename: 'tolaria-mvp.md' })).toEqual({
       title: '[26Q2] Tolaria MVP',
       hasH1: true,
+      titleSource: 'h1',
     })
+  })
+
+  // Same fixtures as the native parser and the browser bridge, so all three agree.
+  it.each(titleSourceContract.fixtures)('matches the shared title contract: $name', fixture => {
+    const state = deriveDisplayTitleState({ content: fixture.content, filename: fixture.filename })
+    expect(state.title).toBe(fixture.title)
+    expect(state.titleSource).toBe(fixture.titleSource)
   })
 })

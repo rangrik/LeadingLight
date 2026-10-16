@@ -55,8 +55,10 @@ Continue in useful, independently verified releases, reusing working inherited c
 
 1. Capture and resumption: a direct route into writing, useful pinned pages, and clear empty
    states. Naming and organization remain optional.
-2. Local recovery and portability: version previews, safe restoration, local backups and
-   Markdown import/export with explicit attachment coverage.
+2. Automatic local version history: bounded checkpoints, verified previews and recovery into a
+   new copy. Keep older writing reachable after a rename or removal, explain any gap in recovery,
+   and never silently replace a current draft. Follow with local backups and Markdown import/export
+   with explicit attachment coverage.
 3. Optional organization: tags, collections and local templates that reduce repeated work.
    Do not require a taxonomy to create or find a page.
 4. Rich editing: qualify and refine tables, checklists, code, links, images, paste, undo and

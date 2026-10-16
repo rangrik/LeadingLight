@@ -29,6 +29,7 @@
 .ll-pane-empty { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 12px; padding: 24px; text-align: center; }
 .ll-pane-empty p { margin: 0; font-weight: 500; }
 .ll-pane-empty span { color: var(--muted-foreground); font-size: 13px; max-width: 260px; }
+.ll-pane-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .ll-pane-separator { flex: 0 0 6px; cursor: col-resize; touch-action: none; background: var(--background); }
 .ll-pane-separator:hover, .ll-pane-separator:focus-visible { background: var(--border); outline: 2px solid var(--ring); outline-offset: -2px; }
 .ll-panes--vertical > .ll-pane-separator { cursor: row-resize; }

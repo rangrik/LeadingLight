@@ -77,6 +77,21 @@ describe('QuickFind', () => {
     expect(options()).toEqual(['Watering'])
   })
 
+  // Seam: two pages called "Lantern" were indistinguishable, and a full relative path found nothing.
+  it('tells same-title pages apart by path and finds a page by its relative path', () => {
+    const lantern = page('lantern', 'Lantern', { modifiedAt: 5 })
+    const harborLantern = page('harbor/lantern', 'Lantern', { filename: 'lantern.md', modifiedAt: 4 })
+    renderFind({ entries: [lantern, harborLantern, water] })
+    expect(options()).toEqual(['Lanternlantern', 'Lanternharbor/lantern', 'Watering'])
+
+    for (const query of ['harbor/lantern.md', 'harbor/lantern', './Harbor/Lantern.md']) {
+      type(query)
+      expect(options()[0]).toBe('Lanternharbor/lantern')
+      expect(options()).not.toContain('Lanternlantern')
+      expect(options().some(option => option?.startsWith('Create page'))).toBe(false)
+    }
+  })
+
   it('falls back to recently edited pages, labeled as such, when nothing was opened yet', () => {
     renderFind()
     expect(screen.getByRole('group', { name: 'Recently edited' })).toBeInTheDocument()

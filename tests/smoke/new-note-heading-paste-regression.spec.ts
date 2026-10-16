@@ -64,10 +64,16 @@ async function createUntitledNote(page: Page): Promise<void> {
   await page.locator('body').click()
   await triggerMenuCommand(page, 'file-new-note')
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+(?:-\d+)?/i, {
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+(?:-\d+)?/i, {
     timeout: 5_000,
   })
   await expectEditorFocused(page)
+}
+
+// New pages are body-first; the title heading is the user's own `# `.
+async function startTitleHeading(page: Page): Promise<void> {
+  await page.keyboard.type('# ')
+  await expect(page.locator('.bn-editor [data-content-type="heading"]').first()).toBeVisible()
 }
 
 async function expectActiveFilename(page: Page, { title }: TitleInput): Promise<void> {
@@ -125,6 +131,7 @@ test('new-note first typing and rich heading paste remain stable through saves',
   const filename = `${slugifyTitle({ title })}.md`
 
   await createUntitledNote(page)
+  await startTitleHeading(page)
   await page.keyboard.type(title, { delay: 30 })
   await page.keyboard.press('Enter')
   await page.keyboard.type('Initial body text survives the create-note save.', { delay: 30 })

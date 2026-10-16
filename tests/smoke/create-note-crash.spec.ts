@@ -17,8 +17,10 @@ test('create note via Cmd+N does not crash', async ({ page }) => {
   await page.waitForTimeout(2000)
 
   expect(errors).toHaveLength(0)
+  // A blank new page is labelled Untitled until it has saved text, never by its timestamp.
   const noteList = page.locator('[data-testid="note-list-container"]')
-  await expect(noteList.getByText(/Untitled Note/i).first()).toBeVisible({ timeout: 5000 })
+  await expect(noteList.getByText('Untitled', { exact: true }).first()).toBeVisible({ timeout: 5000 })
+  await expect(noteList.getByText(/untitled-page-\d+/i)).toHaveCount(0)
   await expect(page.getByRole('textbox').last()).toBeVisible()
 })
 
@@ -30,10 +32,11 @@ test('create note via sidebar + button does not crash', async ({ page }) => {
   await page.waitForSelector('[data-testid="sidebar-top-nav"]', { timeout: 10000 })
   await page.waitForTimeout(500)
 
+  // With no type or folder chosen, the list's + makes an ordinary untyped page.
   await page.locator('button[title="Create new note"]').first().click()
   await page.waitForTimeout(2000)
 
   expect(errors).toHaveLength(0)
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+/i)
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+/i)
 })

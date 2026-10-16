@@ -60,6 +60,56 @@ rename keeps that session, while replacing the document invalidates it. The spli
 records actual in-place renames with `renamedFrom`; similar headings or overlapping text in
 two separate files cannot establish document identity or bypass loading the destination file.
 
+## Capture and resumption
+
+Ordinary New page has an explicit plain-creation intent: persist an empty, untyped Markdown
+file before opening it and focus the body. Contextual type, folder, sheet and named creation
+retain their specific intent. Native parsing, live editing and the development bridge share
+title-provenance fixtures. The derived source is carried on entries, never written into notes;
+the native cache version changes so older entries are reparsed.
+
+`src/leadinglight/pageLabel.ts` derives a short display label from the last saved body of an
+unnamed generated capture. It does not rename files or invent stored titles. Authored titles
+win even when they happen to match the filename fallback. Relative-path cues distinguish
+duplicate labels, and the finder can resolve a relative path directly. Favorites use the same
+awaited exact-page opener and preserve list filters and existing pane ownership. See
+[capture and resume](capture-and-resume.md).
+
+Favorite persistence has a separate native transaction, described in
+[ADR 004](ADR-004-favorite-transactions.md). The editor's per-page save coordinator owns its
+publication and integration with newer drafts. Recovery and malformed-draft holds are visible
+states, not permission to replay an old snapshot. Property-write, rename, folder-move and
+close integrations must preserve that ownership boundary. The milestone verification record
+qualifies the completed implementation and its failure paths before release.
+
+`src/leadinglight/favoriteKeys.ts` contains only the YAML text transforms and their contracts.
+The browser bridge and server build import this leaf directly; it must not import desktop hooks,
+components or invocation code. `favoriteTransaction.ts` retains the application coordination and
+compatible exports. This keeps the shared parsing boundary independent of the desktop UI.
+
+Manual renames retain the mounted rich editor through the pane's explicit `renamedFrom` record.
+The swap hook verifies that the editor still holds that old path, flushes its pending text through
+canonical routing, and advances the reactive content path without replacing the live blocks.
+Similar titles or body text do not prove that two pages are the same document. Scoped DOM lookup
+returns an empty surface when Tiptap's unmounted view throws; it cannot borrow another pane's
+scroll container or focus. These lifecycle boundaries also let a Today focus request finish after
+its editor mounts.
+
+`pendingCapture.ts` coordinates one visible `PendingCaptureField` while New page or Today is
+opening. Admission happens synchronously, before filesystem work. The request retains its vault
+session, pane and destination; navigation cannot redirect its words. Rich and raw editors expose
+an exact-page handoff endpoint that checks mounted, editable, non-inert ownership and actual focus.
+The rich endpoint uses the mounted ProseMirror view because BlockNote can still report headless
+during Tiptap's first initialization task. Raw handoff first resumes its focus guard.
+
+The ordinary save queue returns a receipt only after enqueueing the full document. The receipt
+contains canonical path, content, queue session and sequence. Capture checks the exact content,
+then retains a delivery target after removing its field. Save, close and vault switch must prove
+that target reached a saved or completed-Trash outcome; a successful-looking drain alone is
+insufficient. Uncertain insertion keeps a recovery copy without replaying it. Close and vault
+switch refuse unresolved words and hold new capture admission through the transition. See
+[ADR 005](ADR-005-immediate-capture.md) for guarantees and limitations.
+
 ## Daily pages, connections and recovery
 
 Milestone 3 adds three bounded integrations. `useTodayPage` computes a local calendar date on

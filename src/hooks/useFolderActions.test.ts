@@ -79,6 +79,7 @@ function renderFolderActions({
         setTabs([])
         setActiveTabPath(null)
       },
+      prepareFolderMove: async () => ({ commit: () => {}, release: () => {} }),
       reloadVault,
       reloadFolders,
       setToastMessage,

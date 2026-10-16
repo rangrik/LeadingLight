@@ -1,5 +1,10 @@
 import { useRef, useState, useCallback, useEffect } from 'react'
 import type { EditorView } from '@codemirror/view'
+import { isolateHistory } from '@codemirror/commands'
+import { NOT_READY, UNCERTAIN, registerReadyPage } from '../hooks/useEditorFocus'
+import { resumeEditorFocus } from '../hooks/editorFocusOwnership'
+import type { ContentReceipt } from '../hooks/useEditorSave'
+import { editorScopeForPath } from '../leadinglight/editorScope'
 import { trackEvent } from '../lib/telemetry'
 import {
   detectYamlError,
@@ -31,13 +36,15 @@ import {
   type RawEditorSetAutocomplete,
 } from './rawEditorAutocomplete'
 import { RawEditorAutocompleteDropdown } from './RawEditorAutocompleteDropdown'
+import { registerRawTimerStop } from './editorContentFlushRegistration'
 
 export interface RawEditorViewProps {
   content: string
   path: string
   entries: VaultEntry[]
   sourceEntry?: VaultEntry
-  onContentChange: (path: string, content: string) => void
+  /** Returns the save queue's receipt when it takes the text. */
+  onContentChange: (path: string, content: string) => ContentReceipt | null | void
   vaultPath?: string
   onSave: () => void
   /** Mutable ref updated on every keystroke with the latest doc string.
@@ -123,6 +130,14 @@ function useRawEditorPendingChanges({
   useEffect(() => {
     latestContentRefStable.current = latestContentRef
   }, [latestContentRef])
+  useEffect(() => {
+    if (!latestContentRef) return
+    return registerRawTimerStop(latestContentRef, handedOver => {
+      if (!debounceRef.current || latestDocRef.current !== handedOver) return
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    })
+  }, [latestContentRef])
 
   const handleDocChange = useCallback(
     (doc: string) => {
@@ -131,6 +146,8 @@ function useRawEditorPendingChanges({
     setYamlError(detectYamlError(doc))
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
+      // A spent handle would make a later Save or close resend this text over newer settles.
+      debounceRef.current = null
       onContentChangeRef.current(pathRef.current, doc)
     }, DEBOUNCE_MS)
     },
@@ -325,6 +342,64 @@ function useRawEditorDomEvents(
   }, [activatePlainTextPaste, flushPendingChange, rootRef])
 }
 
+// Same contract as the rich editor: keyboard first, then one change the save queue confirms.
+function useRawEditorReadyPage({ path, debounceRef, onContentChange, rootRef, viewRef }: {
+  path: string
+  debounceRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
+  onContentChange: RawEditorViewProps['onContentChange']
+  rootRef: React.RefObject<HTMLDivElement | null>
+  viewRef: React.MutableRefObject<EditorView | null>
+}): void {
+  const admitRef = useLatestRef(onContentChange)
+  useEffect(() => {
+    const ownPane = () => {
+      const scope = rootRef.current?.closest<HTMLElement>('[data-pane-id]') ?? null
+      return scope && scope === editorScopeForPath(path) && scope.dataset.paneActive === 'true' ? scope : null
+    }
+    const appendAtEnd = (view: EditorView, text: string) => {
+      const end = view.state.doc.length
+      view.dispatch(text
+        ? { changes: { from: end, insert: text }, selection: { anchor: end + text.length }, annotations: isolateHistory.of('full') }
+        : { selection: { anchor: end } })
+    }
+    const readyView = () => (ownPane() ? viewRef.current : null)
+    // The draft field's focus boundary keeps editor focus switched off until it is handed over here.
+    const takeKeyboard = (view: EditorView) => {
+      if (view.contentDOM.closest('[inert]') || view.contentDOM.getAttribute('contenteditable') !== 'true') return false
+      resumeEditorFocus()
+      view.focus()
+      return view.hasFocus
+    }
+    return registerReadyPage(path, {
+      pane: () => ownPane()?.dataset.paneId ?? null,
+      focus: () => {
+        const view = readyView()
+        if (!view) return false
+        appendAtEnd(view, '')
+        return takeKeyboard(view)
+      },
+      accept: text => {
+        const view = readyView()
+        if (!view || !takeKeyboard(view)) return NOT_READY
+        appendAtEnd(view, text)
+        if (!text) return { kind: 'delivered', receipt: null, focused: view.hasFocus }
+        try {
+          // The whole document goes to the save queue now instead of after the typing pause.
+          if (debounceRef.current) clearTimeout(debounceRef.current)
+          debounceRef.current = null
+          const doc = view.state.doc.toString()
+          const receipt = admitRef.current(path, doc) || null
+          if (!receipt || receipt.content !== doc) throw new Error('The save queue did not take the draft')
+          return { kind: 'delivered', receipt, focused: view.hasFocus }
+        } catch (error) {
+          console.warn('[capture] The draft may be only partly in its raw page:', error)
+          return UNCERTAIN
+        }
+      },
+    })
+  }, [admitRef, debounceRef, path, rootRef, viewRef])
+}
+
 function useRawEditorContentSync(options: {
   content: string
   findRequest?: RawEditorFindRequest | null
@@ -467,7 +542,7 @@ function useRawEditorEffects(
   options: RawEditorViewProps,
   state: ReturnType<typeof useRawEditorState>,
 ) {
-  const { content, findRequest, onImageImportResult, path } = options
+  const { content, findRequest, onContentChange, onImageImportResult, path } = options
   const {
     containerRef,
     insertWikilinkRef,
@@ -491,6 +566,7 @@ function useRawEditorEffects(
     viewRef,
   })
   useRawEditorDomEvents(rootRef, activatePlainTextPaste, pendingChanges.flush)
+  useRawEditorReadyPage({ path, debounceRef: pendingChanges.debounceRef, onContentChange, rootRef, viewRef })
 
   useRawEditorWikilinkInsertion({
     debounceRef: pendingChanges.debounceRef,

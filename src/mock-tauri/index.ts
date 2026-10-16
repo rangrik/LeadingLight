@@ -6,6 +6,7 @@
 
 import { MOCK_CONTENT } from './mock-content'
 import { mockHandlers, addMockEntry, updateMockContent, trackMockChange } from './mock-handlers'
+import { setNoteFavorite, type SetNoteFavoriteArgs } from './mock-favorite'
 import { tryVaultApi } from './vault-api'
 
 export { addMockEntry, updateMockContent, trackMockChange }
@@ -21,7 +22,16 @@ function registerMockHandlers(): Record<string, MockHandler> {
   )
 }
 
-const registeredMockHandlers = registerMockHandlers()
+const registeredMockHandlers: Record<string, MockHandler> = {
+  ...registerMockHandlers(),
+  // Reads and writes take the app's own routes, so the dev vault API, the desktop harness and
+  // the in-memory mock all keep the star in the same place as the page.
+  set_note_favorite: (args?: unknown) => setNoteFavorite(
+    args as SetNoteFavoriteArgs,
+    path => mockInvoke<string>('get_note_content', { path }),
+    (path, content) => mockInvoke('save_note_content', { path, content }),
+  ),
+}
 
 export function isTauri(): boolean {
   if (typeof globalThis !== 'undefined' && typeof (globalThis as { isTauri?: unknown }).isTauri === 'boolean') {

@@ -28,6 +28,16 @@ the finder offers recently opened pages. `⌘S` saves immediately, and `⌘⌥1`
 and Linux, use Ctrl instead of Command. Rich text and Markdown shortcuts use the inherited
 editor; the Markdown files remain readable in other tools.
 
+New pages start ready for body text, with no required title or type. After saving, unnamed
+captures use their first words as a list label while keeping the same filename. Star a page to
+keep it in **Favorites**, or choose **Resume a page** from an empty pane. Duplicate page titles
+show their folder paths, and Search accepts a relative path such as `harbor/lantern`.
+
+**Today** opens one page for the local date, and **Backlinks** shows pages that link to the
+current page. **Trash** keeps removed pages inside the same local vault and can restore them
+without replacing an occupied filename. See [capture and resume](docs/leadinglight/capture-and-resume.md)
+for the writing and saving contracts.
+
 The initial release uses one workspace window, with two page panes and guarded switching
 between local folders. Combined multi-workspace views and separate editing windows are held
 until they share the same document ownership and save guarantees.

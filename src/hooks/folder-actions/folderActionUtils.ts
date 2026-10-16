@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri, mockInvoke } from '../../mock-tauri'
 import type { SidebarSelection, VaultEntry } from '../../types'
+import type { RunManualRename } from '../useAppSave'
 
 export interface FolderRenameResult {
   old_path: string
@@ -55,6 +56,89 @@ export function replaceRelativeFolderPrefix(params: {
 
 export function folderLabel(params: { folderPath: string }): string {
   return params.folderPath.split('/').filter(Boolean).at(-1) ?? params.folderPath
+}
+
+/** A folder's pages, saved and kept still while the folder moves. */
+export interface FolderMoveHold {
+  /** Points every held page's later writes at its path in the moved folder. */
+  commit: (newFolderPath: string) => void
+  release: () => void
+}
+
+export interface FolderMoveSaves {
+  /** Stops new manual renames, Trash and page changes, waits for running ones, and returns the reopen call. */
+  quiet: () => Promise<() => void>
+  pagePaths: () => string[]
+  holdWrites: (paths: readonly string[]) => void
+  /** Writes a held page's latest text and returns its settled path; throws when it can't. */
+  saveHeld: (path: string) => Promise<string>
+  releaseWrites: (paths: readonly string[]) => void
+  trackRenamedPath: (oldPath: string, newPath: string) => void
+}
+
+/** Saves and holds every page in a folder before it moves, so no write can follow the old path. */
+export async function holdFolderForMove(folderPath: string, saves: FolderMoveSaves): Promise<FolderMoveHold> {
+  const reopen = await saves.quiet()
+  const held: string[] = []
+  let open = true
+  const release = () => {
+    if (!open) return
+    open = false
+    saves.releaseWrites(held)
+    reopen()
+  }
+  // Only the pages' current paths move; older names already forward to them, so they must not be remapped.
+  const moved = new Set<string>()
+  try {
+    // Read after running renames settle; an older name still listed is forwarded to its page by saveHeld.
+    held.push(...new Set(saves.pagePaths().filter(path => isWithinPrefix({ path, prefix: folderPath }))))
+    saves.holdWrites(held)
+    for (const path of [...held]) {
+      const settled = await saves.saveHeld(path)
+      moved.add(settled)
+      if (!held.includes(settled)) held.push(settled)
+    }
+  } catch (error) {
+    release()
+    throw error
+  }
+  return {
+    commit: newFolderPath => {
+      for (const path of moved) saves.trackRenamedPath(path, replaceFolderPrefix({ path, oldPrefix: folderPath, newPrefix: newFolderPath }))
+    },
+    release,
+  }
+}
+
+export interface PageMoveSaves {
+  /** The manual rename barrier: refuses while a folder move, close or vault switch holds, else registers at once. */
+  withManualRename: RunManualRename
+  holdWrites: (paths: readonly string[]) => void
+  /** Writes the page's latest text, settles any automatic rename and returns the path to move. */
+  saveHeld: (path: string) => Promise<string>
+  releaseWrites: (paths: readonly string[]) => void
+}
+
+/** Moves a page as a manual rename, with its writes held while the file moves; null when refused or failed. */
+export function admitPageMove<Rest extends unknown[], R>(
+  saves: PageMoveSaves,
+  move: (path: string, ...rest: Rest) => Promise<R | null>,
+): (path: string, ...rest: Rest) => Promise<R | null> {
+  return async (path, ...rest) => {
+    let moved: R | null = null
+    await saves.withManualRename(path, async () => {
+      const held = [path]
+      saves.holdWrites(held)
+      try {
+        const settled = await saves.saveHeld(path)
+        if (settled !== path) held.push(settled)
+        moved = await move(settled, ...rest)
+      } finally {
+        saves.releaseWrites(held)
+      }
+    }).catch((error: unknown) => { console.warn('[move] The page was not moved:', error) })
+    return moved
+  }
 }
 
 export async function invokeRenameFolder(params: {

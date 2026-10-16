@@ -21,10 +21,14 @@ interface FileContentExpectation extends FileExpectation {
   text: string
 }
 
-interface EmptyTitleHeadingState {
+interface EmptyBodyState {
+  blockCount: number
   contentType: string | null
-  placeholder: string | null
+  text: string | null
 }
+
+// Ordinary capture files are named by the app, never by the user.
+const UNTITLED_PAGE = /^untitled-page-\d+(?:-\d+)?$/i
 
 const REACT_UPDATE_LOOP_FRAGMENTS = [
   'Maximum update depth',
@@ -48,22 +52,33 @@ function collectReactUpdateLoopErrors(page: Page): string[] {
   return errors
 }
 
+// A new page is one blank body block in a zero-byte file; any heading is the user's own.
 async function createUntitledNote(page: Page): Promise<void> {
   await page.locator('body').click()
   await triggerMenuCommand(page, 'file-new-note')
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+(?:-\d+)?/i, {
-    timeout: 5_000,
-  })
-  await expectStableEmptyTitleHeading(page)
+  const filenameTrigger = page.getByTestId('breadcrumb-filename-trigger')
+  await expect(filenameTrigger).toContainText(/untitled-page-\d+(?:-\d+)?/i, { timeout: 5_000 })
+  const stem = (await filenameTrigger.textContent())?.trim() ?? ''
+  expect(stem).toMatch(UNTITLED_PAGE)
+  await expect.poll(() => fs.existsSync(`${tempVaultDir}/${stem}.md`)).toBe(true)
+  expect(fs.readFileSync(`${tempVaultDir}/${stem}.md`, 'utf-8')).toBe('')
+  await expectStableEmptyBody(page)
+}
+
+async function startHeading(page: Page): Promise<void> {
+  await page.keyboard.type('# ')
+  await expect.poll(() => activeSelectionBlockType(page), { timeout: 5_000 }).toBe('heading')
 }
 
 async function writeNewHeading(page: Page, title: string): Promise<void> {
+  await startHeading(page)
   await page.keyboard.type(title)
   await page.keyboard.press('Enter')
 }
 
 async function writeNewHeadingAndBody(page: Page, title: string, body: string): Promise<void> {
+  await startHeading(page)
   await page.keyboard.type(title, { delay: 20 })
   await page.keyboard.press('Enter')
   await page.keyboard.type(body, { delay: 20 })
@@ -102,20 +117,21 @@ async function expectEditorFocused(page: Page): Promise<void> {
   }).toBe('focused')
 }
 
-async function readEmptyTitleHeadingState(page: Page): Promise<EmptyTitleHeadingState> {
+async function readEmptyBodyState(page: Page): Promise<EmptyBodyState> {
   return page.evaluate(() => {
-    const firstBlock = document.querySelector('.bn-block-content') as HTMLElement | null
-    const inlineHeading = firstBlock?.querySelector('.bn-inline-content') as HTMLElement | null
+    const blocks = document.querySelectorAll('.bn-editor .bn-block-content')
+    const firstBlock = blocks[0] as HTMLElement | undefined
     return {
+      blockCount: blocks.length,
       contentType: firstBlock?.getAttribute('data-content-type') ?? null,
-      placeholder: inlineHeading ? getComputedStyle(inlineHeading, '::before').content : null,
+      text: firstBlock?.textContent ?? null,
     }
   })
 }
 
-async function selectionInsideEmptyTitleHeading(page: Page): Promise<boolean> {
+async function selectionInsideEmptyBody(page: Page): Promise<boolean> {
   return page.evaluate(() => {
-    const firstBlock = document.querySelector('.bn-block-content') as HTMLElement | null
+    const firstBlock = document.querySelector('.bn-editor .bn-block-content') as HTMLElement | null
     const selection = window.getSelection()
     const anchorNode = selection?.anchorNode ?? null
     const anchorElement = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement ?? null
@@ -123,21 +139,22 @@ async function selectionInsideEmptyTitleHeading(page: Page): Promise<boolean> {
   })
 }
 
-async function expectReadyEmptyTitleHeading(page: Page): Promise<void> {
+async function expectReadyEmptyBody(page: Page): Promise<void> {
   await expectEditorFocused(page)
-  await expect.poll(() => readEmptyTitleHeadingState(page), {
+  await expect.poll(() => readEmptyBodyState(page), {
     timeout: 5_000,
   }).toEqual({
-    contentType: 'heading',
-    placeholder: '"Title"',
+    blockCount: 1,
+    contentType: 'paragraph',
+    text: '',
   })
-  await expect.poll(() => selectionInsideEmptyTitleHeading(page), { timeout: 5_000 }).toBe(true)
+  await expect.poll(() => selectionInsideEmptyBody(page), { timeout: 5_000 }).toBe(true)
 }
 
-async function expectStableEmptyTitleHeading(page: Page): Promise<void> {
-  await expectReadyEmptyTitleHeading(page)
+async function expectStableEmptyBody(page: Page): Promise<void> {
+  await expectReadyEmptyBody(page)
   await page.waitForTimeout(300)
-  await expectReadyEmptyTitleHeading(page)
+  await expectReadyEmptyBody(page)
 }
 
 async function activeSelectionBlockType(page: Page): Promise<string | null> {
@@ -295,7 +312,7 @@ test('new-note H1 auto-rename keeps the editor usable and leaves no untitled dup
 
   const files = markdownFiles(tempVaultDir)
   expect(files).toContain('fresh-focus-title.md')
-  expect(files.filter((name) => name.startsWith('untitled-note-'))).toEqual([])
+  expect(files.filter((name) => name.startsWith('untitled-page-'))).toEqual([])
   expect(files.filter((name) => /^rapid-rename-\d+\.md$/.test(name))).toHaveLength(4)
   expect(errors).toEqual([])
 })
@@ -309,6 +326,7 @@ test('new-note short title typing and rich heading paste stay in the H1 until En
   const bodyText = 'Body starts only after intentional Enter.'
 
   await createUntitledNote(page)
+  await startHeading(page)
   await page.keyboard.type(titleStart, { delay: 80 })
   await expectTitleHeadingText(page, titleStart)
   await expectEditorFocused(page)
@@ -346,6 +364,7 @@ test('@smoke new-note typing stays focused through initial save settlement', asy
   const bodyText = 'Body keeps accepting text while creation writes and saves settle.'
 
   await createUntitledNote(page)
+  await startHeading(page)
   await page.keyboard.type(title, { delay: 35 })
   await page.keyboard.press('Enter')
   await page.keyboard.type(bodyText, { delay: 35 })
@@ -406,6 +425,7 @@ test('new-note H1 auto-rename preserves body typing and cursor while rename land
   })
 
   await createUntitledNote(page)
+  await startHeading(page)
   await page.keyboard.type('Cursor Stable Rename', { delay: 30 })
   await page.keyboard.press('Enter')
 
@@ -447,6 +467,7 @@ test('fresh-note Enter stays stable after autosave and editor chrome clicks', as
   const thirdLine = 'Third paragraph after another chrome click.'
 
   await createUntitledNote(page)
+  await startHeading(page)
   await page.keyboard.type(title, { delay: 35 })
   await page.keyboard.press('Enter')
   await page.keyboard.type(firstLine, { delay: 35 })
@@ -477,7 +498,7 @@ test('@smoke new-note H1 auto-rename does not recreate the untitled file when a 
 
   await createUntitledNote(page)
   const untitledStem = (await page.getByTestId('breadcrumb-filename-trigger').textContent())?.trim()
-  expect(untitledStem).toMatch(/^untitled-note-\d+(?:-\d+)?$/i)
+  expect(untitledStem).toMatch(UNTITLED_PAGE)
 
   await writeNewHeading(page, title)
   await page.waitForTimeout(2_600)

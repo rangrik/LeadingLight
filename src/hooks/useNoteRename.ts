@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { isTauri, mockInvoke } from '../mock-tauri'
 import type { VaultEntry, WorkspaceIdentity } from '../types'
 import { slugify } from './useNoteCreation'
+import { createTranslator } from '../lib/i18n'
 import {
   findByNotePath,
   normalizeVaultRelativePath,
@@ -10,7 +11,7 @@ import {
   notePathsMatch,
   vaultRelativePathLabel,
 } from '../utils/notePathIdentity'
-import { filenameStemToTitle } from '../utils/noteTitle'
+import { deriveDisplayTitleState, filenameStemToTitle } from '../utils/noteTitle'
 import { vaultPathForEntry } from '../utils/workspaces'
 import { relativePathStem } from '../utils/wikilink'
 
@@ -21,6 +22,8 @@ interface RenameResult {
 }
 
 export { slugify }
+
+const translate = createTranslator()
 
 interface RenameRequest {
   path: string
@@ -225,14 +228,25 @@ export async function performMoveNoteToWorkspace({
 
 export function buildRenamedEntry(entry: VaultEntry, newTitle: string, newPath: string): VaultEntry {
   const filename = notePathFilename(newPath)
-  return { ...entry, path: newPath, filename, title: newTitle }
+  // The old source does not describe the new title.
+  return { ...entry, path: newPath, filename, title: newTitle, titleSource: undefined }
+}
+
+function titleFollowsFilename(entry: VaultEntry): boolean {
+  if (entry.titleSource) return entry.titleSource === 'filename'
+  return !entry.hasH1 && entry.title === filenameStemToTitle(entry.filename)
 }
 
 export function buildFilenameRenamedEntry(entry: VaultEntry, newPath: string): VaultEntry {
   const filename = notePathFilename(newPath)
-  const oldFallbackTitle = filenameStemToTitle(entry.filename)
-  const title = !entry.hasH1 && entry.title === oldFallbackTitle ? filenameStemToTitle(filename) : entry.title
+  const title = titleFollowsFilename(entry) ? filenameStemToTitle(filename) : entry.title
   return { ...entry, path: newPath, filename, title }
+}
+
+/** The renamed file's own content decides its title, as a native reload would. */
+function withContentTitle(entry: VaultEntry, content: string): VaultEntry {
+  if (entry.fileKind && entry.fileKind !== 'markdown') return entry
+  return { ...entry, ...deriveDisplayTitleState({ content, filename: notePathFilename(entry.path) }) }
 }
 
 export function buildWorkspaceMovedEntry(entry: VaultEntry, newPath: string, workspace: WorkspaceIdentity): VaultEntry {
@@ -260,6 +274,16 @@ export function workspaceMoveReplacementTarget({
 
 export async function loadNoteContent({ path }: LoadNoteContentRequest): Promise<string> {
   return isTauri() ? invoke<string>('get_note_content', { path }) : mockInvoke<string>('get_note_content', { path })
+}
+
+/** Null when the moved file can't be read back; the move itself has still happened. */
+async function readRenamedContent(path: string): Promise<string | null> {
+  try {
+    return await loadNoteContent({ path })
+  } catch (err) {
+    console.warn('Failed to reload a renamed note:', err)
+    return null
+  }
 }
 
 function rewriteSummaryLabel(params: { updatedFiles: number }): string {
@@ -388,6 +412,12 @@ interface RenameTabDeps {
 
 interface ApplyRenameOptions {
   successMessage?: (result: RenameResult) => string
+  /** The page's tab text when the native operation started; undefined when it was not open. */
+  sourceContent?: string
+}
+
+function shownTabContent(tabs: Tab[], path: string): string | undefined {
+  return tabs.find((tab) => notePathsMatch(tab.entry.path, path))?.content
 }
 
 function useRenameResultApplier(config: NoteRenameConfig, tabDeps: RenameTabDeps) {
@@ -408,17 +438,28 @@ function useRenameResultApplier(config: NoteRenameConfig, tabDeps: RenameTabDeps
   ) => {
     const currentTabs = tabsRef.current
     const entry = findRenameEntry(entries, currentTabs, oldPath)
-    const newContent = await loadNoteContent({ path: result.new_path })
-    const newEntry = buildEntry(entry, result.new_path)
+    const shownContent = shownTabContent(currentTabs, oldPath)
+    const movedEntry = buildEntry(entry, result.new_path)
     const otherTabPaths = currentTabs
       .filter((tab) => !notePathsMatch(tab.entry.path, oldPath) && !notePathsMatch(tab.entry.path, result.new_path))
       .map((tab) => tab.entry.path)
+    // The file has already moved: its new path and tab go live before the optional read, so nothing saves to the old name.
     if (!notePathsMatch(oldPath, result.new_path)) onPathRenamed?.(oldPath, result.new_path)
-      setTabs((prev) =>
-        prev.map((tab) => (notePathsMatch(tab.entry.path, oldPath) ? { entry: newEntry, content: newContent } : tab)),
-      )
+    setTabs((prev) =>
+      prev.map((tab) => (notePathsMatch(tab.entry.path, oldPath) ? { entry: movedEntry, content: tab.content } : tab)),
+    )
     if (notePathsMatch(activeTabPathRef.current, oldPath)) handleSwitchTab(result.new_path)
-    onEntryRenamed(oldPath, newEntry, newContent)
+    const refreshed = await readRenamedContent(result.new_path)
+    // The copy read back replaces only the text the operation started from; text typed during it is newer.
+    const settled = (content: string) => (refreshed !== null && content === options?.sourceContent ? refreshed : content)
+    const entryFor = (content: string | undefined) => (content === undefined ? movedEntry : withContentTitle(movedEntry, content))
+    setTabs((prev) => prev.map((tab) => {
+      if (!notePathsMatch(tab.entry.path, result.new_path)) return tab
+      const content = settled(tab.content)
+      return { entry: entryFor(content), content }
+    }))
+    const newContent = shownContent === undefined ? refreshed ?? undefined : settled(shownContent)
+    onEntryRenamed(oldPath, entryFor(newContent), newContent ?? '')
       await reloadTabsAfterRename({
         tabPaths: otherTabPaths,
         updateTabContent,
@@ -427,7 +468,7 @@ function useRenameResultApplier(config: NoteRenameConfig, tabDeps: RenameTabDeps
     const successMessage = options?.successMessage
       ? options.successMessage(result)
       : renameToastMessage(result.updated_files, result.failed_updates ?? 0)
-    setToastMessage(successMessage)
+    setToastMessage(refreshed === null ? translate('leadinglight.rename.refreshFailed', { done: successMessage }) : successMessage)
     return result
     },
     [
@@ -465,13 +506,15 @@ async function runRenameAction(options: {
   logLabel: string
   successMessage?: (result: RenameResult) => string
   allowUnchangedResult?: boolean
+  sourceContent?: string
 }): Promise<RenameResult | null> {
-  const { path, perform, applyRenameResult, buildEntry, onEntryRenamed, setToastMessage, errorMessage, logLabel, successMessage, allowUnchangedResult = false } = options
+  const { path, perform, applyRenameResult, buildEntry, onEntryRenamed, setToastMessage, errorMessage, logLabel, successMessage, allowUnchangedResult = false, sourceContent } = options
   try {
     const result = await perform()
     if (allowUnchangedResult && notePathsMatch(result.new_path, path)) return result
     await applyRenameResult(path, result, buildEntry, onEntryRenamed, {
       successMessage,
+      sourceContent,
     })
     return result
   } catch (err) {
@@ -535,6 +578,7 @@ function useWorkspaceMoveHandler({
         successMessage: (result) =>
           moveWorkspaceToastMessage(destinationWorkspace.label, result.updated_files, result.failed_updates ?? 0),
       allowUnchangedResult: true,
+      sourceContent: shownTabContent(tabsRef.current, path),
     })
     },
     [applyRenameResult, entries, setToastMessage, tabsRef],
@@ -574,6 +618,7 @@ function useLocalRenameHandler(context: LocalRenameHandlerContext, mode: 'title'
         setToastMessage,
         errorMessage: renameErrorMessage,
         logLabel: mode === 'title' ? 'Failed to rename note' : 'Failed to rename note filename',
+        sourceContent: shownTabContent(tabsRef.current, path),
       })
     },
     [applyRenameResult, entries, mode, setToastMessage, tabsRef],
@@ -614,6 +659,7 @@ export function useNoteRename(config: NoteRenameConfig, tabDeps: RenameTabDeps) 
         successMessage: (result) =>
           moveToastMessage(normalizedFolderPath, result.updated_files, result.failed_updates ?? 0),
       allowUnchangedResult: true,
+      sourceContent: shownTabContent(tabsRef.current, path),
     })
     },
     [entries, tabsRef, applyRenameResult, setToastMessage],

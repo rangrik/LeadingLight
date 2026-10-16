@@ -6,8 +6,10 @@ import { updateMockFrontmatter, deleteMockFrontmatterProperty } from './mockFron
 import { updateMockContent, trackMockChange } from '../mock-tauri'
 import { parseFrontmatter } from '../utils/frontmatter'
 import { normalizeNoteFormat } from '../utils/noteFormat'
-import { canonicalFrontmatterKey, isSystemMetadataKey } from '../utils/systemMetadata'
+import { canonicalFrontmatterKey, frontmatterKeysMatch, isSystemMetadataKey } from '../utils/systemMetadata'
 import { normalizeNoteWidthMode } from '../utils/noteWidth'
+import { carryTopLevelKeys } from '../leadinglight/favoriteKeys'
+import type { DocumentMutation } from './useEditorSave'
 
 type FrontmatterCommand = 'update_frontmatter' | 'delete_frontmatter_property'
 type FrontmatterKey = string
@@ -269,6 +271,22 @@ async function executeFrontmatterOp(
     : executeMockFrontmatterOp(op, path, key)
 }
 
+/** One property write as a page change: written natively, then the same key carried into newer text. */
+export function propertyChange(
+  op: FrontmatterOp,
+  key: FrontmatterKey,
+  value?: FrontmatterValue,
+): Omit<DocumentMutation<MarkdownContent>, 'flushBuffers'> {
+  const inGroup = (candidate: FrontmatterKey) => candidate === key || frontmatterKeysMatch(candidate, key)
+  let committed: MarkdownContent | null = null
+  return {
+    publish: async path => (committed = await executeFrontmatterOp(op, path, key, value)),
+    committedContent: content => content,
+    // Before the write this only asks whether newer text can take a change of the key.
+    rebase: draft => carryTopLevelKeys(draft, committed ?? draft, inGroup),
+  }
+}
+
 export interface FrontmatterOpOptions {
   /** Suppress toast feedback (caller manages its own toast). */
   silent?: boolean
@@ -380,7 +398,7 @@ interface FrontmatterFailureParams {
   path: VaultPath
 }
 
-async function handleFrontmatterFailure({
+export async function handleFrontmatterFailure({
   callbacks,
   err,
   op,
@@ -408,10 +426,15 @@ export async function runFrontmatterAndApply(request: FrontmatterRunRequest): Pr
     callbacks.cacheContent?.(path, newContent)
     if (callbacks.shouldApply && !callbacks.shouldApply(path)) return undefined
     callbacks.updateTab(path, newContent)
-    applyEntryPatch(path, callbacks, frontmatterToEntryPatch(op, key, value))
-    notifyFrontmatterSuccess(op, callbacks, options)
+    applyFrontmatterSuccess(request)
     return newContent
   } catch (err) {
     return handleFrontmatterFailure({ op, path, err, callbacks, options })
   }
+}
+
+/** After a committed write: the entry's fields, then the success toast unless silent. */
+export function applyFrontmatterSuccess({ op, path, key, value, callbacks, options }: FrontmatterRunRequest): void {
+  applyEntryPatch(path, callbacks, frontmatterToEntryPatch(op, key, value))
+  notifyFrontmatterSuccess(op, callbacks, options)
 }

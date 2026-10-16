@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { requestEditorFocus, useEditorFocus } from './useEditorFocus'
+import { readyPageFor, requestEditorFocus, tryFocusReadyPage, useEditorFocus } from './useEditorFocus'
 import type { FocusableEditor } from './editorFocusUtils'
 import { resumeEditorFocus, suspendEditorFocus } from './editorFocusOwnership'
 import { trackEvent } from '../lib/telemetry'
@@ -215,6 +215,149 @@ describe('useEditorFocus', () => {
     expect(first.editor.focus).not.toHaveBeenCalled()
     expect(second.editor.focus).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
+  })
+
+  it('moves focus into its own pane when an editor in another pane has focus', () => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0 })
+    const paneEditable = (path: string, active: boolean) => {
+      const pane = document.createElement('div')
+      Object.assign(pane.dataset, { paneId: path, notePath: path, paneActive: String(active) })
+      const editable = Object.assign(document.createElement('div'), { tabIndex: -1 })
+      editable.setAttribute('contenteditable', 'true')
+      document.body.appendChild(pane).appendChild(editable)
+      return editable
+    }
+    const today = paneEditable('/vault/today.md', true)
+    const garden = paneEditable('/vault/garden.md', false)
+    const editor = { focus: vi.fn(() => today.focus()), prosemirrorView: { dom: today } }
+    renderHook(() => useEditorFocus(editor, { current: true }, '/vault/today.md'))
+    garden.focus()
+
+    window.dispatchEvent(new CustomEvent('laputa:focus-editor', { detail: { path: '/vault/today.md' } }))
+    vi.advanceTimersByTime(250)
+
+    expect(document.activeElement).toBe(today)
+    vi.useRealTimers()
+  })
+
+  it('focuses a new page whose editor was unmounted when its swap finished', () => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0 })
+    const pane = document.body.appendChild(document.createElement('section'))
+    Object.assign(pane.dataset, { paneId: '0', notePath: '/vault/today.md', paneActive: 'true' })
+    const today = Object.assign(document.createElement('div'), { className: 'ProseMirror', tabIndex: -1 })
+    today.setAttribute('contenteditable', 'true')
+    // Like Tiptap: while the canvas is away, reading the view's DOM throws.
+    const view = { get dom() { if (!today.isConnected) throw new Error('view not available'); return today } }
+    renderHook(() => useEditorFocus({ focus: vi.fn(), prosemirrorView: view }, { current: true }, '/vault/today.md'))
+
+    window.dispatchEvent(new CustomEvent('laputa:focus-editor', { detail: { path: '/vault/today.md' } }))
+    window.dispatchEvent(new CustomEvent('laputa:editor-tab-swapped', { detail: { path: '/vault/today.md' } }))
+    pane.appendChild(today)
+    vi.advanceTimersByTime(160)
+
+    expect(document.activeElement).toBe(today)
+    vi.useRealTimers()
+  })
+
+  describe('a page its editor already shows', () => {
+    const paneEditable = (path: string, active: boolean) => {
+      const pane = document.body.appendChild(document.createElement('section'))
+      Object.assign(pane.dataset, { paneId: path, notePath: path, paneActive: String(active) })
+      const editable = pane.appendChild(Object.assign(document.createElement('div'), { tabIndex: -1 }))
+      editable.setAttribute('contenteditable', 'true')
+      return { pane, editable }
+    }
+    const readyEditor = (dom: () => HTMLElement) => ({
+      focus: vi.fn(() => dom().focus()),
+      prosemirrorView: { get dom() { return dom() } },
+      document: [{ id: 'first' }, { id: 'last' }],
+      setTextCursorPosition: vi.fn(),
+    })
+
+    it('takes the keyboard now with the caret at the end, even when it already had focus', () => {
+      const { editable } = paneEditable('/vault/today.md', true)
+      const editor = readyEditor(() => editable)
+      renderHook(() => useEditorFocus(editor, { current: true }, '/vault/today.md', '/vault/today.md'))
+
+      expect(tryFocusReadyPage('/vault/today.md')).toBe(true)
+      expect(document.activeElement).toBe(editable)
+      expect(editor.setTextCursorPosition).toHaveBeenLastCalledWith('last', 'end')
+      editor.setTextCursorPosition.mockClear()
+      expect(tryFocusReadyPage('/vault/today.md')).toBe(true)
+      expect(editor.setTextCursorPosition).toHaveBeenCalledWith('last', 'end')
+    })
+
+    it('moves the keyboard from the other pane only once the page pane is active', () => {
+      const garden = paneEditable('/vault/garden.md', true).editable
+      const today = paneEditable('/vault/today-other.md', false)
+      renderHook(() => useEditorFocus(readyEditor(() => today.editable), { current: true }, '/vault/today-other.md', '/vault/today-other.md'))
+      garden.focus()
+
+      expect(tryFocusReadyPage('/vault/today-other.md')).toBe(false)
+      expect(document.activeElement).toBe(garden)
+      today.pane.dataset.paneActive = 'true'
+      expect(tryFocusReadyPage('/vault/today-other.md')).toBe(true)
+      expect(document.activeElement).toBe(today.editable)
+    })
+
+    it('refuses without taking focus when the editor is not ready, sits in another page pane, or has no view', () => {
+      const { editable } = paneEditable('/vault/loading.md', true)
+      const elsewhere = paneEditable('/vault/elsewhere.md', true).editable
+      const notReady = readyEditor(() => editable)
+      renderHook(() => useEditorFocus(notReady, { current: true }, '/vault/loading.md', null))
+      const misplaced = readyEditor(() => elsewhere)
+      renderHook(() => useEditorFocus(misplaced, { current: true }, '/vault/misplaced.md', '/vault/misplaced.md'))
+      // Raw or diff mode unmounts the rich canvas; then reading the view's DOM throws.
+      const unmounted = readyEditor(() => { throw new Error('view not available') })
+      const raw = renderHook(() => useEditorFocus(unmounted, { current: true }, '/vault/raw.md', '/vault/raw.md'))
+
+      expect(tryFocusReadyPage('/vault/loading.md')).toBe(false)
+      expect(tryFocusReadyPage('/vault/misplaced.md')).toBe(false)
+      expect(tryFocusReadyPage('/vault/raw.md')).toBe(false)
+      for (const editor of [notReady, misplaced, unmounted]) expect(editor.focus).not.toHaveBeenCalled()
+      raw.unmount()
+      expect(tryFocusReadyPage('/vault/raw.md')).toBe(false)
+    })
+
+    // Seam: the page takes the keyboard before the draft goes in, only in an active pane; only the queue's receipt counts.
+    it('takes the keyboard before queueing the draft, and reports a failed insert as uncertain', () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { pane, editable } = paneEditable('/vault/new.md', false)
+      const steps: string[] = []
+      const view = { dom: editable, editable: true, focus: vi.fn(() => { steps.push('focus'); editable.focus() }) }
+      const editor = { ...readyEditor(() => editable), prosemirrorView: view }
+      const receipt = { path: '/vault/new.md', content: 'words', session: 1, seq: 1 }
+      const takeDraft = vi.fn((text: string) => { steps.push(`queued ${text}`); return receipt })
+      renderHook(() => useEditorFocus(editor, { current: true }, '/vault/new.md', '/vault/new.md', takeDraft))
+      const page = readyPageFor('/vault/new.md')
+
+      expect(page?.accept('words')).toEqual({ kind: 'notReady' })
+      pane.dataset.paneActive = 'true'
+      expect(page?.pane()).toBe('/vault/new.md')
+      expect(page?.accept('words')).toEqual({ kind: 'delivered', receipt, focused: true })
+      expect(steps).toEqual(['focus', 'queued words'])
+
+      takeDraft.mockImplementation(() => { throw new Error('not queued') })
+      expect(page?.accept('again')).toEqual({ kind: 'uncertain' })
+    })
+
+    it('a background focus request does not take the keyboard from a pending draft field', () => {
+      vi.useFakeTimers()
+      vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { cb(0); return 0 })
+      const { editable } = paneEditable('/vault/late.md', true)
+      renderHook(() => useEditorFocus(readyEditor(() => editable), { current: true }, '/vault/late.md'))
+      const draft = document.body.appendChild(document.createElement('div'))
+      draft.dataset.pendingCapture = 'true'
+      const field = draft.appendChild(document.createElement('textarea'))
+      field.focus()
+
+      requestEditorFocus({ path: '/vault/late.md', cursorAtEnd: true })
+      vi.advanceTimersByTime(6_000)
+      expect(document.activeElement).toBe(field)
+      vi.useRealTimers()
+    })
   })
 
   it('falls back to focusing when the swap event never arrives', () => {

@@ -9,6 +9,16 @@ import { triggerMenuCommand } from './testBridge'
 
 let tempVaultDir: string
 
+// New pages are body-first; a title exists only once the user types `# `.
+async function expectBodyEditingFocus(page: Page): Promise<void> {
+  await expect(page.locator('.bn-editor')).toBeFocused()
+  const firstBlock = page.locator('.bn-editor .bn-block-content').first()
+  await expect(firstBlock).toHaveAttribute('data-content-type', 'paragraph')
+  await expect.poll(() => firstBlock.evaluate(element => (
+    element.contains(window.getSelection()?.anchorNode ?? null)
+  ))).toBe(true)
+}
+
 async function expectTitleEditingFocus(page: Page): Promise<void> {
   await expect(page.locator('.bn-editor')).toBeFocused()
   const titleHeading = page.locator('.bn-editor [data-content-type="heading"]').first()
@@ -30,12 +40,13 @@ test.afterEach(() => {
 test('@smoke new-note title stays focused when auto-rename lands during a typing pause', async ({ page }) => {
   await triggerMenuCommand(page, APP_COMMAND_IDS.fileNewNote)
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+/i, {
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+/i, {
     timeout: 5_000,
   })
-  await expectTitleEditingFocus(page)
+  await expectBodyEditingFocus(page)
 
   const titleHeading = page.locator('.bn-editor [data-content-type="heading"]').first()
+  await page.keyboard.type('# ')
   await page.keyboard.type('Deliberate', { delay: 35 })
   await expect(titleHeading).toContainText('Deliberate')
 
@@ -50,15 +61,16 @@ test('@smoke new-note title stays focused when auto-rename lands during a typing
   await expectTitleEditingFocus(page)
 
   await page.keyboard.press('Meta+N')
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+/i, {
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+/i, {
     timeout: 5_000,
   })
   const nextTitleHeading = page.locator('.bn-editor [data-content-type="heading"]').first()
-  // No click: Cmd+N alone must leave the caret in the new title. A redundant second content
-  // swap used to move it into the body, and clicking the title only hid that when the click
-  // happened to land after the second swap.
-  await expectTitleEditingFocus(page)
+  // No click: Cmd+N alone must leave the caret in the new page. A redundant second content
+  // swap used to move it, and clicking only hid that when the click happened to land after
+  // the second swap.
+  await expectBodyEditingFocus(page)
 
+  await page.keyboard.type('# ')
   await page.keyboard.type('Consecutive', { delay: 35 })
   await page.waitForTimeout(2_700)
   await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText('consecutive', {

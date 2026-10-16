@@ -62,6 +62,19 @@ describe('useRichEditorContentReadiness untitled rename continuity', () => {
     expect(result.current).toBe(false)
   })
 
+  it('keeps a page renamed in place ready, but not an unrelated page with the same text', () => {
+    const page = makeTab('harbor-ledger.md', '# Note B\n\nBody')
+    const readiness = (activeTab: typeof page & { renamedFrom?: string }) => renderHook(() => useRichEditorContentReadiness({
+      activeTab,
+      activeTabIsSheet: false,
+      editorContentPath: 'note-b.md',
+    })).result.current
+
+    // The pane recorded the rename; the new filename has nothing to do with the title.
+    expect(readiness({ ...page, renamedFrom: 'note-b.md' })).toBe(true)
+    expect(readiness(page)).toBe(false)
+  })
+
   it('keeps focused title editing ready when a delayed signal names the previous note', () => {
     const editorSurface = document.createElement('div')
     const editorInput = document.createElement('button')

@@ -6,9 +6,16 @@ async function createUntitledNote(page: Page): Promise<void> {
   await page.locator('body').click()
   await triggerMenuCommand(page, 'file-new-note')
   await expect(page.locator('.bn-editor')).toBeVisible({ timeout: 5_000 })
-  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-note-\d+(?:-\d+)?/i, {
+  await expect(page.getByTestId('breadcrumb-filename-trigger')).toContainText(/untitled-page-\d+(?:-\d+)?/i, {
     timeout: 5_000,
   })
+}
+
+// New pages are body-first; `# ` turns the caret's empty first block into the title heading.
+async function startEmptyTitle(page: Page): Promise<void> {
+  await expect.poll(() => activeSelectionBlockType(page), { timeout: 5_000 }).toBe('paragraph')
+  await page.keyboard.type('# ')
+  await expect.poll(() => activeSelectionBlockType(page), { timeout: 5_000 }).toBe('heading')
 }
 
 async function clearEditorSelection(page: Page): Promise<void> {
@@ -73,6 +80,7 @@ test.afterEach(async () => {
 
 test('@smoke clicking an untitled title wrapper restores the caret to the H1', async ({ page }) => {
   await createUntitledNote(page)
+  await startEmptyTitle(page)
   await clearEditorSelection(page)
 
   await expect.poll(() => editorHasContentEditableFocus(page), { timeout: 5_000 }).toBe(false)
@@ -85,8 +93,8 @@ test('@smoke clicking an untitled title wrapper restores the caret to the H1', a
 
 test('@smoke clicking editable text restores a dropped dark-mode caret after Enter', async ({ page }) => {
   await createUntitledNote(page)
-  const title = page.locator('.bn-block-content[data-content-type="heading"]').first()
-  await title.click()
+  await page.locator('.bn-editor .bn-block-content').first().click()
+  await startEmptyTitle(page)
   await page.keyboard.type('Focus recovery')
   await page.keyboard.press('Enter')
   await page.keyboard.type('Body before recovery')

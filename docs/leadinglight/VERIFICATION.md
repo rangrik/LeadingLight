@@ -196,3 +196,81 @@ actions and keyboard input were used instead. A system Screenshot overlay preven
 physical mouse clicks, so these native accessibility checks do not establish native pointer
 hit-box coverage. The browser flows exercise the actual mouse paths. The final pane-focus chord
 was not requalified during this pass; the earlier milestone's shortcut checks remain separate.
+
+Later that evening, after the system overlay was dismissed, native computer use successfully
+bound the isolated 0.3.0 app. Pointer checks verified closing Properties, opening Today, switching
+to stacked pages, resizing the divider and creating a side-by-side split by dragging a page tab.
+All Notes row drags still did not initiate a successful native HTML5 drop and remain unqualified.
+The two-pane Today shortcut exposed a focus defect: when Today already occupied the other pane,
+selection changed but typing remained in the former editor. This case is a correction and
+release check for the next candidate; the earlier single-pane shortcut result does not cover it.
+
+# Milestone 4 — immediate capture and dependable resumption
+
+Version 0.4.0 was checked on macOS on 2026-10-16 with disposable local vaults. Ordinary New page
+starts empty, accepts immediate typing, and derives its list label from saved body text without
+silently renaming the file. Favorites and path search distinguish same-title pages. Empty panes
+offer Resume through the existing finder. Favorite metadata, page/property saves and structural
+actions share coordinated document ownership.
+
+## Capture, focus and failure recovery
+
+The final frozen browser candidate passes 27 distinct cases across two runs: ten immediate/delayed
+capture and Save cases, then seventeen capture, daily-page, recovery, manual-rename and property-save
+regressions. Runs used one worker and no retries. They include immediate mouse and Command-N input,
+Today already open in another pane, delayed rich/raw handoff, Unicode text, failed creation/retry,
+navigation-away retention, and checking that an unresolved draft or failed delivered write never
+flashes a successful Save notice. Earlier candidate runs covered 34 distinct flows; these counts
+overlap and must not be added as unique tests.
+
+The packaged native app now passes the previously failing immediate New and two-pane Today checks
+without added readiness waits. Failed creation was induced by removing write permission from only
+the disposable vault directory. The full draft remained visible; Save reported it unsaved; normal
+Command-Q returned `saved=false` and kept the window open. Restoring the original permission and
+choosing Try again delivered the text once, with focus and continued typing intact. Both rich and
+raw paths passed. Unicode paste, including accented and Japanese text, survived raw handoff and
+restart. The automation provider drops accented characters with its typing method even in a ready
+editor; those synthesized keystrokes are not native Unicode/IME qualification.
+
+Immediate capture followed by normal quit persisted the entire page. A separate raw-buffer edit
+immediately followed by quit also persisted. Native logs recorded successful renderer acknowledgment
+before termination, and relaunch restored both pages, raw mode and the 50/50 layout. Initial capture
+text remains in memory until saved; these checks do not establish crash or power-loss recovery.
+Native IME composition and the complete vault-switch failure matrix remain unqualified.
+
+## Other native checks
+
+Earlier isolated candidate checks verified duplicate Favorites and relative-path search, type-then-star
+before debounce, preservation of body text and file metadata, both dirty panes across quit/restart,
+authored-title page rename and folder rename with continued writing, local attachments and hashes,
+malformed raw Favorite refusal with retained text, Resume, search dismissal, stacked resizing and
+light/dark appearance. A paced native rename check does not establish every pending-write race;
+targeted queue tests and browser regressions cover those separately.
+
+Native All Notes HTML5 row dragging remains unqualified. A bounded folder-drop diagnostic also
+produced no movement and left all fixture files unchanged. The evidence cannot distinguish the
+automation provider from WebKit behavior. Native tab dragging and divider gestures work; Chromium
+checks exercise trusted HTML5 row-drag events. No speculative replacement was introduced.
+
+## Quality gates and limits
+
+The final correction's affected test run passes 1,255 tests in 117 files. Additional focused raw
+receipt and independent notification-recorder checks pass; these overlap broader evidence. App and
+build-script TypeScript, changed-source lint, production frontend build and isolated native bundle
+build pass. The native bundle is signed ad hoc and passes strict resource verification. One reusable
+debug target and at most two Cargo jobs were used. Earlier native Favorite/metadata/rename tests and
+strict Clippy passed. Normal local hooks remain required for publication.
+
+The broader affected frontend run passed 2,418 tests and failed five unchanged upstream `useMcpStatus`
+assertions. Two supplemental release-script cases fail on inherited GNU-find assumptions on macOS.
+The separate tests-only TypeScript project retains baseline fixture errors; application/build types
+are clean. Full locale parity also remains incomplete (131 English fallback keys absent per target
+locale). These are not claims of a clean full upstream suite, coverage qualification, or full locale
+support. No telemetry or cloud translation service is used.
+
+`yaml` 2.9.1 is the new direct dependency for validation before narrow Favorite metadata patches.
+Compatibility holds remain in [DEPENDENCIES.md](DEPENDENCIES.md). Save receipts, their current
+single-vault limitation, and memory-only pending drafts are documented in
+[ADR 005](ADR-005-immediate-capture.md). Automatic local version history is a subsequent milestone.
+The user's running installed app was not replaced or used for QA; a production update is staged
+separately until it can be installed safely.

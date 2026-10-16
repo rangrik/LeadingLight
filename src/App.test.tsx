@@ -4,6 +4,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { DEFAULT_VAULTS } from './hooks/useVaultSwitcher'
 import { invoke } from '@tauri-apps/api/core'
 import type { Settings, ViewDefinition, ViewFile } from './types'
+import type * as AppSaveModule from './hooks/useAppSave'
+import type * as NoteActionsModule from './hooks/useNoteActions'
+import type { NoteActionsConfig } from './hooks/useNoteActions'
+import type { useNoteRetargetingUi } from './hooks/useNoteRetargetingUi'
+import type { FolderMoveHold } from './hooks/folder-actions/folderActionUtils'
+
+type RetargetingInput = Parameters<typeof useNoteRetargetingUi>[0]
 
 // Provide a localStorage mock that supports all methods (jsdom's may be incomplete)
 const localStorageMock = (() => {
@@ -472,6 +479,59 @@ vi.mock('./components/tolariaEditorFormatting', () => ({
   TolariaFormattingToolbarController: () => null,
 }))
 
+// The real hooks, recording what App hands them, so the page barriers are tested as App wires them.
+const appWiring = vi.hoisted(() => ({
+  noteActions: null as NoteActionsConfig | null,
+  notes: null as ReturnType<typeof NoteActionsModule.useNoteActions> | null,
+  appSave: null as ReturnType<typeof AppSaveModule.useAppSave> | null,
+  prepareFolderMove: null as ((folderPath: string) => Promise<FolderMoveHold>) | null,
+  moveNoteToFolder: null as RetargetingInput['moveNoteToFolder'] | null,
+  closeFlush: null as (() => Promise<void>) | null,
+  switchVault: null as (() => void | Promise<void>) | null,
+}))
+vi.mock('./hooks/useNoteActions', async (importOriginal) => {
+  const actual = await importOriginal<typeof NoteActionsModule>()
+  return { ...actual, useNoteActions: (config: NoteActionsConfig) => { appWiring.noteActions = config; return (appWiring.notes = actual.useNoteActions(config)) } }
+})
+vi.mock('./hooks/useNoteRetargetingUi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./hooks/useNoteRetargetingUi')>()
+  return { ...actual, useNoteRetargetingUi: (input: RetargetingInput) => { appWiring.moveNoteToFolder = input.moveNoteToFolder; return actual.useNoteRetargetingUi(input) } }
+})
+vi.mock('./leadinglight/useNativeSaveBeforeClose', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./leadinglight/useNativeSaveBeforeClose')>()
+  return {
+    ...actual,
+    useNativeSaveBeforeClose: (options: Parameters<typeof actual.useNativeSaveBeforeClose>[0]) => {
+      appWiring.closeFlush = options.flush
+      return actual.useNativeSaveBeforeClose(options)
+    },
+  }
+})
+vi.mock('./hooks/useVaultSwitcher', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./hooks/useVaultSwitcher')>()
+  return {
+    ...actual,
+    useVaultSwitcher: (options: Parameters<typeof actual.useVaultSwitcher>[0]) => {
+      appWiring.switchVault = options.onSwitch
+      return actual.useVaultSwitcher(options)
+    },
+  }
+})
+vi.mock('./hooks/useAppSave', async (importOriginal) => {
+  const actual = await importOriginal<typeof AppSaveModule>()
+  return { ...actual, useAppSave: (options: Parameters<typeof actual.useAppSave>[0]) => (appWiring.appSave = actual.useAppSave(options)) }
+})
+vi.mock('./hooks/useFolderActions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./hooks/useFolderActions')>()
+  return {
+    ...actual,
+    useFolderActions: (input: Parameters<typeof actual.useFolderActions>[0]) => {
+      appWiring.prepareFolderMove = input.prepareFolderMove
+      return actual.useFolderActions(input)
+    },
+  }
+})
+
 import App from './App'
 import { TooltipProvider } from './components/ui/tooltip'
 import { useUpdater } from './hooks/useUpdater'
@@ -670,14 +730,16 @@ describe('App', () => {
       const pane = await screen.findByLabelText('Page pane 1', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
       fireEvent.click(within(pane).getByText('New page'))
 
+      // An ordinary page: empty and untyped until the person writes.
       await waitFor(() => {
         expect(saveNoteContent).toHaveBeenCalledWith(expect.objectContaining({
-          path: '/vault/untitled-note-1700000000.md',
+          path: '/vault/untitled-page-1700000000.md',
+          content: '',
           vaultPath: '/vault',
         }))
       })
       await waitFor(() => {
-        expect(window.__laputaTest?.activeTabPath).toBe('/vault/untitled-note-1700000000.md')
+        expect(window.__laputaTest?.activeTabPath).toBe('/vault/untitled-page-1700000000.md')
       })
     } finally {
       dateNow.mockRestore()
@@ -709,14 +771,15 @@ describe('App', () => {
 
       fireEvent.keyDown(window, { key: 'n', code: 'KeyN', metaKey: true })
 
+      // Cmd+N is an ordinary New page: empty, untyped, and named "Untitled" until it has a body.
       await waitFor(() => {
         expect(saveNoteContent).toHaveBeenCalledWith({
-          path: '/vault/untitled-note-1700000000.md',
-          content: '---\ntype: Note\n---\n\n# \n\n',
+          path: '/vault/untitled-page-1700000000.md',
+          content: '',
           vaultPath: '/vault',
         })
       })
-      expect(window.__laputaTest?.activeTabPath).not.toBe('/vault/untitled-note-1700000000.md')
+      expect(window.__laputaTest?.activeTabPath).not.toBe('/vault/untitled-page-1700000000.md')
 
       await act(async () => {
         resolveSave()
@@ -724,12 +787,55 @@ describe('App', () => {
       })
 
       await waitFor(() => {
-        expect(window.__laputaTest?.activeTabPath).toBe('/vault/untitled-note-1700000000.md')
+        expect(window.__laputaTest?.activeTabPath).toBe('/vault/untitled-page-1700000000.md')
       })
-      expect(screen.getAllByText('Untitled Note 1700000000').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Untitled').length).toBeGreaterThan(0)
     } finally {
       dateNow.mockRestore()
     }
+  })
+
+  // Seam: keys typed before the new page exists stay in a visible field, and Save never claims them saved.
+  it('holds early typing in a draft field through a failed create, and Save says it is not in a page yet', async () => {
+    let refuseSave!: (error: Error) => void
+    const saveNoteContent = vi.fn(() => new Promise<void>((_resolve, reject) => { refuseSave = reject }))
+    mockCommandResults.save_note_content = saveNoteContent
+    render(<App />)
+    await screen.findByText('All Notes')
+    // An ordinary page stays open, so Save also waits for a repository refresh before it returns.
+    fireEvent.click(within(await screen.findByTestId('note-list-container')).getByText('Test Project'))
+    await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/project/test.md'))
+
+    fireEvent.keyDown(window, { key: 'n', code: 'KeyN', metaKey: true })
+    const draft = screen.getByRole('textbox', { name: 'Your draft' })
+    expect(document.activeElement).toBe(draft)
+    expect(screen.getByText('Opening page…')).toBeInTheDocument()
+    fireEvent.change(draft, { target: { value: 'Harbor fog\nat dawn' } })
+
+    await waitFor(() => expect(saveNoteContent).toHaveBeenCalled())
+    await act(async () => { refuseSave(new Error('The disk refused the write.')) })
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Your draft' })).toHaveValue('Harbor fog\nat dawn')
+    expect(window.__laputaTest?.activeTabPath ?? '').not.toMatch(/untitled-page/)
+
+    let releaseRefresh: () => void = () => {}
+    mockCommandResults.get_modified_files = () => new Promise(resolve => { releaseRefresh = () => resolve([]) })
+    // Save must never flash Saved or Nothing to save while the draft is still outside any page.
+    const flashed: string[] = []
+    const watch = new MutationObserver(() => {
+      for (const text of ['Saved', 'Nothing to save']) {
+        // The open page's own status label is not a Save announcement.
+        if (screen.queryAllByText(text, { exact: true }).some(element => !element.closest('section[data-pane-id]'))) flashed.push(text)
+      }
+    })
+    watch.observe(document.body, { childList: true, subtree: true, characterData: true })
+    fireEvent.keyDown(window, { key: 's', metaKey: true })
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+    releaseRefresh()
+    expect(await screen.findByText('Your draft isn’t in a page yet. It is still on screen.')).toBeInTheDocument()
+    watch.disconnect()
+    expect(flashed).toEqual([])
+    expect(screen.getByRole('textbox', { name: 'Your draft' })).toHaveValue('Harbor fog\nat dawn')
   })
 
   it('shows visible feedback when a manual update check finds an update', async () => {
@@ -1219,27 +1325,77 @@ describe('App', () => {
     })
   }, 10_000)
 
-  it('opens favorites directly into Neighborhood mode', async () => {
-    configureNeighborhoodFavoritesVault()
+  describe('opening a favorite', () => {
+    const favoriteRow = async (title: string) => {
+      const header = await screen.findByText('FAVORITES', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+      const section = header.closest('div')?.parentElement as HTMLElement
+      return within(section).findByText(title)
+    }
+    const readsOf = (reads: ReturnType<typeof vi.fn>, path: string) =>
+      reads.mock.calls.filter(([args]) => (args as { path: string }).path === path).length
 
-    render(<App />)
+    // Seam: a favorite click used to switch the list into a neighborhood and reload the open page.
+    it('opens the exact page and leaves the list and its filter alone, even when clicked twice', async () => {
+      configureNeighborhoodFavoritesVault()
+      const reads = vi.fn(({ path }: { path: string }) => neighborhoodContent[path] ?? '')
+      mockCommandResults.get_note_content = reads
+      render(<App />)
+      const noteList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+      await enterNeighborhood(noteList, 'Beta')
+      await waitFor(() => expect(getHeaderForNoteList(noteList)).toHaveTextContent('Beta'))
 
-    let favoritesSection: HTMLElement | undefined
-    await waitFor(() => {
-      const sidebar = screen.getByText('FAVORITES')
-      const currentFavoritesSection = sidebar.closest('div')?.parentElement as HTMLElement
-      expect(within(currentFavoritesSection).getByText('Alpha')).toBeInTheDocument()
-      favoritesSection = currentFavoritesSection
-    })
-    fireEvent.click(within(favoritesSection!).getByText('Alpha'))
+      fireEvent.click(await favoriteRow('Alpha'))
+      await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md'))
+      const alphaReads = readsOf(reads, '/vault/alpha.md')
+      fireEvent.click(await favoriteRow('Alpha'))
+      await act(async () => { await Promise.resolve() })
 
-    const noteListContainer = await screen.findByTestId('note-list-container')
-    await waitFor(() => {
-      expect(getHeaderForNoteList(noteListContainer)).toHaveTextContent('Alpha')
-    })
+      expect(getHeaderForNoteList(noteList)).toHaveTextContent('Beta')
+      expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md')
+      expect(readsOf(reads, '/vault/alpha.md')).toBe(alphaReads)
+    }, SLOW_APP_READY_TIMEOUT_MS * 2)
 
-    expect(screen.getByText('Related to')).toBeInTheDocument()
-    expect(screen.getByText('Beta')).toBeInTheDocument()
+    it('keeps the current page when the favorite cannot be read', async () => {
+      configureNeighborhoodFavoritesVault()
+      mockCommandResults.get_note_content = ({ path }: { path: string }) => {
+        if (path === '/vault/alpha.md') throw new Error('stream did not contain valid UTF-8')
+        return neighborhoodContent[path] ?? ''
+      }
+      render(<App />)
+      const noteList = await screen.findByTestId('note-list-container', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+      await clickNoteListItem(noteList, 'Beta')
+      await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/beta.md'))
+
+      fireEvent.click(await favoriteRow('Alpha'))
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 50)) })
+
+      expect(window.__laputaTest?.activeTabPath).toBe('/vault/beta.md')
+    }, SLOW_APP_READY_TIMEOUT_MS * 2)
+
+    it('does not pull focus into the page if the person moved on during a slow read', async () => {
+      configureNeighborhoodFavoritesVault()
+      let finishRead: (content: string) => void = () => {}
+      mockCommandResults.get_note_content = ({ path }: { path: string }) => path === '/vault/alpha.md'
+        ? new Promise<string>(resolve => { finishRead = resolve })
+        : neighborhoodContent[path] ?? ''
+      const focusRequests: string[] = []
+      const onFocusRequest = (event: Event) => { focusRequests.push((event as CustomEvent<{ path: string }>).detail.path) }
+      window.addEventListener('laputa:focus-editor', onFocusRequest)
+      const field = document.body.appendChild(document.createElement('input'))
+      try {
+        render(<App />)
+        fireEvent.click(await favoriteRow('Alpha'))
+        field.focus()
+        await act(async () => { finishRead(neighborhoodContent['/vault/alpha.md']) })
+        await waitFor(() => expect(window.__laputaTest?.activeTabPath).toBe('/vault/alpha.md'))
+
+        expect(document.activeElement).toBe(field)
+        expect(focusRequests).not.toContain('/vault/alpha.md')
+      } finally {
+        window.removeEventListener('laputa:focus-editor', onFocusRequest)
+        field.remove()
+      }
+    }, SLOW_APP_READY_TIMEOUT_MS * 2)
   })
 
   it('defaults to All Notes when explicit organization is disabled in vault config', async () => {
@@ -1491,7 +1647,7 @@ describe('App', () => {
   })
 
   it('updates the main-window size constraints when the view mode changes', async () => {
-    const { invoke } = await import('@tauri-apps/api/core') as { invoke: ReturnType<typeof vi.fn> }
+    const invoke = vi.mocked((await import('@tauri-apps/api/core')).invoke)
 
     render(<App />)
     await waitFor(() => {
@@ -1522,7 +1678,7 @@ describe('App', () => {
   })
 
   it('does not ask Windows to grow the native window when toggling Properties', async () => {
-    const { invoke } = await import('@tauri-apps/api/core') as { invoke: ReturnType<typeof vi.fn> }
+    const invoke = vi.mocked((await import('@tauri-apps/api/core')).invoke)
     const originalUserAgent = navigator.userAgent
     Object.defineProperty(window.navigator, 'userAgent', {
       configurable: true,
@@ -1549,5 +1705,223 @@ describe('App', () => {
         value: originalUserAgent,
       })
     }
+  })
+
+  // Seam: App's wiring of the page barriers. Catches property writes, title renames and folder moves running unguarded.
+  const PAGE = '/vault/project/test.md'
+  const BUSY = 'This page is busy with another change. Try again in a moment.'
+  const flushTasks = () => act(() => new Promise(resolve => setTimeout(resolve, 0)))
+
+  it('runs property writes and title renames through the page barrier, and says when a page is busy', async () => {
+    render(<App />)
+    await screen.findAllByText('Test Project', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    const { runPageExclusive, runManualRename } = appWiring.noteActions!
+    let finishWrite = () => {}
+    let writing: Promise<boolean> | undefined
+    act(() => { writing = runPageExclusive!(PAGE, () => new Promise(resolve => { finishWrite = () => resolve(true) })) })
+    const rename = vi.fn(async () => {})
+    let renaming: Promise<void> | undefined
+    act(() => { renaming = runManualRename!(PAGE, rename) })
+    await flushTasks()
+    expect(rename).not.toHaveBeenCalled()
+
+    await act(async () => { finishWrite(); await writing; await renaming })
+    expect(rename).toHaveBeenCalledOnce()
+    const reopen = appWiring.appSave!.holdManualRenameAdmission()
+    const refused = vi.fn(async () => {})
+    await act(() => runManualRename!(PAGE, refused))
+    reopen()
+    expect(refused).not.toHaveBeenCalled()
+    expect(await screen.findByText(BUSY)).toBeInTheDocument()
+  })
+
+  it('holds page renames while a folder moves, after letting one already running finish', async () => {
+    render(<App />)
+    await screen.findAllByText('Test Project', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    const { runManualRename } = appWiring.noteActions!
+    let finishRename = () => {}
+    let running: Promise<void> | undefined
+    act(() => { running = runManualRename!(PAGE, () => new Promise<void>(resolve => { finishRename = resolve })) })
+    await flushTasks()
+    let preparing: Promise<FolderMoveHold> | undefined
+    let prepared = false
+    act(() => { preparing = appWiring.prepareFolderMove!('/vault/project'); void preparing.then(() => { prepared = true }) })
+    const late = vi.fn(async () => {})
+    await act(() => runManualRename!(PAGE, late))
+    await flushTasks()
+    expect(late).not.toHaveBeenCalled()
+    expect(prepared).toBe(false)
+
+    await act(async () => { finishRename(); await running })
+    const hold = await act(() => preparing!)
+    hold.release()
+    const after = vi.fn(async () => {})
+    await act(() => runManualRename!(PAGE, after))
+    expect(after).toHaveBeenCalledOnce()
+  })
+
+  // Seam: close and vault switch against page renames and moves. Catches the newest text lost to a rename's older copy.
+  const NEWEST = '# Test Project\n\nNewest words.'
+  const RENAMED = '/vault/project/renamed.md'
+  const MOVED = '/vault/topic/test.md'
+
+  // Like the native worker: a rename or move reads the body first and publishes it only when let go.
+  function installStagingDisk() {
+    const disk = new Map([[PAGE, mockAllContent[PAGE]]])
+    const native = { release: () => {}, renames: 0, moves: 0, saveFails: false }
+    const released = new Promise<void>(resolve => { native.release = resolve })
+    const publish = async (from: string, to: string) => {
+      const staged = disk.get(from) ?? ''
+      await released
+      disk.delete(from)
+      disk.set(to, staged)
+      return { new_path: to, updated_files: 0, failed_updates: 0 }
+    }
+    mockCommandResults.save_note_content = ({ path, content }: { path: string, content: string }) => {
+      if (native.saveFails) throw new Error('disk full')
+      disk.set(path, content)
+      return null
+    }
+    mockCommandResults.get_note_content = ({ path }: { path: string }) => disk.get(path) ?? ''
+    mockCommandResults.list_vault = () => [...disk.keys()].map(path => ({ ...mockEntries[0], path, filename: path.split('/').pop() }))
+    mockCommandResults.rename_note_filename = ({ old_path, new_filename_stem }: { old_path: string, new_filename_stem: string }) => {
+      native.renames += 1
+      return publish(old_path, `${old_path.slice(0, old_path.lastIndexOf('/'))}/${new_filename_stem}.md`)
+    }
+    mockCommandResults.move_note_to_folder = ({ old_path, folder_path }: { old_path: string, folder_path: string }) => {
+      native.moves += 1
+      return publish(old_path, `/vault/${folder_path}/${old_path.split('/').pop()}`)
+    }
+    return { disk, native }
+  }
+
+  async function renderReadyApp() {
+    render(<App />)
+    await screen.findAllByText('Test Project', {}, { timeout: SLOW_APP_READY_TIMEOUT_MS })
+    return appWiring.appSave!
+  }
+
+  function startTracked(start: () => Promise<unknown>) {
+    const state = { settled: false, done: Promise.resolve() as Promise<unknown> }
+    act(() => { state.done = start().then(() => { state.settled = true }) })
+    return state
+  }
+
+  it('runs page moves through the rename barrier, and close waits for one already running', async () => {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    const move = () => appWiring.moveNoteToFolder!(PAGE, 'topic', '/vault', () => {})
+    const reopen = app.holdManualRenameAdmission()
+    await act(async () => { expect(await move()).toBeNull() })
+    reopen()
+    expect(native.moves).toBe(0)
+    expect(await screen.findByText(BUSY)).toBeInTheDocument()
+
+    const moving = startTracked(move)
+    await flushTasks()
+    expect(native.moves).toBe(1)
+    act(() => { app.handleContentChange(PAGE, NEWEST) })
+    const closing = startTracked(() => appWiring.closeFlush!())
+    await flushTasks()
+    expect(closing.settled).toBe(false)
+
+    await act(async () => { native.release(); await moving.done; await closing.done })
+    expect(Object.fromEntries(disk)).toEqual({ [MOVED]: NEWEST })
+  })
+
+  it('close waits for a page rename that started first, refuses new ones, then saves the newest text at the new name', async () => {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    const renaming = startTracked(() => app.handleFilenameRename(PAGE, 'renamed'))
+    await flushTasks()
+    expect(native.renames).toBe(1)
+    act(() => { app.handleContentChange(PAGE, NEWEST) })
+    const closing = startTracked(() => appWiring.closeFlush!())
+    await flushTasks()
+    expect(closing.settled).toBe(false)
+    expect(disk.get(PAGE)).toBe(mockAllContent[PAGE])
+    await act(() => app.handleFilenameRename(PAGE, 'other'))
+    expect(native.renames).toBe(1)
+    expect(await screen.findByText(BUSY)).toBeInTheDocument()
+
+    await act(async () => { native.release(); await renaming.done; await closing.done })
+    expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: NEWEST })
+  })
+
+  it('vault switch waits for a page rename that started first, then saves the open page at its new name', async () => {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    await act(() => appWiring.notes!.handleSelectNote(appWiring.noteActions!.entries[0]))
+    const renaming = startTracked(() => app.handleFilenameRename(PAGE, 'renamed'))
+    await flushTasks()
+    act(() => { app.handleContentChange(PAGE, NEWEST) })
+    const switching = startTracked(async () => appWiring.switchVault!())
+    await flushTasks()
+    expect(native.renames).toBe(1)
+    expect(switching.settled).toBe(false)
+    expect(disk.get(PAGE)).toBe(mockAllContent[PAGE])
+
+    await act(async () => { native.release(); await renaming.done; await switching.done })
+    expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: NEWEST })
+  })
+
+  it('lets page renames run again after a close that could not save', async () => {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    await act(() => appWiring.notes!.handleSelectNote(appWiring.noteActions!.entries[0]))
+    act(() => { app.handleContentChange(PAGE, NEWEST) })
+    native.saveFails = true
+    await act(async () => { await expect(appWiring.closeFlush!()).rejects.toThrow() })
+
+    native.saveFails = false
+    native.release()
+    await act(() => app.handleFilenameRename(PAGE, 'renamed'))
+    expect(native.renames).toBe(1)
+    expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: NEWEST })
+  })
+
+  // Seam: quit and vault switch against the pending draft field. Catches words stranded in a vault being left.
+  const draftField = () => screen.queryByRole('textbox', { name: 'Your draft' })
+  const pressNewPage = () => fireEvent.keyDown(window, { key: 'n', code: 'KeyN', metaKey: true })
+
+  it('a vault switch drops an empty draft, lets no new draft start while it waits, then refuses one with words', async () => {
+    const { native } = installStagingDisk()
+    const app = await renderReadyApp()
+    pressNewPage()
+    expect(draftField()).toBeInTheDocument()
+    const renaming = startTracked(() => app.handleFilenameRename(PAGE, 'renamed'))
+    await flushTasks()
+    const switching = startTracked(async () => appWiring.switchVault!())
+    await flushTasks()
+    expect(draftField()).toBeNull()
+    pressNewPage()
+    await flushTasks()
+    expect(draftField()).toBeNull()
+    await act(async () => { native.release(); await renaming.done; await switching.done })
+    expect(switching.settled).toBe(true)
+
+    pressNewPage()
+    fireEvent.change(draftField()!, { target: { value: 'Harbor fog' } })
+    await act(async () => { await expect(appWiring.switchVault!()).rejects.toThrow() })
+    expect(draftField()).toHaveValue('Harbor fog')
+  })
+
+  it('quit refuses at once while the draft holds words or an open composition, leaving it editable', async () => {
+    const { native } = installStagingDisk()
+    const app = await renderReadyApp()
+    pressNewPage()
+    const field = draftField()!
+    fireEvent.compositionStart(field)
+    fireEvent.change(field, { target: { value: '港' } })
+    // A running rename holds an ordinary quit; a draft with words must not wait behind it.
+    const renaming = startTracked(() => app.handleFilenameRename(PAGE, 'renamed'))
+    await flushTasks()
+    let refused = false
+    act(() => { void appWiring.closeFlush!().catch(() => { refused = true }) })
+    await flushTasks()
+    expect(refused).toBe(true)
+    expect(document.activeElement).toBe(field)
+    expect(field).toHaveValue('港')
+    await act(async () => { native.release(); await renaming.done })
   })
 })

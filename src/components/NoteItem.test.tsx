@@ -125,6 +125,23 @@ describe('NoteItem', () => {
     expect(onClickNote).toHaveBeenCalled()
   })
 
+  // Seam: a New page row must read as its body, not a timestamp, and not repeat that body below.
+  it('labels a generated capture by its saved body without a duplicate snippet line', () => {
+    const entry = makeEntry({
+      path: '/vault/untitled-page-1797000000.md',
+      filename: 'untitled-page-1797000000.md',
+      title: 'Untitled Page 1797000000',
+      titleSource: 'filename',
+      snippet: 'first thought',
+    })
+
+    render(<NoteItem entry={entry} isSelected={false} typeEntryMap={{}} onClickNote={vi.fn()} />)
+
+    expect(screen.getByTestId('note-title-row')).toHaveTextContent('first thought')
+    expect(screen.queryByText(/1797000000/)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('note-snippet')).not.toBeInTheDocument()
+  })
+
   it('writes the note path into drag data for folder retargeting', () => {
     const entry = makeEntry({
       path: '/vault/projects/alpha.md',
