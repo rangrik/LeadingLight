@@ -1149,11 +1149,17 @@ function useVaultActions(options: VaultActionOptions) {
     },
     [addVault, switchVault],
   )
+  // Listed first, so a refused switch still leaves the folder one click away; resolves only once switched.
+  const openWorkspace = useCallback(async (path: string, label: string) => {
+    addVault(path, label)
+    await switchVaultPath({ setSelectedVaultPath, setVaultPath, onSwitchRef, path })
+  }, [addVault, onSwitchRef, setSelectedVaultPath, setVaultPath])
 
   return {
     handleCreateEmptyVault: useCreateEmptyVaultAction(addAndSwitch, onToastRef),
     handleOpenLocalFolder: useOpenLocalFolderAction(addAndSwitch, onToastRef),
     handleVaultCloned: useVaultClonedAction(addAndSwitch, onToastRef),
+    openWorkspace,
     registerVaultSelection,
     removeVault: useRemoveVaultAction({
       defaultWorkspacePath,
@@ -1235,6 +1241,7 @@ export function useVaultSwitcher({ onSwitch, onToast }: UseVaultSwitcherOptions)
     handleCreateEmptyVault,
     handleOpenLocalFolder,
     handleVaultCloned,
+    openWorkspace,
     registerVaultSelection,
     removeVault,
     reorderVaults,
@@ -1261,6 +1268,7 @@ export function useVaultSwitcher({ onSwitch, onToast }: UseVaultSwitcherOptions)
     handleVaultCloned,
     isGettingStartedHidden,
     loaded,
+    openWorkspace,
     registerVaultSelection,
     refreshVaultRegistry,
     removeVault,

@@ -30,6 +30,7 @@ pub(crate) use page_write::{check_save, legacy_save, save_page};
 pub(crate) use registry::Lease;
 use registry::{Digest, Registry};
 pub(crate) use resolve::{discard, release_with_copy};
+pub(crate) use versions::{export_candidates, export_version, ExportCandidate, ExportPlan};
 pub(crate) use versions::{health as history_health, list_locations, list_versions, read_version};
 
 static REGISTRY: Registry = Registry::new();

@@ -12,9 +12,11 @@ import {
 	vaultCommandContext,
 } from "./vault-api-commands.ts";
 import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
+import { noteWorkspaceRoot, runDiskBackup } from "./vault-api-backup.ts";
 import { heldPathRefusal, runDiskHistory, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
 import { listTrash, moveToTrash, restoreFromTrash } from "./vault-api-trash.ts";
 import { HISTORY_COMMANDS } from "../src/mock-tauri/mock-history.ts";
+import { BACKUP_COMMAND_LIST } from "../src/mock-tauri/mock-backup.ts";
 import { type SaveRecoveryCommand, VAULT_API_MARKER } from "../src/mock-tauri/mock-save-recovery.ts";
 
 function sendJson(
@@ -214,6 +216,17 @@ const HISTORY_ROUTES: [string, VaultRoute][] = HISTORY_COMMANDS.map((command): [
 		fallback: "Page history failed",
 	},
 ]);
+// M6 backup, inspection and restore, the same way: `start_workspace_backup` at `start-workspace-backup`.
+const BACKUP_ROUTES: [string, VaultRoute][] = BACKUP_COMMAND_LIST.map((command): [string, VaultRoute] => [
+	command.replaceAll("_", "-"),
+	{
+		write: async ({ req, res }) => {
+			const response = await runDiskBackup(command, await readJsonBody<unknown>(req));
+			sendJson(res, response.payload, response.statusCode);
+		},
+		fallback: "Backup failed",
+	},
+]);
 const VAULT_ROUTES = new Map<string, VaultRoute>([
 	["list", { cmd: "list_vault", fallback: "Vault read failed" }],
 	["content", { cmd: "get_note_content", fallback: "Vault read failed" }],
@@ -255,6 +268,7 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 	["command", { write: executeVaultCommand, fallback: "Vault command failed" }],
 	...SAVE_RECOVERY_ROUTES,
 	...HISTORY_ROUTES,
+	...BACKUP_ROUTES,
 ]);
 interface TrashBody {
 	vault_path: string;
@@ -318,6 +332,8 @@ async function dispatchVaultRoute({
 		return;
 	}
 	const args = await readVaultEndpointArgs(request.url, request.req);
+	// A listed vault is a workspace this server knows, so backups and restores stay out of it.
+	if (route.cmd === "list_vault") noteWorkspaceRoot(args.path);
 	const response = runVaultCommand({ args, cmd: route.cmd ?? "" });
 	sendJson(request.res, response.payload, response.statusCode);
 }

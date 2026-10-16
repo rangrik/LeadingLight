@@ -26,6 +26,7 @@ mod html_block_protocol;
 pub mod kiro_cli;
 mod kiro_discovery;
 pub mod leadinglight;
+mod leadinglight_backup;
 mod leadinglight_history;
 mod leadinglight_trash;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
@@ -301,6 +302,11 @@ macro_rules! app_invoke_handler {
             commands::read_page_version,
             commands::save_page_version_as_copy,
             commands::page_history_health,
+            commands::start_workspace_backup,
+            commands::start_backup_inspection,
+            commands::start_backup_restore,
+            commands::get_backup_operation,
+            commands::cancel_backup_operation,
             commands::update_frontmatter,
             commands::delete_frontmatter_property,
             commands::set_note_favorite,

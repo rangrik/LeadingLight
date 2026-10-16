@@ -1319,3 +1319,93 @@ fn bridge_and_native_read_each_others_versions() {
     let health = vault.health();
     assert_eq!((health.state, health.unreadable), (HealthState::On, 0));
 }
+
+/// Every file under the store, by relative path, for comparing before and after a read.
+fn store_bytes(vault: &Vault) -> Vec<(String, Vec<u8>)> {
+    let store = vault.roots.canonical.join(".leadinglight");
+    let mut files: Vec<_> = walkdir::WalkDir::new(&store)
+        .follow_links(false)
+        .into_iter()
+        .flatten()
+        .filter(|entry| entry.file_type().is_file())
+        .map(|entry| {
+            let rel = entry.path().strip_prefix(&store).unwrap();
+            (
+                rel.to_string_lossy().into_owned(),
+                fs::read(entry.path()).unwrap(),
+            )
+        })
+        .collect();
+    files.sort();
+    files
+}
+
+/// Seam: the read-existing history lock used by backups. Catches it creating a lock file,
+/// repairing a custom or missing exclusion, creating a store, or ignoring a held lock.
+#[test]
+fn reading_with_the_existing_lock_creates_and_repairs_nothing() {
+    let vault = vault();
+    let page = vault.page("notes/a.md", b"first\n");
+    assert_eq!(vault.save(&page, b"second\n"), committed(true));
+    let store = vault.roots.canonical.join(".leadinglight");
+    fs::write(store.join("history/.gitignore"), b"custom\n").unwrap();
+    fs::remove_file(store.join("history.lock")).unwrap();
+    let before = store_bytes(&vault);
+    {
+        let lock = CopyLock::acquire_existing(&vault.roots.canonical).unwrap();
+        assert_eq!(lock.dir, store.join("history"));
+    }
+    assert_eq!(store_bytes(&vault), before);
+    assert!(!store.join("history.lock").exists());
+
+    fs::remove_file(store.join("history/.gitignore")).unwrap();
+    let before = store_bytes(&vault);
+    drop(CopyLock::acquire_existing(&vault.roots.canonical).unwrap());
+    assert_eq!(
+        store_bytes(&vault),
+        before,
+        "a missing exclusion stays missing"
+    );
+
+    let empty = TempDir::new().unwrap();
+    let root = empty.path().canonicalize().unwrap();
+    assert!(CopyLock::acquire_existing(&root).is_err());
+    assert!(!root.join(".leadinglight").exists());
+
+    let held = CopyLock::acquire(&vault.roots.canonical).unwrap();
+    let root = vault.roots.canonical.clone();
+    let waited = std::thread::spawn(move || CopyLock::acquire_existing(&root).is_err());
+    assert!(waited.join().unwrap(), "a held lock keeps the reader out");
+    drop(held);
+}
+
+/// Seam: the export inventory's budget. Catches a store being enumerated past the caller's
+/// entry budget, or a store that cannot be read being reported as having no versions.
+#[test]
+fn the_version_inventory_stops_at_its_budget_and_never_mistakes_unreadable_for_empty() {
+    let vault = vault();
+    let page = vault.page("notes/a.md", b"first\n");
+    assert_eq!(vault.save(&page, b"second\n"), committed(true));
+    let plan = super::export_candidates(&vault.roots, 100).unwrap();
+    assert_eq!((plan.candidates.len(), plan.unlisted), (1, 0));
+    assert!(plan.unreadable.is_empty());
+    assert!(super::export_candidates(&vault.roots, 1).is_err());
+
+    let versions = vault.roots.canonical.join(".leadinglight/history/versions");
+    let loc = location_key("notes/a.md");
+    let mode =
+        |path: &Path, mode| fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+    mode(&versions.join(&loc), 0o000);
+    let plan = super::export_candidates(&vault.roots, 100);
+    mode(&versions.join(&loc), 0o755);
+    let plan = plan.unwrap();
+    assert!(plan.candidates.is_empty());
+    assert_eq!(
+        plan.unreadable,
+        [format!(".leadinglight/history/versions/{loc}")]
+    );
+
+    let none = self::vault();
+    let plan = super::export_candidates(&none.roots, 100).unwrap();
+    assert!(plan.candidates.is_empty() && plan.unreadable.is_empty() && plan.unlisted == 0);
+}

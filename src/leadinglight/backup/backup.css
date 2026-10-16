@@ -1,0 +1,14 @@
+.ll-backup-dialog { max-width: 560px; }
+.ll-backup-title { display: flex; align-items: center; gap: 8px; }
+.ll-backup-text, .ll-backup-result { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.ll-backup-text p, .ll-backup-result p, .ll-backup-working p { margin: 0; }
+.ll-backup-text { color: var(--muted-foreground); }
+.ll-backup-result-title { font-weight: 600; color: var(--foreground); }
+.ll-backup-details { display: flex; flex-direction: column; gap: 2px; max-height: 160px; margin: 0; padding-left: 18px; overflow-y: auto; font-size: 12px; color: var(--muted-foreground); }
+.ll-backup-working { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; }
+.ll-backup-working > svg { flex: none; margin-top: 2px; width: 16px; height: 16px; color: var(--muted-foreground); }
+.ll-backup-working > div { display: flex; flex-direction: column; gap: 2px; }
+.ll-backup-path { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; color: var(--muted-foreground); }
+.ll-backup-path p { margin: 0; }
+.ll-backup-path code { min-width: 0; overflow-wrap: anywhere; user-select: text; color: var(--foreground); }
+.ll-backup-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }

@@ -372,3 +372,50 @@ fallback; full translated catalogs are not claimed. Native compact-window, fault
 IME matrices were not repeated here; browser and unit evidence cover their stated cases only.
 Windows/Linux runtime, force-kill and power-loss recovery remain unqualified. History is selective,
 location-based and text-only; it is not a complete backup or a record of every edit.
+
+
+# Version 0.6.0 — local workspace backup and restore
+
+Validated on macOS on 2026-10-16 using disposable synthetic vaults. Back up workspace saves
+open pages, copies ordinary files, attachments, saved views and valid earlier versions into a
+new local folder, then checks every copied file. Restore checks the backup again and creates
+an exclusive new workspace folder. Opening that workspace is a separate explicit action.
+[Local backup](local-backup.md) and [ADR 008](ADR-008-local-backup.md) describe exclusions,
+bounds, cancellation, uncertain replies and the non-atomic nature of this file-by-file copy.
+
+Five final browser acceptance scenarios passed with one worker and no retries. They exercised
+native-picker cancellation through a supplied test answer, editing/command guard release,
+rich-text then raw edits in two panes held behind actual disk save requests, independent
+manifest/hash checks, binary and empty attachments, Unicode/BOM/CRLF, nested views, retained
+history and exclusions. Restore covered a 560 × 720 form, existing-folder refusal without
+overwrite, exact copied bytes, unchanged source pages, explicit Open and restored-history
+preview. Same-length payload corruption was refused after inspection and on fresh inspection.
+Lost start replies recovered with the same operation ID; unknown status stopped polling without
+replaying the job and allowed editing again. These tests use the real disk bridge; picker and
+transport faults are deliberately injected. The editor-mode setting remains shared across panes.
+
+The isolated packaged Mac app passed the native picker Cancel path, backup of two edited pages,
+inspection, collision refusal, restore and explicit Open. All fourteen copied/restored files
+matched the source and manifest by length and SHA-256, including two earlier versions and both
+attachments. Restored modification times matched; the unfinished marker was absent only after
+success. The existing-folder sentinel and source bytes were unchanged. The restored page opened
+with its new text, and Earlier versions displayed the original text. The test app was closed
+afterwards; no personal notes or production configuration were used.
+
+The final cross-reader test explicitly ran the ignored native acceptance case. Native and Node
+each inspected and restored the other's backup, matching the shared fixture's exact bytes.
+Sixteen Node backup cases passed, including red/green regressions for final cleanup failure and
+partial history enumeration errors. Native targeted checks covered twenty-seven backup cases,
+with the cross-reader case run separately, plus history integration and strict Clippy/formatting.
+UI regressions cover already-admitted image imports before the final save barrier, held/retriable
+saves, workspace epoch binding and bounded lost command replies. Counts from overlapping runs
+are not combined into a unique total. No cloud analyzer or coverage percentage is claimed.
+
+Temporary content-free drag instrumentation was removed before publication. A native automated
+row gesture reported button bits of zero, one dragstart and no page dragover/drop or dragend;
+it did not establish a human-use defect or qualify native All Notes dragging. No blind drag
+rewrite was included. Normal row behavior is unchanged. Force-kill, power loss, hostile same-user
+filesystem races and Windows/Linux runtime remain unqualified. Backup and restore are bounded,
+verified local copies, not a filesystem snapshot or a synchronization service. No dependency,
+telemetry, scheduled backup, cloud storage or remote data feature was added. New copy uses the
+English source locale and existing fallback; complete translated catalogs are not claimed.

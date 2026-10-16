@@ -8,7 +8,7 @@ mod scan_cmds;
 mod view_cmds;
 
 pub use attachment_cmds::*;
-pub(super) use boundary::VaultBoundary;
+pub(super) use boundary::{registered_workspace_roots, VaultBoundary};
 pub use file_cmds::*;
 pub use frontmatter_cmds::*;
 pub use lifecycle_cmds::*;

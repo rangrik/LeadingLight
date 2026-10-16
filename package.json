@@ -2,7 +2,7 @@
 	"name": "leadinglight",
 	"private": true,
 	"license": "AGPL-3.0-or-later",
-	"version": "0.5.0",
+	"version": "0.6.0",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -35,7 +35,7 @@
 		"server:seed": "node --experimental-strip-types apps/server/scripts/seed-test-remote.ts",
 		"server:bench": "node --experimental-strip-types apps/server/scripts/run.ts apps/server/scripts/bench.ts",
 		"server:collab-bench": "node --experimental-strip-types apps/server/scripts/run.ts apps/server/scripts/collab-bench.ts",
-		"test:dev-mock": "node --experimental-strip-types --test scripts/vault-api-plugin.test.mjs scripts/vault-api-save-recovery.test.mjs scripts/vault-api-history.test.mjs",
+		"test:dev-mock": "node --experimental-strip-types --test scripts/vault-api-plugin.test.mjs scripts/vault-api-save-recovery.test.mjs scripts/vault-api-history.test.mjs scripts/vault-api-backup.test.mjs",
 		"test:watch": "vitest",
 		"test:e2e": "playwright test",
 		"playwright:smoke": "playwright test --config playwright.smoke.config.ts tests/smoke/autosave-low-end-typing.spec.ts tests/smoke/create-note-backing-file.spec.ts tests/smoke/create-edit-update-depth.spec.ts tests/smoke/delete-note-nonblocking.spec.ts tests/smoke/example.spec.ts tests/smoke/fix-crash-create-note.spec.ts tests/smoke/quick-open-create-note.spec.ts tests/smoke/save-before-note-switch.spec.ts tests/smoke/h1-untitled-auto-rename.spec.ts tests/smoke/keyboard-command-routing.spec.ts tests/smoke/leadinglight-capture.spec.ts tests/smoke/missing-string-metadata-open-note.spec.ts tests/smoke/multibyte-search-snippet.spec.ts tests/smoke/new-note-first-property.spec.ts tests/smoke/new-note-title-focus.spec.ts tests/smoke/onboarding-vault-registration.spec.ts tests/smoke/pull-refresh-open-note.spec.ts tests/smoke/wikilink-cmd-click-history.spec.ts tests/smoke/wikilink-path-fix.spec.ts",

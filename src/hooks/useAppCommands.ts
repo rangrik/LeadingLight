@@ -17,6 +17,8 @@ import type { ImmediateCreateOptions } from './useNoteCreation'
 import type { NoteListMultiSelectionCommands } from '../components/note-list/multiSelectionCommands'
 import type { GitRepositoryOption } from '../utils/gitRepositories'
 import type { RichEditorBlockTypeDefinition } from '../utils/richEditorBlockTypes'
+import { buildBackupCommands, type BackupActions } from '../leadinglight/backup/backupActions'
+import { useGuardedHandlers } from '../leadinglight/backup/backupInputGate'
 
 interface AppCommandsConfig {
   activeTabPath: string | null
@@ -142,6 +144,9 @@ interface AppCommandsConfig {
   canRestoreDeletedNote?: boolean
   /** Earlier versions of the active pane's page. */
   onOpenPageHistory?: (path: string) => void
+  backupActions?: BackupActions
+  /** While true, shortcuts and native menu commands do nothing. */
+  isInputGuarded?: () => boolean
 }
 
 type CommandRegistryConfig = Parameters<typeof useCommandRegistry>[0]
@@ -618,6 +623,8 @@ function createCommandRegistryConfig(config: AppCommandsConfig): CommandRegistry
   }
 }
 
+const neverGuarded = () => false
+
 /** Sets up keyboard shortcuts, command registry, menu events, and keyboard navigation. */
 export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
   const entriesRef = useRef(config.entries)
@@ -643,17 +650,22 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
 
   const keyboardActions = createKeyboardActions(config)
   const menuEventHandlers = createMenuEventHandlers(config, selectFilter, viewChanges)
+  const guarded = config.isInputGuarded ?? neverGuarded
+  const keyboard = useGuardedHandlers({ ...keyboardActions, onArchiveNote: toggleArchive }, guarded)
+  const menu = useGuardedHandlers({ ...menuEventHandlers, onArchiveNote: toggleArchive }, guarded)
 
-  useAppKeyboard({ ...keyboardActions, onArchiveNote: toggleArchive })
+  useAppKeyboard(keyboard)
 
-  useMenuEvents({ ...menuEventHandlers, onArchiveNote: toggleArchive })
+  useMenuEvents(menu)
 
   const registryCommands = useCommandRegistry(createCommandRegistryConfig(config))
-  const { activeTabPath, entries, locale, onOpenPageHistory } = config
+  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions } = config
   const activeFileKind = entries.find(entry => entry.path === activeTabPath)?.fileKind
-  const commands = useMemo(() => onOpenPageHistory
-    ? [...registryCommands, buildPageHistoryCommand({ activeTabPath, activeFileKind, locale, onOpenPageHistory })]
-    : registryCommands, [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory])
+  const commands = useMemo(() => [
+    ...registryCommands,
+    ...(onOpenPageHistory ? [buildPageHistoryCommand({ activeTabPath, activeFileKind, locale, onOpenPageHistory })] : []),
+    ...(backupActions ? buildBackupCommands(locale ?? 'en', backupActions) : []),
+  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions])
 
   useKeyboardNavigation({
     activeTabPath: config.activeTabPath,

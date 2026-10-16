@@ -1,9 +1,9 @@
-import { FolderOpen, GitBranch, Plus, Rocket } from '@phosphor-icons/react'
+import { Archive, ArrowCounterClockwise, FolderOpen, GitBranch, Plus, Rocket } from '@phosphor-icons/react'
 import type { BuildVaultActionOptions, VaultAction } from './vaultMenuTypes'
 import { REMOTE_FEATURES_ENABLED } from '../../leadinglight/localPolicy'
 
 export function buildVaultActions(options: BuildVaultActionOptions): VaultAction[] {
-  const { multiWorkspaceEnabled, onCreateEmptyVault, onCloneGettingStarted, onCloneVault, onOpenLocalFolder } = options
+  const { multiWorkspaceEnabled, onCreateEmptyVault, onCloneGettingStarted, onCloneVault, onOpenLocalFolder, onBackUpWorkspace, onRestoreBackup } = options
   const items: VaultAction[] = []
 
   if (onCreateEmptyVault) {
@@ -46,6 +46,14 @@ export function buildVaultActions(options: BuildVaultActionOptions): VaultAction
       accent: true,
       onClick: onCloneGettingStarted,
     })
+  }
+
+  if (onBackUpWorkspace) {
+    items.push({ key: 'back-up', Icon: Archive, labelKey: 'leadinglight.backup.menu', testId: 'vault-menu-back-up', onClick: onBackUpWorkspace })
+  }
+
+  if (onRestoreBackup) {
+    items.push({ key: 'restore-backup', Icon: ArrowCounterClockwise, labelKey: 'leadinglight.restore.menu', testId: 'vault-menu-restore-backup', onClick: onRestoreBackup })
   }
 
   return items

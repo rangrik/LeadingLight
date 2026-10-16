@@ -9,6 +9,8 @@ import type * as NoteActionsModule from './hooks/useNoteActions'
 import type { NoteActionsConfig } from './hooks/useNoteActions'
 import type { useNoteRetargetingUi } from './hooks/useNoteRetargetingUi'
 import type { FolderMoveHold } from './hooks/folder-actions/folderActionUtils'
+import type { WorkspaceGuard } from './leadinglight/backup/BackupDialog'
+import { trackEditorWork } from './leadinglight/editorWork'
 
 type RetargetingInput = Parameters<typeof useNoteRetargetingUi>[0]
 
@@ -489,7 +491,12 @@ const appWiring = vi.hoisted(() => ({
   moveNoteToFolder: null as RetargetingInput['moveNoteToFolder'] | null,
   closeFlush: null as (() => Promise<void>) | null,
   switchVault: null as (() => void | Promise<void>) | null,
+  backupGuard: null as WorkspaceGuard | null,
 }))
+vi.mock('./leadinglight/backup/useBackupUi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./leadinglight/backup/useBackupUi')>()
+  return { ...actual, useBackupUi: (input: Parameters<typeof actual.useBackupUi>[0]) => { appWiring.backupGuard = input.guard; return actual.useBackupUi(input) } }
+})
 vi.mock('./hooks/useNoteActions', async (importOriginal) => {
   const actual = await importOriginal<typeof NoteActionsModule>()
   return { ...actual, useNoteActions: (config: NoteActionsConfig) => { appWiring.noteActions = config; return (appWiring.notes = actual.useNoteActions(config)) } }
@@ -1929,5 +1936,96 @@ describe('App', () => {
     expect(document.activeElement).toBe(field)
     expect(field).toHaveValue('港')
     await act(async () => { native.release(); await renaming.done })
+  })
+
+  // Seam: the guard App builds for a backup from the close barrier. Catches input, menu commands, drafts or renames
+  // slipping in after Choose folder, a copy of older text, or a guard that never lets go.
+  const shellInert = () => document.querySelector('.app-shell')?.hasAttribute('inert')
+  const finder = () => screen.queryByRole('dialog', { name: 'Find a page' })
+
+  it('a backup guard stops input, menus, drafts and renames at once, saves the newest text after a running rename, then lets go', async () => {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    await act(() => appWiring.notes!.handleSelectNote(appWiring.noteActions!.entries[0]))
+    const renaming = startTracked(() => app.handleFilenameRename(PAGE, 'renamed'))
+    await flushTasks()
+    act(() => { app.handleContentChange(PAGE, NEWEST) })
+    const guard = appWiring.backupGuard!
+    let release = () => {}
+    act(() => { release = guard.begin() })
+    expect(shellInert()).toBe(true)
+    pressNewPage()
+    fireEvent.keyDown(window, { key: 'p', code: 'KeyP', metaKey: true })
+    act(() => { window.__laputaTest?.dispatchBrowserMenuCommand?.('edit-find-in-vault') })
+    await flushTasks()
+    expect(draftField()).toBeNull()
+    expect(finder()).toBeNull()
+
+    const saving = startTracked(() => guard.saveAll())
+    await flushTasks()
+    expect(saving.settled).toBe(false)
+    await act(async () => { native.release(); await renaming.done; await saving.done })
+    expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: NEWEST })
+    expect(guard.unresolvedSaves()).toBe(false)
+    await act(() => app.handleFilenameRename(RENAMED, 'other'))
+    expect(native.renames).toBe(1)
+
+    act(() => release())
+    expect(shellInert()).toBe(false)
+    act(() => { window.__laputaTest?.dispatchBrowserMenuCommand?.('edit-find-in-vault') })
+    expect(await screen.findByRole('dialog', { name: 'Find a page' })).toBeInTheDocument()
+  })
+
+  // Seam: the backup's final save against an image import accepted before the guard. Catches a copy that starts before
+  // the import's reference reaches its page, or one that starts over a page that then could not be saved.
+  const WITH_IMAGE = '# Test Project\n\n![](attachments/photo.png)'
+  const SAVED_BACKUP = {
+    status: 'complete', folder: '/backups/Test backup', folderName: 'Test backup', files: 1, bytes: 1, durable: true,
+    gaps: { total: 0, counts: {}, sample: [] }, versionsSkipped: 0, trashItemsNotIncluded: 0,
+  }
+
+  async function backUpDuringImport() {
+    const { disk, native } = installStagingDisk()
+    const app = await renderReadyApp()
+    await act(() => appWiring.notes!.handleSelectNote(appWiring.noteActions!.entries[0]))
+    let finishImport = () => {}
+    // BlockNote is mocked here, so the editor's change path stands in for the image landing in the page.
+    void trackEditorWork(new Promise<void>(resolve => { finishImport = resolve }).then(() => app.handleContentChange(PAGE, WITH_IMAGE)))
+    const copied: string[] = []
+    mockCommandResults.start_workspace_backup = () => { copied.push(disk.get(PAGE) ?? ''); return { status: 'finished', result: SAVED_BACKUP } }
+    vi.spyOn(window, 'prompt').mockReturnValueOnce('/backups')
+    fireEvent.click(screen.getByTestId('status-vault-trigger'))
+    fireEvent.click(await screen.findByTestId('vault-menu-back-up'))
+    fireEvent.click(await screen.findByTestId('backup-choose'))
+    await flushTasks()
+    expect(screen.getByTestId('backup-dialog')).toHaveAttribute('data-step', 'saving')
+    expect(copied).toEqual([])
+    return { disk, native, copied, finishImport }
+  }
+
+  it('a backup waits for an image import already under way, then saves its page before the copy starts', async () => {
+    const { disk, copied, finishImport } = await backUpDuringImport()
+    await act(async () => finishImport())
+    expect(await screen.findByTestId('backup-result')).toHaveTextContent('Backup saved')
+    expect(copied).toEqual([WITH_IMAGE])
+    expect(disk.get(PAGE)).toBe(WITH_IMAGE)
+    expect(shellInert()).toBe(false)
+  })
+
+  it('refuses the backup when the page cannot be saved after the import lands, and lets go', async () => {
+    const { native, copied, finishImport } = await backUpDuringImport()
+    native.saveFails = true
+    await act(async () => finishImport())
+    expect(await screen.findByTestId('backup-refused')).toHaveAttribute('data-reason', 'unsaved')
+    expect(copied).toEqual([])
+    expect(appWiring.backupGuard!.unresolvedSaves()).toBe(true)
+    expect(shellInert()).toBe(false)
+  })
+
+  it('offers Back up workspace in the workspace menu, with Trash named as not included', async () => {
+    await renderReadyApp()
+    fireEvent.click(screen.getByTestId('status-vault-trigger'))
+    fireEvent.click(await screen.findByTestId('vault-menu-back-up'))
+    expect(await screen.findByTestId('backup-intro')).toHaveTextContent('Pages in Trash, Git history and linked folders aren’t included.')
   })
 })

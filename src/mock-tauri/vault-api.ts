@@ -4,6 +4,7 @@
  * through it instead of returning hardcoded mock data.
  */
 
+import { BACKUP_COMMAND_LIST } from './mock-backup'
 import { HISTORY_COMMANDS } from './mock-history'
 import { VAULT_API_MARKER } from './mock-save-recovery'
 
@@ -255,6 +256,10 @@ const SAVE_RECOVERY_ROUTES = new Map([
 // Page history (S1a) for a vault on disk; its versions live beside that vault's pages.
 const HISTORY_ROUTES = new Map<string, string>(HISTORY_COMMANDS.map(command => [command, `/api/vault/${command.replaceAll('_', '-')}`]))
 
+// Backup, inspection and restore (M6): routed by every path they carry, not by a vault alone.
+const BACKUP_ROUTES = new Map<string, string>(BACKUP_COMMAND_LIST.map(command => [command, `/api/vault/${command.replaceAll('_', '-')}`]))
+const BACKUP_PATH_KEYS = ['vaultPath', 'backupPath', 'parent'] as const
+
 const UNAVAILABLE = 'The dev vault server is not answering, so nothing was written.'
 
 // The mock vault answers itself; any other vault is answered from disk or the caller sees no reply.
@@ -272,6 +277,12 @@ export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>
   if (recoveryRoute) return args ? tryDiskCommandApi<T>(recoveryRoute, args, (args.request as { vaultPath?: unknown } | undefined)?.vaultPath) : undefined
   const historyRoute = HISTORY_ROUTES.get(cmd)
   if (historyRoute) return args ? tryDiskCommandApi<T>(historyRoute, args, args.vaultPath) : undefined
+  const backupRoute = BACKUP_ROUTES.get(cmd)
+  if (backupRoute) {
+    // Any mock-vault path means the in-memory preview, which answers itself; status and cancel go to disk.
+    const memory = args !== undefined && BACKUP_PATH_KEYS.some(key => isMemoryPath(args[key]))
+    return args ? tryDiskCommandApi<T>(backupRoute, args, memory ? MEMORY_VAULT_ROOTS[0] : undefined) : undefined
+  }
   const request = buildVaultApiRequest(cmd, args)
   if (!request) return undefined
   const closed = !isGetRequest(request) && failsClosed(request.body)

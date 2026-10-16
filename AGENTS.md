@@ -18,10 +18,11 @@ reduce merge churn; its organization-specific service requirements do not govern
 - Reuse shadcn/Radix and Phosphor. No bespoke replacements for existing standard controls.
 
 ## Team and coordination
-- Standing owner rule: Opus 5.5 is the only code implementer. All application code, tests,
-  scripts and config are written by Opus 5.5 (xhigh; max for any reverse engineering).
+- Latest owner direction: do not use Opus. Codex is authorized to write application code,
+  tests, scripts and configuration. Do not start or resume an Opus session.
 - This Codex chat is manager/integrator: briefs, ownership, running checks, review, integration,
-  builds, commits and publication. It does not write code. Astra gives read-only technical review.
+  builds, commits and publication, and may implement or delegate code with explicit ownership.
+  Astra gives read-only technical review.
   Sol 6.1 runs UI QA (browser and native) and computer use, without writing tests. Fable 5.1
   handles design/product when needed.
 - Use workspace_management/ for private task briefs, agent IDs, findings and handoffs.
@@ -52,7 +53,8 @@ reduce merge churn; its organization-specific service requirements do not govern
 - Cargo builds use at most 2 jobs and one reusable target; avoid simultaneous native/coverage builds.
 - Do not create release/debug/coverage caches simultaneously. Inspect disk use before major builds.
 - Do not delete other projects' caches. Keep only this project's necessary QA artifacts.
-- Monitor account usage; stop before 80% Codex weekly usage. Do not buy credits or reset limits.
+- Monitor account usage. The owner authorizes the full remaining included quota for useful work;
+  do not manufacture work to consume it. Never buy credits, use paid overage or reset limits.
 
 ---
 

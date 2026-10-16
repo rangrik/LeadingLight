@@ -165,6 +165,22 @@ local to each vault and excluded from ordinary page discovery. See
 The browser development bridge uses disposable filesystem fixtures to exercise the same visible
 flows; native transaction guarantees are qualified separately with Rust and native-app tests.
 
+Manual backup and restore are implemented, but runtime qualification and release are pending.
+
+- **Where it lives.** `src/leadinglight/backup/` and the native `leadinglight_backup` module.
+- **Backup.** A backup is a new plain folder whose manifest is published last.
+- **Restore.** It validates and rereads a backup into a new, exclusively created folder, and opens
+  it only when asked.
+- **Preparation.** Before any wait, the interface takes the close barrier's admissions and an input
+  guard. It joins image imports already accepted, then runs the unchanged close flush. Unresolved
+  saves, drafts with words, or a changed workspace session refuse the backup.
+- **History and exclusions.** Earlier versions are exported through history's own verification,
+  under a read-only acquisition of its existing lock. Trash, Git and caches are excluded.
+- **Operations.** One operation runs per process and is polled. Lost replies are queried and never
+  replayed.
+
+See [ADR 008](ADR-008-local-backup.md) and [local backup](local-backup.md).
+
 ## Bringing in upstream changes
 
 1. Commit a clean, verified LeadingLight state. Fetch `upstream main --no-tags`.

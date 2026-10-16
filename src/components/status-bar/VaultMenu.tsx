@@ -1,8 +1,9 @@
 import { Cube } from '@phosphor-icons/react'
-import { createElement, useMemo, useRef, useState } from 'react'
+import { createElement, useContext, useMemo, useRef, useState } from 'react'
 import { ActionTooltip } from '@/components/ui/action-tooltip'
 import { Button } from '@/components/ui/button'
 import { ConfirmDeleteDialog } from '../ConfirmDeleteDialog'
+import { BackupActionsContext } from '../../leadinglight/backup/backupActions'
 import { translate } from '../../lib/i18n'
 import type { VaultOption } from './types'
 import { useDismissibleLayer } from './useDismissibleLayer'
@@ -226,6 +227,7 @@ export function VaultMenu(props: VaultMenuProps) {
   })
 
   useDismissibleLayer(open, menuRef, () => setOpen(false))
+  const backup = useContext(BackupActionsContext)
 
   const actions = useMemo<VaultAction[]>(() => {
     return buildVaultActions({
@@ -234,8 +236,10 @@ export function VaultMenu(props: VaultMenuProps) {
       onCloneGettingStarted,
       onCloneVault,
       onOpenLocalFolder,
+      onBackUpWorkspace: backup?.backUp,
+      onRestoreBackup: backup?.restore,
     })
-  }, [multiWorkspaceEnabled, onCreateEmptyVault, onCloneGettingStarted, onCloneVault, onOpenLocalFolder])
+  }, [multiWorkspaceEnabled, onCreateEmptyVault, onCloneGettingStarted, onCloneVault, onOpenLocalFolder, backup])
 
   return (
     <div ref={menuRef} style={{ position: 'relative' }}>

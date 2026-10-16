@@ -85,3 +85,24 @@ History does not replace draft recovery. An unsaved or uncertain draft follows t
 described above. Earlier versions are saved text only, selected by policy rather than every
 edit. Close, quit and vault switching wait for page saves, not for history maintenance. See
 [local page history](local-page-history.md) and [ADR 007](ADR-007-local-page-history.md).
+
+## Backup preparation boundary
+
+A manual backup reuses this close flush without changing close, quit or vault switching. When
+Choose folder… is clicked, before the picker opens, the interface does all of this in one
+synchronous step:
+
+- binds the current vault session;
+- refuses a draft with words;
+- holds page, rename, Trash and folder-move admission;
+- suspends shortcuts and native menu commands;
+- makes the shell and both panes inert.
+
+It then waits for image imports already accepted to reach their page, and runs the same flush as
+close.
+
+A failed flush stops the backup before anything is copied. So does a held or retriable save, a
+window that started closing or switching, or any change of vault session, including leaving and
+returning. The guard is released when the backup ends, fails, is stopped, or loses track of the
+native operation. Close does not wait for a running backup copy. See
+[ADR 008](ADR-008-local-backup.md).

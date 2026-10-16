@@ -672,6 +672,146 @@ pub(super) fn read_verified(
     Ok((bytes, meta))
 }
 
+/// One saved version a backup may take: its location key, folder name, length and hash.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ExportCandidate {
+    pub(crate) loc: String,
+    pub(crate) name: String,
+    pub(crate) length: u64,
+    pub(crate) sha256: String,
+}
+
+/// A saved version's three files, exactly as stored, verified under the history lock.
+pub(crate) struct ExportedVersion {
+    pub(crate) location_record: Vec<u8>,
+    pub(crate) record: Vec<u8>,
+    pub(crate) payload: Vec<u8>,
+}
+
+/// What a backup may take from history: listable versions, how many version-shaped entries
+/// history does not list, and which store folders could not be read at all.
+#[derive(Debug, Default)]
+pub(crate) struct ExportPlan {
+    pub(crate) candidates: Vec<ExportCandidate>,
+    /// Each one is an omitted version a backup must disclose.
+    pub(crate) unlisted: u64,
+    /// Vault-relative store paths whose contents were not considered; never "no versions".
+    pub(crate) unreadable: Vec<String>,
+}
+
+/// The inventory reached the caller's entry budget; it stopped there and holds no partial plan.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct OverBudget;
+
+const VERSIONS_REL: &str = ".leadinglight/history/versions";
+
+fn spend(left: &mut usize) -> Result<(), OverBudget> {
+    *left = left.checked_sub(1).ok_or(OverBudget)?;
+    Ok(())
+}
+
+/// Every listable version, by the same rule lists use, visiting at most `budget` entries in
+/// total. Read-only, and like lists it takes no lock.
+pub(crate) fn export_candidates(
+    roots: &VaultRoots,
+    budget: usize,
+) -> Result<ExportPlan, OverBudget> {
+    let mut plan = ExportPlan::default();
+    let mut left = budget;
+    let store = roots.canonical.join(".leadinglight");
+    let history = store.join("history");
+    let versions = history.join(VERSIONS_DIR);
+    for (dir, rel) in [
+        (&store, ".leadinglight"),
+        (&history, ".leadinglight/history"),
+        (&versions, VERSIONS_REL),
+    ] {
+        match fs::symlink_metadata(dir) {
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(plan),
+            Ok(meta) if meta.is_dir() => {}
+            _ => {
+                plan.unreadable.push(rel.to_string());
+                return Ok(plan);
+            }
+        }
+    }
+    let Ok(locations) = fs::read_dir(&versions) else {
+        plan.unreadable.push(VERSIONS_REL.to_string());
+        return Ok(plan);
+    };
+    for child in locations {
+        spend(&mut left)?;
+        let Ok(child) = child else {
+            plan.unreadable.push(VERSIONS_REL.to_string());
+            break;
+        };
+        let loc = child.file_name().to_string_lossy().into_owned();
+        let dir = child.path();
+        if !is_location_key(&loc) || !real_dir(&dir) {
+            continue;
+        }
+        let rel = format!("{VERSIONS_REL}/{loc}");
+        let Ok(entries) = fs::read_dir(&dir) else {
+            plan.unreadable.push(rel);
+            continue;
+        };
+        let mut shaped = Vec::new();
+        for entry in entries {
+            spend(&mut left)?;
+            let Ok(entry) = entry else {
+                plan.unreadable.push(rel.clone());
+                break;
+            };
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if entry_time(&name).is_some() {
+                shaped.push(name);
+            }
+        }
+        let record = match location_record(&dir, &loc) {
+            Ok(record) => record,
+            Err(_) => {
+                plan.unreadable.push(format!("{rel}/{LOCATION}"));
+                continue;
+            }
+        };
+        for name in shaped {
+            match record.as_ref().and_then(|_| listed(&dir, &loc, &name)) {
+                Some(meta) => plan.candidates.push(ExportCandidate {
+                    loc: loc.clone(),
+                    name,
+                    length: meta.length,
+                    sha256: meta.sha256,
+                }),
+                None => plan.unlisted += 1,
+            }
+        }
+    }
+    plan.candidates
+        .sort_by(|a, b| (&a.loc, &a.name).cmp(&(&b.loc, &b.name)));
+    Ok(plan)
+}
+
+pub(crate) fn export_version(
+    roots: &VaultRoots,
+    candidate: &ExportCandidate,
+) -> Option<ExportedVersion> {
+    store_dir(roots)?;
+    // The existing lock domain, read-only: nothing in the store is created or repaired.
+    let lock = CopyLock::acquire_existing(&roots.canonical).ok()?;
+    let id = format!("{}/{}", candidate.loc, candidate.name);
+    let (payload, meta) = read_verified(&lock.dir, &id, &candidate.sha256).ok()?;
+    let location = lock.dir.join(VERSIONS_DIR).join(&candidate.loc);
+    let record = inventory::read_small(&location.join(&candidate.name).join(META)).ok()??;
+    let location_record = inventory::read_small(&location.join(LOCATION)).ok()??;
+    // The stored record must still be the one just verified.
+    let stored: VersionMeta = serde_json::from_slice(&record).ok()?;
+    (stored == meta).then_some(ExportedVersion {
+        location_record,
+        record,
+        payload,
+    })
+}
+
 pub(crate) fn read_version(roots: &VaultRoots, id: &str, sha256_hex: &str) -> ReadVersionOutcome {
     let Some(history) = store_dir(roots) else {
         return ReadVersionOutcome::Missing;

@@ -7,6 +7,7 @@
 import { MOCK_CONTENT } from './mock-content'
 import { mockHandlers, addMockEntry, updateMockContent, trackMockChange } from './mock-handlers'
 import { setNoteFavorite, type SetNoteFavoriteArgs } from './mock-favorite'
+import { BACKUP_COMMAND_LIST, runMemoryBackup } from './mock-backup'
 import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-history'
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { tryVaultApi } from './vault-api'
@@ -41,6 +42,9 @@ const registeredMockHandlers: Record<string, MockHandler> = {
   ...Object.fromEntries(HISTORY_COMMANDS.map(command => [command, async (args?: unknown) =>
     (await tryVaultApi(command, args as Record<string, unknown> | undefined))
       ?? runHistoryCommand(memoryPageHistory, command, args)])),
+  // Backup and restore need a disk; the in-memory preview answers `unavailable`, never a fake success.
+  ...Object.fromEntries(BACKUP_COMMAND_LIST.map(command => [command, async (args?: unknown) =>
+    (await tryVaultApi(command, args as Record<string, unknown> | undefined)) ?? runMemoryBackup(command, args)])),
 }
 
 export function isTauri(): boolean {

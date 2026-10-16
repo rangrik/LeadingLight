@@ -202,6 +202,19 @@ fn registered_vault_roots(list: &vault_list::VaultList) -> Vec<VaultRootPaths> {
         .collect()
 }
 
+/// Canonical roots of every workspace this app knows, including the active and default ones.
+/// Unit tests never read the real registry; their callers pass synthetic roots instead.
+pub(crate) fn registered_workspace_roots() -> Result<Vec<PathBuf>, String> {
+    if cfg!(test) {
+        return Ok(Vec::new());
+    }
+    let list = vault_list::load_vault_list()?;
+    Ok(registered_vault_roots(&list)
+        .into_iter()
+        .map(|root| root.canonical)
+        .collect())
+}
+
 fn is_registered_vault_root(requested: &VaultRootPaths) -> Result<bool, String> {
     let list = vault_list::load_vault_list()?;
     for root in registered_vault_roots(&list) {

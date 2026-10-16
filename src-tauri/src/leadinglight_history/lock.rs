@@ -50,7 +50,8 @@ fn unavailable(reason: impl std::fmt::Display) -> LockError {
 pub(super) struct CopyLock {
     /// `.leadinglight/history`, a real folder that Git already skips.
     pub(super) dir: PathBuf,
-    _file: File,
+    /// `None` only for a read-existing lock on a store whose lock file was never made.
+    _file: Option<File>,
     _claim: Claim,
 }
 
@@ -83,10 +84,62 @@ impl CopyLock {
         exclude_from_git(&dir)?;
         Ok(Self {
             dir,
+            _file: Some(file),
+            _claim: claim,
+        })
+    }
+
+    /// For reading an existing store, such as a backup: the same lock, waiting like `acquire`,
+    /// but nothing is created or repaired. A store whose lock file was never made has never
+    /// been locked by anyone, so only this process's claim is taken then.
+    pub(super) fn acquire_existing(root: &Path) -> Result<Self, LockError> {
+        let deadline = Instant::now() + LOCK_WAIT;
+        while !claimed().insert(root.to_path_buf()) {
+            wait_or_busy(deadline)?;
+        }
+        let claim = Claim(root.to_path_buf());
+        let base = root.join(STORE_DIR);
+        let dir = base.join(HISTORY_DIR);
+        let real = |path: &Path| fs::symlink_metadata(path).is_ok_and(|meta| meta.is_dir());
+        if !real(&base) || !real(&dir) {
+            return Err(unavailable("there is no history store to read"));
+        }
+        let path = base.join(LOCK_FILE);
+        let file = match fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == ErrorKind::NotFound => None,
+            Ok(meta) if meta.is_file() => Some(open_existing_lock(&path)?),
+            _ => return Err(unavailable("the lock file is not a regular file")),
+        };
+        if let Some(file) = &file {
+            loop {
+                match file.try_lock() {
+                    Ok(()) => break,
+                    Err(fs::TryLockError::WouldBlock) => wait_or_busy(deadline)?,
+                    Err(fs::TryLockError::Error(error)) => return Err(unavailable(error)),
+                }
+            }
+        }
+        Ok(Self {
+            dir,
             _file: file,
             _claim: claim,
         })
     }
+}
+
+/// Opens the lock file that is already there, never creating it, and only if it is the same
+/// regular file that was checked.
+fn open_existing_lock(path: &Path) -> Result<File, LockError> {
+    let not_plain = || unavailable("the lock file is not a regular file");
+    let file = OpenOptions::new()
+        .read(true)
+        .open(path)
+        .map_err(unavailable)?;
+    let same = match (file.metadata(), fs::symlink_metadata(path)) {
+        (Ok(opened), Ok(entry)) => entry.is_file() && device_inode(&opened) == device_inode(&entry),
+        _ => false,
+    };
+    same.then_some(file).ok_or_else(not_plain)
 }
 
 fn wait_or_busy(deadline: Instant) -> Result<(), LockError> {

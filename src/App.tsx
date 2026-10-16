@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { MULTI_WORKSPACE_ENABLED, SEPARATE_WINDOWS_ENABLED } from './leadinglight/localPolicy'
 import { Sidebar } from './components/Sidebar'
 import { NoteList } from './components/NoteList'
@@ -24,6 +25,10 @@ import { useLocalTrash } from './leadinglight/useLocalTrash'
 import { TrashDialog } from './leadinglight/TrashDialog'
 import { usePageHistoryHealth } from './leadinglight/pageHistory/usePageHistoryHealth'
 import { usePageHistoryUi } from './leadinglight/pageHistory/usePageHistoryUi'
+import { BackupActionsContext } from './leadinglight/backup/backupActions'
+import { backupInputHeld, holdBackupInput } from './leadinglight/backup/backupInputGate'
+import { editorWorkSettled } from './leadinglight/editorWork'
+import { useBackupUi } from './leadinglight/backup/useBackupUi'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
 import { Toast } from './components/Toast'
@@ -1061,9 +1066,33 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     locale: appLocale,
   })
   useLayoutEffect(() => { trashBlockedRef.current = isClosing || workspaceTransitionPending }, [isClosing, workspaceTransitionPending])
+  // From Choose folder until a backup ends, the workspace holds still as for a close, but the window stays.
+  const [backupGuarded, setBackupGuarded] = useState(false)
+  const beginBackupGuard = useCallback(() => {
+    const reopenDrafts = pendingCapture.beginBoundary()
+    const reopenInput = holdBackupInput()
+    const reopenRenames = holdManualRenameAdmission()
+    const reopenTrash = holdTrashAdmission()
+    const reopenMutations = holdMutationAdmission()
+    folderMoveRef.current.holds += 1
+    // Commit the inert shell and paused editors before the picker or any save awaits.
+    flushSync(() => setBackupGuarded(true))
+    let held = true
+    return () => {
+      if (!held) return
+      held = false
+      folderMoveRef.current.holds -= 1
+      reopenMutations()
+      reopenTrash()
+      reopenRenames()
+      reopenInput()
+      reopenDrafts()
+      setBackupGuarded(false)
+    }
+  }, [pendingCapture, holdManualRenameAdmission, holdTrashAdmission, holdMutationAdmission])
   // A pane that stops being busy, or a lifted overlay, may let a waiting draft into its page now.
   const { pendingPanes } = notes.splitWorkspace
-  useLayoutEffect(() => { pendingCapture.pump() }, [pendingCapture, pendingPanes, isClosing, workspaceTransitionPending, trash.busy])
+  useLayoutEffect(() => { pendingCapture.pump() }, [pendingCapture, pendingPanes, isClosing, workspaceTransitionPending, trash.busy, backupGuarded])
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -1512,6 +1541,23 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onCopyCreated: () => { void reloadVault() },
   })
   const { open: openPageHistory } = pageHistory
+  const { saveRecovery } = appSave
+  const backup = useBackupUi({
+    locale: appLocale, vaultPath: resolvedPath, openWorkspace: vaultSwitcher.openWorkspace,
+    guard: {
+      begin: beginBackupGuard,
+      // An image import accepted before the guard lands in its page first; then both panes are saved.
+      saveAll: async () => {
+        await editorWorkSettled()
+        await flushWorkspaceBeforeClose()
+      },
+      unresolvedSaves: () => {
+        const { holds, retriable } = saveRecovery.getSnapshot()
+        return holds.length + retriable.length > 0
+      },
+      busy: () => trashBlockedRef.current,
+    },
+  })
   const openActivePageHistory = useCallback((path: string) => openPageHistory(path, notes.splitWorkspace.activePane, null),
     [openPageHistory, notes.splitWorkspace.activePane])
   const renderSaveHold = (path: string, named = false) => (
@@ -1906,6 +1952,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onOpenSettings: handleOpenSettings,
     onOpenFeedback: openFeedback,
     onOpenPageHistory: activeDeletedFile ? undefined : openActivePageHistory,
+    backupActions: backup.actions,
+    isInputGuarded: backupInputHeld,
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2090,7 +2138,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       {isClosing && <div role="status" className="fixed inset-0 z-[10000] flex items-center justify-center bg-background/80 text-sm text-muted-foreground">{translate(appLocale, 'leadinglight.shutdown.saving')}</div>}
       <TrashActivity activity={trash.activity} locale={appLocale} />
       <PendingCaptureField controller={pendingCapture} locale={appLocale} />
-      <div className="app-shell" inert={isClosing || workspaceTransitionPending || trash.busy} aria-busy={isClosing || workspaceTransitionPending || trash.busy}>
+      <div className="app-shell" inert={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} aria-busy={isClosing || workspaceTransitionPending || trash.busy || backupGuarded}>
         <div className="app">
           {sidebarVisible && (
             <>
@@ -2114,7 +2162,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           )}
           <div className={`app__editor${aiActivity.highlightElement === 'editor' || aiActivity.highlightElement === 'tab' ? ' ai-highlight' : ''}`}>
             <SplitEditorWorkspace
-              transitionPending={workspaceTransitionPending || isClosing || trash.busy}
+              transitionPending={workspaceTransitionPending || isClosing || trash.busy || backupGuarded}
               onCreatePage={title => notes.handleCreateNote(title, 'Note', 'quick_open')}
               workspace={notes.splitWorkspace}
               unsavedPaths={vault.unsavedPaths}
@@ -2205,7 +2253,9 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         </div>
         <UpdateBanner status={updateStatus} actions={updateActions} locale={appLocale} />
         <RenameDetectedBanner renames={detectedRenames} onUpdate={handleUpdateWikilinks} onDismiss={handleDismissRenames} />
-        <StatusBar noteCount={visibleEntries.length} modifiedCount={gitModifiedCount} vaultPath={resolvedPath} defaultWorkspacePath={defaultWorkspacePath} vaults={vaultSwitcher.allVaults} multiWorkspaceEnabled={multiWorkspaceEnabled} onSwitchVault={vaultSwitcher.switchVault} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onOpenSettings={handleOpenSettings} onOpenVaultSettings={MULTI_WORKSPACE_ENABLED ? handleOpenVaultSettings : undefined} onOpenFeedback={openFeedback} onOpenDocs={openDocs} onOpenLocalFolder={vaultSwitcher.handleOpenLocalFolder} onCreateEmptyVault={vaultSwitcher.handleCreateEmptyVault} onCloneVault={dialogs.openCloneVault} onCloneGettingStarted={cloneGettingStartedVault} onClickPending={() => handleSetSelection({ kind: 'filter', filter: 'changes' })} onClickPulse={() => handleSetSelection({ kind: 'filter', filter: 'pulse' })} onCommitPush={handleCommitPush} commitActionPending={commitFlow.isOpeningCommitDialog} gitFeaturesEnabled={gitFeaturesEnabled} onInitializeGit={openGitSetupDialog} isOffline={networkStatus.isOffline} isGitVault={isGitVault} isVaultReloading={vault.isReloading || isVaultContentLoading} syncStatus={autoSync.syncStatus} lastSyncTime={autoSync.lastSyncTime} conflictCount={autoSync.conflictFiles.length} remoteStatus={autoSync.remoteStatus} repositories={gitRepositories} selectedRepositoryPath={gitSurfaces.syncRepositoryPath} onRepositoryChange={gitSurfaces.setSyncRepositoryPath} onTriggerSync={handlePullSelectedRepository} onPullAndPush={handlePullAndPushSelectedRepository} onOpenConflictResolver={conflictFlow.handleOpenConflictResolver} zoomLevel={zoom.zoomLevel} themeMode={documentThemeMode} onZoomReset={zoom.zoomReset} onToggleThemeMode={settingsLoaded ? handleToggleThemeMode : undefined} buildNumber={buildNumber} onCheckForUpdates={handleCheckForUpdates} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} aiFeaturesEnabled={aiFeaturesEnabled} mcpStatus={mcpSetupDialog.status} onInstallMcp={mcpSetupDialog.openDialog} locale={appLocale} />
+        <BackupActionsContext value={backup.actions}>
+          <StatusBar noteCount={visibleEntries.length} modifiedCount={gitModifiedCount} vaultPath={resolvedPath} defaultWorkspacePath={defaultWorkspacePath} vaults={vaultSwitcher.allVaults} multiWorkspaceEnabled={multiWorkspaceEnabled} onSwitchVault={vaultSwitcher.switchVault} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onOpenSettings={handleOpenSettings} onOpenVaultSettings={MULTI_WORKSPACE_ENABLED ? handleOpenVaultSettings : undefined} onOpenFeedback={openFeedback} onOpenDocs={openDocs} onOpenLocalFolder={vaultSwitcher.handleOpenLocalFolder} onCreateEmptyVault={vaultSwitcher.handleCreateEmptyVault} onCloneVault={dialogs.openCloneVault} onCloneGettingStarted={cloneGettingStartedVault} onClickPending={() => handleSetSelection({ kind: 'filter', filter: 'changes' })} onClickPulse={() => handleSetSelection({ kind: 'filter', filter: 'pulse' })} onCommitPush={handleCommitPush} commitActionPending={commitFlow.isOpeningCommitDialog} gitFeaturesEnabled={gitFeaturesEnabled} onInitializeGit={openGitSetupDialog} isOffline={networkStatus.isOffline} isGitVault={isGitVault} isVaultReloading={vault.isReloading || isVaultContentLoading} syncStatus={autoSync.syncStatus} lastSyncTime={autoSync.lastSyncTime} conflictCount={autoSync.conflictFiles.length} remoteStatus={autoSync.remoteStatus} repositories={gitRepositories} selectedRepositoryPath={gitSurfaces.syncRepositoryPath} onRepositoryChange={gitSurfaces.setSyncRepositoryPath} onTriggerSync={handlePullSelectedRepository} onPullAndPush={handlePullAndPushSelectedRepository} onOpenConflictResolver={conflictFlow.handleOpenConflictResolver} zoomLevel={zoom.zoomLevel} themeMode={documentThemeMode} onZoomReset={zoom.zoomReset} onToggleThemeMode={settingsLoaded ? handleToggleThemeMode : undefined} buildNumber={buildNumber} onCheckForUpdates={handleCheckForUpdates} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} aiFeaturesEnabled={aiFeaturesEnabled} mcpStatus={mcpSetupDialog.status} onInstallMcp={mcpSetupDialog.openDialog} locale={appLocale} />
+        </BackupActionsContext>
         {aiFeaturesEnabled && !effectiveShowAIChat ? (
           <AiWorkspaceFloatingButton
             statuses={aiAgentsStatus}
@@ -2289,6 +2339,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         <CloneVaultModal key={dialogs.showCloneVault ? 'clone-open' : 'clone-closed'} open={dialogs.showCloneVault} onClose={dialogs.closeCloneVault} onVaultCloned={vaultSwitcher.handleVaultCloned} />
         <TrashDialog open={trashOpen} onOpenChange={setTrashOpen} vaultPath={resolvedPath} locale={appLocale} restore={restoreFromTrash} onOpenPage={openRestoredPage} />
         {pageHistory.dialog}
+        {backup.dialog}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog
             open={true}

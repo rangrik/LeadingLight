@@ -1,5 +1,6 @@
 mod ai;
 mod app_icon;
+mod backup;
 mod blocking;
 mod clipboard;
 mod delete;
@@ -20,6 +21,7 @@ use std::borrow::Cow;
 
 pub use ai::*;
 pub use app_icon::*;
+pub use backup::*;
 pub use clipboard::*;
 pub use delete::*;
 pub use folders::*;

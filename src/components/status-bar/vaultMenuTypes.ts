@@ -64,4 +64,4 @@ export interface VaultPathSelection extends VaultMenuInteractionOptions {
 export type BuildVaultActionOptions = Pick<
   VaultMenuProps,
   'multiWorkspaceEnabled' | 'onCreateEmptyVault' | 'onCloneGettingStarted' | 'onCloneVault' | 'onOpenLocalFolder'
->
+> & { onBackUpWorkspace?: () => void; onRestoreBackup?: () => void }
