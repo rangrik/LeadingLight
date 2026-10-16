@@ -36,9 +36,36 @@ The identity is a bright lighthouse on a pale sky-blue tile, with a warm lamp an
 
 ## Milestone 3 — connected and recoverable
 
-Verify and refine page links, backlinks, tags, daily notes, local attachments, deletion recovery
-and optional organization. Prefer inherited working capabilities over rebuilding them. Add only
-those surfaces that help capture, retrieve or develop an idea. Keep advanced settings secondary.
+Version 0.3.0 adds three connected writing features:
+
+- Today opens one ordinary Markdown page for the current local date, ready to write. Repeated
+  visits reuse that page; there is no daily review obligation or automatic page creation.
+- Backlinks are easy to find and open the exact source page, including pages with duplicate
+  titles. Existing relationships retain their values and do not show duplicate suggestions.
+- Local Trash makes page removal reversible across restarts. Save pending writing before
+  moving a page, preserve attachments, keep the other pane intact, and never overwrite a
+  conflicting file during restore. No automatic expiry or permanent erase control is planned.
+
+The verification record identifies the qualified behavior and remaining limits. The narrow-pane
+Inspector floats above the page without squeezing its writing area or enlarging the native window.
+
+## Following increments
+
+Continue in useful, independently verified releases, reusing working inherited capabilities:
+
+1. Capture and resumption: a direct route into writing, useful pinned pages, and clear empty
+   states. Naming and organization remain optional.
+2. Local recovery and portability: version previews, safe restoration, local backups and
+   Markdown import/export with explicit attachment coverage.
+3. Optional organization: tags, collections and local templates that reduce repeated work.
+   Do not require a taxonomy to create or find a page.
+4. Rich editing: qualify and refine tables, checklists, code, links, images, paste, undo and
+   formatting, including independent editing in both panes.
+5. Connected knowledge: improve object properties and navigation when they make a concrete
+   writing or retrieval task easier. Keep advanced views secondary.
+
+Correctness and usability fixes can precede the next feature. New surfaces must preserve
+local storage, visible error recovery and the existing save/navigation contracts.
 
 ## Product rules
 
