@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
+import { useState } from 'react'
 import { useRawMode } from './useRawMode'
 import * as store from '../utils/vaultConfigStore'
 
 describe('useRawMode', () => {
-  let onFlushPending: ReturnType<typeof vi.fn>
+  let onFlushPending: ReturnType<typeof vi.fn<() => Promise<boolean>>>
 
   beforeEach(() => {
     onFlushPending = vi.fn().mockResolvedValue(true)
@@ -17,7 +18,7 @@ describe('useRawMode', () => {
   })
 
   afterEach(() => {
-    store.resetVaultConfigStore()
+    act(() => store.resetVaultConfigStore())
   })
 
   function renderRawHook(activeTabPath: string | null = '/note.md') {
@@ -151,4 +152,62 @@ describe('useRawMode', () => {
     const { result } = renderRawHook()
     expect(result.current.rawMode).toBe(true)
   })
+
+  it('keeps controlled pane modes independent of each other and later vault-config broadcasts', async () => {
+    const { result } = renderHook(() => {
+      const [left, setLeft] = useState<'preview' | 'raw'>('preview')
+      const [right, setRight] = useState<'preview' | 'raw'>('preview')
+      const leftOptions = { activeTabPath: '/left.md', control: { mode: left, begin: () => (mode: 'preview' | 'raw') => { setLeft(mode); return true } } }
+      const rightOptions = { activeTabPath: '/right.md', control: { mode: right, begin: () => (mode: 'preview' | 'raw') => { setRight(mode); return true } } }
+      return [useRawMode(leftOptions), useRawMode(rightOptions)] as const
+    })
+    await act(async () => { await result.current[1].handleToggleRaw() })
+    expect(result.current.map(pane => pane.rawMode)).toEqual([false, true])
+    expect(store.getVaultConfig().editor_mode).toBeNull()
+    act(() => store.updateVaultConfigField('zoom', 1.2))
+    expect(result.current.map(pane => pane.rawMode)).toEqual([false, true])
+    await act(async () => { await result.current[0].handleToggleRaw() })
+    await act(async () => { await result.current[1].handleToggleRaw() })
+    expect(result.current.map(pane => pane.rawMode)).toEqual([true, false])
+  })
+
+  it('does not change mode when preparation explicitly refuses', async () => {
+    onFlushPending.mockResolvedValue(false)
+    const { result } = renderRawHook()
+    await act(async () => { await result.current.handleToggleRaw() })
+    expect(result.current.rawMode).toBe(false)
+    expect(store.getVaultConfig().editor_mode).toBeNull()
+  })
+  it('reports preparation rejection without changing the preference', async () => {
+    const error = new Error('Composition is still active')
+    const onError = vi.fn()
+    const { result } = renderHook(() => useRawMode({ activeTabPath: '/a.md', onFlushPending: async () => { throw error }, onError }))
+    await act(async () => { expect(await result.current.handleToggleRaw()).toBe(false) })
+    expect(result.current.rawMode).toBe(false)
+    expect(onError).toHaveBeenCalledWith(error)
+  })
+
+  it('coalesces rapid commands and drops preparation after page replacement or unmount', async () => {
+    let resolve!: (value: boolean) => void
+    onFlushPending.mockImplementation(() => new Promise<boolean>(done => { resolve = done }))
+    const { result, rerender, unmount } = renderRawHook('/a.md')
+    let first!: Promise<boolean>
+    act(() => { first = result.current.handleToggleRaw() })
+    await act(async () => { expect(await result.current.handleToggleRaw()).toBe(false) })
+    expect(onFlushPending).toHaveBeenCalledTimes(1)
+    const stale = result.current.handleToggleRaw
+    rerender({ path: '/b.md' })
+    rerender({ path: '/a.md' })
+    await act(async () => { resolve(true); expect(await first).toBe(false) })
+    await act(async () => { expect(await stale()).toBe(false) })
+    expect(result.current.rawMode).toBe(false)
+    act(() => { first = result.current.handleToggleRaw() })
+    const afterUnmount = result.current.handleToggleRaw
+    unmount()
+    resolve(true)
+    expect(await first).toBe(false)
+    expect(await afterUnmount()).toBe(false)
+    expect(store.getVaultConfig().editor_mode).toBeNull()
+  })
+
 })

@@ -24,6 +24,12 @@ layout while preserving editor ownership. List drags reuse the upstream note MIM
 and claim only internal drops over the writing area, before editor and sidebar handlers.
 Folder moves and external text/file drops retain their existing routes.
 
+Each stable pane also owns its rich-text/Markdown preference. An optional controlled editor
+interface reserves the current page and session before content preparation and refuses stale
+completion. The existing workspace snapshot persists modes beside paths in visual order;
+upstream single-editor callers retain their shared preference. This adds no save queue or note
+metadata. See [ADR 009](ADR-009-pane-editor-modes.md).
+
 The upstream tab controller exposes an opt-in `openEntryWhenLoaded` operation.
 It saves the previous page and loads the requested page before committing a tab change.
 Known-content opens also report whether they committed and accept a completion guard; a

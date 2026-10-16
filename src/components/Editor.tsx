@@ -1,3 +1,4 @@
+import type { PaneEditorModeControl } from '../leadinglight/paneEditorMode'
 import { useRef, useEffect, useCallback, memo, useState, type ReactNode } from 'react'
 import { useEditorTabSwap } from '../hooks/useEditorTabSwap'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -146,6 +147,7 @@ export interface EditorProps {
   onGoForward?: () => void
   leftPanelsCollapsed?: boolean
   /** Mutable ref that Editor registers its raw-mode toggle into, for command palette access. */
+  editorModeControl?: PaneEditorModeControl
   rawToggleRef?: React.MutableRefObject<() => void>
   /** Mutable ref that Editor registers editor find commands into, for shortcuts and menus. */
   findInNoteRef?: React.MutableRefObject<((options?: { replace?: boolean }) => void) | null>
@@ -191,18 +193,18 @@ function useEditorModeExclusion({
   diffMode: boolean
   rawMode: boolean
   handleToggleDiff: () => void | Promise<void>
-  handleToggleRaw: () => void
+  handleToggleRaw: () => Promise<boolean>
   rawToggleRef?: React.MutableRefObject<() => void>
   diffToggleRef?: React.MutableRefObject<() => void>
 }) {
   const handleToggleDiffExclusive = useCallback(async () => {
-    if (!diffMode && rawMode) handleToggleRaw()
+    if (!diffMode && rawMode && !await handleToggleRaw()) return
     await handleToggleDiff()
   }, [diffMode, rawMode, handleToggleDiff, handleToggleRaw])
 
-  const handleToggleRawExclusive = useCallback(() => {
-    if (!rawMode && diffMode) handleToggleDiff()
-    handleToggleRaw()
+  const handleToggleRawExclusive = useCallback(async () => {
+    if (!await handleToggleRaw()) return
+    if (!rawMode && diffMode) await handleToggleDiff()
   }, [rawMode, diffMode, handleToggleDiff, handleToggleRaw])
 
   useEffect(() => {
@@ -255,6 +257,8 @@ interface EditorSetupParams {
   pendingCommitDiffRequest?: CommitDiffRequest | null
   onPendingCommitDiffHandled?: (requestId: number) => void
   getNoteStatus?: (path: string) => NoteStatus
+  editorModeControl?: PaneEditorModeControl
+  onModeError?: (error: unknown) => void
   rawToggleRef?: React.MutableRefObject<() => void>
   diffToggleRef?: React.MutableRefObject<() => void>
   onImageImportError?: ImageImportErrorHandler
@@ -297,6 +301,8 @@ function useEditorSetup(options: EditorSetupParams) {
     pendingCommitDiffRequest,
     onPendingCommitDiffHandled,
     getNoteStatus,
+    editorModeControl,
+    onModeError,
     rawToggleRef,
     diffToggleRef,
     onImageImportError,
@@ -380,6 +386,8 @@ function useEditorSetup(options: EditorSetupParams) {
         onContentChange,
         vaultPath,
         flushPendingEditorChangeRef,
+        editorModeControl,
+        onModeError,
       )
       const rawModeContent = resolveRawModeContent({
         activeTab,
@@ -537,6 +545,7 @@ function useEditorSetup(options: EditorSetupParams) {
     }
 
     function EditorLayout(options: {
+      editorModeControl?: PaneEditorModeControl
       tabs: Tab[]
       activeTabPath: string | null
       activeTab: Tab | null
@@ -731,6 +740,7 @@ function useEditorSetup(options: EditorSetupParams) {
                 />
         ) : (
           <EditorContent
+              editorModeControl={options.editorModeControl}
               activeTab={activeTab}
               activeTabPath={activeTabPath}
               isLoadingNewTab={isLoadingNewTab}
@@ -874,6 +884,8 @@ export const Editor = memo(function Editor(props: EditorProps) {
     pendingCommitDiffRequest: props.pendingCommitDiffRequest,
     onPendingCommitDiffHandled: props.onPendingCommitDiffHandled,
     getNoteStatus: props.getNoteStatus,
+    editorModeControl: props.editorModeControl,
+    onModeError: error => props.onToast?.(String(error)),
     rawToggleRef: props.rawToggleRef,
     diffToggleRef: props.diffToggleRef,
     onImageImportError: handleImageImportError,

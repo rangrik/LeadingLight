@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type SetStateAction } from 'react'
 import { flushSync } from 'react-dom'
 import { useNavigationHistory } from '../hooks/useNavigationHistory'
 import type { OpenReservation } from '../hooks/useNoteCreation'
 import { useTabManagement, type Tab } from '../hooks/useTabManagement'
 import type { VaultEntry } from '../types'
 import { notePathsMatch } from '../utils/notePathIdentity'
+import { getVaultConfig, getVaultConfigPath, subscribeVaultConfig } from '../utils/vaultConfigStore'
+import { readPaneEditorModes, type PaneEditorMode, type PaneEditorModes } from './paneEditorMode'
 import { edgeSlot, pagePlacement, type DropEdge, type NoteDropTarget, type PaneOrder } from './pageTabDrag'
 
 export type PaneId = 0 | 1
@@ -15,7 +17,9 @@ interface WorkspaceSnapshot {
   split: boolean
   orientation: SplitOrientation
   ratio: number
+  editorModes?: PaneEditorModes
 }
+const defaultEditorModes: PaneEditorModes = ['preview', 'preview']
 const emptySnapshot = (): WorkspaceSnapshot => ({ paths: [null, null], active: 0, split: false, orientation: 'horizontal', ratio: 50 })
 export function readWorkspaceSnapshot(vaultPath: string): WorkspaceSnapshot {
   try {
@@ -23,7 +27,8 @@ export function readWorkspaceSnapshot(vaultPath: string): WorkspaceSnapshot {
     if (!value || !Array.isArray(value.paths)) return emptySnapshot()
     const paths: [string | null, string | null] = [0, 1].map(i => typeof value.paths[i] === 'string' ? value.paths[i] : null) as [string | null, string | null]
     if (notePathsMatch(paths[0], paths[1])) paths[1] = null
-    return { paths, active: value.active === 1 ? 1 : 0, split: value.split === true,
+    const editorModes = readPaneEditorModes(value.editorModes)
+    return { paths, ...(editorModes ? { editorModes } : {}), active: value.active === 1 ? 1 : 0, split: value.split === true,
       orientation: value.orientation === 'vertical' ? 'vertical' : 'horizontal',
       ratio: typeof value.ratio === 'number' && Number.isFinite(value.ratio) ? Math.min(75, Math.max(25, value.ratio)) : 50 }
   } catch { return emptySnapshot() }
@@ -83,6 +88,37 @@ export function useSplitWorkspace(options: Options) {
   const vaultInteractionRef = useRef(0)
   useLayoutEffect(() => { vaultInteractionRef.current = interactionVersionRef.current }, [options.vaultPath])
   const [restoredEpoch, setRestoredEpoch] = useState(-1)
+  const config = useSyncExternalStore(subscribeVaultConfig, getVaultConfig)
+  const configPath = useSyncExternalStore(subscribeVaultConfig, getVaultConfigPath)
+  const savedModes = useMemo(() => readWorkspaceSnapshot(session.vaultPath).editorModes, [session])
+  const readyForVisits = options.restoreWorkspace === false || !options.vaultPath || restoredEpoch === session.epoch
+  const seedModes = (): PaneEditorModes | null => {
+    if (savedModes) return savedModes
+    if (configPath !== options.vaultPath) return null
+    const mode = configPath === options.vaultPath && config.editor_mode === 'raw' ? 'raw' : 'preview'
+    return [mode, mode]
+  }
+  const [modeState, setModeState] = useState(() => ({ epoch: session.epoch, modes: seedModes() }))
+  if (modeState.epoch !== session.epoch || (!modeState.modes && (savedModes || configPath === options.vaultPath))) {
+    setModeState({ epoch: session.epoch, modes: seedModes() })
+  }
+  const editorModes: PaneEditorModes = modeState.modes ?? defaultEditorModes
+  const editorModesReady = modeState.epoch === session.epoch && modeState.modes !== null
+  // Config providers bind in their mount effect, including failed storage reads. Recheck after
+  // those effects before falling back for providerless callers; never wait for note reads.
+  useEffect(() => {
+    if (options.isVaultLoading && options.restoreWorkspace !== false && options.vaultPath) return
+    let live = true
+    queueMicrotask(() => {
+      if (!live) return
+      const mode = getVaultConfigPath() === options.vaultPath && getVaultConfig().editor_mode === 'raw' ? 'raw' : 'preview'
+      setModeState(previous => previous.epoch !== session.epoch || previous.modes ? previous : { epoch: session.epoch, modes: [mode, mode] })
+    })
+    return () => { live = false }
+  }, [options.isVaultLoading, options.restoreWorkspace, options.vaultPath, session.epoch])
+  const modesReadyRef = useRef(editorModesReady)
+  useLayoutEffect(() => { modesReadyRef.current = editorModesReady }, [editorModesReady])
+
   const firstHistory = useNavigationHistory()
   const secondHistory = useNavigationHistory()
   const histories = [firstHistory, secondHistory] as const
@@ -106,6 +142,26 @@ export function useSplitWorkspace(options: Options) {
   }, [])
   // Advances on every navigation request per pane, so a slow drop never commits over a newer one.
   const requestGenerationRef = useRef<[number, number]>([0, 0])
+  const beginEditorModeChange = useCallback((pane: PaneId) => {
+    const epoch = session.epoch
+    const navigation = requestGenerationRef.current[pane]
+    const path = controllersRef.current[pane].activeTabPathRef.current
+    const current = () => modesReadyRef.current && sessionRef.current === epoch && requestGenerationRef.current[pane] === navigation
+      && !busyCountRef.current[pane] && (splitRef.current || activePaneRef.current === pane)
+      && controllersRef.current[pane].activeTabPathRef.current === path
+      && paneTabsRef.current[pane].some(tab => tab.entry.path === path)
+    if (!path || !current()) return null
+    interactionVersionRef.current += 1
+    let consumed = false
+    return (mode: PaneEditorMode) => {
+      if (consumed) return false
+      consumed = true
+      if (!current()) return false
+      setModeState(previous => ({ epoch, modes: pane === 0 ? [mode, previous.modes![1]] : [previous.modes![0], mode] }))
+      return true
+    }
+  }, [session.epoch])
+
   const findPane = useCallback((path: string): PaneId | undefined => {
     return ([0, 1] as const).find(pane => {
       const controller = controllersRef.current[pane]
@@ -419,25 +475,25 @@ export function useSplitWorkspace(options: Options) {
     const pending = pendingPathsRef.current
     if (first.activeTabPath) pending[0] = null
     if (second.activeTabPath) pending[1] = null
-    if (options.restoreWorkspace === false || !options.vaultPath || restoredEpoch !== session.epoch || persistPausedRef.current) return
+    if (options.restoreWorkspace === false || !options.vaultPath || restoredEpoch !== session.epoch || persistPausedRef.current || !editorModesReady) return
     // Stored in visual order, so a restart maps slot N back to pane N.
     const paths = [first.activeTabPath ?? pending[0], second.activeTabPath ?? pending[1]]
     try {
       localStorage.setItem(`leadinglight.workspace:${options.vaultPath}`, JSON.stringify({
-        paths: [paths[order[0]], paths[order[1]]], active: order.indexOf(activePane), split, orientation, ratio,
+        paths: [paths[order[0]], paths[order[1]]], editorModes: [editorModes[order[0]], editorModes[order[1]]], active: order.indexOf(activePane), split, orientation, ratio,
       }))
     } catch { /* Restricted storage still permits editing; restoration is best effort. */ }
-  }, [activePane, first.activeTabPath, second.activeTabPath, options.vaultPath, options.restoreWorkspace, order, orientation, ratio, restoredEpoch, session.epoch, split])
+  }, [editorModes, editorModesReady, activePane, first.activeTabPath, second.activeTabPath, options.vaultPath, options.restoreWorkspace, order, orientation, ratio, restoredEpoch, session.epoch, split])
 
   return { tabs, setTabs, activeTabPath, activeTabPathRef, requestedActiveTabPathRef, handleSelectNote,
     handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
-    splitWorkspace: { pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
+    splitWorkspace: { editorModes, editorModesReady, beginEditorModeChange, pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
       closePageAndReserveOpen,
       currentTabs,
       markNavigation,
       openNoteWhenLoaded,
       // Recents may count visits only after this vault session's restore has settled.
-      readyForVisits: options.restoreWorkspace === false || restoredEpoch === session.epoch,
+      readyForVisits,
       paths: [first.activeTabPath, second.activeTabPath] as const,
       canGoBack: histories[activePane].canGoBack,
       canGoForward: histories[activePane].canGoForward,

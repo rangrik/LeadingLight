@@ -1,3 +1,4 @@
+import type { PaneEditorModeControl } from '../leadinglight/paneEditorMode'
 import { editorScopeForPath } from '../leadinglight/editorScope'
 import { useRef, useLayoutEffect, useCallback, useState } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
@@ -307,6 +308,8 @@ export function useRawModeWithFlush(
   onContentChange?: (path: string, content: string) => void,
   vaultPath?: string,
   flushPendingEditorChangeRef?: React.MutableRefObject<(() => boolean) | null>,
+  control?: PaneEditorModeControl,
+  onModeError?: (error: unknown) => void,
 ) {
   const { path: editorContentPath } = useEditorContentPathSignal(activeTabPath)
   const rawLatestContentRef = useRef<string | null>(null)
@@ -377,6 +380,8 @@ export function useRawModeWithFlush(
     activeTabPath,
     onFlushPending: handleFlushPending,
     onBeforeRawEnd: handleBeforeRawEnd,
+    control,
+    onError: onModeError,
   })
   useEditorModePositionSync({
     activeTabPath,

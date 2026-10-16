@@ -157,7 +157,7 @@ it.each(['changed', 'removed'] as const)('reopens a discarded page from the file
   if (how === 'changed') disk.set(A, NOW)
   else disk.delete(A)
 
-  // One batch, so no empty render lands first: discard, Save, raw toggle (vault-wide) on the closing editor, reopen.
+  // One batch, so no empty render lands first: discard, Save, a stale raw command on the closing editor, reopen.
   let opened: boolean | null = null
   await act(async () => {
     const running = h.actions.finish(A, 'discard')
@@ -170,9 +170,16 @@ it.each(['changed', 'removed'] as const)('reopens a discarded page from the file
   await tick(5_000)
 
   expect(savedWith('Held words.')).toBe(1)
+  // A command on the closed page is refused; neither pane changes mode.
+  expect(h.split.splitWorkspace.editorModes).toEqual(['preview', 'preview'])
+  expect(container.querySelector('[data-pane-id="0"] [data-testid="raw-editor-codemirror"]')).toBeNull()
   if (how === 'changed') {
     expect(opened).toBe(true)
     expect(shown(0)?.content).toBe(NOW)
+    // Explicitly switch the freshly loaded page, preserving the real raw-buffer freshness/save proof.
+    await act(async () => { rawToggle.current() })
+    await tick(50)
+    expect(h.split.splitWorkspace.editorModes).toEqual(['raw', 'preview'])
     const raw = (container.querySelector('[data-pane-id="0"] [data-testid="raw-editor-codemirror"]') as HTMLElement & { __cmView: EditorView }).__cmView
     expect(raw.state.doc.toString()).toBe(NOW)
     saves = 'commit'
@@ -183,9 +190,10 @@ it.each(['changed', 'removed'] as const)('reopens a discarded page from the file
     expect(opened).toBe(false)
     expect(disk.has(A)).toBe(false)
   }
-  // Same editor, never remounted, still on its own page; raw mode now shows its source.
+  // Same editor and sheet surface, never remounted or switched by the other pane's command.
   expect(container.querySelector('[data-pane-id="1"] .editor')).toBe(otherEditor)
-  expect(container.querySelector('[data-pane-id="1"] [data-testid="raw-editor-codemirror"]')?.textContent).toContain('kept')
+  expect(container.querySelector('[data-pane-id="1"] [data-testid="raw-editor-codemirror"]')).toBeNull()
+  expect(container.querySelector('[data-pane-id="1"] [data-testid="sheet-editor"]')).not.toBeNull()
   expect(shown(1)?.content).toBe(disk.get(B))
 })
 

@@ -60,21 +60,39 @@ cannot silently abandon an unresolved capture.
 The next release strengthens ordinary saves and explicit draft recovery before adding automatic
 local page history. Its qualification is recorded separately in VERIFICATION.md.
 
+## Milestone 5 — earlier writing stays reachable
+
+Version 0.5.0 keeps bounded automatic page history locally. Earlier versions can be previewed
+and recovered into a new copy without replacing the current page. History remains reachable
+after a page rename or removal, and gaps are reported rather than hidden. Ordinary saves and
+explicit draft recovery retain their own visible outcomes.
+
+## Milestone 6 — a local copy of the workspace
+
+Version 0.6.0 adds manual backup and restore from the workspace menu. Backup first settles
+writing in both panes, then copies pages, attachments, saved views and valid earlier versions
+to a chosen local folder with a verifiable manifest. Trash, Git history and temporary data are
+excluded. Restore checks the backup and creates a new folder; it never overwrites an existing
+workspace. Opening the restored copy is an explicit action.
+
+## Milestone 7 — each pane keeps its own editor
+
+Version 0.6.1 lets one pane stay in rich text while the other uses Markdown. The choice belongs
+to the pane through navigation, layout changes, closing and reopening, and normal app restart.
+Mode changes retain current words and respect focus when the person moves to another pane or
+control. A rich-editor recovery action also targets only its own pane.
+
 ## Following increments
 
 Continue in useful, independently verified releases, reusing working inherited capabilities:
 
 1. Capture and resumption: continue polishing the delivered immediate capture, useful pinned
    pages and clear empty states. Naming and organization remain optional.
-2. Automatic local version history: bounded checkpoints, verified previews and recovery into a
-   new copy. Keep older writing reachable after a rename or removal, explain any gap in recovery,
-   and never silently replace a current draft. Follow with local backups and Markdown import/export
-   with explicit attachment coverage.
-3. Optional organization: tags, collections and local templates that reduce repeated work.
+2. Optional organization: tags, collections and local templates that reduce repeated work.
    Do not require a taxonomy to create or find a page.
-4. Rich editing: qualify and refine tables, checklists, code, links, images, paste, undo and
+3. Rich editing: qualify and refine tables, checklists, code, links, images, paste, undo and
    formatting, including independent editing in both panes.
-5. Connected knowledge: improve object properties and navigation when they make a concrete
+4. Connected knowledge: improve object properties and navigation when they make a concrete
    writing or retrieval task easier. Keep advanced views secondary.
 
 Correctness and usability fixes can precede the next feature. New surfaces must preserve

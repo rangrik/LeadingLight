@@ -108,13 +108,15 @@ test('backup saves dirty rich and raw panes, verifies all bytes, and restores wi
   await pane(page, 2).getByText('Open a page here').click()
   await openByTitle(page, 'Tide table', TIDE, 2)
 
-  // Editor mode is shared across panes: make the rich edit before opening raw mode.
   // Hold real writes before disk admission so both edits are still dirty at Choose folder.
   const releaseSaves = fixture.holdSaves()
   await typeRich(page, pane(page, 1), ' Rich words kept in the backup.')
   await pane(page, 2).getByRole('button', { name: 'Open the raw editor', exact: true }).click()
   const raw = pane(page, 2).getByTestId('raw-editor-codemirror')
   await expect(raw).toBeVisible()
+  // Backup must flush both real editor kinds in the same workspace.
+  await expect(pane(page, 1).locator('.bn-editor')).toBeVisible()
+  await expect(pane(page, 1).getByTestId('raw-editor-codemirror')).toHaveCount(0)
   await raw.locator('.cm-content').click()
   await page.keyboard.press('ControlOrMeta+End')
   await page.keyboard.insertText('\nRaw words kept in the backup.\n')

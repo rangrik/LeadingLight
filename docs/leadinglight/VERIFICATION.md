@@ -419,3 +419,35 @@ filesystem races and Windows/Linux runtime remain unqualified. Backup and restor
 verified local copies, not a filesystem snapshot or a synchronization service. No dependency,
 telemetry, scheduled backup, cloud storage or remote data feature was added. New copy uses the
 English source locale and existing fallback; complete translated catalogs are not claimed.
+
+# Milestone 7 — independent pane editor modes
+
+Validated on macOS on 2026-10-16 for version 0.6.1, with disposable synthetic workspaces.
+No real notes were read or used for testing.
+
+The split workspace now owns a separate rich-text/Markdown preference for each stable pane.
+Regression tests first reproduced shared-preference coupling and switching despite explicit
+preparation refusal. Four additional held-frame regressions reproduced focus being taken back
+from another pane or an outside control. The fixes preserve existing single-editor behavior.
+The focused run passed 191 tests across 14 files; application and changed-test TypeScript and
+changed-file lint passed. The production frontend and isolated native app built successfully.
+
+Six Chromium checks passed against the local development bridge with real BlockNote and
+CodeMirror editors and real disposable files. The mode journey covered dirty edits in both
+panes, immediate raw exit, active command routing, an unrelated config broadcast, stable editor
+ownership, stacking, resizing, visual reordering, close/reopen and restored mode/path pairing.
+The existing backup suite now explicitly requires simultaneous rich and raw editors before its
+held-save backup, and checks saved bytes, restore collision, tamper refusal and uncertain replies.
+
+Native mouse actions opened and edited two pages, changed only the selected pane's mode, and
+returned an immediate raw edit to rich text. The command palette changed the active pane while
+the other retained Markdown mode. Mouse stacking, divider dragging, close and reopen retained
+both choices. Normal Command-Q and relaunch restored the two pages, mixed modes, vertical layout
+and resized divider. Both saved Markdown files matched their pre-quit SHA-256 and byte counts.
+
+Readiness tests cover legacy and invalid snapshots, missing/invalid/blocked preference storage,
+provider-free fallback, and unloaded pages. Transition tests cover stale page/vault completions,
+refusal and errors, raw buffer forwarding, emergency recovery, and delayed focus restoration.
+These are bounded regression checks, not exhaustive native IME, crash, power-loss, or other-OS
+qualification. Native All Notes dragging retains its previously documented automation limit;
+this increment makes no new claim about that gesture. No dependency or network feature was added.

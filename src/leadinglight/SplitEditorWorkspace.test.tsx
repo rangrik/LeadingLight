@@ -21,7 +21,7 @@ vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(pro
     if (flushPendingEditorContentRef) flushPendingEditorContentRef.current = target => { if (target === path) activity.flush(path) }
   }, [path, rawToggleRef, flushPendingEditorContentRef])
   return <>
-    <div contentEditable suppressContentEditableWarning data-testid={`editor-${path}`}>{path}</div>
+    <div contentEditable suppressContentEditableWarning data-mode={props.editorModeControl?.mode} data-testid={`editor-${path}`}>{path}</div>
     {openHistory && <button data-testid={`history-${path}`} onClick={event => openHistory(event.currentTarget)}>history</button>}
     {!props.inspectorCollapsed && <div data-testid={`inspector-${path}`} tabIndex={-1} data-inspector-overlay={props.inspectorOverlay ? '' : undefined} />}
   </>
@@ -32,6 +32,7 @@ function fixture() {
   const entries = [entry('/left.md'), entry('/right.md')]
   const workspace: SplitWorkspaceController = {
     activePane: 0, split: true, orientation: 'horizontal', ratio: 50, paths: ['/left.md', '/right.md'], order: [0, 1], placePane: vi.fn(() => true), placeNote: vi.fn(async () => true),
+    editorModes: ['preview', 'raw'], editorModesReady: true, beginEditorModeChange: vi.fn(() => vi.fn(() => true)),
     pendingPanes: [false, false], suspendPersistence: vi.fn(), focusPane: vi.fn(), selectNoteInPane: vi.fn(async () => {}),
     closePane: vi.fn(), openSplit: vi.fn(), resize: vi.fn(), canGoBack: false, canGoForward: false, goBack: vi.fn(), goForward: vi.fn(),
     closePages: vi.fn(), closePageAndReserveOpen: vi.fn(() => null), currentTabs: vi.fn(() => []),
@@ -56,6 +57,22 @@ describe('split editor integration', () => {
     props.flushPendingEditorContentRef.current?.('/right.md')
     expect(activity.flush).toHaveBeenCalledWith('/left.md')
     expect(activity.flush).toHaveBeenCalledWith('/right.md')
+  })
+  it('passes each pane its own mode and guards commands while preferences or workspace transitions are pending', () => {
+    activity.raw.mockClear()
+    const props = fixture()
+    const { rerender } = render(<SplitEditorWorkspace {...props} />)
+    expect(screen.getByTestId('editor-/left.md')).toHaveAttribute('data-mode', 'preview')
+    expect(screen.getByTestId('editor-/right.md')).toHaveAttribute('data-mode', 'raw')
+    props.workspace.editorModesReady = false
+    rerender(<SplitEditorWorkspace {...props} />)
+    expect(screen.getByTestId('editor-/left.md').closest('[inert]')).not.toBeNull()
+    props.rawToggleRef.current()
+    expect(activity.raw).not.toHaveBeenCalled()
+    props.workspace.editorModesReady = true
+    rerender(<SplitEditorWorkspace {...props} transitionPending />)
+    props.rawToggleRef.current()
+    expect(activity.raw).not.toHaveBeenCalled()
   })
   // Seam: a final save choice blocks only its own pane. Catches typing or page commands reaching it, or the other pane frozen too.
   it('blocks input and page commands only in the pane inside a final save choice', () => {

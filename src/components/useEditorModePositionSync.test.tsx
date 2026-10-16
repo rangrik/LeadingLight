@@ -268,4 +268,43 @@ describe('useEditorModePositionSync', () => {
     expect(editor.setTextCursorPosition).not.toHaveBeenCalled()
     expect(editor.focus).not.toHaveBeenCalled()
   })
+  it.each([
+    ['raw', 'other pane'], ['rich', 'other pane'], ['raw', 'outside control'], ['rich', 'outside control'],
+  ])('restores the %s caret without taking focus back from an %s before its deferred frame', (mode, destination) => {
+    const editor = makeEditor()
+    const owner = document.createElement('section')
+    owner.dataset.paneId = '0'
+    owner.dataset.notePath = 'note.md'
+    owner.dataset.paneActive = 'true'
+    owner.tabIndex = -1
+    for (const child of [...document.body.children]) owner.appendChild(child)
+    document.body.appendChild(owner)
+    const other = document.createElement('section')
+    other.dataset.paneId = '1'
+    const input = document.createElement('input')
+    if (destination === 'other pane') { other.appendChild(input); document.body.appendChild(other) }
+    else document.body.appendChild(input)
+    const focus = vi.fn(() => owner.focus())
+    editor.focus = focus
+    const dispatch = vi.fn()
+    installRawView({ state: { doc: { toString: () => content }, selection: { main: { anchor: 0, head: 0 } } }, scrollDOM: { scrollTop: 0 }, dispatch, focus })
+    owner.appendChild(document.querySelector('[data-testid="raw-editor-codemirror"]')!)
+    const transition = createRestoreTransitionRef()
+    transition.current.rawRestore = { anchor: 3, head: 7, scrollTop: 42 }
+    transition.current.richRestore = { anchorLineRatio: 0.5, headLineRatio: 0.5 }
+    const frames: FrameRequestCallback[] = []
+    vi.mocked(window.requestAnimationFrame).mockImplementation(callback => { frames.push(callback); return frames.length })
+    renderHook(() => useEditorModePositionSync({ activeTabPath: 'note.md', editor: editor as never, restoreTransitionRef: transition, rawMode: mode === 'raw' }))
+    if (mode === 'rich') act(() => window.dispatchEvent(new CustomEvent('laputa:editor-tab-swapped', { detail: { path: 'note.md' } })))
+    expect(frames).toHaveLength(1)
+    if (destination === 'other pane') owner.dataset.paneActive = 'false'
+    input.focus()
+    input.setSelectionRange(0, 0)
+    act(() => frames[0](0))
+    expect(document.activeElement).toBe(input)
+    expect(focus).not.toHaveBeenCalled()
+    if (mode === 'raw') expect(dispatch).toHaveBeenCalledWith({ selection: { anchor: 3, head: 7 } })
+    else expect(editor.setTextCursorPosition).toHaveBeenCalled()
+  })
+
 })

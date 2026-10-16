@@ -360,6 +360,7 @@ export function captureRawCodeMirrorRestoreState(documentObject: ParentNode): Co
 export function restoreCodeMirrorView(
   documentObject: ParentNode,
   state: CodeMirrorRestoreState,
+  focus = true,
 ): boolean {
   const view = getRawEditorView(documentObject)
   if (!view) return false
@@ -376,7 +377,7 @@ export function restoreCodeMirrorView(
     return false
   }
   view.scrollDOM.scrollTop = state.scrollTop
-  view.focus()
+  if (focus) view.focus()
   return true
 }
 
@@ -384,6 +385,7 @@ export function restoreBlockNoteView(
   editor: BlockNotePositionEditor,
   snapshot: RawEditorPositionSnapshot,
   documentObject: ParentNode,
+  focus = true,
 ): boolean {
   const state = buildBlockNoteRestoreState(editor, snapshot)
   if (!state) return false
@@ -397,9 +399,11 @@ export function restoreBlockNoteView(
   } catch {
     return false
   }
-  editor.focus()
-  documentObject
-    .querySelector<HTMLElement>(`[data-id="${state.endBlockId}"]`)
-    ?.scrollIntoView({ block: 'center' })
+  if (focus) {
+    editor.focus()
+    documentObject
+      .querySelector<HTMLElement>(`[data-id="${state.endBlockId}"]`)
+      ?.scrollIntoView({ block: 'center' })
+  }
   return true
 }

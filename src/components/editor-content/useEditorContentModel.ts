@@ -1,5 +1,6 @@
+import type { PaneEditorModeControl } from '../../leadinglight/paneEditorMode'
 import type React from 'react'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { useCreateBlockNote } from '@blocknote/react'
 import type { AppLocale } from '../../lib/i18n'
 import type { NoteWidthMode, NoteStatus, VaultEntry } from '../../types'
@@ -16,6 +17,7 @@ export interface Tab {
 }
 
 export interface EditorContentProps {
+  editorModeControl?: PaneEditorModeControl
   activeTab: Tab | null
   activeTabPath: string | null
   isLoadingNewTab: boolean
@@ -101,14 +103,22 @@ export function useEditorContentModel(props: EditorContentProps) {
     ? entries.find((entry) => entry.path === activeTabPath) ?? null
     : null
   const loadingTab = loadingEntry ? { entry: loadingEntry, content: '' } : null
+  const recoveryIdentity = useMemo(() => ({ path: activeTabPath, begin: props.editorModeControl?.begin }), [activeTabPath, props.editorModeControl?.begin])
+  const liveRecovery = useRef<typeof recoveryIdentity | null>(recoveryIdentity)
+  useLayoutEffect(() => {
+    liveRecovery.current = recoveryIdentity
+    return () => { liveRecovery.current = null }
+  }, [recoveryIdentity])
   const onToggleRaw = useCallback((recoveryReason?: BlockNoteRenderRecoveryReason) => {
     if (recoveryReason === 'react_update_depth_exceeded') {
-      updateVaultConfigField('editor_mode', 'raw')
+      if (liveRecovery.current !== recoveryIdentity) return
+      if (recoveryIdentity.begin) recoveryIdentity.begin()?.('raw')
+      else updateVaultConfigField('editor_mode', 'raw')
       return
     }
 
     toggleRaw()
-  }, [toggleRaw])
+  }, [toggleRaw, recoveryIdentity])
 
   const breadcrumbBarRef = useRef<HTMLDivElement | null>(null)
 

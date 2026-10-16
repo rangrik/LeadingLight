@@ -10,6 +10,15 @@ import {
 
 const MAX_RAW_RESTORE_ATTEMPTS = 5
 
+/** A delayed frame can restore its own caret, but cannot reclaim input from another surface. */
+function ownsRestoreFocus(scope: ParentNode): boolean {
+  if (scope === document) return true // Preserve standalone editor behavior.
+  if (!(scope instanceof HTMLElement) || scope.dataset.paneActive !== 'true' || scope.closest('[inert]') || scope.querySelector('[data-recovery-blocked]')) return false
+  const focused = document.activeElement
+  return !focused || focused === document.body || scope.contains(focused)
+}
+
+
 export interface EditorModeRestoreTransition {
   rawRestore: CodeMirrorRestoreState | null
   roundTripRawRestore: { path: string; state: CodeMirrorRestoreState } | null
@@ -43,7 +52,8 @@ function useRawEditorRestoreEffect({
     const tryRestore = () => {
       const pendingState = restoreTransitionRef.current.rawRestore
       if (!pendingState) return
-      if (restoreCodeMirrorView(editorScopeForPath(activeTabPath), pendingState)) {
+      const scope = editorScopeForPath(activeTabPath)
+      if (restoreCodeMirrorView(scope, pendingState, ownsRestoreFocus(scope))) {
         restoreTransitionRef.current.rawRestore = null
         return
       }
@@ -102,7 +112,8 @@ function useBlockNoteRestoreEffect({
         restoreFrame = 0
         if (canceled) return
 
-        restoreBlockNoteView(editor, pendingSnapshot, editorScopeForPath(activeTabPath))
+        const scope = editorScopeForPath(activeTabPath)
+        restoreBlockNoteView(editor, pendingSnapshot, scope, ownsRestoreFocus(scope))
         restoreTransitionRef.current.roundTripRawRestore = null
         restoreTransitionRef.current.richRestore = null
       })

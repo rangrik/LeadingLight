@@ -1,3 +1,4 @@
+import type { PaneEditorMode } from './paneEditorMode'
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type MutableRefObject, type PointerEvent, type ReactNode } from 'react'
 import { Columns, Rows, X, CaretDown, Plus, DotsSixVertical, ArrowBendUpLeft } from '@phosphor-icons/react'
 import { LazyEditor } from '../components/LazyEditor'
@@ -138,6 +139,13 @@ export function SplitEditorWorkspace(props: Props) {
   const { rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef, pdfExportRef,
     turnCurrentBlockIntoRef, flushPendingEditorContentRef, flushPendingRawContentRef } = props
   const { isBlocked } = settlement
+  const { beginEditorModeChange } = workspace
+  const modeBegins = useMemo(() => ([0, 1] as const).map(pane => () => {
+    if (isBlocked(pane) || props.transitionPending) return null
+    const commit = beginEditorModeChange(pane)
+    return commit ? (mode: PaneEditorMode) => !isBlocked(pane) && commit(mode) : null
+  }), [beginEditorModeChange, isBlocked, props.transitionPending])
+
   // A shown page with unsaved words stays writable when a list refresh no longer has its file.
   const editorEntries = useMemo(() => {
     const kept = workspace.paths.flatMap(path => {
@@ -153,7 +161,7 @@ export function SplitEditorWorkspace(props: Props) {
   }, [props.blockedPaths])
   useEffect(() => {
     // A pane inside a final recovery choice takes no page command; the other pane still does.
-    const pane = () => isBlocked(activeRef.current) ? null : paneRefs[activeRef.current]
+    const pane = () => isBlocked(activeRef.current) || props.transitionPending || !workspace.editorModesReady || workspace.pendingPanes[activeRef.current] ? null : paneRefs[activeRef.current]
     if (rawToggleRef) rawToggleRef.current = () => pane()?.rawToggleRef.current()
     if (diffToggleRef) diffToggleRef.current = () => pane()?.diffToggleRef.current()
     if (tableOfContentsToggleRef) tableOfContentsToggleRef.current = () => paneRefs[activeRef.current].tableOfContentsToggleRef.current()
@@ -162,7 +170,7 @@ export function SplitEditorWorkspace(props: Props) {
     if (turnCurrentBlockIntoRef) turnCurrentBlockIntoRef.current = target => pane()?.turnCurrentBlockIntoRef.current?.(target)
     if (flushPendingEditorContentRef) flushPendingEditorContentRef.current = path => paneRefs.forEach(pane => pane.flushPendingEditorContentRef.current?.(path))
     if (flushPendingRawContentRef) flushPendingRawContentRef.current = path => paneRefs.forEach(pane => pane.flushPendingRawContentRef.current?.(path))
-  }, [paneRefs, isBlocked, rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef,
+  }, [paneRefs, isBlocked, props.transitionPending, workspace.editorModesReady, workspace.pendingPanes, rawToggleRef, diffToggleRef, tableOfContentsToggleRef, findInNoteRef,
     pdfExportRef, turnCurrentBlockIntoRef, flushPendingEditorContentRef, flushPendingRawContentRef])
 
   useEffect(() => {
@@ -228,7 +236,7 @@ export function SplitEditorWorkspace(props: Props) {
                 workspace.resize(event.key === 'Home' ? 50 : workspace.ratio + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -5 : 5))
               }
             }} />}
-          <section inert={workspace.pendingPanes[pane]} aria-busy={workspace.pendingPanes[pane]} data-pane-id={pane} data-pane-active={active} data-note-path={path ?? ''}
+          <section inert={workspace.pendingPanes[pane] || !workspace.editorModesReady} aria-busy={workspace.pendingPanes[pane]} data-pane-id={pane} data-pane-active={active} data-note-path={path ?? ''}
             aria-label={translate(locale, 'leadinglight.split.pane', { number: index + 1 })}
             className={`ll-pane${active ? ' ll-pane--active' : ''}`}
             style={{ flex: workspace.split ? `${index === 0 ? workspace.ratio : 100 - workspace.ratio} 1 0` : '1 1 0' }}
@@ -267,7 +275,7 @@ export function SplitEditorWorkspace(props: Props) {
             {tab && path && props.renderPageNotice?.(path)}
             {tab ? <div className="contents" inert={blocked} data-recovery-blocked={blocked ? '' : undefined}>
               <PageHistoryActionContext.Provider value={props.onOpenPageHistory ? historyActions[pane] : null}>
-              <LazyEditor {...props} {...paneRefs[pane]} tabs={[tab]} activeTabPath={path} entries={editorEntries}
+              <LazyEditor {...props} {...paneRefs[pane]} editorModeControl={{ mode: workspace.editorModes[pane], begin: modeBegins[pane] }} tabs={[tab]} activeTabPath={path} entries={editorEntries}
               onContentChange={settlement.contentChanges[pane]}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
               inspectorOverlay={inspector.floats(pane)}
