@@ -2,12 +2,14 @@ import { Archive, CalendarDot, FileText, MagnifyingGlass, Plus, Trash, Tray } fr
 import type { SidebarSelection } from '../../types'
 import { isSelectionActive, NavItem } from '../SidebarParts'
 import { translate, type AppLocale } from '../../lib/i18n'
+import { Button } from '../ui/button'
 
 interface SidebarTopNavProps {
   selection: SidebarSelection
   onSelect: (selection: SidebarSelection) => void
   onSearch?: () => void
   onCreatePage?: () => void
+  onCreateFromTemplate?: () => void
   onOpenToday?: () => void
   /** False until the vault listing and restored layout are ready. */
   canOpenToday?: boolean
@@ -21,11 +23,13 @@ interface SidebarTopNavProps {
 }
 
 export function SidebarTopNav(options: SidebarTopNavProps) {
-  const { selection, onSelect, onSearch, onCreatePage, onOpenToday, canOpenToday = true, onOpenTrash, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
+  const { selection, onSelect, onSearch, onCreatePage, onCreateFromTemplate, onOpenToday, canOpenToday = true, onOpenTrash, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
   return (
     <div className="border-b border-border" data-testid="sidebar-top-nav" style={{ padding: '4px 6px' }}>
       {/* Called without the click event, which would otherwise read as a type. */}
       {onCreatePage && <NavItem icon={Plus} label={translate(locale, 'leadinglight.split.create')} onClick={() => onCreatePage()} disabled={loading} />}
+      {onCreateFromTemplate && <Button variant="ghost" size="sm" className="h-7 w-full justify-start pl-8 text-xs font-normal text-muted-foreground"
+        disabled={loading} onClick={() => onCreateFromTemplate()}>{translate(locale, 'leadinglight.templates.shortAction')}</Button>}
       {onSearch &&<NavItem icon={MagnifyingGlass} label={translate(locale, 'leadinglight.find.action')} onClick={onSearch} />}
       {onOpenToday && <NavItem icon={CalendarDot} label={translate(locale, 'leadinglight.today.action')} onClick={onOpenToday} disabled={loading || !canOpenToday} />}
       {showInbox && (

@@ -104,7 +104,8 @@ function buildPathQueryRequest(cmd: PathQueryCommand, args: Record<string, unkno
   const payload = commandArgs(args)
   const path = argText(payload, 'path')
   if (!path) return null
-  return { kind: pathQueryKind(cmd), body: { path } }
+  const vaultPath = argText(payload, 'vaultPath') ?? argText(payload, 'vault_path')
+  return { kind: pathQueryKind(cmd), body: vaultPath ? { path, vault_path: vaultPath } : { path } }
 }
 
 function buildRequiredPostRequest(
@@ -285,7 +286,8 @@ export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>
   }
   const request = buildVaultApiRequest(cmd, args)
   if (!request) return undefined
-  const closed = !isGetRequest(request) && failsClosed(request.body)
+  const exactRead = request.kind === 'entry' || (cmd === 'get_note_content' && typeof request.body.vault_path === 'string')
+  const closed = (!isGetRequest(request) || exactRead) && failsClosed(request.body)
   if (!await checkVaultApi()) {
     if (closed) throw new VaultApiRefusal(UNAVAILABLE)
     return undefined
@@ -293,6 +295,9 @@ export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>
 
   try {
     const data = await fetchVaultApiResponse(request, closed)
+    if (closed && exactRead && (data == null || (cmd === 'get_note_content' && typeof data.content !== 'string'))) {
+      throw new VaultApiRefusal('The exact page could not be read from disk.')
+    }
     if (data === undefined) return undefined
     if (cmd === 'get_note_content') return data.content as T
     if (cmd === 'validate_note_content') return (data.content === args?.content) as T

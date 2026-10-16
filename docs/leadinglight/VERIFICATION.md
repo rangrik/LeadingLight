@@ -451,3 +451,45 @@ refusal and errors, raw buffer forwarding, emergency recovery, and delayed focus
 These are bounded regression checks, not exhaustive native IME, crash, power-loss, or other-OS
 qualification. Native All Notes dragging retains its previously documented automation limit;
 this increment makes no new claim about that gesture. No dependency or network feature was added.
+
+# Milestone 8 — optional local templates
+
+Validated on macOS on 2026-10-16 for version 0.7.0, using only disposable synthetic workspaces.
+The feature adds no dependencies, remote resources, telemetry, account setup or template service.
+
+The domain and page-write seam passed 155 targeted tests across ten files. UI checks passed
+28 tests at the first freeze and 16 related tests after the separate keyboard-navigation guard
+was corrected. Review regressions first reproduced unstable native default ordering, reuse of
+a previous new-template identity, and navigation behind an open draft. The corrected code
+canonicalizes defaults, creates each new template exclusively, and guards both keyboard paths.
+Application and changed-code types and lint passed. The local disk adapter suite passed 48 tests.
+
+Eight Chrome acceptance cases passed against real disposable files, with one worker and zero
+retries. They cover exact selection of duplicate names, passive preview, changed-source review,
+creation in the requesting mixed-mode pane, unchanged ordinary blank capture, typing during an
+older save, successive new templates, filename collisions, lost create replies, and draft retention
+after a failed exact source read. The test fixture routes create/read operations through the
+production disk adapter. An additional 480×400 browser check confirms Name, Starting text, Back,
+Save and Create remain visible and usable at the configured minimum window dimensions.
+
+Native mouse and keyboard actions created a page from a template with three inherited defaults
+without a false source-change loop. Its exact bytes matched the expected generated page and the
+source stayed unchanged. An unsaved new-template draft refused Command-Q and remained intact.
+Mouse Save and Command-S created two distinct templates in one chooser session. Creating in a
+Markdown pane preserved that mode and left the other rich-text pane unchanged. Existing template
+identity stayed read-only; an explicit text edit/save affected subsequent pages only. Fourteen
+synthetic file hashes and the exact file set survived normal quit and relaunch unchanged.
+The restarted app restored both pages and their distinct editor modes; all three templates and
+their latest previews remained available.
+
+Native missing-read classification passed four new regressions within the 101-passing-test
+LeadingLight filter (five existing ignored tests); the broader vault command filter passed 65
+with no ignored tests. Only a proven absent leaf under a valid in-vault directory permits an
+explicit create-only retry. Missing parents, permission errors, dangling links and outside paths
+do not count as absence. Exclusive creation still refuses a file appearing after that check.
+
+These are bounded checks, not native fault-injection, power-loss, forced-kill, IME or other-OS
+qualification. Compact native window resizing remains unqualified by automation; the browser
+minimum-size result is separate. The full locale validator reports 461 missing keys per non-English
+catalog, including 69 new English keys, under the fork's English fallback policy. Complete
+translations, whole-upstream coverage and notarized distribution are not claimed.

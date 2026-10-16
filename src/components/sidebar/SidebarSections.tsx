@@ -364,6 +364,7 @@ export const CustomizeOverlay = ({
         currentIcon={typeEntry?.icon ?? null}
         currentColor={typeEntry?.color ?? null}
         currentTemplate={typeEntry?.template ?? null}
+        showTemplate={false}
         onChangeIcon={(icon) => onCustomize('icon', icon)}
         onChangeColor={(color) => onCustomize('color', color)}
         onChangeTemplate={onChangeTemplate}

@@ -33,6 +33,12 @@ import { useActionHistory, type ActionHistoryController, type ActionHistoryEntry
 import type { MutateExistingDocument, RunManualRename, RunPageExclusive } from './useAppSave'
 import { requestFavoriteState, type ApplyFavoriteState } from '../leadinglight/favoriteTransaction'
 import { createTranslator } from '../lib/i18n'
+import { isTauri } from '../mock-tauri'
+import { stringify } from 'yaml'
+import { carryTopLevelKeys } from '../leadinglight/favoriteKeys'
+import { useLocalTemplates, readTemplateEntry, templateLocal } from '../leadinglight/templates/useLocalTemplates'
+import { readTemplateSnapshot, withTemplateText, TemplateOperationError, type TemplateWriteRequest } from '../leadinglight/templates/templateDomain'
+import type { TemplateSaveResult, TemplateSnapshot } from '../leadinglight/templates/templateContract'
 
 export interface NoteActionsConfig {
   addEntry: (entry: VaultEntry) => void
@@ -373,6 +379,85 @@ async function writeInPageQueue(
     return true
   })
   return written
+}
+
+/** Template editing needs the disk receipt before any list refresh, not the legacy void callback. */
+export async function writeTemplateConfirmed(config: NoteActionsConfig, request: TemplateWriteRequest): Promise<TemplateSaveResult> {
+  const { source, text, revision, current } = request
+  const refused = (reason: 'saveHeld' | 'stale' | 'readFailed' | 'invalidSource'): TemplateSaveResult =>
+    ({ status: 'failed', reason, revision, write: 'notStarted' })
+  const outcome: { result: TemplateSaveResult; attempted: boolean } = { result: refused('saveHeld'), attempted: false }
+  if (!config.runPageExclusive || !current()) return refused(current() ? 'saveHeld' : 'stale')
+  try {
+    await config.runPageExclusive(source.path, async mutate => {
+      let baseline: TemplateSnapshot = request.expected
+      const nativeChange = propertyChange('update', 'template', text)
+      const templateMetadata = `---\n${stringify({ template: text }, { lineWidth: 0 })}---\n`
+      const group = (key: string) => canonicalFrontmatterKey(key) === 'template'
+      const admission = mutate(source.path, {
+        ...nativeChange,
+        rebase: content => isTauri() && !request.reconcile ? nativeChange.rebase(content) : carryTopLevelKeys(content, templateMetadata, group),
+        publish: async path => {
+          try {
+            if (!current() || !notePathsMatch(path, source.path)) throw new TemplateOperationError('stale')
+            baseline = await readTemplateSnapshot(source, readTemplateEntry)
+            if (!current()) throw new TemplateOperationError('stale')
+            if (request.reconcile && baseline.template === text) {
+              const content = await templateLocal<string>('get_note_content', { ...source })
+              if (typeof content !== 'string' || !current()) throw new TemplateOperationError('stale')
+              return content
+            }
+            if (baseline.revision !== request.expected.revision) {
+              outcome.result = { status: 'sourceChanged', snapshot: baseline, revision }
+              throw new TemplateOperationError('stale')
+            }
+            let browserContent: string | null = null
+            if (!isTauri()) {
+              const existing = await templateLocal<string>('get_note_content', { ...source })
+              browserContent = carryTopLevelKeys(existing, templateMetadata, group)
+              if (browserContent === null) throw new TemplateOperationError('invalidSource')
+            }
+            if (!current()) throw new TemplateOperationError('stale')
+            config.onInternalVaultWrite?.(path)
+            outcome.attempted = true
+            const content = browserContent === null ? await nativeChange.publish(path)
+              : await templateLocal('save_note_content', { path, content: browserContent, vaultPath: source.vaultPath }).then(() => browserContent)
+            if (typeof content !== 'string') throw new Error('No template write receipt')
+            return content
+          } catch (error) {
+            if (!outcome.attempted && outcome.result.status !== 'sourceChanged') outcome.result = {
+              status: 'failed', reason: error instanceof TemplateOperationError ? error.reason : 'readFailed', revision, write: 'notStarted',
+            }
+            throw error
+          }
+        },
+      })
+      if (!admission.admitted) return false
+      const settled = await admission.done
+      if (settled.kind !== 'returned') {
+        if (outcome.attempted) outcome.result = { status: 'failed', reason: 'unconfirmed', revision, write: 'unconfirmed', attemptedPath: source.path }
+        return false
+      }
+      const snapshot = withTemplateText(baseline, text)
+      const receipt: Extract<TemplateSaveResult, { status: 'saved' }> = {
+        status: 'saved', source, snapshot, text, revision, refreshPending: !settled.current || !current(),
+      }
+      outcome.result = receipt
+      if (!settled.current || !current()) return true
+      try {
+        config.updateEntry(source.path, { template: text })
+        config.onFrontmatterContentChanged?.(source.path, settled.result)
+        await config.onFrontmatterPersisted?.()
+        if (current()) await (config.onTypeStateChanged?.() ?? config.reloadVault?.())
+      } catch { receipt.refreshPending = true }
+      return true
+    })
+  } catch {
+    if (outcome.attempted && outcome.result.status !== 'saved') outcome.result = {
+      status: 'failed', reason: 'unconfirmed', revision, write: 'unconfirmed', attemptedPath: source.path,
+    }
+  }
+  return outcome.result
 }
 
 function usePropertyWriter(
@@ -1069,8 +1154,21 @@ export function useNoteActions(config: NoteActionsConfig) {
     (path, state) => requestFavoriteState(mutateExistingDocument, resolveActionPath(path), state),
     [mutateExistingDocument, resolveActionPath],
   )
+  const templates = useLocalTemplates({
+    vaultPath: config.vaultPath,
+    ready: !config.isVaultLoading,
+    entries,
+    reserveOpen: tabMgmt.reserveOpen,
+    markNavigation: tabMgmt.splitWorkspace.markNavigation,
+    flushSource: config.flushBeforeNoteMutation,
+    writeExisting: request => writeTemplateConfirmed(config, request),
+    addEntry: config.addEntry,
+    markWrite: config.onInternalVaultWrite,
+    onPersisted: config.onNewNotePersisted,
+    refresh: async () => { await (config.onTypeStateChanged?.() ?? config.reloadVault?.()) },
+  })
 
-  return buildNoteActionsResult({
+  return { templates, ...buildNoteActionsResult({
     actionHistory,
     applyFavoriteState,
     createPageAt,
@@ -1080,5 +1178,5 @@ export function useNoteActions(config: NoteActionsConfig) {
     handleSelectNote,
     rename,
     tabMgmt,
-  })
+  }) }
 }

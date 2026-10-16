@@ -68,6 +68,15 @@ two separate files cannot establish document identity or bypass loading the dest
 
 ## Capture and resumption
 
+Optional local templates live in `src/leadinglight/templates` and reuse ordinary Type documents.
+`useNoteActions` binds a controller to the existing vault, pane reservation and page mutation
+coordinator. Exact-path source reads supply a resolved starting text and defaults together;
+fresh validation precedes exclusive creation beside that source. The chooser and explicit-save
+editor retain dirty revisions and unresolved attempted paths. Their lifecycle guard refuses work
+before quit, vault-switch or backup takes prerequisites needed by an active template operation.
+The scoped browser bridge follows the same fail-closed read contract. Blank capture remains
+unchanged. See [ADR 010](ADR-010-local-templates.md).
+
 Ordinary New page has an explicit plain-creation intent: persist an empty, untyped Markdown
 file before opening it and focus the body. Contextual type, folder, sheet and named creation
 retain their specific intent. Native parsing, live editing and the development bridge share

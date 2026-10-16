@@ -11,6 +11,35 @@ fn note_path(dir: &TempDir, name: &str) -> PathBuf {
 }
 
 #[tokio::test]
+async fn leadinglight_scoped_content_missing_leaf_supports_exclusive_retry() {
+    let dir = TempDir::new().unwrap();
+    let root = vault_root(&dir);
+    let note = note_path(&dir, "retry.md");
+    let error = get_note_content(note.clone(), Some(root.clone()))
+        .await
+        .unwrap_err();
+    assert!(error.starts_with("ENOENT:"));
+    create_note_content(
+        note.clone(),
+        "# Retried once\n".to_string(),
+        Some(root.clone()),
+    )
+    .await
+    .unwrap();
+    assert!(create_note_content(
+        note.clone(),
+        "# Must not replace\n".to_string(),
+        Some(root.clone())
+    )
+    .await
+    .is_err());
+    assert_eq!(
+        get_note_content(note, Some(root)).await.unwrap(),
+        "# Retried once\n"
+    );
+}
+
+#[tokio::test]
 async fn note_content_commands_roundtrip_with_requested_vault() {
     let dir = TempDir::new().unwrap();
     let root = vault_root(&dir);

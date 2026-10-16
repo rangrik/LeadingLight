@@ -31,6 +31,7 @@ interface SidebarProps {
   onSelect: (selection: SidebarSelection) => void
   onSearch?: () => void
   onCreatePage?: () => void
+  onCreateFromTemplate?: () => void
   onOpenToday?: () => void
   canOpenToday?: boolean
   onOpenTrash?: () => void
@@ -86,6 +87,7 @@ interface SidebarNavigationProps
   | 'onSelect'
   | 'onSearch'
   | 'onCreatePage'
+  | 'onCreateFromTemplate'
   | 'onOpenToday'
   | 'canOpenToday'
   | 'onOpenTrash'
@@ -408,6 +410,7 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         onSelect={props.onSelect}
         onSearch={props.onSearch}
         onCreatePage={props.onCreatePage}
+        onCreateFromTemplate={props.onCreateFromTemplate}
         onOpenToday={props.onOpenToday}
         canOpenToday={props.canOpenToday}
         onOpenTrash={props.onOpenTrash}
@@ -643,6 +646,7 @@ function SidebarRuntimeNavigation({
       onSelect={props.onSelect}
       onSearch={props.onSearch}
       onCreatePage={props.onCreatePage}
+      onCreateFromTemplate={props.onCreateFromTemplate}
       onOpenToday={props.onOpenToday}
       canOpenToday={props.canOpenToday}
       onOpenTrash={props.onOpenTrash}

@@ -175,7 +175,7 @@ export interface TypeInstanceDefault {
   kind: 'property' | 'relationship'
 }
 
-function buildNoteBody({
+export function buildNoteBody({
   format,
   template,
   initialEmptyHeading,
@@ -872,7 +872,7 @@ interface ImmediateCreateQueueConfig {
 }
 
 /** Generate a unique untitled filename using a timestamp. */
-function generateUntitledFilename(entries: VaultEntry[], label: string, pendingSlugs?: Set<string>): string {
+export function generateUntitledFilename(entries: VaultEntry[], label: string, pendingSlugs?: Set<string>): string {
   const ts = Math.floor(Date.now() / 1000)
   const typeSlug = label === 'Note' ? 'note' : slugify(label)
   const base = `untitled-${typeSlug}-${ts}`

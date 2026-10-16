@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync, unlinkSync } from "node:fs";
+import { lstatSync, mkdirSync, realpathSync, renameSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import {
 	collectVaultSearchResults,
@@ -94,7 +94,8 @@ function commandVaultContent({
 	args,
 }: VaultCommandContext): VaultCommandResponse {
 	const filePath = existingCommandPath({ args, key: "path" });
-	if (!filePath) return invalidPathResponse();
+	if (!filePath && missingScopedFile(args)) return commandResponse({ payload: { error: "ENOENT: page is missing" }, statusCode: 404 });
+	if (!filePath || !insideExplicitRoot(args, filePath)) return invalidPathResponse();
 	return commandResponse({ payload: { content: readUtf8File(filePath) } });
 }
 
@@ -119,8 +120,26 @@ function commandVaultEntry({
 	args,
 }: VaultCommandContext): VaultCommandResponse {
 	const filePath = existingCommandPath({ args, key: "path" });
-	if (!filePath) return invalidPathResponse();
+	if (!filePath || !insideExplicitRoot(args, filePath)) return invalidPathResponse();
 	return commandResponse({ payload: parseMarkdownFile(filePath) });
+}
+
+/** Match native's explicit-vault exact read; aliases may not escape the captured root. */
+function insideExplicitRoot(args: Record<string, unknown>, filePath: string): boolean {
+	const root = commandString({ args, key: "vault_path" });
+	if (!root) return true;
+	try {
+		const relative = path.relative(realpathSync(root), realpathSync(filePath));
+		return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+	} catch { return false; }
+}
+
+/** Only an absent file under an existing, validated parent authorizes an exclusive same-path retry. */
+function missingScopedFile(args: Record<string, unknown>): boolean {
+	const filePath = commandString({ args, key: "path" });
+	if (!filePath || !commandString({ args, key: "vault_path" }) || !insideExplicitRoot(args, path.dirname(filePath))) return false;
+	try { lstatSync(filePath); return false; }
+	catch (error) { return error instanceof Error && Reflect.get(error, "code") === "ENOENT"; }
 }
 
 function commandVaultSearch({

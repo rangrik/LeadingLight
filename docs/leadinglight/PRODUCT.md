@@ -82,13 +82,21 @@ to the pane through navigation, layout changes, closing and reopening, and norma
 Mode changes retain current words and respect focus when the person moves to another pane or
 control. A rich-editor recovery action also targets only its own pane.
 
+## Milestone 8 — optional local starting points
+
+Version 0.7.0 adds **From template** beside ordinary New page. Choose a local template, preview
+the resulting page and its destination, then create in the current pane. Templates are ordinary
+local Markdown Type documents; a new template needs only a name and starting text. Explicit
+Save keeps unfinished edits visible, and closing or quitting refuses to discard them silently.
+Templates are optional: New page still opens a blank page immediately.
+
 ## Following increments
 
 Continue in useful, independently verified releases, reusing working inherited capabilities:
 
 1. Capture and resumption: continue polishing the delivered immediate capture, useful pinned
    pages and clear empty states. Naming and organization remain optional.
-2. Optional organization: tags, collections and local templates that reduce repeated work.
+2. Optional organization: tags, collections and improvements to local templates that reduce repeated work.
    Do not require a taxonomy to create or find a page.
 3. Rich editing: qualify and refine tables, checklists, code, links, images, paste, undo and
    formatting, including independent editing in both panes.

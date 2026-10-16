@@ -96,10 +96,34 @@ impl VaultBoundary {
         } else {
             requested
                 .canonicalize()
-                .map_err(|_| "File does not exist".to_string())?
+                .map_err(|error| self.existing_path_error(&requested, &error))?
         };
         self.ensure_within_root(&canonical)?;
         Ok(path_to_string(&requested))
+    }
+
+    // Only a missing leaf under a readable, in-vault parent permits an explicit
+    // create-only retry. A broken link or inaccessible path is not proof of absence.
+    fn existing_path_error(&self, requested: &Path, error: &std::io::Error) -> String {
+        const UNAVAILABLE: &str = "File could not be accessed";
+        if error.kind() != std::io::ErrorKind::NotFound {
+            return UNAVAILABLE.to_string();
+        }
+        let Some(parent) = requested.parent().and_then(|path| path.canonicalize().ok()) else {
+            return UNAVAILABLE.to_string();
+        };
+        if let Err(error) = self.ensure_within_root(&parent) {
+            return error;
+        }
+        if !parent.is_dir() {
+            return UNAVAILABLE.to_string();
+        }
+        match std::fs::symlink_metadata(requested) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                "ENOENT: File does not exist".to_string()
+            }
+            _ => UNAVAILABLE.to_string(),
+        }
     }
 
     fn requested_path(&self, raw_path: &str) -> PathBuf {
@@ -469,6 +493,58 @@ pub(crate) fn with_view_file<T>(
 mod tests {
     use super::*;
     use crate::vault_list::{VaultEntry, VaultList};
+
+    #[test]
+    fn leadinglight_missing_leaf_is_distinct_from_unavailable_parent() {
+        let root = tempfile::TempDir::new().unwrap();
+        let boundary = VaultBoundary::from_request(Some(root.path().to_str().unwrap())).unwrap();
+        let missing = root.path().join("missing.md");
+        assert!(boundary
+            .validate_existing_path(missing.to_str().unwrap())
+            .unwrap_err()
+            .starts_with("ENOENT:"));
+        let missing_parent = root.path().join("missing-folder/page.md");
+        assert_eq!(
+            boundary
+                .validate_existing_path(missing_parent.to_str().unwrap())
+                .unwrap_err(),
+            "File could not be accessed"
+        );
+        let inaccessible = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            boundary.existing_path_error(&missing, &inaccessible),
+            "File could not be accessed"
+        );
+    }
+
+    #[test]
+    fn leadinglight_missing_leaf_outside_root_is_not_an_absence_receipt() {
+        let root = tempfile::TempDir::new().unwrap();
+        let outside = tempfile::TempDir::new().unwrap();
+        let boundary = VaultBoundary::from_request(Some(root.path().to_str().unwrap())).unwrap();
+        let missing = outside.path().join("missing.md");
+        assert_eq!(
+            boundary
+                .validate_existing_path(missing.to_str().unwrap())
+                .unwrap_err(),
+            ACTIVE_VAULT_PATH_ERROR
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn leadinglight_broken_symlink_is_not_a_missing_leaf() {
+        let root = tempfile::TempDir::new().unwrap();
+        let boundary = VaultBoundary::from_request(Some(root.path().to_str().unwrap())).unwrap();
+        let link = root.path().join("link.md");
+        std::os::unix::fs::symlink(root.path().join("absent.md"), &link).unwrap();
+        assert_eq!(
+            boundary
+                .validate_existing_path(link.to_str().unwrap())
+                .unwrap_err(),
+            "File could not be accessed"
+        );
+    }
 
     #[test]
     fn registered_vault_roots_skip_unavailable_vaults() {

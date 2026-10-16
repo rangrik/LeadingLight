@@ -91,6 +91,24 @@ describe('tryVaultApi', () => {
   describe('on a page served by the dev vault server', () => {
     afterEach(() => document.head.querySelector('meta[name="leadinglight-vault-api"]')?.remove())
     const servedByDevVault = () => document.head.insertAdjacentHTML('beforeend', '<meta name="leadinglight-vault-api" content="disk">')
+    it('fails exact entry and scoped content reads closed, with the captured root forwarded', async () => {
+      servedByDevVault()
+      globalThis.fetch = vi.fn(async (input, init) => {
+        if (requestUrl(input) === '/api/vault/ping') return jsonResponse({ ok: true })
+        expect(requestBody(init)).toEqual({ path: '/fixture/type.md', vault_path: '/fixture' })
+        throw new Error('read transport lost')
+      })
+      const { tryVaultApi } = await import('./vault-api')
+      await expect(tryVaultApi('reload_vault_entry', { path: '/fixture/type.md', vaultPath: '/fixture' })).rejects.toThrow('read transport lost')
+      await expect(tryVaultApi('get_note_content', { path: '/fixture/type.md', vaultPath: '/fixture' })).rejects.toThrow('read transport lost')
+    })
+
+    it('rejects null exact-entry responses instead of falling back to memory', async () => {
+      servedByDevVault()
+      globalThis.fetch = vi.fn(async input => requestUrl(input) === '/api/vault/ping' ? jsonResponse({ ok: true }) : jsonResponse(null))
+      const { tryVaultApi } = await import('./vault-api')
+      await expect(tryVaultApi('reload_vault_entry', { path: '/fixture/type.md', vaultPath: '/fixture' })).rejects.toThrow()
+    })
     const replying = (...replies: (Response | Error)[]) => vi.fn(async (input: RequestInfo | URL) => {
       if (requestUrl(input) === '/api/vault/ping') return jsonResponse({ ok: true })
       const reply = replies.shift() ?? new Error('no server')

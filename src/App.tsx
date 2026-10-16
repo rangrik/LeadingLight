@@ -29,6 +29,8 @@ import { BackupActionsContext } from './leadinglight/backup/backupActions'
 import { backupInputHeld, holdBackupInput } from './leadinglight/backup/backupInputGate'
 import { editorWorkSettled } from './leadinglight/editorWork'
 import { useBackupUi } from './leadinglight/backup/useBackupUi'
+import { TemplateDialog } from './leadinglight/templates/TemplateDialog'
+import { useTemplateUi, type TemplateBoundary } from './leadinglight/templates/useTemplateUi'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
 import { Toast } from './components/Toast'
@@ -242,6 +244,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const [pendingCapture] = useState(() => new PendingCaptureController())
   // Filled below: a vault switch refuses over a draft with words and holds new drafts until it ends.
   const captureBoundaryRef = useRef({ begin: (): (() => void) => () => {}, finish: async (): Promise<void> => {} })
+  const templateBoundaryRef = useRef<TemplateBoundary>({ begin: () => () => {}, whenIdle: async () => {}, assertClear: () => {}, saveActive: () => false, isOpen: () => false })
   const networkStatus = useNetworkStatus()
   const { settings, loaded: settingsLoaded, saveSettings } = useSettings()
   const aiFeaturesEnabled = areAiFeaturesEnabled(settings)
@@ -254,9 +257,12 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       if (noteWindowParams || aiWorkspaceWindow) return
       if (workspaceTransitionRef.current) return workspaceTransitionRef.current
       let reopenDrafts: () => void
+      let reopenTemplates = () => {}
       try {
+        reopenTemplates = templateBoundaryRef.current.begin()
         reopenDrafts = captureBoundaryRef.current.begin()
       } catch (error) {
+        reopenTemplates()
         return Promise.reject(error)
       }
       setWorkspaceTransitionPending(true)
@@ -266,6 +272,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       const reopenMutations = mutationBarrierRef.current.hold()
       folderMoveRef.current.holds += 1
       const transition = (async () => {
+        // Template admission is held; its boundary refused any still-running source work before these holds.
+        await templateBoundaryRef.current.whenIdle()
         // A folder rename, page renames and moves, a Trash move and any Favorite change settle first; then the pages the panes hold now (not at the last render) are saved.
         await folderMoveRef.current.running
         await renameBarrierRef.current.idle()
@@ -273,10 +281,12 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         await mutationBarrierRef.current.idle()
         for (const tab of notes.splitWorkspace.currentTabs()) await flushEditorStateBeforeAction(tab.entry.path)
         await captureBoundaryRef.current.finish()
+        templateBoundaryRef.current.assertClear()
         notes.splitWorkspace.suspendPersistence()
         handleSetSelection(DEFAULT_SELECTION)
         notes.closeAllTabs()
       })().finally(() => {
+        reopenTemplates()
         reopenDrafts()
         folderMoveRef.current.holds -= 1
         reopenMutations()
@@ -1035,14 +1045,18 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const currentPaneTabs = notes.splitWorkspace.currentTabs
   const saveWorkspacePending = appSave.savePending
   const flushWorkspaceBeforeClose = useCallback(async () => {
+    // Refuse dirty or running template work before taking any prerequisite page holds.
+    const reopenTemplates = templateBoundaryRef.current.begin()
     // A draft with words refuses the close at once and stays editable; no new draft may start meanwhile.
-    const reopenDrafts = pendingCapture.beginBoundary()
+    let reopenDrafts: () => void
+    try { reopenDrafts = pendingCapture.beginBoundary() } catch (error) { reopenTemplates(); throw error }
     // No new page rename or move, Trash or Favorite work joins; running ones settle, even for closed pages; then the pages the panes hold now are saved.
     const reopenRenames = holdManualRenameAdmission()
     const reopenTrash = holdTrashAdmission()
     const reopenMutations = holdMutationAdmission()
     folderMoveRef.current.holds += 1
     try {
+      await templateBoundaryRef.current.whenIdle()
       await folderMoveRef.current.running
       await whenManualRenamesIdle()
       await whenTrashIdle()
@@ -1051,6 +1065,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       await saveWorkspacePending()
       if (!await verifyDraftPages()) throw new CaptureHeldError()
       pendingCapture.assertClear()
+      templateBoundaryRef.current.assertClear()
     } finally {
       // While the window stays closing, isBlocked keeps refusing; a cancelled close reopens.
       folderMoveRef.current.holds -= 1
@@ -1058,6 +1073,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       reopenTrash()
       reopenRenames()
       reopenDrafts()
+      reopenTemplates()
     }
   }, [pendingCapture, verifyDraftPages, holdManualRenameAdmission, holdTrashAdmission, holdMutationAdmission, whenManualRenamesIdle, whenTrashIdle, whenMutationsIdle, currentPaneTabs, flushEditorStateBeforeAction, saveWorkspacePending])
   const { isClosing } = useNativeSaveBeforeClose({
@@ -1069,7 +1085,10 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   // From Choose folder until a backup ends, the workspace holds still as for a close, but the window stays.
   const [backupGuarded, setBackupGuarded] = useState(false)
   const beginBackupGuard = useCallback(() => {
-    const reopenDrafts = pendingCapture.beginBoundary()
+    // This refuses even a cancelled preview read until it settles, before the backup picker and page holds.
+    const reopenTemplates = templateBoundaryRef.current.begin()
+    let reopenDrafts: () => void
+    try { reopenDrafts = pendingCapture.beginBoundary() } catch (error) { reopenTemplates(); throw error }
     const reopenInput = holdBackupInput()
     const reopenRenames = holdManualRenameAdmission()
     const reopenTrash = holdTrashAdmission()
@@ -1087,12 +1106,20 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       reopenRenames()
       reopenInput()
       reopenDrafts()
+      reopenTemplates()
       setBackupGuarded(false)
     }
   }, [pendingCapture, holdManualRenameAdmission, holdTrashAdmission, holdMutationAdmission])
   // A pane that stops being busy, or a lifted overlay, may let a waiting draft into its page now.
   const { pendingPanes } = notes.splitWorkspace
   useLayoutEffect(() => { pendingCapture.pump() }, [pendingCapture, pendingPanes, isClosing, workspaceTransitionPending, trash.busy, backupGuarded])
+
+  const templateUi = useTemplateUi({
+    controller: notes.templates, vaultPath: resolvedPath, locale: appLocale, onHeld: setToastMessage,
+    canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
+    blocked: () => isClosing || workspaceTransitionPending || trash.busy || backupInputHeld(),
+  })
+  useLayoutEffect(() => { templateBoundaryRef.current = templateUi.boundary })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -1423,6 +1450,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const handleAppSaveRef = useRef(handleAppSave)
   useLayoutEffect(() => { handleAppSaveRef.current = handleAppSave }, [handleAppSave])
   const handleTrackedSave = useCallback(async (...args: Parameters<typeof handleAppSave>) => {
+    if (templateBoundaryRef.current.saveActive()) return false
     // Words still in the draft field are in no page, so Save refuses instead of announcing success.
     const refuse = (key: 'leadinglight.capture.notSaved' | 'leadinglight.capture.pageNotSaved') => {
       setToastMessage(translate(appLocale, key))
@@ -1941,6 +1969,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onTurnCurrentBlockInto: activeDeletedFile ? undefined : turnCurrentBlockIntoCommand,
     onPastePlainText: pastePlainTextCommand,
     onCreateNote: handleNewPage,
+    onCreateFromTemplate: templateUi.open,
     onCreateNoteOfType: notes.handleCreateNoteImmediate,
     onSave: handleTrackedSave,
     onUndo: undoCommand,
@@ -1954,6 +1983,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onOpenPageHistory: activeDeletedFile ? undefined : openActivePageHistory,
     backupActions: backup.actions,
     isInputGuarded: backupInputHeld,
+    isTemplateOpen: templateUi.boundary.isOpen,
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2143,7 +2173,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           {sidebarVisible && (
             <>
               <div className="app__sidebar" style={{ width: layout.sidebarWidth }}>
-                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
+                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
               </div>
               <ResizeHandle onResize={layout.handleSidebarResize} />
             </>
@@ -2340,6 +2370,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         <TrashDialog open={trashOpen} onOpenChange={setTrashOpen} vaultPath={resolvedPath} locale={appLocale} restore={restoreFromTrash} onOpenPage={openRestoredPage} />
         {pageHistory.dialog}
         {backup.dialog}
+        <TemplateDialog ui={templateUi} entries={visibleEntries} locale={appLocale} blocked={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} />
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog
             open={true}

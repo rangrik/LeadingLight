@@ -19,6 +19,8 @@ import type { GitRepositoryOption } from '../utils/gitRepositories'
 import type { RichEditorBlockTypeDefinition } from '../utils/richEditorBlockTypes'
 import { buildBackupCommands, type BackupActions } from '../leadinglight/backup/backupActions'
 import { useGuardedHandlers } from '../leadinglight/backup/backupInputGate'
+import { buildTemplateCommands } from '../leadinglight/templates/templateActions'
+import { runNativeTextHistoryCommand } from '../utils/appOrchestration'
 
 interface AppCommandsConfig {
   activeTabPath: string | null
@@ -32,6 +34,7 @@ interface AppCommandsConfig {
   onCommandPalette: () => void
   onSearch: () => void
   onOpenToday?: () => void
+  onCreateFromTemplate?: () => void
   onFindInNote?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -147,6 +150,8 @@ interface AppCommandsConfig {
   backupActions?: BackupActions
   /** While true, shortcuts and native menu commands do nothing. */
   isInputGuarded?: () => boolean
+  /** Template input owns Save; background page and navigation commands stay paused. */
+  isTemplateOpen?: () => boolean
 }
 
 type CommandRegistryConfig = Parameters<typeof useCommandRegistry>[0]
@@ -651,27 +656,37 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
   const keyboardActions = createKeyboardActions(config)
   const menuEventHandlers = createMenuEventHandlers(config, selectFilter, viewChanges)
   const guarded = config.isInputGuarded ?? neverGuarded
-  const keyboard = useGuardedHandlers({ ...keyboardActions, onArchiveNote: toggleArchive }, guarded)
-  const menu = useGuardedHandlers({ ...menuEventHandlers, onArchiveNote: toggleArchive }, guarded)
+  const modalGuarded = () => guarded() || (config.isTemplateOpen?.() ?? false)
+  const save = () => { if (!guarded()) config.onSave() }
+  const textHistory = (command: 'undo' | 'redo') => {
+    if (guarded()) return
+    if (config.isTemplateOpen?.()) { runNativeTextHistoryCommand(command); return }
+    if (command === 'undo') config.onUndo?.()
+    else config.onRedo?.()
+  }
+  const modalActions = { onSave: save, onUndo: () => textHistory('undo'), onRedo: () => textHistory('redo') }
+  const keyboard = { ...useGuardedHandlers({ ...keyboardActions, onArchiveNote: toggleArchive }, modalGuarded), ...modalActions }
+  const menu = { ...useGuardedHandlers({ ...menuEventHandlers, onArchiveNote: toggleArchive }, modalGuarded), ...modalActions }
 
   useAppKeyboard(keyboard)
 
   useMenuEvents(menu)
 
   const registryCommands = useCommandRegistry(createCommandRegistryConfig(config))
-  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions } = config
+  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions, onCreateFromTemplate } = config
   const activeFileKind = entries.find(entry => entry.path === activeTabPath)?.fileKind
   const commands = useMemo(() => [
     ...registryCommands,
     ...(onOpenPageHistory ? [buildPageHistoryCommand({ activeTabPath, activeFileKind, locale, onOpenPageHistory })] : []),
     ...(backupActions ? buildBackupCommands(locale ?? 'en', backupActions) : []),
-  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions])
+    ...(onCreateFromTemplate ? buildTemplateCommands(locale ?? 'en', onCreateFromTemplate) : []),
+  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions, onCreateFromTemplate])
 
   useKeyboardNavigation({
     activeTabPath: config.activeTabPath,
     visibleNotesRef: config.visibleNotesRef,
-    onReplaceActiveTab: config.onReplaceActiveTab,
-    onSelectNote: config.onSelectNote,
+    onReplaceActiveTab: entry => { if (!modalGuarded()) config.onReplaceActiveTab(entry) },
+    onSelectNote: entry => { if (!modalGuarded()) config.onSelectNote(entry) },
   })
 
   return commands

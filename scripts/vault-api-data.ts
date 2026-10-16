@@ -242,6 +242,7 @@ function frontmatterString(
 	...keys: string[]
 ): string | null {
 	const value = getFrontmatterValue(frontmatter, keys);
+	if (Array.isArray(value) && value.every(item => typeof item === "string")) return value[0] ?? "";
 	return typeof value === "string" ? value : null;
 }
 
@@ -409,10 +410,10 @@ function isScalarFrontmatterProperty(
 	return typeof value === "number" || typeof value === "boolean";
 }
 
-function singleStringArrayValue(value: unknown): string | undefined {
+function singleScalarArrayValue(value: unknown): string | number | boolean | undefined {
 	if (!Array.isArray(value)) return undefined;
 	if (value.length !== 1) return undefined;
-	return typeof value[0] === "string" ? value[0] : undefined;
+	return typeof value[0] === "string" || isScalarFrontmatterProperty(value[0]) ? value[0] : undefined;
 }
 
 function wikiLinkFreeString({ value }: { value: string }): string | undefined {
@@ -425,7 +426,8 @@ function frontmatterPropertyValue(
 	if (value === null) return null;
 	if (isScalarFrontmatterProperty(value)) return value;
 	if (typeof value === "string") return wikiLinkFreeString({ value });
-	const singleArrayValue = singleStringArrayValue(value);
+	const singleArrayValue = singleScalarArrayValue(value);
+	if (isScalarFrontmatterProperty(singleArrayValue)) return singleArrayValue;
 	return singleArrayValue === undefined
 		? undefined
 		: wikiLinkFreeString({ value: singleArrayValue });
