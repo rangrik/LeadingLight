@@ -19,6 +19,8 @@ import type {
 import { MOCK_CONTENT } from './mock-content'
 import { MOCK_ENTRIES } from './mock-entries'
 import { mockTrashHandlers } from './mock-trash'
+import { createSaveRecovery, memoryStore } from './mock-save-recovery'
+import { MEMORY_VAULT_ROOTS } from './vault-api'
 
 function syncWindowContent(): void {
   if (typeof window !== 'undefined') {
@@ -426,8 +428,23 @@ function handleMoveNoteToWorkspace(args: {
   return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0 }
 }
 
+// Only for the mock vault, or a page with no dev vault server; never for a vault on disk.
+const memorySaveRecovery = createSaveRecovery(memoryStore({
+  read: path => MOCK_CONTENT[path] ?? (MOCK_ENTRIES.some(entry => entry.path === path) ? '' : undefined),
+  write: (path, content) => {
+    MOCK_CONTENT[path] = content
+    mockSavedSinceCommit.add(path)
+    syncWindowContent()
+  },
+}, MEMORY_VAULT_ROOTS))
+
 export const mockHandlers = {
   ...mockTrashHandlers,
+  save_page_content: (args: unknown) => memorySaveRecovery.savePageContent(args),
+  check_save_outcome: (args: unknown) => memorySaveRecovery.checkSaveOutcome(args),
+  save_draft_as_new_page: (args: unknown) => memorySaveRecovery.saveDraftAsNewPage(args),
+  release_hold_with_copy: (args: unknown) => memorySaveRecovery.releaseHoldWithCopy(args),
+  discard_hold: (args: unknown) => memorySaveRecovery.discardHold(args),
   read_vault_snapshot: () => MOCK_ENTRIES,
   record_startup_milestone: ({ name, detail }: { name: string; detail?: number | null }) => ({
     name,

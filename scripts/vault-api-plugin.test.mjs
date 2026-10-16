@@ -4,10 +4,12 @@ import { request } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "vite";
 import { parseMarkdownFile } from "./vault-api-data.ts";
 import { vaultApiPlugin } from "./vault-api-plugin.ts";
+import { VAULT_API_MARKER } from "../src/mock-tauri/mock-save-recovery.ts";
 
 const titleSourceContract = JSON.parse(
 	readFileSync(new URL("../src/shared/titleSourceContract.json", import.meta.url), "utf8"),
@@ -196,6 +198,28 @@ test("dev vault renames preserve legacy target handling and save/delete response
 			(await api("/api/vault/delete", { path: moved.body.new_path })).body,
 			moved.body.new_path,
 		);
+	}));
+
+// Each S0 command has its own route, a held page refuses legacy writes, and served pages say a disk is reachable.
+test("dev vault save recovery routes answer native shapes and guard a held page", () =>
+	withVault(async ({ api, vault, note }) => {
+		assert.deepEqual(vaultApiPlugin().transformIndexHtml()[0].attrs, { name: VAULT_API_MARKER, content: "disk" });
+		const sha = (text) => createHash("sha256").update(text, "utf8").digest("hex");
+		const envelope = (page, content, vaultPath = vault) => ({
+			requestId: randomUUID(), vaultPath, session: "s1", path: page, seq: 1, submittedSha256: sha(content),
+		});
+		const request = envelope(note, "# Saved\n");
+		const saved = await api("/api/vault/save-page-content", { request, content: "# Saved\n" });
+		assert.deepEqual([saved.status, saved.body.status, readFileSync(note, "utf8")], [200, "committed", "# Saved\n"]);
+		assert.equal((await api("/api/vault/check-save-outcome", { request })).body.state, "done");
+		const gone = path.join(vault, "gone.md");
+		const held = await api("/api/vault/save-page-content", { request: envelope(gone, "text"), content: "text" });
+		assert.equal(held.body.reason, "missing");
+		assert.equal((await api("/api/vault/save", { path: gone, content: "recreated" })).status, 409);
+		assert.equal(existsSync(gone), false);
+		const elsewhere = envelope("/not-on-disk/page.md", "x", "/not-on-disk");
+		assert.deepEqual((await api("/api/vault/save-page-content", { request: elsewhere, content: "x" })).body, { error: "notDiskVault" });
+		assert.equal((await api("/api/vault/save-page-content", { request: { ...request, extra: true }, content: "# Saved\n" })).status, 400);
 	}));
 
 test("dev vault error responses preserve status codes", () =>

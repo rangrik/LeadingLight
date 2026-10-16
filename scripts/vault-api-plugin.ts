@@ -12,7 +12,9 @@ import {
 	vaultCommandContext,
 } from "./vault-api-commands.ts";
 import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
+import { heldPathRefusal, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
 import { listTrash, moveToTrash, restoreFromTrash } from "./vault-api-trash.ts";
+import { type SaveRecoveryCommand, VAULT_API_MARKER } from "../src/mock-tauri/mock-save-recovery.ts";
 
 function sendJson(
 	res: ServerResponse,
@@ -22,6 +24,13 @@ function sendJson(
 	res.statusCode = statusCode;
 	res.setHeader("Content-Type", "application/json");
 	res.end(JSON.stringify(payload));
+}
+
+// Like native: a held page refuses other mutations; 409 keeps the browser from a silent fallback.
+function refuseHeld(res: ServerResponse, paths: readonly unknown[]): boolean {
+	const held = heldPathRefusal(paths);
+	if (held) sendJson(res, { error: held }, 409);
+	return held !== null;
 }
 
 const VAULT_ENDPOINT_ARG_KEYS = [
@@ -62,6 +71,7 @@ async function saveVaultContent(
 		sendJson(res, { error: "Missing path or content" }, 400);
 		return;
 	}
+	if (refuseHeld(res, [filePath])) return;
 
 	mkdirSync(path.dirname(filePath), { recursive: true });
 	writeUtf8File(filePath, content);
@@ -105,6 +115,7 @@ async function renameVaultNoteTitle(
 		old_path: string;
 		new_title: string;
 	}>(req);
+	if (refuseHeld(res, [oldPath])) return;
 	const oldContent = readUtf8File(oldPath);
 	const oldTitle = oldContent.match(/^# (.+)$/m)?.[1]?.trim() ?? "";
 	const slug = newTitle
@@ -139,6 +150,7 @@ async function renameVaultNoteFilename(
 		old_path: string;
 		new_filename_stem: string;
 	}>(req);
+	if (refuseHeld(res, [oldPath])) return;
 	const filename = validateMarkdownFilenameStem(newFilenameStem);
 	if (!filename.ok) {
 		sendJson(res, { error: filename.error }, 400);
@@ -172,6 +184,23 @@ interface VaultRequest {
 	req: IncomingMessage;
 	res: ServerResponse;
 	url: URL;
+}
+// The native S0 save commands, one route each, so a test can stand at each command's boundary.
+const SAVE_RECOVERY_ROUTES: [string, VaultRoute][] = (
+	[
+		["save-page-content", "save_page_content"],
+		["check-save-outcome", "check_save_outcome"],
+		["save-draft-as-new-page", "save_draft_as_new_page"],
+		["release-hold-with-copy", "release_hold_with_copy"],
+		["discard-hold", "discard_hold"],
+	] as const
+).map(([route, command]): [string, VaultRoute] => [
+	route,
+	{ write: (request) => runSaveRecoveryRoute(request, command), fallback: "Save recovery failed" },
+]);
+async function runSaveRecoveryRoute({ req, res }: VaultRequest, command: SaveRecoveryCommand): Promise<void> {
+	const response = await runDiskSaveRecovery(command, await readJsonBody<unknown>(req));
+	sendJson(res, response.payload, response.statusCode);
 }
 const VAULT_ROUTES = new Map<string, VaultRoute>([
 	["list", { cmd: "list_vault", fallback: "Vault read failed" }],
@@ -208,10 +237,11 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 		},
 	],
 	["delete", { write: deleteVaultNote, fallback: "Delete failed" }],
-	["trash-move", { write: (request) => runTrashRoute(request, (body) => moveToTrash(body.vault_path, body.paths ?? [])), fallback: "Trash failed" }],
+	["trash-move", { write: (request) => runTrashRoute(request, (body) => moveToTrash(body.vault_path, body.paths ?? []), true), fallback: "Trash failed" }],
 	["trash-list", { write: (request) => runTrashRoute(request, (body) => listTrash(body.vault_path)), fallback: "Trash failed" }],
 	["trash-restore", { write: (request) => runTrashRoute(request, (body) => restoreFromTrash(body.vault_path, body.ids ?? [])), fallback: "Restore failed" }],
 	["command", { write: executeVaultCommand, fallback: "Vault command failed" }],
+	...SAVE_RECOVERY_ROUTES,
 ]);
 interface TrashBody {
 	vault_path: string;
@@ -221,13 +251,16 @@ interface TrashBody {
 async function runTrashRoute(
 	{ req, res }: VaultRequest,
 	run: (body: TrashBody) => unknown,
+	moves = false,
 ): Promise<void> {
 	const body = await readJsonBody<TrashBody>(req);
-	// A vault that is not on disk falls back to the in-memory browser mock.
+	// A vault that is not on disk is refused; only the browser's mock vault then answers from memory.
 	if (!body.vault_path || !pathExists(body.vault_path)) {
 		sendJson(res, { error: "Missing vault path" }, 400);
 		return;
 	}
+	const vaultPath = body.vault_path;
+	if (moves && refuseHeld(res, (body.paths ?? []).map((input) => path.resolve(vaultPath, input)))) return;
 	sendJson(res, run(body));
 }
 async function deleteVaultNote({ req, res }: VaultRequest): Promise<void> {
@@ -236,6 +269,7 @@ async function deleteVaultNote({ req, res }: VaultRequest): Promise<void> {
 		sendJson(res, { error: "Missing path" }, 400);
 		return;
 	}
+	if (refuseHeld(res, [filePath])) return;
 	unlinkSync(filePath);
 	sendJson(res, filePath);
 }
@@ -302,6 +336,9 @@ async function handleVaultApiRequest(
 export function vaultApiPlugin(): Plugin {
 	return {
 		name: "vault-api",
+		apply: "serve",
+		// Tells the browser a disk vault is reachable, so its writes never fall back to memory.
+		transformIndexHtml: () => [{ tag: "meta", attrs: { name: VAULT_API_MARKER, content: "disk" }, injectTo: "head-prepend" }],
 		configureServer(server) {
 			server.middlewares.use(async (req, res, next) => {
 				if (await handleVaultApiRequest(req, res)) return;

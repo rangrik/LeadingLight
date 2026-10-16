@@ -7,6 +7,7 @@
 import { MOCK_CONTENT } from './mock-content'
 import { mockHandlers, addMockEntry, updateMockContent, trackMockChange } from './mock-handlers'
 import { setNoteFavorite, type SetNoteFavoriteArgs } from './mock-favorite'
+import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { tryVaultApi } from './vault-api'
 
 export { addMockEntry, updateMockContent, trackMockChange }
@@ -31,6 +32,10 @@ const registeredMockHandlers: Record<string, MockHandler> = {
     path => mockInvoke<string>('get_note_content', { path }),
     (path, content) => mockInvoke('save_note_content', { path, content }),
   ),
+  // The desktop harness calls these handlers directly, so a disk vault is still answered from disk.
+  ...Object.fromEntries(SAVE_RECOVERY_COMMANDS.map(command => [command, async (args?: unknown) =>
+    (await tryVaultApi(command, args as Record<string, unknown> | undefined))
+      ?? Reflect.apply(Reflect.get(mockHandlers, command) as MockHandler, undefined, [args])])),
 }
 
 export function isTauri(): boolean {

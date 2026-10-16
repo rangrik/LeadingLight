@@ -87,6 +87,54 @@ describe('tryVaultApi', () => {
     })).resolves.toBe(false)
   })
 
+  // Seam: a page served with a disk vault never turns a failed write into an in-memory success.
+  describe('on a page served by the dev vault server', () => {
+    afterEach(() => document.head.querySelector('meta[name="leadinglight-vault-api"]')?.remove())
+    const servedByDevVault = () => document.head.insertAdjacentHTML('beforeend', '<meta name="leadinglight-vault-api" content="disk">')
+    const replying = (...replies: (Response | Error)[]) => vi.fn(async (input: RequestInfo | URL) => {
+      if (requestUrl(input) === '/api/vault/ping') return jsonResponse({ ok: true })
+      const reply = replies.shift() ?? new Error('no server')
+      if (reply instanceof Error) throw reply
+      return reply
+    })
+
+    it('answers a save recovery command from disk or fails, and keeps the mock vault in memory', async () => {
+      const args = { request: { requestId: 'r', vaultPath: '/fixture' }, content: 'text' }
+      const fetchMock = replying(
+        jsonResponse({ status: 'committed', written: true, durable: true, history: null }),
+        jsonResponse({ error: 'Save recovery failed' }, 500),
+        jsonResponse({ error: 'notDiskVault' }, 404),
+      )
+      globalThis.fetch = fetchMock as typeof fetch
+      const { tryVaultApi } = await import('./vault-api')
+      const memoryArgs = { request: { vaultPath: '/Users/mock/demo-vault-v2' } }
+      await expect(tryVaultApi('save_page_content', args)).resolves.toBeUndefined()
+      servedByDevVault()
+
+      await expect(tryVaultApi('save_page_content', args)).resolves.toMatchObject({ status: 'committed' })
+      const [url, init] = fetchMock.mock.calls[1] as unknown as [RequestInfo, RequestInit]
+      expect([requestUrl(url), requestBody(init)]).toEqual(['/api/vault/save-page-content', args])
+      await expect(tryVaultApi('save_page_content', args)).rejects.toThrow('Save recovery failed')
+      await expect(tryVaultApi('save_page_content', args)).rejects.toThrow('notDiskVault')
+      await expect(tryVaultApi('save_page_content', args)).rejects.toThrow('no server')
+      await expect(tryVaultApi('save_page_content', memoryArgs)).resolves.toBeUndefined()
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    })
+
+    it('fails a legacy write when the server is unavailable, errs or goes away; only the mock vault falls back', async () => {
+      const save = { path: '/fixture/alpha.md', content: 'new' }
+      globalThis.fetch = vi.fn(async () => jsonResponse({ ok: false }, 503)) as typeof fetch
+      const { tryVaultApi } = await import('./vault-api')
+      servedByDevVault()
+      await expect(tryVaultApi('save_note_content', save)).rejects.toThrow('not answering')
+
+      globalThis.fetch = replying(jsonResponse({ error: 'EACCES' }, 500), jsonResponse({}, 500)) as typeof fetch
+      await expect(tryVaultApi('save_note_content', save)).rejects.toThrow('EACCES')
+      await expect(tryVaultApi('save_note_content', { path: '/Users/luca/Laputa/alpha.md', content: 'new' })).resolves.toBeUndefined()
+      await expect(tryVaultApi('move_to_local_trash', { vaultPath: '/fixture', paths: ['alpha.md'] })).rejects.toThrow('no server')
+    })
+  })
+
   it('accepts nested Tauri command args when routing browser vault API writes', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = requestUrl(input)

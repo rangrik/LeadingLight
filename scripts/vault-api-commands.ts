@@ -9,6 +9,7 @@ import {
 	resolveInside,
 	writeUtf8File,
 } from "./vault-api-data.ts";
+import { heldPathRefusal } from "./vault-api-save-recovery.ts";
 
 type VaultCommandHandler = (
 	context: VaultCommandContext,
@@ -262,9 +263,20 @@ const VAULT_COMMAND_HANDLERS = new Map<string, VaultCommandHandler>([
 	["validate_note_content", commandVaultContent],
 ]);
 
+// The page each mutating command touches; native refuses these while that page is held.
+const HELD_GUARDED_ARGS = new Map<string, string>([
+	["delete_note", "path"],
+	["rename_note", "old_path"],
+	["rename_note_filename", "old_path"],
+	["save_note_content", "path"],
+]);
+
 export function runVaultCommand(
 	context: VaultCommandContext,
 ): VaultCommandResponse {
+	const guarded = HELD_GUARDED_ARGS.get(context.cmd);
+	const held = guarded ? heldPathRefusal([Reflect.get(context.args, guarded)]) : null;
+	if (held) return commandResponse({ payload: { error: held }, statusCode: 409 });
 	const handler = VAULT_COMMAND_HANDLERS.get(context.cmd);
 	if (handler) return handler(context);
 	return commandResponse({

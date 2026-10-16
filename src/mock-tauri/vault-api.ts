@@ -4,7 +4,24 @@
  * through it instead of returning hardcoded mock data.
  */
 
+import { VAULT_API_MARKER } from './mock-save-recovery'
+
 let vaultApiAvailable: boolean | null = null
+
+/** The in-memory mock vault's own roots: its pages and default vaults live only here. */
+export const MEMORY_VAULT_ROOTS = ['/Users/mock', '/Users/luca/Laputa', '/mock-vault'] as const
+
+const isMemoryPath = (value: unknown) => typeof value === 'string'
+  && MEMORY_VAULT_ROOTS.some(root => value === root || value.startsWith(`${root}/`))
+
+// Without the marker there is no disk at all (unit tests, static pages), so memory is the only vault.
+const diskSession = () => typeof document !== 'undefined' && document.querySelector(`meta[name="${VAULT_API_MARKER}"]`) !== null
+
+/** A write in a disk session may fall back to memory only when every target is in the mock vault. */
+function failsClosed(body: Record<string, unknown>): boolean {
+  const targets = [body.path, body.old_path, body.vault_path].filter(target => target !== undefined)
+  return diskSession() && !(targets.length > 0 && targets.every(isMemoryPath))
+}
 
 async function detectVaultApiAvailability(): Promise<boolean> {
   try {
@@ -180,14 +197,12 @@ function buildFetchOptions(request: { body: Record<string, unknown> }): RequestI
 /** Raised for a refused write so the caller sees it instead of a silent in-memory fallback. */
 class VaultApiRefusal extends Error {}
 
-async function fetchVaultApiResponse(request: VaultApiRequest) {
+async function fetchVaultApiResponse(request: VaultApiRequest, closed: boolean) {
   const res = await fetchVaultApiRequest(request)
-  if (res.status === 409) {
-    const body = await res.json().catch(() => ({})) as { error?: string }
-    throw new VaultApiRefusal(body.error ?? 'File already exists')
-  }
-  if (!res.ok) return undefined
-  return res.json()
+  if (res.ok) return res.json()
+  if (res.status !== 409 && !closed) return undefined
+  const body = await res.json().catch(() => ({})) as { error?: string }
+  throw new VaultApiRefusal(body.error ?? (res.status === 409 ? 'File already exists' : `Vault API ${res.status}`))
 }
 
 function isGetRequest(request: VaultApiRequest): request is VaultApiGetRequest {
@@ -228,19 +243,46 @@ function fetchVaultApiRequest(request: VaultApiRequest): Promise<Response> {
     : fetchVaultApiPostRequest(request)
 }
 
+const SAVE_RECOVERY_ROUTES = new Map([
+  ['save_page_content', '/api/vault/save-page-content'],
+  ['check_save_outcome', '/api/vault/check-save-outcome'],
+  ['save_draft_as_new_page', '/api/vault/save-draft-as-new-page'],
+  ['release_hold_with_copy', '/api/vault/release-hold-with-copy'],
+  ['discard_hold', '/api/vault/discard-hold'],
+])
+
+const UNAVAILABLE = 'The dev vault server is not answering, so nothing was written.'
+
+// The mock vault answers itself; any other vault is answered from disk or the caller sees no reply.
+async function trySaveRecoveryApi<T>(route: string, args: Record<string, unknown>): Promise<T | undefined> {
+  const request = args.request as { vaultPath?: unknown } | undefined
+  if (!diskSession() || isMemoryPath(request?.vaultPath)) return undefined
+  if (!await checkVaultApi()) throw new Error(UNAVAILABLE)
+  const res = await fetch(route, buildFetchOptions({ body: args }))
+  const body = await res.json().catch(() => null) as { error?: unknown } | null
+  if (res.ok && body !== null) return body as T
+  throw new Error(typeof body?.error === 'string' ? body.error : `Vault API ${res.status}`)
+}
+
 export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
+  const recoveryRoute = SAVE_RECOVERY_ROUTES.get(cmd)
+  if (recoveryRoute) return args ? trySaveRecoveryApi<T>(recoveryRoute, args) : undefined
   const request = buildVaultApiRequest(cmd, args)
   if (!request) return undefined
-  if (!await checkVaultApi()) return undefined
+  const closed = !isGetRequest(request) && failsClosed(request.body)
+  if (!await checkVaultApi()) {
+    if (closed) throw new VaultApiRefusal(UNAVAILABLE)
+    return undefined
+  }
 
   try {
-    const data = await fetchVaultApiResponse(request)
+    const data = await fetchVaultApiResponse(request, closed)
     if (data === undefined) return undefined
     if (cmd === 'get_note_content') return data.content as T
     if (cmd === 'validate_note_content') return (data.content === args?.content) as T
     return data as T
   } catch (err) {
-    if (err instanceof VaultApiRefusal) throw err
+    if (err instanceof VaultApiRefusal || closed) throw err
     console.warn(`[mock-tauri] Vault API call failed for ${cmd}, falling back to mock:`, err)
     return undefined
   }
