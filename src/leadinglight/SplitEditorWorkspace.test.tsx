@@ -1,17 +1,19 @@
 import { useEffect } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SplitEditorWorkspace } from './SplitEditorWorkspace'
 import type { EditorProps } from '../components/Editor'
 import type { SplitWorkspaceController } from './useSplitWorkspace'
 import type { VaultEntry } from '../types'
-import { NOTE_DRAG_MIME_TYPE, readDraggedNotePath, writeNoteDragData } from '../utils/noteDragDrop'
+import { NoteItem } from '../components/NoteItem'
+import { useSidebarNoteDropTargets } from '../hooks/useSidebarNoteDropTargets'
 import { usePageHistoryAction } from './pageHistory/pageHistoryContext'
 import { usePageRelocationAction } from './relocation/pageRelocationContext'
 
-const activity = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), raw: vi.fn(), flush: vi.fn() }))
+const activity = vi.hoisted(() => ({ mount: vi.fn(), unmount: vi.fn(), raw: vi.fn(), flush: vi.fn(), render: vi.fn() }))
 vi.mock('../components/LazyEditor', () => ({ LazyEditor: function TestEditor(props: EditorProps) {
   const { activeTabPath: path, rawToggleRef, flushPendingEditorContentRef } = props
+  activity.render(path)
   const openHistory = usePageHistoryAction()
   const movePage = usePageRelocationAction()
   useEffect(() => {
@@ -425,165 +427,257 @@ describe('dragging a page tab', () => {
 })
 
 describe('dragging a note from the list', () => {
-  function renderWithNote() {
-    const props = fixture()
-    props.entries = [...props.entries, entry('/third.md')]
-    const view = render(<SplitEditorWorkspace {...props} />)
+  type Props = ReturnType<typeof fixture> & { vaultPath?: string; transitionPending?: boolean }
+  const third = { ...entry('/third.md'), title: 'Third', isA: null, archived: false, snippet: '', modifiedAt: null, createdAt: null, icon: null } as VaultEntry
+  const onClickNote = vi.fn()
+  const moveNoteToFolder = vi.fn()
+  // jsdom has no layout: each step names the element under the pointer.
+  let under: Element | null = null
+  beforeEach(() => {
+    under = null
+    onClickNote.mockClear()
+    moveNoteToFolder.mockClear()
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => under })
+  })
+  function SidebarFolder() {
+    useSidebarNoteDropTargets({ canDropNoteOnType: () => false, canDropNoteOnFolder: () => true, changeNoteType: vi.fn(), moveNoteToFolder })
+    return <div data-note-drop-folder="archive" data-testid="folder" />
+  }
+  // A real list row, a sidebar folder and a 1000x600 page area, as in the app.
+  function renderWithNote(vaultPath?: string, rowEntry: VaultEntry = third) {
+    const props: Props = { ...fixture(), vaultPath }
+    props.entries = [...props.entries, third]
+    const ui = (next: Props | null) => <>
+      <NoteItem entry={rowEntry} isSelected={false} typeEntryMap={{}} onClickNote={onClickNote} />
+      <SidebarFolder />
+      {next && <SplitEditorWorkspace {...next} />}
+    </>
+    const view = render(ui(props))
     const area = view.container.querySelector('.ll-panes') as HTMLElement
     vi.spyOn(area, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: 1000, height: 600, right: 1000, bottom: 600, x: 0, y: 0, toJSON: () => ({}) })
-    return { props, view }
+    return { props, rerender: (next: Props | null) => view.rerender(ui(next)) }
   }
-  // jsdom has no DragEvent; browsers hide the payload (getData) until drop.
-  function drag(type: string, target: Element, { x = 0, y = 0, data = '', types = [NOTE_DRAG_MIME_TYPE, 'text/plain'], synthetic = false } = {}) {
-    const transfer = { types, dropEffect: 'none', getData: () => data }
-    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y })
-    Object.defineProperty(event, 'dataTransfer', { value: transfer })
-    if (synthetic) Object.defineProperty(event, 'synthetic', { value: true })
-    fireEvent(target, event)
-    return { event, transfer }
+  const row = () => screen.getByRole('option')
+  const press = (buttons = 1, extra = {}) =>
+    fireEvent.pointerDown(row(), { pointerId: 1, clientX: 10, clientY: 10, button: 0, buttons, isPrimary: true, ...extra })
+  const moveTo = (element: Element | null, clientX: number, clientY: number, buttons = 1) => {
+    under = element
+    fireEvent.pointerMove(window, { pointerId: 1, clientX, clientY, buttons, isPrimary: true })
   }
-  // Starts a list drag the way a note row does: write the payload, then let dragstart bubble.
-  const startListDrag = (path: string) => {
-    writeNoteDragData({ setData: vi.fn(), effectAllowed: 'none' } as unknown as DataTransfer, path)
-    drag('dragstart', document.body)
+  const release = (element: Element | null, clientX: number, clientY: number) => {
+    under = element
+    fireEvent.pointerUp(window, { pointerId: 1, clientX, clientY, button: 0, isPrimary: true })
   }
+  // The browser's click after a release lands where the pointer was released.
+  const clickRow = (clientX: number, clientY: number) => fireEvent.click(row(), { detail: 1, clientX, clientY })
   const editor = (path: string) => screen.getByTestId(`editor-${path}`)
+  const folder = () => screen.getByTestId('folder')
+  const chip = () => document.querySelector('.ll-drag-chip')
+  const zones = () => [...document.querySelectorAll<HTMLElement>('.ll-drop-zone')].map(zone => zone.dataset.edge)
+  const activeZone = () => document.querySelector<HTMLElement>('.ll-drop-zone[data-active="true"]')?.dataset.edge
 
-  it('previews a locked list drag at an edge, then opens the note there without reaching the editor', () => {
+  it('previews an edge with the title chip, opens the note there once, and swallows only the release click', () => {
     const { props } = renderWithNote()
-    const editorDrop = vi.fn()
-    const sidebarDrop = vi.fn()
-    editor('/left.md').addEventListener('drop', editorDrop)
-    document.addEventListener('drop', sidebarDrop, true)
-    try {
-      startListDrag('/third.md')
-      const over = drag('dragover', editor('/left.md'), { x: 900, y: 300 })
-      expect(over.event.defaultPrevented).toBe(true)
-      expect(over.transfer.dropEffect).toBe('move')
-      expect(document.querySelector('.ll-drop-zone[data-active="true"]')).toHaveAttribute('data-edge', 'right')
-      const dropped = drag('drop', editor('/left.md'), { x: 900, y: 300, data: '/third.md' })
-      expect(dropped.event.defaultPrevented).toBe(true)
-      expect(props.workspace.placeNote).toHaveBeenCalledWith(expect.objectContaining({ path: '/third.md' }), { edge: 'right' })
-      expect(editorDrop).not.toHaveBeenCalled()
-      expect(sidebarDrop).not.toHaveBeenCalled()
-      expect(readDraggedNotePath(null)).toBeNull()
-      expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-    } finally { document.removeEventListener('drop', sidebarDrop, true) }
-  })
-
-  it('opens a list note in the pane under the pointer for a centre drop', () => {
-    const { props } = renderWithNote()
-    startListDrag('/third.md')
-    drag('dragover', editor('/right.md'), { x: 600, y: 300 })
-    expect(document.querySelector('.ll-drop-zone[data-edge="center"]')).toBeInTheDocument()
-    expect(screen.getByText('Open here', { selector: '[role="status"]' })).toBeInTheDocument()
-    drag('drop', editor('/right.md'), { x: 600, y: 300, data: '/third.md' })
-    expect(props.workspace.placeNote).toHaveBeenCalledWith(expect.objectContaining({ path: '/third.md' }), { pane: 1 })
-  })
-
-  it('consumes stale, invalid and mid-transition drops so the path never reaches the editor', () => {
-    const { props, view } = renderWithNote()
-    const editorDrop = vi.fn()
-    editor('/left.md').addEventListener('drop', editorDrop)
-    startListDrag('/other-vault/ghost.md')
-    expect(drag('drop', editor('/left.md'), { x: 600, y: 300, data: '/other-vault/ghost.md' }).event.defaultPrevented).toBe(true)
-    startListDrag('/third.md')
-    expect(drag('drop', screen.getByRole('separator'), { x: 500, y: 300, data: '/third.md' }).event.defaultPrevented).toBe(true)
-    view.rerender(<SplitEditorWorkspace {...props} transitionPending />)
-    startListDrag('/third.md')
-    expect(drag('drop', editor('/left.md'), { x: 900, y: 300, data: '/third.md' }).event.defaultPrevented).toBe(true)
-    expect(editorDrop).not.toHaveBeenCalled()
+    press()
+    moveTo(row(), 13, 10)
+    expect(chip()).toBeNull()
+    moveTo(editor('/left.md'), 900, 300)
+    expect(activeZone()).toBe('right')
+    expect(chip()).toHaveTextContent('Third')
+    expect(chip()).toHaveStyle({ left: '900px', top: '300px' })
+    expect(screen.getByText('Place right', { selector: '[role="status"]' })).toBeInTheDocument()
     expect(props.workspace.placeNote).not.toHaveBeenCalled()
-  })
-
-  it('ignores a list drag that started before the pages changed, but still keeps its path out of the editor', () => {
-    const { props, view } = renderWithNote()
-    const editorDrop = vi.fn()
-    editor('/left.md').addEventListener('drop', editorDrop)
-    startListDrag('/third.md')
-    view.rerender(<SplitEditorWorkspace {...props} workspace={{ ...props.workspace, paths: ['/left.md', '/third-moved.md'] as const }} />)
-    const over = drag('dragover', editor('/left.md'), { x: 900, y: 300 })
-    expect(over.event.defaultPrevented).toBe(true)
+    release(editor('/left.md'), 900, 300)
+    clickRow(900, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: '/third.md' }), { edge: 'right' })
     expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-    expect(drag('drop', editor('/left.md'), { x: 900, y: 300, data: '/third.md' }).event.defaultPrevented).toBe(true)
-    writeNoteDragData({ setData: vi.fn(), effectAllowed: 'none' } as unknown as DataTransfer, '/third.md')
-    expect(drag('drop', editor('/left.md'), { x: 900, y: 300, data: '/third.md' }).event.defaultPrevented).toBe(true)
-    expect(editorDrop).not.toHaveBeenCalled()
+    expect(chip()).toBeNull()
+    expect(onClickNote).not.toHaveBeenCalled()
+    clickRow(10, 10)
+    expect(onClickNote).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves the chip without rerendering the panes until the drop zone changes', () => {
+    renderWithNote()
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    activity.render.mockClear()
+    moveTo(editor('/left.md'), 905, 310)
+    moveTo(editor('/left.md'), 910, 320)
+    expect(chip()).toHaveStyle({ left: '910px', top: '320px' })
+    expect(activity.render).not.toHaveBeenCalled()
+    moveTo(folder(), 50, 50)
+    const zoneChange = activity.render.mock.calls.length
+    expect(zoneChange).toBeGreaterThan(0)
+    moveTo(folder(), 52, 50)
+    moveTo(folder(), 54, 50)
+    expect(chip()).toHaveStyle({ left: '54px', top: '50px' })
+    expect(activity.render).toHaveBeenCalledTimes(zoneChange)
+    release(null, 54, 50)
+  })
+
+  it('opens the note in the pane under the pointer for a centre drop', () => {
+    const { props } = renderWithNote()
+    press()
+    moveTo(editor('/right.md'), 600, 300)
+    expect(zones()).toContain('center')
+    expect(screen.getByText('Open here', { selector: '[role="status"]' })).toBeInTheDocument()
+    release(editor('/right.md'), 600, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: '/third.md' }), { pane: 1 })
+  })
+
+  it('offers a page that is already open only the edges that move it', () => {
+    const shown = { ...third, path: '/right.md', title: 'Right' } as VaultEntry
+    const { props } = renderWithNote(undefined, shown)
+    press()
+    moveTo(editor('/left.md'), 100, 300)
+    expect(zones()).toEqual(['left', 'top', 'bottom'])
+    expect(activeZone()).toBe('left')
+    release(editor('/left.md'), 100, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ path: '/right.md' }), { edge: 'left' })
+  })
+
+  it('keeps a short press as a click and modified or secondary presses as list selection', () => {
+    const { props } = renderWithNote()
+    press()
+    release(row(), 10, 10)
+    clickRow(10, 10)
+    expect(onClickNote).toHaveBeenCalledTimes(1)
+    for (const extra of [{ metaKey: true }, { shiftKey: true }, { ctrlKey: true }, { button: 2 }]) {
+      press(1, extra)
+      moveTo(editor('/left.md'), 900, 300)
+      expect(chip()).toBeNull()
+      release(editor('/left.md'), 900, 300)
+    }
+    expect(props.workspace.placeNote).not.toHaveBeenCalled()
+    expect(row()).toHaveAttribute('draggable', 'false')
+    expect(fireEvent.dragStart(row())).toBe(false)
+  })
+
+  it('shows only the chip away from the page area and commits no earlier preview on an outside release', () => {
+    const { props } = renderWithNote()
+    const toolbar = document.querySelector('.ll-workspace-toolbar') as HTMLElement
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    expect(activeZone()).toBe('right')
+    moveTo(toolbar, 900, -10)
+    expect(document.querySelector('.ll-drop-overlay')).toBeNull()
+    expect(chip()).toHaveStyle({ left: '900px', top: '-10px' })
+    expect(screen.getByText(/^Moving Third\./, { selector: '[role="status"]' })).toBeInTheDocument()
+    release(toolbar, 900, -10)
+    expect(chip()).toBeNull()
+    const separator = screen.getByRole('separator')
+    press()
+    moveTo(separator, 500, 300)
+    release(separator, 500, 300)
     expect(props.workspace.placeNote).not.toHaveBeenCalled()
   })
 
-  it('leaves external drops and sidebar targets to their own handlers, once each', () => {
+  it('cancels on Escape: clears the preview, drops nothing and still swallows the release click', () => {
+    const { props } = renderWithNote()
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    expect(fireEvent.keyDown(window, { key: 'Escape' })).toBe(false)
+    expect(document.querySelector('.ll-drop-overlay')).toBeNull()
+    expect(chip()).toBeNull()
+    moveTo(editor('/left.md'), 900, 300)
+    expect(chip()).toBeNull()
+    release(editor('/left.md'), 900, 300)
+    clickRow(900, 300)
+    expect(props.workspace.placeNote).not.toHaveBeenCalled()
+    expect(onClickNote).not.toHaveBeenCalled()
+  })
+
+  it('drags with input that never reports a held button, but a missed release cancels a normal press', () => {
+    const { props } = renderWithNote()
+    press(0)
+    moveTo(editor('/left.md'), 900, 300, 0)
+    expect(activeZone()).toBe('right')
+    release(editor('/left.md'), 900, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledTimes(1)
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    moveTo(editor('/left.md'), 900, 300, 0)
+    expect(chip()).toBeNull()
+    release(editor('/left.md'), 900, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledTimes(1)
+  })
+
+  it('sends one release to exactly one destination: a sidebar folder or the page area', () => {
+    const { props } = renderWithNote()
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    moveTo(folder(), 50, 50)
+    expect(document.querySelector('.ll-drop-overlay')).toBeNull()
+    expect(chip()).toHaveTextContent('Third')
+    expect(folder()).toHaveAttribute('data-note-drop-state', 'valid')
+    release(folder(), 50, 50)
+    expect(moveNoteToFolder).toHaveBeenCalledExactlyOnceWith('/third.md', 'archive')
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    press()
+    moveTo(folder(), 50, 50)
+    moveTo(editor('/left.md'), 900, 300)
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    release(editor('/left.md'), 900, 300)
+    expect(props.workspace.placeNote).toHaveBeenCalledTimes(1)
+    expect(moveNoteToFolder).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['the vault changes', (props: Props): Props => ({ ...props, vaultPath: '/other-vault' })],
+    ['a shown page changes', (props: Props): Props => ({ ...props, workspace: { ...props.workspace, paths: ['/left.md', '/moved.md'] } })],
+    ['the layout changes', (props: Props): Props => ({ ...props, workspace: { ...props.workspace, orientation: 'vertical' } })],
+    ['a save or close transition starts', (props: Props): Props => ({ ...props, transitionPending: true })],
+  ])('revokes pane and sidebar destinations, before and after the threshold, when %s', (_change, change) => {
+    const { props, rerender } = renderWithNote('/vault')
+    press()
+    moveTo(editor('/left.md'), 900, 300)
+    moveTo(folder(), 50, 50)
+    expect(folder()).toHaveAttribute('data-note-drop-state', 'valid')
+    rerender(change(props))
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    expect(chip()).toBeNull()
+    moveTo(folder(), 50, 50)
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    release(folder(), 50, 50)
+    // Switching away and back must not revive a press made before the change.
+    rerender(props)
+    press()
+    rerender(change(props))
+    rerender(props)
+    moveTo(folder(), 50, 50)
+    expect(chip()).toBeNull()
+    release(folder(), 50, 50)
+    expect(moveNoteToFolder).not.toHaveBeenCalled()
+    expect(props.workspace.placeNote).not.toHaveBeenCalled()
+    press()
+    moveTo(folder(), 50, 50)
+    release(folder(), 50, 50)
+    expect(moveNoteToFolder).toHaveBeenCalledExactlyOnceWith('/third.md', 'archive')
+  })
+
+  it('revokes the sidebar destination too when the page area unmounts mid-drag', () => {
+    const { rerender } = renderWithNote()
+    press()
+    moveTo(folder(), 50, 50)
+    expect(folder()).toHaveAttribute('data-note-drop-state', 'valid')
+    rerender(null)
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    moveTo(folder(), 50, 50)
+    expect(folder()).not.toHaveAttribute('data-note-drop-state')
+    release(folder(), 50, 50)
+    expect(moveNoteToFolder).not.toHaveBeenCalled()
+  })
+
+  it('leaves external editor drops to their own handlers', () => {
     const { props } = renderWithNote()
     const editorDrop = vi.fn()
     editor('/left.md').addEventListener('drop', editorDrop)
-    const external = drag('drop', editor('/left.md'), { x: 600, y: 300, data: '/Users/someone/notes.md', types: ['text/plain'] })
-    expect(external.event.defaultPrevented).toBe(false)
+    const drop = new MouseEvent('drop', { bubbles: true, cancelable: true, clientX: 600, clientY: 300 })
+    Object.defineProperty(drop, 'dataTransfer', { value: { types: ['Files', 'text/plain'], dropEffect: 'none', getData: () => '/Users/someone/notes.md' } })
+    fireEvent(editor('/left.md'), drop)
+    expect(drop.defaultPrevented).toBe(false)
     expect(editorDrop).toHaveBeenCalledTimes(1)
-    const folder = document.body.appendChild(document.createElement('div'))
-    const folderDrop = vi.fn()
-    folder.addEventListener('drop', folderDrop)
-    try {
-      startListDrag('/third.md')
-      expect(drag('drop', folder, { data: '/third.md' }).event.defaultPrevented).toBe(false)
-      expect(folderDrop).toHaveBeenCalledTimes(1)
-      expect(readDraggedNotePath(null)).toBe('/third.md')
-    } finally { folder.remove() }
     expect(props.workspace.placeNote).not.toHaveBeenCalled()
-  })
-
-  it('rejects a toolbar drop forwarded into an editor without inserting its note path', () => {
-    const { props, view } = renderWithNote()
-    const toolbar = view.container.querySelector('.ll-workspace-toolbar') as HTMLElement
-    const editorDrop = vi.fn()
-    editor('/left.md').addEventListener('drop', editorDrop)
-    // BlockNote forwards nearby out-of-editor drops from its document listener.
-    const forwardOutsideDrop = vi.fn(() => {
-      // Sidebar handlers still need the original session when the drop is outside.
-      expect(readDraggedNotePath(null)).toBe('/third.md')
-      const forwarded = drag('drop', editor('/left.md'), { x: 600, y: 300, data: '/third.md', synthetic: true })
-      expect(forwarded.event.defaultPrevented).toBe(true)
-    })
-    document.addEventListener('drop', forwardOutsideDrop, true)
-    try {
-      startListDrag('/third.md')
-      const original = drag('drop', toolbar, { x: 600, y: -10, data: '/third.md' })
-      expect(original.event.defaultPrevented).toBe(false)
-      expect(forwardOutsideDrop).toHaveBeenCalledTimes(1)
-      expect(props.workspace.placeNote).not.toHaveBeenCalled()
-      expect(editorDrop).not.toHaveBeenCalled()
-      expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-    } finally { document.removeEventListener('drop', forwardOutsideDrop, true) }
-  })
-
-  it('ignores a toolbar hover forwarded into an editor and still previews a real return to the pane', () => {
-    const { view } = renderWithNote()
-    const toolbar = view.container.querySelector('.ll-workspace-toolbar') as HTMLElement
-    const forwardOutsideHover = vi.fn(() => {
-      drag('dragover', editor('/left.md'), { x: 600, y: 300, synthetic: true })
-    })
-    document.addEventListener('dragover', forwardOutsideHover, true)
-    try {
-      startListDrag('/third.md')
-      drag('dragover', toolbar, { x: 600, y: -10 })
-      expect(forwardOutsideHover).toHaveBeenCalledTimes(1)
-      expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-      drag('dragover', editor('/left.md'), { x: 900, y: 300 })
-      expect(document.querySelector('.ll-drop-zone[data-active="true"]')).toHaveAttribute('data-edge', 'right')
-    } finally { document.removeEventListener('dragover', forwardOutsideHover, true) }
-  })
-
-  it('clears the preview when the drag ends or moves outside the page area', () => {
-    renderWithNote()
-    const outside = document.body.appendChild(document.createElement('div'))
-    try {
-      startListDrag('/third.md')
-      drag('dragover', editor('/left.md'), { x: 900, y: 300 })
-      expect(document.querySelector('.ll-drop-overlay')).toBeInTheDocument()
-      drag('dragover', outside)
-      expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-      drag('dragover', editor('/left.md'), { x: 900, y: 300 })
-      fireEvent(window, new Event('dragend'))
-      expect(document.querySelector('.ll-drop-overlay')).toBeNull()
-    } finally { outside.remove() }
   })
 })

@@ -9,7 +9,13 @@ reduce merge churn; its organization-specific service requirements do not govern
 - First milestone: two independently editable pages, side by side or stacked, resize, close,
   reopen and restore. Reuse the existing rich editor and Markdown persistence.
 - Fresh local vault. Notes, attachments, settings, backups and history stay local. No telemetry,
-  remote error reporting, automatic Git sync, remote AI calls, remote templates or update checks.
+  remote error reporting, automatic Git sync, remote templates or update checks.
+- October 20 owner-authorized additions: explicit website-to-Markdown capture and optional
+  in-app Claude/Codex collaboration. Network requests are limited to the requested website
+  capture or an explicitly started provider session. Do not enable legacy remote integrations.
+  Show which local text is supplied to the provider; broader vault access requires an explicit
+  session grant. Keep canonical documents and conversation records local. Provider inference
+  is not offline. No background uploads or automatic paid fallback.
 - Public source code is explicitly authorized; never commit user notes, credentials, local
   screenshots of personal content, agent transcripts, or the owner's private information.
 - Keep AGPL-3.0-or-later and upstream attribution. Never publish as official Tolaria/Capacities.
@@ -18,19 +24,25 @@ reduce merge churn; its organization-specific service requirements do not govern
 - Reuse shadcn/Radix and Phosphor. No bespoke replacements for existing standard controls.
 
 ## Team and coordination
-- Latest owner direction: do not use Opus. Codex is authorized to write application code,
-  tests, scripts and configuration. Do not start or resume an Opus session.
+- Latest owner direction (October 20): use Opus 5.5 with extra-high (`xhigh`) effort for
+  development. This supersedes the earlier Opus prohibition. Codex manages, reviews and runs QA;
+  hand application code, tests, scripts and configuration work to authenticated Claude CLI Opus.
 - This Codex chat is manager/integrator: briefs, ownership, running checks, review, integration,
-  builds, commits and publication, and may implement or delegate code with explicit ownership.
+  builds, commits and publication, with explicit non-overlapping Opus assignments.
   Astra gives read-only technical review.
   Sol 6.1 runs UI QA (browser and native) and computer use, without writing tests. Fable 5.1
   handles design/product when needed.
 - Use workspace_management/ for private task briefs, agent IDs, findings and handoffs.
   Each agent owns a separate report. Manager owns the board and integration. No other agent
   commits, pushes, installs dependencies, launches servers or starts native builds unless assigned.
-- Shared checkout, explicit file ownership, no simultaneous edits to shared files. Ask manager
-  before expanding scope. Communicate important contract changes before implementing them.
+- Use separate managed worktrees for parallel development, with explicit file ownership and
+  no simultaneous edits to integration files. Share the primary checkout's dependency install
+  and native target; only the manager runs servers/native builds or integrates commits.
+  Ask the manager before expanding scope. Communicate contract changes before implementing.
 - Do not read or change real user vaults for testing. Use disposable synthetic fixtures.
+- Current owner testing preference: run UI checks in the browser without taking over their
+  screen. Native command/build checks remain allowed. Record native UI qualification limits;
+  do not launch or control a native test window during this work.
 
 ## Architecture and quality
 - Keep upstream history and an upstream remote; origin is rangrik/LeadingLight. Never push upstream.
@@ -53,6 +65,9 @@ reduce merge churn; its organization-specific service requirements do not govern
 - Cargo builds use at most 2 jobs and one reusable target; avoid simultaneous native/coverage builds.
 - Do not create release/debug/coverage caches simultaneously. Inspect disk use before major builds.
 - Do not delete other projects' caches. Keep only this project's necessary QA artifacts.
+- Keep one installed LeadingLight app. Retain at most one verified compressed rollback archive
+  under workspace_management/rollback.noindex; remove finished test/build app bundles after QA
+  or installation so Spotlight does not accumulate duplicate app results.
 - Monitor account usage. The owner authorizes the full remaining included quota for useful work;
   do not manufacture work to consume it. Never buy credits, use paid overage or reset limits.
 

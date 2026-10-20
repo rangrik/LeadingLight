@@ -1,26 +1,51 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { clearDraggedNotePath, NOTE_DRAG_MIME_TYPE, readDraggedNotePath } from '../utils/noteDragDrop'
-import { notePathsMatch } from '../utils/notePathIdentity'
+import { cancelNoteRowDrag, registerNoteRowDropTarget, type NoteRowPoint } from './noteRowDrag'
 import { dropEdgeAt, type DropEdge, type NoteDropTarget } from './pageTabDrag'
 import type { PaneId } from './useSplitWorkspace'
 
 export interface PaneRect { left: number; top: number; width: number; height: number }
+/** The pointer outside React state, so the chip can follow it without rerendering the panes. */
+export interface DragPointer {
+  get: () => { x: number; y: number } | null
+  subscribe: (listener: () => void) => () => void
+}
 export interface NoteDropPreview {
   title: string
   edges: DropEdge[]
   edge: DropEdge | null
   center: PaneRect | null
+  pointer: DragPointer
 }
 interface DroppableNote { title: string; edges: DropEdge[] }
+type DropZones = Pick<NoteDropPreview, 'edges' | 'edge' | 'center'>
+const NO_ZONES: DropZones = { edges: [], edge: null, center: null }
 
-// Only our own note drags carry this type; external files, text and links never do.
-const isNoteDrag = (event: DragEvent) => Array.from(event.dataTransfer?.types ?? []).includes(NOTE_DRAG_MIME_TYPE)
+function createDragPointer(): DragPointer & { set: (next: { x: number; y: number } | null) => void } {
+  let value: { x: number; y: number } | null = null
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set: next => {
+      value = next
+      listeners.forEach(listener => listener())
+    },
+    subscribe: listener => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
 
-function hitAt(area: HTMLElement, event: DragEvent, edges: DropEdge[]): { target: NoteDropTarget; center: PaneRect | null } | null {
+const sameZones = (a: DropZones, b: DropZones) => a.edge === b.edge && a.edges.join() === b.edges.join()
+  && a.center?.left === b.center?.left && a.center?.top === b.center?.top
+  && a.center?.width === b.center?.width && a.center?.height === b.center?.height
+
+function hitAt(area: HTMLElement, point: NoteRowPoint, edges: DropEdge[]): { target: NoteDropTarget; center: PaneRect | null } | null {
+  if (!point.element || !area.contains(point.element)) return null
   const rect = area.getBoundingClientRect()
-  const edge = dropEdgeAt(rect, event.clientX, event.clientY, edges)
+  const edge = dropEdgeAt(rect, point.x, point.y, edges)
   if (edge) return { target: { edge }, center: null }
-  const pane = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-pane-id]') : null
+  const pane = point.element.closest<HTMLElement>('[data-pane-id]')
   if (!pane || !area.contains(pane)) return null
   const box = pane.getBoundingClientRect()
   return {
@@ -29,15 +54,9 @@ function hitAt(area: HTMLElement, event: DragEvent, edges: DropEdge[]): { target
   }
 }
 
-function samePreview(a: NoteDropPreview | null, b: NoteDropPreview | null): boolean {
-  if (!a || !b) return a === b
-  return a.title === b.title && a.edge === b.edge && a.edges.join() === b.edges.join()
-    && JSON.stringify(a.center) === JSON.stringify(b.center)
-}
-
 /**
- * Notes dragged from the list. Window capture runs before the sidebar's document-capture cleanup
- * and before any editor, so a note path dropped on the page area can never be inserted as text.
+ * The page area's side of the note-row gesture. The chip follows the pointer anywhere; drop zones
+ * show only over the page area. External file, text and image drops never pass through here.
  */
 export function useNoteListDrop({ areaRef, vaultPath, describe, onDrop }: {
   areaRef: RefObject<HTMLElement | null>
@@ -46,91 +65,43 @@ export function useNoteListDrop({ areaRef, vaultPath, describe, onDrop }: {
   onDrop: (path: string, target: NoteDropTarget) => void
 }) {
   const [preview, setPreview] = useState<NoteDropPreview | null>(null)
-  // The drag this workspace saw start. Cleared when the vault, pages, layout or transition state change.
-  const originRef = useRef<{ path: string; vault: string } | null>(null)
-  const describeRef = useRef(describe)
-  const onDropRef = useRef(onDrop)
-  const vaultRef = useRef(vaultPath)
-  useEffect(() => {
-    describeRef.current = describe
-    onDropRef.current = onDrop
-    vaultRef.current = vaultPath
-  })
+  const [pointer] = useState(createDragPointer)
+  const current = useRef({ vaultPath, describe, onDrop })
+  useEffect(() => { current.current = { vaultPath, describe, onDrop } })
+  useEffect(() => registerNoteRowDropTarget(({ path }) => {
+    const vault = current.current.vaultPath
+    const pressed = current.current.describe(path)
+    if (!pressed) return null
+    // Pages, layout and eligibility now; a drop is checked again at release.
+    const describeNow = () => (current.current.vaultPath === vault ? current.current.describe(path) : null)
+    // Rerender only when the zones change, not for every pointer move.
+    const show = (zones: DropZones) =>
+      setPreview(shown => (shown && sameZones(shown, zones) ? shown : { title: pressed.title, ...zones, pointer }))
+    return {
+      // The preview lives exactly as long as the drag, wherever the pointer is.
+      follow: point => {
+        pointer.set(point && { x: point.x, y: point.y })
+        setPreview(shown => (point ? shown ?? { title: pressed.title, ...NO_ZONES, pointer } : null))
+      },
+      clear: () => setPreview(shown => (shown && !sameZones(shown, NO_ZONES) ? { ...shown, ...NO_ZONES } : shown)),
+      hit: point => {
+        const note = describeNow()
+        const area = areaRef.current
+        const hit = note && area ? hitAt(area, point, note.edges) : null
+        if (!note || !hit) return null
+        return {
+          preview: () => show({ edges: note.edges, edge: 'edge' in hit.target ? hit.target.edge : null, center: hit.center }),
+          drop: () => { if (describeNow()) current.current.onDrop(path, hit.target) },
+        }
+      },
+    }
+  }), [areaRef, pointer])
 
-  useEffect(() => {
-    const show = (next: NoteDropPreview | null) => setPreview(current => (samePreview(current, next) ? current : next))
-    const areaUnder = (event: DragEvent) => {
-      const area = areaRef.current
-      return area && event.target instanceof Node && area.contains(event.target) ? area : null
-    }
-    const claim = (event: DragEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-    }
-    const fromThisDrag = (path: string | null) => {
-      const origin = originRef.current
-      return origin && path && notePathsMatch(origin.path, path) && origin.vault === vaultRef.current ? path : null
-    }
-    // Bubble phase: runs after the note row has written its payload.
-    const onDragStart = (event: DragEvent) => {
-      const path = isNoteDrag(event) ? readDraggedNotePath(event.dataTransfer) : null
-      originRef.current = path ? { path, vault: vaultRef.current } : null
-    }
-    const onDragOver = (event: DragEvent) => {
-      if (!isNoteDrag(event)) return
-      const area = areaUnder(event)
-      if (!area) { show(null); return }
-      claim(event)
-      // BlockNote forwards nearby outside hovers into its editor with clamped coordinates.
-      if ('synthetic' in event && event.synthetic === true) {
-        if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'
-        show(null)
-        return
-      }
-      // Browsers hide the payload until drop; the drag session still names the note.
-      const note = describeRef.current(fromThisDrag(readDraggedNotePath(event.dataTransfer)))
-      const hit = note ? hitAt(area, event, note.edges) : null
-      if (event.dataTransfer) event.dataTransfer.dropEffect = hit ? 'move' : 'none'
-      show(note && { title: note.title, edges: note.edges, edge: hit && 'edge' in hit.target ? hit.target.edge : null, center: hit?.center ?? null })
-    }
-    const onDropEvent = (event: DragEvent) => {
-      if (!isNoteDrag(event)) return
-      show(null)
-      const path = fromThisDrag(readDraggedNotePath(event.dataTransfer))
-      // End our origin before an outside drop can be forwarded back into an editor.
-      // Keep the shared note payload available for the sidebar's outside-drop handler.
-      originRef.current = null
-      const area = areaUnder(event)
-      if (!area) return
-      // Consumed even when invalid or stale: no target may receive the path as text.
-      claim(event)
-      clearDraggedNotePath()
-      const note = path ? describeRef.current(path) : null
-      const hit = note ? hitAt(area, event, note.edges) : null
-      if (path && hit) onDropRef.current(path, hit.target)
-    }
-    const clear = () => show(null)
-    const end = () => { originRef.current = null; show(null) }
-    window.addEventListener('dragstart', onDragStart)
-    window.addEventListener('dragenter', onDragOver, true)
-    window.addEventListener('dragover', onDragOver, true)
-    window.addEventListener('drop', onDropEvent, true)
-    window.addEventListener('dragend', end, true)
-    window.addEventListener('blur', clear)
-    return () => {
-      window.removeEventListener('dragstart', onDragStart)
-      window.removeEventListener('dragenter', onDragOver, true)
-      window.removeEventListener('dragover', onDragOver, true)
-      window.removeEventListener('drop', onDropEvent, true)
-      window.removeEventListener('dragend', end, true)
-      window.removeEventListener('blur', clear)
-    }
-  }, [areaRef])
-
-  /** Called on vault, page, layout or transition changes: a drag that started before them cannot drop. */
+  /** Revoke both pane and sidebar destinations, even before the press crosses the threshold. */
   const invalidateNoteDrag = useCallback(() => {
-    originRef.current = null
+    cancelNoteRowDrag()
+    pointer.set(null)
     setPreview(null)
-  }, [])
+  }, [pointer])
   return { preview, invalidateNoteDrag }
 }

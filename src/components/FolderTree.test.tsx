@@ -1,7 +1,9 @@
 import { useState, type ComponentProps } from 'react'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest'
 import { FolderTree } from './FolderTree'
+import { startNoteRowDrag } from '../leadinglight/noteRowDrag'
+import { useSidebarNoteDropTargets } from '../hooks/useSidebarNoteDropTargets'
 import { FOLDER_ROW_SINGLE_CLICK_DELAY_MS } from './folder-tree/useFolderRowInteractions'
 import { FOLDER_ROW_NESTING_INDENT, getFolderConnectorLeft } from './folder-tree/folderTreeLayout'
 import { CREATE_NOTE_IN_FOLDER_EVENT } from '../hooks/noteCreationRequests'
@@ -680,41 +682,69 @@ describe('FolderTree', () => {
     expect(screen.queryByTestId('delete-folder-menu-item')).not.toBeInTheDocument()
   })
 
-  it('moves a dragged note onto an eligible folder row', () => {
-    const onMoveNoteToFolder = vi.fn()
-    renderTree({
-      onCanDropNote: (notePath, folderPath) => notePath === '/vault/alpha.md' && folderPath === 'projects',
-      onMoveNoteToFolder,
+  // Seam: folder rows receive note rows only through the shared sidebar gesture. Catches a lost
+  // drop-target attribute, a duplicate row-level handler, or a second move for one release.
+  describe('as note-row destinations', () => {
+    let under: Element | null = null
+    beforeEach(() => {
+      under = null
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => under })
+    })
+    afterEach(() => { fireEvent.blur(window) })
+
+    function SidebarDrops(options: { canDrop: (notePath: string, folderPath: string) => boolean; move: (notePath: string, folderPath: string) => unknown }) {
+      useSidebarNoteDropTargets({ canDropNoteOnType: () => false, canDropNoteOnFolder: options.canDrop, changeNoteType: vi.fn(), moveNoteToFolder: options.move })
+      return null
+    }
+    function renderTreeWithNoteRow(notePath: string, canDrop: (notePath: string, folderPath: string) => boolean, props: Partial<ComponentProps<typeof FolderTree>> = {}) {
+      const move = vi.fn()
+      const onMoveNoteToFolder = vi.fn()
+      render(<>
+        <div data-testid="note-row" onPointerDown={event => startNoteRowDrag(event, { path: notePath })} />
+        <SidebarDrops canDrop={canDrop} move={move} />
+        <FolderTree folders={mockFolders} selection={defaultSelection} onSelect={vi.fn()} onCanDropNote={canDrop} onMoveNoteToFolder={onMoveNoteToFolder} {...props} />
+      </>)
+      return { move, onMoveNoteToFolder }
+    }
+    function dragNoteOnto(target: Element) {
+      const pointer = { pointerId: 5, button: 0, isPrimary: true, clientY: 0 }
+      fireEvent.pointerDown(screen.getByTestId('note-row'), { ...pointer, buttons: 1, clientX: 0 })
+      under = target
+      fireEvent.pointerMove(window, { ...pointer, buttons: 1, clientX: 40 })
+      const highlighted = target.closest('[data-note-drop-folder]')?.getAttribute('data-note-drop-state') ?? null
+      fireEvent.pointerUp(window, { ...pointer, buttons: 0, clientX: 40 })
+      return highlighted
+    }
+
+    it('moves a dragged note onto an eligible folder row once, through the shared gesture only', () => {
+      const { move, onMoveNoteToFolder } = renderTreeWithNoteRow('/vault/alpha.md',
+        (notePath, folderPath) => notePath === '/vault/alpha.md' && folderPath === 'projects')
+      const row = screen.getByTestId('folder-row:projects')
+
+      expect(dragNoteOnto(within(row).getByText('projects'))).toBe('valid')
+      expect(move).toHaveBeenCalledExactlyOnceWith('/vault/alpha.md', 'projects')
+      expect(row).not.toHaveAttribute('data-note-drop-state')
+
+      // No duplicate row-level HTML5 handler remains.
+      const dataTransfer = { dropEffect: 'none', getData: vi.fn(() => '/vault/alpha.md') }
+      expect(fireEvent.dragOver(row, { dataTransfer })).toBe(true)
+      fireEvent.drop(row, { dataTransfer })
+      expect(onMoveNoteToFolder).not.toHaveBeenCalled()
+      expect(move).toHaveBeenCalledTimes(1)
     })
 
-    const dataTransfer = {
-      dropEffect: 'none',
-      getData: vi.fn((type: string) => type === 'application/x-tolaria-note-path' ? '/vault/alpha.md' : ''),
-    }
-    const row = screen.getByTestId('folder-row:projects')
-
-    fireEvent.dragOver(row, { dataTransfer })
-    fireEvent.drop(row, { dataTransfer })
-
-    expect(dataTransfer.dropEffect).toBe('move')
-    expect(onMoveNoteToFolder).toHaveBeenCalledWith('/vault/alpha.md', 'projects')
-  })
-
-  it('moves a dragged note onto the vault root row', () => {
-    const onMoveNoteToFolder = vi.fn()
-    renderTree({
-      onCanDropNote: (notePath, folderPath) => notePath === '/vault/projects/alpha.md' && folderPath === '',
-      onMoveNoteToFolder,
-      vaultRootPath,
+    it('does not highlight or move onto an ineligible folder row', () => {
+      const { move } = renderTreeWithNoteRow('/vault/alpha.md', (_notePath, folderPath) => folderPath === 'projects')
+      expect(dragNoteOnto(screen.getByTestId('folder-row:areas'))).toBeNull()
+      expect(move).not.toHaveBeenCalled()
     })
 
-    const dataTransfer = {
-      dropEffect: 'none',
-      getData: vi.fn((type: string) => type === 'application/x-tolaria-note-path' ? '/vault/projects/alpha.md' : ''),
-    }
+    it('moves a dragged note onto the vault root row', () => {
+      const { move } = renderTreeWithNoteRow('/vault/projects/alpha.md',
+        (notePath, folderPath) => notePath === '/vault/projects/alpha.md' && folderPath === '', { vaultRootPath })
 
-    fireEvent.drop(screen.getByTestId('folder-row:'), { dataTransfer })
-
-    expect(onMoveNoteToFolder).toHaveBeenCalledWith('/vault/projects/alpha.md', '')
+      expect(dragNoteOnto(screen.getByTestId('folder-row:'))).toBe('valid')
+      expect(move).toHaveBeenCalledExactlyOnceWith('/vault/projects/alpha.md', '')
+    })
   })
 })

@@ -20,9 +20,14 @@ Two panes must not own independent unsynchronized buffers for the same file. A p
 owned by a document, not a single global timer that another page can overwrite.
 
 The split controller and drag adapters live under `src/leadinglight/`. Title drags change
-layout while preserving editor ownership. List drags reuse the upstream note MIME/session
-and claim only internal drops over the writing area, before editor and sidebar handlers.
-Folder moves and external text/file drops retain their existing routes.
+layout while preserving editor ownership. Markdown note rows use one internal pointer
+session shared by pane and sidebar destinations. The original path and participating
+destinations are captured on press; a movement threshold preserves ordinary clicks. Global
+workspace invalidation revokes the entire gesture, and the actual release point admits one
+destination before dispatch through existing save/relocation operations. External editor
+text/file drops retain their existing routes. The row chip follows the pointer over the list
+and sidebar through a body portal; only that chip subscribes to pointer coordinates, so moving
+within a drop zone does not repeatedly render the editors. See [ADR 012](ADR-012-note-row-pointer-gestures.md).
 
 Each stable pane also owns its rich-text/Markdown preference. An optional controlled editor
 interface reserves the current page and session before content preparation and refuses stale
@@ -211,13 +216,17 @@ See [ADR 008](ADR-008-local-backup.md) and [local backup](local-backup.md).
 The manager owns task assignments, dependencies, Git and the single native build. Each agent has
 explicit file ownership and a private report under ignored `workspace_management/`. Shared-contract
 changes are communicated before edits. Completed work is reviewed by a different model when
-available. Do not use parallel installs or duplicate native caches to increase agent throughput.
-The owner authorizes Codex implementation, including tests, scripts and configuration. Opus
-sessions must not be started or resumed. Review and QA retain their separate assigned ownership.
+available. Parallel coding uses separate managed worktrees with explicit integration ownership.
+They share the primary checkout's dependency installation and native target; builds are serialized
+by the manager. Do not use parallel installs or duplicate native caches to increase throughput.
+The current owner direction assigns implementation, tests, scripts and configuration to
+Opus 5.5 at extra-high effort. Codex manages integration, review and QA with separate ownership.
 
 Use one `node_modules` and `src-tauri/target`, at most two Cargo jobs, and compact development
 profiles. Browser fixtures and native test vaults are synthetic and excluded from Git. Never delete
-other projects' caches or touch personal vaults for QA.
+other projects' caches or touch personal vaults for QA. Keep only the installed application and
+one verified compressed rollback archive. Remove completed test and build app bundles after
+verification so desktop search does not accumulate old application copies.
 
 ## Dependency policy
 

@@ -11,6 +11,7 @@
 .ll-page-picker[data-draggable] { cursor: grab; touch-action: none; user-select: none; }
 .ll-page-grip { flex-shrink: 0; margin-inline-end: -4px; }
 .ll-workspace--dragging, .ll-workspace--dragging * { cursor: grabbing !important; user-select: none; }
+html[data-note-row-dragging], html[data-note-row-dragging] * { cursor: grabbing !important; -webkit-user-select: none; user-select: none; }
 .ll-drop-overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
 .ll-drop-zone { position: absolute; display: flex; align-items: center; justify-content: center; padding: 6px; border: 1px dashed color-mix(in srgb, var(--ring) 55%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--ring) 5%, transparent); color: var(--muted-foreground); font-size: 12px; text-align: center; transition: width 120ms ease-out, height 120ms ease-out, background-color 120ms ease-out; }
 .ll-drop-zone[data-edge="left"], .ll-drop-zone[data-edge="right"] { top: 6px; bottom: 6px; width: 84px; }

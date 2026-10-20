@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent } from 'react'
-import { clearDraggedNotePath, readDraggedNotePath } from '../utils/noteDragDrop'
+import { registerNoteRowDropTarget } from '../leadinglight/noteRowDrag'
 
 const NOTE_DROP_TARGET_SELECTOR = '[data-note-drop-type], [data-note-drop-folder]'
 const NOTE_DROP_STATE_ATTRIBUTE = 'data-note-drop-state'
@@ -19,17 +19,13 @@ type NoteDropDestination = {
   value: string
 }
 
-function dropTargetFromEvent(event: DragEvent): HTMLElement | null {
-  if (!(event.target instanceof Element)) return null
-  return event.target.closest<HTMLElement>(NOTE_DROP_TARGET_SELECTOR)
-}
-
-function destinationForElement(element: HTMLElement | null): NoteDropDestination | null {
-  if (!element) return null
-  const type = element.dataset.noteDropType
-  if (type !== undefined) return { element, kind: 'type', value: type }
-  const folder = element.dataset.noteDropFolder
-  if (folder !== undefined) return { element, kind: 'folder', value: folder }
+function destinationForElement(element: Element | null): NoteDropDestination | null {
+  const target = element?.closest<HTMLElement>(NOTE_DROP_TARGET_SELECTOR)
+  if (!target) return null
+  const type = target.dataset.noteDropType
+  if (type !== undefined) return { element: target, kind: 'type', value: type }
+  const folder = target.dataset.noteDropFolder
+  if (folder !== undefined) return { element: target, kind: 'folder', value: folder }
   return null
 }
 
@@ -49,15 +45,15 @@ function runDestinationMutation(
   destination: NoteDropDestination,
 ): void {
   const mutation = destination.kind === 'type' ? options.changeNoteType : options.moveNoteToFolder
-  void Promise.resolve(mutation(notePath, destination.value)).catch(() => {})
+  try {
+    void Promise.resolve(mutation(notePath, destination.value)).catch(() => {})
+  } catch { /* The mutation reports its own failure. */ }
 }
 
-function stopHandledDrop(event: DragEvent): void {
-  event.preventDefault()
-  event.stopPropagation()
-  event.stopImmediatePropagation()
-}
-
+/**
+ * Sidebar Types and Folders as destinations of the internal note-row gesture.
+ * The closest target under the release point is checked against current eligibility.
+ */
 export function useSidebarNoteDropTargets(options: SidebarNoteDropTargetsInput): void {
   const canAccept = useEffectEvent((notePath: string, destination: NoteDropDestination) =>
     canAcceptDestination(options, notePath, destination),
@@ -66,78 +62,24 @@ export function useSidebarNoteDropTargets(options: SidebarNoteDropTargetsInput):
     runDestinationMutation(options, notePath, destination),
   )
 
-  useEffect(() => {
+  useEffect(() => registerNoteRowDropTarget(({ path }) => {
     let activeTarget: HTMLElement | null = null
-
     const setActiveTarget = (nextTarget: HTMLElement | null) => {
       if (activeTarget === nextTarget) return
       activeTarget?.removeAttribute(NOTE_DROP_STATE_ATTRIBUTE)
       activeTarget = nextTarget
       activeTarget?.setAttribute(NOTE_DROP_STATE_ATTRIBUTE, 'valid')
     }
-
-    const updateTarget = (event: DragEvent): NoteDropDestination | null => {
-      const notePath = readDraggedNotePath(event.dataTransfer)
-      const destination = destinationForElement(dropTargetFromEvent(event))
-      const valid = !!notePath && !!destination && canAccept(notePath, destination)
-      setActiveTarget(valid ? destination.element : null)
-      if (!valid) {
-        if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'
-        return null
-      }
-      event.preventDefault()
-      if (event.dataTransfer) event.dataTransfer.dropEffect = 'move'
-      return destination
+    return {
+      clear: () => setActiveTarget(null),
+      hit: point => {
+        const destination = destinationForElement(point.element)
+        if (!destination || !canAccept(path, destination)) return null
+        return {
+          preview: () => setActiveTarget(destination.element),
+          drop: () => runMutation(path, destination),
+        }
+      },
     }
-
-    const handleDragEnter = (event: DragEvent) => {
-      updateTarget(event)
-    }
-
-    const handleDragOver = (event: DragEvent) => {
-      updateTarget(event)
-    }
-
-    const handleDragLeave = (event: DragEvent) => {
-      if (!activeTarget) return
-      const relatedTarget =
-        event.relatedTarget instanceof Element
-          ? event.relatedTarget.closest<HTMLElement>(NOTE_DROP_TARGET_SELECTOR)
-          : null
-      if (!event.relatedTarget) return
-      if (relatedTarget === activeTarget) return
-      setActiveTarget(null)
-    }
-
-    const handleDrop = (event: DragEvent) => {
-      const notePath = readDraggedNotePath(event.dataTransfer)
-      const destination = destinationForElement(dropTargetFromEvent(event))
-      const valid = !!notePath && !!destination && canAccept(notePath, destination)
-      setActiveTarget(null)
-      clearDraggedNotePath()
-      if (!notePath || !destination) return
-      stopHandledDrop(event)
-      if (!valid) return
-      runMutation(notePath, destination)
-    }
-
-    const handleDragEnd = () => {
-      setActiveTarget(null)
-      clearDraggedNotePath()
-    }
-
-    document.addEventListener('dragenter', handleDragEnter, true)
-    document.addEventListener('dragover', handleDragOver, true)
-    document.addEventListener('dragleave', handleDragLeave, true)
-    document.addEventListener('drop', handleDrop, true)
-    document.addEventListener('dragend', handleDragEnd, true)
-    return () => {
-      document.removeEventListener('dragenter', handleDragEnter, true)
-      document.removeEventListener('dragover', handleDragOver, true)
-      document.removeEventListener('dragleave', handleDragLeave, true)
-      document.removeEventListener('drop', handleDrop, true)
-      document.removeEventListener('dragend', handleDragEnd, true)
-      handleDragEnd()
-    }
-  }, [])
+  }), [])
 }

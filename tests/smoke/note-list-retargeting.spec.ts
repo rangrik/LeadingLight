@@ -1,106 +1,104 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { createFixtureVaultCopy, openFixtureVault, removeFixtureVaultCopy } from '../helpers/fixtureVault'
+import { parse } from 'yaml'
+import { createFixtureVaultCopy, openFixtureVaultDesktopHarness, removeFixtureVaultCopy } from '../helpers/fixtureVault'
 
-interface FixtureMoveArgs {
+/** The native command's arguments, as the desktop bridge passes them under `args`. */
+interface FolderMoveRequest {
+  vaultPath: string
   oldPath: string
   folderPath: string
-}
-
-interface MockMoveArgs {
-  old_path: string
-  folder_path: string
-}
-
-type RetargetingTestWindow = typeof window & {
-  __mockHandlers?: Record<string, (args?: unknown) => unknown>
-  __noteRetargetingTransfer?: DataTransfer
-  fixtureMoveNoteToFolder?: (args: FixtureMoveArgs) => Promise<{
-    new_path: string
-    updated_files: number
-    failed_updates: number
-  }>
+  openPaths?: string[]
 }
 
 let tempVaultDir: string
+let moves: FolderMoveRequest[] = []
 
-function noteBPath(folder = 'note'): string {
-  return `${tempVaultDir}/${folder}/note-b.md`
+const noteBPath = (folder = 'note') => path.join(tempVaultDir, folder, 'note-b.md')
+const read = (file: string) => fs.readFileSync(file, 'utf8')
+// List rows only: an open pane also carries data-note-path.
+const noteBRow = (page: Page, folder = 'note') => page.locator(`[role="option"][data-note-path="${noteBPath(folder)}"]`)
+
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
+// Metadata by meaning, not by the writer's quoting style.
+function frontmatter(text: string): Record<string, unknown> {
+  const data: unknown = parse(FRONTMATTER.exec(text)?.[1] ?? '')
+  return data && typeof data === 'object' ? data as Record<string, unknown> : {}
+}
+const body = (text: string) => text.replace(FRONTMATTER, '').trim()
+
+async function centre(locator: Locator) {
+  const box = await locator.boundingBox()
+  if (!box) throw new Error('Retargeting gesture target has no visible bounds')
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
 }
 
-function noteBRow(page: Page): Locator {
-  return page.locator('[data-note-path$="/note/note-b.md"]')
+// The list is virtualized: wheel it until the row renders, then bring the whole row on screen.
+async function revealRow(page: Page, row: Locator): Promise<void> {
+  const list = page.getByRole('listbox', { name: 'Notes' })
+  await row.waitFor({ state: 'attached', timeout: 2_000 }).catch(() => {})
+  for (const direction of [-1, 1]) {
+    for (let step = 0; step < 12 && await row.count() === 0; step++) {
+      await list.hover()
+      await page.mouse.wheel(0, direction * 400)
+    }
+  }
+  await row.scrollIntoViewIfNeeded()
+  await expect(row).toBeInViewport({ ratio: 1 })
 }
 
-async function startNoteDrag(source: Locator, targetSelector: string): Promise<void> {
-  await source.evaluate((sourceElement, selector) => {
-    const target = document.querySelector<HTMLElement>(selector)
-    if (!target) throw new Error('Retargeting drag target is unavailable')
-    const dataTransfer = new DataTransfer()
-    const testWindow = window as RetargetingTestWindow
-    testWindow.__noteRetargetingTransfer = dataTransfer
-    sourceElement.dispatchEvent(new DragEvent('dragstart', { bubbles: true, dataTransfer }))
-    target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer }))
-    target.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer }))
-  }, targetSelector)
-}
-
-async function finishNoteDrop(page: Page, targetSelector: string): Promise<void> {
-  await page.evaluate((selector) => {
-    const target = document.querySelector<HTMLElement>(selector)
-    const testWindow = window as RetargetingTestWindow
-    const dataTransfer = testWindow.__noteRetargetingTransfer
-    if (!target || !dataTransfer) throw new Error('Retargeting drop fixture is unavailable')
-    target.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer }))
-  }, targetSelector)
+// A trusted mouse press, a move past the threshold, then over the destination. The caller releases.
+async function dragNoteTo(page: Page, source: Locator, target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded()
+  await expect(target).toBeInViewport()
+  await revealRow(page, source)
+  const from = await centre(source)
+  const to = await centre(target)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(from.x + 8, from.y, { steps: 3 })
+  await page.mouse.move(to.x, to.y, { steps: 12 })
+  await expect(page.locator('.ll-drag-chip')).toHaveText('Note B')
 }
 
 async function selectAllNotes(page: Page): Promise<void> {
   await page.getByTestId('sidebar-top-nav').getByText('All Notes', { exact: true }).click()
-  await expect(noteBRow(page)).toBeVisible({ timeout: 5_000 })
+  await revealRow(page, noteBRow(page))
 }
 
-async function readFixtureNote(page: Page, notePath: string): Promise<string> {
-  const response = await page.request.get(`/api/vault/content?path=${encodeURIComponent(notePath)}`)
-  expect(response.ok()).toBe(true)
-  const payload = await response.json() as { content: string }
-  return payload.content
-}
+// The same viewport as local-note-drag.spec.ts; rows are still revealed by scrolling, never assumed.
+test.use({ viewport: { width: 1600, height: 1000 } })
 
 test.describe('note-list retargeting', () => {
   test.setTimeout(90_000)
 
   test.beforeEach(async ({ page }) => {
-    tempVaultDir = createFixtureVaultCopy()
-    await page.exposeFunction('fixtureMoveNoteToFolder', async ({ oldPath, folderPath }: FixtureMoveArgs) => {
-      const content = await readFixtureNote(page, oldPath)
-      const filename = oldPath.slice(oldPath.lastIndexOf('/') + 1)
-      const destination = `${tempVaultDir}/${folderPath}/${filename}`
-      const saveResponse = await page.request.post('/api/vault/save', {
-        data: { path: destination, content },
-      })
-      expect(saveResponse.ok()).toBe(true)
-      const deleteResponse = await page.request.post('/api/vault/delete', {
-        data: { path: oldPath },
-      })
-      expect(deleteResponse.ok()).toBe(true)
-      return { new_path: destination, updated_files: 0, failed_updates: 0 }
+    // Real path, so paths the app reports compare exactly.
+    tempVaultDir = fs.realpathSync(createFixtureVaultCopy())
+    moves = []
+    // A controlled receipt for the desktop folder mover: the file moves on disk and the reply has
+    // the shape the app validates (relocation/relocationContract.ts). It does not qualify the native mover.
+    await page.exposeFunction('fixtureMoveNoteToFolder', (request: FolderMoveRequest) => {
+      moves.push(request)
+      const content = read(request.oldPath)
+      const destination = path.join(request.vaultPath, request.folderPath, path.basename(request.oldPath))
+      fs.mkdirSync(path.dirname(destination), { recursive: true })
+      fs.renameSync(request.oldPath, destination)
+      return {
+        new_path: destination, updated_files: 0, failed_updates: 0,
+        source_before_content: content, source_content: content, updated_open_pages: [], unrefreshed_open_paths: [],
+      }
     })
-    await openFixtureVault(page, tempVaultDir, {
-      expectedReadyTitle: 'Team Meeting',
+    // Ready on the helper's default title, which the list shows at the top of this vault.
+    await openFixtureVaultDesktopHarness(page, tempVaultDir, {
       folders: [{ name: 'project', path: 'project', children: [] }],
     })
     await page.evaluate(() => {
-      const testWindow = window as RetargetingTestWindow
-      if (!testWindow.__mockHandlers || !testWindow.fixtureMoveNoteToFolder) {
-        throw new Error('Fixture move handler is unavailable')
-      }
-      testWindow.__mockHandlers.move_note_to_folder = (args) => {
-        const moveArgs = args as MockMoveArgs
-        return testWindow.fixtureMoveNoteToFolder?.({
-          oldPath: moveArgs.old_path,
-          folderPath: moveArgs.folder_path,
-        })
-      }
+      const handlers = window.__mockHandlers
+      const move = Reflect.get(window, 'fixtureMoveNoteToFolder') as ((request: unknown) => Promise<unknown>) | undefined
+      if (!handlers || !move) throw new Error('Fixture move handler is unavailable')
+      handlers.move_note_to_folder = (args?: unknown) => move((args as { args?: unknown } | undefined)?.args)
     })
     await expect(page.locator('[data-note-drop-folder="project"]')).toBeVisible({ timeout: 5_000 })
     await selectAllNotes(page)
@@ -108,36 +106,48 @@ test.describe('note-list retargeting', () => {
 
   test.afterEach(() => removeFixtureVaultCopy(tempVaultDir))
 
-  test('assigns a Type, moves into a Folder, and persists both after reload', async ({ page }) => {
-    const typeSelector = '[data-note-drop-type="Project"]'
-    const folderSelector = '[data-note-drop-folder="project"]'
-    const typeTarget = page.locator(typeSelector)
-    const folderTarget = page.locator(folderSelector)
+  test('assigns a Type and moves into a Folder by pointer, once each, and both persist after reload', async ({ page }) => {
+    const typeTarget = page.locator('[data-note-drop-type="Project"]')
+    const folderTarget = page.locator('[data-note-drop-folder="project"]')
+    // The whole list's count; a virtualized list cannot prove an entry is absent row by row.
+    const allNotes = page.getByTestId('sidebar-top-nav').getByRole('button', { name: /^All Notes/ })
+    const listed = await allNotes.textContent()
+    const original = read(noteBPath())
+    expect(frontmatter(original)).not.toHaveProperty('type', 'Project')
 
-    await startNoteDrag(noteBRow(page), typeSelector)
+    await dragNoteTo(page, noteBRow(page), typeTarget)
     await expect(typeTarget).toHaveAttribute('data-note-drop-state', 'valid')
-    await finishNoteDrop(page, typeSelector)
+    await page.mouse.up()
     await expect(typeTarget).not.toHaveAttribute('data-note-drop-state')
-    await expect.poll(() => readFixtureNote(page, noteBPath())).toMatch(/type:\s+Project/)
+    await expect.poll(() => frontmatter(read(noteBPath())).type).toBe('Project')
+    expect(body(read(noteBPath()))).toBe(body(original))
+    const typed = read(noteBPath())
 
-    await startNoteDrag(noteBRow(page), typeSelector)
+    // Already a Project: the same Type is not offered, and releasing there changes nothing.
+    await dragNoteTo(page, noteBRow(page), typeTarget)
     await expect(typeTarget).not.toHaveAttribute('data-note-drop-state')
+    await page.mouse.up()
 
-    await startNoteDrag(noteBRow(page), folderSelector)
+    await dragNoteTo(page, noteBRow(page), folderTarget)
     await expect(folderTarget).toHaveAttribute('data-note-drop-state', 'valid')
-    await finishNoteDrop(page, folderSelector)
+    await page.mouse.up()
     await expect(folderTarget).not.toHaveAttribute('data-note-drop-state')
-    await expect.poll(async () => (await page.request.get(
-      `/api/vault/content?path=${encodeURIComponent(noteBPath('project'))}`,
-    )).ok()).toBe(true)
-    expect((await page.request.get(`/api/vault/content?path=${encodeURIComponent(noteBPath())}`)).ok()).toBe(false)
+    await expect.poll(() => moves.length).toBe(1)
+    expect(moves[0]).toEqual(expect.objectContaining({ vaultPath: tempVaultDir, oldPath: noteBPath(), folderPath: 'project' }))
+    await revealRow(page, noteBRow(page, 'project'))
+    expect(fs.existsSync(noteBPath())).toBe(false)
+    expect(read(noteBPath('project'))).toBe(typed)
+    // Dragging never opened the note it moved.
+    await expect(page.locator('.ll-pane[data-note-path$="/note-b.md"]')).toHaveCount(0)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
-    await expect(page.getByTestId('sidebar-top-nav')).toBeVisible({
-      timeout: 15_000,
-    })
+    await expect(page.getByTestId('sidebar-top-nav')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('sidebar-top-nav').getByText('All Notes', { exact: true }).click()
-    await expect(page.locator(`[data-note-path="${noteBPath('project')}"]`)).toBeVisible({ timeout: 10_000 })
-    expect(await readFixtureNote(page, noteBPath('project'))).toMatch(/type:\s+Project/)
+    await expect(page.getByText('Alpha Project', { exact: true }).first()).toBeVisible({ timeout: 10_000 })
+    await revealRow(page, noteBRow(page, 'project'))
+    await expect(allNotes).toHaveText(listed ?? '')
+    await expect(noteBRow(page)).toHaveCount(0)
+    expect(frontmatter(read(noteBPath('project'))).type).toBe('Project')
+    expect(moves).toHaveLength(1)
   })
 })

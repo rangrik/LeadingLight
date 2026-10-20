@@ -607,3 +607,34 @@ The disk browser preview deliberately refuses filing; its memory preview only su
 pages and wikilinks. HTML destinations and ambiguous reference forms may require simplifying
 the page before moving it. English source copy uses the existing fallback. Existing dependency
 compatibility exceptions remain; whole-upstream coverage was not measured.
+
+# M11 direct note dragging — 0.10.0
+
+Markdown rows now use one internal pointer gesture for split panes and sidebar folders/types.
+The pointer chip follows outside the editor column; pane editors do not rerender on every move.
+Source identity remains bound at press, current eligibility is checked at release, and the
+gesture ends before dispatch. The tab gesture and external editor text/image drops are unchanged.
+
+Scoped checks passed 127 gesture/integration tests, 386 neighboring list/sidebar/workspace tests,
+and 68 external-drop/editor tests. Source and scoped test TypeScript checks and changed-code lint
+passed. Mutation checks proved detection of missing global cancellation, dispatch before cleanup,
+missing release-click suppression and repeated editor rendering. Mutations were restored.
+
+Ten distinct headless Chrome cases passed with one worker and no retries: nine in the main
+gesture run and one migrated sidebar scenario in a focused follow-up. They cover all four edges,
+center placement, existing-page reuse, continued writing in both panes, Escape/outside release,
+release over another row, ordinary/modifier/context interactions, folder dispatch once, type
+metadata and persistence across reload. Folder moves use controlled native-shaped receipts on
+synthetic disk fixtures; these do not establish native filesystem transformation.
+
+The first diagnostic run exposed incorrect test assumptions about the center zone, existing
+Meta-click behavior and YAML quoting. The migrated sidebar test also required viewport-aware
+readiness and scrolling for a virtualized row. Correcting these assertions did not change the
+application behavior. The subsequent runs above passed.
+
+Native UI interaction was not run during this milestone at the owner's request. Browser tests
+do not qualify WKWebView pointer capture, native release-click ordering, native IME or other OSes.
+Rows no longer export absolute file-path text through OS drag-and-drop; Copy file path remains.
+No native HTML5 edge auto-scroll is retained. No dependency or UI-copy changes were needed;
+existing dependency compatibility and English-fallback limits remain. Whole-upstream coverage
+was not measured.

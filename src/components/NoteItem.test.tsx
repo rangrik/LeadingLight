@@ -1,7 +1,8 @@
 import { render, screen, fireEvent, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { NoteItem } from './NoteItem'
 import { makeEntry } from '../test-utils/noteListTestUtils'
+import { registerNoteRowDropTarget, type NoteRowDropTarget, type NoteRowOrigin } from '../leadinglight/noteRowDrag'
 
 vi.mock('../utils/url', async () => {
   const actual = await vi.importActual('../utils/url') as typeof import('../utils/url')
@@ -142,26 +143,71 @@ describe('NoteItem', () => {
     expect(screen.queryByTestId('note-snippet')).not.toBeInTheDocument()
   })
 
-  it('writes the note path into drag data for folder retargeting', () => {
-    const entry = makeEntry({
-      path: '/vault/projects/alpha.md',
-      filename: 'alpha.md',
-      title: 'Alpha',
+  describe('internal row gesture', () => {
+    const pointer = { pointerId: 4, button: 0, buttons: 1, isPrimary: true, clientX: 10, clientY: 10 }
+    let begin: Mock<(origin: NoteRowOrigin) => NoteRowDropTarget | null>
+    let dispose: () => void
+    beforeEach(() => {
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => null })
+      begin = vi.fn<(origin: NoteRowOrigin) => NoteRowDropTarget | null>(() => ({ hit: () => null, clear: () => {} }))
+      dispose = registerNoteRowDropTarget(begin)
     })
-    const dataTransfer = {
-      effectAllowed: 'none',
-      setData: vi.fn(),
-    }
+    afterEach(() => {
+      fireEvent.blur(window)
+      dispose()
+    })
+    const alpha = makeEntry({ path: '/vault/projects/alpha.md', filename: 'alpha.md', title: 'Alpha' })
 
-    render(<NoteItem entry={entry} isSelected={false} typeEntryMap={{}} onClickNote={vi.fn()} />)
+    it('starts the internal gesture from a Markdown row, never a native drag with its path as text', () => {
+      const onClickNote = vi.fn()
+      render(<NoteItem entry={alpha} isSelected={false} typeEntryMap={{}} onClickNote={onClickNote} />)
+      const item = screen.getByRole('option')
+      const dataTransfer = { effectAllowed: 'none', setData: vi.fn() }
 
-    const item = screen.getByRole('option')
-    expect(item).toHaveAttribute('draggable', 'true')
-    fireEvent.dragStart(item, { dataTransfer })
+      expect(item).toHaveAttribute('draggable', 'false')
+      expect(fireEvent.dragStart(within(item).getByTestId('note-title-row'), { dataTransfer })).toBe(false)
+      expect(dataTransfer.setData).not.toHaveBeenCalled()
 
-    expect(dataTransfer.effectAllowed).toBe('move')
-    expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-tolaria-note-path', entry.path)
-    expect(dataTransfer.setData).toHaveBeenCalledWith('text/plain', entry.path)
+      fireEvent.pointerDown(item, pointer)
+      expect(begin).toHaveBeenCalledExactlyOnceWith({ path: alpha.path })
+      fireEvent.pointerUp(window, pointer)
+      fireEvent.click(item, { detail: 1, clientX: 10, clientY: 10 })
+      expect(onClickNote).toHaveBeenCalledTimes(1)
+    })
+
+    it('leaves modified, secondary and property-chip presses to their own handlers', () => {
+      const relatedEntry = makeEntry({ path: '/vault/beta.md', filename: 'beta.md', title: 'Beta' })
+      const entry = makeEntry({ ...alpha, relationships: { Related: ['[[beta]]'] } })
+      const onClickNote = vi.fn()
+      render(
+        <NoteItem
+          entry={entry}
+          isSelected={false}
+          typeEntryMap={{}}
+          allEntries={[entry, relatedEntry]}
+          displayPropsOverride={['Related']}
+          onClickNote={onClickNote}
+        />,
+      )
+      const item = screen.getByRole('option')
+      for (const extra of [{ metaKey: true }, { ctrlKey: true }, { shiftKey: true }, { altKey: true }, { button: 2 }]) {
+        fireEvent.pointerDown(item, { ...pointer, ...extra })
+      }
+      fireEvent.pointerDown(screen.getByTestId('property-chip-related-0'), pointer)
+      expect(begin).not.toHaveBeenCalled()
+      fireEvent.click(item, { metaKey: true })
+      expect(onClickNote).toHaveBeenCalledWith(entry, expect.objectContaining({ metaKey: true }))
+    })
+
+    it.each([
+      ['a binary file', makeEntry({ path: '/vault/archive.zip', filename: 'archive.zip', title: 'archive.zip', fileKind: 'binary' }), undefined],
+      ['an image preview', makeEntry({ path: '/vault/photo.png', filename: 'photo.png', title: 'photo.png', fileKind: 'binary' }), undefined],
+      ['a deleted change', alpha, 'deleted' as const],
+    ])('does not start the gesture from %s', (_label, entry, changeStatus) => {
+      render(<NoteItem entry={entry} isSelected={false} typeEntryMap={{}} changeStatus={changeStatus} onClickNote={vi.fn()} />)
+      fireEvent.pointerDown(screen.getByRole('option'), pointer)
+      expect(begin).not.toHaveBeenCalled()
+    })
   })
 
   it('uses CSS named colors from the Type document for note type indicators', () => {

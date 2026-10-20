@@ -4,6 +4,7 @@ import type {
   DragEventHandler,
   MouseEvent as ReactMouseEvent,
   MouseEventHandler,
+  PointerEventHandler,
   ReactNode,
   SVGAttributes,
 } from 'react'
@@ -38,7 +39,7 @@ import { workspaceForEntry } from '../utils/workspaces'
 import { WorkspaceInitialsBadge } from './WorkspaceInitialsBadge'
 import { useAppLocale, useDateDisplayFormat } from '../hooks/useAppPreferences'
 import { isGeneratedCapture, pageLabel } from '../leadinglight/pageLabel'
-import { writeNoteDragData } from '../utils/noteDragDrop'
+import { startNoteRowDrag } from '../leadinglight/noteRowDrag'
 
 const TYPE_ICON_MAP: Record<string, ComponentType<SVGAttributes<SVGSVGElement>>> = {
   Project: Wrench,
@@ -153,11 +154,10 @@ type NoteItemRowState = 'binary' | 'multiSelected' | 'selected' | 'highlighted' 
 
 type NoteItemSurfaceProps = {
   className: string
-  draggable: boolean
   style: CSSProperties
   onClick: MouseEventHandler<HTMLDivElement>
   onContextMenu?: MouseEventHandler<HTMLDivElement>
-  onDragStart?: DragEventHandler<HTMLDivElement>
+  onPointerDown?: PointerEventHandler<HTMLDivElement>
   onMouseEnter?: () => void
   title?: string
   testId?: string
@@ -539,7 +539,8 @@ function resolveNoteItemSurfaceProps(
     typeLightColor,
     changeStatus,
   } = options
-  const draggable =
+  // Markdown rows move to panes, Folders and Types by the internal pointer gesture.
+  const movable =
     !isUnavailableBinary &&
     (entry.fileKind === undefined || entry.fileKind === 'markdown') &&
     changeStatus !== 'deleted'
@@ -551,7 +552,6 @@ function resolveNoteItemSurfaceProps(
       isMultiSelected,
       isHighlighted,
     }),
-    draggable,
     style: resolveNoteItemSurfaceStyle({
       isUnavailableBinary,
       isSelected,
@@ -561,7 +561,7 @@ function resolveNoteItemSurfaceProps(
     }),
     onClick: createNoteItemClickHandler(entry, isUnavailableBinary, onClickNote),
     onContextMenu: onContextMenu ? (event) => onContextMenu(entry, event) : undefined,
-    onDragStart: draggable ? (event) => writeNoteDragData(event.dataTransfer, entry.path) : undefined,
+    onPointerDown: movable ? (event) => startNoteRowDrag(event, { path: entry.path }) : undefined,
     onMouseEnter: entry.fileKind !== 'binary' && onPrefetch ? () => onPrefetch(entry) : undefined,
     testId: resolveNoteItemTestId({
       isMultiSelected,
@@ -571,6 +571,9 @@ function resolveNoteItemSurfaceProps(
     title: resolveNoteItemTitle({ previewKind, isUnavailableBinary }),
   }
 }
+
+// A row never starts a native drag, so its path is not exported as text to other apps.
+const preventNativeDrag: DragEventHandler<HTMLDivElement> = (event) => event.preventDefault()
 
 function NoteItemRow({
   surfaceProps,
@@ -595,14 +598,15 @@ function NoteItemRow({
       tabIndex={-1}
       aria-selected={isSelected || isMultiSelected}
       className={surfaceProps.className}
-      draggable={surfaceProps.draggable}
+      draggable={false}
       style={surfaceProps.style}
       onClick={surfaceProps.onClick}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') event.currentTarget.click()
       }}
       onContextMenu={surfaceProps.onContextMenu}
-      onDragStart={surfaceProps.onDragStart}
+      onDragStart={preventNativeDrag}
+      onPointerDown={surfaceProps.onPointerDown}
       onMouseEnter={surfaceProps.onMouseEnter}
       data-testid={surfaceProps.testId}
       data-highlighted={isHighlighted || undefined}

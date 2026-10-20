@@ -1,9 +1,8 @@
 import { Folder, FolderOpen } from '@phosphor-icons/react'
-import { type DragEventHandler, type MouseEventHandler, type MouseEvent as ReactMouseEvent, useCallback } from 'react'
+import type { MouseEventHandler, MouseEvent as ReactMouseEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { FolderNode } from '../../types'
-import { readDraggedNotePath } from '../../utils/noteDragDrop'
 import { useFolderRowInteractions } from './useFolderRowInteractions'
 
 interface FolderItemRowProps {
@@ -17,44 +16,12 @@ interface FolderItemRowProps {
   onStartRenameFolder?: (folderPath: string) => void
   onToggle: () => void
   canOpenMenu?: boolean
+  /**
+   * Still passed by the tree. A note row dropped here is admitted once by the shared
+   * sidebar gesture (useSidebarNoteDropTargets) through `data-note-drop-folder`.
+   */
   onCanDropNote?: (notePath: string, folderPath: string) => boolean
   onMoveNoteToFolder?: (notePath: string, folderPath: string) => Promise<unknown> | unknown
-}
-
-function useFolderNoteDropHandlers({
-  node,
-  onCanDropNote,
-  onMoveNoteToFolder,
-}: Pick<FolderItemRowProps, 'node' | 'onCanDropNote' | 'onMoveNoteToFolder'>) {
-  const canMoveDraggedNote = useCallback(
-    (dataTransfer: DataTransfer | null) => {
-      const notePath = readDraggedNotePath(dataTransfer)
-      return notePath && onCanDropNote?.(notePath, node.path) ? notePath : null
-    },
-    [node.path, onCanDropNote],
-  )
-
-  const onDragOver: DragEventHandler<HTMLButtonElement> = useCallback(
-    (event) => {
-      if (!canMoveDraggedNote(event.dataTransfer)) return
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-    },
-    [canMoveDraggedNote],
-  )
-
-  const onDrop: DragEventHandler<HTMLButtonElement> = useCallback(
-    (event) => {
-      const notePath = canMoveDraggedNote(event.dataTransfer)
-      if (!notePath) return
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-      void onMoveNoteToFolder?.(notePath, node.path)
-    },
-    [canMoveDraggedNote, node.path, onMoveNoteToFolder],
-  )
-
-  return { onDragOver, onDrop }
 }
 
 export function FolderItemRow(options: FolderItemRowProps) {
@@ -69,8 +36,6 @@ export function FolderItemRow(options: FolderItemRowProps) {
     onStartRenameFolder,
     onToggle,
     canOpenMenu = true,
-    onCanDropNote,
-    onMoveNoteToFolder,
   } = options
   const hasChildren = node.children.length > 0
   const { handleRenameDoubleClick, handleSelectClick } = useFolderRowInteractions({
@@ -78,11 +43,6 @@ export function FolderItemRow(options: FolderItemRowProps) {
     onRenameFolder: onStartRenameFolder ? () => onStartRenameFolder(node.path) : undefined,
     onSelect,
     onToggle,
-  })
-  const noteDropHandlers = useFolderNoteDropHandlers({
-    node,
-    onCanDropNote,
-    onMoveNoteToFolder,
   })
 
   return (
@@ -109,8 +69,6 @@ export function FolderItemRow(options: FolderItemRowProps) {
           onOpenMenu(node, event)
         }}
         onDoubleClick={handleRenameDoubleClick}
-        onDragOver={noteDropHandlers.onDragOver}
-        onDrop={noteDropHandlers.onDrop}
       />
     </div>
   )
@@ -125,8 +83,6 @@ function FolderSelectButton(options: {
   onClick: (clickDetail: number) => void
   onContextMenu: MouseEventHandler<HTMLButtonElement>
   onDoubleClick: () => void
-  onDragOver: DragEventHandler<HTMLButtonElement>
-  onDrop: DragEventHandler<HTMLButtonElement>
 }) {
   const {
     contentInset,
@@ -137,8 +93,6 @@ function FolderSelectButton(options: {
     onClick,
     onContextMenu,
     onDoubleClick,
-    onDragOver,
-    onDrop,
   } = options
   return (
     <Button
@@ -160,8 +114,6 @@ function FolderSelectButton(options: {
       onClick={(event) => onClick(event.detail)}
       onContextMenu={onContextMenu}
       onDoubleClick={onDoubleClick}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
       data-testid={`folder-row:${node.path}`}
       data-note-drop-folder={node.path}
     >
