@@ -76,6 +76,300 @@
       "content": "Some text.\n",
       "title": "Harbor Notes",
       "titleSource": "filename"
+    },
+    {
+      "name": "literal: escaped brackets show as plain brackets",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\[draft\\] plan\n\nBody.\n",
+      "title": "[draft] plan",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped asterisk is not emphasis",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# a\\*b\n",
+      "title": "a*b",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped and bare ampersands",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# R\\&D and R&D notes\n",
+      "title": "R&D and R&D notes",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped and intraword underscores",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# x\\_y and x_y\n",
+      "title": "x_y and x_y",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped inline punctuation",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\*star\\* \\_under\\_ \\`tick\\` \\~\\~gone\\~\\~ \\[box\\] \\<tag> \\#tag \\$5\n",
+      "title": "*star* _under_ `tick` ~~gone~~ [box] <tag> #tag $5",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped line-start and closing markers",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\> 1\\. \\- \\+ \\= \\: \\| C \\#\n",
+      "title": "> 1. - + = : | C #",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped link syntax is not a link label",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\[text\\](https://example.com)\n",
+      "title": "[text](https://example.com)",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped wikilink syntax is not a wikilink",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\[\\[page\\]\\] and \\[\\[page|Alias\\]\\]\n",
+      "title": "[[page]] and [[page|Alias]]",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: named, decimal and hex references decode once",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# Q&amp;A &#38; &#x26; &#X26; &copy;\n",
+      "title": "Q&A & & & ©",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: an encoded reference is decoded only once",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# &amp;amp; &amp;#38; &amp;lt;\n",
+      "title": "&amp; &#38; &lt;",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped ampersand keeps a reference literal",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\&amp; and \\&#38;\n",
+      "title": "&amp; and &#38;",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: unknown or unterminated references stay literal",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# &bogus; &amp &#; &#x; &#12345678;\n",
+      "title": "&bogus; &amp &#; &#x; &#12345678;",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: invalid numeric references become the replacement character",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# a&#0;b&#xD800;c&#x110000;d\n",
+      "title": "a\ufffdb\ufffdc\ufffdd",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: decoded references never act as Markdown syntax",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# &#42;not bold&#42; &#91;x&#93;(y) &#91;&#91;page&#93;&#93; &#96;tick&#96;\n",
+      "title": "*not bold* [x](y) [[page]] `tick`",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: backslash written as a reference before a brace",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# set &#92;{x}\n",
+      "title": "set \\{x}",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: backslashes before letters stay",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# C:\\Users\\me and a\\b\n",
+      "title": "C:\\Users\\me and a\\b",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped backslashes before punctuation",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# a\\\\\\*b and \\\\[x\\\\]\n",
+      "title": "a\\*b and \\[x\\]",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: trailing backslash stays",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# end\\\n",
+      "title": "end\\",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: real emphasis, strikethrough, link and code keep the existing title",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# **Bold** _em_ *it* ~~old~~ [Link](https://example.com) and `code`\n",
+      "title": "Bold em it old Link and code",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: real wikilinks show their target or alias",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[Project Alpha]] and [[projects/beta|**Beta** plan]]\n",
+      "title": "Project Alpha and Beta plan",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a table-escaped wikilink pipe still names the alias",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[projects/beta\\|Beta]]\n",
+      "title": "Beta",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a link label keeps escaped punctuation",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [a\\]b \\*c\\*](https://example.com/x\\))\n",
+      "title": "a]b *c*",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: code spans keep their text literally",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# Use `a*b`, `x_y`, `\\*` and `&amp;`\n",
+      "title": "Use a*b, x_y, \\* and &amp;",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a double-backtick code span may hold a backtick",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# `` a`b `` done\n",
+      "title": "a`b done",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: an unmatched backtick stays",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# 5 ` items\n",
+      "title": "5 ` items",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: emoji, combining marks and CJK identifiers",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# Café 🚀 👩\u200d💻 🇯🇵 e\u0301 \\*naïve\\* 日本_語\n",
+      "title": "Café 🚀 👩\u200d💻 🇯🇵 e\u0301 *naïve* 日本_語",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: escaped H1 after frontmatter keeps H1 precedence",
+      "filename": "lantern.md",
+      "content": "---\ntitle: Frontmatter Name\n---\n\n# \\[draft\\] R&amp;D\n\nBody.\n",
+      "title": "[draft] R&D",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: an H1 that decodes to blank is not a title",
+      "filename": "untitled-note-1797000000.md",
+      "content": "---\ntype: Note\n---\n# &nbsp;\n\n",
+      "title": "Untitled Note 1797000000",
+      "titleSource": "filename"
+    },
+    {
+      "name": "literal: plain brackets and an unclosed wikilink stay",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [draft] plan [26Q2] and [[open\n",
+      "title": "[draft] plan [26Q2] and [[open",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: lone tildes and padded pairs stay",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# Note~2~beta ~~ spaced ~~ ~approx\n",
+      "title": "Note~2~beta ~~ spaced ~~ ~approx",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: underscore runs are emphasis unless inside a word",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# __init__ snake_case_name foo__bar _lead\n",
+      "title": "init snake_case_name foo__bar lead",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: underscores in a URL stay",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# https://example.com/_draft_/index\n",
+      "title": "https://example.com/_draft_/index",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: underscores in a www address stay",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# www.example.com/_draft_/index\n",
+      "title": "www.example.com/_draft_/index",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: a leading underscore in an email address stays",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# _owner@example.com\n",
+      "title": "_owner@example.com",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: ampersands in a URL stay as written",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# https://example.com/?a=1&amp;b=2&c=3\n",
+      "title": "https://example.com/?a=1&amp;b=2&c=3",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: emphasis around URLs and email addresses is still removed",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# _see_ https://example.com/a_b\\_ and **x_y@example.com**\n",
+      "title": "see https://example.com/a_b_ and x_y@example.com",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a reference-decoded pipe is wikilink text, not an alias separator",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[Page&#124;Alias]]\n",
+      "title": "Page|Alias",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: raw and escaped pipes name an alias, a decoded pipe does not",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[a|b]] [[c\\|d]] [[e&#124;f]]\n",
+      "title": "b d e|f",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a double-encoded pipe decodes once inside a wikilink",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[Page&amp;#124;Alias]]\n",
+      "title": "Page&#124;Alias",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a code-span pipe is wikilink text",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[Page`|`Alias]]\n",
+      "title": "Page|Alias",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a reference-decoded bracket is wikilink text",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# [[Page&#93;x]]\n",
+      "title": "Page]x",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: every supported named character reference",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# &amp;&AMP;&lt;&LT;&gt;&GT;&quot;&QUOT;&apos;&copy;&COPY;&reg;&REG;&trade;&TRADE;&hellip;&mdash;&ndash;&lsquo;&rsquo;&sbquo;&ldquo;&rdquo;&bdquo;&laquo;&raquo;&bull;&middot;&deg;&times;&divide;&plusmn;&minus;&euro;&pound;&yen;&cent;&sect;&para;&larr;&uarr;&rarr;&darr;&harr;|&nbsp;|&ensp;|&emsp;|&thinsp;|\n",
+      "title": "&&<<>>\"\"'©©®®™™…—–‘’‚“”„«»•·°×÷±−€£¥¢§¶←↑→↓↔|\u00a0|\u2002|\u2003|\u2009|",
+      "titleSource": "h1"
     }
   ]
 }

@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import { titleTextFromMarkdown } from "../src/utils/noteTitleInline.ts";
 
 export interface VaultEntry {
 	path: string;
@@ -276,21 +277,14 @@ function favoriteIndex(value: unknown): number | null {
 	return typeof value === "number" && Number.isInteger(value) ? value : null;
 }
 
-function stripTitleMarkdown(text: string): string {
-	return text
-		.replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, "$1")
-		.replace(/\[\[([^\]]+)\]\]/g, "$1")
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-		.replace(/[*_`~]/g, "");
-}
-
+/** Same display text as the live title and native parsing (src/shared/titleSourceContract.json). */
 function leadingH1Title(body: string): string | null {
 	const firstLine = body
 		.split("\n")
 		.map((line) => line.trim())
 		.find(Boolean);
 	if (!firstLine?.startsWith("# ")) return null;
-	return stripTitleMarkdown(firstLine.slice(2)).trim() || null;
+	return titleTextFromMarkdown(firstLine.slice(2)).trim() || null;
 }
 
 function filenameTitle(filename: string): string {

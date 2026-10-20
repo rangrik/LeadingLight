@@ -1,9 +1,12 @@
 //! Pure text-processing helpers for markdown content parsing.
 //! Snippet extraction, markdown stripping, date parsing, and string utilities.
 
+mod title_text;
+
 use regex::Regex;
 use serde::Deserialize;
 use std::sync::OnceLock;
+use title_text::title_text_from_markdown;
 
 const WORD_COUNT_CONTRACT_JSON: &str = include_str!("../../../src/shared/wordCountContract.json");
 
@@ -96,8 +99,8 @@ pub(super) fn extract_h1_title(content: &str) -> Option<String> {
     let body = crate::frontmatter::frontmatter_body(content).trim_start();
     let title =
         first_non_empty_line(TextSlice(body)).and_then(|line| markdown_h1_text(TextSlice(line)))?;
-    let stripped = strip_markdown_chars(TextSlice(title));
-    non_empty_trimmed(TextSlice(&stripped)).map(str::to_string)
+    let display = title_text_from_markdown(title);
+    non_empty_trimmed(TextSlice(&display)).map(str::to_string)
 }
 
 fn non_empty_trimmed(value: TextSlice<'_>) -> Option<&str> {

@@ -1,5 +1,6 @@
 import type { TitleSource } from '../types'
 import { parseFrontmatter } from './frontmatter'
+import { titleTextFromMarkdown } from './noteTitleInline'
 import { splitFrontmatter } from './wikilinks'
 
 type DisplayTitle = string
@@ -22,32 +23,6 @@ interface DisplayTitleState {
   title: DisplayTitle
   hasH1: boolean
   titleSource: TitleSource
-}
-
-function replaceWikilinkAliases(text: MarkdownLine): MarkdownLine {
-  return text.replace(/\[\[[^|\]]+\|([^\]]+)\]\]/g, '$1')
-}
-
-function replacePlainWikilinks(text: MarkdownLine): MarkdownLine {
-  return text.replace(/\[\[([^\]]+)\]\]/g, '$1')
-}
-
-function replaceMarkdownLinks(text: MarkdownLine): MarkdownLine {
-  return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-}
-
-function removeInlineMarkdownMarkers(text: MarkdownLine): MarkdownLine {
-  return text.replace(/[*_`~]/g, '')
-}
-
-function stripMarkdownFormatting(text: MarkdownLine): DisplayTitle {
-  return removeInlineMarkdownMarkers(
-    replaceMarkdownLinks(
-      replacePlainWikilinks(
-        replaceWikilinkAliases(text),
-      ),
-    ),
-  )
 }
 
 function firstNonBlankLine(body: MarkdownContent): MarkdownLine | null {
@@ -79,7 +54,7 @@ export function extractH1TitleFromContent(content: MarkdownContent): DisplayTitl
   const firstLine = firstNonBlankLine(body)
 
   if (!firstLine?.startsWith('# ')) return null
-  const title = stripMarkdownFormatting(firstLine.slice(2)).trim()
+  const title = titleTextFromMarkdown(firstLine.slice(2)).trim()
   return title || null
 }
 
