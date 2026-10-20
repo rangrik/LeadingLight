@@ -31,6 +31,9 @@ import { editorWorkSettled } from './leadinglight/editorWork'
 import { useBackupUi } from './leadinglight/backup/useBackupUi'
 import { TemplateDialog } from './leadinglight/templates/TemplateDialog'
 import { useTemplateUi, type TemplateBoundary } from './leadinglight/templates/useTemplateUi'
+import { ExtensionSettings } from './leadinglight/extensions/ExtensionSettings'
+import { useExtensionUi } from './leadinglight/extensions/useExtensionUi'
+import { holdWithExtensions, useExtensions, type ExtensionBoundary } from './leadinglight/extensions/useExtensions'
 import { usePageRelocation } from './leadinglight/relocation/usePageRelocation'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
@@ -246,6 +249,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   // Filled below: a vault switch refuses over a draft with words and holds new drafts until it ends.
   const captureBoundaryRef = useRef({ begin: (): (() => void) => () => {}, finish: async (): Promise<void> => {} })
   const templateBoundaryRef = useRef<TemplateBoundary>({ begin: () => () => {}, whenIdle: async () => {}, assertClear: () => {}, saveActive: () => false, isOpen: () => false })
+  // Filled below: leaving stops extension admissions at once and waits for native to confirm.
+  const extensionBoundaryRef = useRef<ExtensionBoundary>({ begin: () => () => {}, settle: async () => {} })
   const networkStatus = useNetworkStatus()
   const { settings, loaded: settingsLoaded, saveSettings } = useSettings()
   const aiFeaturesEnabled = areAiFeaturesEnabled(settings)
@@ -266,6 +271,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         reopenTemplates()
         return Promise.reject(error)
       }
+      // No extension run is admitted from here; the switch waits for native to confirm below.
+      const reopenExtensions = extensionBoundaryRef.current.begin()
       setWorkspaceTransitionPending(true)
       // No new page rename or move, Trash move, restore or Favorite change may start until the switch has finished or failed.
       const reopenRenames = renameBarrierRef.current.hold()
@@ -275,6 +282,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       const transition = (async () => {
         // Template admission is held; its boundary refused any still-running source work before these holds.
         await templateBoundaryRef.current.whenIdle()
+        // An extension write already admitted is joined; an unconfirmed close refuses the switch.
+        await extensionBoundaryRef.current.settle()
         // A folder rename, page renames and moves, a Trash move and any Favorite change settle first; then the pages the panes hold now (not at the last render) are saved.
         await folderMoveRef.current.running
         await renameBarrierRef.current.idle()
@@ -287,6 +296,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         handleSetSelection(DEFAULT_SELECTION)
         notes.closeAllTabs()
       })().finally(() => {
+        reopenExtensions()
         reopenTemplates()
         reopenDrafts()
         folderMoveRef.current.holds -= 1
@@ -1077,9 +1087,21 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       reopenTemplates()
     }
   }, [pendingCapture, verifyDraftPages, holdManualRenameAdmission, holdTrashAdmission, holdMutationAdmission, whenManualRenamesIdle, whenTrashIdle, whenMutationsIdle, currentPaneTabs, flushEditorStateBeforeAction, saveWorkspacePending])
+  // Closing the window (not a backup, which reuses the flush) also ends this vault's extension session.
+  const closeRefusedByExtensionsRef = useRef(false)
+  const flushWindowBeforeClose = useCallback(async () => {
+    closeRefusedByExtensionsRef.current = false
+    const reopenExtensions = extensionBoundaryRef.current.begin()
+    try {
+      try { await extensionBoundaryRef.current.settle() } catch (error) { closeRefusedByExtensionsRef.current = true; throw error }
+      await flushWorkspaceBeforeClose()
+    } finally {
+      reopenExtensions()
+    }
+  }, [flushWorkspaceBeforeClose])
   const { isClosing } = useNativeSaveBeforeClose({
-    flush: flushWorkspaceBeforeClose,
-    onError: setToastMessage,
+    flush: flushWindowBeforeClose,
+    onError: message => setToastMessage(closeRefusedByExtensionsRef.current ? translate(appLocale, 'leadinglight.extensions.unsettled') : message),
     locale: appLocale,
   })
   useLayoutEffect(() => { trashBlockedRef.current = isClosing || workspaceTransitionPending }, [isClosing, workspaceTransitionPending])
@@ -1121,6 +1143,19 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     blocked: () => isClosing || workspaceTransitionPending || trash.busy || backupInputHeld(),
   })
   useLayoutEffect(() => { templateBoundaryRef.current = templateUi.boundary })
+  // Optional local extensions: one native session per visit of this main window's vault.
+  const extensions = useExtensions({
+    vaultPath: resolvedPath, ready: vaultListingReady && !noteWindowParams && !aiWorkspaceWindow,
+    onUnsettled: () => setToastMessage(translate(appLocale, 'leadinglight.extensions.unsettled')),
+  })
+  useLayoutEffect(() => { extensionBoundaryRef.current = extensions.boundary })
+  const extensionUi = useExtensionUi({
+    locale: appLocale, extensions, folders: vault.folders, entries: visibleEntries,
+    reserveOpen: notes.reserveOpen, addEntry: vault.addEntry, markInternalWrite: markRecentVaultWrite,
+    onPersisted: handleCreatedVaultEntryPersisted, notify: setToastMessage,
+    canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
+    blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded,
+  })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -1574,10 +1609,13 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const backup = useBackupUi({
     locale: appLocale, vaultPath: resolvedPath, openWorkspace: vaultSwitcher.openWorkspace,
     guard: {
-      begin: beginBackupGuard,
-      // An image import accepted before the guard lands in its page first; then both panes are saved.
+      // Extension admissions stop with the other holds; a dismissed or finished backup reopens them.
+      begin: () => holdWithExtensions(extensionBoundaryRef.current, beginBackupGuard),
+      // An image import accepted before the guard lands in its page first; an extension write
+      // already admitted lands (or the backup is refused) before both panes are saved and copied.
       saveAll: async () => {
         await editorWorkSettled()
+        await extensionBoundaryRef.current.settle()
         await flushWorkspaceBeforeClose()
       },
       unresolvedSaves: () => {
@@ -1983,6 +2021,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onPastePlainText: pastePlainTextCommand,
     onCreateNote: handleNewPage,
     onCreateFromTemplate: templateUi.open,
+    onCreateFromExtension: extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined,
     onCreateNoteOfType: notes.handleCreateNoteImmediate,
     onSave: handleTrackedSave,
     onUndo: undoCommand,
@@ -1996,7 +2035,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onOpenPageHistory: activeDeletedFile ? undefined : openActivePageHistory,
     backupActions: backup.actions,
     isInputGuarded: backupInputHeld,
-    isTemplateOpen: templateUi.boundary.isOpen,
+    // An extension dialog owns its text fields the same way: page commands pause, text undo stays native.
+    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen(),
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2186,7 +2226,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           {sidebarVisible && (
             <>
               <div className="app__sidebar" style={{ width: layout.sidebarWidth }}>
-                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
+                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onCreateFromExtension={extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
               </div>
               <ResizeHandle onResize={layout.handleSidebarResize} />
             </>
@@ -2383,7 +2423,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           onCommit={conflictResolver.commitResolution}
           onClose={conflictFlow.handleCloseConflictResolver}
         />
-        <SettingsPanel open={dialogs.showSettings} initialSectionId={settingsInitialSectionId} settings={settings} aiAgentsStatus={aiAgentsStatus} locale={appLocale} systemLocale={systemLocale} vaults={vaultSwitcher.allVaults} defaultWorkspacePath={vaultSwitcher.defaultWorkspacePath} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} isGitVault={gitRepoState !== 'missing'} vaultPath={resolvedPath} onSave={saveSettings} onCopyMcpConfig={mcpSetupDialog.copyManualConfig} explicitOrganizationEnabled={explicitOrganizationEnabled} onSaveExplicitOrganization={handleSaveExplicitOrganization} onClose={dialogs.closeSettings} />
+        <SettingsPanel open={dialogs.showSettings} initialSectionId={settingsInitialSectionId} settings={settings} aiAgentsStatus={aiAgentsStatus} locale={appLocale} systemLocale={systemLocale} vaults={vaultSwitcher.allVaults} defaultWorkspacePath={vaultSwitcher.defaultWorkspacePath} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} isGitVault={gitRepoState !== 'missing'} vaultPath={resolvedPath} onSave={saveSettings} onCopyMcpConfig={mcpSetupDialog.copyManualConfig} explicitOrganizationEnabled={explicitOrganizationEnabled} onSaveExplicitOrganization={handleSaveExplicitOrganization} extensions={noteWindowParams ? undefined : <ExtensionSettings ui={extensionUi} />} onClose={dialogs.closeSettings} />
         <FeedbackDialog open={showFeedback} onClose={closeFeedback} locale={appLocale} />
         <McpSetupDialog open={mcpSetupDialog.open} status={mcpSetupDialog.status} busyAction={mcpSetupDialog.busyAction} manualConfigSnippet={mcpSetupDialog.manualConfigSnippet} opencodeManualConfigSnippet={mcpSetupDialog.opencodeManualConfigSnippet} manualConfigLoading={mcpSetupDialog.manualConfigLoading} manualConfigError={mcpSetupDialog.manualConfigError} locale={appLocale} onClose={mcpSetupDialog.closeDialog} onConnect={mcpSetupDialog.connect} onCopyManualConfig={mcpSetupDialog.copyManualConfig} onCopyOpenCodeManualConfig={mcpSetupDialog.copyOpenCodeManualConfig} onDisconnect={mcpSetupDialog.disconnect} onLoadManualConfig={mcpSetupDialog.loadManualConfig} />
         <CloneVaultModal key={dialogs.showCloneVault ? 'clone-open' : 'clone-closed'} open={dialogs.showCloneVault} onClose={dialogs.closeCloneVault} onVaultCloned={vaultSwitcher.handleVaultCloned} />
@@ -2391,6 +2431,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         {pageHistory.dialog}
         {backup.dialog}
         <TemplateDialog ui={templateUi} entries={visibleEntries} locale={appLocale} blocked={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} />
+        {extensionUi.dialogs}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog
             open={true}

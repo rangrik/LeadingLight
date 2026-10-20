@@ -92,6 +92,8 @@ interface SettingsPanelProps {
   vaultPath?: string
   explicitOrganizationEnabled?: boolean
   onSaveExplicitOrganization?: (enabled: boolean) => void
+  /** The Extensions section, after Workflow; it acts at once and is not part of the draft. */
+  extensions?: ReactNode
   onClose: () => void
 }
 
@@ -193,6 +195,7 @@ interface SettingsBodyProps {
   setCrashReporting: (value: boolean) => void
   analytics: boolean
   setAnalytics: (value: boolean) => void
+  extensions?: ReactNode
 }
 
 const PULL_INTERVAL_OPTIONS = [1, 2, 5, 10, 15, 30] as const
@@ -310,7 +313,7 @@ function applyThemeModeSelection(value: ThemeMode): void {
 }
 
 export function SettingsPanel(options: SettingsPanelProps) {
-  const { open, settings, aiAgentsStatus = createMissingAiAgentsStatus(), initialSectionId = null, locale = 'en', systemLocale = locale, onSave, onCopyMcpConfig, vaults = [], defaultWorkspacePath = null, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, isGitVault = true, vaultPath = '', explicitOrganizationEnabled = true, onSaveExplicitOrganization, onClose } = options
+  const { open, settings, aiAgentsStatus = createMissingAiAgentsStatus(), initialSectionId = null, locale = 'en', systemLocale = locale, onSave, onCopyMcpConfig, vaults = [], defaultWorkspacePath = null, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, isGitVault = true, vaultPath = '', explicitOrganizationEnabled = true, onSaveExplicitOrganization, extensions, onClose } = options
   const initialDraft = useMemo(
     () => createSettingsDraft(settings, explicitOrganizationEnabled),
     [explicitOrganizationEnabled, settings],
@@ -339,6 +342,7 @@ export function SettingsPanel(options: SettingsPanelProps) {
       vaultPath={vaultPath}
       explicitOrganizationEnabled={explicitOrganizationEnabled}
       onSaveExplicitOrganization={onSaveExplicitOrganization}
+      extensions={extensions}
       onClose={onClose}
     />
   )
@@ -434,7 +438,7 @@ function useSettingsPanelInteractions(options: {
 }
 
 function SettingsPanelInner(options: SettingsPanelInnerProps) {
-  const { settings, aiAgentsStatus, initialDraft, initialSectionId, systemLocale, onSave, onCopyMcpConfig, vaults, defaultWorkspacePath, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, isGitVault, vaultPath, onSaveExplicitOrganization, onClose } = options
+  const { settings, aiAgentsStatus, initialDraft, initialSectionId, systemLocale, onSave, onCopyMcpConfig, vaults, defaultWorkspacePath, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, isGitVault, vaultPath, onSaveExplicitOrganization, extensions, onClose } = options
   const backdropRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const { draft, updateDraft, handleGitignoredVisibilityChange, handleAllNotesFileVisibilityChange, handleThemeModeChange, handleSave } = useSettingsDraftActions({ initialDraft, onClose, onSave, onSaveExplicitOrganization, settings })
@@ -465,6 +469,7 @@ function SettingsPanelInner(options: SettingsPanelInnerProps) {
         setThemeMode={handleThemeModeChange}
         setHideGitignoredFiles={handleGitignoredVisibilityChange}
         setAllNotesFileVisibility={handleAllNotesFileVisibilityChange}
+        extensions={extensions}
       />
     </SettingsPanelFrame>
   )
@@ -560,10 +565,11 @@ interface SettingsBodyFromDraftProps {
   setThemeMode: (value: ThemeMode) => void
   setHideGitignoredFiles: (value: boolean) => void
   setAllNotesFileVisibility: (value: AllNotesFileVisibility) => void
+  extensions?: ReactNode
 }
 
 function SettingsBodyFromDraft(options: SettingsBodyFromDraftProps) {
-  const { t, draft, locale, systemLocale, updateDraft, isGitVault, vaultPath, aiAgentsStatus, onCopyMcpConfig, vaults, defaultWorkspacePath, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, setThemeMode, setHideGitignoredFiles, setAllNotesFileVisibility } = options
+  const { t, draft, locale, systemLocale, updateDraft, isGitVault, vaultPath, aiAgentsStatus, onCopyMcpConfig, vaults, defaultWorkspacePath, onRemoveVault, onReorderVaults, onSetDefaultWorkspace, onUpdateWorkspaceIdentity, setThemeMode, setHideGitignoredFiles, setAllNotesFileVisibility, extensions } = options
   return (
     <SettingsBody
       t={t}
@@ -635,6 +641,7 @@ function SettingsBodyFromDraft(options: SettingsBodyFromDraftProps) {
       setCrashReporting={(value) => updateDraft('crashReporting', value)}
       analytics={draft.analytics}
       setAnalytics={(value) => updateDraft('analytics', value)}
+      extensions={extensions}
     />
   )
 }
@@ -642,7 +649,7 @@ function SettingsBodyFromDraft(options: SettingsBodyFromDraftProps) {
 function SettingsBody(props: SettingsBodyProps) {
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden">
-      <SettingsBodyNav t={props.t} />
+      <SettingsBodyNav t={props.t} showExtensions={props.extensions !== undefined} />
       <div className="min-w-0 flex-1 overflow-auto px-6 py-4" data-testid="settings-scroll-area">
         <SettingsSyncAndAppearanceSections {...props} />
         <SettingsContentSections {...props} />
@@ -726,7 +733,7 @@ function SettingsContentSections(options: SettingsBodyProps) {
 }
 
 function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
-  const { t, autoAdvanceInboxAfterOrganize, setAutoAdvanceInboxAfterOrganize, aiFeaturesEnabled, setAiFeaturesEnabled, aiAgentsStatus, defaultAiAgent, setDefaultAiAgent, defaultAiTarget, setDefaultAiTarget, aiModelProviders, setAiModelProviders, onCopyMcpConfig, explicitOrganization, setExplicitOrganization, crashReporting, setCrashReporting, analytics, setAnalytics } = options
+  const { t, autoAdvanceInboxAfterOrganize, setAutoAdvanceInboxAfterOrganize, aiFeaturesEnabled, setAiFeaturesEnabled, aiAgentsStatus, defaultAiAgent, setDefaultAiAgent, defaultAiTarget, setDefaultAiTarget, aiModelProviders, setAiModelProviders, onCopyMcpConfig, explicitOrganization, setExplicitOrganization, crashReporting, setCrashReporting, analytics, setAnalytics, extensions } = options
   return (
     <>
       {REMOTE_FEATURES_ENABLED && (
@@ -756,6 +763,8 @@ function SettingsAgentWorkflowSections(options: SettingsBodyProps) {
           onChangeAutoAdvanceInboxAfterOrganize={setAutoAdvanceInboxAfterOrganize}
         />
       </SettingsSection>
+
+      {extensions !== undefined && <SettingsSection id={SETTINGS_SECTION_IDS.extensions}>{extensions}</SettingsSection>}
 
       <SettingsSection id={SETTINGS_SECTION_IDS.privacy}>
         {REMOTE_FEATURES_ENABLED ? (

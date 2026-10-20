@@ -10,6 +10,8 @@ interface SidebarTopNavProps {
   onSearch?: () => void
   onCreatePage?: () => void
   onCreateFromTemplate?: () => void
+  /** Shown only while an extension command can run; one entry, never one per extension. */
+  onCreateFromExtension?: () => void
   onOpenToday?: () => void
   /** False until the vault listing and restored layout are ready. */
   canOpenToday?: boolean
@@ -23,13 +25,15 @@ interface SidebarTopNavProps {
 }
 
 export function SidebarTopNav(options: SidebarTopNavProps) {
-  const { selection, onSelect, onSearch, onCreatePage, onCreateFromTemplate, onOpenToday, canOpenToday = true, onOpenTrash, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
+  const { selection, onSelect, onSearch, onCreatePage, onCreateFromTemplate, onCreateFromExtension, onOpenToday, canOpenToday = true, onOpenTrash, showInbox, inboxCount, activeCount, archivedCount, locale = 'en', loading = false } = options
   return (
     <div className="border-b border-border" data-testid="sidebar-top-nav" style={{ padding: '4px 6px' }}>
       {/* Called without the click event, which would otherwise read as a type. */}
       {onCreatePage && <NavItem icon={Plus} label={translate(locale, 'leadinglight.split.create')} onClick={() => onCreatePage()} disabled={loading} />}
       {onCreateFromTemplate && <Button variant="ghost" size="sm" className="h-7 w-full justify-start pl-8 text-xs font-normal text-muted-foreground"
         disabled={loading} onClick={() => onCreateFromTemplate()}>{translate(locale, 'leadinglight.templates.shortAction')}</Button>}
+      {onCreateFromExtension && <Button variant="ghost" size="sm" className="h-7 w-full justify-start pl-8 text-xs font-normal text-muted-foreground"
+        disabled={loading} onClick={() => onCreateFromExtension()}>{translate(locale, 'leadinglight.extensions.shortAction')}</Button>}
       {onSearch &&<NavItem icon={MagnifyingGlass} label={translate(locale, 'leadinglight.find.action')} onClick={onSearch} />}
       {onOpenToday && <NavItem icon={CalendarDot} label={translate(locale, 'leadinglight.today.action')} onClick={onOpenToday} disabled={loading || !canOpenToday} />}
       {showInbox && (

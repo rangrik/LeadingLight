@@ -32,6 +32,8 @@ interface SidebarProps {
   onSearch?: () => void
   onCreatePage?: () => void
   onCreateFromTemplate?: () => void
+  /** Present only while an extension command can run. */
+  onCreateFromExtension?: () => void
   onOpenToday?: () => void
   canOpenToday?: boolean
   onOpenTrash?: () => void
@@ -88,6 +90,7 @@ interface SidebarNavigationProps
   | 'onSearch'
   | 'onCreatePage'
   | 'onCreateFromTemplate'
+  | 'onCreateFromExtension'
   | 'onOpenToday'
   | 'canOpenToday'
   | 'onOpenTrash'
@@ -411,6 +414,7 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         onSearch={props.onSearch}
         onCreatePage={props.onCreatePage}
         onCreateFromTemplate={props.onCreateFromTemplate}
+        onCreateFromExtension={props.onCreateFromExtension}
         onOpenToday={props.onOpenToday}
         canOpenToday={props.canOpenToday}
         onOpenTrash={props.onOpenTrash}
@@ -647,6 +651,7 @@ function SidebarRuntimeNavigation({
       onSearch={props.onSearch}
       onCreatePage={props.onCreatePage}
       onCreateFromTemplate={props.onCreateFromTemplate}
+      onCreateFromExtension={props.onCreateFromExtension}
       onOpenToday={props.onOpenToday}
       canOpenToday={props.canOpenToday}
       onOpenTrash={props.onOpenTrash}

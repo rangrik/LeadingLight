@@ -785,11 +785,15 @@ async function createTypeSilently({
   }
 }
 
-/** A creation's destination, taken at the request. `open` resolves whether the page is now shown there. */
+/**
+ * A creation's destination, taken at the request. `open` resolves whether the page is now shown
+ * there. `stillWanted`, when given, is the caller's own guard (for example an extension run that
+ * may be revoked); it is checked with the reservation's guards at the moment of placement too.
+ */
 export interface OpenReservation {
   inSession: () => boolean
   isActive: () => boolean
-  open: (entry: VaultEntry, content: string) => Promise<boolean>
+  open: (entry: VaultEntry, content: string, stillWanted?: () => boolean) => Promise<boolean>
 }
 
 /** Without a split target, keep the upstream behavior: open in the current pane. */
@@ -800,7 +804,8 @@ function reserveCreationOpen(
   return reserveOpen?.() ?? {
     inSession: () => true,
     isActive: () => true,
-    open: async (entry, content) => {
+    open: async (entry, content, stillWanted) => {
+      if (stillWanted && !stillWanted()) return false
       openTabWithContent(entry, content)
       return true
     },

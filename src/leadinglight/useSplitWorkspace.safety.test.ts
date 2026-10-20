@@ -145,6 +145,39 @@ describe('reserved creation open', () => {
     expect(hook.result.current.tabs.map(tab => tab.entry.path)).toEqual([created.path])
   })
 
+  it('places nothing when the caller’s own guard turns false while the outgoing page saves', async () => {
+    const saves: (() => void)[] = []
+    const beforeNavigate = () => new Promise<void>(resolve => { saves.push(resolve) })
+    const hook = renderHook(() => useSplitWorkspace({ vaultPath: '/vault', entries: all, restoreWorkspace: false, beforeNavigate }))
+    await act(() => hook.result.current.handleSelectNote(a))
+    let wanted = true
+    let opening: Promise<boolean> = Promise.resolve(true)
+    act(() => { opening = hook.result.current.reserveOpen().open(created, '# created', () => wanted) })
+    // Page a is being saved before the swap; placement waits for it.
+    await waitFor(() => expect(saves.length).toBe(1))
+    // An extension run revoked or cancelled before placement: the reservation's own checks still pass.
+    wanted = false
+    let shown = true
+    await act(async () => { saves[0](); shown = await opening })
+    expect(shown).toBe(false)
+    expect(hook.result.current.splitWorkspace.paths).toEqual([a.path, null])
+    expect(hook.result.current.activeTabPath).toBe(a.path)
+    expect(hook.result.current.splitWorkspace.pendingPanes).toEqual([false, false])
+  })
+
+  it('opens when the caller’s guard still holds at placement, and refuses one already false', async () => {
+    const hook = renderHook(() => useSplitWorkspace({ vaultPath: '/vault', entries: all, restoreWorkspace: false }))
+    await act(() => hook.result.current.handleSelectNote(a))
+    let refused = true
+    await act(async () => { refused = await hook.result.current.reserveOpen().open(created, '# created', () => false) })
+    expect(refused).toBe(false)
+    expect(hook.result.current.activeTabPath).toBe(a.path)
+    let shown = false
+    await act(async () => { shown = await hook.result.current.reserveOpen().open(created, '# created', () => true) })
+    expect(shown).toBe(true)
+    expect(hook.result.current.activeTabPath).toBe(created.path)
+  })
+
   it('a cancelled open does not release a newer request for the same page', async () => {
     const saves: (() => void)[] = []
     const beforeNavigate = () => new Promise<void>(resolve => { saves.push(resolve) })

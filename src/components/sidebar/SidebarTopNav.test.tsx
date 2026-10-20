@@ -15,3 +15,22 @@ describe('optional template entry', () => {
     expect(blank).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('optional extension entry', () => {
+  const nav = (onCreateFromExtension?: () => void) => render(<SidebarTopNav selection={{ kind: 'filter', filter: 'all' }} onSelect={vi.fn()} showInbox={false}
+    inboxCount={0} activeCount={0} archivedCount={0} onCreatePage={vi.fn()} onCreateFromTemplate={vi.fn()} onCreateFromExtension={onCreateFromExtension} />)
+
+  it('is absent while no extension command can run', () => {
+    nav()
+    expect(screen.queryByRole('button', { name: 'From extension…' })).not.toBeInTheDocument()
+  })
+
+  it('sits under From template and opens the extension flow without touching blank New page', () => {
+    const extension = vi.fn()
+    nav(extension)
+    const buttons = screen.getAllByRole('button').map(button => button.textContent)
+    expect(buttons.indexOf('From extension…')).toBe(buttons.indexOf('From template') + 1)
+    fireEvent.click(screen.getByRole('button', { name: 'From extension…' }))
+    expect(extension).toHaveBeenCalledExactlyOnceWith()
+  })
+})

@@ -215,15 +215,16 @@ export function useSplitWorkspace(options: Options) {
     // Earlier creations opening here do not cancel it; user navigation, a newer creation or closing the pane do.
     const valid = () => inSession() && visible() && newestCreationRef.current[pane] < id
       && requestGenerationRef.current[pane] - backgroundOpensRef.current[pane] === navigation
-    const open = async (entry: VaultEntry, content: string) => {
-      if (!valid() || findPane(entry.path) !== undefined) return false
+    // `stillWanted` is the caller's guard; it is asked again at placement, after the outgoing save.
+    const open = async (entry: VaultEntry, content: string, stillWanted: () => boolean = () => true) => {
+      if (!valid() || !stillWanted() || findPane(entry.path) !== undefined) return false
       newestCreationRef.current[pane] = id
       backgroundOpensRef.current[pane] += 1
       const request = ++requestGenerationRef.current[pane]
       beginBusy(pane)
       try {
         return await controllersRef.current[pane].openTabWithContent(entry, content,
-          () => inSession() && visible() && requestGenerationRef.current[pane] === request)
+          () => inSession() && visible() && requestGenerationRef.current[pane] === request && stillWanted())
       } finally { endBusy(pane) }
     }
     return { inSession, isActive: () => activePaneRef.current === pane, open }

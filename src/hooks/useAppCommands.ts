@@ -20,6 +20,7 @@ import type { RichEditorBlockTypeDefinition } from '../utils/richEditorBlockType
 import { buildBackupCommands, type BackupActions } from '../leadinglight/backup/backupActions'
 import { useGuardedHandlers } from '../leadinglight/backup/backupInputGate'
 import { buildTemplateCommands } from '../leadinglight/templates/templateActions'
+import { buildExtensionCommands } from '../leadinglight/extensions/extensionActions'
 import { runNativeTextHistoryCommand } from '../utils/appOrchestration'
 
 interface AppCommandsConfig {
@@ -35,6 +36,8 @@ interface AppCommandsConfig {
   onSearch: () => void
   onOpenToday?: () => void
   onCreateFromTemplate?: () => void
+  /** Present only while an extension command can run. */
+  onCreateFromExtension?: () => void
   onFindInNote?: () => void
   onUndo?: () => void
   onRedo?: () => void
@@ -673,14 +676,15 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
   useMenuEvents(menu)
 
   const registryCommands = useCommandRegistry(createCommandRegistryConfig(config))
-  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions, onCreateFromTemplate } = config
+  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension } = config
   const activeFileKind = entries.find(entry => entry.path === activeTabPath)?.fileKind
   const commands = useMemo(() => [
     ...registryCommands,
     ...(onOpenPageHistory ? [buildPageHistoryCommand({ activeTabPath, activeFileKind, locale, onOpenPageHistory })] : []),
     ...(backupActions ? buildBackupCommands(locale ?? 'en', backupActions) : []),
     ...(onCreateFromTemplate ? buildTemplateCommands(locale ?? 'en', onCreateFromTemplate) : []),
-  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions, onCreateFromTemplate])
+    ...(onCreateFromExtension ? buildExtensionCommands(locale ?? 'en', onCreateFromExtension) : []),
+  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension])
 
   useKeyboardNavigation({
     activeTabPath: config.activeTabPath,
