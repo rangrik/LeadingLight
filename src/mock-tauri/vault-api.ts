@@ -5,6 +5,7 @@
  */
 
 import { BACKUP_COMMAND_LIST } from './mock-backup'
+import { isExtensionCommand } from './mock-extensions'
 import { HISTORY_COMMANDS } from './mock-history'
 import { VAULT_API_MARKER } from './mock-save-recovery'
 
@@ -273,7 +274,39 @@ async function tryDiskCommandApi<T>(route: string, args: Record<string, unknown>
   throw new Error(typeof body?.error === 'string' ? body.error : `Vault API ${res.status}`)
 }
 
+// Extensions in a disk session: every command goes to the dev server, which issues this page its
+// owner, as native binds a window. Sessions, runs and receipts never fall back to the memory mock.
+const EXTENSIONS_UNAVAILABLE = 'The dev extension bridge is not answering; nothing was changed by this request.'
+let extensionOwner: Promise<string> | null = null
+
+async function registerExtensionOwner(): Promise<string> {
+  const res = await fetch('/api/extensions/owner', buildFetchOptions({ body: {} }))
+  const body = await res.json().catch(() => null) as { owner?: unknown } | null
+  if (!res.ok || typeof body?.owner !== 'string') throw new Error(EXTENSIONS_UNAVAILABLE)
+  const owner = body.owner
+  // Leaving the page ends its sessions, as native does for a reloaded or closed window.
+  window.addEventListener('pagehide', () => {
+    extensionOwner = null
+    navigator.sendBeacon?.('/api/extensions/owner-end', new Blob([JSON.stringify({ owner })], { type: 'application/json' }))
+  }, { once: true })
+  return owner
+}
+
+async function tryExtensionDiskApi<T>(cmd: string, args: Record<string, unknown>): Promise<T | undefined> {
+  if (!diskSession()) return undefined
+  extensionOwner ??= registerExtensionOwner().catch((error: unknown) => {
+    extensionOwner = null
+    throw error
+  })
+  const owner = await extensionOwner
+  const res = await fetch(`/api/extensions/${cmd}`, buildFetchOptions({ body: { owner, args } }))
+  const body = await res.json().catch(() => null) as { error?: unknown } | null
+  if (res.ok && body !== null) return body as T
+  throw new Error(typeof body?.error === 'string' ? body.error : EXTENSIONS_UNAVAILABLE)
+}
+
 export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
+  if (isExtensionCommand(cmd)) return tryExtensionDiskApi<T>(cmd, args ?? {})
   // The desktop is the preservation boundary for folder moves. A disk-session browser
   // must never turn an unsupported native operation into an in-memory success.
   if (cmd === 'move_note_to_folder' && args && diskSession()) {

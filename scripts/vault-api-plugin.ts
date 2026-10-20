@@ -13,6 +13,7 @@ import {
 } from "./vault-api-commands.ts";
 import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
 import { noteWorkspaceRoot, runDiskBackup } from "./vault-api-backup.ts";
+import { handleExtensionApiRequest, noteExtensionVault } from "./vault-api-extensions.ts";
 import { heldPathRefusal, runDiskHistory, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
 import { listTrash, moveToTrash, restoreFromTrash } from "./vault-api-trash.ts";
 import { HISTORY_COMMANDS } from "../src/mock-tauri/mock-history.ts";
@@ -332,8 +333,12 @@ async function dispatchVaultRoute({
 		return;
 	}
 	const args = await readVaultEndpointArgs(request.url, request.req);
-	// A listed vault is a workspace this server knows, so backups and restores stay out of it.
-	if (route.cmd === "list_vault") noteWorkspaceRoot(args.path);
+	// A listed vault is a workspace this server knows, so backups and restores stay out of it,
+	// and the only kind of vault where extensions may create pages.
+	if (route.cmd === "list_vault") {
+		noteWorkspaceRoot(args.path);
+		noteExtensionVault(args.path);
+	}
 	const response = runVaultCommand({ args, cmd: route.cmd ?? "" });
 	sendJson(request.res, response.payload, response.statusCode);
 }
@@ -370,6 +375,7 @@ export function vaultApiPlugin(): Plugin {
 		transformIndexHtml: () => [{ tag: "meta", attrs: { name: VAULT_API_MARKER, content: "disk" }, injectTo: "head-prepend" }],
 		configureServer(server) {
 			server.middlewares.use(async (req, res, next) => {
+				if (await handleExtensionApiRequest(req, res)) return;
 				if (await handleVaultApiRequest(req, res)) return;
 				next();
 			});

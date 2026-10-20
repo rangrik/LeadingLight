@@ -13,7 +13,7 @@ import {
   type BlockTemplate, type BlockType, type Capability, type ChoiceOption, type DestinationPolicy, type DiagnosticCode,
   type ExtensionCommand, type ExtensionDiagnostic, type ExtensionPackage, type FieldKind, type FieldRef, type FormField,
   type PackageValidation, type RecipeStep, type StepOperation, type TextPart,
-} from './extensionContract'
+} from './extensionContract.ts'
 
 const LIMITS = EXTENSION_LIMITS
 type Fields = Record<string, unknown>

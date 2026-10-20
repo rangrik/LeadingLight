@@ -10,9 +10,29 @@ import { setNoteFavorite, type SetNoteFavoriteArgs } from './mock-favorite'
 import { BACKUP_COMMAND_LIST, runMemoryBackup } from './mock-backup'
 import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-history'
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
-import { tryVaultApi } from './vault-api'
+import { MOCK_ENTRIES } from './mock-entries'
+import { EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, memoryHost, type MemoryVault } from './mock-extensions'
+import { MEMORY_VAULT_ROOTS, tryVaultApi } from './vault-api'
+import bundledMeetingDebrief from '../../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json?raw'
 
 export { addMockEntry, updateMockContent, trackMockChange }
+
+// The mock vault's pages for extensions; a new page is created as create_note_content creates one.
+const mockVaultPages: MemoryVault = {
+  roots: MEMORY_VAULT_ROOTS,
+  pagePaths: () => [...Object.keys(MOCK_CONTENT), ...MOCK_ENTRIES.map(entry => entry.path)],
+  createPage(path, content) {
+    if (Object.hasOwn(MOCK_CONTENT, path) || MOCK_ENTRIES.some(entry => entry.path === path)) return false
+    updateMockContent(path, content)
+    trackMockChange(path)
+    return true
+  },
+}
+let memoryExtensions: ExtensionBackend | null = null
+const runMemoryExtensions = (command: string, args: unknown) => {
+  memoryExtensions ??= new ExtensionBackend(memoryHost(mockVaultPages, [bundledMeetingDebrief]))
+  return memoryExtensions.handle(command, args ?? {}, MEMORY_OWNER)
+}
 
 type MockHandler = (args?: unknown) => unknown
 
@@ -45,6 +65,9 @@ const registeredMockHandlers: Record<string, MockHandler> = {
   // Backup and restore need a disk; the in-memory preview answers `unavailable`, never a fake success.
   ...Object.fromEntries(BACKUP_COMMAND_LIST.map(command => [command, async (args?: unknown) =>
     (await tryVaultApi(command, args as Record<string, unknown> | undefined)) ?? runMemoryBackup(command, args)])),
+  // E1 extensions: the dev server in a disk session, which fails closed; otherwise the mock vault.
+  ...Object.fromEntries(EXTENSION_BRIDGE_COMMANDS.map(command => [command, async (args?: unknown) =>
+    (await tryVaultApi(command, args as Record<string, unknown> | undefined)) ?? runMemoryExtensions(command, args)])),
 }
 
 export function isTauri(): boolean {

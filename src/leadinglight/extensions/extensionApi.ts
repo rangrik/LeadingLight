@@ -2,7 +2,7 @@
 // session gate the UI uses to call it in the right order. Native implements the commands; the UI
 // receives an ExtensionApi. Every id and handle is opaque here and revalidated natively; a package
 // id or command id taken from package text is never authority by itself.
-import { isOpaqueToken, type GuardedProposal, type ProposalQueryArgs, type ProposalQueryReply, type ProposalReceipt } from '../proposals/proposalContract'
+import { isOpaqueToken, type GuardedProposal, type ProposalQueryArgs, type ProposalQueryReply, type ProposalReceipt } from '../proposals/proposalContract.ts'
 import type { Capability, ExtensionDiagnostic, RunLiveness } from './extensionContract'
 
 export const EXTENSION_COMMANDS = {
