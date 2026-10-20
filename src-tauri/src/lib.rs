@@ -27,6 +27,7 @@ pub mod kiro_cli;
 mod kiro_discovery;
 pub mod leadinglight;
 mod leadinglight_backup;
+mod leadinglight_extensions;
 mod leadinglight_history;
 mod leadinglight_relocation_links;
 mod leadinglight_trash;
@@ -416,6 +417,19 @@ macro_rules! app_invoke_handler {
             commands::list_views,
             commands::save_view_cmd,
             commands::delete_view_cmd,
+            commands::import_extension_candidate,
+            commands::list_extensions,
+            commands::read_extension_package,
+            commands::activate_extension_version,
+            commands::deactivate_extension,
+            commands::open_extension_session,
+            commands::close_extension_session,
+            commands::begin_extension_run,
+            commands::end_extension_run,
+            commands::bind_extension_folder,
+            commands::bind_extension_document,
+            commands::submit_document_proposal,
+            commands::query_document_proposal,
             vault_watcher::start_vault_watcher,
             vault_watcher::stop_vault_watcher
         ]
@@ -441,6 +455,18 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
     window_state::handle_run_event(app_handle, event);
     shutdown_save::handle_run_event(app_handle, event);
 
+    // A destroyed window's extension sessions end even if its own close reply was lost.
+    if let tauri::RunEvent::WindowEvent {
+        label,
+        event: tauri::WindowEvent::Destroyed,
+        ..
+    } = event
+    {
+        app_handle
+            .state::<leadinglight_extensions::ExtensionsState>()
+            .forget_owner(label);
+    }
+
     if let tauri::RunEvent::Exit = event {
         let state: tauri::State<'_, desktop_runtime::WsBridgeChild> = app_handle.state();
         desktop_runtime::stop_ws_bridge_on_exit(&state);
@@ -454,7 +480,9 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .register_uri_scheme_protocol("tolaria-html-block", html_block_protocol::handle_request)
-        .manage(commands::StartupTimingState::default());
+        .manage(commands::StartupTimingState::default())
+        .manage(leadinglight_extensions::ExtensionsState::default())
+        .on_page_load(leadinglight_extensions::on_page_load);
 
     #[cfg(desktop)]
     let builder = with_desktop_entry_plugins(builder);

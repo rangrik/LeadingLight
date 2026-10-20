@@ -1,0 +1,60 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "leadinglight.meeting-debrief",
+  "version": "1.0.0",
+  "name": "Meeting debrief",
+  "description": "Answer a few questions after a meeting and create a structured note in a folder you choose.",
+  "capabilities": ["document.create", "document.open"],
+  "commands": [
+    {
+      "id": "new-debrief",
+      "title": "New meeting debrief",
+      "steps": [
+        {
+          "id": "answers",
+          "op": "collectForm",
+          "fields": [
+            { "id": "meeting", "kind": "text", "label": "Meeting", "required": true },
+            { "id": "attendees", "kind": "text", "label": "Who was there" },
+            { "id": "decisions", "kind": "multilineText", "label": "Decisions", "required": true },
+            { "id": "followUps", "kind": "multilineText", "label": "Follow-ups" },
+            {
+              "id": "mood",
+              "kind": "choice",
+              "label": "How did it go?",
+              "options": [
+                { "id": "good", "label": "Went well" },
+                { "id": "mixed", "label": "Mixed" },
+                { "id": "rough", "label": "Rough" }
+              ]
+            },
+            { "id": "revisit", "kind": "boolean", "label": "Revisit next week" }
+          ]
+        },
+        { "id": "destination", "op": "resolveDestination", "policy": "newInChosenFolder" },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": ["Debrief: ", { "step": "answers", "field": "meeting" }],
+          "blocks": [
+            {
+              "type": "list",
+              "style": "bullet",
+              "items": [
+                ["Attendees: ", { "step": "answers", "field": "attendees" }],
+                ["Mood: ", { "step": "answers", "field": "mood" }]
+              ]
+            },
+            { "type": "heading", "level": 2, "text": ["Decisions"] },
+            { "type": "paragraph", "text": [{ "step": "answers", "field": "decisions" }] },
+            { "type": "heading", "level": 2, "text": ["Follow-ups"], "ifFilled": { "step": "answers", "field": "followUps" } },
+            { "type": "paragraph", "text": [{ "step": "answers", "field": "followUps" }] },
+            { "type": "paragraph", "text": ["Revisit this next week."], "ifFilled": { "step": "answers", "field": "revisit" } }
+          ]
+        },
+        { "id": "create", "op": "proposeDocument" },
+        { "id": "open", "op": "openCommittedResult" }
+      ]
+    }
+  ]
+}
