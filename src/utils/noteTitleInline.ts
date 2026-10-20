@@ -8,8 +8,8 @@
  *
  * A bounded CommonMark subset, linear in the input (docs/leadinglight/title-literal-text.md):
  * backslash escapes, character references and code spans first become literal text that can never
- * open, close or split syntax, and `_` and `&` inside bare http(s), www and email words stay as
- * written. Wikilinks, links, `~~strikethrough~~`, `*` and non-intraword `_` runs are then
+ * open, close or split syntax; a lone backslash before `{` stays, and `_` and `&` inside bare
+ * http(s), www and email words stay as written. Wikilinks, links, `~~strikethrough~~`, `*` and non-intraword `_` runs are then
  * unwrapped as titles always were. Inline HTML, `<...>` autolinks and images get no special handling.
  */
 
@@ -187,9 +187,11 @@ function namedReference(source: string[], start: number): DecodedReference | nul
   return glyph === undefined ? null : { glyph, end: end + 1 }
 }
 
+// LeadingLight's rich parser keeps a lone backslash before `{` (markdownLiteralProtection), and the
+// extension encoder relies on it. Backslashes still pair left to right, so `\\{` shows `\{`.
 function pushBackslash(source: string[], index: number, units: TitleUnit[]): number {
   const next = source[index + 1]
-  if (ASCII_PUNCTUATION.has(next)) {
+  if (ASCII_PUNCTUATION.has(next) && next !== '{') {
     units.push({ glyph: next, origin: 'escaped' })
     return index + 2
   }

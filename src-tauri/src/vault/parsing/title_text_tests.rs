@@ -49,6 +49,22 @@ fn test_title_text_leaves_surrounding_whitespace_for_the_caller() {
     assert_eq!(title_text_from_markdown("  \\*a\\*  "), "  *a*  ");
 }
 
+// LeadingLight's rich parser keeps a lone backslash before `{` (markdownLiteralProtection).
+#[test]
+fn test_title_text_keeps_a_backslash_before_an_opening_brace() {
+    let cases = [
+        ("\\{", "\\{"),
+        ("\\\\{", "\\{"),
+        ("\\\\\\{", "\\\\{"),
+        ("\\}", "}"),
+        ("`\\{`", "\\{"),
+        ("&#92;{", "\\{"),
+    ];
+    for (markdown, expected) in cases {
+        assert_eq!(title_text_from_markdown(markdown), expected, "{markdown}");
+    }
+}
+
 #[test]
 fn test_title_text_splits_wikilink_alias_only_at_raw_or_escaped_pipe() {
     let cases = [
@@ -102,6 +118,7 @@ fn test_title_text_stays_linear_on_long_input() {
         (long_url.clone(), long_url),
         (long_email.clone(), long_email),
         ("wwwhttp:@".repeat(REPEATS), "wwwhttp:@".repeat(REPEATS)),
+        ("\\{".repeat(REPEATS), "\\{".repeat(REPEATS)),
     ];
     for (markdown, expected) in cases {
         let actual = title_text_from_markdown(&markdown);

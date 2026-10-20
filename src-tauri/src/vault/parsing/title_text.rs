@@ -3,9 +3,10 @@
 //! Mirrors src/utils/noteTitleInline.ts (live title and browser bridge); all three readers assert
 //! src/shared/titleSourceContract.json. A bounded CommonMark subset, linear in the input
 //! (docs/leadinglight/title-literal-text.md): backslash escapes, character references and code
-//! spans first become literal text that can never open, close or split syntax, and `_` and `&`
-//! inside bare http(s), www and email words stay as written. Wikilinks, links,
-//! `~~strikethrough~~`, `*` and non-intraword `_` runs are then unwrapped as titles always were.
+//! spans first become literal text that can never open, close or split syntax; a lone backslash
+//! before `{` stays, and `_` and `&` inside bare http(s), www and email words stay as written.
+//! Wikilinks, links, `~~strikethrough~~`, `*` and non-intraword `_` runs are then unwrapped as
+//! titles always were.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -292,9 +293,11 @@ fn named_reference(source: &[char], start: usize) -> Option<(char, usize)> {
         .map(|ch| (ch, end + 1))
 }
 
+// LeadingLight's rich parser keeps a lone backslash before `{` (markdownLiteralProtection), and the
+// extension encoder relies on it. Backslashes still pair left to right, so `\\{` shows `\{`.
 fn push_backslash(source: &[char], index: usize, units: &mut Vec<TitleUnit>) -> usize {
     match source.get(index + 1) {
-        Some(&next) if next.is_ascii_punctuation() => {
+        Some(&next) if next.is_ascii_punctuation() && next != '{' => {
             units.push(TitleUnit::escaped(next));
             index + 2
         }

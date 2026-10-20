@@ -183,6 +183,48 @@
       "titleSource": "h1"
     },
     {
+      "name": "literal: encoder output keeps a backslash before a brace",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# Set \\{x}\n",
+      "title": "Set \\{x}",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: encoder output keeps doubled and longer backslash runs before a brace",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# a\\\\\\{b} c\\\\\\\\\\{d}\n",
+      "title": "a\\\\{b} c\\\\\\{d}",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: encoder output mixes backslashes before letters and a brace",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# C:\\\\path\\{id}\n",
+      "title": "C:\\path\\{id}",
+      "titleSource": "h1"
+    },
+    {
+      "name": "literal: encoder output keeps a backslash before a brace inside a URL",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# https://example.com/\\{id}/_x\\_\n",
+      "title": "https://example.com/\\{id}/_x_",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: an escaped backslash before a brace pairs left to right",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# \\\\{x}\n",
+      "title": "\\{x}",
+      "titleSource": "h1"
+    },
+    {
+      "name": "formatting: a backslash before a brace is literal in and outside a code span",
+      "filename": "untitled-page-1797000000.md",
+      "content": "# `\\{x}` and \\{y} but \\}z\n",
+      "title": "\\{x} and \\{y} but }z",
+      "titleSource": "h1"
+    },
+    {
       "name": "literal: backslashes before letters stay",
       "filename": "untitled-page-1797000000.md",
       "content": "# C:\\Users\\me and a\\b\n",

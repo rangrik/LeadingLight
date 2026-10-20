@@ -22,6 +22,18 @@ describe('titleTextFromMarkdown', () => {
     expect(titleTextFromMarkdown('  \\*a\\*  ')).toBe('  *a*  ')
   })
 
+  // LeadingLight's rich parser keeps a lone backslash before `{` (markdownLiteralProtection).
+  it.each([
+    ['a lone backslash before a brace', '\\{', '\\{'],
+    ['an escaped backslash before a brace', '\\\\{', '\\{'],
+    ['three backslashes before a brace', '\\\\\\{', '\\\\{'],
+    ['a backslash before a closing brace still escapes it', '\\}', '}'],
+    ['a backslash before a brace inside a code span', '`\\{`', '\\{'],
+    ['a decoded backslash before a brace', '&#92;{', '\\{'],
+  ])('keeps a backslash before an opening brace: %s', (_name, markdown, expected) => {
+    expect(titleTextFromMarkdown(markdown)).toBe(expected)
+  })
+
   it.each([
     ['a raw pipe after a decoded one names the alias', '[[a&#124;b|c]]', 'c'],
     ['a decoded pipe after a raw one stays alias text', '[[a|b&#124;c]]', 'b|c'],
@@ -54,6 +66,7 @@ describe('titleTextFromMarkdown', () => {
     ['one long URL word', `https://example.com/${'_a'.repeat(REPEATS)}`, `https://example.com/${'_a'.repeat(REPEATS)}`],
     ['one long email local part', `${'_'.repeat(REPEATS)}@example.com`, `${'_'.repeat(REPEATS)}@example.com`],
     ['repeated address prefixes without a link', 'wwwhttp:@'.repeat(REPEATS), 'wwwhttp:@'.repeat(REPEATS)],
+    ['backslashes before braces', '\\{'.repeat(REPEATS), '\\{'.repeat(REPEATS)],
   ])('stays linear on long input: %s', (_name, markdown, expected) => {
     expect(titleTextFromMarkdown(markdown)).toBe(expected)
   })
