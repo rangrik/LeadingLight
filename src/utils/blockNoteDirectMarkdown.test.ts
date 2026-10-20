@@ -249,8 +249,9 @@ describe('BlockNote direct Markdown serialization', () => {
       },
     ]
 
+    // `<T>` is escaped because raw HTML in a text node is dropped on reopen, losing the text.
     expect(blocksToMarkdownDirect(blocks).markdown).toBe([
-      'Literal \\*stars\\* \\`ticks\\` #tag! {ok} <T>',
+      'Literal \\*stars\\* \\`ticks\\` #tag! {ok} \\<T>',
       '',
       '| A\\|B |',
       '| --- |',
@@ -312,7 +313,8 @@ describe('BlockNote direct Markdown serialization', () => {
       '',
       '\\> Not a quote',
       '',
-      '\\![not an image]',
+      // Escaping the brackets already makes this inert, so the bang stays readable.
+      '!\\[not an image\\]',
     ].join('\n'))
   })
 
@@ -385,7 +387,12 @@ describe('BlockNote direct Markdown serialization', () => {
   it('caches unchanged block objects across rich-editor body serialization', () => {
     const block = {
       type: 'paragraph',
-      content: [{ type: 'text', text: 'Keep [[Project Alpha]] fast.', styles: {} }],
+      // A wikilink the user actually made is a `wikilink` inline node; bracket text stays text.
+      content: [
+        { type: 'text', text: 'Keep ', styles: {} },
+        { type: 'wikilink', props: { target: 'Project Alpha' } },
+        { type: 'text', text: ' fast.', styles: {} },
+      ],
       children: [],
     }
     const editor = makeEditor([block])

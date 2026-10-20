@@ -5,6 +5,7 @@ import {
   installRichEditorMarkdownSerializer,
   preProcessRichEditorMarkdown,
   serializeRichEditorDocumentToMarkdown,
+  type RichEditorMarkdownSerializer,
 } from '../utils/richEditorMarkdown'
 import { resolveBlocksForTarget } from './editorBlockResolution'
 
@@ -174,6 +175,34 @@ describe('preProcessRichEditorMarkdown', () => {
     const resolved = await reloadRichEditorMarkdown(content, 'backup-reference.md')
 
     expect(resolved.markdown).toBe(`${content}\n`)
+  })
+
+  // The test above serializes without a matching note path, so it exercises the canonical
+  // serializer. This one uses the source baseline the app captures when a note opens, which must
+  // keep untouched bytes even where the canonical spelling would differ (`\<` before a space).
+  it('preserves unchanged source bytes through the source-preserving save path', async () => {
+    const content = [
+      '---',
+      'title: Backup reference',
+      '---',
+      String.raw`Path: {BackupType}\{ServerName}$\{InstanceName}\{DatabaseName}`,
+      '',
+      String.raw`Compare a \< b, cost $5 and $10, C:\Users\name, ==kept== and \[!NOTE] text.`,
+      '',
+      '> line one',
+      '> line two',
+    ].join('\n')
+    const targetPath = 'unchanged-source.md'
+    const editor = BlockNoteEditor.create({ schema })
+    installRichEditorMarkdownSerializer(editor)
+    const resolved = await resolveBlocksForTarget({ cache: new Map(), content, editor, targetPath })
+
+    expect(serializeRichEditorDocumentToMarkdown({
+      blocks: resolved.blocks,
+      editor: editor as unknown as RichEditorMarkdownSerializer,
+      notePath: targetPath,
+      tabContent: content,
+    })).toBe(content)
   })
 
   it('preserves linked inline code through a small-note rich-editor round trip', async () => {

@@ -16,6 +16,7 @@ import {
 } from './editorParsedBlockCache'
 import { tryParseFastMarkdownBlocksOffThread } from './editorFastMarkdownBlocks'
 import { logEditorBlockResolutionTrace } from '../utils/editorPerformanceTrace'
+import { hasProtectedLiteral } from '../utils/markdownLiteralProtection'
 import {
   captureRichEditorMarkdownSource,
   injectRichEditorMarkdownBlocks,
@@ -53,6 +54,7 @@ export type CachedTabState = {
   sourceContent: NoteContent
 }
 
+const H1_INLINE_SYNTAX_RE = /[\\*_`~[\]&<$]/u
 const TAB_STATE_CACHE_LIMIT = 8
 const DIRECT_MARKDOWN_PARSE_MIN_BYTES = 16 * 1024
 const EMPTY_CHECKLIST_ITEM_FILLER = '\u200B'
@@ -129,6 +131,9 @@ function buildFastPathBlocks(options: { preprocessed: PreprocessedMarkdown }): E
 
   const h1OnlyMatch = trimmed.match(/^# (.+)$/)
   if (!h1OnlyMatch) return null
+  // This shortcut copies the line as text instead of parsing it, so anything that needs real
+  // inline parsing or literal-escape restoration has to take the ordinary path.
+  if (requiresInlineParsing(h1OnlyMatch[1])) return null
 
   return [
     {
@@ -139,6 +144,10 @@ function buildFastPathBlocks(options: { preprocessed: PreprocessedMarkdown }): E
     },
     { type: 'paragraph', content: [], children: [] },
   ]
+}
+
+function requiresInlineParsing(text: string): boolean {
+  return H1_INLINE_SYNTAX_RE.test(text) || hasProtectedLiteral(text)
 }
 
 function emptyHeadingBlock(): Record<string, unknown> {

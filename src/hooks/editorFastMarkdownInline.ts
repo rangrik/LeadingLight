@@ -180,15 +180,29 @@ export function parseFastMarkdownInline(
   return state.items
 }
 
+/**
+ * As in CommonMark, a backslash escapes only ASCII punctuation; before anything else it is a
+ * literal backslash, so `C:\Users` keeps its backslashes. A backslash before the joined line break
+ * is a hard break, which shows as the break itself.
+ */
+function isEscapableCharacter(character: string): boolean {
+  if (character === '\n') return true
+  const code = character.charCodeAt(0)
+  return (code >= 0x21 && code <= 0x2f)
+    || (code >= 0x3a && code <= 0x40)
+    || (code >= 0x5b && code <= 0x60)
+    || (code >= 0x7b && code <= 0x7e)
+}
+
 function appendLiteralText(state: InlineParserState): void {
   const current = state.text.charAt(state.index)
-  if (current !== '\\') {
+  const next = state.text.charAt(state.index + 1)
+  if (current !== '\\' || !next || !isEscapableCharacter(next)) {
     appendText(state.items, current, state.styles)
     state.index += 1
     return
   }
 
-  const hasEscapedCharacter = state.index + 1 < state.text.length
-  appendText(state.items, hasEscapedCharacter ? state.text.charAt(state.index + 1) : '\\', state.styles)
-  state.index += hasEscapedCharacter ? 2 : 1
+  appendText(state.items, next, state.styles)
+  state.index += 2
 }

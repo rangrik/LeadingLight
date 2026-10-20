@@ -30,6 +30,7 @@ describe('rich-editor Markdown serialization', () => {
 
   it('installs direct serialization through the shared rich-editor API', () => {
     const blocksToMarkdownLossy = vi.fn(() => 'legacy markdown\n')
+    // Bracket text in a text node is literal text, so it is escaped rather than written as a link.
     const editor: RichEditorMarkdownSerializer = {
       document: [{
         type: 'paragraph',
@@ -41,7 +42,31 @@ describe('rich-editor Markdown serialization', () => {
 
     installRichEditorMarkdownSerializer(editor)
 
-    expect(serializeRichEditorBodyToMarkdown(editor)).toBe('Keep [[Project Alpha]] fast.\n')
+    expect(serializeRichEditorBodyToMarkdown(editor)).toBe('Keep \\[\\[Project Alpha\\]\\] fast.\n')
+    expect(blocksToMarkdownLossy).not.toHaveBeenCalled()
+  })
+
+  it('writes an actual wikilink node as wikilink Markdown', () => {
+    const blocksToMarkdownLossy = vi.fn(() => 'legacy markdown\n')
+    const editor: RichEditorMarkdownSerializer = {
+      document: [{
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: 'Keep ', styles: {} },
+          { type: 'wikilink', props: { target: 'Project Alpha' } },
+          { type: 'text', text: ' and ', styles: {} },
+          { type: 'wikilink', props: { target: 'Team/Beta|Beta' } },
+          { type: 'text', text: ' fast.', styles: {} },
+        ],
+        children: [],
+      }],
+      blocksToMarkdownLossy,
+    }
+
+    installRichEditorMarkdownSerializer(editor)
+
+    expect(serializeRichEditorBodyToMarkdown(editor))
+      .toBe('Keep [[Project Alpha]] and [[Team/Beta|Beta]] fast.\n')
     expect(blocksToMarkdownLossy).not.toHaveBeenCalled()
   })
 })

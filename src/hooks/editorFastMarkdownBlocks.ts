@@ -1,3 +1,5 @@
+import { advanceMarkdownFence, type MarkdownFence } from '../utils/markdownFences'
+import { transformOutsideInlineCode } from '../utils/markdownInlineCode'
 import {
   fastMarkdownTextItem as textItem,
   parseFastMarkdownInline as parseInline,
@@ -74,7 +76,9 @@ interface SingleLineParseInput {
   line: MarkdownLine
 }
 
-const HEADING_RE = /^(#{1,6})[ \t]+(.+?)\s*#*\s*$/u
+// A closing sequence of hashes only ends a heading when whitespace separates it from the content
+// and it is not escaped, so `## C#` keeps its hash and `## Rank \#` keeps an escaped one.
+const HEADING_RE = /^(#{1,6})[ \t]+(.*?)(?:[ \t]+(?<!\\)#+)?[ \t]*$/u
 const ORDERED_LIST_RE = /^([ \t]*)(\d+)[.)][ \t]+(.+)$/u
 const UNORDERED_LIST_RE = /^([ \t]*)([-*+])[ \t]+(.+)$/u
 const CHECK_LIST_PREFIX_RE = /^([ \t]*)([-*+])[ \t]+\[([ xX])\]/u
@@ -84,6 +88,24 @@ const MARKDOWN_IMAGE_RE = /(^|[^\\])!\[[^\]]*\]\(/u
 const STANDALONE_IMAGE_RE = /^[ \t]{0,3}!\[((?:\\.|[^\]\\])*)\]\((<[^>\r\n]+>|[^\s()\r\n]+)\)[ \t]*$/u
 const REFERENCE_LINK_RE = /^[ \t]{0,3}\[[^\]]+\]:[ \t]+/u
 const UNSUPPORTED_BLOCK_RE = /^[ \t]{0,3}(?:#{7,}|:::+|\[\^.+\]:)/u
+// This parser decodes no character references by design: a general decoder here could reassemble a
+// durable block token after parsing. An escaped reference is already safe, because the literal
+// branch drops the backslash and keeps the spelling. An unescaped one needs real decoding, so the
+// whole source goes to the ordinary parser rather than showing the reference spelling to the reader.
+const UNESCAPED_CHARACTER_REFERENCE_RE =
+  /(?<!\\)&(?:#\d{1,8}|#[xX][0-9a-fA-F]{1,6}|[A-Za-z][A-Za-z0-9]{1,31});/u
+// The inline parser pairs any two unescaped `_`, while CommonMark never lets an underscore between
+// letters or digits open or close emphasis. `snake_case_name` and URL paths would lose their
+// underscores, so such prose goes to the ordinary parser. Code is excluded: the inline parser
+// keeps code spans literal and fenced code is never inline-parsed.
+const INTRAWORD_UNDERSCORE_RE = /[\p{L}\p{N}]_(?=[\p{L}\p{N}])/u
+const QUOTE_LINE_RE = /^[ \t]{0,3}>[ \t]?(.*)$/u
+const NESTED_QUOTE_RE = /^[ \t]{0,3}>/u
+const DURABLE_TOKEN_RE = /@@TOLARIA_[A-Z_]+:[^@]*@@/gu
+const PLACEHOLDER_TOKEN_RE = new RegExp(
+  `${String.fromCharCode(0x2039)}[A-Z_]+:[^${String.fromCharCode(0x203a)}]*${String.fromCharCode(0x203a)}`,
+  'gu',
+)
 
 const textEncoder = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null
 
@@ -93,6 +115,94 @@ function now(): number {
 
 function sourceBytes(source: FastMarkdownSource): number {
   return textEncoder ? textEncoder.encode(source.markdown).byteLength : source.markdown.length
+}
+
+function countUnescapedUnderscores(text: string): number {
+  let count = 0
+  let backslashes = 0
+  for (const character of text) {
+    if (character === '_' && backslashes % 2 === 0) count += 1
+    backslashes = character === '\\' ? backslashes + 1 : 0
+  }
+  return count
+}
+
+interface UnderscoreRun {
+  intraword: boolean
+  unescaped: number
+}
+
+function isPairable(run: UnderscoreRun): boolean {
+  return run.intraword && run.unescaped >= 2
+}
+
+/**
+ * Whether one block's prose holds an intraword underscore the inline parser could pair with
+ * another. The inline parser only pairs within a block, so the count restarts at a blank line;
+ * a run that spans two adjacent single-line blocks only over-counts, which costs speed, not text.
+ */
+function hasPairableIntrawordUnderscore(markdown: MarkdownSourceText): boolean {
+  let fence: MarkdownFence | null = null
+  let run: UnderscoreRun = { intraword: false, unescaped: 0 }
+
+  for (const line of markdown.split(/\r?\n/u)) {
+    const nextFence = advanceMarkdownFence(line, fence)
+    const insideFence = nextFence !== fence || fence !== null
+    fence = nextFence
+    if (insideFence || !line.trim()) {
+      run = { intraword: false, unescaped: 0 }
+      continue
+    }
+
+    transformOutsideInlineCode(line, (prose) => {
+      const text = prose.replace(DURABLE_TOKEN_RE, '').replace(PLACEHOLDER_TOKEN_RE, '')
+      run.intraword ||= INTRAWORD_UNDERSCORE_RE.test(text)
+      run.unescaped += countUnescapedUnderscores(text)
+      return prose
+    })
+    if (isPairable(run)) return true
+  }
+  return false
+}
+
+/**
+ * Length of an unescaped backtick run starting at `index`; a backslash-escaped first backtick is
+ * literal and does not count toward the run.
+ */
+function unescapedBacktickRun(line: MarkdownLine, index: number, backslashes: number): number {
+  let end = index
+  while (line.charAt(end) === '`') end += 1
+  return end - index - (backslashes % 2 === 1 ? 1 : 0)
+}
+
+function hasUnescapedBacktickRun(line: MarkdownLine): boolean {
+  let backslashes = 0
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line.charAt(index)
+    if (character === '`') {
+      if (unescapedBacktickRun(line, index, backslashes) >= 2) return true
+      backslashes = 0
+      continue
+    }
+    backslashes = character === '\\' ? backslashes + 1 : 0
+  }
+  return false
+}
+
+/**
+ * The inline parser closes a code span at the next single backtick, while CommonMark requires a
+ * run of the same length. A span opened by two or more backticks (which the canonical serializer
+ * writes for code containing a backtick) would lose its content and code exclusion.
+ */
+function hasMultiBacktickCodeSpan(markdown: MarkdownSourceText): boolean {
+  let fence: MarkdownFence | null = null
+  for (const line of markdown.split(/\r?\n/u)) {
+    const nextFence = advanceMarkdownFence(line, fence)
+    const insideFence = nextFence !== fence || fence !== null
+    fence = nextFence
+    if (!insideFence && hasUnescapedBacktickRun(line)) return true
+  }
+  return false
 }
 
 function startsHtmlBlock(line: MarkdownLine): boolean {
@@ -139,14 +249,33 @@ function headingBlock(line: MarkdownLine): BlockLike | null {
   }
 }
 
-function quoteBlock(line: MarkdownLine): BlockLike | null {
-  const match = /^[ \t]{0,3}>[ \t]?(.*)$/u.exec(line)
-  if (!match) return null
-  return {
-    type: 'quote',
-    content: parseInline(match[1]),
-    children: [],
+function quoteLineContent(line: MarkdownLine): string | null {
+  const match = QUOTE_LINE_RE.exec(line)
+  return match ? match[1] : null
+}
+
+function isGroupableQuoteContent(content: string): boolean {
+  return content.trim() !== '' && !NESTED_QUOTE_RE.test(content)
+}
+
+/**
+ * Consecutive quote lines form one quote, as they do in BlockNote. Splitting them into one quote
+ * per line would make a later save write a blank line between them and permanently break one
+ * quote into several. A nested marker or an empty quote line ends the run, as before.
+ */
+function parseQuote(state: ParserState, start: LineIndex): ParsedBlockStep | null {
+  const first = quoteLineContent(state.lines.at(start) ?? '')
+  if (first === null) return null
+
+  const lines = [first]
+  let next = start + 1
+  while (isGroupableQuoteContent(first) && next < state.lines.length) {
+    const content = quoteLineContent(state.lines.at(next) ?? '')
+    if (content === null || !isGroupableQuoteContent(content)) break
+    lines.push(content)
+    next += 1
   }
+  return blockStep({ block: { type: 'quote', content: parseInline(lines.join('\n')), children: [] }, next })
 }
 
 function listLine(line: MarkdownLine): ListLine | null {
@@ -379,7 +508,7 @@ function startsBlock(lines: MarkdownLine[], index: LineIndex): boolean {
   const line = lines.at(index) ?? ''
   if (imageBlock(line)) return true
   if (headingBlock(line)) return true
-  if (quoteBlock(line)) return true
+  if (quoteLineContent(line) !== null) return true
   if (listLine(line)) return true
   return FENCE_RE.test(line)
     || THEMATIC_BREAK_RE.test(line)
@@ -398,7 +527,9 @@ function parseMultilineBlock(state: ParserState, index: LineIndex): ParsedBlockS
   if (table || state.fallbackReason) return table ? blockStep({ block: table.block, next: table.next }) : null
 
   const list = parseList(state, index)
-  return list ? { blocks: list.blocks, next: list.next } : null
+  if (list) return { blocks: list.blocks, next: list.next }
+
+  return parseQuote(state, index)
 }
 
 function parseSingleLineBlock({ index, line }: SingleLineParseInput): ParsedBlockStep | null {
@@ -407,9 +538,6 @@ function parseSingleLineBlock({ index, line }: SingleLineParseInput): ParsedBloc
 
   const heading = headingBlock(line)
   if (heading) return blockStep({ block: heading, next: index + 1 })
-
-  const quote = quoteBlock(line)
-  if (quote) return blockStep({ block: quote, next: index + 1 })
 
   return THEMATIC_BREAK_RE.test(line)
     ? blockStep({ block: { type: 'divider', children: [] }, next: index + 1 })
@@ -446,6 +574,21 @@ function parseBlocks(source: FastMarkdownSource): FastMarkdownParseResult {
   const state: ParserState = { fallbackReason: null, lines: source.markdown.split(/\r?\n/u) }
   const blocks: BlockLike[] = []
   let index = 0
+
+  // Checked over the whole source, because a reference can sit on a continuation line that the
+  // block parsers consume without passing it through the per-line check.
+  if (UNESCAPED_CHARACTER_REFERENCE_RE.test(source.markdown)) {
+    state.fallbackReason = 'character-reference'
+    return createParseResult({ blocks, source, startedAt, state })
+  }
+  if (hasPairableIntrawordUnderscore(source.markdown)) {
+    state.fallbackReason = 'intraword-underscore'
+    return createParseResult({ blocks, source, startedAt, state })
+  }
+  if (hasMultiBacktickCodeSpan(source.markdown)) {
+    state.fallbackReason = 'multi-backtick-code'
+    return createParseResult({ blocks, source, startedAt, state })
+  }
 
   while (index < state.lines.length) {
     const line = state.lines.at(index) ?? ''

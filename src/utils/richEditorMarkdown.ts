@@ -25,6 +25,10 @@ import {
 	markdownSourceLineText,
 	splitMarkdownSourceLines,
 } from "./markdownSourceLines";
+import {
+	protectEscapedLiterals,
+	restoreProtectedLiteralsInBlocks,
+} from "./markdownLiteralProtection";
 import { patchMarkdownSourceWithMap } from "./markdownSourcePatch";
 import { preProcessSingleTildeStrikethrough } from "./markdownStrikethrough";
 import { injectMathInBlocks, preProcessMathMarkdown } from "./mathMarkdown";
@@ -72,8 +76,6 @@ interface RichEditorBlockSerializationOptions {
 const EMPTY_CHECKLIST_ITEM_FILLER = "\u200B";
 const EMPTY_CHECKLIST_ITEM_LINE_RE = /^([ \t]*[-*+][ \t]+\[[ xX]\])[ \t]*$/u;
 const BLANK_PARAGRAPH_PLACEHOLDER = "\u200B";
-const BACKSLASH_BEFORE_BRACE_PLACEHOLDER =
-	"\uE000TOLARIA_BACKSLASH_LBRACE\uE001";
 
 interface ParsedBlockquoteSourceLine {
 	content: string;
@@ -122,10 +124,7 @@ export function preProcessRichEditorMarkdown(
 	vaultPath?: VaultPath,
 	notePath?: NotePath,
 ): PreprocessedMarkdown {
-	const withLiteralBackslashes = preserveLiteralBackslashes(markdown);
-	const withDurableBlocks = preProcessDurableEditorMarkdown({
-		markdown: withLiteralBackslashes,
-	});
+	const withDurableBlocks = preProcessDurableEditorMarkdown({ markdown });
 	const withEmptyChecklists = preProcessEmptyChecklistItems(withDurableBlocks);
 	const withBlankQuotes =
 		preProcessBlankBlockquoteParagraphs(withEmptyChecklists);
@@ -137,7 +136,12 @@ export function preProcessRichEditorMarkdown(
 	const withLinkedCode = preProcessLinkedCodeMarkdown(withImages);
 	const withWikilinks = preProcessWikilinks(withLinkedCode);
 	const withMath = preProcessMathMarkdown({ markdown: withWikilinks });
-	return preProcessSingleTildeStrikethrough({ markdown: withMath });
+	const withStrikethrough = preProcessSingleTildeStrikethrough({
+		markdown: withMath,
+	});
+	// Last, so math, wikilinks and the other raw-source readers above see the source exactly as
+	// written; only the parser and the post-parse injectors see the protected form.
+	return protectEscapedLiterals(withStrikethrough);
 }
 
 export function injectRichEditorMarkdownBlocks(
@@ -150,43 +154,8 @@ export function injectRichEditorMarkdownBlocks(
 	const withDurableBlocks = injectDurableEditorMarkdownBlocks(withHighlights);
 	const withCallouts = injectCalloutBlocks(withDurableBlocks);
 	const withBlankParagraphs = injectBlankParagraphBlocks(withCallouts);
-	return restoreLiteralBackslashesInBlocks(withBlankParagraphs);
-}
-
-function preserveLiteralBackslashes(markdown: MarkdownBody): MarkdownBody {
-	return markdown.replace(/\\(?=\{)/gu, BACKSLASH_BEFORE_BRACE_PLACEHOLDER);
-}
-
-function restoreLiteralBackslashesInBlocks(
-	blocks: EditorBlocksSnapshot,
-): EditorBlocksSnapshot {
-	return restoreLiteralBackslashes(blocks) as EditorBlocksSnapshot;
-}
-
-function restoreLiteralBackslashes(value: unknown): unknown {
-	if (typeof value === "string") {
-		return value.replaceAll(BACKSLASH_BEFORE_BRACE_PLACEHOLDER, "\\");
-	}
-	if (Array.isArray(value)) {
-		let changed = false;
-		const restored = value.map((item) => {
-			const next = restoreLiteralBackslashes(item);
-			changed ||= next !== item;
-			return next;
-		});
-		return changed ? restored : value;
-	}
-	if (!isRecord(value)) return value;
-
-	let changed = false;
-	const restored = Object.fromEntries(
-		Object.entries(value).map(([key, item]) => {
-			const next = restoreLiteralBackslashes(item);
-			changed ||= next !== item;
-			return [key, next];
-		}),
-	);
-	return changed ? restored : value;
+	// Last, so the callout and highlight injectors above still saw the protected form.
+	return restoreProtectedLiteralsInBlocks(withBlankParagraphs);
 }
 
 export function hasRichEditorDurableBlocks(
