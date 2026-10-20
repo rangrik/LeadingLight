@@ -1,0 +1,45 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.observation-log",
+  "version": "1.0.0",
+  "name": "Observation log",
+  "description": "Add a short observation to the end of a page you pick.",
+  "capabilities": ["document.append"],
+  "commands": [
+    {
+      "id": "add-observation",
+      "title": "Add an observation",
+      "steps": [
+        {
+          "id": "entry",
+          "op": "collectForm",
+          "fields": [
+            { "id": "what", "kind": "text", "label": "What did you notice?", "required": true },
+            { "id": "detail", "kind": "multilineText", "label": "Details" },
+            {
+              "id": "sort",
+              "kind": "choice",
+              "label": "Kind",
+              "required": true,
+              "options": [
+                { "id": "idea", "label": "Idea" },
+                { "id": "fact", "label": "Fact" },
+                { "id": "feeling", "label": "Feeling" }
+              ]
+            }
+          ]
+        },
+        { "id": "target", "op": "resolveDestination", "policy": "chosenExistingDocument" },
+        {
+          "id": "entryBlocks",
+          "op": "composeDocument",
+          "blocks": [
+            { "type": "heading", "level": 3, "text": [{ "step": "entry", "field": "sort" }, ": ", { "step": "entry", "field": "what" }] },
+            { "type": "quote", "text": [{ "step": "entry", "field": "detail" }] }
+          ]
+        },
+        { "id": "add", "op": "proposeDocument" }
+      ]
+    }
+  ]
+}

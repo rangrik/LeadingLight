@@ -1,0 +1,27 @@
+{
+  "about": "Shared conformance cases for every package validator. Each invalid file yields exactly one diagnostic with this code and JSON Pointer path.",
+  "valid": ["meeting-debrief.json", "passage-commentary.json", "append-observation.json", "quick-note.json"],
+  "invalid": [
+    { "file": "invalid/unknown-nested-key.json", "code": "unknownField", "path": "/commands/0/steps/0/fields/0/placeholder" },
+    { "file": "invalid/folder-path.json", "code": "unknownField", "path": "/commands/0/steps/1/folder" },
+    { "file": "invalid/proto-key.json", "code": "unknownField", "path": "/commands/0/steps/2/blocks/0/__proto__" },
+    { "file": "invalid/duplicate-key.json", "code": "duplicateKey", "path": "/commands/0/steps/1/policy" },
+    { "file": "invalid/escaped-duplicate-key.json", "code": "duplicateKey", "path": "/id" },
+    { "file": "invalid/unsafe-number.json", "code": "invalidNumber", "path": "/commands/0/steps/2/blocks/0/level" },
+    { "file": "invalid/unknown-schema.json", "code": "unsupportedSchema", "path": "/schema" },
+    { "file": "invalid/generic-command-step.json", "code": "unknownOperation", "path": "/commands/0/steps/4/op" },
+    { "file": "invalid/loop-step.json", "code": "unknownOperation", "path": "/commands/0/steps/1/op" },
+    { "file": "invalid/forged-source-block.json", "code": "unsupportedValue", "path": "/commands/0/steps/2/blocks/0/type" },
+    { "file": "invalid/unknown-capability.json", "code": "unknownCapability", "path": "/capabilities/1" },
+    { "file": "invalid/undeclared-capability.json", "code": "undeclaredCapability", "path": "/capabilities" },
+    { "file": "invalid/second-write.json", "code": "stepOrder", "path": "/commands/0/steps/4/op" },
+    { "file": "invalid/associated-without-capture.json", "code": "missingStep", "path": "/commands/0/steps/1/policy" },
+    { "file": "invalid/capture-to-chosen-folder.json", "code": "notAllowed", "path": "/commands/0/steps/1/policy" },
+    { "file": "invalid/unbound-reference.json", "code": "unboundReference", "path": "/commands/0/steps/2/title/0/step" },
+    { "file": "invalid/unbound-field.json", "code": "unboundReference", "path": "/commands/0/steps/2/title/0/field" },
+    { "file": "invalid/forward-reference.json", "code": "forwardReference", "path": "/commands/0/steps/2/blocks/0/text/1/step" },
+    { "file": "invalid/self-reference.json", "code": "forwardReference", "path": "/commands/0/steps/2/blocks/0/ifFilled/step" },
+    { "file": "invalid/boolean-in-text.json", "code": "incompatibleReference", "path": "/commands/0/steps/2/blocks/0/text/1" },
+    { "file": "invalid/optional-in-title.json", "code": "incompatibleReference", "path": "/commands/0/steps/2/title/0" }
+  ]
+}

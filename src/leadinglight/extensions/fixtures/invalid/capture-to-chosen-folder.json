@@ -1,0 +1,25 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.passage-clipping",
+  "version": "1.0.0",
+  "name": "Passage clipping",
+  "description": "Save a selected passage as a new note in a folder you choose.",
+  "capabilities": ["selection.read", "document.create"],
+  "commands": [
+    {
+      "id": "clip",
+      "title": "Clip passage",
+      "steps": [
+        { "id": "passage", "op": "capturePassage" },
+        { "id": "where", "op": "resolveDestination", "policy": "newInChosenFolder" },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": ["Clipping from ", { "step": "passage", "field": "sourceTitle" }],
+          "blocks": [{ "type": "paragraph", "text": ["Clipped for later."] }]
+        },
+        { "id": "save", "op": "proposeDocument" }
+      ]
+    }
+  ]
+}

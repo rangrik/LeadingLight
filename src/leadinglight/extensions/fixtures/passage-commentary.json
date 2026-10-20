@@ -1,0 +1,37 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.passage-commentary",
+  "version": "1.0.0",
+  "name": "Passage commentary",
+  "description": "Keep your thoughts about a highlighted passage in a note linked to its source.",
+  "capabilities": ["selection.read", "association.resolve", "document.create", "document.append", "document.open"],
+  "commands": [
+    {
+      "id": "comment",
+      "title": "Comment on passage",
+      "steps": [
+        { "id": "passage", "op": "capturePassage" },
+        {
+          "id": "reflection",
+          "op": "collectForm",
+          "fields": [
+            { "id": "thought", "kind": "multilineText", "label": "Your thoughts" },
+            { "id": "question", "kind": "text", "label": "A question to come back to" }
+          ]
+        },
+        { "id": "where", "op": "resolveDestination", "policy": "associatedWithSource" },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": ["Commentary on ", { "step": "passage", "field": "sourceTitle" }],
+          "blocks": [
+            { "type": "paragraph", "text": [{ "step": "reflection", "field": "thought" }] },
+            { "type": "list", "style": "bullet", "items": [["Question: ", { "step": "reflection", "field": "question" }]] }
+          ]
+        },
+        { "id": "save", "op": "proposeDocument" },
+        { "id": "open", "op": "openCommittedResult" }
+      ]
+    }
+  ]
+}

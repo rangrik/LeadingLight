@@ -1,0 +1,25 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.quick-note",
+  "version": "1.0.0",
+  "name": "Quick note",
+  "description": "Ask for a topic and create a note in a folder you choose.",
+  "capabilities": ["document.create"],
+  "commands": [
+    {
+      "id": "quick",
+      "title": "Quick note",
+      "steps": [
+        { "id": "answers", "op": "collectForm", "fields": [{ "id": "topic", "kind": "text", "label": "Topic", "required": true }] },
+        { "id": "where", "op": "resolveDestination", "policy": "newInChosenFolder" },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": [{ "step": "answers", "field": "topic" }],
+          "blocks": [{ "type": "heading", "level": 9007199254740995, "text": ["Notes"] }]
+        },
+        { "id": "create", "op": "proposeDocument" }
+      ]
+    }
+  ]
+}
