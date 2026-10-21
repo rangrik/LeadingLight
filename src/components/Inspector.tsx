@@ -25,8 +25,9 @@ import { useInspectorFocusBoundary } from '../hooks/editorFocusOwnership'
 import { useInspectorPropertyActions } from './inspector/useInspectorPropertyActions'
 import type { AppLocale } from '../lib/i18n'
 import { resolveEntry } from '../utils/wikilink'
+import type { FrontmatterValue } from '../utils/frontmatterValue'
 
-export type FrontmatterValue = string | number | boolean | string[] | null
+export type { FrontmatterValue }
 
 /** Opens this exact page; resolves false when it did not open. */
 export type OpenInspectorEntry = (entry: VaultEntry) => Promise<boolean>
