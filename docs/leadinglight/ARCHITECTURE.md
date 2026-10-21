@@ -281,3 +281,39 @@ retain their existing behavior. See ADR 011 for the contract and its limits.
 The disk browser preview explicitly refuses this operation until equivalent filesystem and
 reference guarantees exist. Controlled browser receipts test editor lifecycle separately from
 native filesystem acceptance. No vault content leaves the machine.
+
+## Adapt extension authoring
+
+Adapt is a chat that asks a provider for one E1 extension package, one question, or "not possible".
+It runs only on an explicit Send. Each Send starts a fresh, bounded provider thread carrying:
+
+- the request;
+- the attachments visible in the composer, attached explicitly;
+- the earlier turns shown, whose replies may quote earlier context;
+- the identity of the package being changed;
+- the built-in extension guide.
+
+Nothing else from the vault is sent.
+
+**Every effect goes through E1's trusted path:** validation, the effect-free preview, its single Turn
+on, the run form and undo.
+
+- **Revisions** carry the exact base version and the version that was on when the extension was
+  attached. Activation is a compare-and-set against that recorded value.
+- **Nothing is adopted or edited automatically.**
+- **No package code, JavaScript or HTML runs, and nothing patches the app core.**
+
+**Where it lives.**
+
+- **UI.** `src/leadinglight/adapt/`: transport, controller, candidate checks, dialog and adoption
+  hooks.
+- **Native host.** `src-tauri/src/leadinglight_adapt/`, with 13 fixed commands in
+  `src-tauri/src/commands/adapt.rs`.
+- **Conversations.** Stored per vault under LeadingLight's local app data, outside the vault and
+  outside workspace backups.
+
+**Providers.** Codex is the first provider: a separate local process with a private app `HOME` and
+`CODEX_HOME`, and its own sign-in. Claude is unavailable initially, with no paid fallback.
+
+See [ADR 014](ADR-014-adapt-extension-authoring.md), [the provider notes](adapt-provider.md) and
+[local runtime policy](local-only-runtime.md).

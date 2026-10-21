@@ -26,6 +26,7 @@ mod html_block_protocol;
 pub mod kiro_cli;
 mod kiro_discovery;
 pub mod leadinglight;
+mod leadinglight_adapt;
 mod leadinglight_backup;
 mod leadinglight_extensions;
 mod leadinglight_history;
@@ -430,6 +431,19 @@ macro_rules! app_invoke_handler {
             commands::bind_extension_document,
             commands::submit_document_proposal,
             commands::query_document_proposal,
+            commands::adapt_provider_status,
+            commands::adapt_connect,
+            commands::adapt_cancel_connect,
+            commands::adapt_disconnect,
+            commands::adapt_open_visit,
+            commands::adapt_close_visit,
+            commands::adapt_list_conversations,
+            commands::adapt_new_conversation,
+            commands::adapt_read_conversation,
+            commands::adapt_save_conversation,
+            commands::adapt_delete_conversation,
+            commands::adapt_send,
+            commands::adapt_cancel_turn,
             vault_watcher::start_vault_watcher,
             vault_watcher::stop_vault_watcher
         ]
@@ -465,9 +479,15 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
         app_handle
             .state::<leadinglight_extensions::ExtensionsState>()
             .forget_owner(label);
+        app_handle
+            .state::<leadinglight_adapt::AdaptState>()
+            .forget_owner(label);
     }
 
     if let tauri::RunEvent::Exit = event {
+        app_handle
+            .state::<leadinglight_adapt::AdaptState>()
+            .shutdown();
         let state: tauri::State<'_, desktop_runtime::WsBridgeChild> = app_handle.state();
         desktop_runtime::stop_ws_bridge_on_exit(&state);
     }
@@ -482,7 +502,11 @@ pub fn run() {
         .register_uri_scheme_protocol("tolaria-html-block", html_block_protocol::handle_request)
         .manage(commands::StartupTimingState::default())
         .manage(leadinglight_extensions::ExtensionsState::default())
-        .on_page_load(leadinglight_extensions::on_page_load);
+        .manage(leadinglight_adapt::AdaptState::default())
+        .on_page_load(|webview, payload| {
+            leadinglight_extensions::on_page_load(webview, payload);
+            leadinglight_adapt::on_page_load(webview, payload);
+        });
 
     #[cfg(desktop)]
     let builder = with_desktop_entry_plugins(builder);

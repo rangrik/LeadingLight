@@ -1,3 +1,4 @@
+mod adapt;
 mod ai;
 mod app_icon;
 mod backup;
@@ -20,6 +21,7 @@ mod version;
 
 use std::borrow::Cow;
 
+pub use adapt::*;
 pub use ai::*;
 pub use app_icon::*;
 pub use backup::*;
