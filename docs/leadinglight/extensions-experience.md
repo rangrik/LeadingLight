@@ -55,8 +55,9 @@ then asks whether to stop checking. If the workspace changes, or the extension i
 replaced while the form is open, the form says it can no longer be submitted and keeps your
 answers to copy.
 
-A created note opens in the pane that was active when the form opened. If that is no longer
-possible, the form says where the note was created.
+When the extension asks to open its result, the created note opens in the pane that was active
+when the form opened. If that is no longer possible, or the extension only creates the note,
+the form says where the note was created.
 
 ## What is and isn’t backed up
 
