@@ -21,6 +21,7 @@ export const ADAPT_COMMANDS = {
   listConversations: 'adapt_list_conversations',
   newConversation: 'adapt_new_conversation',
   readConversation: 'adapt_read_conversation',
+  saveConversation: 'adapt_save_conversation',
   deleteConversation: 'adapt_delete_conversation',
   send: 'adapt_send',
   cancelTurn: 'adapt_cancel_turn',
@@ -96,9 +97,16 @@ export type AdaptConnectReply =
 export interface AdaptCancelConnectArgs { provider: AdaptProvider }
 export type AdaptCancelConnectReply = { status: 'cancelled' | 'notConnecting' }
 
-/** Stops every running turn of this provider first (`accountChanged`), then signs out. */
+/**
+ * Closes admission for this provider, cancels every running turn of it (`accountChanged`), then
+ * signs out. While this is in progress every Send for the provider is refused `notConnected`.
+ * `disconnected`: signed out and every turn proven ended. `stopping`: signed out and nothing is
+ * admitted, but some cancelled work is not yet proven ended; ask again to learn when it is.
+ */
 export interface AdaptDisconnectArgs { provider: AdaptProvider }
-export type AdaptDisconnectReply = { status: 'disconnected' } | { status: 'refused'; reason: 'unavailable' | 'failed' }
+export type AdaptDisconnectReply =
+  | { status: 'disconnected' | 'stopping' }
+  | { status: 'refused'; reason: 'unavailable' | 'failed' }
 
 // --- Visits ----------------------------------------------------------------------------------------
 
@@ -113,12 +121,14 @@ export type AdaptOpenVisitReply =
   | { status: 'refused'; reason: 'vaultUnavailable' | 'storageUnavailable' }
 
 /**
- * Sent only after every turn this visit started has stopped (`visitClosed`) and no candidate of it
- * can be admitted. `unknown`: no such visit in this host process. Native also closes a window's
- * visits when it closes or reloads.
+ * Cancels every turn this visit started (`visitClosed`); none of them can admit a candidate after
+ * this call. `closed`: every one is proven ended and the visit is gone. `stopping`: the visit is
+ * closing but some turn is not yet proven ended; call again with the same id until `closed`. A
+ * closing visit answers nothing else: every other command treats it as `unknownVisit`. `unknown`: no
+ * such visit in this host process. Native also closes a window's visits when it closes or reloads.
  */
 export interface AdaptCloseVisitArgs { visitId: string }
-export type AdaptCloseVisitReply = { status: 'closed' | 'unknown' }
+export type AdaptCloseVisitReply = { status: 'closed' | 'stopping' | 'unknown' }
 
 // --- Conversations ---------------------------------------------------------------------------------
 
@@ -194,12 +204,22 @@ export type AdaptEntry =
 export const ADAPT_TURN_PHASES = ['sending', 'working', 'checking', 'stopping'] as const
 export type AdaptTurnPhase = (typeof ADAPT_TURN_PHASES)[number]
 
+/**
+ * Whether what a snapshot shows is in local storage. `saved`: written and synced. `unconfirmed`:
+ * written, but the folder sync failed, so it may not survive a power loss. `unsaved`: some entry
+ * exists only in memory because the local write failed; it is lost if LeadingLight quits. Never show
+ * the last two as saved; offer `saveConversation`, which is local only.
+ */
+export const ADAPT_STORAGE_STATES = ['saved', 'unconfirmed', 'unsaved'] as const
+export type AdaptStorageState = (typeof ADAPT_STORAGE_STATES)[number]
+
 export interface AdaptConversation {
   conversationId: string
   revision: number
   /** Oldest first. Every request is followed by exactly one outcome once its turn ends. */
   entries: AdaptEntry[]
   turn: { turnId: string; phase: AdaptTurnPhase } | null
+  storage: AdaptStorageState
 }
 
 /** `knownRevision`: the revision the UI already shows; the same one answers `unchanged`. */
@@ -208,6 +228,13 @@ export type AdaptReadConversationReply =
   | { status: 'ok'; conversation: AdaptConversation }
   | { status: 'unchanged'; revision: number }
   | { status: 'unknownVisit' | 'unknownConversation' }
+
+/**
+ * Writes the conversation as shown to local storage again, and answers how that went. Local only:
+ * it never contacts a provider and never repeats a turn.
+ */
+export interface AdaptSaveConversationArgs { visitId: string; conversationId: string }
+export type AdaptSaveConversationReply = { status: AdaptStorageState | 'unknownVisit' | 'unknownConversation' }
 
 // --- Turns -----------------------------------------------------------------------------------------
 
@@ -268,6 +295,7 @@ export interface AdaptApi {
   listConversations(args: AdaptListConversationsArgs): Promise<AdaptListConversationsReply | null>
   newConversation(args: AdaptNewConversationArgs): Promise<AdaptNewConversationReply | null>
   readConversation(args: AdaptReadConversationArgs): Promise<AdaptReadConversationReply | null>
+  saveConversation(args: AdaptSaveConversationArgs): Promise<AdaptSaveConversationReply | null>
   deleteConversation(args: AdaptDeleteConversationArgs): Promise<AdaptDeleteConversationReply | null>
   send(args: AdaptSendArgs): Promise<AdaptSendReply | null>
   cancelTurn(args: AdaptCancelTurnArgs): Promise<AdaptCancelTurnReply | null>
@@ -414,8 +442,8 @@ export const parseCancelConnectReply = (value: unknown): AdaptCancelConnectReply
 
 export function parseDisconnectReply(value: unknown): AdaptDisconnectReply | null {
   if (!isFields(value)) return null
-  if (has(value, 'status') === 'disconnected') return hasKeys(value, ['status']) ? { status: 'disconnected' } : null
-  return refusal(value, ['unavailable', 'failed'] as const)
+  if (has(value, 'status') === 'refused') return refusal(value, ['unavailable', 'failed'] as const)
+  return statusOnly(value, ['disconnected', 'stopping'] as const)
 }
 
 export function parseOpenVisitReply(value: unknown): AdaptOpenVisitReply | null {
@@ -425,7 +453,8 @@ export function parseOpenVisitReply(value: unknown): AdaptOpenVisitReply | null 
   return refusal(value, ['vaultUnavailable', 'storageUnavailable'] as const)
 }
 
-export const parseCloseVisitReply = (value: unknown): AdaptCloseVisitReply | null => statusOnly(value, ['closed', 'unknown'] as const)
+export const parseCloseVisitReply = (value: unknown): AdaptCloseVisitReply | null =>
+  statusOnly(value, ['closed', 'stopping', 'unknown'] as const)
 
 const SUMMARY_KEYS = ['conversationId', 'updatedAt', 'title', 'turns', 'running']
 
@@ -583,9 +612,9 @@ function isOrdered(entries: AdaptEntry[], turn: AdaptConversation['turn']): bool
 }
 
 function parseConversation(value: unknown): AdaptConversation | null {
-  if (!isFields(value) || !hasKeys(value, ['conversationId', 'revision', 'entries', 'turn'])) return null
-  const { conversationId, revision, entries, turn } = value
-  if (!isOpaqueToken(conversationId) || !isRevision(revision) || !Array.isArray(entries)) return null
+  if (!isFields(value) || !hasKeys(value, ['conversationId', 'revision', 'entries', 'turn', 'storage'])) return null
+  const { conversationId, revision, entries, turn, storage } = value
+  if (!isOpaqueToken(conversationId) || !isRevision(revision) || !Array.isArray(entries) || !oneOf(ADAPT_STORAGE_STATES, storage)) return null
   if (entries.length > ADAPT_LIMITS.turnsPerConversation * 2) return null
   let running: AdaptConversation['turn'] = null
   if (turn !== null) {
@@ -596,7 +625,7 @@ function parseConversation(value: unknown): AdaptConversation | null {
   }
   const parsed = entries.map(parseEntry)
   if (!parsed.every(entry => entry !== null) || !isOrdered(parsed as AdaptEntry[], running)) return null
-  return { conversationId, revision, entries: parsed as AdaptEntry[], turn: running }
+  return { conversationId, revision, entries: parsed as AdaptEntry[], turn: running, storage }
 }
 
 /** An answer about another conversation is no answer. */
@@ -627,3 +656,6 @@ export function parseSendReply(value: unknown, args: AdaptSendArgs): AdaptSendRe
 
 export const parseCancelTurnReply = (value: unknown): AdaptCancelTurnReply | null =>
   statusOnly(value, ['stopped', 'stopping', 'finished', 'unknownVisit', 'unknownConversation'] as const)
+
+export const parseSaveConversationReply = (value: unknown): AdaptSaveConversationReply | null =>
+  statusOnly(value, [...ADAPT_STORAGE_STATES, 'unknownVisit', 'unknownConversation'] as const)

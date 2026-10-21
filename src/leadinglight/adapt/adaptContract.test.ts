@@ -4,7 +4,10 @@ import {
   checkSendArgs,
   parseAdaptReply,
   parseCancelTurnReply,
+  parseCloseVisitReply,
+  parseDisconnectReply,
   parseListConversationsReply,
+  parseSaveConversationReply,
   parseNewConversationReply,
   parseReadConversationReply,
   parseSendReply,
@@ -46,8 +49,8 @@ const reply = (turnId: string) => ({
 })
 
 const READ: AdaptReadConversationArgs = { visitId: 'visit-1', conversationId: 'conversation-1', knownRevision: null }
-const conversation = (entries: unknown[], turn: unknown = null) => ({
-  status: 'ok', conversation: { conversationId: 'conversation-1', revision: 7, entries, turn },
+const conversation = (entries: unknown[], turn: unknown = null, storage: unknown = 'saved') => ({
+  status: 'ok', conversation: { conversationId: 'conversation-1', revision: 7, entries, turn, storage },
 })
 
 describe('what a Send may carry', () => {
@@ -120,8 +123,19 @@ describe('reading a conversation snapshot', () => {
     }
   })
 
+  it('says whether what it shows is saved locally', () => {
+    const shown = [request(TURN_1), reply(TURN_1)]
+    for (const storage of ['saved', 'unconfirmed', 'unsaved'] as const) {
+      const parsed = parseReadConversationReply(conversation(shown, null, storage), READ)
+      expect(parsed?.status === 'ok' && parsed.conversation.storage).toBe(storage)
+    }
+    expect(parseReadConversationReply(conversation(shown, null, 'probably'), READ)).toBeNull()
+    const withoutStorage = { status: 'ok', conversation: { conversationId: 'conversation-1', revision: 7, entries: shown, turn: null } }
+    expect(parseReadConversationReply(withoutStorage, READ)).toBeNull()
+  })
+
   it('answers only for the conversation and revision asked about', () => {
-    const other = { status: 'ok', conversation: { conversationId: 'conversation-2', revision: 7, entries: [], turn: null } }
+    const other = { status: 'ok', conversation: { conversationId: 'conversation-2', revision: 7, entries: [], turn: null, storage: 'saved' } }
     expect(parseReadConversationReply(other, READ)).toBeNull()
     expect(parseReadConversationReply({ status: 'unchanged', revision: 7 }, { ...READ, knownRevision: 7 })).toEqual({ status: 'unchanged', revision: 7 })
     expect(parseReadConversationReply({ status: 'unchanged', revision: 7 }, { ...READ, knownRevision: 6 })).toBeNull()
@@ -172,6 +186,21 @@ describe('reading turn replies', () => {
   it('keeps cancel outcomes distinct', () => {
     expect(parseCancelTurnReply({ status: 'stopping' })).toEqual({ status: 'stopping' })
     expect(parseCancelTurnReply({ status: 'stopped', confirmed: true })).toBeNull()
+  })
+
+  it('keeps unproven endings distinct from finished ones', () => {
+    expect(parseCloseVisitReply({ status: 'stopping' })).toEqual({ status: 'stopping' })
+    expect(parseCloseVisitReply({ status: 'closed' })).toEqual({ status: 'closed' })
+    expect(parseCloseVisitReply({ status: 'closing' })).toBeNull()
+    expect(parseDisconnectReply({ status: 'stopping' })).toEqual({ status: 'stopping' })
+    expect(parseDisconnectReply({ status: 'refused', reason: 'failed' })).toEqual({ status: 'refused', reason: 'failed' })
+    expect(parseDisconnectReply({ status: 'stopping', reason: 'failed' })).toBeNull()
+  })
+
+  it('reads a local save as local storage states only', () => {
+    expect(parseSaveConversationReply({ status: 'unsaved' })).toEqual({ status: 'unsaved' })
+    expect(parseSaveConversationReply({ status: 'unknownConversation' })).toEqual({ status: 'unknownConversation' })
+    expect(parseSaveConversationReply({ status: 'admitted' })).toBeNull()
   })
 
   it('says plainly when a vault has no room for another conversation', () => {
