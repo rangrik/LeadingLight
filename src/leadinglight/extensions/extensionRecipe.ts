@@ -9,9 +9,11 @@ import {
   type DestinationPolicy, type DocumentBlock, type DocumentPreview, type DocumentProposal, type DocumentWrite,
   type ExtensionCommand, type ExtensionPackage, type FormAnswers, type FormField, type InputProblem, type InputProblemCode,
   type PackageReview, type PassageCapture, type RecipeStep, type ReviewDecision, type RunEffects, type RunInput,
-  type RunNavigation, type RunOutcome, type RunRefusal, type RunStart, type StepOperation, type TextPart, type WriteImpact,
+  type RunNavigation, type RunOutcome, type RunRefusal, type RunStart, type StepOperation, type TextPart, type WebPageCapture,
+  type WriteImpact,
 } from './extensionContract'
 import { commandCapabilities, isValidatedPackage, utf8Bytes } from './extensionSchema'
+import { readWebPageCapture } from './extensionWebPage'
 
 const LIMITS = EXTENSION_LIMITS
 
@@ -35,6 +37,7 @@ function reviewCommand(command: ExtensionCommand, host: readonly Capability[]): 
     id: command.id,
     title: command.title,
     placement: stepOf(command, 'capturePassage') ? 'selectionAction' : 'palette',
+    network: stepOf(command, 'captureWebPage') ? 'explicitWebPage' : 'none',
     write: WRITE_IMPACT[stepOf(command, 'resolveDestination')?.policy ?? 'newInChosenFolder'],
     opensResult: stepOf(command, 'openCommittedResult') !== null,
     questions: stepOf(command, 'collectForm')?.fields.length ?? 0,
@@ -93,6 +96,24 @@ function captureOf(command: ExtensionCommand, capture: PassageCapture | null, pr
   }
   values.set(valueKey(step.id, 'sourceTitle'), { text: capture.sourceTitle, filled: true })
   return capture
+}
+
+/**
+ * The page a command may use: required with a captureWebPage step, refused without one. Only a value
+ * the strict reader accepts counts, so no other capture can stand in for a page.
+ */
+function webPageOf(command: ExtensionCommand, value: WebPageCapture | null, problems: InputProblem[], values: Values): WebPageCapture | null {
+  const step = stepOf(command, 'captureWebPage')
+  const page = value === null ? null : readWebPageCapture(value)
+  if (step === null || page === null) {
+    if (step !== null || value !== null) problems.push({ code: 'invalidCapture', field: null })
+    return null
+  }
+  values.set(valueKey(step.id, 'pageTitle'), { text: page.pageTitle, filled: true })
+  values.set(valueKey(step.id, 'pageUrl'), { text: page.pageUrl, filled: true })
+  values.set(valueKey(step.id, 'siteName'), { text: page.siteName, filled: true })
+  values.set(valueKey(step.id, 'byline'), page.byline === null ? EMPTY : { text: page.byline, filled: true })
+  return page
 }
 
 function answerOf(field: FormField, value: AnswerValue | undefined): { value: Resolved; problem: InputProblemCode | null } {
@@ -175,11 +196,18 @@ function blockOf(template: Extract<RecipeStep, { op: 'composeDocument' }>['block
   return template.type === 'heading' ? { type: 'heading', level: template.level, text } : { type: template.type, text }
 }
 
-const textsOf = (block: DocumentBlock): readonly string[] =>
-  block.type === 'list' ? block.items : [block.type === 'source' ? block.quote : block.text]
+/** The page block has no text of its own here: its body is the host's, bounded by the converter. */
+function textsOf(block: DocumentBlock): readonly string[] {
+  if (block.type === 'list') return block.items
+  if (block.type === 'webArticle') return []
+  return [block.type === 'source' ? block.quote : block.text]
+}
 
 /** Null once the expanded text passes the document limit; composing stops there. */
-function compose(command: ExtensionCommand, values: Values, capture: PassageCapture | null, write: DocumentWrite | null): ComposedDocument | null {
+function compose(
+  command: ExtensionCommand, values: Values, host: { capture: PassageCapture | null; webPage: WebPageCapture | null }, write: DocumentWrite | null,
+): ComposedDocument | null {
+  const { capture, webPage } = host
   const step = stepOf(command, 'composeDocument')
   if (!step) return null
   const title = write?.mode === 'append' || step.title === null ? null : titleText(step.title, values)
@@ -193,6 +221,7 @@ function compose(command: ExtensionCommand, values: Values, capture: PassageCapt
   }
   if (textBytes > LIMITS.documentTextBytes) return null
   if (capture && !place({ type: 'source', passage: capture.passage, quote: capture.quote })) return null
+  if (webPage && !place({ type: 'webArticle', page: webPage.page })) return null
   for (const template of step.blocks) if (!place(blockOf(template, values))) return null
   return { title, blocks, textBytes }
 }
@@ -202,9 +231,10 @@ export function previewDocument(command: ExtensionCommand, input: RunInput): Doc
   const problems: InputProblem[] = []
   const values: Values = new Map()
   const capture = captureOf(command, input.capture, problems, values)
+  const webPage = webPageOf(command, input.webPage ?? null, problems, values)
   answersOf(command, input.answers ?? {}, problems, values)
   const write = writeOf(command, input.destination, problems)
-  const document = compose(command, values, capture, write)
+  const document = compose(command, values, { capture, webPage }, write)
   if (document === null) problems.push({ code: 'outputTooLarge', field: null })
   return { document, write, problems }
 }
@@ -287,7 +317,8 @@ export async function runExtensionCommand(start: RunStart, effects: RunEffects):
   if (decision.action === 'cancel') return { status: 'cancelled', answers: null }
   const { answers } = decision
 
-  const prepared = prepareProposal(command, { runId, operationId }, { capture, answers, destination: decision.destination })
+  // A fetched page arrives with the decision: it is fetched inside the review, never before it.
+  const prepared = prepareProposal(command, { runId, operationId }, { capture, answers, destination: decision.destination, webPage: decision.webPage ?? null })
   if (prepared.status === 'invalid') return refused('invalidInput', { problems: prepared.problems, answers })
   const receipt = await commitOnce(effects, prepared.proposal)
   if (receipt.status === 'uncertain') return { status: 'uncertain', operationId, answers }

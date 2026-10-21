@@ -9,7 +9,7 @@
 import { isMap, isScalar, isSeq, parseDocument } from 'yaml'
 import {
   BLOCK_TYPES, CAPABILITIES, DESTINATION_POLICIES, EXTENSION_LIMITS, EXTENSION_SCHEMA, FIELD_KINDS, HEADING_LEVELS,
-  LIST_STYLES, PASSAGE_FIELDS, STEP_OPERATIONS,
+  LIST_STYLES, PASSAGE_FIELDS, STEP_OPERATIONS, WEB_PAGE_FIELDS,
   type BlockTemplate, type BlockType, type Capability, type ChoiceOption, type DestinationPolicy, type DiagnosticCode,
   type ExtensionCommand, type ExtensionDiagnostic, type ExtensionPackage, type FieldKind, type FieldRef, type FormField,
   type PackageValidation, type RecipeStep, type StepOperation, type TextPart,
@@ -126,7 +126,7 @@ function visitTokens(report: Report, node: unknown, path: string) {
       visitTokens(report, pair.value, at)
     }
   } else if (isSeq(node)) {
-    node.items.forEach((item, index) => visitTokens(report, item, pointer(path, index)))
+    node.items.forEach((item, index) => { visitTokens(report, item, pointer(path, index)) })
   } else if (isScalar(node) && typeof node.value === 'number') {
     const token = node.source ?? ''
     if (!PLAIN_INTEGER.test(token) || !Number.isSafeInteger(node.value)) {
@@ -307,7 +307,8 @@ const BLOCK_SPECS: Record<BlockType, Spec> = {
 }
 
 function blockAt(report: Report, value: unknown, path: string): BlockTemplate | null {
-  const hint = ' The host adds the source block itself.'
+  const forgesPage = isFields(value) && own(value, 'type') === 'webArticle'
+  const hint = forgesPage ? ' The host adds the web page block itself.' : ' The host adds the source block itself.'
   const variant = variantOf(report, value, path, 'type', BLOCK_TYPES, 'unsupportedValue', 'A block', hint)
   if (!variant) return null
   const { fields, tag: type } = variant
@@ -329,6 +330,8 @@ function blockAt(report: Report, value: unknown, path: string): BlockTemplate | 
 
 const STEP_SPECS: Record<StepOperation, Spec> = {
   capturePassage: spec(['id', 'op']),
+  // No address, header, method or option: the person enters the address in host UI.
+  captureWebPage: spec(['id', 'op']),
   collectForm: spec(['id', 'op', 'fields']),
   resolveDestination: spec(['id', 'op', 'policy']),
   composeDocument: spec(['id', 'op', 'blocks'], ['title']),
@@ -378,6 +381,7 @@ function producersOf(command: ExtensionCommand): Map<string, Producer> {
   command.steps.forEach((step, index) => {
     const outputs = new Map<string, Output>()
     if (step.op === 'capturePassage') for (const name of PASSAGE_FIELDS) outputs.set(name, { shape: 'line', always: true })
+    if (step.op === 'captureWebPage') for (const name of WEB_PAGE_FIELDS) outputs.set(name, { shape: 'line', always: name !== 'byline' })
     if (step.op === 'collectForm') for (const field of step.fields) outputs.set(field.id, outputOf(field))
     producers.set(step.id, { index, op: step.op, outputs })
   })
@@ -402,6 +406,9 @@ function checkRef(report: Report, producers: Map<string, Producer>, composeIndex
     return add(report, 'incompatibleReference', path, `"${ref.field}" can hold several lines; use it in a paragraph or quote, not a title, heading or list item.`)
   }
   if (use === 'title' && !output.always) {
+    if (producer.op === 'captureWebPage') {
+      return add(report, 'incompatibleReference', path, `A page's "${ref.field}" is not always known; use it in a heading, paragraph or list, not the title.`)
+    }
     add(report, 'incompatibleReference', path, `The title may use only answers that are always filled; make "${ref.field}" required or leave it out of the title.`)
   }
 }
@@ -419,23 +426,34 @@ function checkReferences(report: Report, command: ExtensionCommand, path: string
   compose.blocks.forEach((block, index) => {
     const blockPath = pointer(pointer(at, 'blocks'), index)
     if (block.ifFilled) checkRef(report, producers, composeIndex, block.ifFilled, pointer(blockPath, 'ifFilled'), 'condition')
-    if (block.type === 'list') block.items.forEach((item, itemIndex) => parts(item, pointer(pointer(blockPath, 'items'), itemIndex), 'line'))
+    if (block.type === 'list') block.items.forEach((item, itemIndex) => { parts(item, pointer(pointer(blockPath, 'items'), itemIndex), 'line') })
     else parts(block.text, pointer(blockPath, 'text'), block.type === 'heading' ? 'line' : 'lines')
   })
 }
 
 const REQUIRED_STEPS: readonly StepOperation[] = ['resolveDestination', 'composeDocument', 'proposeDocument']
 
+/** The order as this command would read it: with the one capture step it uses, or the passage one. */
+function orderFor(command: ExtensionCommand): string {
+  const web = command.steps.some(step => step.op === 'captureWebPage')
+  return STEP_OPERATIONS.filter(op => op !== (web ? 'capturePassage' : 'captureWebPage')).join(', ')
+}
+
 function checkPipeline(report: Report, command: ExtensionCommand, path: string) {
   const stepsPath = pointer(path, 'steps')
+  const before = report.count
   let last = -1
   command.steps.forEach((step, index) => {
     const rank = STEP_OPERATIONS.indexOf(step.op)
     if (rank <= last) {
-      add(report, 'stepOrder', pointer(pointer(stepsPath, index), 'op'), `Steps run in the order ${STEP_OPERATIONS.join(', ')}, each at most once; this ${step.op} is out of place.`)
+      add(report, 'stepOrder', pointer(pointer(stepsPath, index), 'op'), `Steps run in the order ${orderFor(command)}, each at most once; this ${step.op} is out of place.`)
     }
     last = Math.max(last, rank)
   })
+  const webIndex = command.steps.findIndex(step => step.op === 'captureWebPage')
+  if (report.count === before && webIndex !== -1 && command.steps.some(step => step.op === 'capturePassage')) {
+    add(report, 'notAllowed', pointer(pointer(stepsPath, webIndex), 'op'), 'A command captures either a passage or a web page, not both; keep one of the two steps.')
+  }
   for (const op of REQUIRED_STEPS) {
     if (!command.steps.some(step => step.op === op)) add(report, 'missingStep', stepsPath, `Command "${command.id}" needs a ${op} step.`)
   }
@@ -450,6 +468,11 @@ function checkDestination(report: Report, command: ExtensionCommand, path: strin
   if (destination?.op !== 'resolveDestination' || compose?.op !== 'composeDocument') return
   const captures = command.steps.some(step => step.op === 'capturePassage')
   const policyPath = pointer(at(destinationIndex), 'policy')
+  // A fetched page is only ever a new note; it never adds to, or associates with, an existing one.
+  if (command.steps.some(step => step.op === 'captureWebPage') && destination.policy !== 'newInChosenFolder') {
+    add(report, 'notAllowed', policyPath, 'A web page is saved only as a new note in a folder the person chooses; use newInChosenFolder.')
+    return
+  }
   if (destination.policy === 'associatedWithSource' && !captures) add(report, 'missingStep', policyPath, 'associatedWithSource needs a capturePassage step first.')
   // A capture is association evidence; format 1 defines no meaning for it in other notes.
   if (destination.policy !== 'associatedWithSource' && captures) {
@@ -481,6 +504,7 @@ export function commandCapabilities(command: ExtensionCommand): Capability[] {
   const destination = command.steps.find(step => step.op === 'resolveDestination')
   for (const step of command.steps) {
     if (step.op === 'capturePassage') needs.add('selection.read')
+    if (step.op === 'captureWebPage') needs.add('web.capture')
     if (step.op === 'resolveDestination' && step.policy === 'associatedWithSource') needs.add('association.resolve')
     if (step.op === 'proposeDocument' && destination?.op === 'resolveDestination') for (const write of WRITES[destination.policy]) needs.add(write)
     if (step.op === 'openCommittedResult') needs.add('document.open')

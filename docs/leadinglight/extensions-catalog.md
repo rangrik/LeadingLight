@@ -10,10 +10,10 @@ is `src/leadinglight/extensions/extensionContract.ts`. Shared examples and confo
 
 ## What recipes can and cannot do
 
-A recipe can ask a few questions, capture the passage you selected, pick a destination you choose,
-lay out headings, paragraphs, quotes and lists from literal text and your answers, propose one note to
-create or add to, and open it afterwards. A different package with the same steps is a materially
-different workflow, with no app rebuild.
+A recipe can ask a few questions, capture the passage you selected or a web page you enter and fetch,
+pick a destination you choose, lay out headings, paragraphs, quotes and lists from literal text and
+your answers, propose one note to create or add to, and open it afterwards. A different package with
+the same steps is a materially different workflow, with no app rebuild.
 
 Recipes cannot:
 
@@ -22,7 +22,9 @@ Recipes cannot:
 - **Arrange the workspace.** No opening particular pages in panes, layouts or other app commands.
 - Run scripts, expressions, regular expressions or templates; include raw Markdown, HTML, CSS, images
   or front matter; name files or folders; read notes you did not choose; contact the network or an
-  AI provider; start in the background.
+  AI provider; start in the background. A website recipe does not contact the network either: it
+  names no address, and only LeadingLight fetches the one page the person enters, when they choose
+  Fetch (see "Saving a web page").
 
 When a request needs one of these, say so and offer the nearest recipe instead.
 
@@ -53,7 +55,8 @@ Ids (`command`, `step`, `field`, `option`) start with a lowercase letter and use
 hyphens, at most 40 characters.
 
 A command is `{ "id", "title", "steps" }`. `title` is the command's name in menus and its dialog.
-A command that captures a passage is offered for a selection; every command is also in the command palette.
+A command that captures a passage is offered for a selection; a command that saves a web page opens
+with an address field; every command is also in the command palette.
 
 ## Steps
 
@@ -63,13 +66,15 @@ operations.
 | Order | `op` | Required | Other fields | Produces |
 |---|---|---|---|---|
 | 1 | `capturePassage` | no | none | `sourceTitle`; the host keeps the passage itself |
+| 1 | `captureWebPage` | no | none | `pageTitle`, `pageUrl`, `siteName`, `byline`; the host keeps the page itself |
 | 2 | `collectForm` | no | `fields` | one value per field |
 | 3 | `resolveDestination` | yes | `policy` | nothing to refer to |
 | 4 | `composeDocument` | yes | `blocks`, `title` | nothing to refer to |
 | 5 | `proposeDocument` | yes | none | one create or append, shown before you confirm |
 | 6 | `openCommittedResult` | no | none | opens the written note |
 
-Every step also has an `id`, unique in its command.
+Every step also has an `id`, unique in its command. A command uses at most one capture step:
+`capturePassage` or `captureWebPage`, never both (`notAllowed`).
 
 ### Destination policies
 
@@ -83,6 +88,21 @@ Every step also has an `id`, unique in its command.
 note linked to its source. Sending it to an arbitrary chosen folder or page would silently make that note
 look associated, and format 1 defines no other meaning for it, so such a package is refused
 (`notAllowed`).
+
+`captureWebPage` is allowed only with `newInChosenFolder`: a saved page is always a new note, never
+added to an existing page or associated with one (`notAllowed`).
+
+### Page values
+
+`captureWebPage` offers four values, each one line of plain text, filled by LeadingLight from the page
+the person fetched. The page's text is not among them.
+
+| Field | Value |
+|---|---|
+| `pageTitle` | the page's title, as the person may have edited it in the dialog; the site's host name when blank |
+| `pageUrl` | the page's final address |
+| `siteName` | the site's name, or its host name |
+| `byline` | the author line, only when the page has one |
 
 ### Form fields
 
@@ -107,17 +127,18 @@ An object part refers to a value produced by an earlier step:
 
 | Used in | May refer to |
 |---|---|
-| `title` | `sourceTitle`, and `text` or `choice` fields that are `required` |
-| heading, list item | `sourceTitle`, `text`, `choice` |
-| paragraph, quote | `sourceTitle`, `text`, `multilineText`, `choice` |
-| `ifFilled` | any field, including `boolean` |
+| `title` | `sourceTitle`; `pageTitle`, `pageUrl`, `siteName`; `text` or `choice` fields that are `required` |
+| heading, list item | `sourceTitle`, any page value, `text`, `choice` |
+| paragraph, quote | `sourceTitle`, any page value, `text`, `multilineText`, `choice` |
+| `ifFilled` | any field, including `boolean` and `byline` |
 
 References must name an earlier step and one of the values it produces. They are not paths,
 expressions or templates.
 
 **Empty answers.** A block, or one list item, that refers to an unanswered field is left out. A list with
 no items left is left out. `ifFilled` keeps a block only when that field is answered (for `boolean`,
-answered yes). These fixed rules are the only conditions.
+answered yes). A page's `byline` counts as unanswered when the page has none. These fixed rules are the
+only conditions.
 
 ## Blocks
 
@@ -144,6 +165,11 @@ association handling. It is not a header copied into every note:
 The person chooses where it goes in LeadingLight's own dialog: the one linked note, one of several
 linked notes, or a new separate note (numbered). LeadingLight never picks among several silently.
 
+When a command saves a web page, LeadingLight likewise places its own page block first, and your
+blocks follow it. A package cannot write, move or remove it, and a block of type `webArticle` is refused
+(`unsupportedValue`). The page block is the whole saved page with where it came from; no reference can
+read its text.
+
 ## Capabilities
 
 | Capability | Needed when |
@@ -153,6 +179,7 @@ linked notes, or a new separate note (numbered). LeadingLight never picks among 
 | `document.create` | `proposeDocument` with `newInChosenFolder` or `associatedWithSource` |
 | `document.append` | `proposeDocument` with `chosenExistingDocument` or `associatedWithSource` |
 | `document.open` | a command has `openCommittedResult` |
+| `web.capture` | a command has `captureWebPage` |
 
 A valid package can still be unavailable on this version of LeadingLight. Turning it on stays blocked,
 and the reason is shown, until every capability it lists is supported. This version performs all five
@@ -160,6 +187,10 @@ for commands that capture a passage: the selected passage is read when the perso
 is found from its Source link, and it is added to or created beside the source. Adding to a page the
 person picks (`chosenExistingDocument`) still needs a page chooser this version does not have, so such
 a package stays unavailable and says it needs adding to an existing page.
+
+`web.capture` is performed only by a version of LeadingLight that ships website capture. On any other
+version a website package is still valid, but it stays unavailable and says it needs website capture;
+it never claims to work. Turning on a package never fetches anything.
 
 ## Strict reading and limits
 
@@ -178,12 +209,14 @@ refused when:
 |---|---|
 | Package | 128 KiB (UTF-8), nesting depth 12 |
 | Commands | 8 |
-| Steps per command | 6, one of each operation |
+| Steps per command | 6, one of each operation, and at most one capture step |
 | Form fields | 16; choice options 12 |
 | Blocks per document | 48; list items 24; parts per text 12 |
 | Literal text part | 1000 bytes; names, titles and labels 200 bytes; description 1000 bytes |
 | Answers | one line 1000 bytes; several lines 64 KiB; captured quote 64 KiB |
 | Composed note text, after references are filled in | 256 KiB |
+| Page values a website step offers | title, site name and author 1000 bytes each; address 2048 bytes |
+| Saved web page, made by LeadingLight | 768 KiB; with your blocks, the whole note at most 1 MiB |
 
 ## Diagnostics
 
@@ -202,13 +235,13 @@ then shape, then meaning, so one mistake usually gives one diagnostic. At most 3
 | `unsupportedSchema` | not `leadinglight.extension/1` |
 | `unknownOperation`, `unknownCapability`, `unsupportedValue` | a step `op`, capability or other choice is not in the lists above |
 | `duplicateId` | an id or capability is used twice |
-| `stepOrder`, `missingStep`, `notAllowed` | steps are out of order or missing, a title is given where none is used, or a passage is captured for a note that is not associated with its source |
+| `stepOrder`, `missingStep`, `notAllowed` | steps are out of order or missing, a title is given where none is used, a passage is captured for a note that is not associated with its source, a command has two capture steps, or a web page would go anywhere but a new note |
 | `unboundReference`, `forwardReference`, `incompatibleReference` | a reference names nothing, names a later step, or is used where its value cannot go |
 | `undeclaredCapability`, `unusedCapability` | `capabilities` does not match what the commands use |
 
 ## Examples
 
-Three examples share the same steps and differ only in data. Their full text is in `fixtures/`.
+Four examples share the same steps and differ only in data. Their full text is in `fixtures/`.
 
 **Meeting debrief** (`meeting-debrief.json`): a form, a folder you choose, a new structured note,
 opened afterwards. Works now.
@@ -248,16 +281,86 @@ palette, and opens the note beside the source. A copy with your own fields or bl
 **Observation log** (`append-observation.json`): ask what you noticed and add a heading and quote to the
 end of a page you pick. Valid, but unavailable in this version: there is no page chooser yet.
 
+**Save from website** (`website-capture.json`): fetch a page the person enters, ask why they saved it,
+and create a note in a folder they choose, with the page first and the answer after it. LeadingLight's
+own copy is `leadinglight.website-capture`; your own version uses a `local.` id, such as
+`local.website-capture`. Available only where website capture is (see Capabilities).
+
+```json
+{
+  "id": "save-page",
+  "title": "Save from website",
+  "steps": [
+    { "id": "page", "op": "captureWebPage" },
+    { "id": "notes", "op": "collectForm", "fields": [
+      { "id": "why", "kind": "multilineText", "label": "Why I saved this" }
+    ] },
+    { "id": "where", "op": "resolveDestination", "policy": "newInChosenFolder" },
+    { "id": "note", "op": "composeDocument",
+      "title": [{ "step": "page", "field": "pageTitle" }],
+      "blocks": [
+        { "type": "heading", "level": 2, "text": ["My notes"], "ifFilled": { "step": "notes", "field": "why" } },
+        { "type": "paragraph", "text": [{ "step": "notes", "field": "why" }] }
+      ] },
+    { "id": "save", "op": "proposeDocument" },
+    { "id": "open", "op": "openCommittedResult" }
+  ]
+}
+```
+
+## Saving a web page
+
+How LeadingLight's website capture is designed to work. Whether this version performs it is shown in
+each package's review (see Capabilities); nothing here makes a package available.
+
+**A recipe can change:**
+
+- the command's title and the package's name and description;
+- the questions, such as "Why I saved this" or a choice of topic, each optional or required;
+- the note title, from `pageTitle`, `pageUrl`, `siteName` and required answers, such as
+  `["Read: ", { "step": "page", "field": "pageTitle" }]`;
+- headings, paragraphs, quotes and lists after the page, from literal text, answers and page values,
+  with `ifFilled`;
+- whether the note opens afterwards.
+
+**LeadingLight always does itself, and no package can change:**
+
+- **The address and the request.** The person types the address and chooses Fetch in LeadingLight's
+  dialog. Nothing is fetched on paste, on opening the dialog, by validation, preview or turning a package
+  on, or ever again later. Only public websites are fetched, never this computer or a private network,
+  with one plain request: no cookies, sign-in, scripts, images or other files.
+- **The page.** LeadingLight turns it into Markdown and keeps its text literally. Images stay links and
+  are never downloaded, nothing from the page runs, and a page whose text can't be kept exactly is
+  refused, never cut short or filled in.
+- **Where it came from.** The page block, its "Saved from" line and the provenance in front matter
+  (`source`, `captured`, and when known `author`, `site` and `published`, plus one hidden record). Editing
+  the title in the dialog never changes them.
+- **Save link only.** When the page can't be read, the person may save a note with the address and a hint
+  to paste the text; your blocks follow it as usual, so the same recipe serves both.
+- **The write.** The folder chooser, the file name from the title, never replacing a file, the "saved
+  before" notice, Check again and Undo.
+
+**After saving.** The note is ordinary Markdown. It is never fetched again or updated from the site, and
+opening it makes no request and loads no image. Turning the recipe off removes only its command; saved
+notes stay readable and their links keep working. Nothing is sent to an AI provider.
+
+**What cannot be asked for.** Format 1 has no field for an address, header, method, credentials,
+cookies, scripts, HTML, Markdown, images or an AI provider, so a request for a recipe that fetches a
+fixed page, fetches by itself, reads a site with a sign-in, adds to an existing note or rewrites the
+page's text is unsupported. The nearest recipe is this one, with the person entering the address.
+
 ## For host developers
 
 - `parseExtensionPackage(text)` validates and returns a frozen package or diagnostics. The run driver
   refuses any package object it did not produce.
 - `reviewPackage(extension, hostCapabilities)` gives activation availability and, per command, its
-  placement, write, whether it opens the result, question count and missing capabilities. Write the
-  user-facing sentences from these facts, not from package text.
-- `previewDocument(command, { capture, answers, destination })` is pure. It returns the typed document,
-  the write and every input problem. Previews use synthetic captures and handles and never reach native
-  code.
+  placement, network effect (`none`, or `explicitWebPage` for a website command), write, whether it opens
+  the result, question count and missing capabilities. Write the user-facing sentences from these facts,
+  not from package text.
+- `previewDocument(command, { capture, answers, destination, webPage })` is pure. It returns the typed
+  document, the write and every input problem. Previews use synthetic captures and handles and never
+  reach native code. A website command's page arrives with the review decision; its host seam is in
+  [web-capture-recipes.md](web-capture-recipes.md).
 - `runExtensionCommand(start, effects)` runs review, then at most one commit, then open, through injected
   effects. It checks the run before and after each awaited effect. A run that ends during review writes
   nothing. A run that ends during commit keeps the write and does not open it. A lost commit reply is

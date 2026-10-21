@@ -41,6 +41,15 @@ fn one(code: &str, path: &str) -> Vec<(String, String)> {
     vec![(code.to_string(), path.to_string())]
 }
 
+/// The five E2 capabilities; `web.capture`, appended later, is not one of them.
+const E2_CAPABILITIES: [Capability; 5] = [
+    Capability::SelectionRead,
+    Capability::AssociationResolve,
+    Capability::DocumentCreate,
+    Capability::DocumentAppend,
+    Capability::DocumentOpen,
+];
+
 #[test]
 fn shared_corpus_gets_the_typescript_validators_answers() {
     let cases: Value = serde_json::from_str(&fixture("cases.json")).unwrap();
@@ -227,11 +236,12 @@ fn commentary_needs_only_the_desktop_host_services_beyond_native() {
     assert!(missing_capabilities(&observation.capabilities).is_empty());
 }
 
-/// This E2 build performs all five capabilities: three natively and the passage and association
+/// This build performs every E2 capability: three natively and the passage and association
 /// services in the qualified desktop host. The bundled commentary needs nothing more here.
+/// `web.capture` has its own switch; `website_tests` pins this build's whole host list.
 #[test]
-fn this_build_performs_every_capability() {
-    assert_eq!(host_capabilities(), Capability::ALL);
+fn this_build_performs_every_e2_capability() {
+    assert!(missing_from(&E2_CAPABILITIES, &host_capabilities()).is_empty());
     let commentary = validate(include_str!("bundled/passage-commentary.json")).unwrap();
     assert!(missing_capabilities(&commentary.capabilities).is_empty());
 }
@@ -244,5 +254,5 @@ fn the_bundled_commentary_is_the_shared_fixture_under_a_reserved_id() {
     shared["id"] = Value::String("leadinglight.passage-commentary".to_string());
     assert_eq!(bundled, shared);
     let manifest = validate(bundled_text).unwrap();
-    assert_eq!(manifest.capabilities, Capability::ALL);
+    assert_eq!(manifest.capabilities, E2_CAPABILITIES);
 }

@@ -15,11 +15,14 @@ describe('the mock vault', () => {
   it('runs a whole create in memory and the page joins the mock vault', async () => {
     const vaultPath = '/Users/luca/Laputa'
     const listed = await handler('list_extensions')({ vaultPath })
-    // Meeting debrief ships off; passage commentary is on wherever nobody turned it off.
+    // Meeting debrief ships off; passage commentary is on wherever nobody turned it off. The website
+    // recipe is listed but off: without the test fixture this page does not fetch.
     expect(listed).toMatchObject({ status: 'ok', extensions: [
       { packageId: 'leadinglight.meeting-debrief', activeSha256: null },
       { packageId: 'leadinglight.passage-commentary', activeSha256: expect.stringMatching(/^[0-9a-f]{64}$/), previousSha256: null },
+      { packageId: 'leadinglight.website-capture', activeSha256: null },
     ] })
+    expect(window.__mockHandlers?.web_capture_fetch).toBeUndefined()
     const imported = await handler('import_extension_candidate')({ packageText: QUICK })
     const packageSha256 = imported.packageSha256 as string
     expect(await handler('activate_extension_version')({ vaultPath, packageId: 'local.quick-note', packageSha256, expectedActiveSha256: null }))

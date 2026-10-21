@@ -18,6 +18,7 @@ mod sheet;
 mod system;
 mod vault;
 mod version;
+mod web_capture;
 
 use std::borrow::Cow;
 
@@ -39,6 +40,7 @@ pub use sheet::*;
 pub use system::*;
 pub use vault::*;
 pub use version::*;
+pub use web_capture::*;
 
 /// Expand a leading `~` or `~/` in a path string to the user's home directory.
 /// Returns the original string unchanged if it doesn't start with `~` or if the

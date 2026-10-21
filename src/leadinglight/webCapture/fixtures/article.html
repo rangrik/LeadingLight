@@ -1,0 +1,91 @@
+<!doctype html>
+<!-- Synthetic fixture written for LeadingLight tests. Not copied from any real site. -->
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <title>Keeping a Lighthouse Log | Harbour Notes</title>
+  <meta property="og:title" content="Keeping a Lighthouse Log">
+  <meta property="og:site_name" content="Harbour Notes">
+  <meta name="author" content="Ada Example">
+  <meta property="article:published_time" content="2026-10-01T09:30:00+02:00">
+  <link rel="stylesheet" href="/styles/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <nav class="main-nav">
+      <a href="/">Home</a> <a href="/archive">Archive</a> <a href="/about">About</a> <a href="/subscribe">Subscribe</a>
+    </nav>
+  </header>
+  <aside class="sidebar">
+    <h3>Popular posts</h3>
+    <ul><li><a href="/p/1">Sidebar link one</a></li><li><a href="/p/2">Sidebar link two</a></li></ul>
+    <div class="ad-banner">Advertisement: buy more rope today</div>
+  </aside>
+  <main>
+    <article class="post">
+      <h1>Keeping a Lighthouse Log</h1>
+      <p class="byline">By Ada Example</p>
+      <p>A lighthouse log is a <strong>plain record</strong> of what the keeper saw, heard and did during a watch. It is <em>not</em> a diary, and it is <s>never</s> rarely read for pleasure. This guide explains how the <a href="/guides/watches">watch system</a> works, where the <a href="https://archive.example.net/logs?year=1890&amp;kind=weather">old weather logs</a> are kept, and why the keepers wrote everything down, even on quiet nights when nothing at all happened on the water.</p>
+      <p>Jump to the <a href="#tables">tables section</a>, read the <a href="javascript:alert(1)">interactive version</a>, or write to <a href="mailto:keeper@example.org">the keeper</a>. The style guide lives at <a href="https://example.org/wiki/Log_(nautical)">the nautical log article</a>.</p>
+      <h2>The watch</h2>
+      <p>Each watch begins with three entries. The keeper writes the time, the weather and the state of the lamp before doing anything else, so that the next keeper can see at a glance whether the night started well or badly.</p>
+      <ul>
+        <li>Time, in the harbour's own clock
+          <ul>
+            <li>Ship's bells are noted separately</li>
+            <li>Clock drift is noted weekly</li>
+          </ul>
+        </li>
+        <li>Weather, in plain words</li>
+        <li>The lamp: <code>lit</code>, <code>dim</code> or <code>out</code></li>
+      </ul>
+      <ol start="3">
+        <li>Third step: trim the wick</li>
+        <li>Fourth step: polish the lens<ol><li>Use the soft cloth</li></ol></li>
+      </ol>
+      <h3>What the old keepers said</h3>
+      <blockquote>
+        <p>Write it down while it is still true.</p>
+        <p>Write it down again in the morning.</p>
+        <ul><li>Never trust memory</li><li>Never trust the barometer alone</li></ul>
+      </blockquote>
+      <h2>Recording equipment</h2>
+      <p>Modern keepers often record the lamp state with a small script. The first example is labelled, the second is not:</p>
+      <pre><code class="language-js">const lamp = { state: 'lit' }
+if (lamp.state !== 'lit') alert('Check the lamp')</code></pre>
+      <pre><code>def check_lamp(lamp):
+    return lamp.state == "lit"</code></pre>
+      <p>Some logs are published as web pages. This is the markup, which must stay code:</p>
+      <pre><code class="language-html">&lt;div class="log"&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;/div&gt;</code></pre>
+      <pre><code>&lt;section&gt;&lt;p&gt;Unlabelled markup&lt;/p&gt;&lt;/section&gt;</code></pre>
+      <pre><code>graph TD; Lamp--&gt;Lens</code></pre>
+      <h2 id="tables">Tables</h2>
+      <table>
+        <thead><tr><th>Hour</th><th>Weather | wind</th></tr></thead>
+        <tbody>
+          <tr><td>21:00</td><td>Clear | calm</td></tr>
+          <tr><td>22:00</td><td><a href="/forecast">Fog</a> rolling in</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <tr><td colspan="2">Night summary</td></tr>
+        <tr><td>Ships seen</td><td>3</td></tr>
+      </table>
+      <figure>
+        <img src="/images/lamp.jpg" srcset="/images/lamp-2x.jpg 2x" alt="The lamp room at dusk">
+        <figcaption>The lamp room, photographed at dusk.</figcaption>
+      </figure>
+      <p>An inline icon <img src="data:image/png;base64,AAAA" alt="anchor"> and a clip:</p>
+      <video src="https://media.example.org/beam.mp4" title="The beam turning" poster="/images/poster.jpg"><p>Your browser cannot play this video.</p></video>
+      <hr>
+      <p>Thanks for reading. Every keeper's log is a small act of care, and every entry helps the next keeper understand the sea a little better than before.</p>
+    </article>
+    <section class="comments" id="comments">
+      <h3>Comments</h3>
+      <div class="comment">Great post! Visit my shop.</div>
+    </section>
+  </main>
+  <footer class="site-footer">© Harbour Notes. <a href="/privacy">Privacy</a></footer>
+  <script>document.title = 'changed by script'</script>
+</body>
+</html>

@@ -34,6 +34,8 @@ interface SidebarProps {
   onCreateFromTemplate?: () => void
   /** Present only while an extension command can run. */
   onCreateFromExtension?: () => void
+  /** Present only while a website command can run. */
+  onCreateFromWebsite?: () => void
   /** Opens Adapt; `adaptStatus` is its one stable status (a turn running, a reply not seen yet). */
   onAdapt?: () => void
   adaptStatus?: 'idle' | 'working' | 'ready'
@@ -94,6 +96,7 @@ interface SidebarNavigationProps
   | 'onCreatePage'
   | 'onCreateFromTemplate'
   | 'onCreateFromExtension'
+  | 'onCreateFromWebsite'
   | 'onAdapt'
   | 'adaptStatus'
   | 'onOpenToday'
@@ -420,6 +423,7 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         onCreatePage={props.onCreatePage}
         onCreateFromTemplate={props.onCreateFromTemplate}
         onCreateFromExtension={props.onCreateFromExtension}
+        onCreateFromWebsite={props.onCreateFromWebsite}
         onAdapt={props.onAdapt}
         adaptStatus={props.adaptStatus}
         onOpenToday={props.onOpenToday}
@@ -659,6 +663,7 @@ function SidebarRuntimeNavigation({
       onCreatePage={props.onCreatePage}
       onCreateFromTemplate={props.onCreateFromTemplate}
       onCreateFromExtension={props.onCreateFromExtension}
+      onCreateFromWebsite={props.onCreateFromWebsite}
       onAdapt={props.onAdapt}
       adaptStatus={props.adaptStatus}
       onOpenToday={props.onOpenToday}

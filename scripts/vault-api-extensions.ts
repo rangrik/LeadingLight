@@ -4,6 +4,8 @@
 // host and its HTTP route. Package files and preferences live in a dev-only registry folder, never
 // the app's configuration folder; pages are created only in vaults the browser listed through this
 // server. Node gives no handle-relative opens or native durability proof: docs/leadinglight/extensions-browser.md.
+// The website recipe and `web.capture` exist here only when the server was started with the
+// synthetic website fixture armed; this server never fetches a web page itself.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
 	type BigIntStats,
@@ -29,7 +31,12 @@ import {
 import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { EXTENSION_LIMITS } from "../src/leadinglight/extensions/extensionContract.ts";
+import {
+	CAPABILITIES,
+	type Capability,
+	E2_HOST_CAPABILITIES,
+	EXTENSION_LIMITS,
+} from "../src/leadinglight/extensions/extensionContract.ts";
 import { PROPOSAL_LIMITS } from "../src/leadinglight/proposals/proposalContract.ts";
 import {
 	type BlobScan,
@@ -699,8 +706,37 @@ const SETTLING = new Set(["close_extension_session", "end_extension_run", "query
 export interface DiskExtensionsOptions {
 	root: string;
 	bundled?: readonly string[];
+	/** What this host performs; `diskHostCapabilities(false)` unless a caller says otherwise. */
+	capabilities?: readonly Capability[];
 	io?: DiskExtensionIo;
 	warn?: (message: string) => void;
+}
+
+/**
+ * Arms the synthetic website fixture for this dev server: exactly "1", read once when the server's
+ * extension registry is first created. Off by default.
+ */
+export const WEB_CAPTURE_DISK_FIXTURE_ENV = "LEADINGLIGHT_DEV_WEB_CAPTURE_FIXTURE";
+
+export const webCaptureDiskFixtureArmed = (env: NodeJS.ProcessEnv = process.env): boolean =>
+	env[WEB_CAPTURE_DISK_FIXTURE_ENV] === "1";
+
+/**
+ * What the disk host performs, always as an explicit list, so a capability added to the vocabulary
+ * is never performed by accident: the E2 capabilities, plus `web.capture` only for the armed website
+ * fixture and only when this checkout's vocabulary has it.
+ */
+export function diskHostCapabilities(
+	website: boolean,
+	warn: (message: string) => void = (message) => console.warn(`[vault-api] ${message}`),
+): readonly Capability[] {
+	if (!website) return E2_HOST_CAPABILITIES;
+	const page = CAPABILITIES.filter((capability: string) => capability === "web.capture");
+	if (page.length === 0) {
+		warn("The website fixture is armed, but this checkout has no web.capture; website packages stay off.");
+		return E2_HOST_CAPABILITIES;
+	}
+	return [...E2_HOST_CAPABILITIES, ...page];
 }
 
 export interface RouteResponse {
@@ -721,6 +757,7 @@ export function createDiskExtensions(options: DiskExtensionsOptions) {
 	};
 	const backend = new ExtensionBackend(
 		diskExtensionHost({ root: options.root, vaultRoots, bundled: options.bundled ?? [], io: options.io, warn: options.warn }),
+		{ capabilities: options.capabilities ?? diskHostCapabilities(false, options.warn) },
 	);
 	const live: string[] = [];
 	const retired: string[] = [];
@@ -803,22 +840,38 @@ const readText = (relative: string): string | null => {
 	}
 };
 
+/** The bundled website recipe: native's file when present, else the domain fixture with only its id changed. */
+function bundledWebsite(): string | null {
+	const native = readText("../src-tauri/src/leadinglight_extensions/bundled/website-capture.json");
+	if (native !== null) return native;
+	const fixture = readText("../src/leadinglight/extensions/fixtures/website-capture.json");
+	return fixture === null ? null : fixture.replace('"id": "local.website-capture"', '"id": "leadinglight.website-capture"');
+}
+
 /**
  * The native bundled packages, read as exact bytes. Passage commentary is native's file when this
- * checkout has it, else the shared fixture with only its id changed, as native ships it.
+ * checkout has it, else the shared fixture with only its id changed, as native ships it. The
+ * website recipe is added only for the armed website fixture.
  */
-export function bundledPackages(): string[] {
+export function bundledPackages(options: { website?: boolean } = {}): string[] {
 	const meeting = readText("../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json");
 	const fixture = readText("../src/leadinglight/extensions/fixtures/passage-commentary.json");
 	const commentary = readText("../src-tauri/src/leadinglight_extensions/bundled/passage-commentary.json")
 		?? (fixture === null ? null : bundledCommentaryText(fixture));
 	if (meeting === null || commentary === null) console.warn("[vault-api] A bundled extension package is not available in this checkout.");
-	return [meeting, commentary].filter((text): text is string => text !== null);
+	const website = options.website ? bundledWebsite() : null;
+	if (options.website && website === null) console.warn("[vault-api] The bundled website recipe is not available in this checkout.");
+	return [meeting, commentary, website].filter((text): text is string => text !== null);
 }
 
 let devExtensions: DiskExtensions | null = null;
 const defaultExtensions = (): DiskExtensions => {
-	devExtensions ??= createDiskExtensions({ root: devRegistryRoot(), bundled: bundledPackages() });
+	if (devExtensions) return devExtensions;
+	const website = webCaptureDiskFixtureArmed();
+	if (website) {
+		console.warn(`[vault-api] ${WEB_CAPTURE_DISK_FIXTURE_ENV}=1: the website recipe and web.capture are on for synthetic test fixtures.`);
+	}
+	devExtensions = createDiskExtensions({ root: devRegistryRoot(), bundled: bundledPackages({ website }), capabilities: diskHostCapabilities(website) });
 	return devExtensions;
 };
 

@@ -14,7 +14,7 @@ export const EXTENSION_LIMITS = {
   /** Nested objects and arrays, the package object being 1; the format itself needs 10. */
   jsonDepth: 12,
   commands: 8,
-  /** Each operation appears at most once, in order. */
+  /** Each operation appears at most once, in order; the two capture steps exclude each other. */
   steps: 6,
   formFields: 16,
   choiceOptions: 12,
@@ -38,12 +38,21 @@ export const EXTENSION_LIMITS = {
   sourceTitleBytes: 1000,
   /** UTF-8 bytes of all composed text after references are expanded, before Markdown encoding. */
   documentTextBytes: 256 * 1024,
+  /** UTF-8 bytes of a fetched page's title, site name or byline as the host offers it to references. */
+  pageTextBytes: 1000,
+  /** UTF-8 bytes of a fetched page's final address. */
+  pageUrlBytes: 2048,
 } as const
 
 // --- Vocabulary ---------------------------------------------------------------------------------
 
-/** Effects and resources a command uses. Derived from its steps; a package must list exactly these. */
-export const CAPABILITIES = ['selection.read', 'association.resolve', 'document.create', 'document.append', 'document.open'] as const
+/**
+ * Effects and resources a command uses. Derived from its steps; a package must list exactly these.
+ * New capabilities are appended, so the canonical order of existing packages never changes.
+ */
+export const CAPABILITIES = [
+  'selection.read', 'association.resolve', 'document.create', 'document.append', 'document.open', 'web.capture',
+] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
 /** What the first host milestone performs: form, chosen folder, exclusive create, open. */
@@ -52,12 +61,16 @@ export const E1_HOST_CAPABILITIES: readonly Capability[] = ['document.create', '
 /**
  * What the passage-commentary milestone performs once capture, association and guarded append are
  * all in place (src/leadinglight/commentary/). A host offers it only when every part actually works.
+ * An explicit list, so a capability added later is never advertised by accident. No exported host
+ * list includes `web.capture`: a host adds it only once its fetch, conversion and dialog qualify.
  */
-export const E2_HOST_CAPABILITIES: readonly Capability[] = CAPABILITIES
+export const E2_HOST_CAPABILITIES: readonly Capability[] = [
+  'selection.read', 'association.resolve', 'document.create', 'document.append', 'document.open',
+]
 
-/** The only operations, in the only order they may appear. */
+/** The only operations, in the only order they may appear. A command captures a passage or a web page, not both. */
 export const STEP_OPERATIONS = [
-  'capturePassage', 'collectForm', 'resolveDestination', 'composeDocument', 'proposeDocument', 'openCommittedResult',
+  'capturePassage', 'captureWebPage', 'collectForm', 'resolveDestination', 'composeDocument', 'proposeDocument', 'openCommittedResult',
 ] as const
 export type StepOperation = (typeof STEP_OPERATIONS)[number]
 
@@ -67,7 +80,7 @@ export type DestinationPolicy = (typeof DESTINATION_POLICIES)[number]
 export const FIELD_KINDS = ['text', 'multilineText', 'boolean', 'choice'] as const
 export type FieldKind = (typeof FIELD_KINDS)[number]
 
-/** Blocks a package may write. The host alone adds the `source` block. */
+/** Blocks a package may write. The host alone adds the `source` and `webArticle` blocks. */
 export const BLOCK_TYPES = ['heading', 'paragraph', 'quote', 'list'] as const
 export type BlockType = (typeof BLOCK_TYPES)[number]
 export const LIST_STYLES = ['bullet', 'numbered'] as const
@@ -79,9 +92,24 @@ export type HeadingLevel = (typeof HEADING_LEVELS)[number]
 /** The one value a captured passage offers to references; the quote itself is placed by the host. */
 export const PASSAGE_FIELDS = ['sourceTitle'] as const
 
+/**
+ * The values a fetched page offers to references: one line each. `pageTitle`, `pageUrl` and `siteName`
+ * are always filled (the host falls back to the address's host name); `byline` only when the page has
+ * one. The page's text and its provenance are placed by the host and never offered to references.
+ */
+export const WEB_PAGE_FIELDS = ['pageTitle', 'pageUrl', 'siteName', 'byline'] as const
+export type WebPageField = (typeof WEB_PAGE_FIELDS)[number]
+
+/** `article`: the converted page. `linkOnly`: the page's address and provenance without its text. */
+export const WEB_PAGE_KINDS = ['article', 'linkOnly'] as const
+export type WebPageKind = (typeof WEB_PAGE_KINDS)[number]
+
+/** What a command can make the host contact. `explicitWebPage`: one page the person enters, on Fetch. */
+export type NetworkEffect = 'none' | 'explicitWebPage'
+
 // --- Validated package (wire form; optional keys are filled in) -----------------------------------
 
-/** A value produced by an earlier step: a form field, or `sourceTitle` of a captured passage. */
+/** A value produced by an earlier step: a form field, `sourceTitle` of a captured passage or a page field. */
 export interface FieldRef { readonly step: string; readonly field: string }
 /** A string part is literal text, never Markdown, HTML or a template. */
 export type TextPart = string | FieldRef
@@ -101,6 +129,11 @@ export type BlockTemplate =
 export type RecipeStep =
   /** Only with associatedWithSource: a capture never makes an arbitrary chosen note associated. */
   | { readonly op: 'capturePassage'; readonly id: string }
+  /**
+   * Only with newInChosenFolder. The person enters an address and chooses Fetch in host UI; the package
+   * names no address, header or option, and nothing is fetched by validation, preview or activation.
+   */
+  | { readonly op: 'captureWebPage'; readonly id: string }
   | { readonly op: 'collectForm'; readonly id: string; readonly fields: readonly FormField[] }
   | { readonly op: 'resolveDestination'; readonly id: string; readonly policy: DestinationPolicy }
   /** `title` is present exactly when the destination may create a note. */
@@ -158,6 +191,8 @@ export interface CommandReview {
   readonly title: string
   /** A command that captures a passage needs a selection; every command is also in the palette. */
   readonly placement: 'selectionAction' | 'palette'
+  /** Derived from the steps, never from package text: whether a run can make the host contact a site. */
+  readonly network: NetworkEffect
   readonly write: WriteImpact
   readonly opensResult: boolean
   readonly questions: number
@@ -197,10 +232,31 @@ export type ChosenDestination =
   | { readonly kind: 'newInFolder'; readonly folderHandle: string }
   | { readonly kind: 'existingDocument'; readonly documentHandle: string }
 
+/**
+ * Made by trusted host UI after the person's explicit Fetch (`article`) or explicit Save link only
+ * (`linkOnly`), and bound to the run. The values are bounded single lines; the host keeps the page's
+ * text and provenance behind `page` and never derives provenance from these values, so editing the
+ * title cannot change where the note says the page came from. Exactly these keys.
+ */
+export interface WebPageCapture {
+  /** Opaque, run-bound token (see isOpaqueToken); only trusted host services resolve it. */
+  readonly page: string
+  readonly kind: WebPageKind
+  /** The title shown for the page, as the person may have edited it; the host name when blank. */
+  readonly pageTitle: string
+  /** The final address: absolute http(s), no credentials, no fragment. */
+  readonly pageUrl: string
+  /** The site's name, or the host name. */
+  readonly siteName: string
+  readonly byline: string | null
+}
+
 export interface RunInput {
   readonly capture: PassageCapture | null
   readonly answers: FormAnswers
   readonly destination: ChosenDestination | null
+  /** Only for a command with a captureWebPage step; absent means none. */
+  readonly webPage?: WebPageCapture | null
 }
 
 /** Typed output; the host encodes it as safe Markdown. Text is literal and unescaped here. */
@@ -218,6 +274,13 @@ export type DocumentBlock =
    *   person's input kept.
    */
   | { readonly type: 'source'; readonly passage: string; readonly quote: string }
+  /**
+   * The fetched page, host-made, always first, and only in commands with a captureWebPage step; a
+   * package cannot write, move or omit it. `page` is the run-bound handle the host resolves to the
+   * converted article (or the link-only note) together with its provenance, re-titled with the composed
+   * title. None of its text reaches the package, and it is never serialized as is.
+   */
+  | { readonly type: 'webArticle'; readonly page: string }
   | { readonly type: 'heading'; readonly level: HeadingLevel; readonly text: string }
   | { readonly type: 'paragraph' | 'quote'; readonly text: string }
   | { readonly type: 'list'; readonly style: ListStyle; readonly items: readonly string[] }
@@ -246,7 +309,10 @@ export const INPUT_PROBLEM_CODES = [
   'invalidCapture', 'missingDestination', 'wrongDestination', 'outputTooLarge',
 ] as const
 export type InputProblemCode = (typeof INPUT_PROBLEM_CODES)[number]
-/** `field` names the form field concerned, when there is one. */
+/**
+ * `field` names the form field concerned, when there is one. `invalidCapture` covers both kinds of
+ * capture: missing or malformed, or one a command without that capture step was given.
+ */
 export interface InputProblem { readonly code: InputProblemCode; readonly field: string | null }
 
 /** `document` is null only when the output limit was passed. Submit only with no problems. */
@@ -279,7 +345,11 @@ export interface ReviewRequest {
 
 /** The single dialog: form, destination and live preview, closed by Create/Add or cancel. */
 export type ReviewDecision =
-  | { readonly action: 'submit'; readonly answers: FormAnswers; readonly destination: ChosenDestination | null }
+  | {
+      readonly action: 'submit'; readonly answers: FormAnswers; readonly destination: ChosenDestination | null
+      /** The dialog's current page at Submit, for a command with a captureWebPage step; absent means none. */
+      readonly webPage?: WebPageCapture | null
+    }
   | { readonly action: 'cancel' }
 
 /**

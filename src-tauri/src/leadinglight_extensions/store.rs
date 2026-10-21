@@ -61,6 +61,7 @@ const FORMAT: u32 = 1;
 const BUNDLED: &[(&str, bool)] = &[
     (include_str!("bundled/meeting-debrief.json"), false),
     (include_str!("bundled/passage-commentary.json"), true),
+    (include_str!("bundled/website-capture.json"), true),
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -190,7 +190,10 @@ fn an_import_is_a_candidate_only() {
         .into_iter()
         .map(|extension| extension.package_id)
         .collect();
-    assert_eq!(ids, [BUNDLED, COMMENTARY, QUICK]);
+    assert_eq!(
+        ids,
+        [BUNDLED, COMMENTARY, "leadinglight.website-capture", QUICK]
+    );
     let quick = entry(&store, VAULT, QUICK);
     assert_eq!(quick.active_sha256, None);
     assert_eq!(

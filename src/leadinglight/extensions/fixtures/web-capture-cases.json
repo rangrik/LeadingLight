@@ -1,0 +1,63 @@
+{
+  "about": "Website capture conformance cases for every package validator, kept apart from cases.json until native mirrors captureWebPage. Each invalid file yields exactly one diagnostic with this code and JSON Pointer path.",
+  "valid": [
+    "website-capture.json"
+  ],
+  "invalid": [
+    {
+      "file": "invalid/web-url-in-step.json",
+      "code": "unknownField",
+      "path": "/commands/0/steps/0/url"
+    },
+    {
+      "file": "invalid/web-append.json",
+      "code": "notAllowed",
+      "path": "/commands/0/steps/2/policy"
+    },
+    {
+      "file": "invalid/web-associated.json",
+      "code": "notAllowed",
+      "path": "/commands/0/steps/2/policy"
+    },
+    {
+      "file": "invalid/web-with-passage.json",
+      "code": "notAllowed",
+      "path": "/commands/0/steps/1/op"
+    },
+    {
+      "file": "invalid/web-forged-article.json",
+      "code": "unsupportedValue",
+      "path": "/commands/0/steps/3/blocks/0/type"
+    },
+    {
+      "file": "invalid/web-undeclared-capability.json",
+      "code": "undeclaredCapability",
+      "path": "/capabilities"
+    },
+    {
+      "file": "invalid/web-unused-capability.json",
+      "code": "unusedCapability",
+      "path": "/capabilities/2"
+    },
+    {
+      "file": "invalid/web-byline-in-title.json",
+      "code": "incompatibleReference",
+      "path": "/commands/0/steps/3/title/0"
+    },
+    {
+      "file": "invalid/web-page-body-reference.json",
+      "code": "unboundReference",
+      "path": "/commands/0/steps/3/blocks/1/text/0/field"
+    },
+    {
+      "file": "invalid/web-capture-after-form.json",
+      "code": "stepOrder",
+      "path": "/commands/0/steps/1/op"
+    },
+    {
+      "file": "invalid/web-second-capture.json",
+      "code": "stepOrder",
+      "path": "/commands/0/steps/1/op"
+    }
+  ]
+}

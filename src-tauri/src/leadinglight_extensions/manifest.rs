@@ -1,7 +1,8 @@
 //! Package validation, mirroring `src/leadinglight/extensions/extensionSchema.ts` stage for stage:
 //! reading the text, then shape, then meaning. Codes, JSON Pointer paths and their order match the
-//! shared corpus in `src/leadinglight/extensions/fixtures/cases.json`. Only what native admission
-//! needs is kept: identity, version, name, declared capabilities and each command's capabilities.
+//! shared corpus in `src/leadinglight/extensions/fixtures/cases.json` and the website corpus in
+//! `web-capture-cases.json`. Only what native admission needs is kept: identity, version, name,
+//! declared capabilities and each command's capabilities.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -29,15 +30,19 @@ pub enum Capability {
     DocumentAppend,
     #[serde(rename = "document.open")]
     DocumentOpen,
+    /// One page the person enters, fetched only when they choose Fetch. Last in canonical order.
+    #[serde(rename = "web.capture")]
+    WebCapture,
 }
 
 impl Capability {
-    pub(crate) const ALL: [Capability; 5] = [
+    pub(crate) const ALL: [Capability; 6] = [
         Capability::SelectionRead,
         Capability::AssociationResolve,
         Capability::DocumentCreate,
         Capability::DocumentAppend,
         Capability::DocumentOpen,
+        Capability::WebCapture,
     ];
 
     pub(crate) fn name(self) -> &'static str {
@@ -47,6 +52,7 @@ impl Capability {
             Capability::DocumentCreate => "document.create",
             Capability::DocumentAppend => "document.append",
             Capability::DocumentOpen => "document.open",
+            Capability::WebCapture => "web.capture",
         }
     }
 
@@ -75,11 +81,22 @@ pub(crate) const HOST_SERVICES_QUALIFIED: bool = true;
 
 const HOST_SERVICES: [Capability; 2] = [Capability::SelectionRead, Capability::AssociationResolve];
 
+/// Website capture (`web.capture`) needs three parts: the native fetch, and the desktop window's
+/// page conversion and website dialog. It is offered because this build has all three, switched
+/// together with the desktop window's own host list (`WEBSITE_FRONTEND_QUALIFIED`). A build without
+/// them must set this to false, so the bundled website recipe stays off and lists `web.capture` as
+/// missing. It is independent of `HOST_SERVICES_QUALIFIED`: growing `Capability::ALL` never grows
+/// what this host performs.
+pub(crate) const WEBSITE_SERVICES_QUALIFIED: bool = true;
+
 /// What this host performs.
 pub(crate) fn host_capabilities() -> Vec<Capability> {
     let mut host = NATIVE_CAPABILITIES.to_vec();
     if HOST_SERVICES_QUALIFIED {
         host.extend(HOST_SERVICES);
+    }
+    if WEBSITE_SERVICES_QUALIFIED {
+        host.push(Capability::WebCapture);
     }
     host.sort();
     host
@@ -577,6 +594,7 @@ enum Policy {
 #[derive(Debug, Clone)]
 enum StepKind {
     Capture,
+    WebPage,
     Form(Vec<FieldDef>),
     Destination(Policy),
     Compose {
@@ -601,8 +619,9 @@ struct Command {
     steps: Vec<Step>,
 }
 
-const STEP_OPERATIONS: [&str; 6] = [
+const STEP_OPERATIONS: [&str; 7] = [
     "capturePassage",
+    "captureWebPage",
     "collectForm",
     "resolveDestination",
     "composeDocument",
@@ -617,13 +636,16 @@ const DESTINATION_POLICIES: [&str; 3] = [
 const FIELD_KINDS: [&str; 4] = ["text", "multilineText", "boolean", "choice"];
 const BLOCK_TYPES: [&str; 4] = ["heading", "paragraph", "quote", "list"];
 const LIST_STYLES: [&str; 2] = ["bullet", "numbered"];
-const CAPABILITY_NAMES: [&str; 5] = [
+const CAPABILITY_NAMES: [&str; 6] = [
     "selection.read",
     "association.resolve",
     "document.create",
     "document.append",
     "document.open",
+    "web.capture",
 ];
+/// What a web page step produces, each one line; only `byline` may be unknown.
+const WEB_PAGE_FIELDS: [&str; 4] = ["pageTitle", "pageUrl", "siteName", "byline"];
 const PACKAGE_SPEC: Spec = spec(
     &[
         "schema",
@@ -796,7 +818,17 @@ fn heading_level(report: &mut Report, value: Option<&Json>, path: &str) {
 }
 
 fn block_at(report: &mut Report, value: &Json, path: &str) -> Option<Block> {
-    let hint = " The host adds the source block itself.";
+    let forges_page = match value {
+        Json::Object(members) => {
+            matches!(own(members, "type"), Some(Json::String(kind)) if kind.is("webArticle"))
+        }
+        _ => false,
+    };
+    let hint = if forges_page {
+        " The host adds the web page block itself."
+    } else {
+        " The host adds the source block itself."
+    };
     let (members, kind) = variant_of(
         report,
         value,
@@ -893,6 +925,8 @@ fn step_at(report: &mut Report, value: &Json, path: &str) -> Option<Step> {
         "A step",
         hint,
     )?;
+    // A web page step has no address, header, method or option: the person enters the address
+    // in host UI.
     let allowed = match op {
         "collectForm" => spec(&["id", "op", "fields"], &[]),
         "resolveDestination" => spec(&["id", "op", "policy"], &[]),
@@ -912,6 +946,7 @@ fn step_at(report: &mut Report, value: &Json, path: &str) -> Option<Step> {
         .unwrap_or(0);
     let kind = match op {
         "capturePassage" => StepKind::Capture,
+        "captureWebPage" => StepKind::WebPage,
         "collectForm" => {
             let fields_path = pointer(path, "fields");
             let entries = list(
@@ -1218,6 +1253,18 @@ fn producers_of(command: &Command) -> HashMap<&str, Producer<'_>> {
                     always: true,
                 },
             )),
+            StepKind::WebPage => {
+                for name in WEB_PAGE_FIELDS {
+                    let always = name != "byline";
+                    outputs.push((
+                        name,
+                        Output {
+                            shape: Shape::Line,
+                            always,
+                        },
+                    ));
+                }
+            }
             StepKind::Form(fields) => {
                 for field in fields {
                     outputs.push((field.id.as_str(), output_of(field)));
@@ -1315,11 +1362,12 @@ impl References<'_> {
             return;
         }
         if usage == Usage::Title && !output.always {
-            report.add(
-                Code::IncompatibleReference,
-                path,
-                format!("The title may use only answers that are always filled; make \"{}\" required or leave it out of the title.", reference.field),
-            );
+            let message = if STEP_OPERATIONS[producer.rank] == "captureWebPage" {
+                format!("A page's \"{}\" is not always known; use it in a heading, paragraph or list, not the title.", reference.field)
+            } else {
+                format!("The title may use only answers that are always filled; make \"{}\" required or leave it out of the title.", reference.field)
+            };
+            report.add(Code::IncompatibleReference, path, message);
         }
     }
 
@@ -1388,10 +1436,32 @@ fn check_references(report: &mut Report, command: &Command, path: &str) {
     }
 }
 
-const REQUIRED_STEPS: [usize; 3] = [2, 3, 4];
+const REQUIRED_STEPS: [&str; 3] = ["resolveDestination", "composeDocument", "proposeDocument"];
+
+/// The order as this command would read it: with the one capture step it uses, or the passage one.
+fn order_for(command: &Command) -> String {
+    let skipped = if captures_web_page(command) {
+        "capturePassage"
+    } else {
+        "captureWebPage"
+    };
+    let order: Vec<&str> = STEP_OPERATIONS
+        .into_iter()
+        .filter(|op| *op != skipped)
+        .collect();
+    order.join(", ")
+}
+
+fn captures_web_page(command: &Command) -> bool {
+    command
+        .steps
+        .iter()
+        .any(|step| matches!(step.kind, StepKind::WebPage))
+}
 
 fn check_pipeline(report: &mut Report, command: &Command, path: &str) {
     let steps_path = pointer(path, "steps");
+    let before = report.count;
     let mut last: Option<usize> = None;
     for (position, step) in command.steps.iter().enumerate() {
         if last.is_some_and(|last| step.rank <= last) {
@@ -1400,22 +1470,38 @@ fn check_pipeline(report: &mut Report, command: &Command, path: &str) {
                 &pointer(&index(&steps_path, position), "op"),
                 format!(
                     "Steps run in the order {}, each at most once; this {} is out of place.",
-                    STEP_OPERATIONS.join(", "),
+                    order_for(command),
                     STEP_OPERATIONS[step.rank]
                 ),
             );
         }
         last = Some(last.map_or(step.rank, |last| last.max(step.rank)));
     }
-    for rank in REQUIRED_STEPS {
-        if !command.steps.iter().any(|step| step.rank == rank) {
+    let web_page = command
+        .steps
+        .iter()
+        .position(|step| matches!(step.kind, StepKind::WebPage));
+    let passage = command
+        .steps
+        .iter()
+        .any(|step| matches!(step.kind, StepKind::Capture));
+    if let Some(position) = web_page.filter(|_| passage && report.count == before) {
+        report.add(
+            Code::NotAllowed,
+            &pointer(&index(&steps_path, position), "op"),
+            "A command captures either a passage or a web page, not both; keep one of the two steps.",
+        );
+    }
+    for op in REQUIRED_STEPS {
+        if !command
+            .steps
+            .iter()
+            .any(|step| STEP_OPERATIONS[step.rank] == op)
+        {
             report.add(
                 Code::MissingStep,
                 &steps_path,
-                format!(
-                    "Command \"{}\" needs a {} step.",
-                    command.id, STEP_OPERATIONS[rank]
-                ),
+                format!("Command \"{}\" needs a {op} step.", command.id),
             );
         }
     }
@@ -1449,6 +1535,15 @@ fn check_destination(report: &mut Report, command: &Command, path: &str) {
         .iter()
         .any(|step| matches!(step.kind, StepKind::Capture));
     let policy_path = pointer(&at(destination_position), "policy");
+    // A fetched page is only ever a new note; it never adds to, or associates with, an existing one.
+    if captures_web_page(command) && policy != Policy::NewInChosenFolder {
+        report.add(
+            Code::NotAllowed,
+            &policy_path,
+            "A web page is saved only as a new note in a folder the person chooses; use newInChosenFolder.",
+        );
+        return;
+    }
     if policy == Policy::AssociatedWithSource && !captures {
         report.add(
             Code::MissingStep,
@@ -1511,6 +1606,9 @@ fn command_capabilities(command: &Command) -> Vec<Capability> {
         match step.kind {
             StepKind::Capture => {
                 needs.insert(Capability::SelectionRead);
+            }
+            StepKind::WebPage => {
+                needs.insert(Capability::WebCapture);
             }
             StepKind::Destination(Policy::AssociatedWithSource) => {
                 needs.insert(Capability::AssociationResolve);

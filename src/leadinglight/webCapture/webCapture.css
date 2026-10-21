@@ -1,0 +1,14 @@
+/* Website dialog: the address stage is the compact 640px dialog; the page stage uses the run
+   dialog's two columns (`.ll-ext-run-dialog`, `.ll-ext-run-body` in extensions.css). */
+.ll-web-capture-dialog[data-stage="address"] { width: min(640px, calc(100vw - 2rem)); max-width: none; }
+.ll-web-capture-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.ll-web-capture-address { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.ll-web-capture-address > input { flex: 1; min-width: 0; }
+.ll-web-capture-announce { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* The Undo notice under a saved page's header; the same strip as the commentary notice. */
+.ll-web-capture-notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 12px; min-height: 36px;
+  border-bottom: 1px solid var(--border); background: var(--state-hover-subtle); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
+}
+.ll-web-capture-notice > p { margin: 0; flex: 1 1 220px; min-width: 0; }
+.ll-web-capture-notice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }

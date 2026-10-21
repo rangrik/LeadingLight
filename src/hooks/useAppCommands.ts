@@ -21,6 +21,7 @@ import { buildBackupCommands, type BackupActions } from '../leadinglight/backup/
 import { useGuardedHandlers } from '../leadinglight/backup/backupInputGate'
 import { buildTemplateCommands } from '../leadinglight/templates/templateActions'
 import { buildExtensionCommands } from '../leadinglight/extensions/extensionActions'
+import { buildWebCaptureCommands } from '../leadinglight/webCapture/webCaptureActions'
 import { buildAdaptCommands } from '../leadinglight/adapt/adaptActions'
 import { runNativeTextHistoryCommand } from '../utils/appOrchestration'
 
@@ -39,6 +40,8 @@ interface AppCommandsConfig {
   onCreateFromTemplate?: () => void
   /** Present only while an extension command can run. */
   onCreateFromExtension?: () => void
+  /** Present only while a website command can run. */
+  onCreateFromWebsite?: () => void
   /** Opens the Adapt dialog (main window only). */
   onAdapt?: () => void
   onFindInNote?: () => void
@@ -679,7 +682,7 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
   useMenuEvents(menu)
 
   const registryCommands = useCommandRegistry(createCommandRegistryConfig(config))
-  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension, onAdapt } = config
+  const { activeTabPath, entries, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension, onCreateFromWebsite, onAdapt } = config
   const activeFileKind = entries.find(entry => entry.path === activeTabPath)?.fileKind
   const commands = useMemo(() => [
     ...registryCommands,
@@ -687,8 +690,9 @@ export function useAppCommands(config: AppCommandsConfig): CommandAction[] {
     ...(backupActions ? buildBackupCommands(locale ?? 'en', backupActions) : []),
     ...(onCreateFromTemplate ? buildTemplateCommands(locale ?? 'en', onCreateFromTemplate) : []),
     ...(onCreateFromExtension ? buildExtensionCommands(locale ?? 'en', onCreateFromExtension) : []),
+    ...(onCreateFromWebsite ? buildWebCaptureCommands(locale ?? 'en', onCreateFromWebsite) : []),
     ...(onAdapt ? buildAdaptCommands(locale ?? 'en', onAdapt) : []),
-  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension, onAdapt])
+  ], [registryCommands, activeTabPath, activeFileKind, locale, onOpenPageHistory, backupActions, onCreateFromTemplate, onCreateFromExtension, onCreateFromWebsite, onAdapt])
 
   useKeyboardNavigation({
     activeTabPath: config.activeTabPath,

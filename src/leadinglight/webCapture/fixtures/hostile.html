@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Synthetic fixture written for LeadingLight tests. Every construct here tries to run code,
+     load a resource or steer link resolution; none of it may have any effect. -->
+<html>
+<head>
+  <base href="javascript:alert('base')">
+  <base href="https://evil.example/">
+  <meta http-equiv="refresh" content="0; url=https://evil.example/refresh">
+  <meta http-equiv="Content-Security-Policy" content="default-src *">
+  <title>Signal Flags Explained</title>
+  <link rel="stylesheet" href="https://evil.example/style.css">
+  <link rel="preload" as="image" href="https://evil.example/preload.png">
+  <link rel="prefetch" href="https://evil.example/prefetch">
+  <link rel="icon" href="https://evil.example/favicon.ico">
+  <style>@import url("https://evil.example/import.css"); body { background: url("https://evil.example/bg.png") }</style>
+  <script src="https://evil.example/head.js"></script>
+  <script>fetch('https://evil.example/inline')</script>
+</head>
+<body onload="fetch('https://evil.example/onload')" background="https://evil.example/body.png">
+  <article>
+    <h1 onclick="alert(1)">Signal Flags Explained</h1>
+    <p style="background-image:url(https://evil.example/style-attr.png)" onmouseover="alert(2)">Signal flags let ships talk across open water without radio. Each flag stands for a letter, and some flags alone carry a whole message that every sailor is expected to know by heart, day or night, in any weather.</p>
+    <p>Hover the <a href="relative/page" onclick="alert(3)" ping="https://evil.example/ping">relative link</a>, which resolves against the fetched page, never against the planted base. A <a href="javascript:alert(4)">script link</a> and a <a href="data:text/html,&lt;script&gt;alert(5)&lt;/script&gt;">data link</a> must become plain text.</p>
+    <img src="https://evil.example/img.png" onerror="alert(6)" alt="Flag chart" srcset="https://evil.example/img-2x.png 2x" loading="eager">
+    <picture><source srcset="https://evil.example/picture.webp" type="image/webp"><img src="https://evil.example/picture.png" alt="Flag picture"></picture>
+    <iframe src="https://evil.example/frame" srcdoc="&lt;script&gt;alert(7)&lt;/script&gt;"></iframe>
+    <object data="https://evil.example/object.swf"><embed src="https://evil.example/embed.swf"></object>
+    <svg width="10" height="10"><image href="https://evil.example/svg-image.png"></image><foreignObject><img src="https://evil.example/foreign.png" onerror="alert(8)"></foreignObject><script>alert(9)</script></svg>
+    <math><mi xlink:href="javascript:alert(10)">x</mi></math>
+    <form action="https://evil.example/form" method="post"><input type="image" src="https://evil.example/input.png"><input name="q" value="hidden value"><button formaction="https://evil.example/button">Send now</button><select><option>Option text</option></select></form>
+    <video poster="https://evil.example/poster.png" src="https://evil.example/video.mp4" onerror="alert(11)"><track src="https://evil.example/track.vtt"></video>
+    <audio src="https://evil.example/audio.mp3"></audio>
+    <template><img src="https://evil.example/template.png"></template>
+    <noscript><img src="https://evil.example/noscript.png" alt="Noscript image"></noscript>
+    <table background="https://evil.example/table.png"><tr><td background="https://evil.example/cell.png">Alpha</td><td>A diver is down; keep well clear at slow speed.</td></tr><tr><td>Bravo</td><td>Dangerous goods are being loaded or unloaded.</td></tr></table>
+    <p>The <strong>international code</strong> has forty flags. Learning them takes a season of practice, and most crews keep a printed chart near the helm so that nobody has to guess what a hoist means when it matters most.</p>
+    <p><a href="https://example.org/flags" target="_blank" rel="opener" data-content-type="htmlBlock" data-text-color="red" style="color:red">Full flag chart</a></p>
+  </article>
+  <script>new Image().src = 'https://evil.example/beacon'</script>
+</body>
+</html>

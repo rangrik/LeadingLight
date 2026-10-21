@@ -1,6 +1,6 @@
 # Local-only runtime
 
-LeadingLight keeps its desktop note workflow local. The remote services inherited from upstream are disabled by product policy, even when a stored preference or build environment asks to enable them: AI agents and chat, the MCP bridge, remote Git, downloads, telemetry and updates. The one exception is Adapt, an owner-authorized flow that reaches a provider only after the person's explicit sign-in and explicit Send. It is described under [Adapt](#adapt-the-owner-authorized-provider-flow) below.
+LeadingLight keeps its desktop note workflow local. The remote services inherited from upstream are disabled by product policy, even when a stored preference or build environment asks to enable them: AI agents and chat, the MCP bridge, remote Git, downloads, telemetry and updates. There are two owner-authorized exceptions, and each reaches the network only after an explicit action. Saving a website fetches the one page the person entered when they choose Fetch; see [Saving a website](#saving-a-website-the-owner-authorized-page-fetch). Adapt reaches a provider only after the person's explicit sign-in and explicit Send; see [Adapt](#adapt-the-owner-authorized-provider-flow).
 
 ## Enforcement points
 
@@ -12,6 +12,38 @@ LeadingLight keeps its desktop note workflow local. The remote services inherite
 - The production content security policy restricts webview connections and media to local resources. Custom HTML blocks already have a separate policy denying network access. Local bundled fonts and editor assets remain usable.
 
 Local note reading and saving, note creation, folder operations, image imports from local files, search, local Git history, native menus and PDF export continue through the existing handlers. A user opening an ordinary external hyperlink in their browser is a deliberate OS action; it is separate from background network access by the application.
+
+## Saving a website: the owner-authorized page fetch
+
+"Save from website" turns one web page the person enters into an ordinary local Markdown note ([ADR 016](ADR-016-website-capture.md)). Its code is its own:
+
+- the native fetch is `src-tauri/src/leadinglight_web_capture/`, with two fixed commands, `web_capture_fetch` and `web_capture_cancel`, in `src-tauri/src/commands/web_capture.rs`;
+- the conversion and dialog are `src/leadinglight/webCapture/`.
+
+**What is remote, and disclosed:**
+
+- **Fetch.** Only the dialog's explicit Fetch sends a request, and only to the exact address shown. It is one plain `GET` over `http` or `https`, with only `Accept`, `Accept-Encoding: identity` and `User-Agent: LeadingLight/<version>`. A site therefore sees one request from the person's network.
+- **Bounds.** Redirects are followed by hand: at most 5, never from `https` to `http`. Every address a name resolves to must be public, and local or private addresses are refused before connecting. One attempt is bounded to 5 MiB and 30 seconds. Failures are fixed reasons that never repeat server text, and no URL is logged or kept afterwards. [web-capture-native.md](web-capture-native.md) has the full rules.
+
+**What is never sent or run:**
+
+- cookies, credentials (`Authorization` or credentials in the address), `Referer` or `Accept-Language`;
+- a proxy, whether from the environment or the system;
+- compression, a cache, a retry or a background fetch;
+- the page's JavaScript;
+- any subresource: no image, stylesheet, font, frame or media request. Images become text links.
+
+The page is parsed into a detached, inert document that loads nothing. The webview itself still makes no remote connections, and the content security policy is unchanged.
+
+**What stays local:**
+
+- **The note is canonical and local.** The result is ordinary Markdown in the vault, created through the existing exclusive create after the person reviews it, and it can be undone. Its front matter records `source` and `captured`.
+- **Never fetched again.** The note is never refetched, refreshed or updated, and opening it makes no request.
+- **Nothing is shared.** The page is never sent to a provider or anywhere else. Attaching a saved note to Adapt is a separate, explicit choice there.
+
+**Where it is offered.** Only the desktop app performs `web.capture`. A native switch (`WEBSITE_SERVICES_QUALIFIED`) and the desktop window's own host list (`WEBSITE_FRONTEND_QUALIFIED`) turn it on together. An ordinary browser build has no fetch and never offers it. A dev browser offers it only when a test installed the synthetic fixture. That fixture answers its own pages under a reserved `.invalid` origin and never opens a connection.
+
+**What has not been measured.** Extraction quality on real sites, and how real servers treat an honest user agent and `Accept-Encoding: identity`. Pages that need a sign-in or scripts are refused, or can be saved as a link only.
 
 ## Adapt: the owner-authorized provider flow
 

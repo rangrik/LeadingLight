@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- Synthetic fixture written for LeadingLight tests. Text that is ordinary on a web page but is
+     syntax in LeadingLight's Markdown; all of it must reopen as the same literal text. -->
+<html>
+<head><title>Notes on Markdown Syntax</title></head>
+<body>
+  <article>
+    <h1>Notes on Markdown Syntax</h1>
+    <p>This page talks about note syntax, so its text is full of characters that look like markup. Every one of them is meant to be read literally by the person who saved the page, exactly as it appears here.</p>
+    <p>Wikilinks look like [[Private note]] and [[Folder/Note|alias]]. Highlights look like ==important== or ==red==warning==. Inline math looks like $a$ and $b$, and prices like $5 or $10 are not math.</p>
+    <p>A callout starts with [!note] and a footnote with [^1]. HTML such as &lt;script&gt;alert(1)&lt;/script&gt; and &lt;img src=x onerror=alert(1)&gt; is only text here. Entities like &amp;amp; &amp;#x3c; &amp;#60; &amp;copy; and AT&amp;T stay as typed.</p>
+    <p>Fences: ``` and ~~~ and `code` and **bold** and __under__ and ~strike~ and *star* are literal.<br># not a heading<br>&gt; not a quote<br>- not a list<br>1. not ordered<br>| not | a | table |<br>--- not a rule<br>===</p>
+    <p>Across elements: a=<span>=b</span>, [<b>[x]</b>], $a<em>$</em>, C:\<strong>*x</strong>, wow!<a href="https://example.org/bang">link after bang</a>, x<em>=</em>=y and <em>==</em> alone.</p>
+    <h2>Rank #</h2>
+    <h3>C# and F# ##</h3>
+    <ul><li>[ ] not a task</li><li>[x] not done either</li></ul>
+    <table>
+      <tr><th>Syntax</th><th>Meaning</th></tr>
+      <tr><td>a | b</td><td>[[x]] and ==y== and $1 $2</td></tr>
+      <tr><td><code>a|b</code></td><td>&lt;b&gt;bold&lt;/b&gt;</td></tr>
+    </table>
+    <pre><code class="language-markdown">```html scripts=sandboxed
+&lt;script&gt;parent.document.title = 'pwned'&lt;/script&gt;
+```
+$$
+x^2
+$$
+[[x]] ==y== $a$ $b$
+~~~
+[!note] inside code</code></pre>
+    <pre><code>$$
+y^2
+$$
+@@ not a marker</code></pre>
+    <p>Bare addresses such as https://example.org/a_b?x=1&amp;y=2 and www.example.org and person@example.org become links by themselves.</p>
+  </article>
+</body>
+</html>

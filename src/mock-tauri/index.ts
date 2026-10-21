@@ -11,12 +11,16 @@ import { BACKUP_COMMAND_LIST, runMemoryBackup } from './mock-backup'
 import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-history'
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { MOCK_ENTRIES } from './mock-entries'
-import { EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, bundledCommentaryText, memoryHost, type MemoryVault } from './mock-extensions'
+import {
+  EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, MOCK_HOST_CAPABILITIES, bundledCommentaryText, bundledWebsiteText, memoryHost, type MemoryVault,
+} from './mock-extensions'
 import { mockTrashHandlers } from './mock-trash'
 import { ADAPT_COMMAND_LIST, browserAdaptHost } from './mock-adapt'
+import { WEB_CAPTURE_FIXTURE_COMMANDS, installPageWebCaptureHost } from './mock-web-capture'
 import { MEMORY_VAULT_ROOTS, tryVaultApi } from './vault-api'
 import bundledMeetingDebrief from '../../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json?raw'
 import passageCommentaryFixture from '../leadinglight/extensions/fixtures/passage-commentary.json?raw'
+import websiteCaptureFixture from '../leadinglight/extensions/fixtures/website-capture.json?raw'
 
 export { addMockEntry, updateMockContent, trackMockChange }
 
@@ -40,14 +44,19 @@ const mockVaultPages: MemoryVault = {
   },
   trashPage: (root, path) => mockTrashHandlers.move_to_local_trash({ vaultPath: root, paths: [path] }).moved.length === 1,
 }
-let memoryExtensions: ExtensionBackend | null = null
-const runMemoryExtensions = (command: string, args: unknown) => {
-  memoryExtensions ??= new ExtensionBackend(memoryHost(mockVaultPages, [bundledMeetingDebrief, bundledCommentaryText(passageCommentaryFixture)]))
-  return memoryExtensions.handle(command, args ?? {}, MEMORY_OWNER)
-}
-
 // Adapt has no provider in the browser unless a test installed the explicit fixture at page load.
 const adaptHost = browserAdaptHost()
+// Website fetch, the same way: only the synthetic fixture's pages, and only outside native.
+const webCaptureHost = installPageWebCaptureHost(isTauri())
+
+let memoryExtensions: ExtensionBackend | null = null
+const runMemoryExtensions = (command: string, args: unknown) => {
+  memoryExtensions ??= new ExtensionBackend(
+    memoryHost(mockVaultPages, [bundledMeetingDebrief, bundledCommentaryText(passageCommentaryFixture), bundledWebsiteText(websiteCaptureFixture)]),
+    { capabilities: webCaptureHost ? [...MOCK_HOST_CAPABILITIES, 'web.capture'] : MOCK_HOST_CAPABILITIES },
+  )
+  return memoryExtensions.handle(command, args ?? {}, MEMORY_OWNER)
+}
 
 type MockHandler = (args?: unknown) => unknown
 
@@ -85,6 +94,10 @@ const registeredMockHandlers: Record<string, MockHandler> = {
     (await tryVaultApi(command, args as Record<string, unknown> | undefined)) ?? runMemoryExtensions(command, args)])),
   // Adapt never reaches the dev server or the network; the desktop harness calls these directly.
   ...Object.fromEntries(ADAPT_COMMAND_LIST.map(command => [command, (args?: unknown) => adaptHost.handle(command, args)])),
+  // Website fetch exists only with the fixture; without it the call fails and the dialog reads `unavailable`.
+  ...(webCaptureHost
+    ? Object.fromEntries(Object.values(WEB_CAPTURE_FIXTURE_COMMANDS).map(command => [command, (args?: unknown) => webCaptureHost.handle(command, args)]))
+    : {}),
 }
 
 export function isTauri(): boolean {

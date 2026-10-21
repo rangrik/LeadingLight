@@ -37,6 +37,8 @@ import { useExtensionUi } from './leadinglight/extensions/useExtensionUi'
 import { holdWithExtensions, useExtensions, type ExtensionBoundary } from './leadinglight/extensions/useExtensions'
 import { COMMENTARY_HOST_CAPABILITIES, commentaryServices, readCommentaryPage } from './leadinglight/commentary/CommentaryServices'
 import { useCommentaryUi } from './leadinglight/commentary/useCommentaryUi'
+import { websiteHostCapabilities } from './leadinglight/webCapture/webCaptureHost'
+import { useWebCaptureUi } from './leadinglight/webCapture/useWebCaptureUi'
 import { sideBySideTooNarrow } from './leadinglight/commentary/useCommentaryPaneWidths'
 import { useAdapt } from './leadinglight/adapt/useAdapt'
 import { useAdaptUi } from './leadinglight/adapt/useAdaptUi'
@@ -111,6 +113,7 @@ import { ConfirmDeleteDialog } from './components/ConfirmDeleteDialog'
 import { UpdateBanner } from './components/UpdateBanner'
 import { invoke } from '@tauri-apps/api/core'
 import { isTauri, mockInvoke } from './mock-tauri'
+import { webCaptureFixtureInstalled } from './mock-tauri/mock-web-capture'
 import type { AiWorkspaceConversationSetting, GitSetupPreference, SidebarSelection, InboxPeriod, VaultEntry, WorkspaceIdentity } from './types'
 import { initializeNoteProperties } from './utils/initializeNoteProperties'
 import type { NoteListFilter } from './utils/noteListHelpers'
@@ -1178,16 +1181,38 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const extensions = useExtensions({
     vaultPath: resolvedPath, ready: vaultListingReady && !noteWindowParams && !aiWorkspaceWindow,
     // Passage capture and association are this window's own services; native confirms its part.
-    hostCapabilities: COMMENTARY_HOST_CAPABILITIES,
+    // Website saving is added only once qualified, or in a dev browser with the synthetic fetch fixture.
+    hostCapabilities: websiteHostCapabilities(COMMENTARY_HOST_CAPABILITIES, webCaptureFixtureInstalled()),
     onUnsettled: () => setToastMessage(translate(appLocale, 'leadinglight.extensions.unsettled')),
   })
   useLayoutEffect(() => { extensionBoundaryRef.current = extensions.boundary })
+  // Undo moved a note this window created to Trash: nothing of it is saved again, and no pane keeps showing it.
+  const handleCreatedNoteTrashed = (path: string) => {
+    appSave.holdWrites([path])
+    appSave.releaseHeldWrites([path], 'discard')
+    notes.splitWorkspace.closePages([path])
+    vault.removeEntries([path])
+    vault.clearUnsaved(path)
+    void refreshGitModifiedFiles()
+  }
+  // Save from website: the website recipe's run through the same extension session, in its own dialog.
+  const webCaptureUi = useWebCaptureUi({
+    locale: appLocale, vaultPath: resolvedPath, extensions, folders: vault.folders, entries: visibleEntries, listingComplete: vaultListingReady,
+    tabs: notes.tabs, workspace: notes.splitWorkspace, reserveOpen: notes.reserveOpen, runPageExclusive,
+    addEntry: vault.addEntry, markInternalWrite: markRecentVaultWrite, onPersisted: handleCreatedVaultEntryPersisted, notify: setToastMessage,
+    onTrashed: handleCreatedNoteTrashed,
+    onOpenSaved: path => vaultBridge.openNoteByPath(path),
+    onOpenInBrowser: url => { void openExternalUrl(url).catch(() => {}) },
+    canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
+    blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded || !!noteWindowParams || !!aiWorkspaceWindow,
+  })
   const extensionUi = useExtensionUi({
     locale: appLocale, extensions, folders: vault.folders, entries: visibleEntries,
     reserveOpen: notes.reserveOpen, addEntry: vault.addEntry, markInternalWrite: markRecentVaultWrite,
     onPersisted: handleCreatedVaultEntryPersisted, notify: setToastMessage,
     canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
     blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded,
+    openWebRun: webCaptureUi.openRun,
   })
   // Adapt: one dialog in the main window; nothing reaches native until it is opened here.
   const adaptAvailable = !noteWindowParams && !aiWorkspaceWindow
@@ -1219,15 +1244,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     tabs: notes.tabs, workspace: notes.splitWorkspace, settle: flushEditorStateBeforeAction, runPageExclusive,
     read: path => readCommentaryPage(resolvedPath, path),
     addEntry: vault.addEntry, markInternalWrite: markRecentVaultWrite, onPersisted: handleCreatedVaultEntryPersisted, notify: setToastMessage,
-    onTrashed: path => {
-      // Undo moved the note to Trash: nothing of it is saved again, and no pane keeps showing it.
-      appSave.holdWrites([path])
-      appSave.releaseHeldWrites([path], 'discard')
-      notes.splitWorkspace.closePages([path])
-      vault.removeEntries([path])
-      vault.clearUnsaved(path)
-      void refreshGitModifiedFiles()
-    },
+    onTrashed: handleCreatedNoteTrashed,
     canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
     blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded || !!noteWindowParams || !!aiWorkspaceWindow,
     narrow: sideBySideTooNarrow,
@@ -1716,8 +1733,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const renderSaveHold = (path: string, named = false) => (
     <SaveHoldBanner key={path} view={saveHold.viewFor(path)} actions={saveHold} locale={appLocale} named={named} title={pageTitleFor(path)} />
   )
-  // Under a page's header: its save hold first, then its source card and commentary notice.
-  const renderPageNotice = (path: string) => <>{renderSaveHold(path)}{commentaryUi.renderNotice(path)}</>
+  // Under a page's header: its save hold first, then its source card and commentary notice, then a saved page's Undo.
+  const renderPageNotice = (path: string) => <>{renderSaveHold(path)}{commentaryUi.renderNotice(path)}{webCaptureUi.renderNotice(path)}</>
   const { split: workspaceSplit, paths: panePaths, activePane } = notes.splitWorkspace
   const shownPanePaths = workspaceSplit ? panePaths : [panePaths[activePane]]
   // A page with unsaved text and no visible pane still gets its note, so nothing waits unseen.
@@ -2110,6 +2127,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onCreateNote: handleNewPage,
     onCreateFromTemplate: templateUi.open,
     onCreateFromExtension: extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined,
+    onCreateFromWebsite: webCaptureUi.hasCommands ? webCaptureUi.openFromWebsite : undefined,
     onAdapt: adaptAvailable ? adaptUi.open : undefined,
     onCreateNoteOfType: notes.handleCreateNoteImmediate,
     onSave: handleTrackedSave,
@@ -2125,7 +2143,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     backupActions: backup.actions,
     isInputGuarded: backupInputHeld,
     // An extension dialog owns its text fields the same way: page commands pause, text undo stays native.
-    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen() || adaptUi.isOpen() || commentaryUi.isOpen(),
+    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen() || adaptUi.isOpen() || commentaryUi.isOpen() || webCaptureUi.isOpen(),
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2317,7 +2335,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           {sidebarVisible && (
             <>
               <div className="app__sidebar" style={{ width: layout.sidebarWidth }}>
-                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onCreateFromExtension={extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined} onAdapt={adaptAvailable ? adaptUi.open : undefined} adaptStatus={adaptUi.menuStatus} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
+                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onCreateFromExtension={extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined} onCreateFromWebsite={webCaptureUi.hasCommands ? webCaptureUi.openFromWebsite : undefined} onAdapt={adaptAvailable ? adaptUi.open : undefined} adaptStatus={adaptUi.menuStatus} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
               </div>
               <ResizeHandle onResize={layout.handleSidebarResize} />
             </>
@@ -2525,6 +2543,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         <TemplateDialog ui={templateUi} entries={visibleEntries} locale={appLocale} blocked={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} />
         {extensionUi.dialogs}
         {commentaryUi.dialogs}
+        {webCaptureUi.dialogs}
         {adaptUi.dialog}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog

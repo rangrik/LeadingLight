@@ -13,7 +13,7 @@ import { ExtensionPreviewDialog, type PreviewTarget } from './ExtensionPreviewDi
 import { ExtensionRollbackDialog } from './ExtensionSettings'
 import { ExtensionRunDialog, type FolderOption } from './ExtensionRunDialog'
 import {
-  runnableCommands,
+  isWebCaptureCommand, runnableCommands,
   type ChangeOutcome, type CreatedPage, type ExtensionVisit, type ImportOutcome, type OpenTarget, type PackageView, type RegistrySnapshot, type RunOpening,
 } from './extensionSessionController'
 import { changeRefusalText, translator } from './extensionUiText'
@@ -62,6 +62,8 @@ export interface ExtensionUiOptions {
   canOpen: () => boolean
   /** True while the window closes or switches, or another workspace-wide action holds still. */
   blocked: boolean
+  /** Opens a website command's own dialog; without it, a website command does not open here. */
+  openWebRun?: (key: string, onCommitted?: (page: CreatedPage) => void, expectedSha256?: string) => RunStart
 }
 
 const FOLDER_MEMORY_LIMIT = 50
@@ -178,6 +180,9 @@ export function useExtensionUi(options: ExtensionUiOptions) {
    * `expectedSha256`: open only that exact version's command; another version on is `changed`.
    */
   const openRun = useCallback((key: string, onCommitted?: (page: CreatedPage) => void, expectedSha256?: string): RunStart => {
+    // A website command has its own dialog; the chooser, Try it and Adapt's Try reach it from here.
+    const runnable = runnableCommands(controller.snapshot()).find(item => item.key === key)
+    if (runnable && isWebCaptureCommand(runnable.command)) return latest().openWebRun?.(key, onCommitted, expectedSha256) ?? 'notOpened'
     if (latest().blocked || !latest().canOpen()) return 'notOpened'
     const opening = controller.openRun(key)
     if (!opening) return 'notOpened'

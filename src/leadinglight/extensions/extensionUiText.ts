@@ -17,6 +17,7 @@ const CAPABILITY_KEYS: Record<Capability, TranslationKey> = {
   'document.create': 'leadinglight.extensions.capability.document.create',
   'document.append': 'leadinglight.extensions.capability.document.append',
   'document.open': 'leadinglight.extensions.capability.document.open',
+  'web.capture': 'leadinglight.extensions.capability.web.capture',
 }
 
 const WRITE_KEYS: Record<CommandReview['write'], TranslationKey> = {
@@ -33,6 +34,7 @@ function questionsSentence(t: T, count: number): string {
 /** What one command does, in the order a run happens. */
 export function commandSentences(t: T, review: CommandReview): string[] {
   return [
+    ...(review.network === 'explicitWebPage' ? [t('leadinglight.extensions.does.fetchPage')] : []),
     ...(review.placement === 'selectionAction' ? [t('leadinglight.extensions.does.selection')] : []),
     questionsSentence(t, review.questions),
     t(WRITE_KEYS[review.write]),

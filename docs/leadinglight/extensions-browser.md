@@ -168,6 +168,51 @@ Receipts give the path as the vault was requested.
   JavaScript before they are checked. Files this backend writes never contain them.
 - **Owner identity.** The owner is a server-issued token, not an authenticated window label.
 
+## Website capture fixture (opt-in)
+
+By default the dev server's disk host is E2's:
+
+- it ships Meeting debrief and Passage commentary;
+- it performs an explicit E2 capability list, so a capability added to the vocabulary is never
+  performed by accident.
+
+To check Save from website against a synthetic disk vault, start the dev server with:
+
+```sh
+LEADINGLIGHT_DEV_WEB_CAPTURE_FIXTURE=1
+```
+
+Only exactly `1` arms it, and it is read once, when the server's registry is first created.
+
+**What arming adds.**
+
+- The bundled website recipe, `leadinglight.website-capture`, as native's exact file.
+- `web.capture`. A checkout whose vocabulary lacks it logs a warning and stays E2.
+- Nothing else:
+  - no route is added;
+  - the server never fetches or proxies an address;
+  - website fetch commands never reach it.
+
+**The browser still decides.** The page itself answers fetches with the synthetic pages of
+`tests/helpers/webCaptureFixture.ts`, for `https://fixtures.leadinglight.invalid` only, and only
+when a test installed that fixture. A page without it offers no website entry, and lists the
+website recipe as unavailable, even on an armed server.
+
+**The write path is unchanged.** Saving uses the existing exclusive create, the lost-reply query
+and Undo to the local Trash, exactly as above.
+
+`tests/smoke/web-capture-disk.spec.ts` (helper `tests/helpers/webCaptureDiskFixture.ts`) checks
+this in an ordinary dev-server page, armed tests skipping without the flag:
+
+- the exact proposed bytes are what is on disk;
+- reload and opening never rewrite the note;
+- a dirty pane keeps its words;
+- Undo trashes exactly the saved bytes, and is refused once the note changed;
+- a name taken on disk is refused at Save;
+- a lost reply is resolved by Check again with one write.
+
+These checks qualify the browser bridge only, not native fetch, native windows or real websites.
+
 ## Backup
 
 Package files and preferences live outside every vault. The current vault backup does not include
@@ -188,4 +233,7 @@ Created pages are ordinary notes and stay readable when an extension is turned o
   - preference faults;
   - the 65-file bound;
   - restart;
-  - owners, route statuses and the plugin seam.
+  - owners, route statuses and the plugin seam;
+  - the website fixture: armed only by exactly `1`, E2 bundles and host when unarmed, an unarmed
+    website package listed with what it misses and never on, and an armed save through the same
+    create, query, conflict and Undo.

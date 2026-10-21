@@ -12,7 +12,7 @@ import {
   type OpenSessionReply, type ReadExtensionReply, type RunAdmission, type RunAdmissionRefusal,
 } from '../leadinglight/extensions/extensionApi.ts'
 import {
-  CAPABILITIES, EXTENSION_LIMITS, EXTENSION_SCHEMA, RESERVED_PACKAGE_ID_PREFIX, type Capability, type ExtensionPackage,
+  E2_HOST_CAPABILITIES, EXTENSION_LIMITS, EXTENSION_SCHEMA, RESERVED_PACKAGE_ID_PREFIX, type Capability, type ExtensionPackage,
 } from '../leadinglight/extensions/extensionContract.ts'
 import { commandCapabilities, parseExtensionPackage, utf8Bytes } from '../leadinglight/extensions/extensionSchema.ts'
 import {
@@ -36,10 +36,18 @@ export const EXTENSION_BRIDGE_COMMANDS: readonly string[] = [
  * Bundled packages on in a vault where nobody chose yet, once the host performs all they need. An
  * explicit Off is kept as that vault's `previous` entry and is never undone by an upgrade.
  */
-export const DEFAULT_ON_PACKAGES: ReadonlySet<string> = new Set(['leadinglight.passage-commentary'])
+export const DEFAULT_ON_PACKAGES: ReadonlySet<string> = new Set(['leadinglight.passage-commentary', 'leadinglight.website-capture'])
 /** The bundled commentary recipe: the shared fixture with only its id changed, as native ships it. */
 export const bundledCommentaryText = (fixture: string) =>
   fixture.replace('"id": "local.passage-commentary"', '"id": "leadinglight.passage-commentary"')
+/** The bundled website recipe, the same way; on by default only where the host performs `web.capture`. */
+export const bundledWebsiteText = (fixture: string) =>
+  fixture.replace('"id": "local.website-capture"', '"id": "leadinglight.website-capture"')
+/**
+ * What a backend performs unless its host says otherwise: an explicit list, so a capability added
+ * to the schema is never performed by accident. `web.capture` is added only by a host that fetches.
+ */
+export const MOCK_HOST_CAPABILITIES: readonly Capability[] = E2_HOST_CAPABILITIES
 const BRIDGE_COMMAND_SET = new Set(EXTENSION_BRIDGE_COMMANDS)
 export const isExtensionCommand = (command: string) => BRIDGE_COMMAND_SET.has(command)
 
@@ -571,7 +579,7 @@ export class ExtensionBackend {
 
   constructor(host: ExtensionHost, options: { capabilities?: readonly Capability[] } = {}) {
     this.host = host
-    this.capabilities = options.capabilities ?? CAPABILITIES
+    this.capabilities = options.capabilities ?? MOCK_HOST_CAPABILITIES
     this.undo = new UndoLedger(host, text => host.sha256(text), operationId => this.operations.has(operationId))
   }
 

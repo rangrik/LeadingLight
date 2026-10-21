@@ -19,12 +19,13 @@ import {
 import {
   E1_HOST_CAPABILITIES, RESERVED_PACKAGE_ID_PREFIX,
   type Capability, type CommandReview, type ComposedDocument, type ExtensionCommand, type ExtensionDiagnostic, type ExtensionPackage, type FormAnswers,
-  type InputProblem, type PackageReview, type PassageCapture, type RunEffects, type RunLiveness, type RunOutcome,
+  type InputProblem, type PackageReview, type PassageCapture, type RunEffects, type RunLiveness, type RunOutcome, type WebPageCapture,
 } from './extensionContract'
 import { buildExtensionMarkdown, type MarkdownRefusal } from './extensionMarkdown'
 import { previewDocument, reviewPackage, runExtensionCommand } from './extensionRecipe'
 import { parseExtensionPackage } from './extensionSchema'
 import type { ExtensionTransport } from './extensionTransport'
+import { readWebPageCapture } from './extensionWebPage'
 
 // --- Registry view ---------------------------------------------------------------------------------
 
@@ -71,6 +72,19 @@ export interface RunnableCommand {
 /** Commands the person can start from New page now: active, readable, fully supported, no selection needed. */
 export function runnableCommands(snapshot: RegistrySnapshot): RunnableCommand[] {
   return commandsAt(snapshot, 'palette')
+}
+
+/** A command that fetches a page the person enters in its own dialog (`captureWebPage`). */
+export function isWebCaptureCommand(command: ExtensionCommand): boolean {
+  return command.steps.some(step => step.op === 'captureWebPage')
+}
+
+/**
+ * The runnable commands that save a page from a website: offered as From website, and listed with
+ * every other command under From extension. Only a host that performs `web.capture` has any.
+ */
+export function webCaptureCommands(snapshot: RegistrySnapshot): RunnableCommand[] {
+  return runnableCommands(snapshot).filter(item => isWebCaptureCommand(item.command))
 }
 
 /**
@@ -139,14 +153,15 @@ export interface PendingAttempt {
 export type UncertainDetail = 'noReply' | 'running' | 'unknown'
 
 export type CreateOutcome =
-  | { readonly status: 'opened'; readonly page: CreatedPage; readonly durable: boolean }
+  /** `undo`: only a website run's create carries one, bound to the session it went through. */
+  | { readonly status: 'opened'; readonly page: CreatedPage; readonly durable: boolean; readonly undo?: UndoOffer | null }
   /**
    * An associated run's write is on disk. The host shows it after its page lane has taken the new
    * bytes, so this run opens nothing itself; `receipt` carries the write's own undo token.
    */
   | { readonly status: 'committed'; readonly page: CreatedPage; readonly receipt: CommittedReceipt; readonly undo: UndoOffer | null }
   /** Written; not shown here because the recipe does not open it, or the pane, vault or run moved on. */
-  | { readonly status: 'created'; readonly page: CreatedPage; readonly durable: boolean; readonly opened: 'notRequested' | 'notShown' }
+  | { readonly status: 'created'; readonly page: CreatedPage; readonly durable: boolean; readonly opened: 'notRequested' | 'notShown'; readonly undo?: UndoOffer | null }
   | { readonly status: 'notWritten'; readonly reason: NotWrittenReason }
   /** The opening's one unresolved operation; it stays the answer to Create until a query settles it. */
   | { readonly status: 'uncertain'; readonly attempt: PendingAttempt; readonly detail: UncertainDetail }
@@ -278,13 +293,15 @@ export interface RunOpening {
 export type PreparedPage = { readonly status: 'ready'; readonly content: string } | { readonly status: 'refused'; readonly reason: NotWrittenReason }
 
 /**
- * One Add or Create of a command that captures a passage. The host chose the destination with the
- * person, and injects the trusted preparation that turns the recipe's typed document into the
- * page's exact bytes: a new note, or the WHOLE postimage of `baseline`. A package never supplies
- * page bytes.
+ * One Add or Create of a command that captures a passage, or one Create of a website command. The
+ * host chose the destination with the person, and injects the trusted preparation that turns the
+ * recipe's typed document into the page's exact bytes: a new note, or the WHOLE postimage of
+ * `baseline`. A package never supplies page bytes.
  */
 export interface AssociatedRequest {
   readonly answers: FormAnswers
+  /** A website command's page, as the dialog holds it at Save; required for those, ignored otherwise. */
+  readonly webPage?: WebPageCapture | null
   readonly destination:
     | { readonly kind: 'create'; readonly folder: string; readonly fileName: string }
     /** `path` is the absolute page path; `baseline` its exact settled text that was reviewed. */
@@ -607,15 +624,22 @@ export function createExtensionController(options: ControllerOptions) {
   }
 
   /**
-   * The typed document an Add (`append`) or Create of a capture opening would write now, with a
-   * handle no native call sees; the host's preparation turns it into page bytes for its preview.
+   * The typed document an Add (`append`) or Create of a capture opening, or a website opening's
+   * Create for `webPage`, would write now, with a handle no native call sees; the host's
+   * preparation turns it into page bytes for its preview.
    */
-  function compose(opening: RunOpening, answers: FormAnswers, mode: 'create' | 'append') {
+  function compose(opening: RunOpening, answers: FormAnswers, mode: 'create' | 'append', webPage: WebPageCapture | null = null) {
     const destination = mode === 'create'
       ? { kind: 'newInFolder' as const, folderHandle: CHECK_HANDLE }
       : { kind: 'existingDocument' as const, documentHandle: CHECK_HANDLE }
-    const preview = previewDocument(opening.runnable.command, { capture: opening.capture, answers, destination })
+    const preview = previewDocument(opening.runnable.command, { capture: opening.capture, answers, destination, webPage })
     return { problems: preview.problems, document: preview.document }
+  }
+
+  /** A website command's page for this request, checked again here: create only, never a passage. */
+  function webPageFor(opening: RunOpening, request: AssociatedRequest): WebPageCapture | null {
+    if (!isWebCaptureCommand(opening.runnable.command) || opening.capture || request.destination.kind !== 'create') return null
+    return readWebPageCapture(request.webPage ?? null)
   }
 
   function pageFor(vaultPath: string, folder: string, fileName: string, title: string, content: string): CreatedPage {
@@ -728,10 +752,11 @@ export function createExtensionController(options: ControllerOptions) {
   }
 
   /**
-   * One explicit Add or Create of a capture opening, under the same rules as `create`: a fresh run
-   * and operation only while the opening has no final result and no unresolved operation. The
-   * destination page is bound in the run and an append's binding must report the exact reviewed
-   * baseline; anything else proves nothing was written. The written page is not opened here.
+   * One explicit Add or Create of a capture opening, or Create of a website opening, under the same
+   * rules as `create`: a fresh run and operation only while the opening has no final result and no
+   * unresolved operation. The destination page is bound in the run and an append's binding must
+   * report the exact reviewed baseline; anything else proves nothing was written. A capture's page
+   * is shown by the host; a website note opens in the request-time target, as a Create does.
    */
   async function submit(opening: RunOpening, request: AssociatedRequest): Promise<CreateOutcome> {
     const state = stateOf(opening)
@@ -739,14 +764,15 @@ export function createExtensionController(options: ControllerOptions) {
     if (settled) return settled
     const revoked = revokedReason(opening)
     if (revoked) return { status: 'revoked', reason: revoked }
-    if (!opening.capture) return { status: 'notWritten', reason: 'unavailable' }
-    const { problems, document } = compose(opening, request.answers, request.destination.kind)
+    const webPage = webPageFor(opening, request)
+    if (!opening.capture && !webPage) return { status: 'notWritten', reason: 'unavailable' }
+    const { problems, document } = compose(opening, request.answers, request.destination.kind, webPage)
     if (problems.length > 0 || !document) return { status: 'invalid', problems }
     const checked = request.prepare(document, request.destination)
     if (checked.status === 'refused') return { status: 'notWritten', reason: checked.reason }
     state.busy = true
     try {
-      return await runAssociated(opening, state, request)
+      return await runAssociated(opening, state, { ...request, webPage })
     } finally {
       state.busy = false
       state.live = null
@@ -789,7 +815,8 @@ export function createExtensionController(options: ControllerOptions) {
           if (reply?.status !== 'bound') run.failure = reply ? HANDLE_REASONS[reply.reason] : 'notStarted'
           else if (normalizeVaultRelativePath(reply.displayPath) !== relative) run.failure = 'internal'
           else run.handle = reply.folderHandle
-          return run.handle === null ? { action: 'cancel' } : { action: 'submit', answers: request.answers, destination: { kind: 'newInFolder', folderHandle: run.handle } }
+          return run.handle === null ? { action: 'cancel' }
+            : { action: 'submit', answers: request.answers, destination: { kind: 'newInFolder', folderHandle: run.handle }, webPage: request.webPage ?? null }
         }
         const reply = await api.bindDocument({ runId, path: relative })
         if (reply?.status !== 'bound') run.failure = reply ? DOCUMENT_REASONS[reply.reason] : 'notStarted'
@@ -827,8 +854,13 @@ export function createExtensionController(options: ControllerOptions) {
         if (receipt.status === 'committed') announce(request.target, sent, receipt)
         return receipt
       },
-      // The host shows the page once its own page lane holds the new bytes.
-      open: () => Promise.resolve(true),
+      // A capture's page is shown by the host once its own page lane holds the new bytes; a website
+      // note is a new page and opens in the request-time target, under the run's own guard.
+      open(receipt) {
+        if (opening.capture) return Promise.resolve(true)
+        const page = run.attempt && pageFromReceipt(run.attempt, receipt)
+        return page ? request.target.open(page, () => live() === 'live') : Promise.resolve(false)
+      },
     }
     const operationId = newId()
     let outcome: RunOutcome
@@ -893,8 +925,10 @@ export function createExtensionController(options: ControllerOptions) {
           state.done = { status: 'committed', page, receipt: outcome.receipt, undo: offerFor(state, outcome.receipt) }
           return state.done
         }
-        state.done = outcome.navigation === 'opened' ? { status: 'opened', page, durable: outcome.receipt.durable }
-          : { status: 'created', page, durable: outcome.receipt.durable, opened: outcome.navigation === 'notRequested' ? 'notRequested' : 'notShown' }
+        // Only a website run's create offers Undo; an E1 create never went through a run session record.
+        const undo = isWebCaptureCommand(opening.runnable.command) ? { undo: offerFor(state, outcome.receipt) } : {}
+        state.done = outcome.navigation === 'opened' ? { status: 'opened', page, durable: outcome.receipt.durable, ...undo }
+          : { status: 'created', page, durable: outcome.receipt.durable, opened: outcome.navigation === 'notRequested' ? 'notRequested' : 'notShown', ...undo }
         return state.done
       }
       case 'notWritten': {
@@ -956,11 +990,12 @@ export function createExtensionController(options: ControllerOptions) {
     const page = committedPage(opening, attempt, receipt)
     // An associated run's page is shown by the host, after its page lane takes the bytes.
     if (opening.capture) return { status: 'committed', page, receipt, undo: offerFor(state, receipt) }
+    const undo = isWebCaptureCommand(opening.runnable.command) ? { undo: offerFor(state, receipt) } : {}
     // The same intent as an immediate reply: a recipe without openCommittedResult never navigates.
-    if (!opening.runnable.review.opensResult) return { status: 'created', page, durable: receipt.durable, opened: 'notRequested' }
+    if (!opening.runnable.review.opensResult) return { status: 'created', page, durable: receipt.durable, opened: 'notRequested', ...undo }
     const current = () => !revokedReason(opening) && !state.cancelled
     const shown = current() && pageFromReceipt(attempt, receipt) !== null && await target.open(page, current).catch(() => false)
-    return shown ? { status: 'opened', page, durable: receipt.durable } : { status: 'created', page, durable: receipt.durable, opened: 'notShown' }
+    return shown ? { status: 'opened', page, durable: receipt.durable, ...undo } : { status: 'created', page, durable: receipt.durable, opened: 'notShown', ...undo }
   }
 
   /** The Undo native offers for this opening's committed write, bound to the session it went through. */

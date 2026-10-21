@@ -12,9 +12,11 @@ import {
 import { utf8Bytes } from './extensionSchema'
 
 /**
- * `source`: a captured-passage block, which E1 cannot prepare (association is E2), so it is refused
- * rather than guessed. `unsafeText`: the encoder refused some text (control characters, malformed
- * Unicode, an internal marker). `tooLarge`: the encoded page is over the proposal limit.
+ * `source`: a host-made capture block, which this builder cannot prepare, so it is refused rather than
+ * guessed: a captured passage (commentary preparation writes it) or a fetched page (`webArticle`,
+ * written only by the host from its converted page). `unsafeText`: the encoder refused some text
+ * (control characters, malformed Unicode, an internal marker). `tooLarge`: the encoded page is over
+ * the proposal limit.
  */
 export type MarkdownRefusal = 'source' | 'unsafeText' | 'tooLarge'
 
@@ -66,6 +68,7 @@ function listItem(marker: string, text: string): string {
 function blockMarkdown(block: DocumentBlock): string {
   switch (block.type) {
     case 'source':
+    case 'webArticle':
       throw new SourceBlockRefused()
     case 'heading': {
       const text = encodeLiteralMarkdownInline(block.text)

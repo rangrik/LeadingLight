@@ -317,3 +317,26 @@ on, the run form and undo.
 
 See [ADR 014](ADR-014-adapt-extension-authoring.md), [the provider notes](adapt-provider.md) and
 [local runtime policy](local-only-runtime.md).
+
+## Website capture
+
+"Save from website" turns one page the person enters into an ordinary local Markdown note. The
+request is sent only when they choose Fetch, and the page is never fetched again.
+
+**Where it lives.**
+
+- **Native fetch.** `src-tauri/src/leadinglight_web_capture/`, with two fixed commands,
+  `web_capture_fetch` and `web_capture_cancel`, in `src-tauri/src/commands/web_capture.rs`. It
+  knows nothing of vaults, notes, runs or packages.
+- **Conversion and dialog.** `src/leadinglight/webCapture/`. The page is parsed inert, Readability
+  extracts the article, and the note must reopen exactly or the page is refused.
+- **Extension step.** `captureWebPage`, which derives `web.capture`, in the existing extension
+  schema. The bundled recipe is `leadinglight.website-capture`.
+- **Saving.** The existing exclusive create proposal and its Undo; there is no new write path.
+
+**Switches.** `WEBSITE_SERVICES_QUALIFIED` in `manifest.rs` and `WEBSITE_FRONTEND_QUALIFIED` in
+`webCaptureHost.ts` change together. The desktop window adds `web.capture` only in the native app.
+A browser offers it only with the dev synthetic fetch fixture, which never opens a connection.
+
+See [ADR 016](ADR-016-website-capture.md), [the native fetch](web-capture-native.md),
+[the integration](website-native-integration.md) and [local runtime policy](local-only-runtime.md).

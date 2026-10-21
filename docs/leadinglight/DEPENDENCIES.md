@@ -48,3 +48,31 @@ Page relocation adds `pulldown-cmark` 0.13.4 with default features disabled. The
 reported 0.13.4 as latest when checked on October 16, 2026. It supplies CommonMark source spans
 for local destination edits; it does not serialize or reformat entire pages. Its lockfile adds
 `unicase` 2.10.0. This addition does not change the compatibility exceptions listed above.
+
+## Website capture (0.14.0)
+
+Website capture adds one direct dependency, `@mozilla/readability` 0.6.0. It extracts the article
+from the fetched page inside a detached document. Existing direct dependencies do the rest:
+DOMPurify 3.4.17, BlockNote 0.46.2 (held above) and `yaml` 2.9.1.
+
+- **Exact pin, by exception.** `package.json` names `0.6.0` with no range, and `pnpm-lock.yaml` adds
+  only its three entries. The conversion's synthetic fixtures and exactness checks were written
+  against this extractor's output. A newer Readability is therefore adopted only after they pass
+  with it, never by a routine refresh.
+- **License.** Apache-2.0, which is compatible with distributing LeadingLight under
+  AGPL-3.0-or-later. Its `LICENSE.md` ships with the package. It has no runtime dependencies and
+  ships its own type definitions.
+- **Version.** 0.6.0, published 2025-03-03, was the registry's latest stable release when checked
+  read-only with `pnpm view` on October 20, 2026. The installed and tested version is 0.6.0.
+
+The native fetch adds no Cargo package:
+
+- `Cargo.toml` names `encoding_rs` 0.8 directly, for its documented charset decoding. It is locked
+  at 0.8.42 and was already in the lockfile.
+- tokio's `net` and `time` features are enabled (tokio 1.53.3), for the pinned lookups and
+  timeouts.
+- The HTTP client is the existing reqwest 0.12, locked at 0.12.28. The fetch configures it to use
+  rustls 0.23.46 with its bundled WebPKI roots (`webpki-roots` 1.0.9).
+
+These Rust versions were not checked against the registry for this release. The compatibility
+exceptions listed above still apply.

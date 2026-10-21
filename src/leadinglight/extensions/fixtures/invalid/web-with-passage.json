@@ -1,0 +1,55 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.website-capture",
+  "version": "1.0.0",
+  "name": "Save from website",
+  "description": "Save a page you enter as a note, with its address and the date.",
+  "capabilities": [
+    "selection.read",
+    "document.create",
+    "web.capture"
+  ],
+  "commands": [
+    {
+      "id": "save-page",
+      "title": "Save from website",
+      "steps": [
+        {
+          "id": "passage",
+          "op": "capturePassage"
+        },
+        {
+          "id": "page",
+          "op": "captureWebPage"
+        },
+        {
+          "id": "where",
+          "op": "resolveDestination",
+          "policy": "newInChosenFolder"
+        },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": [
+            {
+              "step": "page",
+              "field": "pageTitle"
+            }
+          ],
+          "blocks": [
+            {
+              "type": "paragraph",
+              "text": [
+                "Saved."
+              ]
+            }
+          ]
+        },
+        {
+          "id": "save",
+          "op": "proposeDocument"
+        }
+      ]
+    }
+  ]
+}

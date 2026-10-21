@@ -31,6 +31,8 @@ mod store_tests;
 mod undo_tests;
 #[cfg(test)]
 mod validate_tests;
+#[cfg(test)]
+mod website_tests;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};

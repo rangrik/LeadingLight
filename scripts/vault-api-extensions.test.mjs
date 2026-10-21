@@ -20,13 +20,17 @@ import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { test } from "node:test";
+import { CAPABILITIES, E2_HOST_CAPABILITIES } from "../src/leadinglight/extensions/extensionContract.ts";
 import {
 	bundledPackages,
 	createDiskExtensions,
 	devRegistryRoot,
+	diskHostCapabilities,
 	handleExtensionApiRequest,
 	nodeIo,
 	ROUTE_LIMITS,
+	WEB_CAPTURE_DISK_FIXTURE_ENV,
+	webCaptureDiskFixtureArmed,
 } from "./vault-api-extensions.ts";
 import { diskSaveRecovery } from "./vault-api-save-recovery.ts";
 import { vaultApiPlugin } from "./vault-api-plugin.ts";
@@ -615,3 +619,120 @@ test("refuses to create a page in a folder it cannot write, proving nothing was 
 		}
 		assert.ok(!existsSync(path.join(locked, "Locked.md")));
 	}));
+
+// --- The synthetic website fixture: opt-in, explicit capabilities, the existing disk write ------------
+
+const WEBSITE = "leadinglight.website-capture";
+const WEBSITE_FILE = new URL("../src-tauri/src/leadinglight_extensions/bundled/website-capture.json", import.meta.url);
+/** Whether this checkout has the website vocabulary; before it, arming must stay honestly off. */
+const hasWebCapture = CAPABILITIES.includes("web.capture");
+const PAGE_NOTE = [
+	"---",
+	'source: "https://fixtures.leadinglight.invalid/2026/lighthouse-log"',
+	"---",
+	"# Keeping a Lighthouse Log",
+	"",
+	"Saved from [Harbour Notes](https://fixtures.leadinglight.invalid/2026/lighthouse-log) on 2026-10-20.",
+	"",
+].join("\n");
+
+test("arms the website fixture only for exactly 1; unarmed, the host and bundles stay E2's", () =>
+	withWorld(async ({ vault, make }) => {
+		assert.equal(WEB_CAPTURE_DISK_FIXTURE_ENV, "LEADINGLIGHT_DEV_WEB_CAPTURE_FIXTURE");
+		assert.equal(webCaptureDiskFixtureArmed({}), false);
+		for (const value of ["", "0", "true", "yes", " 1", "1 "]) {
+			assert.equal(webCaptureDiskFixtureArmed({ [WEB_CAPTURE_DISK_FIXTURE_ENV]: value }), false, JSON.stringify(value));
+		}
+		assert.equal(webCaptureDiskFixtureArmed({ [WEB_CAPTURE_DISK_FIXTURE_ENV]: "1" }), true);
+		assert.deepEqual([...diskHostCapabilities(false)], [...E2_HOST_CAPABILITIES]);
+		assert.ok(!diskHostCapabilities(false).includes("web.capture"));
+		assert.deepEqual(bundledPackages(), bundledPackages({ website: false }));
+		assert.equal(bundledPackages().length, 2);
+		const listed = (await client(make(), vault).call("list_extensions", { vaultPath: vault })).extensions;
+		assert.deepEqual(listed.map((item) => item.packageId).filter((id) => id.startsWith("leadinglight.")).sort(), [
+			"leadinglight.meeting-debrief",
+			"leadinglight.passage-commentary",
+		]);
+	}));
+
+test("unarmed, a website package is listed with what it misses and never turns on", () =>
+	withWorld(async ({ vault, make }) => {
+		const api = client(make(), vault);
+		const text = fixture("website-capture.json");
+		const imported = await api.importText(text);
+		if (!hasWebCapture) {
+			// Before the website vocabulary this checkout cannot even read the step: still honest.
+			assert.equal(imported.status, "invalid", JSON.stringify(imported));
+			return;
+		}
+		assert.equal(imported.status, "candidate", JSON.stringify(imported));
+		assert.deepEqual(imported.missingCapabilities, ["web.capture"]);
+		assert.deepEqual(await api.activate(text), { status: "refused", reason: "missingCapabilities", missingCapabilities: ["web.capture"] });
+		assert.equal((await api.entry("local.website-capture")).activeSha256, null);
+	}));
+
+test("armed without the website vocabulary, the host stays E2 and says so", { skip: hasWebCapture && "this checkout has the website vocabulary" }, () => {
+	const warnings = [];
+	assert.deepEqual([...diskHostCapabilities(true, (message) => warnings.push(message))], [...E2_HOST_CAPABILITIES]);
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /no web\.capture/);
+});
+
+test(
+	"armed: ships native's website recipe, performs web.capture, and saves through the existing create, query and Undo",
+	{ skip: !hasWebCapture && "needs the website vocabulary in this checkout" },
+	() =>
+		withWorld(async ({ root, vault }) => {
+			const warnings = [];
+			const bundled = bundledPackages({ website: true });
+			const website = readFileSync(WEBSITE_FILE, "utf8");
+			assert.equal(bundled.length, 3);
+			assert.equal(bundled[2], website);
+			assert.deepEqual([...diskHostCapabilities(true)], [...E2_HOST_CAPABILITIES, "web.capture"]);
+			const extensions = createDiskExtensions({ root, bundled, capabilities: diskHostCapabilities(true), warn: (message) => warnings.push(message) });
+			extensions.noteVault(vault);
+			const api = client(extensions, vault);
+			// On by default only because this host performs web.capture; nothing was written for it.
+			assert.equal((await api.entry(WEBSITE)).activeSha256, sha(website));
+			assert.ok(!existsSync(path.join(root, "preferences.json")));
+
+			const sessionId = await api.session();
+			const begin = (invocationId) =>
+				api.call("begin_extension_run", { sessionId, packageSha256: sha(website), commandId: "save-page", invocationId });
+			const admission = await begin(randomUUID());
+			assert.equal(admission.status, "admitted", JSON.stringify(admission));
+			const run = { runId: admission.scope.runId, folderHandle: (await api.bind(admission.scope.runId)).folderHandle };
+			const proposal = api.proposal(run, "keeping-a-lighthouse-log.md", PAGE_NOTE);
+			const receipt = await api.submit(proposal);
+			const page = path.join(vault, "Meetings", "keeping-a-lighthouse-log.md");
+			assert.equal(receipt.status, "committed", JSON.stringify(receipt));
+			assert.equal(receipt.path, page);
+			assert.equal(readFileSync(page, "utf8"), PAGE_NOTE);
+			assert.deepEqual(await api.query(proposal.operationId), receipt);
+			assert.deepEqual(stagingLeft(path.join(vault, "Meetings")), []);
+
+			// The same name from another run is a conflict; the saved page keeps its bytes.
+			const second = await begin(randomUUID());
+			const other = api.proposal({ runId: second.scope.runId, folderHandle: (await api.bind(second.scope.runId)).folderHandle }, "keeping-a-lighthouse-log.md", "# Other\n");
+			assert.deepEqual(await api.submit(other), { status: "conflict", operationId: other.operationId, reason: "exists" });
+			assert.equal(readFileSync(page, "utf8"), PAGE_NOTE);
+
+			// Undo refuses a changed page and keeps it; with the exact bytes back it moves them to Trash.
+			const request = {
+				operationId: randomUUID(), sessionId, undoReceipt: receipt.undoReceipt, kind: "create",
+				expectedSha256: receipt.afterSha256, beforeSha256: null,
+			};
+			writeFileSync(page, `${PAGE_NOTE}typed later\n`);
+			assert.deepEqual(await api.call("undo_document_proposal", { request }), { status: "conflict", operationId: request.operationId, reason: "changed" });
+			assert.equal(readFileSync(page, "utf8"), `${PAGE_NOTE}typed later\n`);
+			writeFileSync(page, PAGE_NOTE);
+			const again = { ...request, operationId: randomUUID() };
+			assert.deepEqual(await api.call("undo_document_proposal", { request: again }), { status: "undone", operationId: again.operationId, kind: "create", path: page });
+			assert.ok(!existsSync(page));
+			const trash = path.join(vault, ".leadinglight", "trash");
+			const items = readdirSync(trash);
+			assert.equal(items.length, 1);
+			assert.equal(readFileSync(path.join(trash, items[0], "payload"), "utf8"), PAGE_NOTE);
+			assert.deepEqual(warnings, []);
+		}),
+);

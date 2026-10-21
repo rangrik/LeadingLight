@@ -32,6 +32,7 @@ mod leadinglight_extensions;
 mod leadinglight_history;
 mod leadinglight_relocation_links;
 mod leadinglight_trash;
+mod leadinglight_web_capture;
 #[cfg(any(test, all(desktop, target_os = "linux")))]
 mod linux_appimage;
 mod macos_fullscreen_escape;
@@ -447,6 +448,7 @@ macro_rules! app_invoke_handler {
             commands::adapt_delete_conversation,
             commands::adapt_send,
             commands::adapt_cancel_turn,
+            commands::web_capture_cancel,
             vault_watcher::start_vault_watcher,
             vault_watcher::stop_vault_watcher
         ]
@@ -461,6 +463,11 @@ fn with_invoke_handler(builder: tauri::Builder<tauri::Wry>) -> tauri::Builder<ta
             invoke.resolver.reject(message);
             return true;
         }
+        // A website fetch is served here, while it is dispatched, so its attempt is reserved
+        // before any task runs and only that request's own task can start it.
+        let Some(invoke) = commands::dispatch_web_capture_fetch(invoke) else {
+            return true;
+        };
         upstream_handler(invoke)
     })
 }
@@ -485,6 +492,9 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
         app_handle
             .state::<leadinglight_adapt::AdaptState>()
             .forget_owner(label);
+        app_handle
+            .state::<leadinglight_web_capture::WebCapture>()
+            .forget_owner(label);
     }
 
     if let tauri::RunEvent::Exit = event {
@@ -493,6 +503,21 @@ fn handle_run_event(app_handle: &tauri::AppHandle, event: &tauri::RunEvent) {
             .shutdown();
         let state: tauri::State<'_, desktop_runtime::WsBridgeChild> = app_handle.state();
         desktop_runtime::stop_ws_bridge_on_exit(&state);
+    }
+}
+
+/// A page load in a window stops that window's website fetch, even when its own cancel was lost.
+/// Starting nothing, the website service is created up front.
+fn forget_website_fetch_on_page_load(
+    webview: &tauri::Webview,
+    payload: &tauri::webview::PageLoadPayload<'_>,
+) {
+    use tauri::Manager;
+
+    if matches!(payload.event(), tauri::webview::PageLoadEvent::Started) {
+        webview
+            .state::<leadinglight_web_capture::WebCapture>()
+            .forget_owner(webview.label());
     }
 }
 
@@ -506,9 +531,11 @@ pub fn run() {
         .manage(commands::StartupTimingState::default())
         .manage(leadinglight_extensions::ExtensionsState::default())
         .manage(leadinglight_adapt::AdaptState::default())
+        .manage(leadinglight_web_capture::WebCapture::new())
         .on_page_load(|webview, payload| {
             leadinglight_extensions::on_page_load(webview, payload);
             leadinglight_adapt::on_page_load(webview, payload);
+            forget_website_fetch_on_page_load(webview, payload);
         });
 
     #[cfg(desktop)]

@@ -1,0 +1,80 @@
+{
+  "schema": "leadinglight.extension/1",
+  "id": "local.website-capture",
+  "version": "1.0.0",
+  "name": "Save from website",
+  "description": "Save a page you enter as a note, with its address and the date.",
+  "capabilities": [
+    "document.create",
+    "document.open",
+    "web.capture"
+  ],
+  "commands": [
+    {
+      "id": "save-page",
+      "title": "Save from website",
+      "steps": [
+        {
+          "id": "page",
+          "op": "captureWebPage"
+        },
+        {
+          "id": "notes",
+          "op": "collectForm",
+          "fields": [
+            {
+              "id": "why",
+              "kind": "multilineText",
+              "label": "Why I saved this"
+            }
+          ]
+        },
+        {
+          "id": "where",
+          "op": "resolveDestination",
+          "policy": "newInChosenFolder"
+        },
+        {
+          "id": "note",
+          "op": "composeDocument",
+          "title": [
+            {
+              "step": "page",
+              "field": "pageTitle"
+            }
+          ],
+          "blocks": [
+            {
+              "type": "heading",
+              "level": 2,
+              "text": [
+                "My notes"
+              ],
+              "ifFilled": {
+                "step": "notes",
+                "field": "why"
+              }
+            },
+            {
+              "type": "paragraph",
+              "text": [
+                {
+                  "step": "page",
+                  "field": "article"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "save",
+          "op": "proposeDocument"
+        },
+        {
+          "id": "open",
+          "op": "openCommittedResult"
+        }
+      ]
+    }
+  ]
+}
