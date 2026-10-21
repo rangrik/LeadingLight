@@ -34,6 +34,9 @@ import { useTemplateUi, type TemplateBoundary } from './leadinglight/templates/u
 import { ExtensionSettings } from './leadinglight/extensions/ExtensionSettings'
 import { useExtensionUi } from './leadinglight/extensions/useExtensionUi'
 import { holdWithExtensions, useExtensions, type ExtensionBoundary } from './leadinglight/extensions/useExtensions'
+import { useAdapt } from './leadinglight/adapt/useAdapt'
+import { useAdaptUi } from './leadinglight/adapt/useAdaptUi'
+import { snapshotPage } from './leadinglight/adapt/adaptPage'
 import { usePageRelocation } from './leadinglight/relocation/usePageRelocation'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
@@ -1156,6 +1159,22 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
     blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded,
   })
+  // Adapt: one dialog in the main window; nothing reaches native until it is opened here.
+  const adaptAvailable = !noteWindowParams && !aiWorkspaceWindow
+  const adapt = useAdapt({ vaultPath: resolvedPath, ready: vaultListingReady && adaptAvailable })
+  // Current page, on the person's click only: exactly that page, once its pending text is saved.
+  const adaptVaultRef = useRef(resolvedPath)
+  useLayoutEffect(() => { adaptVaultRef.current = resolvedPath })
+  const snapshotCurrentPage = useCallback(() => snapshotPage({
+    activePath: () => noteActiveTabPathRef.current,
+    vault: () => adaptVaultRef.current,
+    settle: flushEditorStateBeforeAction,
+    read: path => {
+      const tab = currentPaneTabs().find(item => item.entry.path === path)
+      return tab ? { title: pageLabel(tab.entry, appLocale), text: tab.content } : null
+    },
+  }), [appLocale, currentPaneTabs, flushEditorStateBeforeAction, noteActiveTabPathRef])
+  const adaptUi = useAdaptUi({ locale: appLocale, vaultPath: resolvedPath, adapt, extensions, extensionUi, snapshotPage: snapshotCurrentPage })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -2022,6 +2041,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onCreateNote: handleNewPage,
     onCreateFromTemplate: templateUi.open,
     onCreateFromExtension: extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined,
+    onAdapt: adaptAvailable ? adaptUi.open : undefined,
     onCreateNoteOfType: notes.handleCreateNoteImmediate,
     onSave: handleTrackedSave,
     onUndo: undoCommand,
@@ -2036,7 +2056,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     backupActions: backup.actions,
     isInputGuarded: backupInputHeld,
     // An extension dialog owns its text fields the same way: page commands pause, text undo stays native.
-    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen(),
+    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen() || adaptUi.isOpen(),
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2226,7 +2246,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           {sidebarVisible && (
             <>
               <div className="app__sidebar" style={{ width: layout.sidebarWidth }}>
-                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onCreateFromExtension={extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
+                <Sidebar entries={visibleEntries} folders={vault.folders} views={vault.views} selection={effectiveSelection} onSelect={handleSetSelection} onSearch={openFind} onCreatePage={handleNewPage} onCreateFromTemplate={templateUi.open} onCreateFromExtension={extensionUi.hasRunnable ? extensionUi.openFromExtension : undefined} onAdapt={adaptAvailable ? adaptUi.open : undefined} adaptStatus={adaptUi.menuStatus} onOpenToday={openTodayCommand} canOpenToday={today.canOpenToday} onOpenTrash={openTrash} activeNotePath={notes.activeTabPath} onSelectNote={notes.handleSelectNote} onSelectFavorite={handleOpenFavorite} onReorderFavorites={entryActions.handleReorderFavorites} onCreateType={notes.handleCreateNoteImmediate} onCreateNewType={dialogs.openCreateType} onCustomizeType={entryActions.handleCustomizeType} onUpdateTypeTemplate={entryActions.handleUpdateTypeTemplate} onReorderSections={entryActions.handleReorderSections} onRenameSection={entryActions.handleRenameSection} onDeleteType={handleDeleteType} onToggleTypeVisibility={entryActions.handleToggleTypeVisibility} onCreateFolder={handleCreateFolder} onRenameFolder={renameFolderAlone} folderFileActions={fileActions.folderActions} renamingFolderPath={folderActions.renamingFolderPath} onStartRenameFolder={folderActions.startFolderRename} onCancelRenameFolder={folderActions.cancelFolderRename} onCanDropNoteOnFolder={noteRetargetingUi.canDropNoteOnFolder} onMoveNoteToFolder={noteRetargetingUi.moveIntoFolder} onCreateView={dialogs.openCreateView} onEditView={handleEditView} onDeleteView={handleDeleteView} onUpdateViewDefinition={handleSidebarUpdateViewDefinition} onReorderViews={canReorderSavedViews ? viewOrdering.onReorderViews : undefined} showInbox={explicitOrganizationEnabled} inboxCount={inboxCount} allNotesFileVisibility={allNotesFileVisibility} pluralizeTypeLabels={settings.sidebar_type_pluralization_enabled ?? true} onCollapse={handleCollapseSidebar} onGoBack={handleGoBack} onGoForward={handleGoForward} canGoBack={canGoBack} canGoForward={canGoForward} locale={appLocale} loading={isVaultContentLoading} vaultRootPath={resolvedPath} workspaceOrder={vaultWorkspaceOrder} />
               </div>
               <ResizeHandle onResize={layout.handleSidebarResize} />
             </>
@@ -2423,7 +2443,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           onCommit={conflictResolver.commitResolution}
           onClose={conflictFlow.handleCloseConflictResolver}
         />
-        <SettingsPanel open={dialogs.showSettings} initialSectionId={settingsInitialSectionId} settings={settings} aiAgentsStatus={aiAgentsStatus} locale={appLocale} systemLocale={systemLocale} vaults={vaultSwitcher.allVaults} defaultWorkspacePath={vaultSwitcher.defaultWorkspacePath} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} isGitVault={gitRepoState !== 'missing'} vaultPath={resolvedPath} onSave={saveSettings} onCopyMcpConfig={mcpSetupDialog.copyManualConfig} explicitOrganizationEnabled={explicitOrganizationEnabled} onSaveExplicitOrganization={handleSaveExplicitOrganization} extensions={noteWindowParams ? undefined : <ExtensionSettings ui={extensionUi} />} onClose={dialogs.closeSettings} />
+        <SettingsPanel open={dialogs.showSettings} initialSectionId={settingsInitialSectionId} settings={settings} aiAgentsStatus={aiAgentsStatus} locale={appLocale} systemLocale={systemLocale} vaults={vaultSwitcher.allVaults} defaultWorkspacePath={vaultSwitcher.defaultWorkspacePath} onSetDefaultWorkspace={vaultSwitcher.setDefaultWorkspace} onRemoveVault={vaultSwitcher.removeVault} onReorderVaults={vaultSwitcher.reorderVaults} onUpdateWorkspaceIdentity={vaultSwitcher.updateWorkspaceIdentity} isGitVault={gitRepoState !== 'missing'} vaultPath={resolvedPath} onSave={saveSettings} onCopyMcpConfig={mcpSetupDialog.copyManualConfig} explicitOrganizationEnabled={explicitOrganizationEnabled} onSaveExplicitOrganization={handleSaveExplicitOrganization} extensions={noteWindowParams ? undefined : <ExtensionSettings ui={extensionUi} adapt={adaptAvailable ? { ask: adaptUi.open, adjust: adaptUi.adjust } : undefined} />} onClose={dialogs.closeSettings} />
         <FeedbackDialog open={showFeedback} onClose={closeFeedback} locale={appLocale} />
         <McpSetupDialog open={mcpSetupDialog.open} status={mcpSetupDialog.status} busyAction={mcpSetupDialog.busyAction} manualConfigSnippet={mcpSetupDialog.manualConfigSnippet} opencodeManualConfigSnippet={mcpSetupDialog.opencodeManualConfigSnippet} manualConfigLoading={mcpSetupDialog.manualConfigLoading} manualConfigError={mcpSetupDialog.manualConfigError} locale={appLocale} onClose={mcpSetupDialog.closeDialog} onConnect={mcpSetupDialog.connect} onCopyManualConfig={mcpSetupDialog.copyManualConfig} onCopyOpenCodeManualConfig={mcpSetupDialog.copyOpenCodeManualConfig} onDisconnect={mcpSetupDialog.disconnect} onLoadManualConfig={mcpSetupDialog.loadManualConfig} />
         <CloneVaultModal key={dialogs.showCloneVault ? 'clone-open' : 'clone-closed'} open={dialogs.showCloneVault} onClose={dialogs.closeCloneVault} onVaultCloned={vaultSwitcher.handleVaultCloned} />
@@ -2432,6 +2452,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         {backup.dialog}
         <TemplateDialog ui={templateUi} entries={visibleEntries} locale={appLocale} blocked={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} />
         {extensionUi.dialogs}
+        {adaptUi.dialog}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog
             open={true}

@@ -34,6 +34,9 @@ interface SidebarProps {
   onCreateFromTemplate?: () => void
   /** Present only while an extension command can run. */
   onCreateFromExtension?: () => void
+  /** Opens Adapt; `adaptStatus` is its one stable status (a turn running, a reply not seen yet). */
+  onAdapt?: () => void
+  adaptStatus?: 'idle' | 'working' | 'ready'
   onOpenToday?: () => void
   canOpenToday?: boolean
   onOpenTrash?: () => void
@@ -91,6 +94,8 @@ interface SidebarNavigationProps
   | 'onCreatePage'
   | 'onCreateFromTemplate'
   | 'onCreateFromExtension'
+  | 'onAdapt'
+  | 'adaptStatus'
   | 'onOpenToday'
   | 'canOpenToday'
   | 'onOpenTrash'
@@ -415,6 +420,8 @@ function SidebarTopNavigation(props: SidebarNavigationProps) {
         onCreatePage={props.onCreatePage}
         onCreateFromTemplate={props.onCreateFromTemplate}
         onCreateFromExtension={props.onCreateFromExtension}
+        onAdapt={props.onAdapt}
+        adaptStatus={props.adaptStatus}
         onOpenToday={props.onOpenToday}
         canOpenToday={props.canOpenToday}
         onOpenTrash={props.onOpenTrash}
@@ -652,6 +659,8 @@ function SidebarRuntimeNavigation({
       onCreatePage={props.onCreatePage}
       onCreateFromTemplate={props.onCreateFromTemplate}
       onCreateFromExtension={props.onCreateFromExtension}
+      onAdapt={props.onAdapt}
+      adaptStatus={props.adaptStatus}
       onOpenToday={props.onOpenToday}
       canOpenToday={props.canOpenToday}
       onOpenTrash={props.onOpenTrash}

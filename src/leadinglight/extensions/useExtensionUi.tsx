@@ -14,7 +14,7 @@ import { ExtensionRollbackDialog } from './ExtensionSettings'
 import { ExtensionRunDialog, type FolderOption } from './ExtensionRunDialog'
 import {
   runnableCommands,
-  type ChangeOutcome, type CreatedPage, type ImportOutcome, type OpenTarget, type PackageView, type RegistrySnapshot, type RunOpening,
+  type ChangeOutcome, type CreatedPage, type ExtensionVisit, type ImportOutcome, type OpenTarget, type PackageView, type RegistrySnapshot, type RunOpening,
 } from './extensionSessionController'
 import { changeRefusalText, translator } from './extensionUiText'
 import type { Extensions } from './useExtensions'
@@ -26,8 +26,21 @@ export interface ExtensionNotice {
 }
 
 type Turn = { packageId: string; name: string; sha: string; expected: string | null }
+/**
+ * How a preview ended: turned on (with the command Try it would open), or closed without that.
+ * `moved`: it belonged to a visit that has ended, so its Turn on did nothing.
+ */
+export type PreviewEnding =
+  | { readonly turnedOn: true; readonly tryKey: string | null }
+  | { readonly turnedOn: false; readonly outcome: ChangeOutcome | null; readonly moved?: true }
+/** Whether Try it opened its form, or why not: `changed` when another version is on than the one expected. */
+export type RunStart = 'opened' | 'notOpened' | 'changed'
 type DialogState =
-  | { kind: 'preview'; name: string; target: PreviewTarget; turnOn: Turn | null }
+  | {
+    kind: 'preview'; name: string; target: PreviewTarget; turnOn: Turn | null; after?: (ending: PreviewEnding) => void
+    /** A preview opened for another surface's request stays bound to the visit it was opened in. */
+    bound?: { visit: ExtensionVisit | null; stillCurrent: () => boolean }
+  }
   | { kind: 'import' }
   | { kind: 'chooser' }
   | { kind: 'run'; id: number; opening: RunOpening; target: OpenTarget; initialFolder: string }
@@ -141,9 +154,10 @@ export function useExtensionUi(options: ExtensionUiOptions) {
   const folderOptions = useMemo<FolderOption[]>(
     () => [{ path: '', label: t('leadinglight.extensions.rootFolder') }, ...flattenRetargetFolders(folders)], [folders, t])
 
-  const makeTarget = useCallback((reservation: OpenReservation): OpenTarget => ({
+  const makeTarget = useCallback((reservation: OpenReservation, onCommitted?: (page: CreatedPage) => void): OpenTarget => ({
     beforeWrite: path => latest().markInternalWrite(path),
     committed(page) {
+      onCommitted?.(page)
       // Never into another vault's listing: the reservation knows the vault session it was taken in.
       if (!reservation.inSession()) return
       latest().onPersisted(page.path)
@@ -159,14 +173,23 @@ export function useExtensionUi(options: ExtensionUiOptions) {
     },
   }), [latest])
 
-  const openRun = useCallback((key: string) => {
-    if (latest().blocked || !latest().canOpen()) return
+  /**
+   * `onCommitted`: told once the run's note is on disk, whether or not it is then opened.
+   * `expectedSha256`: open only that exact version's command; another version on is `changed`.
+   */
+  const openRun = useCallback((key: string, onCommitted?: (page: CreatedPage) => void, expectedSha256?: string): RunStart => {
+    if (latest().blocked || !latest().canOpen()) return 'notOpened'
     const opening = controller.openRun(key)
-    if (!opening) return
+    if (!opening) return 'notOpened'
+    if (expectedSha256 !== undefined && opening.runnable.packageSha256 !== expectedSha256) {
+      controller.cancel(opening)
+      return 'changed'
+    }
     const remembered = readFolderMemory(opening.visit.vaultPath)[key] ?? ''
     // A remembered folder is offered only while the host still lists it; native checks it again.
     const initialFolder = folderOptions.some(option => option.path === remembered) ? remembered : ''
-    show({ kind: 'run', id: nextRun(), opening, target: makeTarget(latest().reserveOpen()), initialFolder })
+    show({ kind: 'run', id: nextRun(), opening, target: makeTarget(latest().reserveOpen(), onCommitted), initialFolder })
+    return 'opened'
   }, [controller, folderOptions, latest, makeTarget, nextRun, show])
 
   /** New page → From extension…: one command opens directly, several open the chooser. */
@@ -182,12 +205,14 @@ export function useExtensionUi(options: ExtensionUiOptions) {
   }, [t])
 
   /** Activation and rollback; the controller refreshes before answering, so the list is current. */
-  const turn = useCallback(async ({ packageId, name, sha, expected }: Turn, success: (tryKey: string | null) => ExtensionNotice) => {
+  const turn = useCallback(async ({ packageId, name, sha, expected }: Turn, success: (tryKey: string | null) => ExtensionNotice): Promise<PreviewEnding> => {
     setBusyPackage(packageId)
     setNotice({ text: t('leadinglight.extensions.status.changing', { name }), tryKey: null })
     try {
       const outcome = await controller.activate(packageId, sha, expected)
-      report(outcome, name, () => success(runnableCommands(controller.snapshot()).find(item => item.packageId === packageId)?.key ?? null))
+      const tryKey = runnableCommands(controller.snapshot()).find(item => item.packageId === packageId)?.key ?? null
+      report(outcome, name, () => success(tryKey))
+      return outcome.status === 'done' ? { turnedOn: true, tryKey } : { turnedOn: false, outcome }
     } finally {
       setBusyPackage(null)
     }
@@ -241,14 +266,40 @@ export function useExtensionUi(options: ExtensionUiOptions) {
       turnOn: { packageId: extension.id, name: extension.name, sha: candidate.packageSha256, expected: current?.activeSha256 ?? null } })
   }
 
+  /**
+   * A candidate stored from elsewhere (Adapt): the same effect-free preview, with Turn on as its
+   * single activation. `expected` is the active version the request started from, so a version
+   * that changed meanwhile is refused rather than replaced. `after` hears how the preview ended.
+   * The preview belongs to this visit and to the caller's `stillCurrent`: once either has moved
+   * on (another vault, even the same one again), its Turn on activates nothing.
+   */
+  const reviewCandidate = useCallback((candidate: Extract<ImportOutcome, { status: 'candidate' }>, expected: string | null,
+    after: (ending: PreviewEnding) => void, stillCurrent: () => boolean) => {
+    if (isOpen()) return false
+    const { extension } = candidate
+    const current = viewOf(controller.snapshot(), extension.id)
+    show({ kind: 'preview', name: extension.name, after, bound: { visit: controller.visit(), stillCurrent },
+      target: { version: extension.version, load: { status: 'ready', extension, review: candidate.review }, replacing: activeOf(current) },
+      turnOn: { packageId: extension.id, name: extension.name, sha: candidate.packageSha256, expected } })
+    return true
+  }, [controller, isOpen, show])
+  const boundHere = (bound: { visit: ExtensionVisit | null; stillCurrent: () => boolean } | undefined) =>
+    !bound || (bound.visit !== null && controller.visit() === bound.visit && bound.visit.isOpen() && bound.stillCurrent())
+
   const close = () => hide()
   const renderDialog = (state: DialogState) => {
     switch (state.kind) {
       case 'preview': {
-        const { turnOn } = state
+        const { turnOn, after, bound } = state
         return <ExtensionPreviewDialog key={`${state.name}:${state.target.version}`} locale={locale} name={state.name} target={state.target}
-          onCloseAutoFocus={onCloseAutoFocus} onClose={close}
-          onTurnOn={turnOn ? async () => { await turn(turnOn, turnedOn(turnOn.name)); hide() } : undefined} />
+          onCloseAutoFocus={onCloseAutoFocus} onClose={() => { hide(); after?.({ turnedOn: false, outcome: null }) }}
+          onTurnOn={turnOn ? async () => {
+            // Checked at the click, before anything is sent: a preview left open across a visit change turns nothing on.
+            if (!boundHere(bound)) { hide(); after?.({ turnedOn: false, outcome: null, moved: true }); return }
+            const ending = await turn(turnOn, turnedOn(turnOn.name))
+            hide()
+            after?.(ending)
+          } : undefined} />
       }
       case 'import':
         return <ExtensionImportDialog locale={locale} check={checkImport} onCloseAutoFocus={onCloseAutoFocus} onClose={close} onCandidate={showCandidate} />
@@ -279,7 +330,7 @@ export function useExtensionUi(options: ExtensionUiOptions) {
   return {
     locale, snapshot, runnable, notice, busyPackage,
     hasRunnable: runnable.length > 0,
-    openFromExtension, openRun, preview, toggle, rollback, isOpen,
+    openFromExtension, openRun, preview, toggle, rollback, isOpen, reviewCandidate,
     paste: () => show({ kind: 'import' }),
     /** Reads the registry again, or, while blocked, asks native again to confirm the unsettled closes. */
     retry: () => { void (controller.snapshot().status === 'unsettled' ? controller.retryUnsettled() : controller.refresh()) },

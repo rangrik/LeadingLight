@@ -1,0 +1,54 @@
+/* Adapt: one dialog over the workspace (and over Settings), reusing the extension surface rules. */
+.ll-adapt-dialog { width: min(760px, calc(100vw - 2rem)); max-width: none; height: min(780px, calc(100dvh - 2rem));
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto auto; gap: 12px; }
+/* Menus opened from the dialog sit above it (z 1400) and below Select menus (z 12000). */
+.ll-adapt-menu { z-index: 1500; max-width: min(360px, calc(100vw - 2rem)); }
+.ll-adapt-menu-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.ll-adapt-header-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-left: -8px; }
+.ll-adapt-scroll { display: flex; min-height: 0; flex-direction: column; gap: 12px; overflow-y: auto; padding-right: 2px; }
+.ll-adapt-strong { font-weight: 600; }
+.ll-adapt-connect { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+.ll-adapt-turns { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.ll-adapt-turn { display: flex; flex-direction: column; gap: 10px; }
+.ll-adapt-request, .ll-adapt-reply { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ll-adapt-request { align-self: flex-end; max-width: 85%; padding: 8px 12px; border-radius: calc(var(--radius) - 2px); background: var(--state-hover-subtle); }
+.ll-adapt-who { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--muted-foreground); }
+/* Model and request text: plain, wrapped, never interpreted. */
+.ll-adapt-prose { margin: 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* What LeadingLight checked itself, set apart from the model's words. */
+.ll-adapt-check { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; padding: 12px; border: 1px solid var(--border); border-radius: calc(var(--radius) - 2px); font-size: 13px; }
+.ll-adapt-check p { margin: 0; overflow-wrap: anywhere; }
+.ll-adapt-check-title { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 600; color: var(--muted-foreground); }
+.ll-adapt-check-title > svg { width: 15px; height: 15px; flex: none; }
+
+.ll-adapt-status { display: flex; align-items: center; gap: 10px; min-height: 0; font-size: 13px; }
+.ll-adapt-status:empty { display: none; }
+
+.ll-adapt-composer { display: flex; flex-direction: column; gap: 8px; }
+.ll-adapt-label { font-size: 13px; font-weight: 500; }
+.ll-adapt-input { min-height: 72px; max-height: 30dvh; resize: vertical; }
+.ll-adapt-paste { display: flex; flex-direction: column; gap: 6px; }
+.ll-adapt-paste-input { min-height: 96px; max-height: 30dvh; font-size: 12px; }
+.ll-adapt-examples { display: flex; flex-wrap: wrap; gap: 6px; }
+.ll-adapt-example { height: auto; white-space: normal; text-align: left; font-weight: 400; }
+.ll-adapt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ll-adapt-chip { display: inline-flex; max-width: 100%; align-items: center; gap: 4px; padding: 2px 4px 2px 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; }
+.ll-adapt-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ll-adapt-chip-remove { display: inline-flex; padding: 2px; border-radius: 999px; color: var(--muted-foreground); }
+.ll-adapt-chip-remove:hover, .ll-adapt-chip-remove:focus-visible { background: var(--state-hover-subtle); color: var(--foreground); }
+.ll-adapt-chip-remove > svg { width: 12px; height: 12px; }
+.ll-adapt-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+.ll-adapt-footer { align-items: center; justify-content: space-between; }
+.ll-adapt-accounts { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.ll-adapt-account { display: flex; align-items: center; gap: 4px; margin: 0; font-size: 12px; }
+
+/* Compact: one column, the transcript scrolls, the composer stays at hand. */
+@media (max-width: 720px) {
+  .ll-adapt-dialog { height: calc(100dvh - 1rem); width: calc(100vw - 1rem); }
+  .ll-adapt-request { max-width: 100%; }
+  .ll-adapt-footer { flex-direction: column-reverse; align-items: stretch; }
+}

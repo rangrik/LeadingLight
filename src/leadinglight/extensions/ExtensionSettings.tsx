@@ -6,14 +6,21 @@ import { Button } from '../../components/ui/button'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
 import { Switch } from '../../components/ui/switch'
 import type { AppLocale } from '../../lib/i18n'
+import { canAttach } from '../adapt/adaptAttachments'
 import { ExtensionDialogContent } from './ExtensionPreviewDialog'
 import type { PackageView } from './extensionSessionController'
 import { chipFor, chipText, translator, type T } from './extensionUiText'
 import type { ExtensionUi } from './useExtensionUi'
 import './extensions.css'
 
+/** Adapt's entry points in this section: ask for a new extension, or change an existing one. */
+export interface ExtensionAdaptActions {
+  ask: () => void
+  adjust: (view: PackageView) => void
+}
+
 /** Settings → Extensions: each stored package for this workspace, from the registry itself. */
-export function ExtensionSettings({ ui }: { ui: ExtensionUi }) {
+export function ExtensionSettings({ ui, adapt }: { ui: ExtensionUi; adapt?: ExtensionAdaptActions }) {
   const t = translator(ui.locale)
   const { snapshot, notice } = ui
   return (
@@ -22,8 +29,11 @@ export function ExtensionSettings({ ui }: { ui: ExtensionUi }) {
       <p className="ll-ext-settings-text">{t('leadinglight.extensions.description')}</p>
       {snapshot.status === 'ready' ? (
         <SettingsGroup>
+          {adapt && <SettingsRow label={t('leadinglight.adapt.askRow')} description={t('leadinglight.adapt.askRowDescription')} controlWidth="auto">
+            <Button variant="outline" size="sm" data-testid="extension-adapt" onClick={adapt.ask}>{t('leadinglight.adapt.askButton')}</Button>
+          </SettingsRow>}
           {snapshot.packages.length === 0 && <SettingsGroupItem><p className="ll-ext-quiet">{t('leadinglight.extensions.empty')}</p></SettingsGroupItem>}
-          {snapshot.packages.map(view => <PackageRow key={view.packageId} t={t} ui={ui} view={view} />)}
+          {snapshot.packages.map(view => <PackageRow key={view.packageId} t={t} ui={ui} view={view} adapt={adapt} />)}
           <SettingsRow label={t('leadinglight.extensions.addRow')} description={t('leadinglight.extensions.addDescription')} controlWidth="auto">
             <Button variant="outline" size="sm" data-testid="extension-paste" onClick={ui.paste}>{t('leadinglight.extensions.paste')}</Button>
           </SettingsRow>
@@ -53,12 +63,14 @@ function summaryOf(view: PackageView): string {
   return load?.status === 'ready' ? load.extension.description : ''
 }
 
-function PackageRow({ t, ui, view }: { t: T; ui: ExtensionUi; view: PackageView }) {
+function PackageRow({ t, ui, view, adapt }: { t: T; ui: ExtensionUi; view: PackageView; adapt?: ExtensionAdaptActions }) {
   const chip = chipFor(view)
   const on = view.activeSha256 !== null
   const busy = ui.busyPackage !== null
   const canPreview = view.candidate !== null || (on && view.active?.status === 'ready')
   const canTurnOn = on || (chip !== 'unavailable' && chip !== 'unreadable')
+  // Adjust needs a readable version to start from: the one on, else the newest stored one.
+  const canAdjust = adapt !== undefined && canAttach(view)
   return (
     <div data-testid="extension-row" data-package-id={view.packageId} data-chip={chip}>
       <SettingsRow label={view.name} description={summaryOf(view)} controlWidth="auto">
@@ -70,6 +82,8 @@ function PackageRow({ t, ui, view }: { t: T; ui: ExtensionUi; view: PackageView 
           {on && view.rollback && <Button variant="ghost" size="sm" data-testid="extension-rollback" disabled={busy || !view.rollback.readable} onClick={() => ui.rollback(view)}>
             <ArrowCounterClockwise aria-hidden="true" />{t('leadinglight.extensions.rollback', { version: view.rollback.version })}
           </Button>}
+          {canAdjust && <Button variant="ghost" size="sm" data-testid="extension-adjust" disabled={busy}
+            aria-label={t('leadinglight.adapt.adjustLabel', { name: view.name })} onClick={() => adapt!.adjust(view)}>{t('leadinglight.adapt.adjust')}</Button>}
           <Switch data-testid="extension-switch" checked={on} disabled={busy || !canTurnOn} aria-label={t('leadinglight.extensions.switch', { name: view.name })}
             onCheckedChange={next => { void ui.toggle(view, next) }} />
         </div>
