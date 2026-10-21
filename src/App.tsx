@@ -1174,7 +1174,15 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       return tab ? { title: pageLabel(tab.entry, appLocale), text: tab.content } : null
     },
   }), [appLocale, currentPaneTabs, flushEditorStateBeforeAction, noteActiveTabPathRef])
-  const adaptUi = useAdaptUi({ locale: appLocale, vaultPath: resolvedPath, adapt, extensions, extensionUi, snapshotPage: snapshotCurrentPage })
+  const adaptUi = useAdaptUi({
+    locale: appLocale, vaultPath: resolvedPath, adapt, extensions, extensionUi, snapshotPage: snapshotCurrentPage,
+    // Keep writing leaves Settings too (when Adapt was opened there) and returns to the page in front.
+    onKeepWriting: () => {
+      dialogs.closeSettings()
+      const path = noteActiveTabPathRef.current
+      if (path) requestEditorFocus({ path })
+    },
+  })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)

@@ -16,13 +16,13 @@ vi.mock('../../utils/macosDismissableEscapeSurface', () => ({
 const QUICK = fixtureText('quick-note.json')
 const QUICK_NEXT = QUICK.replace('"version": "1.0.0"', '"version": "1.1.0"')
 
-function setup({ codex, packages = [] }: { codex?: AdaptProviderState; packages?: FakePackage[] } = {}) {
+function setup({ codex, packages = [], inSettings = false }: { codex?: AdaptProviderState; packages?: FakePackage[]; inSettings?: boolean } = {}) {
   const host = fakeHost(codex)
   const controller = createAdaptController({ api: host.api as unknown as AdaptApi, pollMs: 5, retryMs: 1, retries: 2 })
   const registry = fakeRegistry(packages)
   const extensions = registry.controller()
   const snapshotPage = vi.fn(async (): Promise<PageSnapshot> => ({ title: 'Reading list', text: '# Reading list' }))
-  const harness = (vaultPath?: string) => <AdaptHarness registry={extensions} controller={controller} snapshotPage={snapshotPage} vaultPath={vaultPath} />
+  const harness = (vaultPath?: string) => <AdaptHarness registry={extensions} controller={controller} snapshotPage={snapshotPage} vaultPath={vaultPath} inSettings={inSettings} />
   const view = render(harness())
   /** The window switches vault, as App does: both controllers leave the old visit. */
   const moveTo = (vaultPath: string) => view.rerender(harness(vaultPath))
@@ -285,6 +285,53 @@ describe('the Adapt dialog', () => {
     expect(within(dialog()).getByTestId('adapt-adoption')).toHaveAttribute('data-status', 'kept')
     expect(within(dialog()).queryByText(/Quick note is off/)).not.toBeInTheDocument()
     expect(within(dialog()).queryByTestId('adapt-chip')).not.toBeInTheDocument()
+  })
+
+  it('opened from Settings: Escape goes back to Settings, Keep writing leaves Settings too and keeps the request running', async () => {
+    const { host } = setup({ inSettings: true })
+    const askButton = await screen.findByTestId('extension-adapt')
+    askButton.focus()
+    fireEvent.click(askButton)
+    await within(await screen.findByTestId('adapt-dialog')).findByTestId('adapt-request')
+    fireEvent.keyDown(within(dialog()).getByTestId('adapt-request'), { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByTestId('adapt-dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('settings-panel')).toBeInTheDocument()
+    await waitFor(() => expect(askButton).toHaveFocus())
+
+    fireEvent.click(askButton)
+    await screen.findByTestId('adapt-dialog')
+    await ask('A weekly review')
+    await waitFor(() => expect(within(dialog()).getByTestId('adapt-status')).toHaveTextContent('Working…'))
+    fireEvent.click(within(dialog()).getByTestId('adapt-keep-writing'))
+    await waitFor(() => expect(screen.queryByTestId('adapt-dialog')).not.toBeInTheDocument())
+    expect(screen.queryByTestId('settings-panel')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Page')).toHaveFocus())
+    expect(screen.getByTestId('menu-status')).toHaveTextContent('working')
+    expect(host.api.cancelTurn).not.toHaveBeenCalled()
+    act(() => host.reply('conv-1', { kind: 'question', message: 'How many questions?', choices: ['Three'] }))
+    await waitFor(() => expect(screen.getByTestId('menu-status')).toHaveTextContent('ready'))
+    expect(host.api.send).toHaveBeenCalledOnce()
+  })
+
+  it('Keep writing puts focus in the page and keeps the draft, where the close button returns to what opened Adapt', async () => {
+    setup()
+    const opener = screen.getByRole('button', { name: 'Open Adapt' })
+    opener.focus()
+    await openAdapt()
+    fireEvent.change(await within(dialog()).findByTestId('adapt-request'), { target: { value: 'Half typed' } })
+    fireEvent.click(within(dialog()).getByTestId('adapt-keep-writing'))
+    await waitFor(() => expect(screen.queryByTestId('adapt-dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByLabelText('Page')).toHaveFocus())
+    // Radix restores focus on a later tick; it must not be taken back from the page.
+    await new Promise(done => setTimeout(done, 20))
+    expect(screen.getByLabelText('Page')).toHaveFocus()
+
+    opener.focus()
+    await openAdapt()
+    expect(within(dialog()).getByTestId('adapt-request')).toHaveValue('Half typed')
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByTestId('adapt-dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(opener).toHaveFocus())
   })
 
   it('keeps what is typed through Escape, returns focus, and shows a question\'s choices without sending them', async () => {

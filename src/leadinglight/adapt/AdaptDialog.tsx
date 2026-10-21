@@ -41,7 +41,10 @@ interface Props {
   candidates: CandidateActions
   /** Settles and snapshots the page in front, on this click only. */
   onAttachPage: () => void
+  /** Escape or the close button: back to whatever opened Adapt. */
   onClose: () => void
+  /** Keep writing: back to the page, leaving what opened Adapt (Settings) too. */
+  onKeepWriting: () => void
   onCloseAutoFocus: (event: Event) => void
 }
 
@@ -55,7 +58,7 @@ function MenuContent(props: ComponentProps<typeof DropdownMenuContent>) {
  * keeps the request and any running turn; nothing is sent or turned on without a click here or in
  * the E1 preview it opens.
  */
-export function AdaptDialog({ locale, snapshot, controller, registry, adoptions, candidates, onAttachPage, onClose, onCloseAutoFocus }: Props) {
+export function AdaptDialog({ locale, snapshot, controller, registry, adoptions, candidates, onAttachPage, onClose, onKeepWriting, onCloseAutoFocus }: Props) {
   const t = translator(locale)
   const composer = useRef<HTMLTextAreaElement | null>(null)
   const focusComposer = () => composer.current?.focus()
@@ -87,7 +90,7 @@ export function AdaptDialog({ locale, snapshot, controller, registry, adoptions,
         {ready && <Composer t={t} snapshot={snapshot} controller={controller} registry={registry} inputRef={composer} onAttachPage={onAttachPage} />}
         <DialogFooter className="ll-adapt-footer">
           <Accounts t={t} snapshot={snapshot} controller={controller} />
-          <Button variant="outline" data-testid="adapt-keep-writing" onClick={onClose}>{t('leadinglight.adapt.keepWriting')}</Button>
+          <Button variant="outline" data-testid="adapt-keep-writing" onClick={onKeepWriting}>{t('leadinglight.adapt.keepWriting')}</Button>
         </DialogFooter>
       </ExtensionDialogContent>
     </Dialog>

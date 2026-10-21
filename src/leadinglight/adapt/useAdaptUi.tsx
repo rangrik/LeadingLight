@@ -22,6 +22,8 @@ export interface AdaptUiOptions {
   extensions: Extensions
   extensionUi: ExtensionUi
   snapshotPage: () => Promise<PageSnapshot>
+  /** Keep writing: the host dismisses whatever Adapt was opened from (Settings) and puts focus in the page. */
+  onKeepWriting?: () => void
 }
 
 /**
@@ -96,6 +98,15 @@ export function useAdaptUi(options: AdaptUiOptions) {
   }, [controller, show])
 
   const close = useCallback(() => setOpen(false), [])
+  /**
+   * Keep writing closes Adapt and goes back to the page: focus is the host's to place, not returned
+   * to what opened Adapt. A Send in flight, its turn and the draft are left exactly as they are.
+   */
+  const keepWriting = useCallback(() => {
+    returnFocus.current = false
+    setOpen(false)
+    latest.current.onKeepWriting?.()
+  }, [])
   const onCloseAutoFocus = useCallback((event: Event) => {
     event.preventDefault()
     // Stepping aside for the E1 preview, or for Try it's form, leaves focus to them.
@@ -174,7 +185,7 @@ export function useAdaptUi(options: AdaptUiOptions) {
     isOpen: useCallback(() => openRef.current, []),
     dialog: visible ? (
       <AdaptDialog locale={locale} snapshot={snapshot} controller={controller} registry={extensions.snapshot} adoptions={adoptions}
-        candidates={candidates} onAttachPage={() => { void attachPage() }} onClose={close} onCloseAutoFocus={onCloseAutoFocus} />
+        candidates={candidates} onAttachPage={() => { void attachPage() }} onClose={close} onKeepWriting={keepWriting} onCloseAutoFocus={onCloseAutoFocus} />
     ) : null,
   }
 }

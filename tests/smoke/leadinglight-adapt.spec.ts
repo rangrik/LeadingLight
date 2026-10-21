@@ -147,6 +147,35 @@ test.describe('Adapt LeadingLight', () => {
     expect(notes()).toEqual(before)
   })
 
+  test('Keep writing from Settings leaves Settings, returns to the page, and keeps the request running', async ({ page }) => {
+    await start(page, { account: 'connected', turns: [{ reply: { kind: 'question', message: 'Which folder?', choices: ['Reading'] }, hold: true }] })
+    const note = page.getByTestId('note-list-container').getByText('Note B', { exact: true })
+    await expect(note).toBeVisible({ timeout: 10_000 })
+    await note.click()
+    await expect(page.locator('.bn-editor[contenteditable="true"]')).toBeVisible({ timeout: 30_000 })
+
+    await openCommandPalette(page)
+    await executeCommand(page, 'Open Settings')
+    const settings = page.getByTestId('settings-panel')
+    await expect(settings).toBeVisible()
+    const nav = settings.getByRole('button', { name: 'Extensions', exact: true })
+    if (await nav.isVisible()) await nav.click()
+    else await settings.locator('#settings-section-extensions').scrollIntoViewIfNeeded()
+    await settings.getByTestId('extension-adapt').click()
+    await expect(adaptDialog(page)).toBeVisible()
+    await ask(page, 'A reading log')
+    await expect(adaptDialog(page).getByTestId('adapt-status')).toContainText('Working…')
+
+    await adaptDialog(page).getByTestId('adapt-keep-writing').click()
+    await expect(adaptDialog(page)).toHaveCount(0)
+    await expect(settings).not.toBeVisible()
+    await expect(page.locator('.bn-editor')).toBeFocused()
+    await expect(page.getByTestId('sidebar-adapt')).toHaveText('Adapting…')
+    await page.getByTestId('sidebar-adapt').click()
+    await expect(adaptDialog(page).getByTestId('adapt-status')).toContainText('Working…')
+    expect(await adaptFixtureSent(page)).toHaveLength(1)
+  })
+
   test('keeps the request through a failure, retries only on Try again, and stops on Cancel; compact and keyboard-only', async ({ page }) => {
     await page.setViewportSize({ width: 480, height: 820 })
     await start(page, {
