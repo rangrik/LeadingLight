@@ -50,6 +50,8 @@ export type AdaptNotice =
   | { readonly kind: 'conversationRefused'; readonly reason: 'conversationLimit' | 'storageUnavailable' | 'noReply' }
   | { readonly kind: 'deleteRefused'; readonly reason: 'running' | 'storageUnavailable' | 'noReply' }
   | { readonly kind: 'connectRefused'; readonly reason: Extract<AdaptConnectReply, { status: 'refused' }>['reason'] | 'noReply' }
+  /** Cancelling a sign-in was not proven complete (`unconfirmed`), or got no usable answer. */
+  | { readonly kind: 'cancelConnectUnconfirmed'; readonly reason: 'unconfirmed' | 'noReply' }
   | { readonly kind: 'attachRefused'; readonly reason: AttachmentRefusal | Exclude<PageSnapshot, object> }
   | { readonly kind: 'cancelUnconfirmed' }
   /** The visit ended natively while a Send was in flight: nothing of it can start any more. */
@@ -252,8 +254,16 @@ export function createAdaptController(options: ControllerOptions) {
     await refreshStatus()
   }
 
+  /**
+   * Cancels a sign-in in progress. Only `cancelled` (or `notConnecting`, nothing to cancel) settles
+   * it; an unproven or unreadable answer is said plainly and never shown as cancelled. Either way
+   * the provider's own status is read again and the draft is left as it is.
+   */
   async function cancelConnect(): Promise<void> {
-    await api.cancelConnect({ provider: 'codex' })
+    const reply = await api.cancelConnect({ provider: 'codex' })
+    if (reply?.status !== 'cancelled' && reply?.status !== 'notConnecting') {
+      publish({ notice: { kind: 'cancelConnectUnconfirmed', reason: reply ? 'unconfirmed' : 'noReply' } })
+    }
     await refreshStatus()
   }
 

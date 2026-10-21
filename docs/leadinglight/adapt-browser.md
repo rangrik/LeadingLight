@@ -264,3 +264,8 @@ as invoked. Every reply is read by the contract's own `parse*Reply` readers. The
 - **Conversations and reload:** the conversation limit; reload recovery.
 - **Arguments and helper:** strict arguments, and the helper's names and sample packages, which are
   validated by the real E1 parser.
+
+Sign-in cancellation fixtures may set a connect step’s `cancel` to `unconfirmed`. This closes
+admission and leaves the provider unqualified for that page load; repeated cancellation stays
+unconfirmed and a late release cannot connect. Ordinary cancellation remains unchanged. This
+simulates UI status only, not native process or credential cleanup.

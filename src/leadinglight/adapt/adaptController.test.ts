@@ -321,6 +321,37 @@ describe('visits and accounts', () => {
     expect(controller.snapshot().draft.request).toBe('Half typed')
   })
 
+  it('says plainly when cancelling a sign-in is not confirmed, reads the status again and keeps the draft', async () => {
+    const { host, controller } = await ready({ status: 'signedOut', lastConnect: null })
+    controller.setRequest('Typed before signing in')
+    await controller.connect()
+    host.api.cancelConnect.mockImplementationOnce(async () => {
+      host.state.codex = { status: 'unavailable', reason: 'failed', installedVersion: null }
+      return { status: 'unconfirmed' } as never
+    })
+    const reads = host.api.status.mock.calls.length
+    await controller.cancelConnect()
+    expect(host.api.status.mock.calls.length).toBeGreaterThan(reads)
+    expect(controller.snapshot()).toMatchObject({
+      notice: { kind: 'cancelConnectUnconfirmed', reason: 'unconfirmed' },
+      provider: { codex: { status: 'unavailable', reason: 'failed' } },
+      draft: { request: 'Typed before signing in' },
+    })
+
+    // An unreadable answer is not a cancellation either.
+    host.api.cancelConnect.mockResolvedValueOnce(null as never)
+    await controller.cancelConnect()
+    expect(controller.snapshot().notice).toEqual({ kind: 'cancelConnectUnconfirmed', reason: 'noReply' })
+
+    // A proven cancel is as before: no notice, only the host's own status.
+    host.state.codex = { status: 'connecting' }
+    await controller.refreshStatus()
+    controller.dismissNotice()
+    await controller.cancelConnect()
+    expect(controller.snapshot()).toMatchObject({ notice: null, provider: { codex: { status: 'signedOut', lastConnect: 'cancelled' } } })
+    expect(controller.snapshot().draft.request).toBe('Typed before signing in')
+  })
+
   it('connects only on Connect and follows the sign-in until it ends', async () => {
     const { host, controller } = await ready({ status: 'signedOut', lastConnect: null })
     expect(host.api.connect).not.toHaveBeenCalled()

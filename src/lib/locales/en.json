@@ -1784,6 +1784,8 @@
   "leadinglight.adapt.connect": "Sign in with ChatGPT",
   "leadinglight.adapt.connecting": "Waiting for your sign-in in the browser…",
   "leadinglight.adapt.connectCancel": "Cancel sign-in",
+  "leadinglight.adapt.cancelConnectUnconfirmed": "Sign-in is blocked, but we couldn’t confirm that it stopped completely. You can keep writing.",
+  "leadinglight.adapt.cancelConnectNoReply": "Cancelling the sign-in got no clear answer, so it isn’t confirmed as cancelled.",
   "leadinglight.adapt.lastConnect.failed": "The last sign-in didn’t finish. You can try again.",
   "leadinglight.adapt.lastConnect.cancelled": "Sign-in was cancelled.",
   "leadinglight.adapt.connectRefused.browserUnavailable": "LeadingLight couldn’t open the browser for sign-in.",

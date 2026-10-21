@@ -369,6 +369,23 @@ describe('the Adapt dialog', () => {
     expect(host.api.send).toHaveBeenCalledOnce()
   })
 
+  it('never shows an unproven sign-in cancel as cancelled, and shows what Codex reports after it', async () => {
+    const { host } = setup({ codex: { status: 'signedOut', lastConnect: null } })
+    await openAdapt()
+    fireEvent.click(await within(dialog()).findByTestId('adapt-connect'))
+    const cancel = await within(dialog()).findByRole('button', { name: 'Cancel sign-in' })
+    host.api.cancelConnect.mockImplementationOnce(async () => {
+      host.state.codex = { status: 'unavailable', reason: 'failed', installedVersion: null }
+      return { status: 'unconfirmed' } as never
+    })
+    fireEvent.click(cancel)
+    expect(await within(dialog()).findByTestId('adapt-notice')).toHaveTextContent('Sign-in is blocked, but we couldn’t confirm that it stopped completely. You can keep writing.')
+    await waitFor(() => expect(within(dialog()).getByTestId('adapt-provider')).toHaveAttribute('data-status', 'unavailable'))
+    expect(within(dialog()).queryByText('Sign-in was cancelled.')).not.toBeInTheDocument()
+    expect(within(dialog()).queryByTestId('adapt-request')).not.toBeInTheDocument()
+    expect(host.api.send).not.toHaveBeenCalled()
+  })
+
   it('offers a separate sign-in when signed out and says nothing is sent until then', async () => {
     const { host } = setup({ codex: { status: 'signedOut', lastConnect: null } })
     await openAdapt()

@@ -49,8 +49,13 @@ const MAX_ANSWER_BYTES = 2 * ADAPT_LIMITS.packageBytes
 // --- Script ----------------------------------------------------------------------------------------
 
 export const ADAPT_FIXTURE_CONNECT_RESULTS = ['connected', 'failed', 'accountNotSupported', 'browserUnavailable'] as const
-/** What one explicit Connect does. `hold`: it stays `connecting` until released. */
-export interface AdaptFixtureConnect { result: (typeof ADAPT_FIXTURE_CONNECT_RESULTS)[number]; hold?: boolean }
+/**
+ * What one explicit Connect does. `hold`: it stays `connecting` until released. `cancel:
+ * 'unconfirmed'`: cancelling it closes its admission but cannot prove its cleanup (amendment 4).
+ * That cancellation stays unresolved for the rest of the page load: every cancel answers
+ * `unconfirmed`, and Codex is `unavailable/unqualified`, as native keeps unproven cleanup sticky.
+ */
+export interface AdaptFixtureConnect { result: (typeof ADAPT_FIXTURE_CONNECT_RESULTS)[number]; hold?: boolean; cancel?: 'unconfirmed' }
 /** How the local write of one turn's outcome goes, when it does not simply succeed. */
 export const ADAPT_FIXTURE_SAVE_FAULTS = ['unsaved', 'unconfirmed'] as const
 /**
@@ -110,8 +115,10 @@ const encoder = new TextEncoder()
 const sha256 = (text: string) => sha256Bytes(encoder.encode(text))
 
 function readConnectStep(value: unknown): AdaptFixtureConnect | null {
-  if (!isFields(value) || !hasOnly(value, ['result', 'hold']) || !optionalFlag(value.hold)) return null
-  return oneOf(ADAPT_FIXTURE_CONNECT_RESULTS, value.result) ? { result: value.result, hold: value.hold === true } : null
+  if (!isFields(value) || !hasOnly(value, ['result', 'hold', 'cancel']) || !optionalFlag(value.hold)) return null
+  if (value.cancel !== undefined && value.cancel !== 'unconfirmed') return null
+  if (!oneOf(ADAPT_FIXTURE_CONNECT_RESULTS, value.result)) return null
+  return { result: value.result, hold: value.hold === true, ...(value.cancel === undefined ? {} : { cancel: value.cancel }) }
 }
 
 function readTurnStep(value: unknown): AdaptFixtureTurn | null {
@@ -288,7 +295,7 @@ export interface AdaptBrowserHostOptions {
 /** `closing`: answers nothing but close until its turns are proven ended. */
 interface Visit { vault: string; opened: number; closing: boolean }
 interface Work { turnId: string; step: AdaptFixtureTurn | null; cancels: Array<() => void> }
-interface ConnectWork { hold: boolean; finish: () => void; cancel: () => void }
+interface ConnectWork { hold: boolean; finish: () => void; cancel: () => void; unprovenCancel: boolean }
 
 const STORED_KEYS = ['conversationId', 'vault', 'createdAt', 'updatedAt', 'title', 'revision', 'entries', 'storage', 'tombstones', 'sealed', 'running']
 
@@ -353,6 +360,8 @@ export class AdaptBrowserHost {
   /** The in-page provider work of each running turn, by conversation. */
   private readonly work = new Map<string, Work>()
   private connecting: ConnectWork | null = null
+  /** A sign-in cancel could not prove its cleanup: unresolved, and Codex unavailable, until the page loads again. */
+  private uncertain = false
   private readonly sentLog: AdaptFixtureEnvelope[] = []
 
   constructor(options: AdaptBrowserHostOptions) {
@@ -441,6 +450,7 @@ export class AdaptBrowserHost {
   private codex(): AdaptProviderState {
     if (this.provider.kind === 'none') return { status: 'unavailable', reason: 'notInstalled', installedVersion: null }
     if (this.provider.kind === 'broken') return { status: 'unavailable', reason: 'failed', installedVersion: null }
+    if (this.uncertain) return { status: 'unavailable', reason: 'unqualified', installedVersion: null }
     return { ...this.state.account }
   }
 
@@ -479,7 +489,7 @@ export class AdaptBrowserHost {
       else this.setAccount({ status: 'signedOut', lastConnect: 'failed' })
     }
     const hold = step?.hold === true
-    this.connecting = { hold, finish, cancel: hold ? () => undefined : this.schedule(finish, ADAPT_FIXTURE_STEP_MS) }
+    this.connecting = { hold, finish, cancel: hold ? () => undefined : this.schedule(finish, ADAPT_FIXTURE_STEP_MS), unprovenCancel: step?.cancel === 'unconfirmed' }
     return { status: 'started' }
   }
 
@@ -490,10 +500,24 @@ export class AdaptBrowserHost {
     return step
   }
 
+  /**
+   * `cancelled` only when the sign-in's work and cleanup are proven complete. An unproven cancel
+   * (amendment 4) still closes admission, so the sign-in never completes, but answers `unconfirmed`;
+   * it stays unresolved, so every later cancel answers `unconfirmed` too (never `notConnecting`),
+   * and Codex stays unavailable for this page load: nothing is sent and no sign-in starts.
+   */
   cancelConnect(provider: AdaptProvider): AdaptCancelConnectReply {
-    if (provider === 'claude' || !this.connecting) return { status: 'notConnecting' }
+    if (provider === 'claude') return { status: 'notConnecting' }
+    if (this.uncertain) return { status: 'unconfirmed' }
+    if (!this.connecting) return { status: 'notConnecting' }
+    const { unprovenCancel } = this.connecting
     this.connecting.cancel()
     this.connecting = null
+    if (unprovenCancel) {
+      this.uncertain = true
+      this.setAccount({ status: 'signedOut', lastConnect: 'failed' })
+      return { status: 'unconfirmed' }
+    }
     this.setAccount({ status: 'signedOut', lastConnect: 'cancelled' })
     return { status: 'cancelled' }
   }

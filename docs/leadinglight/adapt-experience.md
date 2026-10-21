@@ -11,11 +11,12 @@ turns anything on by itself, or retries anything by itself.
 - **New page → Adapt LeadingLight…** in the sidebar, and **Adapt LeadingLight…** in the command
   palette (main window only). The sidebar entry is Adapt’s one status: **Adapting…** while a request
   runs, **Extension ready** when a reply arrived while the dialog was closed.
-- **Settings → Extensions → Ask for an extension**, and **Adjust…** on any extension with a readable
+- **Settings → Extensions → Adapt…**, and **Adjust…** on any extension with a readable
   version, which starts a fresh request with that version attached.
-- One dialog. Closing it, or **Keep writing**, keeps what you typed and lets a request you sent
-  keep running. Opening Adapt is the first time LeadingLight asks the native host anything about
-  it; nothing is checked at start-up.
+- One dialog. Closing it keeps what you typed and lets a request you sent keep running.
+  **Keep writing** also closes Settings if needed and returns focus to your page. Escape and the
+  close button return to where you opened Adapt. Opening Adapt is the first time LeadingLight
+  asks the native host anything about it; nothing is checked at start-up.
 
 ## Connecting
 
@@ -44,7 +45,8 @@ Type a request, or start from one of three examples. Attachments are chips you c
 
 Under the composer, Adapt says what Send includes: this request, the earlier requests and replies
 shown in this conversation (when there are any), LeadingLight’s extension guide and the attached
-chips. Nothing else from your workspace, and never a file path. Earlier replies may quote things
+chips. The host adds nothing else from your workspace or its file paths. Names or paths you include in
+your own text remain part of that explicit context. Earlier replies may quote things
 attached before; removing a chip does not remove those, and **New request** leaves them out.
 
 Only host-known phases are shown: Sending, Working, Checking it, Stopping. **Cancel** stops the
@@ -82,7 +84,8 @@ extension chip of your next request, so you can keep changing it in the same con
 Conversations stay on this computer, per workspace, up to 50; **Earlier requests** reopens one and
 **Delete conversation** removes it here (anything already sent can’t be taken back). When native
 reports that a conversation is not saved, or not confirmed on disk, Adapt says so and offers
-**Save again**, which writes locally only and sends nothing.
+**Save again**, which writes locally only and sends nothing. Conversations are stored beside the
+app’s local settings, separately from your Markdown files; vault backups do not yet include them.
 
 ## Tests
 

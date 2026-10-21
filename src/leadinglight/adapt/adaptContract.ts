@@ -94,8 +94,15 @@ export type AdaptConnectReply =
   | { status: 'started' }
   | { status: 'refused'; reason: 'unavailable' | 'alreadyConnected' | 'busy' | 'browserUnavailable' }
 
+/**
+ * Cancels a sign-in in progress (amendment 4). `cancelled`: it is cancelled, and its work and any
+ * required credential cleanup are proven complete. `notConnecting`: there was no pending or
+ * unresolved sign-in. `unconfirmed`: admission of the sign-in is closed, so it cannot complete,
+ * but the end of its work or its cleanup cannot be proven; it is never reported as cancelled.
+ * Provider status stays authoritative either way.
+ */
 export interface AdaptCancelConnectArgs { provider: AdaptProvider }
-export type AdaptCancelConnectReply = { status: 'cancelled' | 'notConnecting' }
+export type AdaptCancelConnectReply = { status: 'cancelled' | 'notConnecting' | 'unconfirmed' }
 
 /**
  * Closes admission for this provider, cancels every running turn of it (`accountChanged`), then
@@ -456,7 +463,7 @@ export function parseConnectReply(value: unknown): AdaptConnectReply | null {
 }
 
 export const parseCancelConnectReply = (value: unknown): AdaptCancelConnectReply | null =>
-  statusOnly(value, ['cancelled', 'notConnecting'] as const)
+  statusOnly(value, ['cancelled', 'notConnecting', 'unconfirmed'] as const)
 
 export function parseDisconnectReply(value: unknown): AdaptDisconnectReply | null {
   if (!isFields(value)) return null

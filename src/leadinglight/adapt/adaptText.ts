@@ -86,6 +86,8 @@ export function noticeText(t: T, notice: AdaptNotice): string {
     case 'connectRefused':
       return t(notice.reason === 'browserUnavailable' ? 'leadinglight.adapt.connectRefused.browserUnavailable' : 'leadinglight.adapt.connectRefused.other')
     case 'attachRefused': return t(ATTACH_KEYS[notice.reason])
+    case 'cancelConnectUnconfirmed':
+      return t(notice.reason === 'unconfirmed' ? 'leadinglight.adapt.cancelConnectUnconfirmed' : 'leadinglight.adapt.cancelConnectNoReply')
     case 'cancelUnconfirmed': return t('leadinglight.adapt.stopUnconfirmed')
     case 'visitClosed': return t('leadinglight.adapt.visitClosed')
     case 'disconnectRefused': return t('leadinglight.adapt.disconnectRefused')

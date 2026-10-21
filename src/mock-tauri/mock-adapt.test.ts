@@ -161,6 +161,7 @@ describe('without an explicit fixture', () => {
     ['an unknown key', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, account: 'connected', retries: 3 })],
     ['an unknown account', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, account: 'pro' })],
     ['an unknown Connect result', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, connects: [{ result: 'maybe' }] })],
+    ['an unknown cancel fault', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, connects: [{ result: 'connected', cancel: 'lost' }] })],
     ['two answers in one turn', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, turns: [{ reply: question, output: '{}' }] })],
     ['a misspelled turn option', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, turns: [{ reply: question, hodl: true }] })],
     ['an unknown save fault', JSON.stringify({ fixture: ADAPT_FIXTURE_FORMAT, turns: [{ reply: question, outcomeSave: 'lost' }] })],
@@ -268,6 +269,31 @@ describe('Connect', () => {
     vi.advanceTimersByTime(ADAPT_FIXTURE_STEP_MS)
     expect(adapt.codex()).toEqual({ status: 'signedOut', lastConnect: 'failed' })
     expect(send()).toEqual({ status: 'refused', reason: 'notConnected' })
+  })
+
+  it('answers an unproven sign-in cancel as unconfirmed for the page lifetime, never cancelled, and starts nothing after it', () => {
+    const { host } = withScript({ connects: [{ result: 'connected', hold: true, cancel: 'unconfirmed' }, { result: 'connected' }] })
+    const adapt = api(host)
+    const visitId = visitOf(adapt)
+    const conversationId = conversationIn(adapt, visitId)
+    const unqualified = { status: 'unavailable', reason: 'unqualified', installedVersion: null }
+    adapt.connect()
+    expect(adapt.codex()).toEqual({ status: 'connecting' })
+    const before = adapt.status().revision
+
+    expect(adapt.cancelConnect()).toEqual({ status: 'unconfirmed' })
+    expect(adapt.status().revision).toBeGreaterThan(before)
+    expect(adapt.codex()).toEqual(unqualified)
+    // Its admission is closed: the held sign-in can never complete, and nothing new starts or is sent.
+    expect(window.__leadinglightAdaptFixture?.release()).toBe(0)
+    expect(adapt.codex()).toEqual(unqualified)
+    expect(adapt.connect()).toEqual({ status: 'refused', reason: 'unavailable' })
+    expect(adapt.send({ visitId, conversationId, turnId: crypto.randomUUID(), provider: 'codex', request: 'Make a log', attachments: [], includeTurnIds: [], revision: null }))
+      .toEqual({ status: 'refused', reason: 'providerUnavailable' })
+    // Still unresolved: asking again is unconfirmed again, never "nothing to cancel".
+    expect(adapt.cancelConnect()).toEqual({ status: 'unconfirmed' })
+    expect(adapt.cancelConnect()).toEqual({ status: 'unconfirmed' })
+    expect(adapt.codex()).toEqual(unqualified)
   })
 
   it('completes a held sign-in only when released', () => {

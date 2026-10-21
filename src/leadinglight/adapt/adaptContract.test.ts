@@ -3,6 +3,7 @@ import {
   ADAPT_LIMITS,
   checkSendArgs,
   parseAdaptReply,
+  parseCancelConnectReply,
   parseCancelTurnReply,
   parseCloseVisitReply,
   parseDisconnectReply,
@@ -212,6 +213,17 @@ describe('reading turn replies', () => {
     expect(parseSendReply({ status: 'admitted', turnId: TURN_2 }, send())).toBeNull()
     expect(parseSendReply({ status: 'refused', reason: 'cancelled' }, send())).toEqual({ status: 'refused', reason: 'cancelled' })
     expect(parseSendReply({ status: 'refused', reason: 'later' }, send())).toBeNull()
+  })
+
+  it('keeps an unproven sign-in cancellation distinct from a cancelled one', () => {
+    expect(parseCancelConnectReply({ status: 'cancelled' })).toEqual({ status: 'cancelled' })
+    expect(parseCancelConnectReply({ status: 'notConnecting' })).toEqual({ status: 'notConnecting' })
+    expect(parseCancelConnectReply({ status: 'unconfirmed' })).toEqual({ status: 'unconfirmed' })
+    expect(parseCancelConnectReply({ status: 'unconfirmed', reason: 'cleanup' })).toBeNull()
+    expect(parseCancelConnectReply({ status: 'stopping' })).toBeNull()
+    expect(parseCancelConnectReply({ status: 'Unconfirmed' })).toBeNull()
+    expect(parseCancelConnectReply({})).toBeNull()
+    expect(parseCancelConnectReply(null)).toBeNull()
   })
 
   it('keeps cancel outcomes distinct', () => {
