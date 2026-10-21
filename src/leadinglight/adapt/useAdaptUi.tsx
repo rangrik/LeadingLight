@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { CommandAction } from '../../hooks/commands/types'
 import type { AppLocale } from '../../lib/i18n'
 import type { ExtensionVisit, PackageView } from '../extensions/extensionSessionController'
 import { translator } from '../extensions/extensionUiText'
 import type { Extensions } from '../extensions/useExtensions'
 import type { ExtensionUi } from '../extensions/useExtensionUi'
 import { afterPreview, afterUndo, storeRefusal, type Adoption } from './adaptAdoption'
-import { revisionBaseOf } from './adaptAttachments'
+import { pagesOf, revisionBaseOf } from './adaptAttachments'
+import type { AdaptController } from './adaptController'
 import { AdaptDialog, type CandidateActions } from './AdaptDialog'
-import type { PageSnapshot } from './adaptPage'
+import type { PageSnapshot, PassageSnapshot } from './adaptPage'
+import { noticeText } from './adaptText'
+import type { AskLabels } from './askLabels'
+import { askedAbout, rememberAskedAbout } from './askResume'
 import type { Adapt } from './useAdapt'
 
-export type { PageSnapshot } from './adaptPage'
+export type { PageSnapshot, PassageSnapshot } from './adaptPage'
+export type { AskLabels } from './askLabels'
 
 /** The one stable status beside the Adapt entry: nothing, a turn running, or a reply not seen yet. */
 export type AdaptMenuStatus = 'idle' | 'working' | 'ready'
@@ -24,6 +30,34 @@ export interface AdaptUiOptions {
   snapshotPage: () => Promise<PageSnapshot>
   /** Keep writing: the host dismisses whatever Adapt was opened from (Settings) and puts focus in the page. */
   onKeepWriting?: () => void
+  /** The host's Ask words (its locale). Copy, Selected passage and Another page… need them. */
+  ask?: AskLabels
+  /** Captures the active pane's selection on the person's click (the E2 capture endpoint). */
+  snapshotPassage?: () => PassageSnapshot | Promise<PassageSnapshot>
+  /** Lets the person choose a page, then settles and snapshots it; null when they chose none. */
+  snapshotAnotherPage?: () => Promise<PageSnapshot | null>
+  /** Puts exact text on the clipboard; the app's own clipboard path when absent. */
+  copyText?: (text: string) => Promise<void>
+  /** A short status for the window, when Ask is not opened (nothing was selected). */
+  notify?: (text: string) => void
+}
+
+/**
+ * The open visit's token once the visit that is opening now answers; null when it does not open.
+ * Anything taken on a click before that is attached only to that visit.
+ */
+function whenVisitOpen(controller: AdaptController): Promise<string | null> {
+  const { visit } = controller.snapshot()
+  if (visit === 'open') return Promise.resolve(controller.visitToken())
+  if (visit !== 'opening') return Promise.resolve(null)
+  return new Promise(resolve => {
+    const stop = controller.subscribe(() => {
+      const now = controller.snapshot().visit
+      if (now === 'opening') return
+      stop()
+      resolve(now === 'open' ? controller.visitToken() : null)
+    })
+  })
 }
 
 /**
@@ -48,6 +82,8 @@ export function useAdaptUi(options: AdaptUiOptions) {
   useLayoutEffect(() => { latest.current = options })
   const [open, setOpen] = useState(false)
   const [previewing, setPreviewing] = useState(false)
+  // Another page… shows the page finder; this dialog steps aside meanwhile, as for the E1 preview.
+  const [picking, setPicking] = useState(false)
   // Another vault: its visit ended with it, so the dialog closes; opening it again starts the new one.
   const [openFor, setOpenFor] = useState(options.vaultPath)
   if (openFor !== options.vaultPath) {
@@ -56,12 +92,17 @@ export function useAdaptUi(options: AdaptUiOptions) {
   }
   const [kept, setKept] = useState<{ visit: string | null; byTurn: Readonly<Record<string, Adoption>> }>({ visit: null, byTurn: {} })
   const adoptions = useMemo(() => (kept.visit !== null && kept.visit === snapshot.visitId ? kept.byTurn : {}), [kept, snapshot.visitId])
-  const visible = open && !previewing
+  const visible = open && !previewing && !picking
   const openRef = useRef(false)
   const opener = useRef<HTMLElement | null>(null)
   const returnFocus = useRef(true)
   useLayoutEffect(() => { openRef.current = open })
   useEffect(() => { controller.setLooking(visible) }, [controller, visible])
+  // A Send about a page or passage makes this window return to that conversation for that page.
+  // Paths and ids only, kept locally per vault; nothing of it is ever sent.
+  useEffect(() => controller.onAdmitted((conversationId, attachments) => {
+    rememberAskedAbout(latest.current.vaultPath, pagesOf(attachments), conversationId)
+  }), [controller])
 
   const originNow = useCallback((): Origin | null => {
     const visit = controller.visitToken()
@@ -120,6 +161,68 @@ export function useAdaptUi(options: AdaptUiOptions) {
     // A page read for one visit is never attached in another.
     if (visit && controller.visitToken() === visit) controller.attachPage(page)
   }, [controller])
+  const attachPassage = useCallback(async () => {
+    const { snapshotPassage, ask } = latest.current
+    if (!snapshotPassage || !ask) return
+    const visit = controller.visitToken()
+    const passage = await snapshotPassage()
+    if (visit && controller.visitToken() === visit) controller.attachPassage(passage, ask.passageFrom)
+  }, [controller])
+  const attachAnotherPage = useCallback(async () => {
+    const { snapshotAnotherPage } = latest.current
+    if (!snapshotAnotherPage) return
+    const visit = controller.visitToken()
+    setPicking(true)
+    let page: PageSnapshot | null = null
+    try {
+      page = await snapshotAnotherPage()
+    } finally {
+      setPicking(false)
+    }
+    // Choosing no page attaches nothing and says nothing.
+    if (page !== null && visit && controller.visitToken() === visit) controller.attachPage(page)
+  }, [controller])
+
+  /**
+   * Ask about the page in front, or the passage selected in it, by the command's own click: the
+   * passage is captured at once, the page once its words are saved. Ask then returns to the
+   * conversation that last asked about that page (as stored: nothing is read again), else to a fresh
+   * request that keeps what is typed, and attaches the one chip. Nothing is sent.
+   */
+  const openAbout = useCallback(async (kind: 'page' | 'passage') => {
+    const o = latest.current
+    const vault = o.vaultPath
+    let taking: Promise<PageSnapshot | PassageSnapshot>
+    if (kind === 'passage') {
+      if (!o.snapshotPassage || !o.ask) return
+      const passage = await o.snapshotPassage()
+      if (typeof passage === 'string') {
+        o.notify?.(passage === 'noSelection' ? t('leadinglight.ask.selectFirst') : noticeText(t, { kind: 'attachRefused', reason: passage }, o.ask))
+        return
+      }
+      taking = Promise.resolve(passage)
+    } else {
+      taking = o.snapshotPage()
+    }
+    if (!show()) return
+    const [taken, visit] = await Promise.all([taking, whenVisitOpen(controller)])
+    if (!visit || latest.current.vaultPath !== vault || controller.visitToken() !== visit) return
+    const path = typeof taken === 'string' ? null : taken.key ?? null
+    const remembered = path ? askedAbout(vault, path) : null
+    if (remembered && controller.snapshot().conversationId !== remembered) await controller.show(remembered)
+    else if (!remembered) controller.startFresh()
+    if (controller.visitToken() !== visit) return
+    if (kind === 'passage' && typeof taken !== 'string') controller.attachPassage(taken, latest.current.ask?.passageFrom ?? (title => title))
+    else controller.attachPage(taken as PageSnapshot)
+  }, [controller, show, t])
+
+  /** Palette entries that open Ask about the page in front or its selected passage, on that click. */
+  const paletteCommands = useMemo<CommandAction[]>(() => [
+    { id: 'ask-about-page', label: t('leadinglight.ask.aboutPage'), group: 'Note', enabled: true,
+      keywords: ['ask', 'page', 'codex', 'question', 'explain', 'summarize'], execute: () => { void openAbout('page') } },
+    ...(options.snapshotPassage && options.ask ? [{ id: 'ask-about-passage', label: t('leadinglight.ask.aboutPassage'), group: 'Note' as const, enabled: true,
+      keywords: ['ask', 'passage', 'selection', 'codex', 'explain'], execute: () => { void openAbout('passage') } }] : []),
+  ], [openAbout, options.ask, options.snapshotPassage, t])
 
   const store = useCallback(async (turnId: string, packageText: string) => {
     const origin = originNow()
@@ -180,12 +283,15 @@ export function useAdaptUi(options: AdaptUiOptions) {
   const menuStatus: AdaptMenuStatus = snapshot.attempt || snapshot.conversation?.turn ? 'working' : snapshot.unseenReply ? 'ready' : 'idle'
 
   return {
-    open: show, adjust, close, menuStatus,
+    open: show, adjust, close, menuStatus, openAbout, paletteCommands,
     /** True while the dialog is open, or stepped aside for the E1 preview it opened. */
     isOpen: useCallback(() => openRef.current, []),
     dialog: visible ? (
       <AdaptDialog locale={locale} snapshot={snapshot} controller={controller} registry={extensions.snapshot} review={extensions.controller.reviewOf} adoptions={adoptions}
-        candidates={candidates} onAttachPage={() => { void attachPage() }} onClose={close} onKeepWriting={keepWriting} onCloseAutoFocus={onCloseAutoFocus} />
+        candidates={candidates} onAttachPage={() => { void attachPage() }} onClose={close} onKeepWriting={keepWriting} onCloseAutoFocus={onCloseAutoFocus}
+        ask={options.ask ?? null} copyText={options.copyText}
+        onAttachPassage={options.snapshotPassage ? () => { void attachPassage() } : undefined}
+        onAttachAnotherPage={options.snapshotAnotherPage ? () => { void attachAnotherPage() } : undefined} />
     ) : null,
   }
 }

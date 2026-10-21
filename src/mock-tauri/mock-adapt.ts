@@ -16,7 +16,7 @@
 // revision counter, and the final-answer reader. The fixture claims no native durability.
 import {
   ADAPT_ATTACHMENT_KINDS, ADAPT_COMMANDS, ADAPT_FAILURES, ADAPT_LIMITS, ADAPT_PROVIDERS, ADAPT_STOP_REASONS,
-  checkSendArgs, isPlainLine, isPlainProse, isTurnId, isWellFormedText, parseReadConversationReply, parseStatusReply, utf8Length,
+  adaptPayloadBytes, checkSendArgs, isPlainLine, isTurnId, parseReadConversationReply, parseStatusReply, readAdaptAnswer, utf8Length,
   type AdaptAttachment, type AdaptCancelConnectReply, type AdaptCancelTurnArgs, type AdaptCancelTurnReply, type AdaptCloseVisitReply,
   type AdaptCommandName, type AdaptConnectArgs, type AdaptConnectReply, type AdaptConversationSummary, type AdaptDeleteConversationReply,
   type AdaptDisconnectReply, type AdaptEntry, type AdaptFailure, type AdaptListConversationsReply, type AdaptNewConversationReply,
@@ -160,50 +160,13 @@ export function readAdaptFixtureScript(text: string): AdaptFixtureScript | null 
 
 // --- The final answer (prompt.rs `read_answer`, check.rs `check_reply`) ------------------------------
 
-type AnswerFault = 'invalidOutput' | 'outputTooLarge'
-
-function checkReply(reply: AdaptReply): AnswerFault | null {
-  const prose = (text: string): AnswerFault | null =>
-    text.length > ADAPT_LIMITS.messageChars ? 'outputTooLarge' : isPlainProse(text, ADAPT_LIMITS.messageChars) ? null : 'invalidOutput'
-  const message = prose(reply.message)
-  if (message) return message
-  switch (reply.kind) {
-    case 'candidate':
-      if (utf8Length(reply.packageText) > ADAPT_LIMITS.packageBytes) return 'outputTooLarge'
-      return reply.packageText.trim() === '' || !isWellFormedText(reply.packageText) ? 'invalidOutput' : null
-    case 'question':
-      if (reply.choices.length > ADAPT_LIMITS.choices) return 'invalidOutput'
-      for (const choice of reply.choices) {
-        if (choice.length > ADAPT_LIMITS.choiceChars) return 'outputTooLarge'
-        if (!isPlainLine(choice, ADAPT_LIMITS.choiceChars)) return 'invalidOutput'
-      }
-      return null
-    case 'unsupported':
-      return reply.alternative === null ? null : prose(reply.alternative)
-  }
-}
-
-/** The provider's complete final text as one reply, or why it is none. Never repaired. */
-export function readFixtureAnswer(text: string): AdaptReply | AnswerFault {
+/**
+ * The provider's complete final text as one reply, or why it is none. Never repaired: past the raw
+ * bound native's session keeps, then exactly the contract's own reader (all four kinds, amendment 5).
+ */
+export function readFixtureAnswer(text: string): ReturnType<typeof readAdaptAnswer> {
   if (utf8Length(text) > MAX_ANSWER_BYTES) return 'outputTooLarge'
-  let value: unknown
-  try {
-    value = JSON.parse(text)
-  } catch {
-    return 'invalidOutput'
-  }
-  if (!isFields(value) || !hasOnly(value, ['kind', 'message', 'packageText', 'choices', 'alternative'])) return 'invalidOutput'
-  const { kind, message, choices } = value
-  const packageText = value.packageText ?? null
-  const alternative = value.alternative ?? null
-  if (typeof message !== 'string' || !Array.isArray(choices) || !choices.every(choice => typeof choice === 'string')
-    || (packageText !== null && typeof packageText !== 'string') || (alternative !== null && typeof alternative !== 'string')) return 'invalidOutput'
-  let reply: AdaptReply
-  if (kind === 'candidate' && packageText !== null && choices.length === 0 && alternative === null) reply = { kind, message, packageText }
-  else if (kind === 'question' && packageText === null && alternative === null) reply = { kind, message, choices }
-  else if (kind === 'unsupported' && packageText === null && choices.length === 0) reply = { kind, message, alternative }
-  else return 'invalidOutput'
-  return checkReply(reply) ?? reply
+  return readAdaptAnswer(text)
 }
 
 type Outcome = { reply: AdaptReply } | { failure: AdaptFailure; resetsAt: string | null }
@@ -678,11 +641,8 @@ export class AdaptBrowserHost {
       if (request?.kind !== 'request' || !outcome) return refused('invalidRequest')
       earlierTurns.push({ turnId, request: request.text, reply: outcome.kind === 'reply' ? outcome.reply : null })
     }
-    const replyBytes = (reply: AdaptReply | null) => reply === null ? 0 : utf8Length(reply.message)
-      + (reply.kind === 'candidate' ? utf8Length(reply.packageText) : reply.kind === 'question' ? reply.choices.reduce((sum, choice) => sum + utf8Length(choice), 0) : utf8Length(reply.alternative ?? ''))
-    const total = utf8Length(args.request) + args.attachments.reduce((sum, item) => sum + utf8Length(item.text), 0)
-      + earlierTurns.reduce((sum, turn) => sum + utf8Length(turn.request) + replyBytes(turn.reply), 0)
-    if (total > ADAPT_LIMITS.payloadBytes) return refused('tooLarge')
+    // Every earlier reply counts in full, an answer's text included, as native's `prior_bytes`.
+    if (adaptPayloadBytes(args, earlierTurns) > ADAPT_LIMITS.payloadBytes) return refused('tooLarge')
 
     const script = this.provider.kind === 'fixture' ? this.provider.script.turns ?? [] : []
     const step = script[this.state.nextTurn] ?? null

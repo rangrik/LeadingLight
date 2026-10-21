@@ -15,6 +15,8 @@ pub(crate) const MESSAGE_CHARS: usize = 600;
 pub(crate) const CHOICES: usize = 3;
 pub(crate) const CHOICE_CHARS: usize = 120;
 pub(crate) const PACKAGE_BYTES: usize = 128 * 1024;
+/// Amendment 5: UTF-8 bytes of an answer's Markdown text.
+pub(crate) const ANSWER_BYTES: usize = 16 * 1024;
 pub(crate) const TURNS_PER_CONVERSATION: usize = 50;
 pub(crate) const CONVERSATIONS_PER_VAULT: usize = 50;
 
@@ -75,6 +77,11 @@ pub(crate) fn is_plain_prose(text: &str, max_chars: usize) -> bool {
     !is_blank(text)
         && utf16_len(text) <= max_chars
         && !text.chars().any(|character| is_control(character, true))
+}
+
+/// Prose of any length: not blank, tab and newline as the only controls. Bounds are the caller's.
+fn is_prose_text(text: &str) -> bool {
+    !is_blank(text) && !text.chars().any(|character| is_control(character, true))
 }
 
 pub(crate) fn is_plain_line(text: &str, max_chars: usize) -> bool {
@@ -144,12 +151,14 @@ pub(crate) enum ReplyFault {
     TooLarge,
 }
 
-/// The reader's rules for a stored reply (`parseAdaptReply`): plain prose and bounded sizes.
+/// The reader's rules for a stored reply (`parseAdaptReply`): plain prose and bounded sizes. An
+/// answer's text is prose of at most `ANSWER_BYTES`, never interpreted.
 pub(crate) fn check_reply(reply: &Reply) -> Result<(), ReplyFault> {
     let message = match reply {
         Reply::Candidate { message, .. }
         | Reply::Question { message, .. }
-        | Reply::Unsupported { message, .. } => message,
+        | Reply::Unsupported { message, .. }
+        | Reply::Answer { message, .. } => message,
     };
     prose(message)?;
     match reply {
@@ -177,6 +186,14 @@ pub(crate) fn check_reply(reply: &Reply) -> Result<(), ReplyFault> {
         Reply::Unsupported { alternative, .. } => {
             if let Some(alternative) = alternative {
                 prose(alternative)?;
+            }
+        }
+        Reply::Answer { answer, .. } => {
+            if answer.len() > ANSWER_BYTES {
+                return Err(ReplyFault::TooLarge);
+            }
+            if !is_prose_text(answer) {
+                return Err(ReplyFault::Invalid);
             }
         }
     }

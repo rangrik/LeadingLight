@@ -340,3 +340,36 @@ A browser offers it only with the dev synthetic fetch fixture, which never opens
 
 See [ADR 016](ADR-016-website-capture.md), [the native fetch](web-capture-native.md),
 [the integration](website-native-integration.md) and [local runtime policy](local-only-runtime.md).
+
+## Ask LeadingLight
+
+Ask LeadingLight is the Adapt conversation used to ask about text the person attached. It adds one
+reply kind, `answer`, beside the extension candidate, question and "not possible" replies. There is
+no new command, provider, sign-in, tool or storage format.
+
+**What a Send carries:**
+- the request;
+- the attachment chips the person chose: a selected passage, the current page, another page, or
+  pasted text;
+- the earlier turns shown, only through the existing explicit inclusion controls;
+- the built-in guide.
+
+Nothing else from the vault is read or sent. A removed chip is absent from later requests. Source
+paths and note identities stay local.
+
+**Answers are untrusted text.** They are shown only through an inert renderer and can be copied
+exactly. They are not run, followed, fetched from or saved to a note automatically.
+
+**Where it lives.**
+
+- **UI.** `src/leadinglight/adapt/`, including `adaptAttachments.ts`, `adaptPage.ts` and
+  `askLabels.ts`. The "Another page…" chooser is the existing `QuickFind` in a narrow pick mode.
+- **Native host and storage.** The existing `src-tauri/src/leadinglight_adapt/` and its fixed
+  commands. Conversations stay in LeadingLight's local app data.
+- **Resumption.** Each page maps to its conversation id in local storage. It is recorded only when a
+  Send carrying that page's chip is admitted, and nothing of it is sent.
+
+**Provider.** Codex, as for Adapt. Claude is not available, and there is no paid fallback.
+
+See [the answer contract](ask-contract.md), [the guide](ask-guide.md),
+[the experience](ask-experience.md) and [local runtime policy](local-only-runtime.md).

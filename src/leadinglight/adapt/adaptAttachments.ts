@@ -1,6 +1,6 @@
 // What a person explicitly attaches to an Adapt request. Every attachment is a snapshot of text the
-// person chose and can see before Send: pasted text, the current page's settled text, or one
-// extension package. Nothing is attached automatically, nothing carries a file path, and an
+// person chose and can see before Send: pasted text, a selected passage, a page's settled text, or
+// one extension package. Nothing is attached automatically, nothing sent carries a file path, and an
 // attachment removed from the list is gone from the next Send.
 import { RESERVED_PACKAGE_ID_PREFIX, type ExtensionPackage } from '../extensions/extensionContract'
 import type { PackageView } from '../extensions/extensionSessionController'
@@ -8,6 +8,7 @@ import {
   ADAPT_LIMITS, isPlainLine, isWellFormedText, utf8Length,
   type AdaptAttachment as WireAttachment, type AdaptAttachmentKind, type AdaptRevisionBase,
 } from './adaptContract'
+import type { TakenText } from './adaptPage'
 
 /** The extension a request revises: its identity and the exact version it starts from. */
 export interface RevisionBase {
@@ -32,6 +33,11 @@ export interface AdaptAttachment {
   readonly bytes: number
   /** Present only for an extension attachment. */
   readonly base: RevisionBase | null
+  /**
+   * The page a page snapshot or passage came from, named locally (its path): the same page replaces
+   * its page chip, and Ask can return to the conversation about it. Never sent or shown.
+   */
+  readonly source: string | null
 }
 
 /** `unsafeText`: characters that cannot be sent as text (a NUL or a broken surrogate pair). */
@@ -47,22 +53,28 @@ function labelOf(label: string, fallback: string): string {
   return isPlainLine(short, ADAPT_LIMITS.labelChars) ? short : fallback
 }
 
-function make(kind: AdaptAttachmentKind, label: string, fallback: string, text: string, base: RevisionBase | null = null): AdaptAttachment | AttachmentRefusal {
+function make(
+  kind: AdaptAttachmentKind, label: string, fallback: string, text: string, base: RevisionBase | null = null, source: string | null = null,
+): AdaptAttachment | AttachmentRefusal {
   if (text.trim() === '') return 'empty'
   if (!isWellFormedText(text)) return 'unsafeText'
   const bytes = utf8Length(text)
   if (bytes > ADAPT_LIMITS.attachmentBytes) return 'tooLarge'
-  return { id: newId(), kind, label: labelOf(label, fallback), text, bytes, base }
+  return { id: newId(), kind, label: labelOf(label, fallback), text, bytes, base, source }
 }
 
+/** The chip a new one takes the place of: the one extension, or the same page taken again. */
+const replaces = (next: AdaptAttachment) => (item: AdaptAttachment) =>
+  item.kind === next.kind && (next.kind === 'extension' || (next.kind === 'pageSnapshot' && item.source === next.source))
+
 /**
- * Adds one attachment. A request revises at most one extension and holds one snapshot of the
- * current page, so a second of either replaces the first; the person sees the chip change.
+ * Adds one attachment. A request revises at most one extension, and holds one snapshot of each page,
+ * so a second of either replaces the first; the person sees the chip change. Several pages may be
+ * attached, each by its own click.
  */
 function add(list: readonly AdaptAttachment[], next: AdaptAttachment | AttachmentRefusal): AttachmentResult {
   if (typeof next === 'string') return { status: 'refused', reason: next }
-  const unique = next.kind === 'pageSnapshot' || next.kind === 'extension'
-  const kept = unique ? list.filter(item => item.kind !== next.kind) : [...list]
+  const kept = list.filter(item => !replaces(next)(item))
   if (kept.length >= ADAPT_LIMITS.attachments) return { status: 'refused', reason: 'tooMany' }
   if (kept.reduce((sum, item) => sum + item.bytes, next.bytes) > ADAPT_LIMITS.payloadBytes) return { status: 'refused', reason: 'totalTooLarge' }
   return { status: 'ok', attachments: [...kept, next] }
@@ -72,10 +84,25 @@ export function attachPastedText(list: readonly AdaptAttachment[], text: string,
   return add(list, make('pastedText', label, 'Pasted text', text))
 }
 
-/** The page's settled text, taken when the person chose Current page; the title is its label. */
-export function attachCurrentPage(list: readonly AdaptAttachment[], page: { title: string; text: string }): AttachmentResult {
-  return add(list, make('pageSnapshot', page.title, 'Current page', page.text))
+/** A page's settled text, taken when the person chose it; the title is its label. */
+export function attachCurrentPage(list: readonly AdaptAttachment[], page: TakenText): AttachmentResult {
+  return add(list, make('pageSnapshot', page.title, 'Current page', page.text, null, page.key ?? null))
 }
+
+/**
+ * The selected passage, taken on the person's click, sent as text with the label the host gave it
+ * ("Passage from <title>"). Several passages may be attached; none replaces another.
+ */
+export function attachPassage(list: readonly AdaptAttachment[], passage: TakenText, label: string): AttachmentResult {
+  return add(list, make('pastedText', label, passage.title, passage.text, null, passage.key ?? null))
+}
+
+/** A selected passage, as opposed to text the person pasted. */
+export const isPassage = (item: AdaptAttachment) => item.kind === 'pastedText' && item.source !== null
+
+/** The pages these chips came from, by local path, once each. */
+export const pagesOf = (list: readonly AdaptAttachment[]): string[] =>
+  [...new Set(list.flatMap(item => (item.source === null ? [] : [item.source])))]
 
 /**
  * One validated extension package as the model should see it, and the identity a revision binds

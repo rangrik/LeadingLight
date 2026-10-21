@@ -1,17 +1,18 @@
 # Adapt: asking for an extension
 
-Adapt turns a request in your own words into an E1 extension you review and turn on yourself. It
-asks Codex only when you press Send, and only for a package in the extension format
-(`extensions-catalog.md`). Everything after that is the ordinary E1 path: the package is checked,
+Adapt turns a request in your own words into an E1 extension you review and turn on yourself. In
+the app it is part of **Ask LeadingLight**, which also answers questions about text you attach
+(`ask-experience.md`). It asks Codex only when you press Send; an extension comes back only as a
+package in the extension format (`extensions-catalog.md`). Everything after that is the ordinary E1 path: the package is checked,
 previewed, turned on and run by LeadingLight (`extensions-experience.md`). Adapt never edits a note,
 turns anything on by itself, or retries anything by itself.
 
 ## Where things are
 
-- **New page → Adapt LeadingLight…** in the sidebar, and **Adapt LeadingLight…** in the command
-  palette (main window only). The sidebar entry is Adapt’s one status: **Adapting…** while a request
-  runs, **Extension ready** when a reply arrived while the dialog was closed.
-- **Settings → Extensions → Adapt…**, and **Adjust…** on any extension with a readable
+- **New page → Ask LeadingLight…** in the sidebar, and **Ask LeadingLight…** in the command
+  palette (main window only). The sidebar entry is the one status: **Working…** while a request
+  runs, **Reply ready** when a reply arrived while the dialog was closed.
+- **Settings → Extensions → Ask…**, and **Adjust…** on any extension with a readable
   version, which starts a fresh request with that version attached.
 - One dialog. Closing it keeps what you typed and lets a request you sent keep running.
   **Keep writing** also closes Settings if needed and returns focus to your page. Escape and the
@@ -44,8 +45,7 @@ Type a request, or start from one of three examples. Attachments are chips you c
   the request a change to exactly that version, and records which version was on at that moment.
 
 Under the composer, Adapt says what Send includes: this request, the earlier requests and replies
-shown in this conversation (when there are any), LeadingLight’s extension guide and the attached
-chips. The host adds nothing else from your workspace or its file paths. Names or paths you include in
+shown in this conversation (when there are any), the attached chips and LeadingLight’s guide. The host adds nothing else from your workspace or its file paths. Names or paths you include in
 your own text remain part of that explicit context. Earlier replies may quote things
 attached before; removing a chip does not remove those, and **New request** leaves them out.
 
@@ -58,7 +58,7 @@ request and chips back in the composer, and **Try again** is a new Send.
 Codex’s words are shown as plain text. A reply is one of:
 
 - **One question**, with up to three answers; choosing one puts it in the composer to send.
-- **Not possible with extensions**, with an alternative you can put in the composer.
+- **Not possible here**, with an alternative you can put in the composer.
 - **A draft**, followed by a box headed **Checked by LeadingLight**. That box is LeadingLight’s own
   check of the package (the E1 validator and review), never the model’s description: whether it is
   a new extension, a new version of the one you attached, or a new extension based on one that

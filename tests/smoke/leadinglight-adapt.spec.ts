@@ -170,7 +170,7 @@ test.describe('Adapt LeadingLight', () => {
     await expect(adaptDialog(page)).toHaveCount(0)
     await expect(settings).not.toBeVisible()
     await expect(page.locator('.bn-editor')).toBeFocused()
-    await expect(page.getByTestId('sidebar-adapt')).toHaveText('Adapting…')
+    await expect(page.getByTestId('sidebar-adapt')).toHaveText('Working…')
     await page.getByTestId('sidebar-adapt').click()
     await expect(adaptDialog(page).getByTestId('adapt-status')).toContainText('Working…')
     expect(await adaptFixtureSent(page)).toHaveLength(1)
@@ -183,7 +183,7 @@ test.describe('Adapt LeadingLight', () => {
       turns: [{ output: 'Sure! Here is your extension.' }, { reply: { kind: 'question', message: 'Which folder?', choices: ['Reading'] }, hold: true }],
     })
     await openCommandPalette(page)
-    await executeCommand(page, 'Adapt LeadingLight…')
+    await executeCommand(page, 'Ask LeadingLight…')
     await expect(adaptDialog(page)).toBeVisible()
     const request = adaptDialog(page).getByTestId('adapt-request')
     await expect(request).toBeFocused()

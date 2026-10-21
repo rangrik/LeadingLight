@@ -535,6 +535,49 @@ describe('what each Send gives the provider', () => {
 
 })
 
+describe('an answer (amendment 5), read and counted by the contract itself', () => {
+  const answer = (text: string): AdaptReply => ({ kind: 'answer', message: 'Here is a plain explanation.', answer: text })
+
+  it('reaches the transcript through the one reader, which refuses an unknown field and a long answer', () => {
+    const envelope = (fields: object) => JSON.stringify({ kind: 'answer', message: 'Short intro.', choices: [], ...fields })
+    const run = opened({ turns: [
+      { reply: answer('**Sleep** helps memory.\n\n- one\n- two') },
+      { output: envelope({ answer: 'Fine', html: '<b>x</b>' }) },
+      { output: envelope({ answer: 'x'.repeat(ADAPT_LIMITS.answerBytes + 1) }) },
+      { output: envelope({ answer: 'é'.repeat(ADAPT_LIMITS.answerBytes / 2) }) },
+    ] })
+    const outcomes: unknown[] = []
+    for (let turn = 0; turn < 4; turn += 1) {
+      run.adapt.send(run.sendArgs())
+      settle()
+      const last = run.last()
+      outcomes.push(last.kind === 'reply' ? last.reply : last.kind === 'failed' ? last.reason : last.kind)
+    }
+    expect(outcomes).toEqual([
+      answer('**Sleep** helps memory.\n\n- one\n- two'), 'invalidOutput', 'outputTooLarge',
+      { kind: 'answer', message: 'Short intro.', answer: 'é'.repeat(ADAPT_LIMITS.answerBytes / 2) },
+    ])
+  })
+
+  it('counts an earlier answer in full against the payload bound, not just its message', () => {
+    const long = 'x'.repeat(ADAPT_LIMITS.answerBytes)
+    const run = opened({ turns: [{ reply: answer(long) }, { reply: question }] })
+    const first = run.sendArgs({ request: 'Explain it' })
+    run.adapt.send(first)
+    settle()
+    const used = 'x'.length + 'Explain it'.length + 'Here is a plain explanation.'.length + long.length
+    // Exactly one byte over the bound once the earlier answer counts in full; well under it with its message alone.
+    const room = ADAPT_LIMITS.payloadBytes - used + 1
+    const parts = Array.from({ length: 4 }, (_, index): AdaptAttachment => ({
+      kind: 'pastedText', label: `Part ${index + 1}`, text: 'y'.repeat(Math.floor(room / 4) + (index === 0 ? room % 4 : 0)),
+    }))
+    const next = { request: 'x', attachments: parts }
+    expect(run.adapt.send(run.sendArgs({ ...next, includeTurnIds: [first.turnId] }))).toEqual({ status: 'refused', reason: 'tooLarge' })
+    expect(sentCount()).toBe(1)
+    expect(run.adapt.send(run.sendArgs(next))).toMatchObject({ status: 'admitted' })
+  })
+})
+
 describe('a revision', () => {
   const base = helper.adaptSamplePackage(PACKAGE_ID)
   /** The version active when the person attached the extension: local compare-and-set data only. */

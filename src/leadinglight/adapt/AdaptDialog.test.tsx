@@ -7,7 +7,7 @@ import { candidate, deferred, fakeHost } from './adapt.test-utils'
 import type { AdaptApi, AdaptProviderState } from './adaptContract'
 import { createAdaptController } from './adaptController'
 import { AdaptHarness } from './AdaptHarness.test-utils'
-import type { PageSnapshot } from './useAdaptUi'
+import type { AskLabels, PageSnapshot, PassageSnapshot } from './useAdaptUi'
 
 vi.mock('../extensions/extensionMarkdownText', async () => (await import('../extensions/extensionEncoder.test-utils')).encoderStandIn())
 vi.mock('../../utils/macosDismissableEscapeSurface', () => ({
@@ -18,13 +18,17 @@ vi.mock('../../utils/macosDismissableEscapeSurface', () => ({
 const QUICK = fixtureText('quick-note.json')
 const QUICK_NEXT = QUICK.replace('"version": "1.0.0"', '"version": "1.1.0"')
 
-function setup({ codex, packages = [], inSettings = false, hostCapabilities }: { codex?: AdaptProviderState; packages?: FakePackage[]; inSettings?: boolean; hostCapabilities?: readonly Capability[] } = {}) {
+type AskHost = NonNullable<Parameters<typeof AdaptHarness>[0]['askHost']>
+
+function setup({ codex, packages = [], inSettings = false, hostCapabilities, askHost }: {
+  codex?: AdaptProviderState; packages?: FakePackage[]; inSettings?: boolean; hostCapabilities?: readonly Capability[]; askHost?: AskHost
+} = {}) {
   const host = fakeHost(codex)
   const controller = createAdaptController({ api: host.api as unknown as AdaptApi, pollMs: 5, retryMs: 1, retries: 2 })
   const registry = fakeRegistry(packages)
   const extensions = hostCapabilities ? createExtensionController({ api: registry.transport, hostCapabilities }) : registry.controller()
   const snapshotPage = vi.fn(async (): Promise<PageSnapshot> => ({ title: 'Reading list', text: '# Reading list' }))
-  const harness = (vaultPath?: string) => <AdaptHarness registry={extensions} controller={controller} snapshotPage={snapshotPage} vaultPath={vaultPath} inSettings={inSettings} />
+  const harness = (vaultPath?: string) => <AdaptHarness registry={extensions} controller={controller} snapshotPage={snapshotPage} vaultPath={vaultPath} inSettings={inSettings} askHost={askHost} />
   const view = render(harness())
   /** The window switches vault, as App does: both controllers leave the old visit. */
   const moveTo = (vaultPath: string) => view.rerender(harness(vaultPath))
@@ -183,7 +187,7 @@ describe('the Adapt dialog', () => {
     await waitFor(() => expect(within(dialog()).getAllByTestId('adapt-chip')).toHaveLength(2))
     expect(snapshotPage).toHaveBeenCalledOnce()
     fireEvent.click(within(dialog()).getByRole('button', { name: 'Remove Pasted text' }))
-    expect(within(dialog()).getByTestId('adapt-sends-what')).toHaveTextContent('Send includes this request, LeadingLight’s extension guide and the attachments above.')
+    expect(within(dialog()).getByTestId('adapt-sends-what')).toHaveTextContent('Send includes this request, the attachments above and LeadingLight’s guide. Nothing else from your workspace.')
     await ask('A reading reflection')
     await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
     const [args] = host.api.send.mock.calls[0]
@@ -425,5 +429,169 @@ describe('the Adapt dialog', () => {
     await waitFor(() => expect(host.api.connect).toHaveBeenCalledOnce())
     await within(dialog()).findByText('Waiting for your sign-in in the browser…')
     expect(host.api.send).not.toHaveBeenCalled()
+  })
+})
+
+describe('asking about attached text (A1)', () => {
+  const words: AskLabels = {
+    copy: 'Copy', copied: 'Copied.', copyFailed: 'Couldn’t copy the answer.', attachPassage: 'Selected passage',
+    attachAnotherPage: 'Another page…', noSelection: 'Select a passage in the page first, then attach it.', passageFrom: title => `Passage from ${title}`,
+  }
+  const ANSWER = '## In short\n\nSleep helps **memory**. See [this](https://example.com).'
+  const LONG = Array.from({ length: 12 }, (_, line) => `Line ${line + 1}`).join('\n')
+
+  function askSetup() {
+    const askHost = {
+      ask: words,
+      snapshotPassage: vi.fn((): PassageSnapshot => ({ title: 'Reading list', text: 'A line', key: '/v/reading.md' })),
+      snapshotAnotherPage: vi.fn(async (): Promise<PageSnapshot | null> => ({ title: 'Plan', text: LONG, key: '/v/plan.md' })),
+      copyText: vi.fn(async () => {}),
+    }
+    return { ...setup({ askHost }), askHost }
+  }
+
+  it('reads and attaches nothing on open or Send, then shows the answer inertly and copies it exactly', async () => {
+    const { host, snapshotPage, askHost } = askSetup()
+    await openAdapt()
+    await ask('Explain sleep')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    expect(host.api.send.mock.calls[0][0].attachments).toEqual([])
+    expect(snapshotPage).not.toHaveBeenCalled()
+    expect(askHost.snapshotPassage).not.toHaveBeenCalled()
+    expect(askHost.snapshotAnotherPage).not.toHaveBeenCalled()
+
+    act(() => host.reply('conv-1', { kind: 'answer', message: 'Here is a short explanation.', answer: ANSWER }))
+    const reply = await within(dialog()).findByTestId('adapt-reply')
+    expect(reply).toHaveAttribute('data-kind', 'answer')
+    expect(reply).toHaveTextContent('Answer')
+    expect(within(reply).getByRole('heading', { name: 'In short' })).toBeInTheDocument()
+    expect(reply.querySelectorAll('a, [href]')).toHaveLength(0)
+    fireEvent.click(within(reply).getByTestId('adapt-answer-copy'))
+    await waitFor(() => expect(askHost.copyText).toHaveBeenCalledExactlyOnceWith(ANSWER))
+  })
+
+  it('shows exactly what each chip sends, opens a lone chip, and leaves a removed chip out of the next Send', async () => {
+    const { host } = askSetup()
+    await openAdapt()
+    await choose(within(dialog()).getByTestId('adapt-attach'), 'Current page')
+    expect(await within(dialog()).findByTestId('adapt-chip-text')).toHaveTextContent('# Reading list')
+    expect(within(dialog()).getByTestId('adapt-chip-toggle')).toHaveAttribute('aria-expanded', 'true')
+
+    await choose(within(dialog()).getByTestId('adapt-attach'), 'Another page…')
+    await waitFor(() => expect(within(dialog()).getAllByTestId('adapt-chip')).toHaveLength(2))
+    const [page, plan] = within(dialog()).getAllByTestId('adapt-chip-toggle')
+    fireEvent.click(plan)
+    expect(page).toHaveAttribute('aria-expanded', 'false')
+    const preview = within(dialog()).getByTestId('adapt-chip-text')
+    expect(preview.textContent).toBe(LONG.split('\n').slice(0, 8).join('\n'))
+    fireEvent.click(within(dialog()).getByTestId('adapt-chip-whole'))
+    expect(within(dialog()).getByTestId('adapt-chip-text').textContent).toBe(LONG)
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Remove Reading list' }))
+    await ask('Summarize')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    expect(host.api.send.mock.calls[0][0].attachments).toEqual([{ kind: 'pageSnapshot', label: 'Plan', text: LONG }])
+  })
+
+  it('takes the selected passage only on that click, labelled by the host, and says so when nothing is selected', async () => {
+    const { askHost } = askSetup()
+    await openAdapt()
+    await choose(within(dialog()).getByTestId('adapt-attach'), 'Selected passage')
+    expect(await within(dialog()).findByTestId('adapt-chip-toggle')).toHaveTextContent('Passage from Reading list · 6 B')
+    expect(askHost.snapshotPassage).toHaveBeenCalledOnce()
+    askHost.snapshotPassage.mockReturnValueOnce('noSelection')
+    await choose(within(dialog()).getByTestId('adapt-attach'), 'Selected passage')
+    expect(await within(dialog()).findByTestId('adapt-notice')).toHaveTextContent('Select a passage in the page first, then attach it.')
+    expect(within(dialog()).getAllByTestId('adapt-chip')).toHaveLength(1)
+  })
+
+  it('without the host\'s Ask words still shows an answer inertly, and offers no Copy, passage or other page', async () => {
+    const { host } = setup()
+    await openAdapt()
+    await ask('Explain sleep')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    act(() => host.reply('conv-1', { kind: 'answer', message: 'Short.', answer: ANSWER }))
+    const reply = await within(dialog()).findByTestId('adapt-reply')
+    expect(within(reply).getByTestId('adapt-answer-formatted')).toHaveTextContent('Sleep helps memory.')
+    expect(within(reply).queryByTestId('adapt-answer-copy')).toBeNull()
+    act(() => { within(dialog()).getByTestId('adapt-attach').focus(); fireEvent.keyDown(within(dialog()).getByTestId('adapt-attach'), { key: 'ArrowDown' }) })
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).queryByText('Selected passage')).toBeNull()
+    expect(within(menu).queryByText('Another page…')).toBeNull()
+  })
+})
+
+describe('opening Ask about a page or passage (A1 integration)', () => {
+  const words: AskLabels = {
+    copy: 'Copy', copied: 'Copied.', copyFailed: 'Couldn’t copy the answer.', attachPassage: 'Selected passage',
+    attachAnotherPage: 'Another page…', noSelection: 'Select a passage in the page first, then attach it.', passageFrom: title => `Passage from ${title}`,
+  }
+
+  function aboutSetup() {
+    localStorage.clear()
+    let picked: (value: PageSnapshot | null) => void = () => {}
+    const askHost = {
+      ask: words,
+      snapshotPassage: vi.fn((): PassageSnapshot => ({ title: 'Reading list', text: 'One line', key: '/v/reading.md' })),
+      snapshotAnotherPage: vi.fn(() => new Promise<PageSnapshot | null>(resolve => { picked = resolve })),
+      notify: vi.fn(),
+    }
+    const context = setup({ askHost })
+    context.snapshotPage.mockImplementation(async () => ({ title: 'Reading list', text: '# Reading list', key: '/v/reading.md' }))
+    return { ...context, askHost, pick: (value: PageSnapshot | null) => act(() => picked(value)) }
+  }
+
+  it('attaches the page on that click into a fresh request, and returns to its conversation the next time, as stored', async () => {
+    const { host, snapshotPage } = aboutSetup()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask about this page' }))
+    await screen.findByTestId('adapt-dialog')
+    expect(await within(dialog()).findByTestId('adapt-chip-toggle')).toHaveTextContent('Reading list')
+    expect(snapshotPage).toHaveBeenCalledOnce()
+    // Examples follow what is attached; none promises a write.
+    expect(within(dialog()).getByRole('group', { name: 'Examples' })).toHaveTextContent('Summarize this page')
+    await ask('Summarize this page')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    act(() => host.reply('conv-1', { kind: 'answer', message: 'Here.', answer: 'A short summary.' }))
+    await within(dialog()).findByTestId('adapt-answer')
+
+    // Another conversation is shown when Ask opens about the page again; it goes back to conv-1.
+    fireEvent.click(within(dialog()).getByTestId('adapt-new-request'))
+    fireEvent.click(within(dialog()).getByTestId('adapt-keep-writing'))
+    fireEvent.click(screen.getByRole('button', { name: 'Ask about this page' }))
+    await waitFor(() => expect(within(dialog()).getByTestId('adapt-answer')).toHaveTextContent('A short summary.'))
+    expect(within(dialog()).getAllByTestId('adapt-chip')).toHaveLength(1)
+    // Resuming reread nothing but the page this click attached, and sent nothing.
+    expect(snapshotPage).toHaveBeenCalledTimes(2)
+    expect(host.api.send).toHaveBeenCalledOnce()
+  })
+
+  it('with nothing selected says so and opens nothing', async () => {
+    const { host, askHost } = aboutSetup()
+    askHost.snapshotPassage.mockReturnValueOnce('noSelection')
+    fireEvent.click(screen.getByRole('button', { name: 'Ask about this passage' }))
+    await waitFor(() => expect(askHost.notify).toHaveBeenCalledWith('Select a passage first, then choose Ask about this passage.'))
+    expect(screen.queryByTestId('adapt-dialog')).toBeNull()
+    expect(host.api.openVisit).not.toHaveBeenCalled()
+  })
+
+  it('opens about a passage with its chip, and steps aside while another page is chosen', async () => {
+    const { pick } = aboutSetup()
+    fireEvent.click(screen.getByRole('button', { name: 'Ask about this passage' }))
+    expect(await within(await screen.findByTestId('adapt-dialog')).findByTestId('adapt-chip-toggle')).toHaveTextContent('Passage from Reading list')
+    expect(within(dialog()).getByRole('group', { name: 'Examples' })).toHaveTextContent('Explain this in plain words')
+    await choose(within(dialog()).getByTestId('adapt-attach'), 'Another page…')
+    await waitFor(() => expect(screen.queryByTestId('adapt-dialog')).toBeNull())
+    pick({ title: 'Plan', text: 'Plan text', key: '/v/plan.md' })
+    await screen.findByTestId('adapt-dialog')
+    await waitFor(() => expect(within(dialog()).getAllByTestId('adapt-chip')).toHaveLength(2))
+  })
+
+  it('tells the person what to attach when Codex asks one question', async () => {
+    const { host } = aboutSetup()
+    await openAdapt()
+    await ask('Explain it')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    act(() => host.reply('conv-1', { kind: 'question', message: 'Which page?', choices: [] }))
+    expect(await within(dialog()).findByTestId('adapt-question-hint')).toHaveTextContent('Attach what it needs with Attach, then send. Nothing is read until you choose it.')
   })
 })

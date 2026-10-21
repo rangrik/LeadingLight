@@ -540,3 +540,115 @@ describe('revisions and local history', () => {
     expect(host.store.has('conv-1')).toBe(false)
   })
 })
+
+describe('asking about attached text (A1)', () => {
+  const answer = (text: string) => ({ kind: 'answer', message: 'Here it is in plain words.', answer: text }) as const
+
+  it('counts an earlier answer in full before sending, so an over-bound Send is refused before anything is made or sent', async () => {
+    const { host, controller } = await ready()
+    controller.setRequest('Explain it')
+    await controller.send()
+    const conversationId = host.api.send.mock.calls[0][0].conversationId
+    host.reply(conversationId, answer('x'.repeat(16 * 1024)))
+    await vi.waitFor(() => expect(lastOutcomeOf(controller.snapshot().conversation)?.kind).toBe('reply'))
+    // These attachments fit alone; with the earlier answer resent in full they do not.
+    const room = 512 * 1024 - 'And this?'.length - 'Explain it'.length - 'Here it is in plain words.'.length - 16 * 1024
+    for (let part = 0; part < 4; part += 1) controller.attachText('y'.repeat(Math.ceil((room + 1) / 4)), `Part ${part + 1}`)
+    controller.setRequest('And this?')
+    await controller.send()
+    expect(controller.snapshot().notice).toEqual({ kind: 'sendRefused', reason: 'tooLarge' })
+    expect(host.api.send).toHaveBeenCalledOnce()
+    expect(controller.snapshot().draft.attachments).toHaveLength(4)
+    // A New request leaves the earlier answer out, so the same attachments fit.
+    controller.newRequest()
+    for (let part = 0; part < 4; part += 1) controller.attachText('y'.repeat(Math.ceil((room + 1) / 4)), `Part ${part + 1}`)
+    controller.setRequest('And this?')
+    await controller.send()
+    expect(host.api.send).toHaveBeenCalledTimes(2)
+    expect(host.api.send.mock.calls[1][0]).toMatchObject({ includeTurnIds: [] })
+  })
+
+  it('holds one chip per page, several pages and passages, and sends exactly the chips still shown', async () => {
+    const { host, controller } = await ready()
+    controller.attachPage({ title: 'Plan', text: 'old plan', key: '/v/plan.md' })
+    controller.attachPage({ title: 'Notes', text: 'notes', key: '/v/notes.md' })
+    controller.attachPage({ title: 'Plan', text: 'new plan', key: '/v/plan.md' })
+    controller.attachPassage({ title: 'Plan', text: 'one line', key: '/v/plan.md' }, title => `Passage from ${title}`)
+    controller.attachPassage({ title: 'Plan', text: 'another line', key: '/v/plan.md' }, title => `Passage from ${title}`)
+    const chips = controller.snapshot().draft.attachments
+    expect(chips.map(item => [item.kind, item.label, item.text])).toEqual([
+      ['pageSnapshot', 'Notes', 'notes'], ['pageSnapshot', 'Plan', 'new plan'],
+      ['pastedText', 'Passage from Plan', 'one line'], ['pastedText', 'Passage from Plan', 'another line'],
+    ])
+    controller.removeAttachment(chips[0].id)
+    controller.setRequest('Compare these')
+    await controller.send()
+    const sent = host.api.send.mock.calls[0][0]
+    expect(sent.attachments).toEqual([
+      { kind: 'pageSnapshot', label: 'Plan', text: 'new plan' },
+      { kind: 'pastedText', label: 'Passage from Plan', text: 'one line' },
+      { kind: 'pastedText', label: 'Passage from Plan', text: 'another line' },
+    ])
+    // Pages are named locally only: no path or key travels with the request.
+    expect(JSON.stringify(sent)).not.toContain('/v/')
+  })
+
+  it('says why nothing was taken when no passage is selected, and attaches nothing on its own', async () => {
+    const { host, controller } = await ready()
+    expect(controller.attachPassage('noSelection', title => title)).toBe(false)
+    expect(controller.snapshot().notice).toEqual({ kind: 'attachRefused', reason: 'noSelection' })
+    controller.setRequest('Explain this')
+    await controller.send()
+    expect(host.api.send.mock.calls[0][0].attachments).toEqual([])
+  })
+})
+
+describe('an explicit fresh request over the visit’s first resumption (review fix)', () => {
+  /** A vault whose latest conversation ended with a reply, then a new visit whose first history call is held. */
+  async function heldResumption(held: 'list' | 'read') {
+    const { host, controller } = await ready()
+    controller.setRequest('An older question')
+    await controller.send()
+    host.reply('conv-1', { kind: 'answer', message: 'Old.', answer: 'An older answer.' })
+    await vi.waitFor(() => expect(lastOutcomeOf(controller.snapshot().conversation)?.kind).toBe('reply'))
+    await controller.exit()
+    const gate = deferred<void>()
+    const call = held === 'list' ? host.api.listConversations : host.api.readConversation
+    const original = call.getMockImplementation()!
+    const before = call.mock.calls.length
+    call.mockImplementationOnce((async (args: never) => { await gate.promise; return (original as (a: never) => unknown)(args) }) as never)
+    const entering = controller.enter(VAULT)
+    await vi.waitFor(() => expect(controller.snapshot().visit).toBe('open'))
+    await vi.waitFor(() => expect(call.mock.calls.length).toBe(before + 1))
+    return { host, controller, entering, release: () => gate.resolve() }
+  }
+
+  it.each(['list', 'read'] as const)('keeps the fresh request when the held %s answers afterwards; the next Send inherits nothing', async held => {
+    const { host, controller, entering, release } = await heldResumption(held)
+    // Ask about an unmapped page: a fresh request with its chip, while history is still loading.
+    controller.startFresh()
+    controller.attachPage({ title: 'New page', text: 'New text', key: '/v/new.md' })
+    release()
+    await entering
+    await vi.waitFor(() => expect(host.api.listConversations).toHaveBeenCalled())
+    expect(controller.snapshot()).toMatchObject({ conversationId: null, conversation: null })
+    expect(controller.snapshot().draft.attachments.map(item => item.label)).toEqual(['New page'])
+    controller.setRequest('About the new page')
+    await controller.send()
+    const sent = host.api.send.mock.calls.at(-1)![0]
+    expect(sent.includeTurnIds).toEqual([])
+    expect(sent.conversationId).not.toBe('conv-1')
+  })
+
+  it('without that choice still resumes the latest conversation, and never switches away from a running turn', async () => {
+    const { controller, entering, release } = await heldResumption('list')
+    release()
+    await entering
+    await vi.waitFor(() => expect(controller.snapshot().conversationId).toBe('conv-1'))
+    controller.setRequest('Follow-up')
+    await controller.send()
+    await vi.waitFor(() => expect(controller.snapshot().conversation?.turn).not.toBeNull())
+    controller.startFresh()
+    expect(controller.snapshot().conversationId).toBe('conv-1')
+  })
+})

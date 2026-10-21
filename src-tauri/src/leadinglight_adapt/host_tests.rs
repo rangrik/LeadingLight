@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use tempfile::TempDir;
 
+use super::check::{ANSWER_BYTES, ATTACHMENT_BYTES};
 use super::host::Host;
 use super::prompt::Payload;
 use super::provider::{Provider, ProviderSnapshot, TurnControl, TurnOutcome};
@@ -1651,4 +1652,114 @@ fn an_answer_outside_its_bounds_is_recorded_as_a_failure_not_shown() {
             ..
         }
     ));
+}
+
+// --- Amendment 5: answers --------------------------------------------------------------------------
+
+fn answered(text: &str) -> TurnOutcome {
+    TurnOutcome::Reply(Reply::Answer {
+        message: "Here is a short summary.".to_string(),
+        answer: text.to_string(),
+    })
+}
+
+/// An answer is shown and kept like any reply, survives a restart without a provider call, and is
+/// resent whole only when its turn is named; the Ask guide goes with every Send.
+#[test]
+fn an_answer_is_kept_and_resent_only_when_named() {
+    let world = world(Fake::connected());
+    let visit = world.visit("main");
+    let conversation = world.conversation("main", &visit);
+    let first = uuid();
+    world.fake.then(Behaviour::Answer(answered(
+        "ANSWER-ONE: the passage argues for rest.",
+    )));
+    world.send(
+        "main",
+        &send_args(&visit, &conversation, &first, "Explain the passage"),
+    );
+    let shown = world.settle(&visit, &conversation);
+    assert!(matches!(
+        &shown.entries[1],
+        Entry::Reply { reply: Reply::Answer { answer, .. }, .. } if answer.starts_with("ANSWER-ONE")
+    ));
+
+    world.fake.then(Behaviour::Answer(answered("ANSWER-TWO")));
+    world.send(
+        "main",
+        &send_args(&visit, &conversation, &uuid(), "Something else"),
+    );
+    world.settle(&visit, &conversation);
+    assert!(!world.fake.payload(1).message.contains("ANSWER-ONE"));
+
+    world.fake.then(Behaviour::Answer(answered("ANSWER-THREE")));
+    let mut third = send_args(&visit, &conversation, &uuid(), "Now in one sentence");
+    third.include_turn_ids = vec![first];
+    world.send("main", &third);
+    world.settle(&visit, &conversation);
+    let sent = world.fake.payload(2);
+    assert!(sent
+        .message
+        .contains("ANSWER-ONE: the passage argues for rest."));
+    assert!(!sent.message.contains("ANSWER-TWO"));
+    assert!(sent
+        .instructions
+        .contains("# Ask LeadingLight: answering guide"));
+
+    let restarted = world.restarted();
+    let visit = restarted.visit("main");
+    let restored = restarted.read(&visit, &conversation);
+    assert!(matches!(
+        &restored.entries[1],
+        Entry::Reply { reply: Reply::Answer { answer, .. }, .. } if answer.starts_with("ANSWER-ONE")
+    ));
+    assert_eq!(restarted.fake.turns.load(Ordering::SeqCst), 0);
+}
+
+/// Earlier answers count against the payload bound with the request and attachments: sixteen full
+/// answers fit beside one large page, not beside two.
+#[test]
+fn earlier_answers_count_against_the_payload_bound() {
+    let world = world(Fake::connected());
+    let visit = world.visit("main");
+    let store = world.store();
+    let vault = world.vault_key();
+    let mut answers = Record::new("conversation-answers".to_string(), now());
+    let mut earlier = Vec::new();
+    for _ in 0..16 {
+        let record = finished_record(
+            "conversation-answers",
+            Reply::Answer {
+                message: "Here.".to_string(),
+                answer: "a".repeat(ANSWER_BYTES),
+            },
+        );
+        earlier.push(record.entries[0].turn_id().to_string());
+        answers.entries.extend(record.entries);
+    }
+    store.save(&vault, &answers).unwrap();
+    let page = Attachment {
+        kind: AttachmentKind::PageSnapshot,
+        label: "Page".to_string(),
+        text: "p".repeat(ATTACHMENT_BYTES),
+    };
+    let with_pages = |pages: usize| SendArgs {
+        attachments: vec![page.clone(); pages],
+        include_turn_ids: earlier.clone(),
+        ..send_args(&visit, "conversation-answers", &uuid(), "Compare them")
+    };
+    assert_eq!(
+        world.send("main", &with_pages(2)),
+        refused(SendRefusal::TooLarge)
+    );
+    assert_eq!(world.fake.turns.load(Ordering::SeqCst), 0);
+    world.fake.then(Behaviour::Answer(answered("They agree.")));
+    let fits = with_pages(1);
+    assert_eq!(world.send("main", &fits), admitted(&fits.turn_id));
+    world.settle(&visit, "conversation-answers");
+    assert!(world
+        .fake
+        .payload(0)
+        .message
+        .contains(&"a".repeat(ANSWER_BYTES)));
 }

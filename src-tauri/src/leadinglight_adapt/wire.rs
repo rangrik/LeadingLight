@@ -282,7 +282,8 @@ where
     Option::<String>::deserialize(deserializer)
 }
 
-/// Plain prose only; `package_text` is untrusted JSON text.
+/// Messages are plain prose; `package_text` is untrusted JSON text; `answer` (amendment 5) is
+/// untrusted Markdown text, shown only through an inert renderer and never interpreted here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Reply {
@@ -298,6 +299,10 @@ pub enum Reply {
     Unsupported {
         message: String,
         alternative: Option<String>,
+    },
+    Answer {
+        message: String,
+        answer: String,
     },
 }
 

@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use tempfile::NamedTempFile;
 
+use super::check::ANSWER_BYTES;
 use super::now;
 use super::store::{NativeStoreIo, Published, Record, Store, StoreIo};
 use super::wire::{Entry, Failure, ProviderId, Reply, RevisionBase, StopReason};
@@ -282,4 +283,76 @@ fn a_record_that_breaks_a_rule_is_left_alone_and_not_shown() {
     );
     store.save(VAULT, &stopped).unwrap();
     assert_eq!(store.load(VAULT, "conversation-stopped"), Some(stopped));
+}
+
+fn answered(turn_id: &str, answer: &str) -> Entry {
+    Entry::Reply {
+        turn_id: turn_id.to_string(),
+        at: now(),
+        reply: Reply::Answer {
+            message: "Here is a short summary.".to_string(),
+            answer: answer.to_string(),
+        },
+    }
+}
+
+/// Amendment 5: an answer is stored and read back exactly, a record written before answers existed
+/// reads byte for byte as it always did, and an answer outside its rules leaves the record unread and
+/// untouched. The record format stays 1.
+#[test]
+fn answers_are_stored_beside_the_older_reply_kinds() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(dir.path().join("conversations"));
+    store.prepare(VAULT).unwrap();
+    let saved = record(
+        "conversation-answer",
+        vec![
+            request(TURN_1, &[]),
+            answered(
+                TURN_1,
+                "## Summary\n\n- The passage argues for rest.\n\tÉtude",
+            ),
+            request(TURN_2, &[TURN_1]),
+            reply(TURN_2),
+        ],
+    );
+    assert_eq!(saved.format, 1);
+    store.save(VAULT, &saved).unwrap();
+    assert_eq!(store.load(VAULT, "conversation-answer"), Some(saved));
+
+    let folder = dir.path().join("conversations").join(VAULT);
+    let legacy = format!(
+        r#"{{"format":1,"conversationId":"conversation-legacy","createdAt":"2026-10-20T10:00:00Z","updatedAt":"2026-10-20T10:01:00Z","title":"A weekly review","entries":[{{"kind":"request","turnId":"{TURN_1}","at":"2026-10-20T10:00:00Z","provider":"codex","text":"A weekly review","attachments":[],"includedTurnIds":[],"revision":null,"guide":"extensions-guide-0123456789ab"}},{{"kind":"reply","turnId":"{TURN_1}","at":"2026-10-20T10:01:00Z","reply":{{"kind":"candidate","message":"Here is a weekly review.","packageText":"{{}}"}}}}]}}"#
+    );
+    fs::write(folder.join("conversation-legacy.json"), &legacy).unwrap();
+    let loaded = store.load(VAULT, "conversation-legacy").unwrap();
+    assert_eq!(serde_json::to_string(&loaded).unwrap(), legacy);
+
+    for (id, answer) in [
+        ("conversation-long", "a".repeat(ANSWER_BYTES + 1)),
+        ("conversation-return", "One\r\nTwo".to_string()),
+        ("conversation-blank", " \n\t".to_string()),
+    ] {
+        let bytes = serde_json::to_vec(&record(
+            id,
+            vec![request(TURN_1, &[]), answered(TURN_1, &answer)],
+        ))
+        .unwrap();
+        fs::write(folder.join(format!("{id}.json")), &bytes).unwrap();
+        assert_eq!(store.load(VAULT, id), None, "{id}");
+        assert_eq!(
+            fs::read(folder.join(format!("{id}.json"))).unwrap(),
+            bytes,
+            "{id}"
+        );
+    }
+    let extra = serde_json::to_string(&record(
+        "conversation-extra",
+        vec![request(TURN_1, &[]), answered(TURN_1, "Text")],
+    ))
+    .unwrap()
+    .replace(r#""answer":"Text""#, r#""answer":"Text","html":"<b>x</b>""#);
+    assert!(extra.contains("\"html\""));
+    fs::write(folder.join("conversation-extra.json"), extra).unwrap();
+    assert_eq!(store.load(VAULT, "conversation-extra"), None);
 }

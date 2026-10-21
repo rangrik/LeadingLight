@@ -9,7 +9,7 @@ import { useExtensionUi } from '../extensions/useExtensionUi'
 import { useExtensions } from '../extensions/useExtensions'
 import type { AdaptController } from './adaptController'
 import { useAdapt } from './useAdapt'
-import { useAdaptUi, type PageSnapshot } from './useAdaptUi'
+import { useAdaptUi, type AdaptUiOptions, type PageSnapshot } from './useAdaptUi'
 
 const SETTINGS = {
   auto_pull_interval_minutes: null, git_enabled: null, git_path: null, git_provider: null, git_wsl_distro: null,
@@ -27,6 +27,8 @@ interface Props {
   snapshotPage?: () => Promise<PageSnapshot>
   /** Settings → Extensions inside the real Settings panel, open from the start, as the person opened it. */
   inSettings?: boolean
+  /** The host's Ask seams, as App will pass them once its locale has the words. */
+  askHost?: Pick<AdaptUiOptions, 'ask' | 'snapshotPassage' | 'snapshotAnotherPage' | 'copyText' | 'notify'>
 }
 
 /**
@@ -34,7 +36,7 @@ interface Props {
  * Extensions and a stand-in page editor. Keep writing closes Settings and then focuses the page on a
  * later tick, as App's editor focus request does.
  */
-export function AdaptHarness({ registry, controller, vaultPath = VAULT, reservation, snapshotPage, inSettings = false }: Props) {
+export function AdaptHarness({ registry, controller, vaultPath = VAULT, reservation, snapshotPage, inSettings = false, askHost }: Props) {
   const extensions = useExtensions({ vaultPath, ready: true, controller: registry })
   const [fallback] = useState(() => fakeReservation().reservation)
   const [entries, setEntries] = useState<VaultEntry[]>([])
@@ -47,7 +49,7 @@ export function AdaptHarness({ registry, controller, vaultPath = VAULT, reservat
   })
   const adapt = useAdapt({ vaultPath, ready: true, controller })
   const adaptUi = useAdaptUi({
-    locale: 'en', vaultPath, adapt, extensions, extensionUi, snapshotPage: snapshotPage ?? (async () => 'noPage'),
+    locale: 'en', vaultPath, adapt, extensions, extensionUi, snapshotPage: snapshotPage ?? (async () => 'noPage'), ...askHost,
     onKeepWriting: () => {
       setSettingsOpen(false)
       setTimeout(() => editor.current?.focus(), 0)
@@ -57,6 +59,9 @@ export function AdaptHarness({ registry, controller, vaultPath = VAULT, reservat
   return <>
     <textarea ref={editor} aria-label="Page" />
     <button type="button" onClick={() => { adaptUi.open() }}>Open Adapt</button>
+    {/* As the palette's Ask about this page… and Ask about this passage run them. */}
+    <button type="button" onClick={() => { void adaptUi.openAbout('page') }}>Ask about this page</button>
+    <button type="button" onClick={() => { void adaptUi.openAbout('passage') }}>Ask about this passage</button>
     <span data-testid="menu-status">{adaptUi.menuStatus}</span>
     {inSettings ? <SettingsPanel open={settingsOpen} settings={SETTINGS} onSave={() => {}} onClose={() => setSettingsOpen(false)} extensions={settings} /> : settings}
     {extensionUi.dialogs}

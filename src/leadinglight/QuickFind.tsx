@@ -34,6 +34,12 @@ export interface QuickFindProps {
   onCreate: (title: string) => Promise<PageCreationOutcome>
   onClose: () => void
   locale?: AppLocale
+  /**
+   * Choosing a page for another feature (Ask's Another page…) instead of opening one: the chosen
+   * page goes to `onPick` and the finder closes; nothing is opened or created, and no editor takes
+   * focus. `title` names the dialog for assistive technology.
+   */
+  pick?: { title: string; onPick: (entry: VaultEntry) => void }
 }
 
 type PageRow = { kind: 'page', key: string, entry: VaultEntry, snippet?: string }
@@ -118,7 +124,7 @@ export function QuickFind({ open, onClose, locale = 'en', vaultPath, ...props }:
           else if (returnFocusRef.current?.isConnected) returnFocusRef.current.focus({ preventScroll: true })
         }}
         onEscapeKeyDown={event => { if (event.isComposing) event.preventDefault() }}>
-        <DialogTitle className="sr-only">{translate(locale, 'leadinglight.find.title')}</DialogTitle>
+        <DialogTitle className="sr-only">{props.pick?.title ?? translate(locale, 'leadinglight.find.title')}</DialogTitle>
         {/* A vault change starts a fresh search; work begun in the old vault no longer reports here. */}
         <QuickFindBody key={vaultPath} vaultPath={vaultPath} {...props} locale={locale} dialogShownRef={shownRef}
           onDone={target => { focusTargetRef.current = target; onClose() }} />
@@ -129,11 +135,12 @@ export function QuickFind({ open, onClose, locale = 'en', vaultPath, ...props }:
 
 type BodyProps = Omit<QuickFindProps, 'open' | 'onClose' | 'locale'> & {
   locale: AppLocale
-  onDone: (focus: FocusEventDetail) => void
+  /** `null`: closed after a pick, so focus returns where it was and no editor takes it. */
+  onDone: (focus: FocusEventDetail | null) => void
   dialogShownRef: RefObject<boolean>
 }
 
-function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreate, onDone, dialogShownRef, locale }: BodyProps) {
+function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreate, onDone, dialogShownRef, locale, pick }: BodyProps) {
   const t = (key: TranslationKey, values?: TranslationValues) => translate(locale, key, values)
   const baseId = useId()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -160,11 +167,12 @@ function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreat
   const cues = useMemo(() => duplicateCues(findable, vaultPath, locale), [findable, vaultPath, locale])
   const exactPaths = useMemo(() => pathMatches(findable, query, vaultPath), [findable, query, vaultPath])
   const { results } = useNoteSearch(findable, query, RECENT_ROWS + 2)
-  const body = useQuickFindBodySearch(vaultPath, query, ready)
+  // Choosing a page for Ask reads only the page chosen: titles and paths here, never other pages' text.
+  const body = useQuickFindBodySearch(vaultPath, query, ready && !pick)
   const sections = !ready ? [] : title
     ? querySections(byPath, [...exactPaths, ...results.map(result => result.entry)], body.matches)
     : idleSections(byPath, recentPaths, results.map(result => result.entry))
-  const canCreate = ready && !!title && exactPaths.length === 0 && !findable.some(entry => hasTitle(entry, title))
+  const canCreate = !pick && ready && !!title && exactPaths.length === 0 && !findable.some(entry => hasTitle(entry, title))
   const rowLabel = (entry: VaultEntry) => {
     const cue = cueFor(cues, entry)
     return <>{pageLabel(entry, locale)}{cue && <span className="ml-1.5 text-xs text-muted-foreground">{cue}</span>}</>
@@ -183,6 +191,10 @@ function QuickFindBody({ vaultPath, entries, ready, recentPaths, onOpen, onCreat
 
   const activate = async (row: Row | undefined) => {
     if (!row || operationRef.current) return
+    if (pick) {
+      if (row.kind === 'page') { pick.onPick(row.entry); onDone(null) }
+      return
+    }
     const operation = {}
     operationRef.current = operation
     setBusy(row.kind)

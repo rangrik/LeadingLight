@@ -3,7 +3,8 @@
 //
 // - Nothing is sent without an explicit Send while Codex is connected. Each Send is a fresh turn id
 //   with exactly the draft's request, its visible attachments, the finished earlier turns shown in
-//   this conversation, and the revision binding; native adds only the built-in guide.
+//   this conversation, and the revision binding; native adds only the built-in guide. A Send that
+//   would be over the payload bound, earlier replies counted in full, is refused before anything.
 // - One Send at a time. Its attempt is taken before anything is awaited and kept until its turn has
 //   a terminal outcome or native has proved the turn id can no longer start. While it lasts nothing
 //   else is sent and the shown conversation does not change.
@@ -19,15 +20,16 @@
 import type { ExtensionPackage } from '../extensions/extensionContract'
 import type { PackageView } from '../extensions/extensionSessionController'
 import {
-  attachCurrentPage, attachExtension, attachExtensionFrom, attachPastedText, detach, revisionBaseOf, wireAttachments, wireRevision,
+  attachCurrentPage, attachExtension, attachExtensionFrom, attachPassage as attachPassageText, attachPastedText, detach, revisionBaseOf,
+  wireAttachments, wireRevision,
   type AdaptAttachment, type AttachmentRefusal, type AttachmentResult,
 } from './adaptAttachments'
 import {
-  ADAPT_LIMITS, checkSendArgs,
+  ADAPT_LIMITS, adaptPayloadBytes, checkSendArgs,
   type AdaptApi, type AdaptCloseVisitReply, type AdaptConnectReply, type AdaptConversation, type AdaptConversationSummary, type AdaptEntry,
   type AdaptProviderState, type AdaptRevisionBase, type AdaptSendArgs, type AdaptSendRefusal, type AdaptTurnPhase,
 } from './adaptContract'
-import type { PageSnapshot } from './adaptPage'
+import type { PageSnapshot, PassageSnapshot } from './adaptPage'
 
 /** The text of the disclosure shown on Connect; recorded by native with the consent. */
 export const ADAPT_DISCLOSURE_VERSION = 'adapt-disclosure-1'
@@ -52,7 +54,7 @@ export type AdaptNotice =
   | { readonly kind: 'connectRefused'; readonly reason: Extract<AdaptConnectReply, { status: 'refused' }>['reason'] | 'noReply' }
   /** Cancelling a sign-in was not proven complete (`unconfirmed`), or got no usable answer. */
   | { readonly kind: 'cancelConnectUnconfirmed'; readonly reason: 'unconfirmed' | 'noReply' }
-  | { readonly kind: 'attachRefused'; readonly reason: AttachmentRefusal | Exclude<PageSnapshot, object> }
+  | { readonly kind: 'attachRefused'; readonly reason: AttachmentRefusal | Exclude<PassageSnapshot | PageSnapshot, object> }
   | { readonly kind: 'cancelUnconfirmed' }
   /** The visit ended natively while a Send was in flight: nothing of it can start any more. */
   | { readonly kind: 'visitClosed' }
@@ -133,6 +135,16 @@ export function includedTurnsOf(conversation: AdaptConversation | null): string[
   return replied.slice(-ADAPT_LIMITS.includedTurns)
 }
 
+/** The request and reply text each included earlier turn resends, as native counts them. */
+function earlierTextOf(conversation: AdaptConversation | null, turnIds: readonly string[]) {
+  const entries = conversation?.entries ?? []
+  return turnIds.map(turnId => {
+    const request = entries.find(entry => entry.kind === 'request' && entry.turnId === turnId)
+    const outcome = entries.find(entry => entry.kind === 'reply' && entry.turnId === turnId)
+    return { request: request?.kind === 'request' ? request.text : '', reply: outcome?.kind === 'reply' ? outcome.reply : null }
+  })
+}
+
 /**
  * The revision this conversation already binds, from its latest request that named one, with the
  * expected active version recorded then; a follow-up keeps it unchanged.
@@ -196,6 +208,8 @@ export function createAdaptController(options: ControllerOptions) {
   let statusRevision = -1
   /** Every explicit choice of what to show (history, New request, Send) takes a new number. */
   let selection = 0
+  /** Told once each Send is admitted, with the chips it carried: Ask remembers which pages it was about. */
+  const admittedListeners = new Set<(conversationId: string, attachments: readonly AdaptAttachment[]) => void>()
   /** Visits closed by id whose close native has not yet answered `closed`. */
   const retiring = new Set<string>()
   let unconfirmedClose = false
@@ -495,15 +509,29 @@ export function createAdaptController(options: ControllerOptions) {
     publish({ notice: { kind: 'attachRefused', reason: page } })
     return false
   }
+  /** The selection the host captured on the person's click, labelled by the host, or why there is none. */
+  function attachPassage(passage: PassageSnapshot, label: (title: string) => string) {
+    if (typeof passage !== 'string') return applyAttachment(attachPassageText(snapshot.draft.attachments, passage, label(passage.title)))
+    publish({ notice: { kind: 'attachRefused', reason: passage } })
+    return false
+  }
   const attachPackage = (extension: ExtensionPackage, stored: { sha256: string; activeSha256: string | null }) =>
     applyAttachment(attachExtension(snapshot.draft.attachments, extension, stored))
   const attachFromView = (view: PackageView) => applyAttachment(attachExtensionFrom(snapshot.draft.attachments, view))
   /**
-   * Adjust on an extension: a fresh request about it, so nothing from the conversation shown before
-   * travels with it. What is typed stays; while a Send is in flight it is only attached.
+   * A fresh request that keeps what is typed and attached, so nothing from the conversation shown
+   * before travels with it. Nothing changes while a Send is in flight or a turn runs.
    */
+  function startFresh() {
+    if (!settled()) return
+    // An explicit choice, even with nothing shown yet: a history read still loading (the visit's
+    // first resumption included) must not show an older conversation over it.
+    selection += 1
+    if (snapshot.conversationId) publish({ conversationId: null, conversation: null })
+  }
+  /** Adjust on an extension: a fresh request about it. What is typed stays; while a Send is in flight it is only attached. */
   function adjust(view: PackageView) {
-    if (settled() && snapshot.conversationId) { selection += 1; publish({ conversationId: null, conversation: null }) }
+    startFresh()
     return attachFromView(view)
   }
   function removeAttachment(id: string) { publish({ draft: { ...snapshot.draft, attachments: detach(snapshot.draft.attachments, id) } }) }
@@ -529,6 +557,7 @@ export function createAdaptController(options: ControllerOptions) {
     const unchanged = snapshot.draft.request === taken.draft.request && snapshot.draft.attachments === taken.draft.attachments
     taken.stage = 'running'
     publishAttempt({ ...(first && unchanged ? { draft: EMPTY_DRAFT } : {}), ...extra })
+    if (first && taken.conversationId) for (const listener of admittedListeners) listener(taken.conversationId, taken.draft.attachments)
   }
 
   function argsFor(taken: Attempt, conversationId: string): AdaptSendArgs | null {
@@ -555,8 +584,11 @@ export function createAdaptController(options: ControllerOptions) {
       turnId: newId(), draft: snapshot.draft, revision: base ? wireRevision(base) : boundRevisionOf(shown), conversationId: snapshot.conversationId,
       stage: snapshot.conversationId ? 'admitting' : 'creating', cancel: 'none', tombstoned: false, revoked: false, sending: false,
     }
-    // The arguments are checked before a conversation is made for them.
-    const problem = checkSendArgs(argsFor(taken, taken.conversationId ?? 'pending')!)
+    // The arguments are checked before a conversation is made for them, with every earlier turn it
+    // resends counted in full (an earlier answer is up to 16 KiB). Native stays the authority.
+    const pending = argsFor(taken, taken.conversationId ?? 'pending')!
+    const problem = checkSendArgs(pending)
+      || (adaptPayloadBytes(pending, earlierTextOf(shown, pending.includeTurnIds)) > ADAPT_LIMITS.payloadBytes ? 'tooLarge' : null)
     if (problem) { publish({ notice: { kind: 'sendRefused', reason: problem } }); return }
     attempt = taken
     // Sending is a choice of this conversation: an earlier history pick still loading yields to it.
@@ -718,10 +750,14 @@ export function createAdaptController(options: ControllerOptions) {
 
   return {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener) } },
+    onAdmitted(listener: (conversationId: string, attachments: readonly AdaptAttachment[]) => void) {
+      admittedListeners.add(listener)
+      return () => { admittedListeners.delete(listener) }
+    },
     snapshot: () => snapshot,
     enter, exit, reopen, refreshStatus, connect, cancelConnect, disconnect,
-    show, newRequest, deleteConversation, saveConversation, listConversations: () => listConversations(),
-    setRequest, attachText, attachPage, attachPackage, attachFromView, adjust, removeAttachment,
+    show, newRequest, startFresh, deleteConversation, saveConversation, listConversations: () => listConversations(),
+    setRequest, attachText, attachPage, attachPassage, attachPackage, attachFromView, adjust, removeAttachment,
     canSend, send, cancel,
     /** Names the open visit; an answer prepared for one visit is not used in another. */
     visitToken: () => visitId,

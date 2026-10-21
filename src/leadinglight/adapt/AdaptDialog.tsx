@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type RefObject } from 'react'
-import { ClockCounterClockwise, Paperclip, Plus, ShieldCheck, Sparkle, Trash, X } from '@phosphor-icons/react'
+import { ClockCounterClockwise, Paperclip, Plus, ShieldCheck, Sparkle, Trash } from '@phosphor-icons/react'
 import { Button } from '../../components/ui/button'
 import { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog'
 import {
@@ -10,15 +10,19 @@ import type { AppLocale } from '../../lib/i18n'
 import { ExtensionDialogContent } from '../extensions/ExtensionPreviewDialog'
 import type { PackageView, RegistrySnapshot } from '../extensions/extensionSessionController'
 import { commandSentences, diagnosticLocation, missingSentence, translator, type T } from '../extensions/extensionUiText'
+import { writeClipboardText } from '../../utils/clipboardText'
 import type { Adoption } from './adaptAdoption'
-import { canAttach } from './adaptAttachments'
+import { AdaptAnswer } from './AdaptAnswer'
+import { AdaptChips } from './AdaptChipPreview'
+import { canAttach, isPassage, type AdaptAttachment } from './adaptAttachments'
 import { candidateFor, type CandidateState, type HostReview } from './adaptCandidate'
 import type { AdaptConversation, AdaptEntry, AdaptReply } from './adaptContract'
 import {
   canSendIn, includedTurnsOf, isConnected, isSettled, turnPhaseOf,
   type AdaptController, type AdaptSnapshot, type Winding,
 } from './adaptController'
-import { failedText, noticeText, phaseText, sizeText, stoppedText, unavailableText } from './adaptText'
+import { failedText, noticeText, phaseText, stoppedText, unavailableText } from './adaptText'
+import type { AskLabels } from './askLabels'
 import './adapt.css'
 
 type Request = Extract<AdaptEntry, { kind: 'request' }>
@@ -43,6 +47,14 @@ interface Props {
   candidates: CandidateActions
   /** Settles and snapshots the page in front, on this click only. */
   onAttachPage: () => void
+  /** The host's Ask words. Without them Copy, Selected passage and Another page… are not offered. */
+  ask?: AskLabels | null
+  /** Captures the active pane's selection on this click; offered only with `ask`. */
+  onAttachPassage?: () => void
+  /** Lets the person choose another page, then settles and snapshots it; offered only with `ask`. */
+  onAttachAnotherPage?: () => void
+  /** Puts exact text on the clipboard; rejects when it could not. */
+  copyText?: (text: string) => Promise<void>
   /** Escape or the close button: back to whatever opened Adapt. */
   onClose: () => void
   /** Keep writing: back to the page, leaving what opened Adapt (Settings) too. */
@@ -60,7 +72,10 @@ function MenuContent(props: ComponentProps<typeof DropdownMenuContent>) {
  * keeps the request and any running turn; nothing is sent or turned on without a click here or in
  * the E1 preview it opens.
  */
-export function AdaptDialog({ locale, snapshot, controller, registry, review, adoptions, candidates, onAttachPage, onClose, onKeepWriting, onCloseAutoFocus }: Props) {
+export function AdaptDialog(props: Props) {
+  const { locale, snapshot, controller, registry, review, adoptions, candidates, onAttachPage, onClose, onKeepWriting, onCloseAutoFocus } = props
+  const ask = props.ask ?? null
+  const copyText = props.copyText ?? writeClipboardText
   const t = translator(locale)
   const composer = useRef<HTMLTextAreaElement | null>(null)
   const focusComposer = () => composer.current?.focus()
@@ -83,13 +98,14 @@ export function AdaptDialog({ locale, snapshot, controller, registry, review, ad
           <WindingLine t={t} kind="signingOut" winding={snapshot.signingOut} />
           {conversation && conversation.entries.length > 0 && (
             <Transcript t={t} locale={locale} snapshot={snapshot} conversation={conversation} controller={controller} registry={registry} review={review}
-              adoptions={adoptions} candidates={candidates} onAnswer={answer} onChange={focusComposer} />
+              adoptions={adoptions} candidates={candidates} onAnswer={answer} onChange={focusComposer} ask={ask} copyText={copyText} />
           )}
           {conversation && conversation.storage !== 'saved' && <StorageLine t={t} snapshot={snapshot} controller={controller} storage={conversation.storage} />}
         </div>
         <StatusLine t={t} snapshot={snapshot} controller={controller} />
-        {notice && <p className="ll-ext-notice" role="alert" data-testid="adapt-notice">{noticeText(t, notice)}</p>}
-        {ready && <Composer t={t} snapshot={snapshot} controller={controller} registry={registry} inputRef={composer} onAttachPage={onAttachPage} />}
+        {notice && <p className="ll-ext-notice" role="alert" data-testid="adapt-notice">{noticeText(t, notice, ask)}</p>}
+        {ready && <Composer t={t} snapshot={snapshot} controller={controller} registry={registry} inputRef={composer} onAttachPage={onAttachPage}
+          more={ask ? { ask, passage: props.onAttachPassage, anotherPage: props.onAttachAnotherPage } : null} />}
         <DialogFooter className="ll-adapt-footer">
           <Accounts t={t} snapshot={snapshot} controller={controller} />
           <Button variant="outline" data-testid="adapt-keep-writing" onClick={onKeepWriting}>{t('leadinglight.adapt.keepWriting')}</Button>
@@ -222,6 +238,8 @@ interface TranscriptProps {
   candidates: CandidateActions
   onAnswer: (text: string) => void
   onChange: () => void
+  ask: AskLabels | null
+  copyText: (text: string) => Promise<void>
 }
 
 function turnsOf(entries: readonly AdaptEntry[]): { request: Request; outcome: Outcome | null }[] {
@@ -261,12 +279,21 @@ function RequestView({ t, request }: { t: T; request: Request }) {
   </div>
 }
 
-/** The model's words as plain text, apart from anything LeadingLight itself checked. */
+const WHO = {
+  question: 'leadinglight.adapt.question', unsupported: 'leadinglight.adapt.unsupported', answer: 'leadinglight.adapt.answer', candidate: 'leadinglight.adapt.reply',
+} as const
+
+/**
+ * The model's words as plain text, apart from anything LeadingLight itself checked. An answer's
+ * Markdown is shown only inertly, and nothing acts on it but Copy.
+ */
 function ReplyView(props: TranscriptProps & { request: Request; turnId: string; reply: AdaptReply; actionable: boolean }) {
   const { t, reply, actionable, onAnswer } = props
   return <div className="ll-adapt-reply" data-testid="adapt-reply" data-kind={reply.kind}>
-    <p className="ll-adapt-who">{t(reply.kind === 'question' ? 'leadinglight.adapt.question' : reply.kind === 'unsupported' ? 'leadinglight.adapt.unsupported' : 'leadinglight.adapt.reply')}</p>
+    <p className="ll-adapt-who">{t(WHO[reply.kind])}</p>
     <p className="ll-adapt-prose">{reply.message}</p>
+    {reply.kind === 'question' && <p className="ll-ext-quiet" data-testid="adapt-question-hint">{t('leadinglight.ask.questionHint')}</p>}
+    {reply.kind === 'answer' && <AdaptAnswer t={t} answer={reply.answer} ask={props.ask} copyText={props.copyText} />}
     {reply.kind === 'question' && actionable && <div className="ll-ext-actions">
       {reply.choices.map(choice => <Button key={choice} variant="outline" size="sm" data-testid="adapt-choice" onClick={() => onAnswer(choice)}>{choice}</Button>)}
     </div>}
@@ -378,6 +405,20 @@ function AdoptionView({ t, adoption, turnId, candidates, onChange }: { t: T; ado
   }
 }
 
+const EXAMPLES = {
+  text: ['leadinglight.ask.example.passage1', 'leadinglight.ask.example.passage2', 'leadinglight.ask.example.passage3'],
+  page: ['leadinglight.ask.example.page1', 'leadinglight.ask.example.page2', 'leadinglight.ask.example.page3'],
+  extension: ['leadinglight.adapt.example1', 'leadinglight.adapt.example2', 'leadinglight.adapt.example3'],
+} as const
+
+/** What a fresh request might say, by what is attached; none suggests a write. */
+function examplesFor(attachments: readonly AdaptAttachment[]) {
+  if (attachments.length === 0) return EXAMPLES.extension
+  if (attachments.some(item => isPassage(item) || item.kind === 'pastedText')) return EXAMPLES.text
+  if (attachments.some(item => item.kind === 'pageSnapshot')) return EXAMPLES.page
+  return null
+}
+
 interface ComposerProps {
   t: T
   snapshot: AdaptSnapshot
@@ -385,15 +426,17 @@ interface ComposerProps {
   registry: RegistrySnapshot
   inputRef: RefObject<HTMLTextAreaElement | null>
   onAttachPage: () => void
+  /** The Ask attach choices the host offers, with its words; null when it offers none. */
+  more: { ask: AskLabels; passage?: () => void; anotherPage?: () => void } | null
 }
 
 /** The request, its visible attachments, and exactly what Send will include. */
-function Composer({ t, snapshot, controller, registry, inputRef, onAttachPage }: ComposerProps) {
+function Composer({ t, snapshot, controller, registry, inputRef, onAttachPage, more }: ComposerProps) {
   const fieldId = useId()
   const [pasting, setPasting] = useState(false)
   const { draft, conversation } = snapshot
   const earlier = includedTurnsOf(conversation).length
-  const fresh = !conversation && draft.request === '' && draft.attachments.length === 0
+  const examples = !conversation && draft.request === '' ? examplesFor(draft.attachments) : null
   const send = () => { if (canSendIn(snapshot)) void controller.send() }
   const packages: readonly PackageView[] = registry.status === 'ready' ? registry.packages.filter(canAttach) : []
   // The composer appears once the visit is open and Codex is connected; it takes focus then, unless
@@ -408,18 +451,13 @@ function Composer({ t, snapshot, controller, registry, inputRef, onAttachPage }:
     <Textarea id={fieldId} ref={inputRef} className="ll-adapt-input" data-testid="adapt-request" value={draft.request}
       onChange={event => controller.setRequest(event.target.value)}
       onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); event.stopPropagation(); send() } }} />
-    {fresh && <div className="ll-adapt-examples" role="group" aria-label={t('leadinglight.adapt.examples')}>
-      {(['leadinglight.adapt.example1', 'leadinglight.adapt.example2', 'leadinglight.adapt.example3'] as const).map(key => (
+    {examples && <div className="ll-adapt-examples" role="group" aria-label={t('leadinglight.adapt.examples')}>
+      {examples.map(key => (
         <Button key={key} variant="outline" size="sm" className="ll-adapt-example" onClick={() => { controller.setRequest(t(key)); inputRef.current?.focus() }}>{t(key)}</Button>
       ))}
     </div>}
-    {draft.attachments.length > 0 && <ul className="ll-adapt-chips" aria-label={t('leadinglight.adapt.attachments')} data-testid="adapt-chips">
-      {draft.attachments.map(item => <li key={item.id} className="ll-adapt-chip" data-testid="adapt-chip" data-kind={item.kind}>
-        <span>{t('leadinglight.adapt.chip', { label: item.label, size: sizeText(item.bytes) })}</span>
-        <button type="button" className="ll-adapt-chip-remove" aria-label={t('leadinglight.adapt.removeAttachment', { label: item.label })}
-          onClick={() => controller.removeAttachment(item.id)}><X aria-hidden="true" /></button>
-      </li>)}
-    </ul>}
+    {draft.attachments.length > 0 && <AdaptChips t={t} attachments={draft.attachments} openSingle={!conversation}
+      onRemove={id => controller.removeAttachment(id)} />}
     {pasting && <PasteArea t={t} onAttach={text => {
       if (controller.attachText(text, pastedCount ? `${t('leadinglight.adapt.pastedLabel')} ${pastedCount + 1}` : t('leadinglight.adapt.pastedLabel'))) {
         setPasting(false); inputRef.current?.focus()
@@ -435,8 +473,10 @@ function Composer({ t, snapshot, controller, registry, inputRef, onAttachPage }:
           <Button variant="ghost" size="sm" data-testid="adapt-attach"><Paperclip aria-hidden="true" />{t('leadinglight.adapt.attach')}</Button>
         </DropdownMenuTrigger>
         <MenuContent align="start">
-          <DropdownMenuItem data-testid="adapt-attach-pasted" onSelect={() => setPasting(true)}>{t('leadinglight.adapt.attachPasted')}</DropdownMenuItem>
+          {more?.passage && <DropdownMenuItem data-testid="adapt-attach-passage" onSelect={more.passage}>{more.ask.attachPassage}</DropdownMenuItem>}
           <DropdownMenuItem data-testid="adapt-attach-page" onSelect={onAttachPage}>{t('leadinglight.adapt.attachPage')}</DropdownMenuItem>
+          {more?.anotherPage && <DropdownMenuItem data-testid="adapt-attach-another-page" onSelect={more.anotherPage}>{more.ask.attachAnotherPage}</DropdownMenuItem>}
+          <DropdownMenuItem data-testid="adapt-attach-pasted" onSelect={() => setPasting(true)}>{t('leadinglight.adapt.attachPasted')}</DropdownMenuItem>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger data-testid="adapt-attach-extension">{t('leadinglight.adapt.attachExtension')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent data-settings-panel-portal="true" className="ll-adapt-menu" onEscapeKeyDown={event => event.stopPropagation()}>

@@ -42,7 +42,10 @@ import { useWebCaptureUi } from './leadinglight/webCapture/useWebCaptureUi'
 import { sideBySideTooNarrow } from './leadinglight/commentary/useCommentaryPaneWidths'
 import { useAdapt } from './leadinglight/adapt/useAdapt'
 import { useAdaptUi } from './leadinglight/adapt/useAdaptUi'
-import { snapshotPage } from './leadinglight/adapt/adaptPage'
+import { snapshotPage, type PageSnapshot, type PassageSnapshot } from './leadinglight/adapt/adaptPage'
+import { askLabelsFor } from './leadinglight/adapt/askLabels'
+import { passageFrom } from './leadinglight/adapt/askPassage'
+import { loadNoteContent } from './hooks/useNoteRename'
 import { usePageRelocation } from './leadinglight/relocation/usePageRelocation'
 import { TrashActivity, TrashNotice } from './leadinglight/TrashNotice'
 import { CommandPalette } from './components/CommandPalette'
@@ -1229,8 +1232,48 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       return tab ? { title: pageLabel(tab.entry, appLocale), text: tab.content } : null
     },
   }), [appLocale, currentPaneTabs, flushEditorStateBeforeAction, noteActiveTabPathRef])
+  // Ask: the selected passage, read from the active pane's editor on the person's click through the
+  // E2 capture endpoint (filled once the commentary services below exist). Nothing is saved or read.
+  const askPassageRef = useRef<() => PassageSnapshot>(() => 'noPage')
+  const snapshotAskPassage = useCallback(() => askPassageRef.current(), [])
+  // Another page…: the page finder, in its pick mode, then the ordinary settle-and-read of that page.
+  const [askPick, setAskPick] = useState<{ session: number; open: boolean }>({ session: 0, open: false })
+  const askPickRef = useRef<((entry: VaultEntry | null) => void) | null>(null)
+  const finishAskPick = useCallback((entry: VaultEntry | null) => {
+    const resolve = askPickRef.current
+    askPickRef.current = null
+    setAskPick(state => (state.open ? { ...state, open: false } : state))
+    resolve?.(entry)
+  }, [])
+  const readAskPage = useCallback(async (entry: VaultEntry): Promise<PageSnapshot> => {
+    if (entry.fileKind && entry.fileKind !== 'markdown') return 'notMarkdown'
+    const vault = adaptVaultRef.current
+    const { path } = entry
+    let text: string
+    if (currentPaneTabs().some(tab => notePathsMatch(tab.entry.path, path))) {
+      // Open in a pane: its unsaved words are saved first, then exactly that text is taken.
+      try { await flushEditorStateBeforeAction(path) } catch { return 'notSaved' }
+      const tab = currentPaneTabs().find(item => notePathsMatch(item.entry.path, path))
+      if (!tab) return 'pageChanged'
+      text = tab.content
+    } else {
+      try { text = await loadNoteContent({ path, vaultPath: vault }) } catch { return 'noPage' }
+    }
+    if (adaptVaultRef.current !== vault) return 'pageChanged'
+    return { title: pageLabel(entry, appLocale), text, key: path }
+  }, [appLocale, currentPaneTabs, flushEditorStateBeforeAction])
+  const snapshotAnotherPage = useCallback(async (): Promise<PageSnapshot | null> => {
+    askPickRef.current?.(null)
+    const chosen = await new Promise<VaultEntry | null>(resolve => {
+      askPickRef.current = resolve
+      setAskPick(state => ({ session: state.session + 1, open: true }))
+    })
+    return chosen ? readAskPage(chosen) : null
+  }, [readAskPage])
+  const askLabels = useMemo(() => askLabelsFor((key, values) => translate(appLocale, key, values)), [appLocale])
   const adaptUi = useAdaptUi({
     locale: appLocale, vaultPath: resolvedPath, adapt, extensions, extensionUi, snapshotPage: snapshotCurrentPage,
+    ask: askLabels, snapshotPassage: snapshotAskPassage, snapshotAnotherPage, notify: setToastMessage,
     // Keep writing leaves Settings too (when Adapt was opened there) and returns to the page in front.
     onKeepWriting: () => {
       dialogs.closeSettings()
@@ -1250,6 +1293,15 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     narrow: sideBySideTooNarrow,
     openFinder: () => openFind(),
   })
+  // Ask reads the active pane's selection through the same synchronous endpoint commentary uses.
+  const { captureRefs: passageCaptureRefs } = commentaryUi
+  const askActivePane = notes.splitWorkspace.activePane
+  useLayoutEffect(() => {
+    askPassageRef.current = () => passageFrom(passageCaptureRefs[askActivePane].current?.() ?? { status: 'notReady' }, path => {
+      const tab = currentPaneTabs().find(item => notePathsMatch(item.entry.path, path))
+      return tab && (!tab.entry.fileKind || tab.entry.fileKind === 'markdown') ? pageLabel(tab.entry, appLocale) : null
+    })
+  }, [appLocale, askActivePane, currentPaneTabs, passageCaptureRefs])
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
@@ -2223,7 +2275,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     canRestoreDeletedNote: !!activeDeletedFile,
   })
   // Passage commands act on the active pane's selection, so they join the palette here.
-  const paletteCommands = useMemo(() => [...commands, ...commentaryUi.paletteCommands], [commands, commentaryUi.paletteCommands])
+  const paletteCommands = useMemo(() => [...commands, ...commentaryUi.paletteCommands, ...(adaptAvailable ? adaptUi.paletteCommands : [])],
+    [adaptAvailable, adaptUi.paletteCommands, commands, commentaryUi.paletteCommands])
 
   const {
     inboxCount,
@@ -2481,6 +2534,19 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
           onClose={dialogs.closeQuickOpen}
           locale={appLocale}
         />
+        {adaptAvailable && <QuickFind
+          key={`ask-pick-${askPick.session}`}
+          open={askPick.open}
+          vaultPath={resolvedPath}
+          entries={visibleEntries}
+          ready={vaultListingReady}
+          recentPaths={recentPages.recentPaths}
+          onOpen={notes.splitWorkspace.openNoteWhenLoaded}
+          onCreate={notes.createPage}
+          onClose={() => finishAskPick(null)}
+          locale={appLocale}
+          pick={{ title: translate(appLocale, 'leadinglight.ask.pickTitle'), onPick: finishAskPick }}
+        />}
         <CommandPalette
           open={dialogs.showCommandPalette}
           commands={paletteCommands}

@@ -16,7 +16,8 @@ describe('attaching the current page', () => {
     const taking = snapshotPage(page.value)
     expect(page.settle).toHaveBeenCalledWith('A.md')
     page.release()
-    expect(await taking).toEqual({ title: 'A', text: '# A\n\nsaved' })
+    // The page is named locally (its path) so attaching it again replaces its chip; that key is never sent.
+    expect(await taking).toEqual({ title: 'A', text: '# A\n\nsaved', key: 'A.md' })
   })
 
   it('attaches nothing when another page comes to the front while the clicked one is saving', async () => {

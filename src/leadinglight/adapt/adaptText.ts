@@ -4,6 +4,7 @@ import type { TranslationKey } from '../../lib/i18n'
 import type { T } from '../extensions/extensionUiText'
 import type { AdaptEntry, AdaptProviderState, AdaptSendRefusal, AdaptTurnPhase } from './adaptContract'
 import type { AdaptNotice } from './adaptController'
+import type { AskLabels } from './askLabels'
 
 const PHASE_KEYS: Record<AdaptTurnPhase, TranslationKey> = {
   sending: 'leadinglight.adapt.phase.sending',
@@ -66,7 +67,7 @@ const SEND_KEYS: Partial<Record<AdaptSendRefusal | 'notSent', TranslationKey>> =
   conversationFull: 'leadinglight.adapt.sendRefused.conversationFull',
 }
 
-const ATTACH_KEYS: Record<Extract<AdaptNotice, { kind: 'attachRefused' }>['reason'], TranslationKey> = {
+const ATTACH_KEYS: Record<Exclude<Extract<AdaptNotice, { kind: 'attachRefused' }>['reason'], 'noSelection'>, TranslationKey> = {
   empty: 'leadinglight.adapt.attachRefused.empty',
   tooLarge: 'leadinglight.adapt.attachRefused.tooLarge',
   tooMany: 'leadinglight.adapt.attachRefused.tooMany',
@@ -75,9 +76,11 @@ const ATTACH_KEYS: Record<Extract<AdaptNotice, { kind: 'attachRefused' }>['reaso
   noPage: 'leadinglight.adapt.attachRefused.noPage',
   notSaved: 'leadinglight.adapt.attachRefused.notSaved',
   pageChanged: 'leadinglight.adapt.attachRefused.pageChanged',
+  notMarkdown: 'leadinglight.ask.notMarkdown',
 }
 
-export function noticeText(t: T, notice: AdaptNotice): string {
+/** `ask`: the host's Ask words, which name the one refusal only the Ask slice can give. */
+export function noticeText(t: T, notice: AdaptNotice, ask: AskLabels | null = null): string {
   switch (notice.kind) {
     case 'sendRefused': return t(SEND_KEYS[notice.reason] ?? 'leadinglight.adapt.sendRefused.other')
     case 'conversationRefused':
@@ -85,7 +88,10 @@ export function noticeText(t: T, notice: AdaptNotice): string {
     case 'deleteRefused': return t(notice.reason === 'running' ? 'leadinglight.adapt.deleteRefused.running' : 'leadinglight.adapt.deleteRefused.other')
     case 'connectRefused':
       return t(notice.reason === 'browserUnavailable' ? 'leadinglight.adapt.connectRefused.browserUnavailable' : 'leadinglight.adapt.connectRefused.other')
-    case 'attachRefused': return t(ATTACH_KEYS[notice.reason])
+    case 'attachRefused':
+      // Selected passage is offered only with the host's words, so they are there when it refuses.
+      if (notice.reason === 'noSelection') return ask?.noSelection ?? t('leadinglight.adapt.attachRefused.empty')
+      return t(ATTACH_KEYS[notice.reason])
     case 'cancelConnectUnconfirmed':
       return t(notice.reason === 'unconfirmed' ? 'leadinglight.adapt.cancelConnectUnconfirmed' : 'leadinglight.adapt.cancelConnectNoReply')
     case 'cancelUnconfirmed': return t('leadinglight.adapt.stopUnconfirmed')

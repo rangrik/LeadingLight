@@ -1,0 +1,641 @@
+{
+  "about": "Final answers as the provider sends them, and how both readers take them: native prompt.rs read_answer (prompt_tests.rs) and readAdaptAnswer in adaptContract.ts. A case is a raw final text, or an envelope serialized as JSON after fill sets field to unit repeated count times, then end when given. expect is reply (the stored reply, compared exactly when given), invalid or tooLarge.",
+  "cases": [
+    {
+      "name": "an answer",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "reply",
+      "reply": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      }
+    },
+    {
+      "name": "an answer whose Markdown is hostile is kept as text",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "<script>alert(1)</script> [[Private]] ![x](https://example.org/a.png) $x$ ==mark== @@TOLARIA_HTML_BLOCK:x@@\n\n```html\n<b>hi</b>\n```"
+      },
+      "expect": "reply",
+      "reply": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "answer": "<script>alert(1)</script> [[Private]] ![x](https://example.org/a.png) $x$ ==mark== @@TOLARIA_HTML_BLOCK:x@@\n\n```html\n<b>hi</b>\n```"
+      }
+    },
+    {
+      "name": "an answer with tabs, newlines, CJK, emoji and right-to-left text",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "Ein Absatz\twith a tab.\n\n漢字かな 👩🏽‍💻 שלום"
+      },
+      "expect": "reply",
+      "reply": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "answer": "Ein Absatz\twith a tab.\n\n漢字かな 👩🏽‍💻 שלום"
+      }
+    },
+    {
+      "name": "an answer exactly at 16 KiB of UTF-8",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "answer",
+        "unit": "é",
+        "count": 8192
+      },
+      "expect": "reply"
+    },
+    {
+      "name": "leading JSON whitespace before the object",
+      "text": " \n\t{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}",
+      "expect": "reply",
+      "reply": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      }
+    },
+    {
+      "name": "a candidate written without the answer field, as before",
+      "text": "{\"kind\":\"candidate\",\"message\":\"Here is a weekly review.\",\"packageText\":\"{}\",\"choices\":[],\"alternative\":null}",
+      "expect": "reply",
+      "reply": {
+        "kind": "candidate",
+        "message": "Here is a weekly review.",
+        "packageText": "{}"
+      }
+    },
+    {
+      "name": "an unsupported reply written without the answer field, as before",
+      "text": "{\"kind\":\"unsupported\",\"message\":\"Packages cannot change other files.\",\"packageText\":null,\"choices\":[],\"alternative\":null}",
+      "expect": "reply",
+      "reply": {
+        "kind": "unsupported",
+        "message": "Packages cannot change other files.",
+        "alternative": null
+      }
+    },
+    {
+      "name": "a question with every field, answer null",
+      "envelope": {
+        "kind": "question",
+        "message": "Which page do you mean?",
+        "packageText": null,
+        "choices": [
+          "The open page",
+          "Another page"
+        ],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "reply",
+      "reply": {
+        "kind": "question",
+        "message": "Which page do you mean?",
+        "choices": [
+          "The open page",
+          "Another page"
+        ]
+      }
+    },
+    {
+      "name": "a candidate with answer null",
+      "envelope": {
+        "kind": "candidate",
+        "message": "Here is a reading log.",
+        "packageText": "{\"schema\":\"x\"}",
+        "choices": [],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "reply",
+      "reply": {
+        "kind": "candidate",
+        "message": "Here is a reading log.",
+        "packageText": "{\"schema\":\"x\"}"
+      }
+    },
+    {
+      "name": "an answer one byte over 16 KiB",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "answer",
+        "unit": "a",
+        "count": 16385
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "an answer over 16 KiB in two-byte characters",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "answer",
+        "unit": "é",
+        "count": 8193
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a message over 600 characters before the answer is checked",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "message",
+        "unit": "m",
+        "count": 601
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a blank answer",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": " \n\t　"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with a carriage return",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "One\r\nTwo"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with a direction override",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "Safe ‮txt.exe"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with a line separator",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "One Two"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with a bell character",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "Ring\u0007"
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with NUL",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\u0000\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer with a lone surrogate",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\ud800\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "16 KiB of ASCII and then an escaped NUL is over the bound before NUL is checked",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "answer",
+        "unit": "a",
+        "count": 16384,
+        "end": "\u0000"
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "16 KiB of ASCII and then a bell is over the bound before the bell is checked",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "answer",
+        "unit": "a",
+        "count": 16384,
+        "end": "\u0007"
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a message over 600 characters beside an answer with NUL",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "Rest.\u0000"
+      },
+      "fill": {
+        "field": "message",
+        "unit": "m",
+        "count": 601
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a message over 600 characters ending in NUL",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "message",
+        "unit": "m",
+        "count": 601,
+        "end": "\u0000"
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a choice over 120 characters with NUL",
+      "envelope": {
+        "kind": "question",
+        "message": "Which page do you mean?",
+        "packageText": null,
+        "choices": [
+          "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\u0000"
+        ],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "an alternative over 600 characters with NUL",
+      "envelope": {
+        "kind": "unsupported",
+        "message": "Packages cannot change other files.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": null
+      },
+      "fill": {
+        "field": "alternative",
+        "unit": "x",
+        "count": 601,
+        "end": "\u0000"
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a package over 128 KiB with NUL",
+      "envelope": {
+        "kind": "candidate",
+        "message": "Here is a reading log.",
+        "packageText": "{}",
+        "choices": [],
+        "alternative": null,
+        "answer": null
+      },
+      "fill": {
+        "field": "packageText",
+        "unit": "p",
+        "count": 131072,
+        "end": "\u0000"
+      },
+      "expect": "tooLarge"
+    },
+    {
+      "name": "a message with NUL",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is\u0000 a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a choice with NUL",
+      "envelope": {
+        "kind": "question",
+        "message": "Which page do you mean?",
+        "packageText": null,
+        "choices": [
+          "The open\u0000 page"
+        ],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an alternative with NUL",
+      "envelope": {
+        "kind": "unsupported",
+        "message": "Packages cannot change other files.",
+        "packageText": null,
+        "choices": [],
+        "alternative": "A note\u0000 instead.",
+        "answer": null
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a package with NUL",
+      "envelope": {
+        "kind": "candidate",
+        "message": "Here is a reading log.",
+        "packageText": "{}\u0000",
+        "choices": [],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "NUL in a field the kind does not use, beside a message over 600 characters",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": "\u0000",
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "fill": {
+        "field": "message",
+        "unit": "m",
+        "count": 601
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a lone surrogate beside a message over 600 characters is not text at all",
+      "text": "{\"kind\":\"answer\",\"message\":\"mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"Rest.\\ud800\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "a blank message",
+      "envelope": {
+        "kind": "answer",
+        "message": "  ",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer kind without its answer",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer kind with the answer field left out",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null}",
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer kind with a package",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": "{}",
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer kind with choices",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [
+          "Yes"
+        ],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer kind with an alternative",
+      "envelope": {
+        "kind": "answer",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": "A note instead.",
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a candidate with an answer",
+      "envelope": {
+        "kind": "candidate",
+        "message": "Here is a short summary.",
+        "packageText": "{}",
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a question with an answer",
+      "envelope": {
+        "kind": "question",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an unsupported reply with an answer",
+      "envelope": {
+        "kind": "unsupported",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an answer that is not a string",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":42}",
+      "expect": "invalid"
+    },
+    {
+      "name": "an unknown kind",
+      "envelope": {
+        "kind": "answers",
+        "message": "Here is a short summary.",
+        "packageText": null,
+        "choices": [],
+        "alternative": null,
+        "answer": "## Summary\n\n- The passage argues for rest.\n- It cites two studies."
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "an unknown field",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\",\"tool\":\"shell\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "a repeated field",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\",\"answer\":\"Again.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "a field repeated through an escape",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\",\"\\u0061nswer\":\"Again.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "a missing message",
+      "text": "{\"kind\":\"answer\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "missing choices",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "choices that are not strings",
+      "envelope": {
+        "kind": "question",
+        "message": "Which?",
+        "packageText": null,
+        "choices": [
+          1
+        ],
+        "alternative": null,
+        "answer": null
+      },
+      "expect": "invalid"
+    },
+    {
+      "name": "a positional array",
+      "text": "[\"answer\",\"Here.\",null,[],null,\"Text\"]",
+      "expect": "invalid"
+    },
+    {
+      "name": "two objects",
+      "text": "{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "a fenced object",
+      "text": "```json\n{\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}\n```",
+      "expect": "invalid"
+    },
+    {
+      "name": "prose around the object",
+      "text": "Here is my answer: {\"kind\":\"answer\",\"message\":\"Here is a short summary.\",\"packageText\":null,\"choices\":[],\"alternative\":null,\"answer\":\"## Summary\\n\\n- The passage argues for rest.\\n- It cites two studies.\"}",
+      "expect": "invalid"
+    },
+    {
+      "name": "not JSON",
+      "text": "## Summary\n\nJust Markdown.",
+      "expect": "invalid"
+    }
+  ]
+}

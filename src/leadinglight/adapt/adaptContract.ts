@@ -6,9 +6,10 @@
 // restart may start lower; a visit never outlives its host process.
 //
 // Native never reads a note for Adapt. Only `request`, the attachment texts the UI sends, the
-// visible text of the prior turns the UI names, and the built-in extension guide reach the
+// visible text of the prior turns the UI names, and the built-in Ask and extension guides reach the
 // provider. Nothing from a vault path reaches it. Candidates are untrusted text: the UI parses them
-// and the E1 registry validates them again. Native never imports, activates or edits anything.
+// and the E1 registry validates them again. Answers (amendment 5) are untrusted Markdown text, for
+// inert display and Copy only. Native never imports, activates or edits anything.
 import { isOpaqueToken } from '../proposals/proposalContract'
 
 export const ADAPT_COMMANDS = {
@@ -41,6 +42,8 @@ export const ADAPT_LIMITS = {
   choices: 3,
   choiceChars: 120,
   packageBytes: 128 * 1024,
+  /** Amendment 5: UTF-8 bytes of an answer's Markdown text. */
+  answerBytes: 16 * 1024,
   /** Retained per conversation; sending once full is refused `conversationFull`. */
   turnsPerConversation: 50,
   /**
@@ -180,11 +183,18 @@ export interface AdaptAttachmentSummary { kind: AdaptAttachmentKind; label: stri
  */
 export interface AdaptRevisionBase { packageId: string; baseSha256: string; expectedActiveSha256: string | null }
 
-/** Plain prose only; never Markdown, HTML or links to fetch. `packageText` is untrusted JSON text. */
+export const ADAPT_REPLY_KINDS = ['candidate', 'question', 'unsupported', 'answer'] as const
+
+/**
+ * Every `message` is plain prose: never Markdown, HTML or links to fetch. `packageText` is untrusted
+ * JSON text. `answer` (amendment 5) is untrusted Markdown text: show it only through an inert
+ * renderer (no HTML, no fetching, links not followed) and never act on it.
+ */
 export type AdaptReply =
   | { kind: 'candidate'; message: string; packageText: string }
   | { kind: 'question'; message: string; choices: string[] }
   | { kind: 'unsupported'; message: string; alternative: string | null }
+  | { kind: 'answer'; message: string; answer: string }
 
 /**
  * `invalidOutput`: the final answer was not one well-formed reply; it is not shown and nothing is
@@ -332,9 +342,13 @@ export function utf8Length(text: string): number {
 
 /** No lone surrogates, which cannot cross to native, and no NUL. */
 export function isWellFormedText(text: string): boolean {
+  return !text.includes('\u0000') && isWellFormedUnicode(text)
+}
+
+/** No lone surrogates: native's JSON reader refuses one in any string before any other rule. */
+function isWellFormedUnicode(text: string): boolean {
   for (let index = 0; index < text.length; index++) {
     const unit = text.charCodeAt(index)
-    if (unit === 0) return false
     if (unit >= 0xd800 && unit <= 0xdbff) {
       const next = text.charCodeAt(index + 1)
       if (!(next >= 0xdc00 && next <= 0xdfff)) return false
@@ -522,6 +536,9 @@ export function parseDeleteConversationReply(value: unknown): AdaptDeleteConvers
   return statusOnly(value, ['deleted', 'unknownVisit', 'unknownConversation'] as const)
 }
 
+/** Prose of any length: not blank, well-formed, tab and newline as the only controls. */
+const isProseText = (text: string): boolean => text.trim() !== '' && isWellFormedText(text) && !hasControl(text, true)
+
 /** The model's answer, as native stored it. Also the reader for any candidate envelope. */
 export function parseAdaptReply(value: unknown): AdaptReply | null {
   if (!isFields(value)) return null
@@ -549,9 +566,137 @@ export function parseAdaptReply(value: unknown): AdaptReply | null {
         ? { kind: 'unsupported', message, alternative }
         : null
     }
+    case 'answer': {
+      const answer = has(value, 'answer')
+      return hasKeys(value, ['kind', 'message', 'answer']) && typeof answer === 'string'
+        && utf8Length(answer) <= ADAPT_LIMITS.answerBytes && isProseText(answer)
+        ? { kind: 'answer', message, answer }
+        : null
+    }
     default:
       return null
   }
+}
+
+// --- The provider's final answer (native prompt.rs `read_answer`, check.rs `check_reply`) ----------
+
+export type AdaptReplyFault = Extract<AdaptFailure, 'invalidOutput' | 'outputTooLarge'>
+
+/**
+ * What native's `check_reply` decides for a reply: over a bound is `outputTooLarge`, any other breach
+ * `invalidOutput`, in its order (the message's length, its text, then the kind's own fields).
+ */
+export function checkAdaptReply(reply: AdaptReply): AdaptReplyFault | null {
+  const prose = (text: string): AdaptReplyFault | null =>
+    text.length > ADAPT_LIMITS.messageChars ? 'outputTooLarge' : isPlainProse(text, ADAPT_LIMITS.messageChars) ? null : 'invalidOutput'
+  const message = prose(reply.message)
+  if (message) return message
+  switch (reply.kind) {
+    case 'candidate':
+      if (utf8Length(reply.packageText) > ADAPT_LIMITS.packageBytes) return 'outputTooLarge'
+      return reply.packageText.trim() === '' || !isWellFormedText(reply.packageText) ? 'invalidOutput' : null
+    case 'question':
+      if (reply.choices.length > ADAPT_LIMITS.choices) return 'invalidOutput'
+      for (const choice of reply.choices) {
+        if (choice.length > ADAPT_LIMITS.choiceChars) return 'outputTooLarge'
+        if (!isPlainLine(choice, ADAPT_LIMITS.choiceChars)) return 'invalidOutput'
+      }
+      return null
+    case 'unsupported':
+      return reply.alternative === null ? null : prose(reply.alternative)
+    case 'answer':
+      if (utf8Length(reply.answer) > ADAPT_LIMITS.answerBytes) return 'outputTooLarge'
+      return isProseText(reply.answer) ? null : 'invalidOutput'
+  }
+}
+
+const ENVELOPE_KEYS = ['kind', 'message', 'packageText', 'choices', 'alternative', 'answer']
+
+/** The keys of the outermost object of text that already parsed as JSON, decoded, in order. */
+function outerKeys(text: string): string[] {
+  const keys: string[] = []
+  let depth = 0
+  let expectingKey = false
+  for (let index = 0; index < text.length; index++) {
+    const char = text.charAt(index)
+    if (char === '"') {
+      let end = index + 1
+      while (text.charAt(end) !== '"') end += text.charAt(end) === '\\' ? 2 : 1
+      if (depth === 1 && expectingKey) keys.push(JSON.parse(text.slice(index, end + 1)) as string)
+      expectingKey = false
+      index = end
+    } else if (char === '{' || char === '[') {
+      depth += 1
+      expectingKey = char === '{' && depth === 1
+    } else if (char === '}' || char === ']') {
+      depth -= 1
+    } else if (char === ',' && depth === 1) {
+      expectingKey = true
+    }
+  }
+  return keys
+}
+
+const stringOrNull = (value: unknown): value is string | null =>
+  value === null || (typeof value === 'string' && isWellFormedUnicode(value))
+
+/**
+ * One reply from the provider's complete final text, exactly as native `read_answer` reads it, or why
+ * it is none. Never repaired:
+ * - one JSON object, never an array, with no unknown or repeated key (also after escapes);
+ * - `kind`, `message` and `choices` required, and a missing `packageText`, `alternative` or `answer`
+ *   read as null;
+ * - no lone surrogate in any string;
+ * - exactly the fields its kind uses, then `checkAdaptReply`, which alone refuses NUL and the other
+ *   characters, after the bounds in its order.
+ */
+export function readAdaptAnswer(text: string): AdaptReply | AdaptReplyFault {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    return 'invalidOutput'
+  }
+  if (!isFields(value) || !text.trimStart().startsWith('{')) return 'invalidOutput'
+  const keys = outerKeys(text)
+  if (new Set(keys).size !== keys.length || !keys.every(key => ENVELOPE_KEYS.includes(key))) return 'invalidOutput'
+  const { kind, message, choices } = value
+  const packageText = has(value, 'packageText') ?? null
+  const alternative = has(value, 'alternative') ?? null
+  const answer = has(value, 'answer') ?? null
+  if (typeof kind !== 'string' || typeof message !== 'string' || !isWellFormedUnicode(kind) || !isWellFormedUnicode(message)) return 'invalidOutput'
+  if (!Array.isArray(choices) || !choices.every(choice => typeof choice === 'string' && isWellFormedUnicode(choice))) return 'invalidOutput'
+  if (!stringOrNull(packageText) || !stringOrNull(alternative) || !stringOrNull(answer)) return 'invalidOutput'
+  let reply: AdaptReply
+  if (kind === 'candidate' && packageText !== null && choices.length === 0 && alternative === null && answer === null) reply = { kind, message, packageText }
+  else if (kind === 'question' && packageText === null && alternative === null && answer === null) reply = { kind, message, choices: choices as string[] }
+  else if (kind === 'unsupported' && packageText === null && choices.length === 0 && answer === null) reply = { kind, message, alternative }
+  else if (kind === 'answer' && packageText === null && choices.length === 0 && alternative === null && answer !== null) reply = { kind, message, answer }
+  else return 'invalidOutput'
+  return checkAdaptReply(reply) ?? reply
+}
+
+/** UTF-8 bytes an earlier turn's reply adds to the payload bound (native `prompt::prior_bytes`). */
+export function adaptReplyBytes(reply: AdaptReply): number {
+  switch (reply.kind) {
+    case 'candidate': return utf8Length(reply.message) + utf8Length(reply.packageText)
+    case 'question': return utf8Length(reply.message) + reply.choices.reduce((sum, choice) => sum + utf8Length(choice), 0)
+    case 'unsupported': return utf8Length(reply.message) + (reply.alternative === null ? 0 : utf8Length(reply.alternative))
+    case 'answer': return utf8Length(reply.message) + utf8Length(reply.answer)
+  }
+}
+
+/**
+ * What a Send counts against `payloadBytes`: its request and attachment texts, plus each included
+ * earlier turn's request and reply (null for a turn that ended without one). Native decides; this lets
+ * the UI say so before sending.
+ */
+export function adaptPayloadBytes(
+  args: Pick<AdaptSendArgs, 'request' | 'attachments'>, earlier: readonly { request: string; reply: AdaptReply | null }[],
+): number {
+  return utf8Length(args.request)
+    + args.attachments.reduce((sum, item) => sum + utf8Length(item.text), 0)
+    + earlier.reduce((sum, turn) => sum + utf8Length(turn.request) + (turn.reply === null ? 0 : adaptReplyBytes(turn.reply)), 0)
 }
 
 function parseAttachmentSummary(value: unknown): AdaptAttachmentSummary | null {

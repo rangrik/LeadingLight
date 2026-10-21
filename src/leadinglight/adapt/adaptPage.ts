@@ -2,8 +2,20 @@
 // after its pending text is saved. If that page, or the vault, is no longer the one in front once
 // saving finishes, nothing is attached; another page is never taken in its place.
 
-/** The page text attached, or why nothing was. */
-export type PageSnapshot = { title: string; text: string } | 'noPage' | 'notSaved' | 'pageChanged'
+/**
+ * Text taken from one page on the person's click. `key` names the page locally (its path), so
+ * attaching the same page again replaces its chip; it is never sent and never shown.
+ */
+export interface TakenText { title: string; text: string; key?: string }
+
+/** The page text attached, or why nothing was. `notMarkdown`: a chosen file Ask cannot take as text. */
+export type PageSnapshot = TakenText | 'noPage' | 'notSaved' | 'pageChanged' | 'notMarkdown'
+
+/**
+ * The active pane's selection, captured synchronously by the host when the person chose Selected
+ * passage (the E2 capture endpoint), or why nothing was taken.
+ */
+export type PassageSnapshot = TakenText | 'noSelection' | 'noPage' | 'notSaved' | 'pageChanged'
 
 export interface PageSeam {
   /** The page in front, by path. */
@@ -27,5 +39,6 @@ export async function snapshotPage(seam: PageSeam): Promise<PageSnapshot> {
   }
   // A rename while saving (an untitled page getting its name) also lands here: attach it again.
   if (seam.vault() !== vault || seam.activePath() !== path) return 'pageChanged'
-  return seam.read(path) ?? 'noPage'
+  const page = seam.read(path)
+  return page ? { title: page.title, text: page.text, key: path } : 'noPage'
 }

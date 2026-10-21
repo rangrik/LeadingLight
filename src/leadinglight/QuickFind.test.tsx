@@ -1,5 +1,5 @@
 import { StrictMode } from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PageCreationOutcome } from '../hooks/useNoteCreation'
 import type { VaultEntry } from '../types'
@@ -337,5 +337,56 @@ describe('QuickFind', () => {
     expect(onClose).not.toHaveBeenCalled()
     key('Enter')
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('QuickFind choosing a page for Ask', () => {
+  beforeEach(() => {
+    searches = []
+    vi.mocked(requestEditorFocus).mockClear()
+    vi.mocked(mockInvoke).mockReset().mockImplementation((_command, args) =>
+      new Promise((resolve, reject) => { searches.push({ args, resolve, reject }) }))
+  })
+
+  it('hands the chosen page over and closes, opening, creating and focusing nothing', async () => {
+    const onPick = vi.fn()
+    const { onOpen, onCreate, onClose } = renderFind({ recentPaths: [water.path], pick: { title: 'Choose a page to attach', onPick } })
+    expect(screen.getByRole('dialog', { name: 'Choose a page to attach' })).toBeInTheDocument()
+    type('Garden')
+    fireEvent.click(screen.getByRole('option', { name: 'Garden plan' }))
+    expect(onPick).toHaveBeenCalledExactlyOnceWith(garden)
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(onCreate).not.toHaveBeenCalled()
+    await waitFor(() => expect(requestEditorFocus).not.toHaveBeenCalled())
+  })
+
+  it('never searches page text while choosing, even past the search delay; ordinary find still does', async () => {
+    vi.useFakeTimers()
+    try {
+      const view = renderFind({ pick: { title: 'Choose a page to attach', onPick: vi.fn() } })
+      type('garden')
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+      // Titles and paths only: no search reads other pages' text before one is chosen.
+      expect(searches).toEqual([])
+      expect(mockInvoke).not.toHaveBeenCalled()
+      expect(options()).toEqual(['Garden plan', 'Garden log'])
+      expect(screen.queryByRole('status')).toBeNull()
+      view.update({ open: false })
+      cleanup()
+
+      renderFind()
+      type('garden')
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+      expect(searches).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('offers no new page for a title nothing has', () => {
+    renderFind({ pick: { title: 'Choose a page to attach', onPick: vi.fn() } })
+    type('A page that does not exist')
+    expect(options()).not.toContainEqual(expect.stringContaining('A page that does not exist'))
   })
 })
