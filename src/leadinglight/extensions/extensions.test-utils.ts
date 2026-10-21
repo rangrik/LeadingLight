@@ -5,6 +5,7 @@
 import { vi } from 'vitest'
 import type { OpenReservation } from '../../hooks/useNoteCreation'
 import type { CreateProposal, GuardedProposal, ProposalQueryReply, ProposalReceipt } from '../proposals/proposalContract'
+import type { UndoOffer, UndoQueryReply, UndoReceipt, UndoRequest } from '../proposals/proposalUndoContract'
 import { sha256Hex } from '../saveOutcome'
 import type { BeginRunArgs, FolderHandleReply, RunAdmission } from './extensionApi'
 import { createExtensionController } from './extensionSessionController'
@@ -13,11 +14,13 @@ import meetingDebrief from './fixtures/meeting-debrief.json?raw'
 import quickNote from './fixtures/quick-note.json?raw'
 import passageCommentary from './fixtures/passage-commentary.json?raw'
 import folderPath from './fixtures/invalid/folder-path.json?raw'
+import appendObservation from './fixtures/append-observation.json?raw'
 
 export const VAULT = '/vaults/test'
 
 const FIXTURES = {
   'meeting-debrief.json': meetingDebrief, 'quick-note.json': quickNote, 'passage-commentary.json': passageCommentary, 'invalid/folder-path.json': folderPath,
+  'append-observation.json': appendObservation,
 } as const
 /** The shared fixture corpus, byte for byte. */
 export const fixtureText = (name: keyof typeof FIXTURES): string => FIXTURES[name]
@@ -104,6 +107,9 @@ export function fakeRegistry(packages: FakePackage[], vaultPath = VAULT) {
     bindDocument: vi.fn(async () => ({ status: 'refused' as const, reason: 'unsupported' as const })),
     submitProposal: vi.fn(async (proposal: GuardedProposal): Promise<ProposalReceipt | null> => committedFor(proposal as CreateProposal)),
     queryProposal: vi.fn<(args: { operationId: string }) => Promise<ProposalQueryReply | null>>(async () => null),
+    undoProposal: vi.fn<(request: UndoRequest, offer: UndoOffer) => Promise<UndoReceipt | null>>(async () => null),
+    queryUndo: vi.fn<(args: { operationId: string }, offer: UndoOffer) => Promise<UndoQueryReply | null>>(async () => null),
+    releaseUndo: vi.fn<(args: { sessionId: string; undoReceipt: string }) => Promise<{ status: 'released' } | null>>(async () => ({ status: 'released' })),
     forget: vi.fn(),
   }
   /** Calls that touch sessions, runs, handles or writes; a preview must cause none of them. */

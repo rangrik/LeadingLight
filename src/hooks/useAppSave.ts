@@ -1,15 +1,18 @@
-import { startTransition, useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
+import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { useEditorSaveWithLinks } from './useEditorSaveWithLinks'
-import { UnmergedDraftError, type ContentReceipt, type DocumentMutation, type MutationAdmission, type ReceiptStatus } from './useEditorSave'
+import { UnmergedDraftError, unmergedDraftKey, type ContentReceipt, type DocumentMutation, type HeldDraftRebase, type MutationAdmission, type ReceiptStatus } from './useEditorSave'
 import { flushEditorContent } from '../utils/autoSave'
-import { extractH1TitleFromContent } from '../utils/noteTitle'
+import { deriveDisplayTitleState, extractH1TitleFromContent } from '../utils/noteTitle'
 import { isTauri } from '../mock-tauri'
 import type { VaultEntry } from '../types'
 import { createTranslator, type AppLocale } from '../lib/i18n'
 import { canWritePathToVault } from '../utils/vaultPathContainment'
 import { vaultPathForEntry } from '../utils/workspaces'
 import { notePathFilename, notePathsMatch } from '../utils/notePathIdentity'
+import { managedRenameAdmission } from '../leadinglight/rename/renameAdmission'
+import { runAutomaticRename, type RebaseHeldDraft } from '../leadinglight/rename/managedRename'
+import { loadNoteContent, performAutoRename } from './useNoteRename'
 
 interface TabState {
   entry: VaultEntry
@@ -41,6 +44,30 @@ export type RunPageExclusive = (path: string, work: (mutate: MutateExistingDocum
 
 /** Runs a manual page rename through the barrier; a refused one shows the busy message and never starts. */
 export type RunManualRename = (path: string, rename: () => Promise<void>) => Promise<void>
+
+/** What the automatic rename needs from services created after it (RENAME contract 6.1/6.2). */
+interface ManagedRenameSeams {
+  mutate: MutateExistingDocument
+  rebaseHeldDraft: RebaseHeldDraft
+  holdUnproven: (path: string) => HeldDraftRebase
+  isUnproven: (path: string) => boolean
+  /** Fails closed: a buffer that cannot be read leaves its page held as unknown. */
+  flushEditorBuffers: (path: string) => void
+  holdAutosave: (paths: readonly string[]) => void
+  releaseAutosave: (paths: readonly string[], action: 'resume') => void
+  linkedPaths: (sourcePath: string) => string[]
+  guards: PageChangeGuards
+}
+
+/** The save-queue services a managed rename takes (Amendment B). */
+function managedRenameQueue(managed: ManagedRenameSeams) {
+  return {
+    mutateExistingDocument: managed.mutate,
+    rebaseHeldDraft: managed.rebaseHeldDraft,
+    holdUnproven: managed.holdUnproven,
+    flushEditorBuffers: managed.flushEditorBuffers,
+  }
+}
 
 /** Pages with an admitted change: their automatic rename waits, and a manual one is refused meanwhile. */
 interface PageChangeGuards {
@@ -216,57 +243,6 @@ function pendingRenameOutsideActiveTab({
   return pending.path
 }
 
-async function reloadAutoRenamedNote(options: {
-    oldPath: string
-    newPath: string
-    tabsRef: MutableRefObject<TabState[]>
-    activeTabPathRef: MutableRefObject<string | null>
-    setTabs: AppSaveDeps['setTabs']
-    handleSwitchTab: AppSaveDeps['handleSwitchTab']
-    replaceEntry: AppSaveDeps['replaceEntry']
-    loadModifiedFiles: AppSaveDeps['loadModifiedFiles']
-}): Promise<void> {
-  const { oldPath, newPath, tabsRef, activeTabPathRef, setTabs, handleSwitchTab, replaceEntry, loadModifiedFiles } = options
-  const newEntry = await invoke<VaultEntry>('reload_vault_entry', {
-    path: newPath,
-  })
-  const preservedContent =
-    tabsRef.current.find((tab) => tab.entry.path === oldPath)?.content ??
-    (await invoke<string>('get_note_content', { path: newPath }))
-
-  const otherTabPaths = tabsRef.current
-    .filter((tab) => tab.entry.path !== oldPath && tab.entry.path !== newPath)
-    .map((tab) => tab.entry.path)
-
-  startTransition(() => {
-    setTabs((prev: TabState[]) =>
-      prev.map((tab) =>
-      tab.entry.path === oldPath
-          ? {
-              entry: { ...tab.entry, ...newEntry, path: newPath },
-              content: preservedContent,
-            }
-          : tab,
-      ),
-    )
-    if (activeTabPathRef.current === oldPath) handleSwitchTab(newPath)
-    replaceEntry(oldPath, { ...newEntry, path: newPath }, preservedContent)
-  })
-
-  void Promise.all(
-    otherTabPaths.map(async (path) => {
-    const content = await invoke<string>('get_note_content', { path })
-    startTransition(() => {
-        setTabs((prev: TabState[]) => prev.map((tab) => (tab.entry.path === path ? { ...tab, content } : tab)))
-    })
-    }),
-  ).finally(() => {
-    startTransition(() => {
-      loadModifiedFiles()
-    })
-  })
-}
-
 function useCurrentValueRef<T>(value: T) {
   const ref = useRef(value)
   useEffect(() => {
@@ -314,46 +290,63 @@ function useUntitledRenameExecutor(options: {
   onInternalVaultWrite?: AppSaveDeps['onInternalVaultWrite']
   renamedPathsRef: MutableRefObject<RenamedPathMap>
   inFlightUntitledRenameRef: MutableRefObject<InFlightRenameMap>
+  managedRef: MutableRefObject<ManagedRenameSeams | null>
 }) {
-  const { resolvedPath, tabsRef, activeTabPathRef, setTabs, handleSwitchTab, replaceEntry, loadModifiedFiles, onInternalVaultWrite, renamedPathsRef, inFlightUntitledRenameRef } = options
+  const { resolvedPath, tabsRef, activeTabPathRef, setTabs, handleSwitchTab, replaceEntry, loadModifiedFiles, onInternalVaultWrite, renamedPathsRef, inFlightUntitledRenameRef, managedRef } = options
   return useCallback(
     async (path: string) => {
-    const existingRename = inFlightUntitledRenameRef.current.get(path)
-    if (existingRename) return (await existingRename) !== path
-
-    const renamePromise = (async () => {
-      try {
-        const renameVaultPath = vaultPathForTabPath(tabsRef.current, path, resolvedPath)
-          const result = await invoke<{
-            new_path: string
-            updated_files: number
-          } | null>('auto_rename_untitled', {
-          args: { vaultPath: renameVaultPath, notePath: path },
-        })
-        if (!result) return path
-        onInternalVaultWrite?.(path)
-        onInternalVaultWrite?.(result.new_path)
-        trackRenamedPath(renamedPathsRef.current, path, result.new_path)
-        await reloadAutoRenamedNote({
-          oldPath: path,
-          newPath: result.new_path,
-          tabsRef,
-          activeTabPathRef,
-          setTabs,
-          handleSwitchTab,
-          replaceEntry,
-          loadModifiedFiles,
-        })
-        return result.new_path
-      } catch {
-        return path
-      } finally {
-        inFlightUntitledRenameRef.current.delete(path)
-      }
-    })()
-
-    inFlightUntitledRenameRef.current.set(path, renamePromise)
-    return (await renamePromise) !== path
+      const managed = managedRef.current
+      if (!managed) return false
+      // An earlier rename of this page may still finish: it is never sent again from here.
+      if (managed.isUnproven(path)) return false
+      const vaultPath = vaultPathForTabPath(tabsRef.current, path, resolvedPath)
+      // Admission, then this page's hold and in-flight promise, then linked pages (RENAME 6.1).
+      return runAutomaticRename(path, {
+        inFlight: inFlightUntitledRenameRef.current,
+        vaultPath,
+        linkedPaths: managed.linkedPaths,
+        oldTitle: source => deriveDisplayTitleState({
+          content: tabsRef.current.find(tab => notePathsMatch(tab.entry.path, source))?.content ?? '',
+          filename: notePathFilename(source),
+        }).title,
+        readSource: source => loadNoteContent({ path: source, vaultPath }),
+        // Only after a valid receipt: a page it left unrefreshed continues from its exact bytes.
+        readPage: page => loadNoteContent({ path: page, vaultPath }),
+        dispatch: (source, openPaths) => performAutoRename({ path: source, vaultPath, openPaths }),
+        // Changes of the page wait as for a manual rename; its newer words stay held until settled.
+        holdAutosave: paths => {
+          managed.holdAutosave(paths)
+          for (const held of paths) managed.guards.renaming.add(held)
+        },
+        releaseAutosave: (paths, action) => {
+          for (const held of paths) managed.guards.renaming.delete(held)
+          managed.releaseAutosave(paths, action)
+        },
+        services: { tabsRef, setTabs, ...managedRenameQueue(managed) },
+        route: (oldPath, newPath) => {
+          onInternalVaultWrite?.(oldPath)
+          onInternalVaultWrite?.(newPath)
+          // The editor is bound to the old path until it renders again; its words join the queue first.
+          managed.flushEditorBuffers(oldPath)
+          trackRenamedPath(renamedPathsRef.current, oldPath, newPath)
+          setTabs((prev: TabState[]) => prev.map(tab => notePathsMatch(tab.entry.path, oldPath)
+            ? { ...tab, entry: { ...tab.entry, path: newPath, filename: notePathFilename(newPath) } }
+            : tab))
+          if (notePathsMatch(activeTabPathRef.current, oldPath)) handleSwitchTab(newPath)
+        },
+        // Only the renamed page's entry is read again; linked pages already took their receipts.
+        afterRename: async (oldPath, result) => {
+          const newPath = result.receipt.new_path
+          const newEntry = await invoke<VaultEntry>('reload_vault_entry', { path: newPath })
+          startTransition(() => {
+            setTabs((prev: TabState[]) => prev.map(tab => notePathsMatch(tab.entry.path, newPath)
+              ? { ...tab, entry: { ...tab.entry, ...newEntry, path: newPath } }
+              : tab))
+            replaceEntry(oldPath, { ...newEntry, path: newPath }, result.sourceText)
+            loadModifiedFiles()
+          })
+        },
+      })
     },
     [
     resolvedPath,
@@ -366,6 +359,7 @@ function useUntitledRenameExecutor(options: {
     onInternalVaultWrite,
     renamedPathsRef,
     inFlightUntitledRenameRef,
+    managedRef,
     ],
   )
 }
@@ -451,8 +445,9 @@ function useUntitledRenameCoordinator(options: {
   loadModifiedFiles: AppSaveDeps['loadModifiedFiles']
   onInternalVaultWrite?: AppSaveDeps['onInternalVaultWrite']
   initialH1AutoRenameEnabled: boolean
+  managedRef: MutableRefObject<ManagedRenameSeams | null>
 }) {
-  const { resolvedPath, tabsRef, activeTabPathRef, setTabs, handleSwitchTab, replaceEntry, loadModifiedFiles, onInternalVaultWrite, initialH1AutoRenameEnabled } = options
+  const { resolvedPath, tabsRef, activeTabPathRef, setTabs, handleSwitchTab, replaceEntry, loadModifiedFiles, onInternalVaultWrite, initialH1AutoRenameEnabled, managedRef } = options
   const { renamedPathsRef, inFlightUntitledRenameRef, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave } =
     useRenamePathRegistry()
   const executeUntitledRename = useUntitledRenameExecutor({
@@ -466,6 +461,7 @@ function useUntitledRenameCoordinator(options: {
     onInternalVaultWrite,
     renamedPathsRef,
     inFlightUntitledRenameRef,
+    managedRef,
   })
   const {
         pendingUntitledRenameRef,
@@ -632,7 +628,7 @@ function useUntitledRenameCoordinator(options: {
       })
       await flushPendingUntitledRename(currentPath)
     } catch (err) {
-      setToastMessage(err instanceof UnmergedDraftError ? t('save.error.unmergedDraft') : t('save.error.autoFailed', { error: String(err) }))
+      setToastMessage(err instanceof UnmergedDraftError ? t(unmergedDraftKey(err)) : t('save.error.autoFailed', { error: String(err) }))
       throw err
     }
     },
@@ -687,8 +683,11 @@ function useRenameBarrier(options: {
   onPageBusy: () => void
   writes: Pick<AppSaveServices, 'holdAutosave' | 'releaseAutosave' | 'drainHeld'>
   flushEditorBuffers: AppSaveDeps['flushEditorBuffers']
+  linkedPaths: (sourcePath: string) => string[]
+  /** An earlier change left the page unknown; renaming it could repeat a rename that may still finish. */
+  isUnproven: (path: string) => boolean
 }): RunManualRename {
-  const { guards, pageMutation, resolveCurrentPath, setToastMessage, locale, onPageBusy, writes, flushEditorBuffers } = options
+  const { guards, pageMutation, resolveCurrentPath, setToastMessage, locale, onPageBusy, writes, flushEditorBuffers, linkedPaths, isUnproven } = options
   const { holdAutosave, releaseAutosave, drainHeld } = writes
   const t = useMemo(() => createTranslator(locale), [locale])
   return useCallback(async (path: string, rename: () => Promise<void>): Promise<void> => {
@@ -696,7 +695,30 @@ function useRenameBarrier(options: {
       onPageBusy()
       return
     }
-    const current = resolveCurrentPath(path)
+    let current = resolveCurrentPath(path)
+    if (isUnproven(current)) {
+      setToastMessage(t('leadinglight.rename.unproven'))
+      return
+    }
+    // One managed-rename admission before this page's own registration (RENAME 6.1): a rename
+    // that may rewrite a page another rename holds is refused here, before anything is sent.
+    let ticket = managedRenameAdmission.admit(current, linkedPaths(current))
+    // Only this page's own running rename (its automatic one) is waited for, holding nothing.
+    const own = ticket ? null : managedRenameAdmission.held(current)
+    if (own) {
+      await own.released
+      if (guards.manualRenameHolds.size > 0) {
+        onPageBusy()
+        return
+      }
+      current = resolveCurrentPath(path)
+      ticket = managedRenameAdmission.admit(current, linkedPaths(current))
+    }
+    if (!ticket) {
+      onPageBusy()
+      return
+    }
+    const admitted = ticket
     // Registered before any await, so a folder move that starts later still waits for it.
     let settle = () => {}
     const registration = new Promise<void>(resolve => { settle = resolve })
@@ -710,17 +732,23 @@ function useRenameBarrier(options: {
       holdAutosave([current])
       held = true
       await drainHeld(current)
+      // Checked again with nothing left to wait for: an earlier change may have left it unknown meanwhile.
+      if (isUnproven(current)) {
+        setToastMessage(t('leadinglight.rename.unproven'))
+        return
+      }
       await rename()
     } catch (error) {
-      if (error instanceof UnmergedDraftError) setToastMessage(t('save.error.unmergedDraft'))
+      if (error instanceof UnmergedDraftError) setToastMessage(t(unmergedDraftKey(error)))
       throw error
     } finally {
       if (held) releaseAutosave([current], 'resume')
       guards.renaming.delete(current)
       guards.manualRenames.delete(registration)
       settle()
+      admitted.release()
     }
-  }, [drainHeld, flushEditorBuffers, guards, holdAutosave, onPageBusy, pageMutation, releaseAutosave, resolveCurrentPath, setToastMessage, t])
+  }, [drainHeld, flushEditorBuffers, guards, holdAutosave, isUnproven, linkedPaths, onPageBusy, pageMutation, releaseAutosave, resolveCurrentPath, setToastMessage, t])
 }
 
 function useRenameHandlers(options: {
@@ -857,6 +885,9 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         whenMutationsIdle,
         pageMutation,
         claimPage,
+        rebaseHeldDraft,
+        holdUnproven,
+        isUnproven,
       } = useEditorSaveWithLinks({
         updateEntry,
         setTabs,
@@ -918,6 +949,9 @@ function useEditorPersistence(options: EditorPersistenceOptions) {
         whenMutationsIdle,
         pageMutation,
         claimPage,
+        rebaseHeldDraft,
+        holdUnproven,
+        isUnproven,
       }
     }
 
@@ -1022,6 +1056,8 @@ function useAppSaveServices(
 ) {
   const { updateEntry, setTabs, handleSwitchTab, setToastMessage, loadModifiedFiles, reloadViews, trackUnsaved, clearUnsaved, replaceEntry, resolvedPath, writableVaultPaths, initialH1AutoRenameEnabled, onInternalVaultWrite, locale = 'en', onHistoryNote } = options
   const { tabsRef, activeTabPathRef } = refs
+  // Filled once the page-change services below exist; the automatic rename reads it when it runs.
+  const managedRef = useRef<ManagedRenameSeams | null>(null)
   const {
     pendingUntitledRenameRef,
     cancelPendingUntitledRename,
@@ -1041,6 +1077,7 @@ function useAppSaveServices(
     loadModifiedFiles,
     onInternalVaultWrite,
     initialH1AutoRenameEnabled,
+    managedRef,
   })
   const [guards] = useState<PageChangeGuards>(() => ({ renaming: new Set(), renameSuppressed: new Set(), deferredRenames: new Map(), manualRenames: new Set(), manualRenameHolds: new Set() }))
   // While a page change runs, its automatic rename waits; it is scheduled again once the change settles.
@@ -1051,7 +1088,7 @@ function useAppSaveServices(
     }
     scheduleUntitledRename(path, content)
   }, [guards, resolveCurrentPath, scheduleUntitledRename])
-  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage } = useEditorPersistence({
+  const { handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage, rebaseHeldDraft, holdUnproven, isUnproven } = useEditorPersistence({
     updateEntry,
     setTabs,
     setToastMessage,
@@ -1073,7 +1110,7 @@ function useAppSaveServices(
     registerRenamedPath,
     replaceEntry,
   })
-  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, scheduleUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, replaceRenamedEntry, guards, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage }
+  return { pendingUntitledRenameRef, cancelPendingUntitledRename, registerRenamedPath, resolveCurrentPath, resolvePathBeforeSave, flushPendingUntitledRename, scheduleUntitledRename, handleSaveRaw, handleContentChange, savePendingForPath, savePending, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, replaceRenamedEntry, guards, mutateDocument, holdMutationAdmission, whenMutationsIdle, pageMutation, claimPage, rebaseHeldDraft, holdUnproven, isUnproven, managedRef }
 }
 
 type AppSaveServices = ReturnType<typeof useAppSaveServices>
@@ -1127,15 +1164,20 @@ function useExistingDocumentMutation(
   }, [cancelPendingUntitledRename, flushEditorBuffers, guards, mutateDocument, queueUnsavedTabText, resolveCurrentPath, scheduleUntitledRename, tabsRef])
 }
 
-type TrashBoundaryServices = Pick<AppSaveServices, 'holdAutosave' | 'releaseAutosave' | 'hasPendingWrite' | 'cancelPendingUntitledRename' | 'resolveCurrentPath' | 'resolvePathBeforeSave' | 'pageMutation'>
+type TrashBoundaryServices = Pick<AppSaveServices, 'holdAutosave' | 'releaseAutosave' | 'hasPendingWrite' | 'cancelPendingUntitledRename' | 'resolveCurrentPath' | 'resolvePathBeforeSave' | 'pageMutation' | 'isUnproven'>
 
 /**
  * LeadingLight Trash: automatic writes are held while a page moves; `prepareForTrash` writes its
- * latest text, settles automatic renames and returns the path to move.
+ * latest text, settles automatic renames and returns the path to move. Folder moves use it too.
  */
 function useTrashSaveBoundary(services: TrashBoundaryServices, flushForTrash: (path: string) => Promise<void>) {
-  const { holdAutosave, releaseAutosave, hasPendingWrite, cancelPendingUntitledRename, resolveCurrentPath, resolvePathBeforeSave, pageMutation } = services
+  const { holdAutosave, releaseAutosave, hasPendingWrite, cancelPendingUntitledRename, resolveCurrentPath, resolvePathBeforeSave, pageMutation, isUnproven } = services
+  // A move or Trash is a write too: a page an earlier change left unknown is never moved, typed or clean.
+  const refuseUnproven = useCallback((path: string) => {
+    if (isUnproven(path)) throw new UnmergedDraftError(resolveCurrentPath(path), true)
+  }, [isUnproven, resolveCurrentPath])
   const prepareForTrash = useCallback(async (path: string) => {
+    refuseUnproven(path)
     // A change admitted before the hold finishes first; its newer text then moves with the page.
     await pageMutation(resolveCurrentPath(path))
     await flushForTrash(path)
@@ -1147,8 +1189,10 @@ function useTrashSaveBoundary(services: TrashBoundaryServices, flushForTrash: (p
     }
     // A rename must not start while the file is moving.
     cancelPendingUntitledRename(settled)
+    // Again with nothing left to wait for: an earlier change or rename may have ended unknown meanwhile.
+    refuseUnproven(settled)
     return settled
-  }, [cancelPendingUntitledRename, flushForTrash, holdAutosave, pageMutation, resolveCurrentPath, resolvePathBeforeSave])
+  }, [cancelPendingUntitledRename, flushForTrash, holdAutosave, pageMutation, refuseUnproven, resolveCurrentPath, resolvePathBeforeSave])
   const releaseHeldWrites = useCallback((paths: readonly string[], action: 'discard' | 'resume' | 'release') => {
     if (action === 'discard') for (const path of paths) cancelPendingUntitledRename(path)
     releaseAutosave(paths, action)
@@ -1208,7 +1252,48 @@ export function useAppSave(options: AppSaveDeps) {
   }, [pageBusyMessage, setToastMessage])
   const runPageExclusive = usePageExclusive(services, mutateExistingDocument, onPageBusy)
   const { holdManualRenameAdmission, whenManualRenamesIdle, isManualRenameAdmissionHeld } = useManualRenameAdmission(guards)
-  const withRenameBarrier = useRenameBarrier({ guards, pageMutation, resolveCurrentPath, setToastMessage, locale, onPageBusy, writes: services, flushEditorBuffers: options.flushEditorBuffers })
+  // Every page besides the source whose text this window holds: open tabs and pending writes.
+  const managedRenameLinkedPaths = useCallback((sourcePath: string) => [...new Set([
+    ...tabsRef.current.map(tab => tab.entry.path), ...unsavedPathsRef.current,
+  ])].filter(path => !notePathsMatch(path, sourcePath)), [tabsRef, unsavedPathsRef])
+  const { flushEditorBuffers } = options
+  const { rebaseHeldDraft: rebaseQueuedDraft, holdUnproven: holdQueuedUnproven, isUnproven } = services
+  // Words still in an editor join the queue first. A buffer that cannot be read may hold words the
+  // queue never saw, so its page is held as unknown: never settled, replaced or called clean.
+  const flushRenameBuffers = useCallback((path: string): boolean => {
+    try {
+      flushEditorBuffers?.(path)
+      return true
+    } catch (error) {
+      console.warn('[save] Editor buffers could not be read; the page is held unsaved:', error)
+      holdQueuedUnproven(path)
+      return false
+    }
+  }, [flushEditorBuffers, holdQueuedUnproven])
+  const rebaseHeldDraft = useCallback<RebaseHeldDraft>((path, rebase): HeldDraftRebase => {
+    flushRenameBuffers(path)
+    return rebaseQueuedDraft(path, rebase)
+  }, [flushRenameBuffers, rebaseQueuedDraft])
+  // Held before its buffers are read, so a buffer that throws cannot leave the page writable.
+  const holdUnproven = useCallback((path: string): HeldDraftRebase => {
+    holdQueuedUnproven(path)
+    return flushRenameBuffers(path) ? holdQueuedUnproven(path) : 'unmergedDraft'
+  }, [flushRenameBuffers, holdQueuedUnproven])
+  // Routing moves a page's queue identity; an editor still bound to the old path hands its words over
+  // first. The file has moved either way, so the route is recorded even when that handover failed.
+  const trackRenamedPath = useCallback((oldPath: string, newPath: string) => {
+    flushRenameBuffers(oldPath)
+    registerRenamedPath(oldPath, newPath)
+  }, [flushRenameBuffers, registerRenamedPath])
+  const flushManagedRenameBuffers = useCallback((path: string) => { flushRenameBuffers(path) }, [flushRenameBuffers])
+  const { managedRef, holdAutosave, releaseAutosave } = services
+  useLayoutEffect(() => {
+    managedRef.current = {
+      mutate: mutateExistingDocument, rebaseHeldDraft, holdUnproven, isUnproven, flushEditorBuffers: flushManagedRenameBuffers,
+      holdAutosave, releaseAutosave, linkedPaths: managedRenameLinkedPaths, guards,
+    }
+  }, [flushManagedRenameBuffers, guards, holdAutosave, holdUnproven, isUnproven, managedRef, managedRenameLinkedPaths, mutateExistingDocument, rebaseHeldDraft, releaseAutosave])
+  const withRenameBarrier = useRenameBarrier({ guards, pageMutation, resolveCurrentPath, setToastMessage, locale, onPageBusy, writes: services, flushEditorBuffers: options.flushEditorBuffers, linkedPaths: managedRenameLinkedPaths, isUnproven })
   const { handleFilenameRename, handleSave, handleTitleSync, flushBeforeAction, flushForTrash } = useAppSaveHandlers({
     contentChangeRef,
     handleContentChange,
@@ -1252,13 +1337,22 @@ export function useAppSave(options: AppSaveDeps) {
     receiptStatus,
     /** Save holds, retriable failures and the guarded final resolution, for the recovery UI. */
     saveRecovery: recovery,
-    trackRenamedPath: registerRenamedPath,
+    trackRenamedPath,
     flushBeforeAction,
     mutateExistingDocument,
     holdMutationAdmission,
     whenMutationsIdle,
     runPageExclusive,
     withManualRename: withRenameBarrier,
+    /** RENAME seams: settle a renamed page's held text, and the pages a managed rename protects. */
+    rebaseHeldDraft,
+    /** A page left unproven by its own change (a rename with no proof either way) saves nothing more. */
+    holdUnproven,
+    /** Whether an earlier change left the page unknown: nothing may rename, move or change it now. */
+    isUnproven,
+    /** The managed rename's buffer flush, failing closed (see `flushRenameBuffers`). */
+    flushManagedRenameBuffers,
+    managedRenameLinkedPaths,
     holdManualRenameAdmission,
     whenManualRenamesIdle,
     isManualRenameAdmissionHeld,

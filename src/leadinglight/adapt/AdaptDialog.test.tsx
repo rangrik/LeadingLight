@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { E2_HOST_CAPABILITIES, type Capability } from '../extensions/extensionContract'
+import { createExtensionController } from '../extensions/extensionSessionController'
 import { fakeRegistry, fixtureText, packageOf, VAULT, type FakePackage } from '../extensions/extensions.test-utils'
 import { candidate, deferred, fakeHost } from './adapt.test-utils'
 import type { AdaptApi, AdaptProviderState } from './adaptContract'
@@ -16,11 +18,11 @@ vi.mock('../../utils/macosDismissableEscapeSurface', () => ({
 const QUICK = fixtureText('quick-note.json')
 const QUICK_NEXT = QUICK.replace('"version": "1.0.0"', '"version": "1.1.0"')
 
-function setup({ codex, packages = [], inSettings = false }: { codex?: AdaptProviderState; packages?: FakePackage[]; inSettings?: boolean } = {}) {
+function setup({ codex, packages = [], inSettings = false, hostCapabilities }: { codex?: AdaptProviderState; packages?: FakePackage[]; inSettings?: boolean; hostCapabilities?: readonly Capability[] } = {}) {
   const host = fakeHost(codex)
   const controller = createAdaptController({ api: host.api as unknown as AdaptApi, pollMs: 5, retryMs: 1, retries: 2 })
   const registry = fakeRegistry(packages)
-  const extensions = registry.controller()
+  const extensions = hostCapabilities ? createExtensionController({ api: registry.transport, hostCapabilities }) : registry.controller()
   const snapshotPage = vi.fn(async (): Promise<PageSnapshot> => ({ title: 'Reading list', text: '# Reading list' }))
   const harness = (vaultPath?: string) => <AdaptHarness registry={extensions} controller={controller} snapshotPage={snapshotPage} vaultPath={vaultPath} inSettings={inSettings} />
   const view = render(harness())
@@ -64,6 +66,32 @@ async function choose(trigger: HTMLElement, item: string) {
 }
 
 describe('the Adapt dialog', () => {
+  it('reviews a candidate as this window\'s extension host does: a passage recipe can be turned on, a page-picker recipe cannot', async () => {
+    const { host } = setup({ hostCapabilities: E2_HOST_CAPABILITIES })
+    await openAdapt()
+    await ask('Keep my thoughts on passages')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    act(() => host.reply('conv-1', { kind: 'candidate', message: 'Here it is!', packageText: fixtureText('passage-commentary.json') }))
+    const commentary = await lastCard(1)
+    expect(commentary).toHaveAttribute('data-check', 'ready')
+    expect(within(commentary).queryByTestId('adapt-candidate-needs')).not.toBeInTheDocument()
+    fireEvent.click(within(commentary).getByTestId('adapt-preview'))
+    expect(within(await screen.findByTestId('extension-preview-dialog')).getByTestId('extension-turn-on')).toBeEnabled()
+  })
+
+  it('keeps a recipe that adds to a page the person picks unavailable, saying what it needs', async () => {
+    const { host, registry } = setup({ hostCapabilities: E2_HOST_CAPABILITIES })
+    await openAdapt()
+    await ask('Log what I notice on a page I pick')
+    await waitFor(() => expect(host.api.send).toHaveBeenCalledOnce())
+    act(() => host.reply('conv-1', { kind: 'candidate', message: 'Here it is!', packageText: fixtureText('append-observation.json') }))
+    const card = await lastCard(1)
+    expect(card).toHaveAttribute('data-check', 'unavailable')
+    expect(within(card).getByTestId('adapt-candidate-needs')).toHaveTextContent('adding to an existing page')
+    expect(within(card).queryByTestId('adapt-preview')).not.toBeInTheDocument()
+    expect(registry.api.importCandidate).not.toHaveBeenCalled()
+  })
+
   it('opens no visit until opened, sends only on Send, and turns a candidate on only through the E1 preview, then undoes it', async () => {
     const { host, registry } = setup()
     await screen.findAllByTestId('extension-adapt')

@@ -1,10 +1,21 @@
 //! LeadingLight local Trash: deleted files move into a hidden per-vault store and can be
 //! restored. Contract: workspace notes `m3-trash-contract.md` (v2).
 
+#[cfg(all(test, unix))]
+mod exact_tests;
 mod restore;
 mod store;
 #[cfg(test)]
 mod tests;
+
+/// Test seam: runs after a guarded move wrote its record, just before its final exact check.
+#[cfg(test)]
+type ExactMoveHook = Box<dyn Fn(&Path)>;
+#[cfg(test)]
+thread_local! {
+    pub(crate) static BEFORE_EXACT_MOVE: std::cell::RefCell<Option<ExactMoveHook>> =
+        const { std::cell::RefCell::new(None) };
+}
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -370,6 +381,140 @@ pub fn move_to_trash(root: &Path, paths: &[String]) -> Result<LocalTrashMoveRepo
         }
     }
     Ok(report)
+}
+
+/// What a guarded move of one exact page did.
+#[derive(Debug)]
+pub enum ExactTrashOutcome {
+    /// The page, the very file checked and still exactly the expected bytes, is in Trash, where
+    /// Trash lists it and can restore it like any other item.
+    Moved,
+    /// Nothing moved: the path does not hold one plain file with exactly the expected bytes.
+    Changed,
+    /// Nothing moved: nothing is at the path.
+    Missing,
+    /// Nothing moved, and the page is proven still in place.
+    NotMoved(String),
+    /// The move may have happened; what is where could not be proven either way.
+    Uncertain(String),
+}
+
+/// Moves one page to Trash only while it holds exactly `expected_sha256`: the page is read
+/// through one handle within `limit` bytes and compared, its Trash record is written, and then
+/// the same file and the same bytes are checked again immediately before the final rename. The
+/// caller holds the page's lease, which keeps app saves away; nothing here takes it again. The
+/// final check is what catches anyone else, but it is not a compare-and-swap: a writer acting
+/// between it and the rename is not excluded, so what was moved is checked once more and
+/// anything unproven is uncertain. Ordinary `move_to_trash` is unchanged.
+pub fn move_exact_to_trash(
+    root: &Path,
+    relative: &str,
+    expected_sha256: &str,
+    limit: u64,
+) -> ExactTrashOutcome {
+    use crate::vault::staged_file::{plain_file, sha256, Original};
+
+    let vault = match VaultRoot::open(root) {
+        Ok(vault) => vault,
+        Err(message) => return ExactTrashOutcome::NotMoved(message),
+    };
+    let source = match resolve_source(&vault, relative) {
+        Ok(source) => source,
+        Err(failure) if failure.code == FailureCode::NotFound => return ExactTrashOutcome::Missing,
+        Err(failure) if failure.code == FailureCode::Io => {
+            return ExactTrashOutcome::NotMoved(failure.message)
+        }
+        Err(_) => return ExactTrashOutcome::Changed,
+    };
+    // Reached without following a link on the way, as the page was written.
+    let direct = vault
+        .relative_inside(&source.path)
+        .and_then(relative_text)
+        .is_some_and(|inside| inside == relative && source.relative == relative);
+    if !direct || plain_file(&source.path).is_err() {
+        return ExactTrashOutcome::Changed;
+    }
+    let store = match TrashStore::create(&vault) {
+        Ok(store) => store,
+        Err(message) => return ExactTrashOutcome::NotMoved(message),
+    };
+    let original = match Original::read_within(&source.path, limit) {
+        Ok(Some(original)) => original,
+        Ok(None) => return ExactTrashOutcome::Changed,
+        Err(error) if error.kind() == ErrorKind::NotFound => return ExactTrashOutcome::Missing,
+        Err(error) => return ExactTrashOutcome::NotMoved(error.to_string()),
+    };
+    let hex = |bytes: &[u8]| -> String {
+        sha256(bytes)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    if hex(&original.bytes) != expected_sha256 {
+        return ExactTrashOutcome::Changed;
+    }
+    let id = uuid::Uuid::new_v4().simple().to_string();
+    let item = store.dir.join(&id);
+    if let Err(error) = fs::create_dir(&item) {
+        return ExactTrashOutcome::NotMoved(error.to_string());
+    }
+    let title = match std::str::from_utf8(&original.bytes) {
+        Ok(content) if crate::vault::classify_file_kind(&source.path) == "markdown" => {
+            crate::vault::derive_markdown_title_from_content(content, source.filename())
+        }
+        _ => source.filename().to_string(),
+    };
+    let record = TrashRecord {
+        version: RECORD_VERSION,
+        original_path: source.relative.clone(),
+        title,
+        deleted_at: now_ms(),
+        source_identity: source.identity,
+    };
+    if let Err(error) = write_json(&item, RECORD_FILE, &record) {
+        discard_item_files(&item);
+        return ExactTrashOutcome::NotMoved(error.to_string());
+    }
+    #[cfg(test)]
+    BEFORE_EXACT_MOVE.with(|hook| {
+        if let Some(hook) = hook.borrow().as_ref() {
+            hook(source.path.as_path());
+        }
+    });
+    // The final check, at the rename itself: the same file, holding exactly those bytes.
+    if original.recheck_exact().is_err() {
+        discard_item_files(&item);
+        return ExactTrashOutcome::Changed;
+    }
+    let before = crate::vault::staged_file::file_identity(&source.path);
+    let payload = item.join(PAYLOAD_FILE);
+    if let Err(error) = fs::rename(&source.path, &payload) {
+        let in_place = original.recheck_exact().is_ok();
+        let no_payload = matches!(fs::symlink_metadata(&payload), Err(missing) if missing.kind() == ErrorKind::NotFound);
+        if in_place && no_payload {
+            discard_item_files(&item);
+            return ExactTrashOutcome::NotMoved(error.to_string());
+        }
+        return ExactTrashOutcome::Uncertain(error.to_string());
+    }
+    sync_folder(&item);
+    if let Some(parent) = source.path.parent() {
+        sync_folder(parent);
+    }
+    // What moved must be the very file checked, still holding exactly those bytes.
+    let same_file =
+        before.is_some() && crate::vault::staged_file::file_identity(&payload) == before;
+    let same_bytes = Original::read_within(&payload, limit)
+        .ok()
+        .flatten()
+        .is_some_and(|moved| hex(&moved.bytes) == expected_sha256);
+    if !(same_file && same_bytes) {
+        return ExactTrashOutcome::Uncertain(
+            "The page is in Trash, but what moved could not be proven to be the checked page"
+                .to_string(),
+        );
+    }
+    ExactTrashOutcome::Moved
 }
 
 /// Only the very file recorded at move time, still at its original path, proves the move never

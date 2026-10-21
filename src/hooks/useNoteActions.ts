@@ -14,10 +14,11 @@ import {
   useNoteRename,
   performRename,
   loadNoteContent,
-  renameToastMessage,
-  reloadTabsAfterRename,
+  managedRenameToast,
+  refusedRenameMessage,
   reloadVaultAfterRename,
 } from './useNoteRename'
+import { runManagedRename, type RebaseHeldDraft } from '../leadinglight/rename/managedRename'
 import {
   applyFrontmatterSuccess,
   handleFrontmatterFailure,
@@ -81,6 +82,14 @@ export interface NoteActionsConfig {
   runPageExclusive?: RunPageExclusive
   /** Runs the rename after a title edit through the manual rename barrier. */
   runManualRename?: RunManualRename
+  /** RENAME seam: settles a renamed page's newer text before its hold is released. */
+  rebaseHeldDraft?: RebaseHeldDraft
+  /** RENAME seam: pages besides the source whose text this window holds. */
+  managedRenameLinkedPaths?: (sourcePath: string) => readonly string[]
+  /** RENAME seam: a page whose rename ended without proof either way saves nothing more in this window. */
+  holdUnproven?: (path: string) => unknown
+  /** Pushes a page's rich and raw editor buffers into the save queue. */
+  flushEditorBuffers?: (path: string) => void
 }
 
 function isTitleKey(key: string): boolean {
@@ -167,88 +176,58 @@ interface RenameAfterTitleChangeParams {
   path: string
   newTitle: string
   deps: TitleRenameDeps
+  config: NoteActionsConfig
 }
 
-interface ApplyTitleRenamePathChangeParams {
-  deps: TitleRenameDeps
-  newPath: string
-  newTitle: string
-  path: string
-  /** The page's tab text when the native rename started. */
-  sourceContent: string | undefined
-}
-
-function tabPathsExceptRenamed(
-  tabs: { entry: VaultEntry; content: string }[],
-  path: string,
-  newPath: string,
-): string[] {
-  return tabs
-    .filter((t) => !notePathsMatch(t.entry.path, path) && !notePathsMatch(t.entry.path, newPath))
-    .map((t) => t.entry.path)
-}
-
-async function applyTitleRenamePathChange({
-  deps,
-  newPath,
-  newTitle,
-  path,
-  sourceContent,
-}: ApplyTitleRenamePathChangeParams): Promise<void> {
+/** Canonical routing of the committed new path, before any later await. */
+function routeTitleRename({ deps, oldPath, newPath, newTitle }: { deps: TitleRenameDeps; oldPath: string; newPath: string; newTitle: string }): void {
   const newFilename = notePathFilename(newPath)
-  const otherTabPaths = tabPathsExceptRenamed(deps.tabsRef.current, path, newPath)
   deps.onInternalVaultWrite?.(newPath)
-  deps.onPathRenamed?.(path, newPath)
-  deps.replaceEntry?.(path, {
+  deps.onPathRenamed?.(oldPath, newPath)
+  deps.replaceEntry?.(oldPath, {
     path: newPath,
     filename: newFilename,
     title: newTitle,
   } as Partial<VaultEntry> & { path: string })
-  // The file has moved, so its tab follows before the read; a failed read must not leave it behind.
   deps.setTabs((prev) =>
     prev.map((t) =>
-      notePathsMatch(t.entry.path, path)
+      notePathsMatch(t.entry.path, oldPath)
         ? { entry: { ...t.entry, path: newPath, filename: newFilename, title: newTitle }, content: t.content }
         : t,
     ),
   )
-  if (notePathsMatch(deps.activeTabPathRef.current, path)) deps.handleSwitchTab(newPath)
-  const newContent = await loadNoteContent({ path: newPath })
-  // The copy read back replaces only the text the rename started from; text typed meanwhile is newer.
-  deps.setTabs((prev) =>
-    prev.map((t) =>
-      notePathsMatch(t.entry.path, newPath) && t.content === sourceContent ? { ...t, content: newContent } : t,
-    ),
-  )
-  await reloadTabsAfterRename({
-    tabPaths: otherTabPaths,
-    updateTabContent: deps.updateTabContent,
-  })
+  if (notePathsMatch(deps.activeTabPathRef.current, oldPath)) deps.handleSwitchTab(newPath)
 }
 
-async function renameAfterTitleChange({ path, newTitle, deps }: RenameAfterTitleChangeParams): Promise<void> {
+/** RENAME managed flow: linked open pages claimed, exact receipts, the source's newer text settled. */
+async function renameAfterTitleChange({ path, newTitle, deps, config }: RenameAfterTitleChangeParams): Promise<void> {
   const tab = deps.tabsRef.current.find((t) => notePathsMatch(t.entry.path, path))
   const oldTitle = tab?.entry.title
   deps.onInternalVaultWrite?.(path)
   // What the rename stages is the saved file; the tab ref can predate the property write just settled.
-  const sourceContent = tab ? await loadNoteContent({ path }).catch(() => undefined) : undefined
-  const result = await performRename({
-    path,
-    newTitle,
+  const sourceBaseline = tab ? await loadNoteContent({ path }).catch(() => undefined) : undefined
+  const result = await runManagedRename({
+    sourcePath: path,
     vaultPath: deps.vaultPath,
-    oldTitle,
+    oldTitle: oldTitle ?? '',
+    destination: { siblingOf: path },
+    sourceBaseline,
+    dispatch: openPaths => performRename({ path, newTitle, vaultPath: deps.vaultPath, oldTitle, openPaths }),
+    readPage: page => loadNoteContent({ path: page, vaultPath: deps.vaultPath }),
+    route: (oldPath, newPath) => routeTitleRename({ deps, oldPath, newPath, newTitle }),
+  }, {
+    mutateExistingDocument: config.mutateExistingDocument,
+    rebaseHeldDraft: config.rebaseHeldDraft,
+    linkedPaths: config.managedRenameLinkedPaths,
+    tabsRef: deps.tabsRef,
+    setTabs: deps.setTabs,
+    flushEditorBuffers: config.flushEditorBuffers,
+    // An unknown outcome marks the page before the rename lets go of it; it takes no later words.
+    holdUnproven: config.holdUnproven,
   })
-  if (!notePathsMatch(result.new_path, path)) {
-    await applyTitleRenamePathChange({
-      path,
-      newPath: result.new_path,
-      newTitle,
-      deps,
-      sourceContent,
-    })
-  }
-  await reloadVaultAfterRename(deps.reloadVault)
-  deps.setToastMessage(renameToastMessage(result.updated_files, result.failed_updates ?? 0))
+  if (result.status === 'renamed' || result.status === 'unknown') await reloadVaultAfterRename(deps.reloadVault)
+  const message = managedRenameToast(result, refusedRenameMessage)
+  if (message) deps.setToastMessage(message)
 }
 
 function shouldRenameOnTitleUpdate(key: string, value: FrontmatterValue): value is string {
@@ -329,7 +308,7 @@ async function maybeRenameAfterFrontmatterUpdate({
   const drain = config.runPageExclusive ? config.flushBeforeNoteMutation : undefined
   const rename = async () => {
     await drain?.(path)
-    await renameAfterTitleChange({ path, newTitle: value, deps })
+    await renameAfterTitleChange({ path, newTitle: value, deps, config })
   }
   try {
     await (config.runManualRename ? config.runManualRename(path, rename) : rename())
@@ -1073,6 +1052,13 @@ function useConfiguredNoteRename({
       setToastMessage: config.setToastMessage,
       reloadVault: config.reloadVault,
       onPathRenamed: handlePathRenamed,
+      mutateExistingDocument: config.mutateExistingDocument,
+      rebaseHeldDraft: config.rebaseHeldDraft,
+      linkedPaths: config.managedRenameLinkedPaths,
+      // Still under the rename's source hold: a page left unproven takes no later words either.
+      onRenameSettled: (oldPath, result) => {
+        if (result.status === 'unknown') config.holdUnproven?.(oldPath)
+      },
     },
     {
       tabs: tabMgmt.tabs,

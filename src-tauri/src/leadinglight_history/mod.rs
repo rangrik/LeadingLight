@@ -1,5 +1,6 @@
 //! S0 safer saves: one immutable request per save, in-memory holds, and exact recovery.
 //! S1a adds automatic earlier versions, kept inside the vault's hidden history store.
+//! E2 adds exact, pinned versions for the Undo of guarded extension writes.
 
 mod copy;
 pub(crate) mod history_outcome;
@@ -9,9 +10,12 @@ mod inventory;
 mod lock;
 pub(crate) mod outcome;
 mod page_write;
+mod pins;
 mod policy;
 mod registry;
 mod resolve;
+#[cfg(all(test, unix))]
+mod retained_tests;
 mod retention;
 #[cfg(all(test, unix))]
 mod tests;
@@ -27,11 +31,17 @@ use crate::vault::staged_file::STAGING_PREFIX;
 pub(crate) use copy::{copy_draft, copy_version};
 pub(crate) use outcome::OriginalRequest;
 pub(crate) use page_write::{check_save, legacy_save, save_page};
+#[cfg(test)]
+pub(crate) use pins::pinned_in;
+pub(crate) use pins::Retained;
 pub(crate) use registry::Lease;
 use registry::{Digest, Registry};
 pub(crate) use resolve::{discard, release_with_copy};
 pub(crate) use versions::{export_candidates, export_version, ExportCandidate, ExportPlan};
+#[cfg(test)]
+pub(crate) use versions::{fail_history_syncs, SyncFault};
 pub(crate) use versions::{health as history_health, list_locations, list_versions, read_version};
+pub(crate) use versions::{read_retained, retain_version, RetainError};
 
 static REGISTRY: Registry = Registry::new();
 

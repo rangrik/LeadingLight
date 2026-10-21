@@ -1,9 +1,9 @@
-//! Reply and request shapes, exactly as frozen in `src/leadinglight/extensions/extensionApi.ts` and
-//! `src/leadinglight/proposals/proposalContract.ts`. `null` fields are sent as `null`, never left out.
-//! Replies are only sent from here, so a reason E1 never gives is left out of its enum; the
-//! frozen readers still accept the whole union.
+//! Reply and request shapes, exactly as frozen in `src/leadinglight/extensions/extensionApi.ts`,
+//! `src/leadinglight/proposals/proposalContract.ts` and `proposalUndoContract.ts`. `null` fields
+//! are sent as `null`, never left out. Replies are only sent from here, so a reason this host never
+//! gives is left out of its enum; the frozen readers still accept the whole union.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::manifest::Capability;
 use super::report::Diagnostic;
@@ -185,7 +185,6 @@ pub enum EndRunReply {
     UnknownSession,
 }
 
-/// Without `notDocument`, which only a document binding gives (the append milestone).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HandleRefusal {
@@ -193,6 +192,7 @@ pub enum HandleRefusal {
     OutsideVault,
     Missing,
     NotFolder,
+    NotDocument,
     Link,
     Unsupported,
 }
@@ -210,11 +210,18 @@ pub enum FolderHandleReply {
     },
 }
 
-/// E1 binds no documents; the `bound` shape belongs to the append milestone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum DocumentHandleReply {
-    Refused { reason: HandleRefusal },
+    #[serde(rename_all = "camelCase")]
+    Bound {
+        document_handle: String,
+        display_path: String,
+        content_sha256: String,
+    },
+    Refused {
+        reason: HandleRefusal,
+    },
 }
 
 // --- Proposals ---------------------------------------------------------------------------------------
@@ -252,8 +259,8 @@ impl GuardedProposal {
     }
 }
 
-/// Without `link`: a bound folder that became a link no longer matches its handle, so E1
-/// answers `handleMismatch`.
+/// Without `unsupported`, which no proposal kind this host reads can earn. A bound folder that
+/// became a link answers `handleMismatch`; `link` is a bound page that became one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ProposalRefusal {
@@ -263,28 +270,29 @@ pub enum ProposalRefusal {
     DigestMismatch,
     InvalidName,
     TooLarge,
-    Unsupported,
+    Link,
     Busy,
     StorageUnavailable,
 }
 
-/// Without `changed`, which only an append checking its expected document gives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ConflictReason {
     Exists,
+    Changed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum CommitKind {
     Create,
+    Append,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum ProposalReceipt {
-    /// E1 commits creations only, with no undo promise.
+    /// An append always carries its undo token; a create carries one when Undo is offered.
     #[serde(rename_all = "camelCase")]
     Committed {
         kind: CommitKind,
@@ -339,4 +347,124 @@ pub enum QueryState {
 pub enum QueryReply {
     Receipt(ProposalReceipt),
     State(QueryState),
+}
+
+// --- Undo ------------------------------------------------------------------------------------------
+
+/// The request, read strictly: an unknown or missing field is an unreadable argument, and
+/// `beforeSha256` must be present, as a digest or `null`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UndoRequest {
+    pub(crate) operation_id: String,
+    pub(crate) session_id: String,
+    pub(crate) undo_receipt: String,
+    pub(crate) kind: UndoKind,
+    pub(crate) expected_sha256: String,
+    #[serde(deserialize_with = "present")]
+    pub(crate) before_sha256: Option<String>,
+}
+
+/// A field that may be `null` but never left out.
+fn present<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    Option::deserialize(deserializer)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UndoKind {
+    Create,
+    Append,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UndoRefusal {
+    SessionClosed,
+    UnknownReceipt,
+    Consumed,
+    OperationMismatch,
+    Busy,
+    StorageUnavailable,
+    PreimageUnavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UndoConflict {
+    Changed,
+    Missing,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum UndoReceipt {
+    /// For an append `restored_sha256` and `durable` are present; for a create both are absent.
+    #[serde(rename_all = "camelCase")]
+    Undone {
+        operation_id: String,
+        kind: UndoKind,
+        path: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        restored_sha256: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        durable: Option<bool>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Conflict {
+        operation_id: String,
+        reason: UndoConflict,
+    },
+    #[serde(rename_all = "camelCase")]
+    Refused {
+        operation_id: String,
+        reason: UndoRefusal,
+    },
+    #[serde(rename_all = "camelCase")]
+    Uncertain { operation_id: String },
+}
+
+impl UndoReceipt {
+    pub(crate) fn refused(operation_id: &str, reason: UndoRefusal) -> Self {
+        UndoReceipt::Refused {
+            operation_id: operation_id.to_string(),
+            reason,
+        }
+    }
+
+    pub(crate) fn conflict(operation_id: &str, reason: UndoConflict) -> Self {
+        UndoReceipt::Conflict {
+            operation_id: operation_id.to_string(),
+            reason,
+        }
+    }
+
+    pub(crate) fn uncertain(operation_id: &str) -> Self {
+        UndoReceipt::Uncertain {
+            operation_id: operation_id.to_string(),
+        }
+    }
+
+    /// `undone` and `uncertain` use the token up; the rest prove nothing was written.
+    pub(crate) fn consumes(&self) -> bool {
+        matches!(
+            self,
+            UndoReceipt::Undone { .. } | UndoReceipt::Uncertain { .. }
+        )
+    }
+}
+
+/// A finished undo, or `running` / `unknown` (the same shapes as a proposal query).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum UndoQueryReply {
+    Receipt(UndoReceipt),
+    State(QueryState),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum ReleaseUndoReply {
+    Released,
+    Unknown,
 }

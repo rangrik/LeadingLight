@@ -119,6 +119,25 @@ impl Original {
         })
     }
 
+    /// The same through one handle, but never more than `limit` bytes: `None` when the page is
+    /// larger, including one that grows while it is read.
+    pub(crate) fn read_within(path: &Path, limit: u64) -> std::io::Result<Option<Self>> {
+        let file = fs::File::open(path)?;
+        if file.metadata()?.len() > limit {
+            return Ok(None);
+        }
+        let mut bytes = Vec::new();
+        (&file).take(limit + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > limit {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            path: path.to_path_buf(),
+            identity: identity(&file.metadata()?),
+            bytes,
+        }))
+    }
+
     /// Same file by identity only, so an edit that keeps the size and modified time passes.
     pub(crate) fn recheck_identity(&self) -> Result<(), Mismatch> {
         let meta = plain_file(&self.path)?;

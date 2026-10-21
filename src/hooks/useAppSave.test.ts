@@ -38,6 +38,14 @@ vi.mock('../leadinglight/saveOutcome', async importOriginal => ({
 
 type Tab = { entry: VaultEntry; content: string }
 type RenameResult = { new_path: string; updated_files: number }
+
+/** Native's managed-rename receipt: the exact bytes it read and published, no linked page open. */
+function autoReceipt(result: RenameResult | null, content: string) {
+  return result && {
+    failed_updates: 0, source_before_content: content, source_content: content,
+    updated_open_pages: [], unrefreshed_open_paths: [], ...result,
+  }
+}
 type UntitledRenameOptions = {
   initialContent?: string
   diskContent?: string
@@ -149,7 +157,9 @@ describe('useAppSave', () => {
 
     vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
       if (command === 'save_page_content') return COMMITTED
-      if (command === 'auto_rename_untitled') return options?.autoRenameResult ?? { new_path: newPath, updated_files: 0 }
+      if (command === 'auto_rename_untitled') {
+        return Promise.resolve(options?.autoRenameResult ?? { new_path: newPath, updated_files: 0 }).then(result => autoReceipt(result, diskContent))
+      }
       if (command === 'reload_vault_entry') return makeEntry(newPath, 'Fresh Title', 'fresh-title.md')
       if (command === 'get_note_content' && args && 'path' in args && args.path === newPath) return diskContent
       return undefined
@@ -417,7 +427,7 @@ describe('useAppSave', () => {
     vi.mocked(isTauri).mockReturnValue(true)
     vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
       if (command === 'save_page_content') return COMMITTED
-      if (command === 'auto_rename_untitled') return { new_path: '/vault/fresh-title.md', updated_files: 0 }
+      if (command === 'auto_rename_untitled') return autoReceipt({ new_path: '/vault/fresh-title.md', updated_files: 0 }, '# Fresh Title\n\nBody')
       if (command === 'reload_vault_entry') return makeEntry('/vault/fresh-title.md', 'Fresh Title', 'fresh-title.md')
       if (command === 'get_note_content' && args && 'path' in args && args.path === '/vault/fresh-title.md') return '# Fresh Title\n\nBody'
       return undefined
@@ -456,6 +466,7 @@ describe('useAppSave', () => {
       args: {
         vaultPath: '/vault',
         notePath: entry.path,
+        openPaths: [],
       },
     })
     expect(deps.replaceEntry).toHaveBeenCalledWith(
@@ -477,7 +488,7 @@ describe('useAppSave', () => {
 
     vi.mocked(invoke).mockImplementation(async (command: string, args?: InvokeArgs) => {
       if (command === 'save_page_content') return COMMITTED
-      if (command === 'auto_rename_untitled') return { new_path: newPath, updated_files: 0 }
+      if (command === 'auto_rename_untitled') return autoReceipt({ new_path: newPath, updated_files: 0 }, content)
       if (command === 'reload_vault_entry') return makeEntry(newPath, 'test', 'test.md')
       if (command === 'get_note_content' && args && 'path' in args && args.path === newPath) return content
       return undefined
@@ -503,6 +514,7 @@ describe('useAppSave', () => {
       args: {
         vaultPath,
         notePath: oldPath,
+        openPaths: [],
       },
     })
     expect(deps.replaceEntry).toHaveBeenCalledWith(
@@ -670,7 +682,7 @@ describe('useAppSave', () => {
     })
 
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('auto_rename_untitled', {
-      args: { vaultPath: '/vault', notePath: oldPath },
+      args: { vaultPath: '/vault', notePath: oldPath, openPaths: [] },
     })
 
     await act(async () => {
@@ -682,6 +694,8 @@ describe('useAppSave', () => {
       pendingRename.resolve({ new_path: newPath, updated_files: 0 })
       await Promise.resolve()
     })
+    // The held words are resumed by the rename's release, on the ordinary autosave debounce.
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS) })
 
     await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
       'save_page_content',
@@ -828,59 +842,34 @@ describe('useAppSave', () => {
     )
   })
 
-  it('uses the latest active tab content when untitled auto-rename resolves after continued typing', async () => {
-    const {
-      oldPath,
-      newPath,
-      entry,
-      setTabs,
-      getTabs,
-      setTabsState,
-    } = setupUntitledRenameHarness({
-      diskContent: '# Fresh Title\n\nBody from disk',
-      render: false,
-    })
-    let currentTabs = [{ entry, content: '# Fresh Title\n\nBody' }]
-
-    const { result, rerender } = renderHook(
-      ({ currentTabs, currentActiveTabPath }: { currentTabs: Tab[]; currentActiveTabPath: string | null }) => useAppSave({
-        ...deps,
-        setTabs,
-        tabs: currentTabs,
-        activeTabPath: currentActiveTabPath,
-        unsavedPaths: new Set([oldPath]),
-      }),
-      {
-        initialProps: {
-          currentTabs,
-          currentActiveTabPath: oldPath,
-        },
-      },
-    )
+  // The rename's receipt settles words typed meanwhile; the tab is never reloaded over them.
+  it('keeps words typed while the automatic rename is pending and saves them only at the new path', async () => {
+    const pendingRename = createDeferred<RenameResult>()
+    const typed = '# Fresh Title\n\nBody that keeps changing while rename is pending'
+    const { result, oldPath, newPath, getTabs } = setupUntitledRenameHarness({ autoRenameResult: pendingRename.promise })
 
     await act(async () => {
       result.current.handleContentChange(oldPath, '# Fresh Title\n\nBody')
+      await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS + 2_500)
+    })
+    await act(async () => {
+      result.current.handleContentChange(oldPath, typed)
       await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS)
     })
-
-    currentTabs = [{ entry, content: '# Fresh Title\n\nBody that keeps changing while rename is pending' }]
-    setTabsState(currentTabs)
-    rerender({
-      currentTabs,
-      currentActiveTabPath: oldPath,
-    })
+    // Held while the page moves: nothing is written on the old base meanwhile.
+    expect(pageWrites()).toHaveLength(1)
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_500)
+      pendingRename.resolve({ new_path: newPath, updated_files: 0 })
+      await vi.advanceTimersByTimeAsync(0)
     })
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS) })
 
-    expect(deps.replaceEntry).toHaveBeenCalledWith(
-      oldPath,
-      expect.objectContaining({ path: newPath, filename: 'fresh-title.md' }),
-      '# Fresh Title\n\nBody that keeps changing while rename is pending',
-    )
+    expect(deps.replaceEntry).toHaveBeenCalledWith(oldPath, expect.objectContaining({ path: newPath, filename: 'fresh-title.md' }), typed)
     expect(getTabs()[0].entry.path).toBe(newPath)
-    expect(getTabs()[0].content).toBe('# Fresh Title\n\nBody that keeps changing while rename is pending')
+    expect(getTabs()[0].content).toBe(typed)
+    await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual(['save_page_content', { path: newPath, content: typed }]))
+    expect(pageWrites()).not.toContainEqual(['save_page_content', { path: oldPath, content: typed }])
   })
 
   it('marks untitled auto-rename paths as internal vault writes', async () => {
@@ -1009,6 +998,8 @@ describe('useAppSave', () => {
       await Promise.resolve()
       await Promise.resolve()
     })
+    // The held words are resumed by the rename's release, on the ordinary autosave debounce.
+    await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS) })
 
     await vi.waitFor(() => expect(pageWrites().at(-1)).toEqual([
       'save_page_content',

@@ -63,9 +63,17 @@ export interface DocumentMutation<R> {
   rebase: (content: string) => string | null
   /** Synchronously pushes the page's rich and raw editor buffers into the save queue. */
   flushBuffers?: (path: string) => void
+  /**
+   * Non-null when the page's state after this change is not proven. `current` is the page's exact
+   * bytes read under this lane after the change positively completed; null when even that is unknown.
+   */
+  unproven?: (result: R) => { current: string | null } | null
 }
 
 export type MutationIntegration = 'none' | 'rebased' | 'unmergedDraft'
+
+/** A held page's pending text after a committed change of that page (a managed rename). */
+export type HeldDraftRebase = 'none' | 'rebased' | 'unmergedDraft'
 
 export type MutationSettled<R> =
   | { kind: 'notRun'; path: string; error: unknown; current: boolean }
@@ -79,13 +87,20 @@ export type MutationAdmission<R> =
 /** A page's newest text still can't take a committed change, so it must not be saved yet. */
 export class UnmergedDraftError extends Error {
   readonly path: string
+  /** The page's state after an earlier change is unknown, not merely out of step with the draft. */
+  readonly unproven: boolean
 
-  constructor(path: string) {
+  constructor(path: string, unproven = false) {
     super(`The page's latest edits are not saved yet: ${path}`)
     this.name = 'UnmergedDraftError'
     this.path = path
+    this.unproven = unproven
   }
 }
+
+/** The person-facing wording for an unmerged draft. */
+export const unmergedDraftKey = (error: UnmergedDraftError): TranslationKey =>
+  error.unproven ? 'save.error.unprovenDraft' : 'save.error.unmergedDraft'
 
 /** The page's text waits for an explicit recovery choice, so ordinary saving stops before invoke. */
 export class SaveHeldError extends Error {
@@ -350,6 +365,9 @@ export function useEditorSave(options: EditorSaveConfig) {
   const admissionHolds = useRef(0)
   // Committed changes whose newer draft could not take them yet; that draft is never saved as is.
   const unmerged = useRef(new Map<string, (content: string) => string | null>())
+  // Pages a change may have rewritten without proof either way: no text of theirs is saved in this
+  // window, typed before or after, since the shown text may predate a write that is still to come.
+  const unresolved = useRef(new Set<string>())
   // Lane writes that are page changes, not text saves.
   const changeWrites = useRef(new WeakSet<Promise<boolean>>())
   // A new persistence scope is a new session, even when it returns to an earlier vault.
@@ -364,6 +382,7 @@ export function useEditorSave(options: EditorSaveConfig) {
   const findPending = useCallback((path: string) => [...pending.current.entries()].find(([key]) => currentPath(key) === currentPath(path)), [currentPath])
   const findInFlight = useCallback((path: string) => [...inFlight.current].find(([key]) => currentPath(key) === currentPath(path))?.[1], [currentPath])
   const findMutation = useCallback((path: string) => [...mutations.current].find(([key]) => currentPath(key) === currentPath(path))?.[1], [currentPath])
+  const isUnresolved = useCallback((path: string) => [...unresolved.current].some(key => currentPath(key) === currentPath(path)), [currentPath])
   const recordOutcome = useCallback((path: string, seq: number, outcome: LaneOutcome['outcome']) => {
     const lane = currentPath(path)
     for (const key of [...outcomes.current.keys()]) if (currentPath(key) === lane) outcomes.current.delete(key)
@@ -458,6 +477,7 @@ export function useEditorSave(options: EditorSaveConfig) {
   }, [updateTabs])
   /** Applies a retained change to the page's newer text; false while that text still can't take it. */
   const integrate = useCallback((path: string): boolean => {
+    if (isUnresolved(path) && findPending(path)) return false
     const hold = [...unmerged.current].find(([key]) => currentPath(key) === currentPath(path))
     if (!hold) return true
     const item = findPending(path)
@@ -466,7 +486,7 @@ export function useEditorSave(options: EditorSaveConfig) {
     unmerged.current.delete(hold[0])
     if (item && rebased !== null) replacePending(item, rebased)
     return true
-  }, [currentPath, findPending, replacePending])
+  }, [currentPath, findPending, isUnresolved, replacePending])
   const refuse = useCallback((lane: string, request: OriginalRequest, reason: SaveRefusalReason): never => {
     dropLane(store.retriable, lane)
     store.retriable.set(lane, Object.freeze({ lane, request, reason }))
@@ -563,7 +583,7 @@ export function useEditorSave(options: EditorSaveConfig) {
     }
     // Autosave quietly skips an unmerged draft; anything explicit must say it could not save.
     if (!integrate(path)) {
-      if (drain || force) throw new UnmergedDraftError(lane)
+      if (drain || force) throw new UnmergedDraftError(lane, isUnresolved(path))
       return false
     }
     const item = findPending(path)
@@ -604,7 +624,7 @@ export function useEditorSave(options: EditorSaveConfig) {
       if (inFlight.current.get(lane) === promise) inFlight.current.delete(lane)
     }
     return drain && findPending(path) ? flushDocument(path, drain, force) : saved
-  }, [applyOutcome, cancelTimer, currentPath, findHold, findPending, instanceId, integrate, isSaveBlocked, recordOutcome, saveNote])
+  }, [applyOutcome, cancelTimer, currentPath, findHold, findPending, instanceId, integrate, isSaveBlocked, isUnresolved, recordOutcome, saveNote])
   const savePendingForPath = useCallback((path: string) => flushPath(path), [flushPath])
   /** The Trash move's own drain: writes a held page's latest text. */
   const drainHeld = useCallback((path: string) => flushPath(path, true, true), [flushPath])
@@ -624,7 +644,7 @@ export function useEditorSave(options: EditorSaveConfig) {
   }, [isHeld, savePendingForPath])
   const showFailure = useCallback((error: unknown) => {
     if (error instanceof UnmergedDraftError) {
-      optionsRef.current.setToastMessage(t('save.error.unmergedDraft'))
+      optionsRef.current.setToastMessage(t(unmergedDraftKey(error)))
       return
     }
     if (error instanceof SaveHeldError) {
@@ -724,8 +744,8 @@ export function useEditorSave(options: EditorSaveConfig) {
     } catch (error) { console.error('Save failed:', error); showFailure(error); return false }
   }, [cancelTimer, findPending, isGuarded, isHeld, savePending, savePendingForPath, showFailure, t])
   const mutation = useDocumentMutations({
-    optionsRef, pending, inFlight, mutations, admissionHolds, unmerged, changeWrites, session,
-    currentPath, findPending, findInFlight, findMutation, isHeld, isSaveBlocked, integrate, flushPath, replacePending, updateSavedContent,
+    optionsRef, pending, inFlight, mutations, admissionHolds, unmerged, unresolved, changeWrites, session,
+    currentPath, findPending, findInFlight, findMutation, isHeld, isSaveBlocked, isUnresolved, integrate, flushPath, replacePending, updateSavedContent,
   })
   // A save or page change already running, which a final choice must not overtake.
   const laneWork = useCallback((path: string) => findInFlight(path) ?? findMutation(path), [findInFlight, findMutation])
@@ -734,6 +754,40 @@ export function useEditorSave(options: EditorSaveConfig) {
     currentPath, findPending, findHold, findRetriable, isGuarded, isHeld, laneWork, isOwnHolder, laneKey, dropLane, setHold,
     clearRecovery, emitRecovery, recordOutcome, cancelTimer, scheduleAutosave, commitSaved,
   })
+  /**
+   * A committed change of a page whose writes are held, such as its own managed rename: its
+   * pending text takes `rebase`, or stays pending and unmerged so autosave skips it until it can
+   * (explicit saves report it). The hold's release schedules what remains; nothing is dropped.
+   */
+  const rebaseHeldDraft = useCallback((path: string, rebase: (content: string) => string | null): HeldDraftRebase => {
+    // A page left unknown keeps what it shows: no settlement replaces it, typed or clean.
+    if (isUnresolved(path)) return 'unmergedDraft'
+    const item = findPending(path)
+    if (!item) return 'none'
+    // A change still waiting from earlier applies first; the new one follows it, never replaces it.
+    const earlier = [...unmerged.current].find(([key]) => currentPath(key) === currentPath(path))
+    const combined = earlier ? (draft: string) => { const first = earlier[1](draft); return first === null ? null : rebase(first) } : rebase
+    if (earlier) unmerged.current.delete(earlier[0])
+    const rebased = combined(item[1].content)
+    if (rebased === null) {
+      unmerged.current.set(item[0], combined)
+      return 'unmergedDraft'
+    }
+    if (rebased !== item[1].content) {
+      replacePending(item, rebased)
+      // The page may already show at its new path; its tab takes the settled text there too.
+      updateTabs(currentPath(item[1].path), rebased)
+    }
+    return 'rebased'
+  }, [currentPath, findPending, isUnresolved, replacePending, updateTabs])
+  /**
+   * A page whose own change ended without proof either way, such as a rename whose reply was lost:
+   * its pending text and anything typed later stay on screen, unsaved, for the rest of this window.
+   */
+  const holdUnproven = useCallback((path: string): HeldDraftRebase => {
+    unresolved.current.add(currentPath(path))
+    return findPending(path) ? 'unmergedDraft' : 'none'
+  }, [currentPath, findPending])
   /** Whether this session wrote, or moved to Trash, the page's text from this admission or a later one. */
   const receiptStatus = useCallback((receipt: Pick<ContentReceipt, 'path' | 'session' | 'seq'>): ReceiptStatus => {
     if (receipt.session !== session.current) return 'unproven'
@@ -742,7 +796,7 @@ export function useEditorSave(options: EditorSaveConfig) {
     const last = [...outcomes.current].find(([key]) => currentPath(key) === lane)?.[1]
     return last && last.seq >= receipt.seq && last.outcome !== 'dropped' ? 'settled' : 'unproven'
   }, [currentPath, hasPendingWrite])
-  return { handleContentChange, handleSave, savePending, savePendingForPath, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, ...mutation }
+  return { handleContentChange, handleSave, savePending, savePendingForPath, holdAutosave, releaseAutosave, hasPendingWrite, receiptStatus, drainHeld, isHeld, isSaveBlocked, recovery, rebaseHeldDraft, holdUnproven, isUnproven: isUnresolved, ...mutation }
 }
 
 interface SaveRecoveryDeps {
@@ -1026,6 +1080,7 @@ interface MutationLaneDeps {
   mutations: { current: Map<string, Promise<unknown>> }
   admissionHolds: { current: number }
   unmerged: { current: Map<string, (content: string) => string | null> }
+  unresolved: { current: Set<string> }
   changeWrites: { current: WeakSet<Promise<boolean>> }
   session: { current: number }
   currentPath: (path: string) => string
@@ -1034,6 +1089,7 @@ interface MutationLaneDeps {
   findMutation: (path: string) => Promise<unknown> | undefined
   isHeld: (path: string) => boolean
   isSaveBlocked: (path: string) => boolean
+  isUnresolved: (path: string) => boolean
   integrate: (path: string) => boolean
   flushPath: (path: string) => Promise<boolean>
   replacePending: (item: PendingItem, content: string) => void
@@ -1051,11 +1107,31 @@ function useDocumentMutations(deps: MutationLaneDeps) {
     const settled = (integration: MutationIntegration, latest: string | null): MutationSettled<R> =>
       ({ kind: 'returned', path: target, result, current, integration, latest })
     if (!current) return settled('none', null)
-    const committed = mutation.committedContent(result)
+    const unproven = mutation.unproven?.(result) ?? null
+    const committed = unproven ? null : mutation.committedContent(result)
+    let flushed = true
     try {
       mutation.flushBuffers?.(target)
     } catch (error) {
+      flushed = false
       console.warn('[save] Editor buffers could not be read after a page change:', error)
+    }
+    if (unproven) {
+      // An editor buffer that could not be read may hold words this lane never saw: the page is
+      // then as unknown as a lost reply, and nothing it shows is replaced or called clean.
+      if (!flushed) d.unresolved.current.add(d.currentPath(target))
+      // Nothing is cached or announced as written: the draft waits, unmerged, before the lane opens.
+      const item = d.findPending(target)
+      if (item) {
+        for (const key of [...d.unmerged.current.keys()]) if (d.currentPath(key) === d.currentPath(target)) d.unmerged.current.delete(key)
+        d.unmerged.current.set(item[0], () => null)
+        return settled('unmergedDraft', item[1].content)
+      }
+      if (unproven.current === null || !flushed) return settled('unmergedDraft', null)
+      // A completed change's exact read: the clean page continues from the bytes on disk.
+      cacheNoteContent(target, unproven.current)
+      d.updateSavedContent(target, unproven.current)
+      return settled('none', unproven.current)
     }
     if (committed === null) return settled('none', d.findPending(target)?.[1].content ?? null)
     cacheNoteContent(target, committed)
@@ -1090,6 +1166,10 @@ function useDocumentMutations(deps: MutationLaneDeps) {
     } catch (error) {
       return { kind: 'notRun', path: target, error, current: d.session.current === sessionAtAdmission }
     }
+    // Left unknown while this change waited: it is never sent.
+    if (d.isUnresolved(target)) {
+      return { kind: 'notRun', path: target, error: new UnmergedDraftError(d.currentPath(target), true), current: d.session.current === sessionAtAdmission }
+    }
     // Claimed with no await since the check above, so no other write can start in between.
     const laneKey = d.currentPath(target)
     let release: (saved: boolean) => void = () => {}
@@ -1105,14 +1185,17 @@ function useDocumentMutations(deps: MutationLaneDeps) {
       } catch (error) {
         return { kind: 'unknown', path: target, error, current: d.session.current === sessionAtAdmission }
       }
-      saved = mutation.committedContent(result) !== null
+      const unproven = mutation.unproven?.(result) ?? null
+      // Unknown completion: this page takes no text in this window, now or later, before the lane opens.
+      if (unproven?.current === null) d.unresolved.current.add(d.currentPath(target))
+      saved = !unproven && mutation.committedContent(result) !== null
       try {
         return complete(target, mutation, result, sessionAtAdmission)
       } catch (error) {
         // The change is on disk; a draft that did not take it must not overwrite it later.
         console.error('[save] Could not merge a committed change into newer text:', error)
         const item = d.findPending(target)
-        if (item) d.unmerged.current.set(item[0], mutation.rebase)
+        if (item) d.unmerged.current.set(item[0], unproven ? () => null : mutation.rebase)
         const current = d.session.current === sessionAtAdmission
         return { kind: 'returned', path: target, result, current, integration: item ? 'unmergedDraft' : 'none', latest: item?.[1].content ?? null }
       }
@@ -1133,6 +1216,8 @@ function useDocumentMutations(deps: MutationLaneDeps) {
     if (d.isHeld(lane)) return { admitted: false, reason: 'trash' }
     // A page waiting for a recovery choice takes no change until the person chooses.
     if (d.isSaveBlocked(lane)) return { admitted: false, reason: 'busy' }
+    // A page an earlier change left unknown takes no further change in this window, typed or clean.
+    if (d.isUnresolved(lane)) return { admitted: false, reason: 'busy' }
     const registered = d.findMutation(lane)
     if (registered && registered !== claim) return { admitted: false, reason: 'busy' }
     mutation.flushBuffers?.(lane)
@@ -1167,12 +1252,13 @@ function useDocumentMutations(deps: MutationLaneDeps) {
   const pageMutation = useCallback((path: string) => depsRef.current.findMutation(path), [])
   /**
    * Marks the page as changing, like an admitted change, until `release` runs.
-   * Null while closing, during a Trash move, or while another change of the page is registered.
+   * Null while closing, during a Trash move, while another change of the page is registered, or
+   * once an earlier change left the page unknown.
    */
   const claimPage = useCallback((path: string): { claim: Promise<void>; release: () => void } | null => {
     const d = depsRef.current
     const lane = d.currentPath(path)
-    if (d.admissionHolds.current > 0 || d.isHeld(lane) || d.isSaveBlocked(lane) || d.findMutation(lane)) return null
+    if (d.admissionHolds.current > 0 || d.isHeld(lane) || d.isSaveBlocked(lane) || d.isUnresolved(lane) || d.findMutation(lane)) return null
     let settle = () => {}
     const claim = new Promise<void>(resolve => { settle = resolve })
     d.mutations.current.set(lane, claim)

@@ -34,10 +34,12 @@ describe('mockHandlers coverage', () => {
 
     const updatedContent = mockHandlers.get_all_content() as Record<string, string>
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       new_path: `${vaultPath}/new-title.md`,
       updated_files: 1,
       failed_updates: 0,
+      source_before_content: '---\ntitle: Old Note\n---\n\n# Old Note',
+      source_content: '---\ntitle: New Title\n---\n\n# Old Note',
     })
     expect(updatedContent[`${vaultPath}/new-title.md`]).toContain('title: New Title')
     expect(updatedContent[referencePath]).toBe('See [[new-title]] and [[new-title]].')
@@ -62,6 +64,10 @@ describe('mockHandlers coverage', () => {
       new_path: notePath,
       updated_files: 0,
       failed_updates: 0,
+      source_before_content: '---\ntitle: Same Title\n---\n',
+      source_content: '---\ntitle: Same Title\n---\n',
+      updated_open_pages: [],
+      unrefreshed_open_paths: [],
     })
   })
 
@@ -83,6 +89,11 @@ describe('mockHandlers coverage', () => {
       vault_path: vaultPath,
       old_path: sourcePath,
       new_filename_stem: '   ',
+    })).toThrow('New filename cannot be empty')
+    expect(() => mockHandlers.rename_note_filename({
+      vault_path: vaultPath,
+      old_path: sourcePath,
+      new_filename_stem: 'quarterly:plan',
     })).toThrow('Invalid filename')
 
     expect(() => mockHandlers.rename_note_filename({

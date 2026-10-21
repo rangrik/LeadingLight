@@ -157,6 +157,51 @@ describe('tryVaultApi', () => {
       await expect(tryVaultApi('list_saved_locations', { vaultPath: '/Users/mock', cursor: null })).resolves.toBeUndefined()
     })
 
+    // E2 commentary discovery asks for 2000 and trusts "fewer than asked" as complete.
+    it('searches the captured vault with the requested bound, even after another vault was listed', async () => {
+      servedByDevVault()
+      const searched: Record<string, unknown>[] = []
+      globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = requestUrl(input)
+        if (url === '/api/vault/ping') return jsonResponse({ ok: true })
+        if (url === '/api/vault/list') return jsonResponse([])
+        if (url === '/api/vault/search') {
+          searched.push(requestBody(init))
+          return jsonResponse({ results: [], elapsed_ms: 0, query: 'marker', mode: 'keyword' })
+        }
+        throw new Error(`Unexpected fetch: ${url}`)
+      }) as typeof fetch
+      const { tryVaultApi } = await import('./vault-api')
+      // A, then B is listed, then a request captured in A searches: it must reach A.
+      await tryVaultApi('list_vault', { path: '/vault-a' })
+      await tryVaultApi('list_vault', { path: '/vault-b' })
+      await tryVaultApi('search_vault', { vaultPath: '/vault-a', query: 'marker', limit: 2000, excludeFrontmatter: false })
+      await tryVaultApi('search_vault', { args: { vault_path: '/vault-a', query: 'marker', limit: '2000' } })
+      // Ordinary callers that name no vault and no bound keep the last listed vault and native's 20.
+      await tryVaultApi('search_vault', { query: 'marker', mode: 'all' })
+      expect(searched).toEqual([
+        { mode: 'all', query: 'marker', vault_path: '/vault-a', limit: 2000 },
+        { mode: 'all', query: 'marker', vault_path: '/vault-a', limit: 2000 },
+        { mode: 'all', query: 'marker', vault_path: '/vault-b' },
+      ])
+    })
+
+    it('refuses a malformed search bound and never answers a captured disk vault from memory', async () => {
+      servedByDevVault()
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => requestUrl(input) === '/api/vault/ping'
+        ? jsonResponse({ ok: true })
+        : jsonResponse({ error: 'EACCES' }, 500))
+      globalThis.fetch = fetchMock as typeof fetch
+      const { tryVaultApi } = await import('./vault-api')
+      for (const limit of [0, -1, 2.5, 10_001, 'many']) {
+        await expect(tryVaultApi('search_vault', { vaultPath: '/vault-a', query: 'marker', limit })).rejects.toThrow('Invalid search limit')
+      }
+      expect(fetchMock).not.toHaveBeenCalled()
+      await expect(tryVaultApi('search_vault', { vaultPath: '/vault-a', query: 'marker', limit: 2000 })).rejects.toThrow('EACCES')
+      // The mock vault answers its own searches.
+      await expect(tryVaultApi('search_vault', { vaultPath: '/Users/mock', query: 'marker', limit: 2000 })).resolves.toBeUndefined()
+    })
+
     it('fails a legacy write when the server is unavailable, errs or goes away; only the mock vault falls back', async () => {
       const save = { path: '/fixture/alpha.md', content: 'new' }
       globalThis.fetch = vi.fn(async () => jsonResponse({ ok: false }, 503)) as typeof fetch

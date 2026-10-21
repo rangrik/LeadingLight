@@ -5,7 +5,10 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::manifest::{missing_capabilities, validate, Capability};
+use super::manifest::{
+    host_capabilities, missing_capabilities, missing_from, validate, Capability,
+    NATIVE_CAPABILITIES,
+};
 use super::report::Code;
 
 fn fixtures() -> PathBuf {
@@ -210,20 +213,36 @@ fn the_bundled_debrief_is_the_shared_fixture_under_a_reserved_id() {
     assert!(missing_capabilities(&manifest.capabilities).is_empty());
 }
 
+/// Adding to a page is native now. The passage and its association are host services, so on
+/// native alone commentary still needs them, and with them it needs nothing.
 #[test]
-fn commentary_is_valid_but_needs_what_this_host_cannot_do() {
+fn commentary_needs_only_the_desktop_host_services_beyond_native() {
     let manifest = validate(&fixture("passage-commentary.json")).unwrap();
     assert_eq!(
-        missing_capabilities(&manifest.capabilities),
-        [
-            Capability::SelectionRead,
-            Capability::AssociationResolve,
-            Capability::DocumentAppend
-        ]
+        missing_from(&manifest.capabilities, &NATIVE_CAPABILITIES),
+        [Capability::SelectionRead, Capability::AssociationResolve]
     );
+    assert!(missing_from(&manifest.capabilities, &Capability::ALL).is_empty());
     let observation = validate(&fixture("append-observation.json")).unwrap();
-    assert_eq!(
-        missing_capabilities(&observation.capabilities),
-        [Capability::DocumentAppend]
-    );
+    assert!(missing_capabilities(&observation.capabilities).is_empty());
+}
+
+/// This E2 build performs all five capabilities: three natively and the passage and association
+/// services in the qualified desktop host. The bundled commentary needs nothing more here.
+#[test]
+fn this_build_performs_every_capability() {
+    assert_eq!(host_capabilities(), Capability::ALL);
+    let commentary = validate(include_str!("bundled/passage-commentary.json")).unwrap();
+    assert!(missing_capabilities(&commentary.capabilities).is_empty());
+}
+
+#[test]
+fn the_bundled_commentary_is_the_shared_fixture_under_a_reserved_id() {
+    let bundled_text = include_str!("bundled/passage-commentary.json");
+    let bundled: Value = serde_json::from_str(bundled_text).unwrap();
+    let mut shared: Value = serde_json::from_str(&fixture("passage-commentary.json")).unwrap();
+    shared["id"] = Value::String("leadinglight.passage-commentary".to_string());
+    assert_eq!(bundled, shared);
+    let manifest = validate(bundled_text).unwrap();
+    assert_eq!(manifest.capabilities, Capability::ALL);
 }

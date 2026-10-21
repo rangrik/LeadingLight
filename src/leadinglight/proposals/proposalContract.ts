@@ -1,7 +1,7 @@
 // Guarded document proposals, version 1: one reviewed write per extension run.
 // A leaf beside ordinary autosave; OriginalRequest and the save DTOs are deliberately untouched.
-// Native owns the guard: run, session and handle revalidation, one page lease, no-clobber creation.
-// The first native milestone implements exclusive creation only and refuses append as `unsupported`.
+// Native owns the guard: run, session and handle revalidation, one page lease, no-clobber creation,
+// and for an append the exact reviewed baseline. Undo of a committed write is proposalUndoContract.ts.
 
 export const PROPOSAL_COMMANDS = {
   submit: 'submit_document_proposal',
@@ -40,9 +40,9 @@ export interface CreateProposal extends ProposalBase {
 }
 
 /**
- * Reserved for the commentary milestone; E1 native refuses it as `unsupported`. `content` is the
- * WHOLE reviewed postimage, built by trusted host preparation that updates the association record
- * and appends the body together; it is never a fragment for native to concatenate. Native replaces
+ * Adds to a page bound to the run (passage commentary). `content` is the WHOLE reviewed postimage,
+ * built by trusted host preparation that updates the association record and appends the body
+ * together; it is never a fragment for native to concatenate. Native replaces
  * exactly the page whose bytes hash to `expectedSha256` in one guarded write. A package's
  * `document.append` permission never lets it supply or replace page bytes itself.
  */
@@ -77,7 +77,7 @@ interface CommittedBase {
   durable: boolean
 }
 
-/** A new page. E1 promises no undo for it; a token, if native sends one, offers nothing yet. */
+/** A new page. A token, when native had an undo slot, offers moving it to Trash (proposalUndoContract.ts). */
 export interface CreatedReceipt extends CommittedBase {
   kind: 'create'
   beforeSha256: null

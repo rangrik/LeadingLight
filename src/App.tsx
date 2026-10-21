@@ -16,6 +16,7 @@ import { useSaveHoldActions } from './leadinglight/saveHold/useSaveHoldActions'
 import { requestEditorFocus } from './hooks/useEditorFocus'
 import { isPlainCaptureRequest, type ImmediateCreateOptions, type PlainCreateOutcome } from './hooks/useNoteCreation'
 import type { MutateExistingDocument, RunManualRename, RunPageExclusive } from './hooks/useAppSave'
+import type { RebaseHeldDraft } from './leadinglight/rename/managedRename'
 import { useRecentPages } from './leadinglight/useRecentPages'
 import { useTodayPage } from './leadinglight/useTodayPage'
 import { CaptureHeldError, PendingCaptureController, type DeliveredTarget } from './leadinglight/pendingCapture'
@@ -34,6 +35,9 @@ import { useTemplateUi, type TemplateBoundary } from './leadinglight/templates/u
 import { ExtensionSettings } from './leadinglight/extensions/ExtensionSettings'
 import { useExtensionUi } from './leadinglight/extensions/useExtensionUi'
 import { holdWithExtensions, useExtensions, type ExtensionBoundary } from './leadinglight/extensions/useExtensions'
+import { COMMENTARY_HOST_CAPABILITIES, commentaryServices, readCommentaryPage } from './leadinglight/commentary/CommentaryServices'
+import { useCommentaryUi } from './leadinglight/commentary/useCommentaryUi'
+import { sideBySideTooNarrow } from './leadinglight/commentary/useCommentaryPaneWidths'
 import { useAdapt } from './leadinglight/adapt/useAdapt'
 import { useAdaptUi } from './leadinglight/adapt/useAdaptUi'
 import { snapshotPage } from './leadinglight/adapt/adaptPage'
@@ -623,6 +627,11 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     }),
     [],
   )
+  // Every registered rich and raw buffer for this exact path, synchronously into the save queue.
+  const flushEditorBuffers = useCallback((path: string) => {
+    flushPendingEditorContentRef.current?.(path)
+    flushPendingRawContentRef.current?.(path)
+  }, [])
   const handleCreatedVaultEntryPersisting = useCallback((path: string) => {
     markRecentVaultWrite(path)
     vault.addPendingSave(path)
@@ -647,10 +656,29 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   })
   const runPageExclusive = useCallback<RunPageExclusive>((path, work) => appSaveBarrierRef.current.runPageExclusive(path, work), [])
   const runManualRename = useCallback<RunManualRename>((path, rename) => appSaveBarrierRef.current.withManualRename(path, rename), [])
+  // RENAME seams, the same way: until the coordinator exists a renamed page's newer text is held.
+  const appSaveRenameRef = useRef<{
+    rebaseHeldDraft: RebaseHeldDraft, holdUnproven: (path: string) => unknown, flushBuffers: (path: string) => void,
+    linkedPaths: (sourcePath: string) => readonly string[]
+  }>({
+    rebaseHeldDraft: () => 'none',
+    holdUnproven: () => 'none',
+    flushBuffers: () => {},
+    linkedPaths: () => [],
+  })
+  const rebaseHeldDraft = useCallback<RebaseHeldDraft>((path, rebase) => appSaveRenameRef.current.rebaseHeldDraft(path, rebase), [])
+  const holdUnproven = useCallback((path: string) => appSaveRenameRef.current.holdUnproven(path), [])
+  // A rename's buffer flush fails closed: a buffer that cannot be read holds its page as unknown.
+  const flushRenameBuffers = useCallback((path: string) => appSaveRenameRef.current.flushBuffers(path), [])
+  const managedRenameLinkedPaths = useCallback((sourcePath: string) => appSaveRenameRef.current.linkedPaths(sourcePath), [])
   const notes = useNoteActions({
     mutateExistingDocument,
     runPageExclusive,
     runManualRename,
+    rebaseHeldDraft,
+    holdUnproven,
+    flushEditorBuffers: flushRenameBuffers,
+    managedRenameLinkedPaths,
     addEntry: vault.addEntry,
     removeEntry: vault.removeEntry,
     entries: visibleEntries,
@@ -1000,10 +1028,6 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     setToastMessage,
   })
 
-  const flushEditorBuffers = useCallback((path: string) => {
-    flushPendingEditorContentRef.current?.(path)
-    flushPendingRawContentRef.current?.(path)
-  }, [])
   // Earlier versions warnings belong to this vault session; a committed note only raises one.
   const historyHealth = usePageHistoryHealth(resolvedPath)
   const appSave = useAppSave({
@@ -1027,7 +1051,11 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     appSaveReceiptStatusRef.current = appSave.receiptStatus
     appSaveMutateRef.current = appSave.mutateExistingDocument
     appSaveBarrierRef.current = { runPageExclusive: appSave.runPageExclusive, withManualRename: appSave.withManualRename }
-  }, [appSave.flushBeforeAction, appSave.savePendingForPath, appSave.receiptStatus, appSave.mutateExistingDocument, appSave.runPageExclusive, appSave.withManualRename])
+    appSaveRenameRef.current = {
+      rebaseHeldDraft: appSave.rebaseHeldDraft, holdUnproven: appSave.holdUnproven, flushBuffers: appSave.flushManagedRenameBuffers,
+      linkedPaths: appSave.managedRenameLinkedPaths,
+    }
+  }, [appSave.flushBeforeAction, appSave.savePendingForPath, appSave.receiptStatus, appSave.mutateExistingDocument, appSave.runPageExclusive, appSave.withManualRename, appSave.rebaseHeldDraft, appSave.holdUnproven, appSave.flushManagedRenameBuffers, appSave.managedRenameLinkedPaths])
   const { holdMutationAdmission, whenMutationsIdle, holdManualRenameAdmission, whenManualRenamesIdle } = appSave
   useLayoutEffect(() => { mutationBarrierRef.current = { hold: holdMutationAdmission, idle: whenMutationsIdle } }, [holdMutationAdmission, whenMutationsIdle])
   useLayoutEffect(() => { renameBarrierRef.current = { hold: holdManualRenameAdmission, idle: whenManualRenamesIdle } }, [holdManualRenameAdmission, whenManualRenamesIdle])
@@ -1149,6 +1177,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   // Optional local extensions: one native session per visit of this main window's vault.
   const extensions = useExtensions({
     vaultPath: resolvedPath, ready: vaultListingReady && !noteWindowParams && !aiWorkspaceWindow,
+    // Passage capture and association are this window's own services; native confirms its part.
+    hostCapabilities: COMMENTARY_HOST_CAPABILITIES,
     onUnsettled: () => setToastMessage(translate(appLocale, 'leadinglight.extensions.unsettled')),
   })
   useLayoutEffect(() => { extensionBoundaryRef.current = extensions.boundary })
@@ -1183,13 +1213,41 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       if (path) requestEditorFocus({ path })
     },
   })
+  // Passage commentary: the recipe's run through the same extension session, beside its source.
+  const commentaryUi = useCommentaryUi({
+    locale: appLocale, vaultPath: resolvedPath, extensions, services: commentaryServices, entries: visibleEntries,
+    tabs: notes.tabs, workspace: notes.splitWorkspace, settle: flushEditorStateBeforeAction, runPageExclusive,
+    read: path => readCommentaryPage(resolvedPath, path),
+    addEntry: vault.addEntry, markInternalWrite: markRecentVaultWrite, onPersisted: handleCreatedVaultEntryPersisted, notify: setToastMessage,
+    onTrashed: path => {
+      // Undo moved the note to Trash: nothing of it is saved again, and no pane keeps showing it.
+      appSave.holdWrites([path])
+      appSave.releaseHeldWrites([path], 'discard')
+      notes.splitWorkspace.closePages([path])
+      vault.removeEntries([path])
+      vault.clearUnsaved(path)
+      void refreshGitModifiedFiles()
+    },
+    canOpen: () => vaultListingReady && notes.splitWorkspace.readyForVisits && !pendingCapture.holdsWords(),
+    blocked: isClosing || workspaceTransitionPending || trash.busy || backupGuarded || !!noteWindowParams || !!aiWorkspaceWindow,
+    narrow: sideBySideTooNarrow,
+    openFinder: () => openFind(),
+  })
 
   const handleChangeWorkspace = useCallback(async (entry: VaultEntry, workspace: WorkspaceIdentity) => {
     const sourceVaultPath = vaultPathForEntry(entry, resolvedPath)
     if (sourceVaultPath === workspace.path) return
+    // A page an earlier rename left unknown is never moved: that rename may still finish.
+    const refusedUnproven = () => {
+      if (!appSave.isUnproven(entry.path)) return false
+      setToastMessage(translate(appLocale, 'leadinglight.rename.unproven'))
+      return true
+    }
+    if (refusedUnproven()) return
 
     try {
       await flushEditorStateBeforeAction(entry.path)
+      if (refusedUnproven()) return
       const result = await notes.handleMoveNoteToWorkspace(
         entry.path,
         workspace,
@@ -1218,6 +1276,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
       setToastMessage(`Failed to move note: ${String(err)}`)
     }
   }, [
+    appLocale,
     appSave,
     effectiveSelection,
     flushEditorStateBeforeAction,
@@ -1657,6 +1716,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
   const renderSaveHold = (path: string, named = false) => (
     <SaveHoldBanner key={path} view={saveHold.viewFor(path)} actions={saveHold} locale={appLocale} named={named} title={pageTitleFor(path)} />
   )
+  // Under a page's header: its save hold first, then its source card and commentary notice.
+  const renderPageNotice = (path: string) => <>{renderSaveHold(path)}{commentaryUi.renderNotice(path)}</>
   const { split: workspaceSplit, paths: panePaths, activePane } = notes.splitWorkspace
   const shownPanePaths = workspaceSplit ? panePaths : [panePaths[activePane]]
   // A page with unsaved text and no visible pane still gets its note, so nothing waits unseen.
@@ -2064,7 +2125,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     backupActions: backup.actions,
     isInputGuarded: backupInputHeld,
     // An extension dialog owns its text fields the same way: page commands pause, text undo stays native.
-    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen() || adaptUi.isOpen(),
+    isTemplateOpen: () => templateUi.boundary.isOpen() || extensionUi.isOpen() || adaptUi.isOpen() || commentaryUi.isOpen(),
     onDeleteNote: moveNoteToTrash,
     onArchiveNote: entryActions.handleArchiveNote, onUnarchiveNote: entryActions.handleUnarchiveNote,
     onCommitPush: handleCommitPush,
@@ -2143,6 +2204,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
     onRestoreDeletedNote: restoreDeletedNoteCommand,
     canRestoreDeletedNote: !!activeDeletedFile,
   })
+  // Passage commands act on the active pane's selection, so they join the palette here.
+  const paletteCommands = useMemo(() => [...commands, ...commentaryUi.paletteCommands], [commands, commentaryUi.paletteCommands])
 
   const {
     inboxCount,
@@ -2359,7 +2422,8 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
               flushPendingRawContentRef={flushPendingRawContentRef}
               blockedPaths={saveHold.blockedPaths}
               settlementRef={settlementRef}
-              renderPageNotice={renderSaveHold}
+              renderPageNotice={renderPageNotice}
+              commentary={commentaryUi}
               onOpenPageHistory={openPageHistory}
               renderPaneStatus={pageHistory.renderStatus}
               onToast={setToastMessage}
@@ -2401,7 +2465,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         />
         <CommandPalette
           open={dialogs.showCommandPalette}
-          commands={commands}
+          commands={paletteCommands}
           entries={visibleEntries}
           aiAgentReady={quickPromptTargetReady}
           aiAgentLabel={quickPromptTarget.label}
@@ -2460,6 +2524,7 @@ function MainApp({ noteWindowParams }: { noteWindowParams: NoteWindowParams | nu
         {backup.dialog}
         <TemplateDialog ui={templateUi} entries={visibleEntries} locale={appLocale} blocked={isClosing || workspaceTransitionPending || trash.busy || backupGuarded} />
         {extensionUi.dialogs}
+        {commentaryUi.dialogs}
         {adaptUi.dialog}
         {folderActions.confirmDeleteFolder && (
           <ConfirmDeleteDialog

@@ -1,17 +1,20 @@
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin } from "vite";
 import {
-	filenameRenameTitle,
-	markdownSiblingPath,
 	runVaultCommand,
-	updatePathWikilinks,
 	type VaultCommandPayload,
-	validateMarkdownFilenameStem,
 	vaultCommandContext,
 } from "./vault-api-commands.ts";
-import { pathExists, readUtf8File, writeUtf8File } from "./vault-api-data.ts";
+import { pathExists, writeUtf8File } from "./vault-api-data.ts";
+import {
+	autoRenameUntitledOnDisk,
+	moveNoteToFolderOnDisk,
+	renameNoteFilenameOnDisk,
+	renameNoteOnDisk,
+	type RenameResponse,
+} from "./vault-api-rename.ts";
 import { noteWorkspaceRoot, runDiskBackup } from "./vault-api-backup.ts";
 import { handleExtensionApiRequest, noteExtensionVault } from "./vault-api-extensions.ts";
 import { heldPathRefusal, runDiskHistory, runDiskSaveRecovery } from "./vault-api-save-recovery.ts";
@@ -44,6 +47,7 @@ const VAULT_ENDPOINT_ARG_KEYS = [
 	"mode",
 	"reload",
 	"exclude_frontmatter",
+	"limit",
 ] as const;
 
 function readVaultQueryArgs(url: URL): Record<string, unknown> {
@@ -106,77 +110,15 @@ async function createVaultContent(
 	sendJson(res, null);
 }
 
-async function renameVaultNoteTitle(
-	req: IncomingMessage,
-	res: ServerResponse,
-): Promise<void> {
-	const {
-		vault_path: vaultPath,
-		old_path: oldPath,
-		new_title: newTitle,
-	} = await readJsonBody<{
-		vault_path?: string;
-		old_path: string;
-		new_title: string;
-	}>(req);
-	if (refuseHeld(res, [oldPath])) return;
-	const oldContent = readUtf8File(oldPath);
-	const oldTitle = oldContent.match(/^# (.+)$/m)?.[1]?.trim() ?? "";
-	const slug = newTitle
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, "-")
-		.replace(/(^-|-$)/g, "");
-	const newPath = markdownSiblingPath(oldPath, slug);
-	if (!newPath) {
-		sendJson(res, { error: "Invalid title" }, 400);
-		return;
-	}
-
-	writeUtf8File(newPath, oldContent.replace(/^# .+$/m, `# ${newTitle}`));
-	if (newPath !== oldPath) unlinkSync(oldPath);
-
-	const updatedFiles = vaultPath
-		? updatePathWikilinks({ newPath, oldPath: newPath, oldTitle, vaultPath })
-		: 0;
-	sendJson(res, { new_path: newPath, updated_files: updatedFiles });
-}
-
-async function renameVaultNoteFilename(
-	req: IncomingMessage,
-	res: ServerResponse,
-): Promise<void> {
-	const {
-		vault_path: vaultPath,
-		old_path: oldPath,
-		new_filename_stem: newFilenameStem,
-	} = await readJsonBody<{
-		vault_path?: string;
-		old_path: string;
-		new_filename_stem: string;
-	}>(req);
-	if (refuseHeld(res, [oldPath])) return;
-	const filename = validateMarkdownFilenameStem(newFilenameStem);
-	if (!filename.ok) {
-		sendJson(res, { error: filename.error }, 400);
-		return;
-	}
-
-	const newPath = markdownSiblingPath(oldPath, filename.stem);
-	if (!newPath) {
-		sendJson(res, { error: "Invalid filename" }, 400);
-		return;
-	}
-	if (newPath !== oldPath && pathExists(newPath)) {
-		sendJson(res, { error: "A note with that name already exists" }, 409);
-		return;
-	}
-
-	const oldTitle = filenameRenameTitle(oldPath);
-	renameSync(oldPath, newPath);
-	const updatedFiles = vaultPath
-		? updatePathWikilinks({ newPath, oldPath, oldTitle, vaultPath })
-		: 0;
-	sendJson(res, { new_path: newPath, updated_files: updatedFiles });
+// Managed renames: exact ordinary-link transforms and native-shaped receipts.
+function renameRoute(run: (body: Record<string, unknown>) => RenameResponse): VaultRoute {
+	return {
+		write: async ({ req, res }) => {
+			const response = run(await readJsonBody<Record<string, unknown>>(req));
+			sendJson(res, response.payload, response.statusCode);
+		},
+		fallback: "Rename failed",
+	};
 }
 
 interface VaultRoute {
@@ -248,20 +190,10 @@ const VAULT_ROUTES = new Map<string, VaultRoute>([
 			fallback: "Create failed",
 		},
 	],
-	[
-		"rename",
-		{
-			write: ({ req, res }) => renameVaultNoteTitle(req, res),
-			fallback: "Rename failed",
-		},
-	],
-	[
-		"rename-filename",
-		{
-			write: ({ req, res }) => renameVaultNoteFilename(req, res),
-			fallback: "Rename failed",
-		},
-	],
+	["rename", renameRoute(renameNoteOnDisk)],
+	["rename-filename", renameRoute(renameNoteFilenameOnDisk)],
+	["move-note-to-folder", renameRoute(moveNoteToFolderOnDisk)],
+	["auto-rename-untitled", renameRoute(autoRenameUntitledOnDisk)],
 	["delete", { write: deleteVaultNote, fallback: "Delete failed" }],
 	["trash-move", { write: (request) => runTrashRoute(request, (body) => moveToTrash(body.vault_path, body.paths ?? []), true), fallback: "Trash failed" }],
 	["trash-list", { write: (request) => runTrashRoute(request, (body) => listTrash(body.vault_path)), fallback: "Trash failed" }],

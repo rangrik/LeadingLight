@@ -8,15 +8,21 @@ afterEach(() => {
 })
 
 describe('folder relocation preview boundary', () => {
-  it('refuses a disk relocation when the browser cannot provide native reference preservation', async () => {
+  it('sends a disk relocation to the dev server bridge and never falls back to memory', async () => {
     document.head.insertAdjacentHTML('beforeend', marker)
-    const fetch = vi.fn()
+    const fetch = vi.fn(async (input: RequestInfo | URL) => String(input) === '/api/vault/ping'
+      ? new Response(JSON.stringify({ ok: true }), { status: 200 })
+      : new Response(JSON.stringify({ error: 'A note with that name already exists' }), { status: 409 }))
     vi.stubGlobal('fetch', fetch)
     const { tryVaultApi } = await import('./vault-api')
     await expect(tryVaultApi('move_note_to_folder', {
-      vault_path: '/synthetic-vault', old_path: '/synthetic-vault/page.md', folder_path: 'filed',
-    })).rejects.toThrow('desktop app')
-    expect(fetch).not.toHaveBeenCalled()
+      vault_path: '/synthetic-vault', old_path: '/synthetic-vault/page.md', folder_path: 'filed', open_paths: ['/synthetic-vault/a.md'],
+    })).rejects.toThrow('already exists')
+    const [url, init] = fetch.mock.calls[1] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/vault/move-note-to-folder')
+    expect(JSON.parse(String(init.body))).toEqual({
+      vault_path: '/synthetic-vault', old_path: '/synthetic-vault/page.md', folder_path: 'filed', open_paths: ['/synthetic-vault/a.md'],
+    })
   })
 
   it('returns exact receipts for in-memory plain-page relocation, including incoming wiki links', async () => {
@@ -37,13 +43,17 @@ describe('folder relocation preview boundary', () => {
     })
   })
 
-  it('refuses unsupported memory-reference transforms before changing any page', async () => {
+  it('rebases ordinary destinations like native and refuses forms native refuses, before any change', async () => {
     const { mockHandlers } = await import('./mock-handlers')
     const root = '/Users/mock/relocation'
     const source = `${root}/draft.md`
-    const content = '![Synthetic](./photo.png)\n'
-    mockHandlers.save_note_content({ path: source, content })
-    expect(() => mockHandlers.move_note_to_folder({ vault_path: root, old_path: source, folder_path: 'filed' })).toThrow('desktop app')
-    expect(mockHandlers.get_note_content({ path: source })).toBe(content)
+    mockHandlers.save_note_content({ path: source, content: '![Synthetic](./photo.png)\n' })
+    expect(mockHandlers.move_note_to_folder({ vault_path: root, old_path: source, folder_path: 'filed' }))
+      .toMatchObject({ new_path: `${root}/filed/draft.md`, source_content: '![Synthetic](../photo.png)\n' })
+    const html = `${root}/html.md`
+    const content = "<img src='./photo.png'>\n"
+    mockHandlers.save_note_content({ path: html, content })
+    expect(() => mockHandlers.move_note_to_folder({ vault_path: root, old_path: html, folder_path: 'filed' })).toThrow('HTML link or image')
+    expect(mockHandlers.get_note_content({ path: html })).toBe(content)
   })
 })

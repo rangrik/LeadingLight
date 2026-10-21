@@ -1,9 +1,74 @@
 use crate::commands::expand_tilde;
-use crate::vault::{self, DetectedRename, FolderMoveResult, RenameResult};
+use crate::vault::{self, DetectedRename, FolderMoveResult, PageRenameReceipt, RenameResult};
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::boundary::{with_boundary, with_existing_path_in_requested_vault};
+
+/// The renderer's open pages a managed rename reports exact text for.
+const MAX_OPEN_PAGES: usize = 128;
+
+/// Marks a managed rename this worker refused before publishing its source (Amendment B1). Added
+/// inside the completed worker only, so a panic or a lost reply never carries it: the renderer then
+/// treats the outcome as unknown instead of as proof that nothing was written.
+pub(crate) const RENAME_REFUSED_PREFIX: &str = "leadinglight-rename-refused: ";
+
+/// An error is an explicit refusal only while the source is still at its old path; a failed
+/// rollback leaves it in the transaction backup, and a missing source proves nothing either.
+fn refused_before_publication<T>(old_path: &str, result: Result<T, String>) -> Result<T, String> {
+    result.map_err(|error| {
+        if Path::new(expand_tilde(old_path).as_ref()).exists() {
+            format!("{RENAME_REFUSED_PREFIX}{error}")
+        } else {
+            error
+        }
+    })
+}
+
+/// Open pages inside the one requested vault, each identity once. A page removed outside the
+/// app cannot be refreshed, so it is reported back as unrefreshed instead of refusing the rename.
+#[derive(Default)]
+struct OpenPages {
+    existing: Vec<PathBuf>,
+    missing: Vec<String>,
+}
+
+impl OpenPages {
+    fn validate(vault_path: &str, raw_paths: &[String]) -> Result<Self, String> {
+        if raw_paths.len() > MAX_OPEN_PAGES {
+            return Err("Too many open pages to safely rename a page".to_string());
+        }
+        // One strict requested boundary: do not fall back to another registered vault.
+        with_boundary(Some(vault_path), |boundary| {
+            let mut seen = std::collections::HashSet::new();
+            let mut pages = Self::default();
+            for raw in raw_paths {
+                match boundary.validate_existing_paths(std::slice::from_ref(raw)) {
+                    Ok(mut validated) => {
+                        let path = PathBuf::from(validated.remove(0));
+                        let identity = path.canonicalize().map_err(|e| e.to_string())?;
+                        if seen.insert(identity) {
+                            pages.existing.push(path);
+                        }
+                    }
+                    Err(error) if error.starts_with("ENOENT") => {
+                        if !pages.missing.contains(raw) {
+                            pages.missing.push(raw.clone());
+                        }
+                    }
+                    Err(error) => return Err(error),
+                }
+            }
+            Ok(pages)
+        })
+    }
+
+    fn account(self, mut receipt: PageRenameReceipt) -> PageRenameReceipt {
+        receipt.unrefreshed_open_paths.extend(self.missing);
+        receipt.unrefreshed_open_paths.sort();
+        receipt
+    }
+}
 
 struct RequestedNotePath<'a> {
     vault_path: &'a str,
@@ -57,6 +122,8 @@ pub struct RenameNoteCommandArgs {
     old_path: String,
     new_title: String,
     old_title: Option<String>,
+    #[serde(default)]
+    open_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,6 +132,8 @@ pub struct RenameNoteFilenameCommandArgs {
     vault_path: String,
     old_path: String,
     new_filename_stem: String,
+    #[serde(default)]
+    open_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,6 +151,8 @@ pub struct MoveNoteToFolderCommandArgs {
 pub struct AutoRenameUntitledCommandArgs {
     vault_path: String,
     note_path: String,
+    #[serde(default)]
+    open_paths: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -108,24 +179,32 @@ enum NoteRenameCommandArgs {
 }
 
 impl NoteRenameCommandArgs {
-    fn run(self, note: ValidatedNotePath<'_>) -> Result<RenameResult, String> {
+    fn run(
+        self,
+        note: ValidatedNotePath<'_>,
+        open_paths: &[PathBuf],
+    ) -> Result<PageRenameReceipt, String> {
         match self {
             Self::Title {
                 new_title,
                 old_title,
-            } => vault::rename_note(vault::RenameNoteRequest {
-                vault_path: note.vault_path,
-                old_path: note.note_path,
-                new_title: &new_title,
-                old_title_hint: old_title.as_deref(),
-            }),
-            Self::Filename { new_filename_stem } => {
-                vault::rename_note_filename(vault::RenameNoteFilenameRequest {
+            } => vault::rename_note_with_open_pages(
+                vault::RenameNoteRequest {
+                    vault_path: note.vault_path,
+                    old_path: note.note_path,
+                    new_title: &new_title,
+                    old_title_hint: old_title.as_deref(),
+                },
+                open_paths,
+            ),
+            Self::Filename { new_filename_stem } => vault::rename_note_filename_with_open_pages(
+                vault::RenameNoteFilenameRequest {
                     vault_path: note.vault_path,
                     old_path: note.note_path,
                     new_filename_stem: &new_filename_stem,
-                })
-            }
+                },
+                open_paths,
+            ),
         }
     }
 }
@@ -133,6 +212,7 @@ impl NoteRenameCommandArgs {
 struct PendingNoteRenameCommand {
     vault_path: String,
     old_path: String,
+    open_paths: Vec<String>,
     args: NoteRenameCommandArgs,
 }
 
@@ -144,25 +224,35 @@ enum PublicNoteRenameCommandArgs {
 fn pending_note_rename(
     vault_path: String,
     old_path: String,
+    open_paths: Vec<String>,
     args: NoteRenameCommandArgs,
 ) -> PendingNoteRenameCommand {
     PendingNoteRenameCommand {
         vault_path,
         old_path,
+        open_paths,
         args,
     }
 }
 
-fn rename_existing_note(command: PendingNoteRenameCommand) -> Result<RenameResult, String> {
+fn rename_existing_note(command: PendingNoteRenameCommand) -> Result<PageRenameReceipt, String> {
+    if command.open_paths.len() > MAX_OPEN_PAGES {
+        return Err("Too many open pages to safely rename a page".to_string());
+    }
     let request = RequestedNotePath::new(&command.vault_path, &command.old_path);
-    with_note_path_in_vault(request, |note| command.args.run(note))
+    with_note_path_in_vault(request, |note| {
+        let open = OpenPages::validate(note.vault_path, &command.open_paths)?;
+        let receipt = command.args.run(note, &open.existing)?;
+        Ok(open.account(receipt))
+    })
 }
 
-fn rename_public_note(args: PublicNoteRenameCommandArgs) -> Result<RenameResult, String> {
+fn rename_public_note(args: PublicNoteRenameCommandArgs) -> Result<PageRenameReceipt, String> {
     let command = match args {
         PublicNoteRenameCommandArgs::Title(args) => pending_note_rename(
             args.vault_path,
             args.old_path,
+            args.open_paths,
             NoteRenameCommandArgs::Title {
                 new_title: args.new_title,
                 old_title: args.old_title,
@@ -171,6 +261,7 @@ fn rename_public_note(args: PublicNoteRenameCommandArgs) -> Result<RenameResult,
         PublicNoteRenameCommandArgs::Filename(args) => pending_note_rename(
             args.vault_path,
             args.old_path,
+            args.open_paths,
             NoteRenameCommandArgs::Filename {
                 new_filename_stem: args.new_filename_stem,
             },
@@ -179,30 +270,40 @@ fn rename_public_note(args: PublicNoteRenameCommandArgs) -> Result<RenameResult,
     rename_existing_note(command)
 }
 
-pub(crate) fn rename_note_blocking(args: RenameNoteCommandArgs) -> Result<RenameResult, String> {
+pub(crate) fn rename_note_blocking(
+    args: RenameNoteCommandArgs,
+) -> Result<PageRenameReceipt, String> {
     rename_public_note(PublicNoteRenameCommandArgs::Title(args))
 }
 
 #[tauri::command]
-pub async fn rename_note(args: RenameNoteCommandArgs) -> Result<RenameResult, String> {
-    super::off_main_thread(move || rename_note_blocking(args)).await
+pub async fn rename_note(args: RenameNoteCommandArgs) -> Result<PageRenameReceipt, String> {
+    let old_path = args.old_path.clone();
+    super::off_main_thread(move || {
+        refused_before_publication(&old_path, rename_note_blocking(args))
+    })
+    .await
 }
 
 pub(crate) fn rename_note_filename_blocking(
     args: RenameNoteFilenameCommandArgs,
-) -> Result<RenameResult, String> {
+) -> Result<PageRenameReceipt, String> {
     rename_public_note(PublicNoteRenameCommandArgs::Filename(args))
 }
 
 #[tauri::command]
 pub async fn rename_note_filename(
     args: RenameNoteFilenameCommandArgs,
-) -> Result<RenameResult, String> {
-    super::off_main_thread(move || rename_note_filename_blocking(args)).await
+) -> Result<PageRenameReceipt, String> {
+    let old_path = args.old_path.clone();
+    super::off_main_thread(move || {
+        refused_before_publication(&old_path, rename_note_filename_blocking(args))
+    })
+    .await
 }
 
 fn run_folder_move(args: MoveNoteToFolderCommandArgs) -> Result<FolderMoveResult, String> {
-    if args.open_paths.len() > 128 {
+    if args.open_paths.len() > MAX_OPEN_PAGES {
         return Err("Too many open pages to safely move a page".to_string());
     }
     // One strict requested boundary: do not fall back to another registered vault.
@@ -210,15 +311,10 @@ fn run_folder_move(args: MoveNoteToFolderCommandArgs) -> Result<FolderMoveResult
         let source = boundary
             .validate_existing_paths(std::slice::from_ref(&args.old_path))?
             .remove(0);
-        let mut seen = std::collections::HashSet::new();
-        let mut open_paths = Vec::new();
-        for validated in boundary.validate_existing_paths(&args.open_paths)? {
-            let path = std::path::PathBuf::from(validated);
-            let identity = path.canonicalize().map_err(|e| e.to_string())?;
-            if seen.insert(identity) {
-                open_paths.push(path);
-            }
-        }
+        let open = OpenPages::validate(
+            &boundary.requested_root().to_string_lossy(),
+            &args.open_paths,
+        )?;
         let folder = args.folder_path.trim();
         let destination = if folder.is_empty() {
             boundary.requested_root().to_path_buf()
@@ -229,14 +325,15 @@ fn run_folder_move(args: MoveNoteToFolderCommandArgs) -> Result<FolderMoveResult
             return Err(format!("Folder does not exist: {}", folder));
         }
         let _lease = crate::leadinglight_history::lease(&[Path::new(&source)])?;
-        vault::move_note_to_folder_with_open_pages(
+        let receipt = vault::move_note_to_folder_with_open_pages(
             vault::MoveNoteToFolderRequest {
                 vault_path: &boundary.requested_root().to_string_lossy(),
                 old_path: &source,
                 destination_folder_path: &destination.to_string_lossy(),
             },
-            &open_paths,
-        )
+            &open.existing,
+        )?;
+        Ok(open.account(receipt))
     })
 }
 
@@ -286,16 +383,24 @@ pub fn move_note_to_workspace(
 
 pub(crate) fn auto_rename_untitled_blocking(
     args: AutoRenameUntitledCommandArgs,
-) -> Result<Option<RenameResult>, String> {
+) -> Result<Option<PageRenameReceipt>, String> {
+    if args.open_paths.len() > MAX_OPEN_PAGES {
+        return Err("Too many open pages to safely rename a page".to_string());
+    }
     with_existing_path_in_requested_vault(
         &args.vault_path,
         &args.note_path,
         |requested_root, validated_path| {
             let _lease = crate::leadinglight_history::lease(&[validated_path])?;
-            vault::auto_rename_untitled(vault::AutoRenameUntitledRequest {
-                vault_path: requested_root,
-                note_path: validated_path,
-            })
+            let open = OpenPages::validate(requested_root, &args.open_paths)?;
+            let receipt = vault::auto_rename_untitled_with_open_pages(
+                vault::AutoRenameUntitledRequest {
+                    vault_path: requested_root,
+                    note_path: validated_path,
+                },
+                &open.existing,
+            )?;
+            Ok(receipt.map(|receipt| open.account(receipt)))
         },
     )
 }
@@ -303,8 +408,12 @@ pub(crate) fn auto_rename_untitled_blocking(
 #[tauri::command]
 pub async fn auto_rename_untitled(
     args: AutoRenameUntitledCommandArgs,
-) -> Result<Option<RenameResult>, String> {
-    super::off_main_thread(move || auto_rename_untitled_blocking(args)).await
+) -> Result<Option<PageRenameReceipt>, String> {
+    let note_path = args.note_path.clone();
+    super::off_main_thread(move || {
+        refused_before_publication(&note_path, auto_rename_untitled_blocking(args))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -365,6 +474,7 @@ mod tests {
             old_path: old_path.clone(),
             new_title: "New Title".to_string(),
             old_title: None,
+            open_paths: Vec::new(),
         })
         .await
         .unwrap();
@@ -392,6 +502,7 @@ mod tests {
             vault_path: vault.clone(),
             old_path,
             new_filename_stem: "custom-name".to_string(),
+            open_paths: Vec::new(),
         })
         .await
         .unwrap();
@@ -454,6 +565,7 @@ mod tests {
         let auto = auto_rename_untitled(AutoRenameUntitledCommandArgs {
             vault_path: vault.clone(),
             note_path: untitled,
+            open_paths: Vec::new(),
         })
         .await
         .unwrap()
@@ -527,5 +639,104 @@ mod tests {
         assert!(result.new_path.ends_with("note.md"));
         assert!(dir.path().join("note.md").exists());
         assert!(!dir.path().join("projects/note.md").exists());
+    }
+
+    #[tokio::test]
+    async fn leadinglight_rename_commands_return_receipts_for_open_pages() {
+        let dir = TempDir::new().unwrap();
+        let vault = vault_path(&dir);
+        let source = write_note(&dir, "Topics/plan.md", "# Plan\n");
+        let open = write_note(&dir, "Notes/commentary.md", "[Source](../Topics/plan.md)\n");
+        let gone = dir
+            .path()
+            .join("Notes/closed-elsewhere.md")
+            .to_string_lossy()
+            .into_owned();
+
+        let receipt = rename_note_filename(RenameNoteFilenameCommandArgs {
+            vault_path: vault.clone(),
+            old_path: source,
+            new_filename_stem: "goals".to_string(),
+            open_paths: vec![open.clone(), open.clone(), gone.clone()],
+        })
+        .await
+        .unwrap();
+
+        assert!(receipt.new_path.ends_with("Topics/goals.md"));
+        assert_eq!(receipt.updated_open_pages.len(), 1);
+        assert_eq!(receipt.updated_open_pages[0].path, open);
+        assert_eq!(
+            receipt.updated_open_pages[0].content,
+            "[Source](../Topics/goals.md)\n"
+        );
+        // A page removed outside the app is accounted for, not a reason to refuse.
+        assert_eq!(receipt.unrefreshed_open_paths, vec![gone]);
+
+        let auto_source = write_note(&dir, "untitled-note-42.md", "# Harbor\n");
+        let auto_open = write_note(&dir, "Notes/auto.md", "[Source](../untitled-note-42.md)\n");
+        let auto = auto_rename_untitled(AutoRenameUntitledCommandArgs {
+            vault_path: vault,
+            note_path: auto_source,
+            open_paths: vec![auto_open.clone()],
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(auto.new_path.ends_with("harbor.md"));
+        assert_eq!(auto.updated_open_pages[0].path, auto_open);
+    }
+
+    #[tokio::test]
+    async fn leadinglight_rename_refuses_open_pages_outside_the_vault_before_any_change() {
+        let dir = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
+        let source = write_note(&dir, "plan.md", "# Plan\n");
+        let other = write_note(&outside, "other.md", "# Synthetic outside\n");
+
+        let result = rename_note(RenameNoteCommandArgs {
+            vault_path: vault_path(&dir),
+            old_path: source.clone(),
+            new_title: "Goals".to_string(),
+            old_title: None,
+            open_paths: vec![other],
+        })
+        .await;
+
+        assert!(result.is_err());
+        assert_eq!(fs::read_to_string(source).unwrap(), "# Plan\n");
+        assert!(!dir.path().join("goals.md").exists());
+    }
+
+    #[tokio::test]
+    async fn leadinglight_managed_rename_refusals_are_explicit_only_while_the_source_is_in_place() {
+        let dir = TempDir::new().unwrap();
+        let vault = vault_path(&dir);
+        let source = write_note(&dir, "plan.md", "# Plan\n");
+        write_note(&dir, "goals.md", "# Goals\n");
+
+        let taken = rename_note_filename(RenameNoteFilenameCommandArgs {
+            vault_path: vault.clone(),
+            old_path: source.clone(),
+            new_filename_stem: "goals".to_string(),
+            open_paths: Vec::new(),
+        })
+        .await
+        .unwrap_err();
+        assert_eq!(
+            taken,
+            format!("{RENAME_REFUSED_PREFIX}A note with that name already exists")
+        );
+        assert_eq!(fs::read_to_string(&source).unwrap(), "# Plan\n");
+
+        let missing = rename_note(RenameNoteCommandArgs {
+            vault_path: vault,
+            old_path: dir.path().join("gone.md").to_string_lossy().into_owned(),
+            new_title: "Gone".to_string(),
+            old_title: None,
+            open_paths: Vec::new(),
+        })
+        .await
+        .unwrap_err();
+        assert!(!missing.starts_with(RENAME_REFUSED_PREFIX), "{missing}");
     }
 }

@@ -4,15 +4,17 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use walkdir::WalkDir;
 
 use super::filename_rules::validate_filename_stem;
 use super::path_identity::vault_relative_markdown_stem;
 use super::rename_transaction::RenameWorkspace;
+use super::staged_file;
 use crate::frontmatter::favorite::STAGING_PREFIX;
 use crate::frontmatter::{extract_frontmatter_title, update_frontmatter_content, FrontmatterValue};
+use crate::leadinglight_relocation_links::{may_name_target, rebase_outgoing, retarget_incoming};
 
 /// Result of a rename operation
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,7 +27,7 @@ pub struct RenameResult {
     pub failed_updates: usize,
 }
 
-/// Exact local bytes committed by a folder move, bounded to pages the caller has open.
+/// Exact local bytes committed by a managed rename, bounded to pages the caller has open.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MovedOpenPage {
     pub path: String,
@@ -33,16 +35,37 @@ pub struct MovedOpenPage {
     pub content: String,
 }
 
+/// What one managed filename, title, automatic or folder rename committed.
+///
+/// Once the page itself has moved this is always returned: linked pages that could not be
+/// brought along are counted, never turned into an error that invites a second rename.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct FolderMoveResult {
+pub struct PageRenameReceipt {
     pub new_path: String,
     pub updated_files: usize,
+    /// Pages that may still name the old file, including the page itself.
     pub failed_updates: usize,
     pub source_before_content: String,
     pub source_content: String,
     pub updated_open_pages: Vec<MovedOpenPage>,
     /// A failed rewrite cannot authorize a stale live editor to resume writing.
     pub unrefreshed_open_paths: Vec<String>,
+}
+
+pub type FolderMoveResult = PageRenameReceipt;
+
+impl PageRenameReceipt {
+    fn at(path: &Path, before: String, content: String) -> Self {
+        Self {
+            new_path: path.to_string_lossy().into_owned(),
+            updated_files: 0,
+            failed_updates: 0,
+            source_before_content: before,
+            source_content: content,
+            updated_open_pages: Vec::new(),
+            unrefreshed_open_paths: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -213,6 +236,9 @@ thread_local! {
     /// Test seam: runs after a linked page is read and before it is written back.
     static AFTER_LINKED_READ: std::cell::RefCell<Option<LinkedReadHook>> =
         const { std::cell::RefCell::new(None) };
+    /// Test seam: runs after the renamed page is staged and before its exact recheck.
+    static BEFORE_SOURCE_RECHECK: std::cell::RefCell<Option<LinkedReadHook>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 fn rewrite_wikilinks_in_file(path: &Path, re: &Regex, replacement: &str) -> Result<bool, String> {
@@ -270,15 +296,86 @@ fn persist_staged_note(staged: NamedTempFile, target_path: &Path) -> Result<(), 
         .map_err(|e| format!("Failed to replace {}: {}", target_path.display(), e.error))
 }
 
-fn finalize_rename(vault: &Path, old_targets: &[&str], new_file: &Path) -> RenameResult {
-    let new_path = new_file.to_string_lossy().to_string();
-    let new_path_stem = to_path_stem(new_file, vault);
-    let summary = update_wikilinks_in_vault(vault, old_targets, &new_path_stem, new_file);
-    RenameResult {
-        new_path,
-        updated_files: summary.updated_files,
-        failed_updates: summary.failed_updates,
+/// The page being renamed, as read under the caller's lease.
+struct SourcePage {
+    original: staged_file::Original,
+    content: String,
+    /// Symlinked or hard-linked pages keep the legacy rename without an exact recheck.
+    plain: bool,
+}
+
+impl SourcePage {
+    fn read(path: &Path) -> Result<Self, String> {
+        let plain = staged_file::plain_file(path).is_ok();
+        let unreadable =
+            |e: &dyn std::fmt::Display| format!("Failed to read {}: {}", path.display(), e);
+        let original = staged_file::Original::read(path).map_err(|e| unreadable(&e))?;
+        let content = String::from_utf8(original.bytes.clone()).map_err(|e| unreadable(&e))?;
+        Ok(Self {
+            original,
+            content,
+            plain,
+        })
     }
+
+    /// Immediately before publication: the plain page still holds exactly what was read.
+    fn recheck(&self) -> Result<(), String> {
+        #[cfg(test)]
+        BEFORE_SOURCE_RECHECK.with_borrow(|hook| {
+            if let Some(hook) = hook {
+                hook(&self.original.path);
+            }
+        });
+        if !self.plain {
+            return Ok(());
+        }
+        self.original
+            .recheck_exact()
+            .map_err(|_| "The page changed before it could be renamed".to_string())
+    }
+}
+
+/// A rename within one folder keeps every relative destination; only explicit self-links
+/// change. A page the exact parser refuses keeps its bytes, and is reported only when it
+/// may still name itself.
+fn rebase_in_place(
+    content: &str,
+    vault: &Path,
+    old_file: &Path,
+    new_file: &Path,
+) -> (String, bool) {
+    match rebase_outgoing(content, vault, old_file, new_file) {
+        Ok(rebased) => (rebased, false),
+        Err(_) => (content.to_owned(), may_name_target(content, old_file)),
+    }
+}
+
+/// The committed source rename, then every linked page, accounted in one receipt.
+struct CommittedSource<'a> {
+    vault: &'a Path,
+    old_file: &'a Path,
+    new_file: &'a Path,
+    before: String,
+    content: String,
+    self_links_unverified: bool,
+}
+
+fn finish_rename(
+    source: CommittedSource<'_>,
+    old_targets: &[&str],
+    open_paths: &[PathBuf],
+) -> PageRenameReceipt {
+    let mut receipt = PageRenameReceipt::at(source.new_file, source.before, source.content);
+    receipt.failed_updates = usize::from(source.self_links_unverified);
+    let retarget = LinkRetarget {
+        vault: source.vault,
+        old_file: source.old_file,
+        new_file: source.new_file,
+        wikilinks: build_wikilink_pattern(old_targets),
+        new_target: to_path_stem(source.new_file, source.vault),
+    };
+    retarget_linked_pages(&retarget, open_paths, &mut receipt);
+    receipt
 }
 
 fn create_new_note_file(path: &Path, content: &str) -> Result<(), String> {
@@ -318,12 +415,6 @@ fn normalize_filename_stem(new_filename_stem: &str) -> Result<String, String> {
     Ok(stem.to_string())
 }
 
-struct LoadedNote {
-    content: String,
-    filename: String,
-    title: String,
-}
-
 fn unchanged_result(path: &Path) -> RenameResult {
     RenameResult {
         new_path: path.to_string_lossy().to_string(),
@@ -347,90 +438,121 @@ fn ensure_existing_note(old_file: &Path) -> Result<(), String> {
     Err(format!("File does not exist: {}", old_file.display()))
 }
 
-fn load_note_for_title_rename(
-    old_file: &Path,
-    old_title_hint: Option<&str>,
-) -> Result<LoadedNote, String> {
-    let content = fs::read_to_string(old_file)
-        .map_err(|e| format!("Failed to read {}: {}", old_file.display(), e))?;
-    let filename = old_file
-        .file_name()
+fn page_filename(path: &Path) -> String {
+    path.file_name()
         .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let fm_title = extract_frontmatter_title(&content);
-    let extracted_title = super::extract_title(fm_title.as_deref(), &content, &filename);
-
-    Ok(LoadedNote {
-        content,
-        filename,
-        title: old_title_hint.unwrap_or(&extracted_title).to_string(),
-    })
+        .unwrap_or_default()
 }
 
-fn persist_title_only_update(
-    workspace: &RenameWorkspace,
-    old_file: &Path,
-    updated_content: &str,
-) -> Result<RenameResult, String> {
-    persist_staged_note(workspace.stage_note_content(updated_content)?, old_file)?;
-    Ok(unchanged_result(old_file))
+fn page_title(content: &str, filename: &str) -> String {
+    let fm_title = extract_frontmatter_title(content);
+    super::extract_title(fm_title.as_deref(), content, filename)
 }
 
-/// Rename a note: update its frontmatter title, rename the file, and update wiki links across the vault.
+/// Rename a note: update its frontmatter title, rename the file, and update links across the vault.
 ///
 /// When `old_title_hint` is provided it is used instead of extracting the title from
 /// the file's frontmatter/filename.  This is needed when the caller has already saved
 /// updated content to disk before triggering the rename.
-pub fn rename_note(request: RenameNoteRequest<'_>) -> Result<RenameResult, String> {
+pub fn rename_note(request: RenameNoteRequest<'_>) -> Result<PageRenameReceipt, String> {
+    rename_note_with_open_pages(request, &[])
+}
+
+/// `rename_note` with exact before/after text for the caller's open pages.
+/// Command callers hold the source lease before this authoritative read.
+pub fn rename_note_with_open_pages(
+    request: RenameNoteRequest<'_>,
+    open_paths: &[PathBuf],
+) -> Result<PageRenameReceipt, String> {
     let vault = Path::new(request.vault_path);
     let old_file = Path::new(request.old_path);
 
     recover_pending_rename_transactions(vault)?;
     ensure_existing_note(old_file)?;
     let new_title = validate_new_title(request.new_title)?;
-    let loaded = load_note_for_title_rename(old_file, request.old_title_hint)?;
+    let source = SourcePage::read(old_file)?;
+    let filename = page_filename(old_file);
+    let old_title = request
+        .old_title_hint
+        .map(str::to_string)
+        .unwrap_or_else(|| page_title(&source.content, &filename));
 
     // Check both title and filename: even if the title in content matches,
     // the filename may still be stale (e.g. "untitled-note.md" after user changed H1).
     let expected_filename = format!("{}.md", title_to_slug(new_title));
-    let title_unchanged = loaded.title == new_title;
-    let filename_matches = loaded.filename == expected_filename;
+    let title_unchanged = old_title == new_title;
+    let filename_matches = filename == expected_filename;
 
     if title_unchanged && filename_matches {
-        return Ok(unchanged_result(old_file));
+        let content = source.content.clone();
+        return Ok(PageRenameReceipt::at(old_file, source.content, content));
     }
 
     // Update content only if the title actually changed
     let updated_content = if title_unchanged {
-        loaded.content.clone()
+        source.content.clone()
     } else {
-        update_note_title_in_content(&loaded.content, new_title)
+        update_note_title_in_content(&source.content, new_title)
     };
     let workspace = RenameWorkspace::new(vault)?;
 
     if filename_matches {
-        return persist_title_only_update(&workspace, old_file, &updated_content);
+        let staged = workspace.stage_note_content(&updated_content)?;
+        source.recheck()?;
+        persist_staged_note(staged, old_file)?;
+        return Ok(PageRenameReceipt::at(
+            old_file,
+            source.content,
+            updated_content,
+        ));
     }
 
     let parent_dir = old_file
         .parent()
         .ok_or("Cannot determine parent directory")?;
-    let committed = workspace
+    let mut self_links_unverified = false;
+    let (committed, content) = workspace
         .operation(request.old_path, old_file)
-        .rename_with_candidates(
-            workspace.stage_note_content(&updated_content)?,
+        .rename_with_prepared_candidates(
             &expected_filename,
             parent_dir,
+            |candidate| {
+                let (content, unverified) =
+                    rebase_in_place(&updated_content, vault, old_file, candidate);
+                self_links_unverified = unverified;
+                Ok(content)
+            },
+            || source.recheck(),
         )?;
     let old_path_stem = to_path_stem(old_file, vault);
-    let old_targets = collect_legacy_wikilink_targets(&loaded.title, &old_path_stem);
-    Ok(finalize_rename(vault, &old_targets, committed.new_file()))
+    let old_targets = collect_legacy_wikilink_targets(&old_title, &old_path_stem);
+    Ok(finish_rename(
+        CommittedSource {
+            vault,
+            old_file,
+            new_file: committed.new_file(),
+            before: source.content,
+            content,
+            self_links_unverified,
+        },
+        &old_targets,
+        open_paths,
+    ))
 }
 
 /// Rename only the file path stem while preserving title/frontmatter content.
 pub fn rename_note_filename(
     request: RenameNoteFilenameRequest<'_>,
-) -> Result<RenameResult, String> {
+) -> Result<PageRenameReceipt, String> {
+    rename_note_filename_with_open_pages(request, &[])
+}
+
+/// `rename_note_filename` with exact before/after text for the caller's open pages.
+/// Command callers hold the source lease before this authoritative read.
+pub fn rename_note_filename_with_open_pages(
+    request: RenameNoteFilenameRequest<'_>,
+    open_paths: &[PathBuf],
+) -> Result<PageRenameReceipt, String> {
     let vault = Path::new(request.vault_path);
     let old_file = Path::new(request.old_path);
 
@@ -441,32 +563,43 @@ pub fn rename_note_filename(
     }
 
     let normalized_stem = normalize_filename_stem(request.new_filename_stem)?;
-    let old_filename = old_file
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let content = fs::read_to_string(old_file)
-        .map_err(|e| format!("Failed to read {}: {}", request.old_path, e))?;
-    let fm_title = extract_frontmatter_title(&content);
-    let old_title = super::extract_title(fm_title.as_deref(), &content, &old_filename);
+    let old_filename = page_filename(old_file);
+    let source = SourcePage::read(old_file)?;
+    let old_title = page_title(&source.content, &old_filename);
     let new_filename = format!("{}.md", normalized_stem);
 
     if old_filename == new_filename {
-        return Ok(unchanged_result(old_file));
+        let content = source.content.clone();
+        return Ok(PageRenameReceipt::at(old_file, source.content, content));
     }
 
     let parent_dir = old_file
         .parent()
         .ok_or("Cannot determine parent directory")?;
     let new_file = parent_dir.join(&new_filename);
+    let (content, self_links_unverified) =
+        rebase_in_place(&source.content, vault, old_file, &new_file);
     let workspace = RenameWorkspace::new(vault)?;
+    let staged = workspace.stage_note_content(&content)?;
+    // Checked inside the transaction, after its manifest and immediately before the source moves.
     let committed = workspace
         .operation(request.old_path, old_file)
-        .rename_exact(workspace.stage_note_content(&content)?, &new_file)?;
+        .rename_exact(staged, &new_file, || source.recheck())?;
 
     let old_path_stem = to_path_stem(old_file, vault);
     let old_targets = collect_legacy_wikilink_targets(&old_title, &old_path_stem);
-    Ok(finalize_rename(vault, &old_targets, committed.new_file()))
+    Ok(finish_rename(
+        CommittedSource {
+            vault,
+            old_file,
+            new_file: committed.new_file(),
+            before: source.content,
+            content,
+            self_links_unverified,
+        },
+        &old_targets,
+        open_paths,
+    ))
 }
 
 /// Compatibility entry point for callers that do not keep live editor snapshots.
@@ -483,7 +616,7 @@ pub fn move_note_to_folder(request: MoveNoteToFolderRequest<'_>) -> Result<Renam
 /// Command callers hold the source lease before this authoritative read.
 pub fn move_note_to_folder_with_open_pages(
     request: MoveNoteToFolderRequest<'_>,
-    open_paths: &[std::path::PathBuf],
+    open_paths: &[PathBuf],
 ) -> Result<FolderMoveResult, String> {
     let vault = Path::new(request.vault_path);
     let old_file = Path::new(request.old_path);
@@ -496,55 +629,66 @@ pub fn move_note_to_folder_with_open_pages(
             request.destination_folder_path
         ));
     }
-    super::staged_file::plain_file(old_file)
+    staged_file::plain_file(old_file)
         .map_err(|_| "The page must be a regular, unlinked file before moving".to_string())?;
-    let original = super::staged_file::Original::read(old_file).map_err(|e| e.to_string())?;
+    let original = staged_file::Original::read(old_file).map_err(|e| e.to_string())?;
     let content = String::from_utf8(original.bytes.clone()).map_err(|e| e.to_string())?;
     let old_filename = old_file.file_name().ok_or("The page has no filename")?;
     let new_file = destination_dir.join(old_filename);
-    let mut result = FolderMoveResult {
-        new_path: new_file.to_string_lossy().into_owned(),
-        updated_files: 0,
-        failed_updates: 0,
-        source_before_content: content.clone(),
-        source_content: content.clone(),
-        updated_open_pages: Vec::new(),
-        unrefreshed_open_paths: Vec::new(),
-    };
     if new_file == old_file {
-        return Ok(result);
+        return Ok(PageRenameReceipt::at(&new_file, content.clone(), content));
     }
     // Any unsupported source form refuses before the original path is changed.
-    let rebased = crate::leadinglight_relocation_links::rebase_outgoing(
-        &content, vault, old_file, &new_file,
-    )?;
-    let fm_title = extract_frontmatter_title(&content);
-    let old_title = super::extract_title(
-        fm_title.as_deref(),
-        &content,
-        &old_filename.to_string_lossy(),
-    );
+    let rebased = rebase_outgoing(&content, vault, old_file, &new_file)?;
+    let old_title = page_title(&content, &old_filename.to_string_lossy());
     let workspace = RenameWorkspace::new(vault)?;
     let staged = workspace.stage_note_content(&rebased)?;
-    original
-        .recheck_exact()
-        .map_err(|_| "The page changed before it could be moved".to_string())?;
     let committed = workspace
         .operation(request.old_path, old_file)
-        .rename_exact(staged, &new_file)?;
-    result.source_content = rebased;
+        .rename_exact(staged, &new_file, || {
+            original
+                .recheck_exact()
+                .map_err(|_| "The page changed before it could be moved".to_string())
+        })?;
     let old_path_stem = to_path_stem(old_file, vault);
     let old_targets = collect_legacy_wikilink_targets(&old_title, &old_path_stem);
-    let pattern = build_wikilink_pattern(&old_targets);
-    let new_target = to_path_stem(committed.new_file(), vault);
-    // Every requested page must be accounted for, including a failed or skipped walk entry.
-    let mut unchecked: HashSet<std::path::PathBuf> = open_paths
+    Ok(finish_rename(
+        CommittedSource {
+            vault,
+            old_file,
+            new_file: committed.new_file(),
+            before: content,
+            content: rebased,
+            self_links_unverified: false,
+        },
+        &old_targets,
+        open_paths,
+    ))
+}
+
+/// One committed rename, as every linked page sees it.
+struct LinkRetarget<'a> {
+    vault: &'a Path,
+    old_file: &'a Path,
+    new_file: &'a Path,
+    wikilinks: Option<Regex>,
+    new_target: String,
+}
+
+/// Rewrites every Markdown page that links to the old file, each under its own lease.
+/// Every requested open page is accounted for, including a failed or skipped walk entry.
+fn retarget_linked_pages(
+    retarget: &LinkRetarget<'_>,
+    open_paths: &[PathBuf],
+    receipt: &mut PageRenameReceipt,
+) {
+    let mut unchecked: HashSet<PathBuf> = open_paths
         .iter()
-        .filter(|path| path.as_path() != old_file && path.as_path() != new_file)
+        .filter(|path| path.as_path() != retarget.old_file && path.as_path() != retarget.new_file)
         .cloned()
         .collect();
-    // Unlike the legacy walker, folder relocation never follows a link outside the vault.
-    for entry in WalkDir::new(vault)
+    // Unlike the legacy walker, a managed rename never follows a link outside the vault.
+    for entry in WalkDir::new(retarget.vault)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| e.depth() == 0 || !e.file_name().to_string_lossy().starts_with('.'))
@@ -552,91 +696,100 @@ pub fn move_note_to_folder_with_open_pages(
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => {
-                result.failed_updates += 1;
+                receipt.failed_updates += 1;
                 continue;
             }
         };
         let path = entry.path();
-        if !entry.file_type().is_file() || !is_replaceable_md_file(path, &new_file) {
+        if !entry.file_type().is_file() || !is_replaceable_md_file(path, retarget.new_file) {
             continue;
         }
         let requested = unchecked.remove(path);
-        match rewrite_relocated_reference(
-            path,
-            vault,
-            old_file,
-            &new_file,
-            pattern.as_ref(),
-            &new_target,
-        ) {
-            Ok(Some(page)) => {
-                result.updated_files += 1;
-                if requested {
-                    result.updated_open_pages.push(page);
+        match rewrite_relocated_reference(path, retarget) {
+            Ok(rewrite) => {
+                receipt.failed_updates += usize::from(rewrite.unverified);
+                if let Some(page) = rewrite.page {
+                    receipt.updated_files += 1;
+                    if requested {
+                        receipt.updated_open_pages.push(page);
+                    }
                 }
             }
-            Ok(None) => {}
             Err(_) => {
-                result.failed_updates += 1;
+                receipt.failed_updates += 1;
                 if requested {
-                    result
+                    receipt
                         .unrefreshed_open_paths
                         .push(path.to_string_lossy().into_owned());
                 }
             }
         }
     }
-    result.unrefreshed_open_paths.extend(
+    receipt.unrefreshed_open_paths.extend(
         unchecked
             .into_iter()
             .map(|path| path.to_string_lossy().into_owned()),
     );
-    result.unrefreshed_open_paths.sort();
-    Ok(result)
+    receipt.unrefreshed_open_paths.sort();
+}
+
+/// What a linked page received; `unverified` when it may still name the old file.
+struct LinkedRewrite {
+    page: Option<MovedOpenPage>,
+    unverified: bool,
 }
 
 fn relocated_reference_content(
     content: &str,
     path: &Path,
-    vault: &Path,
-    old_file: &Path,
-    new_file: &Path,
-    pattern: Option<&Regex>,
-    new_target: &str,
-) -> Result<String, String> {
-    let markdown = crate::leadinglight_relocation_links::retarget_incoming(
-        content, vault, path, old_file, new_file,
-    )?;
-    Ok(pattern
-        .and_then(|re| replace_wikilinks_in_content(&markdown, re, new_target))
-        .unwrap_or(markdown))
+    retarget: &LinkRetarget<'_>,
+) -> (String, bool) {
+    let (markdown, unverified) = match retarget_incoming(
+        content,
+        retarget.vault,
+        path,
+        retarget.old_file,
+        retarget.new_file,
+    ) {
+        Ok(markdown) => (markdown, false),
+        // The exact parser refused the page: its Markdown stays as it is, reported only when
+        // it may still name the old file. Its legacy wikilinks are still kept current.
+        Err(_) => (
+            content.to_owned(),
+            may_name_target(content, retarget.old_file),
+        ),
+    };
+    let content = retarget
+        .wikilinks
+        .as_ref()
+        .and_then(|re| replace_wikilinks_in_content(&markdown, re, &retarget.new_target))
+        .unwrap_or(markdown);
+    (content, unverified)
 }
 
 fn rewrite_relocated_reference(
     path: &Path,
-    vault: &Path,
-    old_file: &Path,
-    new_file: &Path,
-    pattern: Option<&Regex>,
-    new_target: &str,
-) -> Result<Option<MovedOpenPage>, String> {
-    use super::staged_file::{self, NativePlatform, Original, Published};
+    retarget: &LinkRetarget<'_>,
+) -> Result<LinkedRewrite, String> {
+    use staged_file::{NativePlatform, Original, Published};
     let initial = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    if relocated_reference_content(
-        &initial, path, vault, old_file, new_file, pattern, new_target,
-    )? == initial
-    {
-        return Ok(None);
+    let (planned, unverified) = relocated_reference_content(&initial, path, retarget);
+    if planned == initial {
+        return Ok(LinkedRewrite {
+            page: None,
+            unverified,
+        });
     }
     let _lease = crate::leadinglight_history::lease(&[path])?;
     staged_file::plain_file(path).map_err(|_| "The linked page is not a plain file".to_string())?;
     let original = Original::read(path).map_err(|e| e.to_string())?;
     let before = String::from_utf8(original.bytes.clone()).map_err(|e| e.to_string())?;
-    let content = relocated_reference_content(
-        &before, path, vault, old_file, new_file, pattern, new_target,
-    )?;
+    let (content, unverified) = relocated_reference_content(&before, path, retarget);
     if before == content {
-        return Ok(None);
+        return Ok(LinkedRewrite {
+            page: None,
+            unverified,
+        });
     }
     #[cfg(test)]
     AFTER_LINKED_READ.with_borrow(|hook| {
@@ -648,13 +801,16 @@ fn rewrite_relocated_reference(
         staged_file::stage(path, content.as_bytes()).map_err(|e| e.to_string())?;
     original
         .recheck_exact()
-        .map_err(|_| "The linked page changed during the move".to_string())?;
+        .map_err(|_| "The linked page changed during the rename".to_string())?;
     match staged_file::publish(&original, staging, &staged, &NativePlatform) {
-        Published::Committed { .. } => Ok(Some(MovedOpenPage {
-            path: path.to_string_lossy().into_owned(),
-            before_content: before,
-            content,
-        })),
+        Published::Committed { .. } => Ok(LinkedRewrite {
+            page: Some(MovedOpenPage {
+                path: path.to_string_lossy().into_owned(),
+                before_content: before,
+                content,
+            }),
+            unverified,
+        }),
         Published::Failed | Published::Uncertain { .. } => {
             Err("The linked page could not be refreshed safely".to_string())
         }
@@ -736,11 +892,19 @@ fn is_untitled_filename(filename: &str) -> bool {
 }
 
 /// Auto-rename an untitled note based on its H1 heading.
-/// Returns `Some(RenameResult)` if renamed, `None` if conditions not met.
+/// Returns `Some(PageRenameReceipt)` if renamed, `None` if conditions not met.
 /// This is a ONE-SHOT rename: only fires for untitled-* files with an H1.
 pub fn auto_rename_untitled(
     request: AutoRenameUntitledRequest<'_>,
-) -> Result<Option<RenameResult>, String> {
+) -> Result<Option<PageRenameReceipt>, String> {
+    auto_rename_untitled_with_open_pages(request, &[])
+}
+
+/// `auto_rename_untitled` with exact before/after text for the caller's open pages.
+pub fn auto_rename_untitled_with_open_pages(
+    request: AutoRenameUntitledRequest<'_>,
+    open_paths: &[PathBuf],
+) -> Result<Option<PageRenameReceipt>, String> {
     let path = Path::new(request.note_path);
     let filename = path
         .file_name()
@@ -759,12 +923,15 @@ pub fn auto_rename_untitled(
         None => return Ok(None),
     };
 
-    let result = rename_note(RenameNoteRequest {
-        vault_path: request.vault_path,
-        old_path: request.note_path,
-        new_title: &h1_title,
-        old_title_hint: None,
-    })?;
+    let result = rename_note_with_open_pages(
+        RenameNoteRequest {
+            vault_path: request.vault_path,
+            old_path: request.note_path,
+            new_title: &h1_title,
+            old_title_hint: None,
+        },
+        open_paths,
+    )?;
     Ok(Some(result))
 }
 
@@ -879,7 +1046,7 @@ mod tests {
     fn rename_test_note_file(
         vault: &Path,
         request: RenameTestRequest<'_>,
-    ) -> (std::path::PathBuf, RenameResult) {
+    ) -> (std::path::PathBuf, PageRenameReceipt) {
         create_test_file(vault, request.path, request.content);
         let old_path = vault.join(request.path);
         let result = rename_note(RenameNoteRequest {
@@ -961,7 +1128,7 @@ mod tests {
         assert_eq!(title_to_slug(input), expected);
     }
 
-    fn assert_unicode_rename_path(result: &RenameResult) {
+    fn assert_unicode_rename_path(result: &PageRenameReceipt) {
         assert!(
             result.new_path.ends_with("你好.md"),
             "got {}",
@@ -969,7 +1136,7 @@ mod tests {
         );
     }
 
-    fn assert_unicode_rename_filesystem(vault: &Path, old_path: &Path, result: &RenameResult) {
+    fn assert_unicode_rename_filesystem(vault: &Path, old_path: &Path, result: &PageRenameReceipt) {
         assert!(Path::new(&result.new_path).exists());
         assert!(!old_path.exists());
         assert!(
@@ -978,7 +1145,7 @@ mod tests {
         );
     }
 
-    fn assert_unicode_rename_frontmatter(result: &RenameResult) {
+    fn assert_unicode_rename_frontmatter(result: &PageRenameReceipt) {
         let new_content = fs::read_to_string(&result.new_path).unwrap();
         assert!(new_content.contains("title: 你好"));
     }
@@ -2044,5 +2211,546 @@ mod tests {
         assert!(!new_path.exists());
         assert!(!backup_path.exists());
         assert!(!manifest_path.exists());
+    }
+
+    // --- LeadingLight E2: exact ordinary links across managed renames ---
+
+    fn path_string(path: &Path) -> String {
+        path.to_string_lossy().into_owned()
+    }
+
+    /// The saved destination of the first `[label](...)` link, resolved from the page's folder.
+    fn resolved_link(page: &Path, label: &str) -> std::path::PathBuf {
+        let content = fs::read_to_string(page).unwrap();
+        let pattern = Regex::new(&format!(r"\[{}\]\(([^)\s]+)", regex::escape(label))).unwrap();
+        let destination = pattern
+            .captures(&content)
+            .unwrap_or_else(|| panic!("no {label} link in {content}"))[1]
+            .to_owned();
+        // Synthetic destinations here need no percent decoding; a fragment is not part of the path.
+        let path = destination.split(['#', '?']).next().unwrap_or_default();
+        page.parent().unwrap().join(path)
+    }
+
+    fn same_file(left: &Path, right: &Path) -> bool {
+        left.canonicalize().ok() == right.canonicalize().ok()
+    }
+
+    const COMMENTARY: &str = "---\n_leadinglight_commentary:\n  version: 1\n  captures:\n    - exact: W1BsYW5dXSBzZWUgW1BsYW5dKC4uL1RvcGljcy9wbGFuLm1kKQ==\n---\n# Commentary on Plan\n\n[Source](../Topics/plan.md)\n\n> Quoted words\n\nMy thoughts.\n";
+
+    #[test]
+    fn leadinglight_filename_rename_retargets_ordinary_source_links_with_exact_receipt() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("Topics/plan.md");
+        let commentary = vault.join("Notes/commentary-on-plan.md");
+        create_test_file(vault, "Topics/plan.md", "# Plan\n\nBody.\n");
+        create_test_file(vault, "Notes/commentary-on-plan.md", COMMENTARY);
+        create_test_file(
+            vault,
+            "Notes/legacy.md",
+            "See [[Topics/plan]] and [[plan]].\n",
+        );
+
+        let receipt = rename_note_filename_with_open_pages(
+            RenameNoteFilenameRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: source.to_str().unwrap(),
+                new_filename_stem: "goals",
+            },
+            std::slice::from_ref(&commentary),
+        )
+        .unwrap();
+
+        let renamed = vault.join("Topics/goals.md");
+        assert_eq!(receipt.new_path, path_string(&renamed));
+        assert_eq!(receipt.source_before_content, "# Plan\n\nBody.\n");
+        assert_eq!(receipt.source_content, "# Plan\n\nBody.\n");
+        assert_eq!((receipt.updated_files, receipt.failed_updates), (2, 0));
+        assert!(same_file(&resolved_link(&commentary, "Source"), &renamed));
+        let after = fs::read_to_string(&commentary).unwrap();
+        // Front matter, including the immutable capture, is byte-identical.
+        assert_eq!(
+            after.split("# Commentary").next(),
+            COMMENTARY.split("# Commentary").next()
+        );
+        assert_eq!(
+            after,
+            COMMENTARY.replace("../Topics/plan.md", "../Topics/goals.md")
+        );
+        assert_eq!(receipt.updated_open_pages.len(), 1);
+        assert_eq!(receipt.updated_open_pages[0].path, path_string(&commentary));
+        assert_eq!(receipt.updated_open_pages[0].before_content, COMMENTARY);
+        assert_eq!(receipt.updated_open_pages[0].content, after);
+        assert!(receipt.unrefreshed_open_paths.is_empty());
+        assert_eq!(
+            fs::read_to_string(vault.join("Notes/legacy.md")).unwrap(),
+            "See [[Topics/goals]] and [[Topics/goals]].\n"
+        );
+    }
+
+    #[test]
+    fn leadinglight_title_rename_retargets_links_to_the_collision_candidate_and_rebases_self_links()
+    {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("Topics/draft.md");
+        create_test_file(vault, "Topics/plan.md", "# Another plan\n");
+        create_test_file(
+            vault,
+            "Topics/draft.md",
+            "---\ntitle: Draft\n---\n# Draft\n\n[Top](./draft.md#draft) [Neighbor](./plan.md)\n",
+        );
+        create_test_file(
+            vault,
+            "Notes/commentary.md",
+            "# C\n\n[Source](../Topics/draft.md)\n",
+        );
+        create_test_file(vault, "Notes/other.md", "[Plan](../Topics/plan.md)\n");
+
+        let receipt = rename_note(RenameNoteRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            new_title: "Plan",
+            old_title_hint: None,
+        })
+        .unwrap();
+
+        let renamed = vault.join("Topics/plan-2.md");
+        assert_eq!(receipt.new_path, path_string(&renamed));
+        assert_eq!(
+            receipt.source_content,
+            "---\ntitle: Plan\n---\n# Draft\n\n[Top](./plan-2.md#draft) [Neighbor](./plan.md)\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&renamed).unwrap(),
+            receipt.source_content
+        );
+        assert!(same_file(
+            &resolved_link(&vault.join("Notes/commentary.md"), "Source"),
+            &renamed
+        ));
+        // The same-title page already at plan.md keeps its own incoming link and bytes.
+        assert_eq!(
+            fs::read_to_string(vault.join("Notes/other.md")).unwrap(),
+            "[Plan](../Topics/plan.md)\n"
+        );
+        assert_eq!(
+            fs::read_to_string(vault.join("Topics/plan.md")).unwrap(),
+            "# Another plan\n"
+        );
+        assert_eq!(receipt.failed_updates, 0);
+    }
+
+    #[test]
+    fn leadinglight_same_title_pages_in_other_folders_keep_their_ordinary_links() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "a/plan.md", "# Plan\n");
+        create_test_file(vault, "b/plan.md", "# Plan\n");
+        let to_a = "[Source](../a/plan.md)\n";
+        let to_b = "[Source](../b/plan.md)\n";
+        create_test_file(vault, "c/on-a.md", to_a);
+        create_test_file(vault, "c/on-b.md", to_b);
+
+        let receipt = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("b/plan.md").to_str().unwrap(),
+            new_filename_stem: "goals",
+        })
+        .unwrap();
+
+        assert_eq!(fs::read_to_string(vault.join("c/on-a.md")).unwrap(), to_a);
+        assert_eq!(
+            fs::read_to_string(vault.join("c/on-b.md")).unwrap(),
+            "[Source](../b/goals.md)\n"
+        );
+        assert_eq!((receipt.updated_files, receipt.failed_updates), (1, 0));
+    }
+
+    #[test]
+    fn leadinglight_auto_rename_keeps_a_commentary_linked_to_its_untitled_source() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("untitled-note-1700000000.md");
+        let commentary = vault.join("Notes/commentary.md");
+        create_test_file(
+            vault,
+            "untitled-note-1700000000.md",
+            "# Harbor Plan\n\nBody.\n",
+        );
+        create_test_file(
+            vault,
+            "Notes/commentary.md",
+            "# Commentary\n\n[Source](../untitled-note-1700000000.md)\n",
+        );
+
+        let receipt = auto_rename_untitled_with_open_pages(
+            AutoRenameUntitledRequest {
+                vault_path: vault.to_str().unwrap(),
+                note_path: source.to_str().unwrap(),
+            },
+            std::slice::from_ref(&commentary),
+        )
+        .unwrap()
+        .unwrap();
+
+        let renamed = vault.join("harbor-plan.md");
+        assert_eq!(receipt.new_path, path_string(&renamed));
+        assert_eq!(receipt.source_before_content, "# Harbor Plan\n\nBody.\n");
+        // The H1 already is the title, so the page's bytes move unchanged.
+        assert_eq!(receipt.source_content, receipt.source_before_content);
+        assert!(same_file(&resolved_link(&commentary, "Source"), &renamed));
+        assert_eq!(receipt.updated_open_pages.len(), 1);
+    }
+
+    #[test]
+    fn leadinglight_renaming_a_commentary_keeps_its_own_source_link() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let commentary = vault.join("Notes/commentary-on-plan.md");
+        create_test_file(vault, "Topics/plan.md", "# Plan\n");
+        create_test_file(vault, "Notes/commentary-on-plan.md", COMMENTARY);
+        fs::create_dir_all(vault.join("Archive/2026")).unwrap();
+
+        let renamed = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: commentary.to_str().unwrap(),
+            new_filename_stem: "harbor-thoughts",
+        })
+        .unwrap();
+        assert_eq!(renamed.source_content, COMMENTARY);
+        let renamed_path = std::path::PathBuf::from(&renamed.new_path);
+        assert!(same_file(
+            &resolved_link(&renamed_path, "Source"),
+            &vault.join("Topics/plan.md")
+        ));
+
+        let moved = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: &renamed.new_path,
+                destination_folder_path: vault.join("Archive/2026").to_str().unwrap(),
+            },
+            &[],
+        )
+        .unwrap();
+        let moved_path = std::path::PathBuf::from(&moved.new_path);
+        assert!(same_file(
+            &resolved_link(&moved_path, "Source"),
+            &vault.join("Topics/plan.md")
+        ));
+        // Only the Source destination changed; the immutable capture is byte-identical.
+        assert_eq!(
+            moved.source_content,
+            COMMENTARY.replace("../Topics/plan.md", "../../Topics/plan.md")
+        );
+    }
+
+    #[test]
+    fn leadinglight_a_busy_linked_page_is_reported_while_the_rename_stays_committed() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("Topics/plan.md");
+        let open = vault.join("Notes/commentary.md");
+        let before = "[Source](../Topics/plan.md)\n";
+        create_test_file(vault, "Topics/plan.md", "# Plan\n");
+        create_test_file(vault, "Notes/commentary.md", before);
+        let _lease = crate::leadinglight_history::lease(&[&open]).unwrap();
+
+        let receipt = rename_note_filename_with_open_pages(
+            RenameNoteFilenameRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: source.to_str().unwrap(),
+                new_filename_stem: "goals",
+            },
+            std::slice::from_ref(&open),
+        )
+        .unwrap();
+
+        assert_eq!(
+            receipt.new_path,
+            path_string(&vault.join("Topics/goals.md"))
+        );
+        assert!(!source.exists());
+        assert_eq!((receipt.updated_files, receipt.failed_updates), (0, 1));
+        assert_eq!(receipt.unrefreshed_open_paths, vec![path_string(&open)]);
+        assert!(receipt.updated_open_pages.is_empty());
+        assert_eq!(fs::read_to_string(&open).unwrap(), before);
+    }
+
+    #[test]
+    fn leadinglight_an_externally_edited_linked_page_is_kept_and_reported() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let open = vault.join("Notes/commentary.md");
+        create_test_file(vault, "Topics/plan.md", "# Plan\n");
+        create_test_file(
+            vault,
+            "Notes/commentary.md",
+            "[Source](../Topics/plan.md)\n",
+        );
+        AFTER_LINKED_READ.set(Some(Box::new(|path| {
+            fs::write(
+                path,
+                "External synthetic edit [Source](../Topics/plan.md)\n",
+            )
+            .unwrap();
+        })));
+        let outcome = rename_note_with_open_pages(
+            RenameNoteRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: vault.join("Topics/plan.md").to_str().unwrap(),
+                new_title: "Goals",
+                old_title_hint: None,
+            },
+            std::slice::from_ref(&open),
+        );
+        AFTER_LINKED_READ.set(None);
+
+        let receipt = outcome.unwrap();
+        assert_eq!(
+            receipt.new_path,
+            path_string(&vault.join("Topics/goals.md"))
+        );
+        assert_eq!(receipt.failed_updates, 1);
+        assert_eq!(receipt.unrefreshed_open_paths, vec![path_string(&open)]);
+        assert_eq!(
+            fs::read_to_string(&open).unwrap(),
+            "External synthetic edit [Source](../Topics/plan.md)\n"
+        );
+    }
+
+    #[test]
+    fn leadinglight_a_source_changed_before_publication_is_not_renamed() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("Topics/plan.md");
+        create_test_file(vault, "Topics/plan.md", "# Plan\n");
+        create_test_file(
+            vault,
+            "Notes/commentary.md",
+            "[Source](../Topics/plan.md)\n",
+        );
+        BEFORE_SOURCE_RECHECK.set(Some(Box::new(|path| {
+            let current = fs::read_to_string(path).unwrap();
+            fs::write(path, current + "External words.\n").unwrap();
+        })));
+        let filename = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            new_filename_stem: "goals",
+        });
+        let title = rename_note(RenameNoteRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            new_title: "Goals",
+            old_title_hint: None,
+        });
+        BEFORE_SOURCE_RECHECK.set(None);
+
+        for outcome in [filename.err(), title.err()] {
+            assert_eq!(
+                outcome.as_deref(),
+                Some("The page changed before it could be renamed")
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(&source).unwrap(),
+            "# Plan\nExternal words.\nExternal words.\n"
+        );
+        assert!(!vault.join("Topics/goals.md").exists());
+        assert_eq!(
+            fs::read_to_string(vault.join("Notes/commentary.md")).unwrap(),
+            "[Source](../Topics/plan.md)\n"
+        );
+    }
+
+    #[test]
+    fn leadinglight_title_only_change_returns_exact_source_text_at_the_same_path() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let source = vault.join("note/plan.md");
+        create_test_file(vault, "note/plan.md", "# Old heading\n");
+
+        let receipt = rename_note(RenameNoteRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: source.to_str().unwrap(),
+            new_title: "Plan",
+            old_title_hint: None,
+        })
+        .unwrap();
+
+        assert_eq!(receipt.new_path, path_string(&source));
+        assert_eq!(receipt.source_before_content, "# Old heading\n");
+        assert_eq!(
+            receipt.source_content,
+            "---\ntitle: Plan\n---\n# Old heading\n"
+        );
+        assert_eq!(fs::read_to_string(&source).unwrap(), receipt.source_content);
+    }
+
+    #[test]
+    fn leadinglight_unparseable_pages_keep_legacy_wikilinks_and_report_only_possible_links() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let unrelated = "<img src='https://example.invalid/a.png'>\n\n[[plan]]\n";
+        let html_link = "<a href='../Topics/plan.md'>Plan</a>\n";
+        create_test_file(vault, "Topics/plan.md", "# Plan\n");
+        create_test_file(vault, "Notes/unrelated.md", unrelated);
+        create_test_file(vault, "Notes/html-link.md", html_link);
+
+        let receipt = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("Topics/plan.md").to_str().unwrap(),
+            new_filename_stem: "goals",
+        })
+        .unwrap();
+
+        assert_eq!(
+            fs::read_to_string(vault.join("Notes/unrelated.md")).unwrap(),
+            unrelated.replace("[[plan]]", "[[Topics/goals]]")
+        );
+        // HTML is never rewritten; the page that may still name the file is reported.
+        assert_eq!(
+            fs::read_to_string(vault.join("Notes/html-link.md")).unwrap(),
+            html_link
+        );
+        assert_eq!((receipt.updated_files, receipt.failed_updates), (1, 1));
+    }
+
+    #[test]
+    fn leadinglight_same_folder_rename_of_an_unparseable_source_still_renames() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        let content = "# Plan\n\n<img src='./photo.png'>\n";
+        create_test_file(vault, "Topics/plan.md", content);
+
+        let receipt = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("Topics/plan.md").to_str().unwrap(),
+            new_filename_stem: "goals",
+        })
+        .unwrap();
+        assert_eq!(receipt.source_content, content);
+        assert_eq!(receipt.failed_updates, 0);
+
+        let self_named = "# Goals\n\n<a href='./goals.md'>Top</a>\n";
+        create_test_file(vault, "Topics/goals.md", self_named);
+        let receipt = rename_note_filename(RenameNoteFilenameRequest {
+            vault_path: vault.to_str().unwrap(),
+            old_path: vault.join("Topics/goals.md").to_str().unwrap(),
+            new_filename_stem: "aims",
+        })
+        .unwrap();
+        assert_eq!(receipt.source_content, self_named);
+        assert_eq!(receipt.failed_updates, 1);
+    }
+
+    #[test]
+    fn leadinglight_folder_move_no_longer_reports_unrelated_html_pages() {
+        let dir = TempDir::new().unwrap();
+        let vault = dir.path();
+        create_test_file(vault, "drafts/page.md", "# Page\n");
+        create_test_file(
+            vault,
+            "gallery.md",
+            "<img src='https://example.invalid/x.png'>\n",
+        );
+        fs::create_dir(vault.join("filed")).unwrap();
+
+        let receipt = move_note_to_folder_with_open_pages(
+            MoveNoteToFolderRequest {
+                vault_path: vault.to_str().unwrap(),
+                old_path: vault.join("drafts/page.md").to_str().unwrap(),
+                destination_folder_path: vault.join("filed").to_str().unwrap(),
+            },
+            &[],
+        )
+        .unwrap();
+        assert_eq!((receipt.updated_files, receipt.failed_updates), (0, 0));
+    }
+
+    /// Amendment B §4: an external edit made while the transaction manifest is written is caught by
+    /// the exact source check that now runs immediately before the source moves into its backup.
+    #[test]
+    fn leadinglight_an_edit_during_manifest_preparation_refuses_title_and_filename_renames() {
+        use super::super::rename_transaction::AFTER_MANIFEST;
+        let manifests_seen = std::rc::Rc::new(std::cell::Cell::new(0));
+        for title in [true, false] {
+            let dir = TempDir::new().unwrap();
+            let vault = dir.path();
+            let source = vault.join("Topics/plan.md");
+            create_test_file(vault, "Topics/plan.md", "# Plan\n");
+            create_test_file(vault, "Notes/c.md", "[Source](../Topics/plan.md)\n");
+            AFTER_MANIFEST.set(Some(Box::new(|manifest: &Path| {
+                assert!(
+                    manifest.exists(),
+                    "the manifest is written before the final check"
+                );
+                let page = manifest
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join("Topics/plan.md");
+                fs::write(page, "# Plan\n\nExternal words.\n").unwrap();
+            })));
+            let seen = manifests_seen.clone();
+            BEFORE_SOURCE_RECHECK.set(Some(Box::new(move |path| {
+                // The check runs after the manifest exists and while the source is still in place.
+                let txn = path
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .join(".tolaria-rename-txn");
+                let manifests = fs::read_dir(&txn).map(|entries| {
+                    entries
+                        .filter_map(Result::ok)
+                        .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+                        .count()
+                });
+                if manifests.unwrap_or(0) > 0 && path.exists() {
+                    seen.set(seen.get() + 1);
+                }
+            })));
+            let outcome = if title {
+                rename_note(RenameNoteRequest {
+                    vault_path: vault.to_str().unwrap(),
+                    old_path: source.to_str().unwrap(),
+                    new_title: "Goals",
+                    old_title_hint: None,
+                })
+            } else {
+                rename_note_filename(RenameNoteFilenameRequest {
+                    vault_path: vault.to_str().unwrap(),
+                    old_path: source.to_str().unwrap(),
+                    new_filename_stem: "goals",
+                })
+            };
+            AFTER_MANIFEST.set(None);
+            BEFORE_SOURCE_RECHECK.set(None);
+
+            assert_eq!(
+                outcome.err().as_deref(),
+                Some("The page changed before it could be renamed"),
+                "title={title}"
+            );
+            assert_eq!(
+                fs::read_to_string(&source).unwrap(),
+                "# Plan\n\nExternal words.\n"
+            );
+            assert!(!vault.join("Topics/goals.md").exists());
+            assert!(
+                !vault.join(".tolaria-rename-txn").exists(),
+                "no manifest or backup is left"
+            );
+            assert_eq!(
+                fs::read_to_string(vault.join("Notes/c.md")).unwrap(),
+                "[Source](../Topics/plan.md)\n"
+            );
+        }
+        assert_eq!(manifests_seen.get(), 2);
     }
 }

@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Switch } from '../../components/ui/switch'
 import { Textarea } from '../../components/ui/textarea'
 import type { AppLocale } from '../../lib/i18n'
-import type { AnswerValue, FormAnswers, FormField, InputProblem } from './extensionContract'
-import { answerTextProblem } from './extensionMarkdown'
+import type { AnswerValue, FormAnswers, FormField } from './extensionContract'
 import { ExtensionDialogContent, PassiveNote } from './ExtensionPreviewDialog'
 import type { CreateOutcome, CreatedPage, ExtensionController, NotWrittenReason, OpenTarget, PendingAttempt, RunOpening } from './extensionSessionController'
-import { isFieldProblem, notWrittenText, problemText, translator, type FieldProblem, type T } from './extensionUiText'
+import { fieldProblems, filled, initialAnswers } from './extensionRunForm'
+import { notWrittenText, problemText, translator, type FieldProblem, type T } from './extensionUiText'
 
 export interface FolderOption { path: string; label: string }
 
@@ -54,24 +54,6 @@ function titleField(opening: RunOpening): string | null {
   const compose = opening.runnable.command.steps.find(step => step.op === 'composeDocument')
   const part = compose?.op === 'composeDocument' ? compose.title?.find(item => typeof item !== 'string') : undefined
   return part && typeof part !== 'string' ? part.field : null
-}
-
-const initialAnswers = (fields: readonly FormField[]): Record<string, AnswerValue> =>
-  Object.fromEntries(fields.map(field => [field.id, field.kind === 'boolean' ? false : field.kind === 'choice' ? null : '']))
-
-const filled = (value: AnswerValue | undefined) => value === true || (typeof value === 'string' && value.trim() !== '')
-
-/** Field problems from the recipe's own checks, then each answer through the literal encoder. */
-function fieldProblems(fields: readonly FormField[], answers: FormAnswers, problems: readonly InputProblem[]): Map<string, FieldProblem> {
-  const found = new Map<string, FieldProblem>()
-  for (const problem of problems) if (problem.field && isFieldProblem(problem.code) && !found.has(problem.field)) found.set(problem.field, problem.code)
-  for (const field of fields) {
-    const value = answers[field.id]
-    if (found.has(field.id) || typeof value !== 'string' || (field.kind !== 'text' && field.kind !== 'multilineText')) continue
-    const failure = answerTextProblem(value, field.kind === 'multilineText')
-    if (failure && failure !== 'lineBreak' && failure !== 'tooLong') found.set(field.id, 'unsafeText')
-  }
-  return found
 }
 
 /** One opening, one form; its answers survive every outcome but a shown, created note. */
@@ -117,6 +99,11 @@ export function ExtensionRunDialog(props: Props) {
       case 'created':
         props.onRemember(folder)
         setPhase({ step: 'created', page: outcome.page, durable: outcome.durable, opened: outcome.opened,
+          elsewhere: controller.revokedReason(opening) === 'workspace' })
+        return
+      case 'committed':
+        // Only a capture command answers this, and this form never runs one; shown as written.
+        setPhase({ step: 'created', page: outcome.page, durable: outcome.receipt.durable, opened: 'notShown',
           elsewhere: controller.revokedReason(opening) === 'workspace' })
         return
       case 'notWritten':
@@ -248,7 +235,8 @@ export function ExtensionRunDialog(props: Props) {
   )
 }
 
-function RunField({ t, field, id, value, error, readOnly, autoFocus, onChange }: {
+/** One recipe form field with its label, problem and the control its kind asks for. */
+export function RunField({ t, field, id, value, error, readOnly, autoFocus, onChange }: {
   t: T; field: FormField; id: string; value: AnswerValue; error: FieldProblem | null; readOnly: boolean; autoFocus: boolean
   onChange: (value: AnswerValue) => void
 }) {

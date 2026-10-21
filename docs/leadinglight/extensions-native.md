@@ -1,7 +1,7 @@
 # Extensions: the native E1 registry
 
-This covers how the desktop app stores, turns on and runs E1 extension packages, and what it does
-not do yet. The transport contract is frozen in `src/leadinglight/extensions/extensionApi.ts` and
+This covers how the desktop app stores, turns on and runs extension packages: the E1 registry, as
+extended in 0.13.0 by E2 passage commentary, and what it does not do yet. The transport contract is frozen in `src/leadinglight/extensions/extensionApi.ts` and
 `src/leadinglight/proposals/proposalContract.ts`; the package format is in
 [extensions-catalog.md](extensions-catalog.md). The code is in `src-tauri/src/leadinglight_extensions/`,
 with the commands in `src-tauri/src/commands/extensions.rs`.
@@ -17,37 +17,41 @@ with the commands in `src-tauri/src/commands/extensions.rs`.
   meanwhile, the activation answers `unknownVersion`, so an activation never names a version that is
   not stored.
 - **Runs commands** in sessions owned by one window.
-- **Creates one new page per run**, in a folder the person chose, and never over an existing file.
+- **Makes one write per run**: a new page in a folder the person chose, never over an existing file,
+  or (E2) the whole reviewed new version of an existing page, with its exact earlier text kept first.
+  A committed write can be undone from its window and session. Adding and Undo are described in
+  [commentary-native.md](commentary-native.md).
 
-Not in E1:
-
-- adding to an existing page: `bind_extension_document` always answers `unsupported`, and append
-  proposals are refused `unsupported`;
-- capturing a selection;
-- resolving associations.
-
-A package that needs any of these imports as a candidate with `missingCapabilities` and cannot be
-turned on.
+Native never captures a selection or resolves an association: `selection.read` and
+`association.resolve` are services of the desktop UI. The UI performs them from 0.13.0, so all five
+capabilities are supported. The switch is `HOST_SERVICES_QUALIFIED` in `manifest.rs`; a build without
+that UI must turn it off, and then a package that needs them imports as a candidate with
+`missingCapabilities` and cannot be turned on. The app's own review still keeps unavailable any
+command that asks the person to pick a page (`chosenExistingDocument`): there is no page chooser yet.
 
 The bundled Meeting debrief (`leadinglight.meeting-debrief`) ships with the app and is off in every
-vault until turned on. Imports cannot use the `leadinglight.` prefix.
+vault until turned on. The bundled Passage commentary (`leadinglight.passage-commentary`) is on by
+default in every vault that has not turned it off, and an explicit Off is kept. Imports cannot
+use the `leadinglight.` prefix.
 
 ## Commands
 
-The 13 commands are named as in `EXTENSION_COMMANDS` and `PROPOSAL_COMMANDS`, and take the frozen
-argument objects in camelCase. `submit_document_proposal` takes `{ proposal }`. The proposal is read
-strictly: an unknown or missing field is an argument error, not a receipt.
+The 16 commands are named as in `EXTENSION_COMMANDS`, `PROPOSAL_COMMANDS` and
+`PROPOSAL_UNDO_COMMANDS`, and take the frozen argument objects in camelCase.
+`submit_document_proposal` takes `{ proposal }` and `undo_document_proposal` takes `{ request }`. Both
+are read strictly: an unknown or missing field is an argument error, not a receipt.
 
 Expected outcomes are always data: refusals, conflicts and `uncertain`. A command fails only when its
 arguments cannot be read or the local store cannot be located.
 
-Some reasons in the frozen unions are never sent by E1:
+One reason in the frozen unions is never sent:
 
-| Reason | Why E1 never sends it |
+| Reason | Why it is never sent |
 |---|---|
-| `notDocument` | E1 binds no documents. |
-| `changed` conflict | Only appends check an expected document. |
-| proposal `link` | A bound folder that became a link no longer matches its handle, so E1 answers `handleMismatch`. |
+| proposal `unsupported` | Every proposal kind the frozen contract defines is performed. |
+
+A bound folder that became a link answers `handleMismatch`; proposal `link` is a bound page that
+became one.
 
 ## Where things are kept
 
@@ -134,6 +138,9 @@ refused.
 | Request keys per session | 256 | New admissions answer `busy`. |
 | Live runs per session | 16 | New admissions answer `busy`; admissions still checking their package count. |
 | Folder handles per run | 8 | Binding another forgets the oldest. |
+| Document handles per run | 8 | Binding another forgets the oldest. |
+| Unused Undo tokens per session | 16 | New appends answer `busy`; a create offers no Undo. |
+| Undo operation ids per process | 1024 | Never dropped; new presses answer `busy`. |
 | Operation ids per process | 1024 | Never dropped; new operations answer `busy`. |
 | Recently closed sessions remembered | 256 | — |
 
@@ -152,6 +159,9 @@ at once. This never waits, so it never blocks the event loop.
   nothing new.
 - Ending, closing, deactivating and rolling back all revoke runs, then wait for any admitted write to
   finish before answering.
+- A committed write's Undo token belongs to the session, not the run: ending, deactivating and
+  rolling back keep it. Closing the session also waits for an Undo in progress, then forgets the
+  session's tokens.
 
 **Activation changes are serialized.** One process-wide gate covers each change from its
 compare-and-set through revoking its runs and joining their writes. An older change can therefore

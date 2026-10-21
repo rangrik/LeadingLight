@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { SessionBarrier } from './extensionApi'
+import type { Capability } from './extensionContract'
 import { createExtensionController, runnableCommands, type ExtensionController, type RunnableCommand, type RegistrySnapshot } from './extensionSessionController'
 import { createExtensionTransport } from './extensionTransport'
 
@@ -46,14 +47,16 @@ export interface Extensions {
 }
 
 /** One controller for this window; each vault visit gets its own native session, never reused by path. */
-export function useExtensions({ vaultPath, ready, onUnsettled, controller: injected }: {
+export function useExtensions({ vaultPath, ready, onUnsettled, controller: injected, hostCapabilities }: {
   vaultPath: string
   ready: boolean
   /** A transition is refused because native has not confirmed; tell the person, as other boundaries do. */
   onUnsettled?: () => void
   controller?: ExtensionController
+  /** What this window performs; the controller's E1 default when absent. Read once, at first render. */
+  hostCapabilities?: readonly Capability[]
 }): Extensions {
-  const [controller] = useState(() => injected ?? createExtensionController({ api: createExtensionTransport() }))
+  const [controller] = useState(() => injected ?? createExtensionController({ api: createExtensionTransport(), hostCapabilities }))
   const boundary = useBoundary(controller, onUnsettled)
   useLayoutEffect(() => {
     const current = controller.visit()

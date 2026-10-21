@@ -12,6 +12,16 @@ struct RenameTransaction {
     backup_path: String,
 }
 
+#[cfg(test)]
+type ManifestHook = Box<dyn Fn(&Path)>;
+
+#[cfg(test)]
+thread_local! {
+    /// Test seam: runs after the manifest is written and before the source check and move.
+    pub(super) static AFTER_MANIFEST: std::cell::RefCell<Option<ManifestHook>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 pub(super) struct RenameWorkspace {
     dir: PathBuf,
 }
@@ -30,16 +40,7 @@ impl RenameWorkspace {
     }
 
     pub(super) fn stage_note_content(&self, content: &str) -> Result<NamedTempFile, String> {
-        let mut staged = NamedTempFile::new_in(&self.dir)
-            .map_err(|e| format!("Failed to create staged rename file: {}", e))?;
-        staged
-            .write_all(content.as_bytes())
-            .map_err(|e| format!("Failed to write staged rename file: {}", e))?;
-        staged
-            .as_file_mut()
-            .sync_all()
-            .map_err(|e| format!("Failed to sync staged rename file: {}", e))?;
-        Ok(staged)
+        stage_content(&self.dir, content)
     }
 
     pub(super) fn operation<'a>(
@@ -61,6 +62,19 @@ impl Drop for RenameWorkspace {
     fn drop(&mut self) {
         remove_empty_transaction_dir(&self.dir);
     }
+}
+
+fn stage_content(dir: &Path, content: &str) -> Result<NamedTempFile, String> {
+    let mut staged = NamedTempFile::new_in(dir)
+        .map_err(|e| format!("Failed to create staged rename file: {}", e))?;
+    staged
+        .write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write staged rename file: {}", e))?;
+    staged
+        .as_file_mut()
+        .sync_all()
+        .map_err(|e| format!("Failed to sync staged rename file: {}", e))?;
+    Ok(staged)
 }
 
 pub(super) struct CommittedRename {
@@ -93,21 +107,26 @@ pub(super) struct RenameOperation<'a> {
 }
 
 impl<'a> RenameOperation<'a> {
-    pub(super) fn rename_with_candidates(
+    /// Publishes at the first free candidate (`name.md`, `name-2.md`, ...). The page's text is
+    /// prepared for the exact candidate it is published at, so its explicit self-links name the
+    /// path it really receives. `recheck` runs after the manifest is written, immediately before
+    /// the original moves (see `prepare`).
+    pub(super) fn rename_with_prepared_candidates(
         &self,
-        staged: NamedTempFile,
         desired_filename: &str,
         parent_dir: &Path,
-    ) -> Result<CommittedRename, String> {
-        let mut staged = staged;
+        mut content_for: impl FnMut(&Path) -> Result<String, String>,
+        recheck: impl Fn() -> Result<(), String>,
+    ) -> Result<(CommittedRename, String), String> {
         for attempt in 0.. {
             let candidate = parent_dir.join(candidate_filename(desired_filename, attempt));
-            self.prepare(&candidate)?;
+            let content = content_for(&candidate)?;
+            let staged = stage_content(&self.transaction_dir, &content)?;
+            self.prepare(&candidate, &recheck)?;
 
             match staged.persist_noclobber(&candidate) {
-                Ok(_) => return Ok(self.committed(candidate)),
+                Ok(_) => return Ok((self.committed(candidate), content)),
                 Err(err) if err.error.kind() == ErrorKind::AlreadyExists => {
-                    staged = err.file;
                     self.rollback()?;
                 }
                 Err(err) => {
@@ -123,12 +142,14 @@ impl<'a> RenameOperation<'a> {
         unreachable!()
     }
 
+    /// Publishes at exactly `new_file`; `recheck` runs as in `rename_with_prepared_candidates`.
     pub(super) fn rename_exact(
         &self,
         staged: NamedTempFile,
         new_file: &Path,
+        recheck: impl Fn() -> Result<(), String>,
     ) -> Result<CommittedRename, String> {
-        self.prepare(new_file)?;
+        self.prepare(new_file, &recheck)?;
         match staged.persist_noclobber(new_file) {
             Ok(_) => Ok(self.committed(new_file.to_path_buf())),
             Err(err) if err.error.kind() == ErrorKind::AlreadyExists => {
@@ -147,8 +168,25 @@ impl<'a> RenameOperation<'a> {
         }
     }
 
-    fn prepare(&self, new_file: &Path) -> Result<(), String> {
+    /// The source check is the last step before the original moves: an edit made while the
+    /// manifest was written is caught, and the original stays in place with no manifest left.
+    /// This narrows, not removes, the window: no OS compare-and-swap covers the move itself.
+    fn prepare(
+        &self,
+        new_file: &Path,
+        recheck: &dyn Fn() -> Result<(), String>,
+    ) -> Result<(), String> {
         self.write_manifest(new_file)?;
+        #[cfg(test)]
+        AFTER_MANIFEST.with_borrow(|hook| {
+            if let Some(hook) = hook {
+                hook(&self.manifest_path);
+            }
+        });
+        if let Err(error) = recheck() {
+            self.rollback()?;
+            return Err(error);
+        }
         self.move_into_backup()
     }
 
@@ -318,9 +356,71 @@ mod tests {
         let workspace = RenameWorkspace::new(vault.path()).unwrap();
         let staged = workspace.stage_note_content("# New\n").unwrap();
         let operation = workspace.operation("old.md", &old_file);
-        let committed = operation.rename_exact(staged, &new_file).unwrap();
+        let committed = operation
+            .rename_exact(staged, &new_file, || Ok(()))
+            .unwrap();
         drop(committed);
 
+        assert!(!transaction_dir(vault.path()).exists());
+    }
+
+    #[test]
+    fn prepared_candidates_publish_text_naming_the_path_actually_taken() {
+        let vault = TempDir::new().unwrap();
+        let old_file = vault.path().join("untitled.md");
+        let occupied = vault.path().join("plan.md");
+        fs::write(&old_file, "# Plan\n").unwrap();
+        fs::write(&occupied, "# Occupied\n").unwrap();
+        let rechecks = std::cell::Cell::new(0);
+
+        let workspace = RenameWorkspace::new(vault.path()).unwrap();
+        let (committed, content) = workspace
+            .operation("untitled.md", &old_file)
+            .rename_with_prepared_candidates(
+                "plan.md",
+                vault.path(),
+                |candidate| {
+                    let name = candidate.file_name().unwrap().to_string_lossy();
+                    Ok(format!("[Self](./{name})\n"))
+                },
+                || {
+                    rechecks.set(rechecks.get() + 1);
+                    Ok(())
+                },
+            )
+            .unwrap();
+
+        assert_eq!(committed.new_file(), vault.path().join("plan-2.md"));
+        assert_eq!(content, "[Self](./plan-2.md)\n");
+        assert_eq!(fs::read_to_string(committed.new_file()).unwrap(), content);
+        assert_eq!(fs::read_to_string(&occupied).unwrap(), "# Occupied\n");
+        assert!(!old_file.exists());
+        assert_eq!(rechecks.get(), 2);
+    }
+
+    #[test]
+    fn a_failed_recheck_leaves_the_original_in_place() {
+        let vault = TempDir::new().unwrap();
+        let old_file = vault.path().join("untitled.md");
+        fs::write(&old_file, "# Plan\n").unwrap();
+
+        let workspace = RenameWorkspace::new(vault.path()).unwrap();
+        let result = workspace
+            .operation("untitled.md", &old_file)
+            .rename_with_prepared_candidates(
+                "plan.md",
+                vault.path(),
+                |_| Ok("# Plan\n".to_string()),
+                || Err("The page changed before it could be renamed".to_string()),
+            );
+        drop(workspace);
+
+        assert_eq!(
+            result.err().as_deref(),
+            Some("The page changed before it could be renamed")
+        );
+        assert_eq!(fs::read_to_string(&old_file).unwrap(), "# Plan\n");
+        assert!(!vault.path().join("plan.md").exists());
         assert!(!transaction_dir(vault.path()).exists());
     }
 

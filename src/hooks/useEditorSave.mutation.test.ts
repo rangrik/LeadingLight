@@ -157,7 +157,7 @@ describe('a Favorite change inside the page save queue', () => {
       await expect(save.current.savePending()).rejects.toBeInstanceOf(UnmergedDraftError)
       await expect(save.current.drainHeld(page)).rejects.toBeInstanceOf(UnmergedDraftError)
       await act(async () => { expect(await save.current.handleSave()).toBe(false) })
-      expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Fix the page's properties first. Your edits are kept.")
+      expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Another change to this page couldn't be combined with your latest edits, so they're kept here but not saved.")
       expect(save.current.mutateDocument(page, favoriteMutation(ON))).toEqual({ admitted: false, reason: 'invalidFrontmatter' })
       expect(native.disk.get(page)).toBe(committed)
 

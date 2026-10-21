@@ -1786,8 +1786,9 @@ describe('App', () => {
       await released
       disk.delete(from)
       disk.set(to, content)
+      // Every managed rename and move answers with its exact receipt.
       return { new_path: to, updated_files: 0, failed_updates: 0,
-        ...(relocation ? { source_before_content: staged, source_content: content, updated_open_pages: [], unrefreshed_open_paths: [] } : {}) }
+        source_before_content: staged, source_content: content, updated_open_pages: [], unrefreshed_open_paths: [] }
     }
     mockCommandResults.save_note_content = ({ path, content }: { path: string, content: string }) => {
       if (native.saveFails) throw new Error('disk full')

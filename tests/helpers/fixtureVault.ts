@@ -18,6 +18,7 @@ interface FixtureVaultPageArgs {
   isGitRepo: boolean
   folders: FolderNode[]
   installedAiAgents: string[]
+  preserveStorageOnReload: boolean
 }
 
 interface FixturePageArgs {
@@ -29,6 +30,12 @@ interface FixtureVaultOptions {
   expectedReadyTitle?: string
   folders?: FolderNode[]
   installedAiAgents?: string[]
+  /**
+   * Off (default): every page load starts from empty storage. On: only the test's first load
+   * clears it, so a `page.reload()` keeps what the app itself saved (its workspace layout) and a
+   * restore can be checked as a person would see it. Nothing is seeded either way.
+   */
+  preserveStorageOnReload?: boolean
 }
 
 interface CopyDirArgs {
@@ -73,9 +80,14 @@ export function removeFixtureVaultCopy(tempVaultDir: string | null | undefined):
   removeFixtureVaultDirectory({ tempVaultDir })
 }
 
-async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folders, installedAiAgents }: FixtureVaultPageArgs): Promise<void> {
-  await page.addInitScript(({ dismissedKey, fixtureFolders, fixtureInstalledAiAgents, initialIsGitRepo, resolvedVaultPath }: { dismissedKey: string; fixtureFolders: FolderNode[]; fixtureInstalledAiAgents: string[]; initialIsGitRepo: boolean; resolvedVaultPath: string }) => {
-    localStorage.clear()
+async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folders, installedAiAgents, preserveStorageOnReload }: FixtureVaultPageArgs): Promise<void> {
+  await page.addInitScript(({ dismissedKey, fixtureFolders, fixtureInstalledAiAgents, initialIsGitRepo, resolvedVaultPath, keepStorage }: { dismissedKey: string; fixtureFolders: FolderNode[]; fixtureInstalledAiAgents: string[]; initialIsGitRepo: boolean; resolvedVaultPath: string; keepStorage: boolean }) => {
+    // Session storage lives as long as this tab, so it tells the test's first load from a reload.
+    const firstLoadKey = '__leadinglight_fixture_storage_started'
+    if (!keepStorage || sessionStorage.getItem(firstLoadKey) !== '1') {
+      localStorage.clear()
+      if (keepStorage) sessionStorage.setItem(firstLoadKey, '1')
+    }
     localStorage.setItem(dismissedKey, '1')
     let gitRepoReady = initialIsGitRepo
     const installedAiAgentSet = new Set(fixtureInstalledAiAgents)
@@ -419,8 +431,11 @@ async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folde
         const excludeFrontmatter = readCommandValue(commandArgs, 'excludeFrontmatter') === true
           ? '&exclude_frontmatter=1'
           : ''
+        // The requested bound is forwarded as native receives it (E2 discovery asks for 2000).
+        const requestedLimit = readCommandValue(commandArgs, 'limit')
+        const limit = requestedLimit === undefined || requestedLimit === null ? '' : `&limit=${encodeURIComponent(String(requestedLimit))}`
         return readJson(
-          `/api/vault/search?vault_path=${encodeURIComponent(resolvedPath)}&query=${query}&mode=${mode}${excludeFrontmatter}`,
+          `/api/vault/search?vault_path=${encodeURIComponent(resolvedPath)}&query=${query}&mode=${mode}${excludeFrontmatter}${limit}`,
         )
       },
     })
@@ -467,6 +482,7 @@ async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folde
           old_path: readCommandValue(commandArgs, 'oldPath'),
           new_title: readCommandValue(commandArgs, 'newTitle'),
           old_title: readCommandValue(commandArgs, 'oldTitle', null),
+          open_paths: readCommandValue(commandArgs, 'openPaths', []),
         }),
       rename_note_filename: (commandArgs?: FixtureCommandArgs) =>
         readJson('/api/vault/rename-filename', {
@@ -476,21 +492,35 @@ async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folde
             vault_path: readCommandValue(commandArgs, 'vaultPath', resolvedVaultPath),
             old_path: readCommandValue(commandArgs, 'oldPath'),
             new_filename_stem: readCommandValue(commandArgs, 'newFilenameStem'),
+            open_paths: readCommandValue(commandArgs, 'openPaths', []),
           }),
         }),
-      auto_rename_untitled: async (commandArgs?: FixtureCommandArgs) => {
-        const notePath = readCommandString(commandArgs, 'notePath')
-        const contentData = await readJson(
-          `/api/vault/content?path=${encodeURIComponent(notePath)}`,
-        ) as { content: string }
-        const match = contentData.content.match(/^#\s+(.+)$/m)
-        if (!match) return null
-        return renameNoteRequest({
-          vault_path: readCommandValue(commandArgs, 'vaultPath', resolvedVaultPath),
-          old_path: notePath,
-          new_title: match[1].trim(),
-        })
-      },
+      // Folder moves through the disk bridge like the renames above: the native command's
+      // `{ args: { vaultPath, oldPath, folderPath, openPaths } }` becomes the route's body, and the
+      // bridge answers with the same receipt native does. Without this the desktop harness reached
+      // the in-memory handler, which reads flat snake_case arguments and never touches the disk.
+      move_note_to_folder: (commandArgs?: FixtureCommandArgs) =>
+        readJson('/api/vault/move-note-to-folder', {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            vault_path: readCommandValue(commandArgs, 'vaultPath', resolvedVaultPath),
+            old_path: readCommandValue(commandArgs, 'oldPath'),
+            folder_path: readCommandValue(commandArgs, 'folderPath'),
+            open_paths: readCommandValue(commandArgs, 'openPaths', []),
+          }),
+        }),
+      // The disk bridge's own untitled rename: native H1 rules, receipts for the open pages.
+      auto_rename_untitled: (commandArgs?: FixtureCommandArgs) =>
+        readJson('/api/vault/auto-rename-untitled', {
+          method: 'POST',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            vault_path: readCommandValue(commandArgs, 'vaultPath', resolvedVaultPath),
+            note_path: readCommandString(commandArgs, 'notePath'),
+            open_paths: readCommandValue(commandArgs, 'openPaths', []),
+          }),
+        }),
     })
 
     const applyFixtureVaultOverrides = (
@@ -527,6 +557,7 @@ async function installFixtureVaultInitScript({ page, vaultPath, isGitRepo, folde
     fixtureInstalledAiAgents: installedAiAgents,
     initialIsGitRepo: isGitRepo,
     resolvedVaultPath: vaultPath,
+    keepStorage: preserveStorageOnReload,
   })
 }
 
@@ -550,6 +581,7 @@ export async function openFixtureVault(
     isGitRepo: options.isGitRepo ?? true,
     folders: options.folders ?? [],
     installedAiAgents: options.installedAiAgents ?? [],
+    preserveStorageOnReload: options.preserveStorageOnReload ?? false,
   })
   await waitForFixtureVaultReady({
     page,

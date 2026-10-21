@@ -9,6 +9,9 @@ import {
   type GuardedProposal, type ProposalQueryReply, type ProposalReceipt,
 } from '../proposals/proposalContract'
 import {
+  PROPOSAL_UNDO_COMMANDS, parseReleaseUndoReply, parseUndoQueryReply, parseUndoReceipt,
+} from '../proposals/proposalUndoContract'
+import {
   EXTENSION_COMMANDS, parseCloseSessionReply, parseEndRunReply, parseOpenSessionReply, parseRunAdmission,
   type ExtensionApi,
 } from './extensionApi'
@@ -20,6 +23,7 @@ import {
 type DeclaredCommand =
   | (typeof EXTENSION_COMMANDS)[keyof typeof EXTENSION_COMMANDS]
   | (typeof PROPOSAL_COMMANDS)[keyof typeof PROPOSAL_COMMANDS]
+  | (typeof PROPOSAL_UNDO_COMMANDS)[keyof typeof PROPOSAL_UNDO_COMMANDS]
 
 /** Sends one declared command with its arguments and resolves to the raw answer. */
 export type Ask = (command: DeclaredCommand, args: Record<string, unknown>) => Promise<unknown>
@@ -87,5 +91,11 @@ export function createExtensionTransport(ask: Ask = nativeAsk): ExtensionTranspo
     forget(operationId) {
       submitted.delete(operationId)
     },
+    // An Undo request travels whole and strict; its reply must name exactly that press of that offer.
+    undoProposal: (request, offer) => read(PROPOSAL_UNDO_COMMANDS.undo, { request: { ...request } },
+      value => parseUndoReceipt(value, offer, request.operationId)),
+    queryUndo: (args, offer) => read(PROPOSAL_UNDO_COMMANDS.query, { operationId: args.operationId },
+      value => parseUndoQueryReply(value, offer, args.operationId)),
+    releaseUndo: args => read(PROPOSAL_UNDO_COMMANDS.release, { sessionId: args.sessionId, undoReceipt: args.undoReceipt }, parseReleaseUndoReply),
   }
 }

@@ -11,10 +11,12 @@ import { BACKUP_COMMAND_LIST, runMemoryBackup } from './mock-backup'
 import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-history'
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { MOCK_ENTRIES } from './mock-entries'
-import { EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, memoryHost, type MemoryVault } from './mock-extensions'
+import { EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, bundledCommentaryText, memoryHost, type MemoryVault } from './mock-extensions'
+import { mockTrashHandlers } from './mock-trash'
 import { ADAPT_COMMAND_LIST, browserAdaptHost } from './mock-adapt'
 import { MEMORY_VAULT_ROOTS, tryVaultApi } from './vault-api'
 import bundledMeetingDebrief from '../../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json?raw'
+import passageCommentaryFixture from '../leadinglight/extensions/fixtures/passage-commentary.json?raw'
 
 export { addMockEntry, updateMockContent, trackMockChange }
 
@@ -28,10 +30,19 @@ const mockVaultPages: MemoryVault = {
     trackMockChange(path)
     return true
   },
+  readPage: path => {
+    const content: unknown = Reflect.get(MOCK_CONTENT, path)
+    return typeof content === 'string' ? content : null
+  },
+  writePage(path, content) {
+    updateMockContent(path, content)
+    trackMockChange(path)
+  },
+  trashPage: (root, path) => mockTrashHandlers.move_to_local_trash({ vaultPath: root, paths: [path] }).moved.length === 1,
 }
 let memoryExtensions: ExtensionBackend | null = null
 const runMemoryExtensions = (command: string, args: unknown) => {
-  memoryExtensions ??= new ExtensionBackend(memoryHost(mockVaultPages, [bundledMeetingDebrief]))
+  memoryExtensions ??= new ExtensionBackend(memoryHost(mockVaultPages, [bundledMeetingDebrief, bundledCommentaryText(passageCommentaryFixture)]))
   return memoryExtensions.handle(command, args ?? {}, MEMORY_OWNER)
 }
 

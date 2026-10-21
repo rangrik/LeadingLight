@@ -106,6 +106,9 @@ const NOT_WRITTEN_KEYS: Record<Exclude<NotWrittenReason, 'exists'>, TranslationK
   unavailable: 'leadinglight.extensions.notWritten.unavailable',
   unsafeText: 'leadinglight.extensions.notWritten.unsafeText',
   internal: 'leadinglight.extensions.notWritten.internal',
+  changed: 'leadinglight.extensions.notWritten.changed',
+  unsafeTail: 'leadinglight.extensions.notWritten.unsafeTail',
+  notAssociated: 'leadinglight.extensions.notWritten.notAssociated',
 }
 export const notWrittenText = (t: T, reason: Exclude<NotWrittenReason, 'exists'>) => t(NOT_WRITTEN_KEYS[reason])
 

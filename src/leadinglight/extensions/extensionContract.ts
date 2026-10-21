@@ -49,6 +49,12 @@ export type Capability = (typeof CAPABILITIES)[number]
 /** What the first host milestone performs: form, chosen folder, exclusive create, open. */
 export const E1_HOST_CAPABILITIES: readonly Capability[] = ['document.create', 'document.open']
 
+/**
+ * What the passage-commentary milestone performs once capture, association and guarded append are
+ * all in place (src/leadinglight/commentary/). A host offers it only when every part actually works.
+ */
+export const E2_HOST_CAPABILITIES: readonly Capability[] = CAPABILITIES
+
 /** The only operations, in the only order they may appear. */
 export const STEP_OPERATIONS = [
   'capturePassage', 'collectForm', 'resolveDestination', 'composeDocument', 'proposeDocument', 'openCommittedResult',

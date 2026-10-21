@@ -14,7 +14,7 @@ vi.mock('../mock-tauri', () => ({ isTauri: () => true, mockInvoke: vi.fn(), upda
 
 const ON: FavoriteState = { favorite: true, favoriteIndex: 1 }
 const KEYS = '_favorite: true\n_favorite_index: 1\n'
-const UNMERGED = "Can't save yet. Fix the page's properties first. Your edits are kept."
+const UNMERGED = "Can't save yet. Another change to this page couldn't be combined with your latest edits, so they're kept here but not saved."
 
 interface Gate { promise: Promise<void>; open: () => void }
 function gate(): Gate {
@@ -61,9 +61,12 @@ function installNative() {
       log.push('rename')
       await gates.rename?.promise
       const from = args.args?.notePath ?? ''
-      disk.set(gates.renameTo, disk.get(from) ?? '')
+      const content = disk.get(from) ?? ''
+      disk.set(gates.renameTo, content)
       disk.delete(from)
-      return { new_path: gates.renameTo, updated_files: 0 }
+      // The managed rename's receipt: the exact bytes read and published; no linked page open.
+      return { new_path: gates.renameTo, updated_files: 0, failed_updates: 0, source_before_content: content,
+        source_content: content, updated_open_pages: [], unrefreshed_open_paths: [] }
     }
     if (cmd === 'reload_vault_entry') return { path: args.path, title: 'Fresh Title', filename: 'fresh-title.md' }
     if (cmd === 'get_note_content') return disk.get(args.path) ?? ''
@@ -189,7 +192,9 @@ describe('the Favorite seam in the app save coordinator', () => {
     expect(disk.get('/vault/fresh-title.md')).toBe(`---\n${KEYS}---\n# Fresh Title\n\nBody`)
   })
 
-  it('waits for an automatic rename already running and changes the renamed file (T2)', async () => {
+  // RENAME 6.2: the page's own rename holds its writes, so a change waits for no rename; it is refused
+  // like during a manual rename and is admitted at the new name once the rename has settled.
+  it('refuses a change while the page is automatically renamed, then changes the renamed file (T2)', async () => {
     const untitled = '/vault/untitled-note-123.md'
     const { app } = setup(untitled, '# Fresh Title\n\nBody')
     act(() => { app.current.handleContentChange(untitled, '# Fresh Title\n\nBody') })
@@ -198,10 +203,10 @@ describe('the Favorite seam in the app save coordinator', () => {
     await wait(2_600)
     expect(log.at(-1)).toBe('rename')
 
-    const done = admit(app, untitled)
-    await settle()
-    expect(log).not.toContain(`favorite:${untitled}`)
+    expect(app.current.mutateExistingDocument(untitled, favoriteMutation(ON))).toEqual({ admitted: false, reason: 'renaming' })
     await act(async () => { gates.rename?.open() })
+    await settle()
+    const done = admit(app, untitled)
     await act(async () => { gates.favorite.open() })
 
     expect(await done).toMatchObject({ kind: 'returned', path: '/vault/fresh-title.md' })

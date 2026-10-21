@@ -59,6 +59,8 @@ import { installRichEditorDispatchPerformanceProbe } from './richEditorDispatchP
 import { RICH_EDITOR_BLOCKNOTE_PERFORMANCE_OPTIONS } from './richEditorBlockNoteOptions'
 import { markStartupPhase } from '../lib/startupPerformance'
 import { useTurnCurrentBlockIntoCommand } from './useTurnCurrentBlockIntoCommand'
+import type { PassageCaptureEndpoint } from '../leadinglight/commentary/commentaryContext'
+import { usePassageCaptureEndpoint } from '../leadinglight/commentary/useCommentaryCapture'
 import './Editor.css'
 import './EditorTheme.css'
 
@@ -179,6 +181,8 @@ export interface EditorProps {
   flushPendingRawContentRef?: React.MutableRefObject<((path: string) => void) | null>
   /** Registers whether the editor's buffers hold only the given text, before a final recovery choice. */
   editorIdleRef?: React.MutableRefObject<EditorIdleCheck | null>
+  /** Registers the pane's synchronous passage capture, read before focus leaves the selection. */
+  passageCaptureRef?: React.MutableRefObject<PassageCaptureEndpoint | null>
   locale?: AppLocale
 }
 
@@ -264,6 +268,7 @@ interface EditorSetupParams {
   rawToggleRef?: React.MutableRefObject<() => void>
   diffToggleRef?: React.MutableRefObject<() => void>
   onImageImportError?: ImageImportErrorHandler
+  passageCaptureRef?: React.MutableRefObject<PassageCaptureEndpoint | null>
 }
 
 function imageImportErrorMessage(error: ImageImportError, locale: AppLocale | undefined): string {
@@ -308,6 +313,7 @@ function useEditorSetup(options: EditorSetupParams) {
     rawToggleRef,
     diffToggleRef,
     onImageImportError,
+    passageCaptureRef,
   } = options
   const vaultPathRef = useRef(vaultPath)
   const activeTabPathRef = useRef(activeTabPath)
@@ -467,6 +473,11 @@ function useEditorSetup(options: EditorSetupParams) {
         onLoadDiffAtCommit,
         pendingCommitDiffRequest,
         onPendingCommitDiffHandled,
+      })
+
+      usePassageCaptureEndpoint({
+        endpointRef: passageCaptureRef, editor, activeTab, readyPath, rawMode, diffMode,
+        documentSessionRef, hasPendingEditorChange, flushPendingEditorChange, handedRef, rawBufferRef: rawLatestContentRef,
       })
 
       const { handleToggleDiffExclusive, handleToggleRawExclusive } = useEditorModeExclusion({
@@ -893,6 +904,7 @@ export const Editor = memo(function Editor(props: EditorProps) {
     rawToggleRef: props.rawToggleRef,
     diffToggleRef: props.diffToggleRef,
     onImageImportError: handleImageImportError,
+    passageCaptureRef: props.passageCaptureRef,
   })
   const findRequest = useEditorFindCommand({
     activeTab: runtime.activeTab,

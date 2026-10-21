@@ -20,10 +20,11 @@ use super::inventory::{
 };
 use super::lock::{real_folder, CopyLock, LockError};
 use super::outcome::OriginalRequest;
+use super::pins::{Retained, Slot, Version};
 use super::policy::{self, Kept, Seen};
 use super::retention::{self, remove_entry, remove_known};
 use super::{hex, PageTarget, VaultRoots};
-use crate::vault::staged_file::{sha256, Platform};
+use crate::vault::staged_file::{sha256, NativePlatform, Platform};
 
 const PAGE_SIZE: usize = 100;
 const PREVIEW_BYTES: usize = 256 * 1024;
@@ -54,6 +55,10 @@ static LAST: Mutex<Option<HashMap<PathBuf, NotKeptReason>>> = Mutex::new(None);
 pub(super) enum Fault {
     Panic,
     StorageFull,
+    /// Syncing a page's location folder fails, including right after a version was renamed in.
+    LocationSync,
+    /// Syncing a folder above a location fails, including right after the location was created.
+    ParentSync,
 }
 
 #[cfg(test)]
@@ -68,8 +73,33 @@ fn fault(point: Fault) -> std::io::Result<()> {
         Some(Fault::StorageFull) if point == Fault::StorageFull => {
             Err(ErrorKind::StorageFull.into())
         }
+        Some(Fault::LocationSync) if point == Fault::LocationSync => {
+            Err(std::io::Error::other("injected location sync failure"))
+        }
+        Some(Fault::ParentSync) if point == Fault::ParentSync => {
+            Err(std::io::Error::other("injected parent sync failure"))
+        }
         _ => Ok(()),
     }
+}
+
+/// Which history folder sync a test makes fail.
+#[cfg(test)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum SyncFault {
+    /// A page's location folder, including right after a version was renamed into it.
+    Location,
+    /// A folder above a location, including right after the location was created.
+    Parent,
+}
+
+/// Test seam for other modules: while set, that sync fails on this thread.
+#[cfg(test)]
+pub(crate) fn fail_history_syncs(fault: Option<SyncFault>) {
+    FAULT.set(fault.map(|fault| match fault {
+        SyncFault::Location => Fault::LocationSync,
+        SyncFault::Parent => Fault::ParentSync,
+    }));
 }
 
 pub(super) fn now_ms() -> u64 {
@@ -267,14 +297,15 @@ fn locked(
     };
     // This location's tiers now include the new version; already removed names are skipped.
     if let Some(location) = location {
-        let mut items = retention::items(location);
+        let (mut items, pinned) =
+            retention::unpinned(history, &context.loc, retention::items(location));
         items.push(retention::Item {
             name: &name,
             captured_at: now,
             big: reason == VersionReason::BigChange,
             listable: true,
         });
-        let plan = retention::plan(&items, now, caps.per_location);
+        let plan = retention::plan(&items, now, caps.per_location.saturating_sub(pinned));
         for name in plan.into_iter().take(CAPTURE_PRUNE_LIMIT) {
             let _ = remove_entry(history, &context.loc, name);
         }
@@ -297,9 +328,9 @@ fn kept(location: Option<&Location>) -> Vec<Kept<'_>> {
 }
 
 fn prune(history: &Path, loc: &str, location: &Location, now: u64, caps: Caps, usage: &mut Usage) {
-    let items = retention::items(location);
-    // Leave room for one more under the per-location cap.
-    let plan = retention::plan(&items, now, caps.per_location.saturating_sub(1));
+    let (items, pinned) = retention::unpinned(history, loc, retention::items(location));
+    // Leave room for one more under the per-location cap, beside the versions pins keep.
+    let plan = retention::plan(&items, now, caps.per_location.saturating_sub(1 + pinned));
     for name in plan.into_iter().take(CAPTURE_PRUNE_LIMIT) {
         match remove_entry(history, loc, name) {
             Some(true) => {
@@ -375,15 +406,201 @@ fn publish(
             platform.sync_dir(&location)?;
         }
         if created {
+            #[cfg(test)]
+            fault(Fault::ParentSync)?;
             platform.sync_dir(&versions)?;
         }
         fs::rename(&staged, location.join(&name))?;
+        #[cfg(test)]
+        fault(Fault::LocationSync)?;
         platform.sync_dir(&location)
     })();
     if written.is_err() && staged.exists() {
         remove_known(&staged);
     }
     written.map(|()| name)
+}
+
+/// Why exact earlier text could not be kept. Each is known before the caller changes anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RetainError {
+    /// The store's lock, or the pin table, is taken; nothing was kept.
+    Busy,
+    /// Over a cap with nothing unpinned left to let go, or the disk is full.
+    Full,
+    /// The store cannot be used safely, or what was written did not read back exactly.
+    Unavailable,
+}
+
+/// Keeps exactly `p`, the text a guarded extension write is about to replace, as a version of
+/// the page at `key`, whatever the capture policy would say, an empty page included. A version
+/// already kept there with the same length and hash is used instead of a second copy. The
+/// version is written and synced, read back and verified, then pinned, all under the copy lock,
+/// so it is on disk before the caller replaces anything and no pruning removes it while the
+/// returned pin lives. Listed like any other version, with the `checkpoint` reason.
+pub(crate) fn retain_version(
+    roots: &VaultRoots,
+    key: &Path,
+    p: &[u8],
+) -> Result<Retained, RetainError> {
+    let caps = caps();
+    if p.len() as u64 > caps.version_bytes {
+        return Err(RetainError::Full);
+    }
+    let rel = relative(key, &roots.canonical).ok_or(RetainError::Unavailable)?;
+    let context = HistoryContext {
+        loc: location_key(&rel),
+        rel,
+        root: roots.canonical.clone(),
+    };
+    let slot = Slot::take().ok_or(RetainError::Busy)?;
+    panic::catch_unwind(AssertUnwindSafe(|| retain_locked(&context, p, slot, caps)))
+        .unwrap_or(Err(RetainError::Unavailable))
+}
+
+fn retain_locked(
+    context: &HistoryContext,
+    p: &[u8],
+    slot: Slot,
+    caps: Caps,
+) -> Result<Retained, RetainError> {
+    let lock = match CopyLock::acquire(&context.root) {
+        Ok(lock) => lock,
+        Err(LockError::Busy) => return Err(RetainError::Busy),
+        Err(LockError::Unavailable(_)) => return Err(RetainError::Unavailable),
+    };
+    let history = lock.dir.as_path();
+    let dirs = [VERSIONS_DIR, TMP_DIR].map(|name| real_folder(&history.join(name)));
+    if dirs.iter().any(Result::is_err) {
+        return Err(RetainError::Unavailable);
+    }
+    let inventory = match inventory::scan(history, ceiling(caps)) {
+        Ok(inventory) => inventory,
+        Err(Stop::Full) => return Err(RetainError::Full),
+        Err(Stop::Unavailable(_)) => return Err(RetainError::Unavailable),
+    };
+    let location = inventory.locations.get(&context.loc);
+    if location.is_some_and(|location| location.record == Some(false)) {
+        return Err(RetainError::Unavailable);
+    }
+    let p_sha = hex(&sha256(p));
+    let length = p.len() as u64;
+    let version = |name: &str| Version {
+        loc: context.loc.clone(),
+        name: name.to_string(),
+        sha256: p_sha.clone(),
+        length,
+    };
+    let exact = |name: &str| {
+        read_verified(history, &format!("{}/{name}", context.loc), &p_sha)
+            .is_ok_and(|(bytes, _)| bytes == p)
+    };
+    let same = location
+        .into_iter()
+        .flat_map(|location| location.entries.iter().rev())
+        .find(|entry| {
+            entry
+                .meta
+                .as_ref()
+                .is_some_and(|meta| meta.length == length && meta.sha256 == p_sha)
+        });
+    if let Some(entry) = same.filter(|entry| exact(&entry.name)) {
+        // Found, not written now: an earlier sync may have failed after it became visible.
+        synced(&context.root, history, &context.loc, &entry.name)?;
+        return Ok(slot.pin(&context.root, history, version(&entry.name)));
+    }
+    let newest = location.and_then(|location| location.entries.last());
+    let now = now_ms().max(newest.map_or(0, |entry| entry.captured_at + 1));
+    let meta = VersionMeta {
+        format: 1,
+        captured_at: now,
+        reason: VersionReason::Checkpoint,
+        recorded_path: context.rel.clone(),
+        length,
+        sha256: p_sha.clone(),
+    };
+    let record = LocationMeta {
+        recorded_path: context.rel.clone(),
+    };
+    let (Ok(meta_bytes), Ok(record)) = (serde_json::to_vec(&meta), serde_json::to_vec(&record))
+    else {
+        return Err(RetainError::Unavailable);
+    };
+    let new_record = location.is_none_or(|location| location.record.is_none());
+    let cost = (p.len() + meta_bytes.len() + if new_record { record.len() } else { 0 }) as u64;
+    let mut usage = Usage::of(&inventory, location);
+    if !usage.fits(cost, caps) {
+        // Only this page's own unpinned older versions make room; its newest always stays.
+        if let Some(location) = location {
+            prune(history, &context.loc, location, now, caps, &mut usage);
+        }
+        if !usage.fits(cost, caps) {
+            return Err(RetainError::Full);
+        }
+    }
+    let staged = Staged {
+        meta: &meta,
+        meta_bytes: &meta_bytes,
+        record: &record,
+        p,
+    };
+    let name = match publish(history, context, &staged, &NativePlatform) {
+        Ok(name) => name,
+        Err(error) if error.kind() == ErrorKind::StorageFull => return Err(RetainError::Full),
+        Err(_) => return Err(RetainError::Unavailable),
+    };
+    // Verified through the same rule a list and a restore use, before the pin is given out.
+    if !exact(&name) {
+        return Err(RetainError::Unavailable);
+    }
+    synced(&context.root, history, &context.loc, &name)?;
+    Ok(slot.pin(&context.root, history, version(&name)))
+}
+
+/// Proves a kept version durable now, before a pin is given out: its two files and its location's
+/// record, its folder, and every folder above it up to the vault are synced, whether this call
+/// wrote the version or found it. A sync that failed earlier is never taken as done since: the
+/// location's sync right after a version was renamed in, or a parent's sync right after a folder
+/// was created, which later calls skip because the folder already exists. So nothing is replaced
+/// on the strength of a recovery copy whose entries were never confirmed.
+fn synced(root: &Path, history: &Path, loc: &str, name: &str) -> Result<(), RetainError> {
+    let versions = history.join(VERSIONS_DIR);
+    let location = versions.join(loc);
+    let entry = location.join(name);
+    let proven = (|| {
+        for file in [
+            entry.join(PAYLOAD),
+            entry.join(META),
+            location.join(LOCATION),
+        ] {
+            fs::File::open(file)?.sync_all()?;
+        }
+        NativePlatform.sync_dir(&entry)?;
+        #[cfg(test)]
+        fault(Fault::LocationSync)?;
+        NativePlatform.sync_dir(&location)?;
+        #[cfg(test)]
+        fault(Fault::ParentSync)?;
+        let store = history.parent().unwrap_or(root);
+        for dir in [versions.as_path(), history, store, root] {
+            NativePlatform.sync_dir(dir)?;
+        }
+        Ok::<(), std::io::Error>(())
+    })();
+    proven.map_err(|_| RetainError::Unavailable)
+}
+
+/// A pinned version's exact bytes, read and verified under the copy lock.
+pub(crate) fn read_retained(retained: &Retained) -> Result<Vec<u8>, RetainError> {
+    let lock = match CopyLock::acquire_existing(retained.root()) {
+        Ok(lock) => lock,
+        Err(LockError::Busy) => return Err(RetainError::Busy),
+        Err(LockError::Unavailable(_)) => return Err(RetainError::Unavailable),
+    };
+    match read_verified(&lock.dir, &retained.id(), retained.sha256()) {
+        Ok((bytes, _)) if bytes.len() as u64 == retained.length() => Ok(bytes),
+        _ => Err(RetainError::Unavailable),
+    }
 }
 
 #[cfg(not(test))]

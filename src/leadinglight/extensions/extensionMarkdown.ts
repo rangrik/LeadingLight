@@ -82,6 +82,15 @@ function blockMarkdown(block: DocumentBlock): string {
   }
 }
 
+/**
+ * The Markdown of a package's own blocks, in order, leaving out blocks whose text is blank. Commentary
+ * preparation places them after its quote. The host `source` block is not one of them and must not be
+ * passed. Throws `LiteralMarkdownTextError` for text the encoder refuses.
+ */
+export function packageBlocksMarkdown(blocks: readonly DocumentBlock[]): string[] {
+  return blocks.map(blockMarkdown).filter(part => part !== '')
+}
+
 function titleOf(document: ComposedDocument, fallbackTitle: string): string {
   const title = document.title ?? ''
   return encodeLiteralMarkdownInline(title) ? title.trim() : fallbackTitle.trim()

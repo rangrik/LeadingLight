@@ -1,9 +1,10 @@
-// Dev-server stand-in for the native E1 extension commands, on synthetic fixture vaults only.
+// Dev-server stand-in for the native extension commands (E1 create, E2 bound pages, guarded append
+// and Undo), on synthetic fixture vaults only.
 // The shared model (src/mock-tauri/mock-extensions.ts) decides every answer; this file is its disk
 // host and its HTTP route. Package files and preferences live in a dev-only registry folder, never
 // the app's configuration folder; pages are created only in vaults the browser listed through this
 // server. Node gives no handle-relative opens or native durability proof: docs/leadinglight/extensions-browser.md.
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
 	type BigIntStats,
 	closeSync,
@@ -29,20 +30,27 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { EXTENSION_LIMITS } from "../src/leadinglight/extensions/extensionContract.ts";
+import { PROPOSAL_LIMITS } from "../src/leadinglight/proposals/proposalContract.ts";
 import {
 	type BlobScan,
+	type BoundDocument,
 	type BoundFolder,
+	type DocumentLookup,
 	ExtensionArgumentError,
 	ExtensionBackend,
 	type ExtensionHost,
 	type FolderLookup,
 	folderSegments,
 	isExtensionCommand,
+	type PageReplace,
+	type PageTrash,
 	type PageWrite,
 	type PreferencesRead,
 	type Publication,
 	type VaultRoots,
+	bundledCommentaryText,
 } from "../src/mock-tauri/mock-extensions.ts";
+import { parseMarkdownFile } from "./vault-api-data.ts";
 import { heldPathRefusal } from "./vault-api-save-recovery.ts";
 
 /** HTTP bounds of this route: page owners at once, owners kept for settling, request size. */
@@ -67,6 +75,7 @@ export interface DiskExtensionIo {
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 const errorCode = (error: unknown) => (error as NodeJS.ErrnoException | null)?.code;
 const PACKAGE_FILE = /^[0-9a-f]{64}\.json$/;
+const UNDO_TOKEN = /^undo-[0-9a-f-]{36}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const identityOf = (stats: BigIntStats) => `${stats.dev}:${stats.ino}`;
 const UNAVAILABLE: PageWrite = { status: "unavailable" };
@@ -385,6 +394,143 @@ function joinRaw(base: string, part: string): string {
 	return base.endsWith(path.sep) ? `${base}${part}` : `${base}${path.sep}${part}`;
 }
 
+// --- Bound pages (E2) -------------------------------------------------------------------------------
+
+/**
+ * Native `bind_extension_document`: a vault-relative `.md` page in real folders, one plain
+ * single-link file within the proposal limit, valid UTF-8; its bytes now are the baseline.
+ */
+export function resolveDocument(root: string, relative: string): DocumentLookup {
+	const segments = folderSegments(relative);
+	if (segments === null || segments.length === 0 || !segments.at(-1)?.toLowerCase().endsWith(".md")) return { ok: false, reason: "outsideVault" };
+	const folder = resolveFolder(root, segments.slice(0, -1).join("/"));
+	if (!folder.ok) return { ok: false, reason: folder.reason === "staleRun" ? "missing" : folder.reason };
+	const target = path.join(folder.folder.path, segments.at(-1) as string);
+	let stats: BigIntStats | null;
+	try {
+		stats = lstatOrNull(target);
+	} catch {
+		return { ok: false, reason: "missing" };
+	}
+	if (!stats) return { ok: false, reason: "missing" };
+	if (stats.isSymbolicLink() || (stats.isFile() && stats.nlink > 1n)) return { ok: false, reason: "link" };
+	if (!stats.isFile()) return { ok: false, reason: "notDocument" };
+	let bytes: ReturnType<typeof readBounded>;
+	try {
+		bytes = readBounded(target, PROPOSAL_LIMITS.contentBytes);
+	} catch {
+		return { ok: false, reason: "missing" };
+	}
+	if (bytes === "missing") return { ok: false, reason: "missing" };
+	if (bytes === "tooLarge") return { ok: false, reason: "unsupported" };
+	if (bytes === "notPlain") return { ok: false, reason: "notDocument" };
+	const content = utf8Text(bytes);
+	if (content === null) return { ok: false, reason: "notDocument" };
+	return { ok: true, document: { path: target, identity: identityOf(stats), relative: segments.join("/") }, content };
+}
+
+/** The page's exact bytes now, or why not; `link` and `notPlain` mean the place itself changed. */
+function currentBytes(target: string): Buffer | "missing" | "link" | "notPlain" | "unreadable" {
+	try {
+		const stats = lstatOrNull(target);
+		if (!stats) return "missing";
+		if (stats.isSymbolicLink() || stats.nlink > 1n) return "link";
+		const bytes = readBounded(target, PROPOSAL_LIMITS.contentBytes);
+		return bytes === "missing" ? "missing" : typeof bytes === "string" ? "notPlain" : bytes;
+	} catch {
+		return "unreadable";
+	}
+}
+
+/**
+ * One guarded whole-page replacement (native append and append Undo): the page must hold exactly
+ * the expected bytes when read, and again immediately before the atomic rename of the staged
+ * content. Before the rename every refusal proves nothing was written; after it only proof counts.
+ */
+export function replacePage(document: BoundDocument, expectedSha256: string, content: string, io: DiskExtensionIo): PageReplace {
+	const target = document.path;
+	if (heldPathRefusal([target])) return { status: "busy" };
+	const check = (): PageReplace | null => {
+		const bytes = currentBytes(target);
+		if (bytes === "missing") return { status: "missing" };
+		if (bytes === "link" || bytes === "notPlain") return { status: "moved" };
+		if (bytes === "unreadable") return { status: "unavailable" };
+		return sha256(bytes) === expectedSha256 ? null : { status: "changed" };
+	};
+	const before = check();
+	if (before) return before;
+	const folder = path.dirname(target);
+	const staged = stage(folder, path.basename(target), Buffer.from(content, "utf8"));
+	if (!staged) return { status: "unavailable" };
+	const drop = () => {
+		rmSync(staged.file, { force: true });
+		removeStagingFolder(staged.dir);
+	};
+	const recheck = check();
+	if (recheck) {
+		drop();
+		return recheck;
+	}
+	try {
+		io.rename(staged.file, target);
+	} catch {
+		const pending = presence(staged.file) === "present";
+		if (pending) {
+			drop();
+			return { status: "unavailable" };
+		}
+		removeStagingFolder(staged.dir);
+		return { status: "uncertain" };
+	}
+	removeStagingFolder(staged.dir);
+	const durable = io.syncDir(folder);
+	const written = currentBytes(target);
+	return typeof written !== "string" && written.equals(Buffer.from(content, "utf8")) ? { status: "replaced", durable } : { status: "uncertain" };
+}
+
+/**
+ * Created-page Undo: the page goes to the vault's local Trash (the same store and record as the
+ * browser Trash), only while it holds exactly the expected bytes, rechecked right before the move.
+ */
+export function trashPage(root: string, document: BoundDocument, expectedSha256: string): PageTrash {
+	const target = document.path;
+	if (heldPathRefusal([target])) return { status: "busy" };
+	const check = (): PageTrash | null => {
+		const bytes = currentBytes(target);
+		if (bytes === "missing") return { status: "missing" };
+		if (bytes === "unreadable") return { status: "unavailable" };
+		if (bytes === "link" || bytes === "notPlain") return { status: "changed" };
+		return sha256(bytes) === expectedSha256 ? null : { status: "changed" };
+	};
+	const before = check();
+	if (before) return before;
+	const id = randomBytes(16).toString("hex");
+	const itemDir = path.join(root, ".leadinglight", "trash", id);
+	try {
+		mkdirSync(itemDir, { recursive: true });
+		const title = parseMarkdownFile(target)?.title ?? path.basename(target);
+		writeFileSync(path.join(itemDir, "record.json"), JSON.stringify({ originalPath: document.relative, title, deletedAt: Date.now() }));
+	} catch {
+		rmSync(itemDir, { recursive: true, force: true });
+		return { status: "unavailable" };
+	}
+	const recheck = check();
+	if (recheck) {
+		rmSync(itemDir, { recursive: true, force: true });
+		return recheck;
+	}
+	try {
+		renameSync(target, path.join(itemDir, "payload"));
+	} catch {
+		if (presence(target) === "present") {
+			rmSync(itemDir, { recursive: true, force: true });
+			return { status: "unavailable" };
+		}
+		return { status: "uncertain" };
+	}
+	return { status: "trashed" };
+}
+
 // --- The disk host ----------------------------------------------------------------------------------
 
 export interface DiskHostOptions {
@@ -402,6 +548,7 @@ export function diskExtensionHost(options: DiskHostOptions): ExtensionHost {
 	const warn = options.warn ?? ((message: string) => console.warn(`[vault-api] ${message}`));
 	const packages = path.join(options.root, "packages");
 	const preferences = path.join(options.root, "preferences.json");
+	const retained = path.join(options.root, "undo");
 	const blobFile = (sha: string) => path.join(packages, `${sha}.json`);
 	const registryFolders = () => {
 		mkdirSync(options.root, { recursive: true });
@@ -495,6 +642,41 @@ export function diskExtensionHost(options: DiskHostOptions): ExtensionHost {
 		pagePath: (vault, folder, fileName) =>
 			joinRaw(folder.relative === "" ? vault.requested : joinRaw(vault.requested, folder.relative.split("/").join(path.sep)), fileName),
 		warn,
+		resolveDocument: async (root, relative) => resolveDocument(root, relative),
+		replacePage: async (document, expectedSha256, content) => replacePage(document, expectedSha256, content, io),
+		trashPage: async (root, document, expectedSha256) => trashPage(root, document, expectedSha256),
+		// An append's earlier text, kept synced in the registry folder and read back before the write.
+		async retain(token, content) {
+			if (!UNDO_TOKEN.test(token)) return false;
+			let dir: string;
+			try {
+				registryFolders();
+				dir = realFolder(retained);
+			} catch {
+				return false;
+			}
+			const file = path.join(dir, `${token}.md`);
+			if (publishFile(dir, file, content, io) === "notPublished") return false;
+			try {
+				const back = readBounded(file, PROPOSAL_LIMITS.contentBytes);
+				return typeof back !== "string" && back.equals(Buffer.from(content, "utf8"));
+			} catch {
+				return false;
+			}
+		},
+		async readRetained(token) {
+			if (!UNDO_TOKEN.test(token)) return null;
+			try {
+				const bytes = readBounded(path.join(retained, `${token}.md`), PROPOSAL_LIMITS.contentBytes);
+				return typeof bytes === "string" ? null : utf8Text(bytes);
+			} catch {
+				return null;
+			}
+		},
+		async dropRetained(token) {
+			if (!UNDO_TOKEN.test(token)) return;
+			rmSync(path.join(retained, `${token}.md`), { force: true });
+		},
 	};
 }
 
@@ -613,14 +795,25 @@ export function devRegistryRoot(env: NodeJS.ProcessEnv = process.env, checkout =
 	return root;
 }
 
-/** The native bundled package, read as exact bytes; missing until native source is integrated. */
-export function bundledPackages(): string[] {
+const readText = (relative: string): string | null => {
 	try {
-		return [readFileSync(new URL("../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json", import.meta.url), "utf8")];
+		return readFileSync(new URL(relative, import.meta.url), "utf8");
 	} catch {
-		console.warn("[vault-api] The bundled extension package is not available in this checkout.");
-		return [];
+		return null;
 	}
+};
+
+/**
+ * The native bundled packages, read as exact bytes. Passage commentary is native's file when this
+ * checkout has it, else the shared fixture with only its id changed, as native ships it.
+ */
+export function bundledPackages(): string[] {
+	const meeting = readText("../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json");
+	const fixture = readText("../src/leadinglight/extensions/fixtures/passage-commentary.json");
+	const commentary = readText("../src-tauri/src/leadinglight_extensions/bundled/passage-commentary.json")
+		?? (fixture === null ? null : bundledCommentaryText(fixture));
+	if (meeting === null || commentary === null) console.warn("[vault-api] A bundled extension package is not available in this checkout.");
+	return [meeting, commentary].filter((text): text is string => text !== null);
 }
 
 let devExtensions: DiskExtensions | null = null;

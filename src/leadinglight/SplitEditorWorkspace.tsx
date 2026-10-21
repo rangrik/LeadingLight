@@ -25,6 +25,8 @@ import type { EditorIdleCheck } from '../components/editorContentFlushRegistrati
 import { PageHistoryActionContext } from './pageHistory/pageHistoryContext'
 import { contextualWikilinkPaths } from './wikilinkContext'
 import { PageRelocationContext } from './relocation/pageRelocationContext'
+import { CommentaryPaneContext, type CommentaryPaneAction, type PassageCaptureEndpoint } from './commentary/commentaryContext'
+import { useCommentaryPaneWidths } from './commentary/useCommentaryPaneWidths'
 import './splitWorkspace.css'
 import './polish.css'
 
@@ -60,6 +62,12 @@ interface Props extends EditorProps {
   onOpenPageHistory?: (path: string, pane: PaneId, returnFocus: HTMLElement | null) => void
   /** A quiet note beside the pane's Saved state. */
   renderPaneStatus?: (path: string, pane: PaneId) => ReactNode
+  /** Passage commentary: each pane's capture endpoint, its toolbar action and its header button. */
+  commentary?: {
+    captureRefs: readonly [MutableRefObject<PassageCaptureEndpoint | null>, MutableRefObject<PassageCaptureEndpoint | null>]
+    paneAction: (pane: PaneId) => CommentaryPaneAction | null
+    renderHeader: (path: string, pane: PaneId) => ReactNode
+  }
 }
 export function SplitEditorWorkspace(props: Props) {
   const { workspace, unsavedPaths } = props
@@ -222,6 +230,14 @@ export function SplitEditorWorkspace(props: Props) {
   }, 0)
   // Rendered in visual order with stable keys, so React moves panes without remounting editors.
   const visiblePanes: readonly PaneId[] = workspace.split ? workspace.order : [workspace.activePane]
+  const narrowPanes = useCommentaryPaneWidths(containerRef, `${workspace.split}:${workspace.orientation}:${Math.round(workspace.ratio)}`)
+  const commentaryAction = (pane: PaneId): CommentaryPaneAction | null => {
+    const action = props.commentary?.paneAction(pane)
+    // A pane that is busy, inert or in a recovery choice offers nothing to capture.
+    const usable = !!action && !props.transitionPending && !workspace.pendingPanes[pane] && workspace.editorModesReady
+      && !includesPath(props.blockedPaths, workspace.paths[pane])
+    return action ? { ...action, available: action.available && usable, compact: narrowPanes[pane] } : null
+  }
   const inspector = useInspectorOverlay({ areaRef: containerRef, visiblePanes, activePane: workspace.activePane,
     activePath: workspace.paths[workspace.activePane] ?? null, inspectorOpen: !props.inspectorCollapsed,
     inspectorWidth: props.inspectorWidth, revealPane, onClose: props.onToggleInspector })
@@ -283,6 +299,7 @@ export function SplitEditorWorkspace(props: Props) {
                 }}>{tab && <DotsSixVertical className="ll-page-grip" aria-hidden="true" />}<span>{tab ? pageLabel(tab.entry, locale) : t('leadinglight.split.choose')}</span><CaretDown /></Button>
               {tab && path && <span className="ll-save-state" data-state={unsavedPaths.has(path) ? 'unsaved' : 'saved'} role="status">{t(unsavedPaths.has(path) ? 'leadinglight.split.unsaved' : 'leadinglight.split.saved')}</span>}
               {tab && path && props.renderPaneStatus?.(path, pane)}
+              {tab && path && props.commentary?.renderHeader(path, pane)}
               {tab && <Button variant="ghost" size="sm" className="ll-backlinks-count" data-count={backlinkCount} aria-label={backlinkLabel} title={backlinkLabel}
                 onClick={() => showBacklinks(pane)}><ArrowBendUpLeft aria-hidden="true" />{backlinkCount}</Button>}
               <Button variant="ghost" size="icon-sm" aria-label={t('leadinglight.split.create')} title={t('leadinglight.split.create')} onClick={() => { activate(pane); props.onCreateNote?.() }}><Plus /></Button>
@@ -295,7 +312,8 @@ export function SplitEditorWorkspace(props: Props) {
                 props.onOpenMovePage?.(tab.entry.path, pane, returnFocus)
               } : null}>
               <PageHistoryActionContext.Provider value={props.onOpenPageHistory ? historyActions[pane] : null}>
-              <LazyEditor {...props} {...paneRefs[pane]} editorModeControl={{ mode: workspace.editorModes[pane], begin: modeBegins[pane] }} tabs={[tab]} activeTabPath={path} entries={editorEntries}
+              <CommentaryPaneContext.Provider value={commentaryAction(pane)}>
+              <LazyEditor {...props} {...paneRefs[pane]} passageCaptureRef={props.commentary?.captureRefs[pane]} editorModeControl={{ mode: workspace.editorModes[pane], begin: modeBegins[pane] }} tabs={[tab]} activeTabPath={path} entries={editorEntries}
                 wikilinkPreferredPaths={wikilinkPreferences[pane]}
               onContentChange={settlement.contentChanges[pane]}
               inspectorEntry={tab.entry} inspectorContent={tab.content} inspectorCollapsed={!active || props.inspectorCollapsed}
@@ -308,6 +326,7 @@ export function SplitEditorWorkspace(props: Props) {
               onOpenEntry={entry => openBacklink(pane, entry)}
               revealBacklinks={active && revealPane === pane} onBacklinksRevealed={clearReveal}
               backlinksEmptyLabel={t('inspector.backlinks.empty')} />
+              </CommentaryPaneContext.Provider>
               </PageHistoryActionContext.Provider>
               </PageRelocationContext.Provider>
             </div>

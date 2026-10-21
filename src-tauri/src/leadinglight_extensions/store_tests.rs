@@ -13,9 +13,10 @@ use tempfile::NamedTempFile;
 
 use super::hex;
 use super::manifest::Capability;
+use super::manifest::NATIVE_CAPABILITIES;
 use super::store::{
     NativeStoreIo, Store, StoreIo, MAX_PREFERENCES_BYTES, MAX_SCANNED_ENTRIES, MAX_SEQ,
-    MAX_STORED_VERSIONS, MAX_VAULT_KEY_BYTES, MAX_VERSIONS_PER_PACKAGE,
+    MAX_STORED_VERSIONS, MAX_VAULTS, MAX_VAULT_KEY_BYTES, MAX_VERSIONS_PER_PACKAGE,
 };
 use super::wire::{
     ActivationRefusal, DeactivationRefusal, ImportRefusal, ImportReply, InstalledExtension,
@@ -26,6 +27,7 @@ use crate::vault::staged_file::sha256;
 const VAULT: &str = "/vault";
 const QUICK: &str = "local.quick-note";
 const BUNDLED: &str = "leadinglight.meeting-debrief";
+const COMMENTARY: &str = "leadinglight.passage-commentary";
 
 /// A one-time hold: when armed, the next effect says it started, then waits to be released.
 type Pause = Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>;
@@ -188,7 +190,7 @@ fn an_import_is_a_candidate_only() {
         .into_iter()
         .map(|extension| extension.package_id)
         .collect();
-    assert_eq!(ids, [BUNDLED, QUICK]);
+    assert_eq!(ids, [BUNDLED, COMMENTARY, QUICK]);
     let quick = entry(&store, VAULT, QUICK);
     assert_eq!(quick.active_sha256, None);
     assert_eq!(
@@ -230,18 +232,12 @@ fn imports_cannot_claim_a_built_in_identity_or_skip_validation() {
         ImportReply::Invalid { diagnostics } => assert_eq!(diagnostics.len(), 1),
         other => panic!("{other:?}"),
     }
+    // This build performs every capability: commentary imports with nothing missing.
     match store.import(&fixture("passage-commentary.json")) {
         ImportReply::Candidate {
             missing_capabilities,
             ..
-        } => assert_eq!(
-            missing_capabilities,
-            [
-                Capability::SelectionRead,
-                Capability::AssociationResolve,
-                Capability::DocumentAppend
-            ]
-        ),
+        } => assert!(missing_capabilities.is_empty(), "{missing_capabilities:?}"),
         other => panic!("{other:?}"),
     }
 }
@@ -298,22 +294,29 @@ fn activation_is_compare_and_set_per_vault_and_rollback_restores_behaviour() {
     assert_eq!(entry(&reopened, VAULT, BUNDLED).active_sha256, None);
 }
 
+/// On a host without the desktop passage services commentary cannot be turned on; on this build,
+/// which performs every capability, it can. Unknown versions never can.
 #[test]
 fn unsupported_or_unknown_versions_cannot_be_turned_on() {
     let dir = tempfile::tempdir().unwrap();
-    let store = Store::new(root(dir.path()));
-    let commentary = candidate(&store, &fixture("passage-commentary.json"));
-    match store.activate(VAULT, "local.passage-commentary", &commentary, None) {
+    let native_only = Store::with_host(
+        root(dir.path()),
+        Box::new(NativeStoreIo),
+        NATIVE_CAPABILITIES.to_vec(),
+    );
+    let commentary = candidate(&native_only, &fixture("passage-commentary.json"));
+    match native_only.activate(VAULT, "local.passage-commentary", &commentary, None) {
         Err((ActivationRefusal::MissingCapabilities, missing)) => assert_eq!(
             missing,
-            [
-                Capability::SelectionRead,
-                Capability::AssociationResolve,
-                Capability::DocumentAppend
-            ]
+            [Capability::SelectionRead, Capability::AssociationResolve]
         ),
-        _ => panic!("commentary must stay off on this host"),
+        _ => panic!("commentary must stay off without the desktop host services"),
     }
+    drop(native_only);
+    let store = Store::new(root(dir.path()));
+    assert!(store
+        .activate(VAULT, "local.passage-commentary", &commentary, None)
+        .is_ok());
     assert!(matches!(
         store.activate(VAULT, QUICK, &commentary, None),
         Err((ActivationRefusal::UnknownVersion, _))
@@ -686,7 +689,7 @@ fn a_rebuild_stays_within_the_bounds_and_excess_files_are_reconciled() {
     let listed = store.list(VAULT);
     let imported: Vec<&InstalledExtension> = listed
         .iter()
-        .filter(|extension| extension.package_id != BUNDLED)
+        .filter(|extension| !extension.package_id.starts_with("leadinglight."))
         .collect();
     assert_eq!(imported.len(), ids);
     assert!(imported.iter().all(|extension| {
@@ -844,4 +847,140 @@ fn a_version_dropped_while_its_activation_is_checked_is_refused() {
     assert_eq!(listed.active_sha256.as_deref(), Some(newest.as_str()));
     assert_eq!(listed.versions.len(), MAX_VERSIONS_PER_PACKAGE);
     assert!(!set_aside(dir.path()).exists());
+}
+
+// --- The bundled commentary: on by default where it can run, an explicit Off kept ---------------
+
+/// A host whose desktop services are qualified, so every capability is supported.
+fn full_host(dir: &Path) -> Store {
+    Store::with_host(root(dir), Box::new(NativeStoreIo), Capability::ALL.to_vec())
+}
+
+#[test]
+fn the_bundled_commentary_stays_off_while_its_host_services_are_not_qualified() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::with_host(
+        root(dir.path()),
+        Box::new(NativeStoreIo),
+        NATIVE_CAPABILITIES.to_vec(),
+    );
+    let sha = store.bundled_hash(COMMENTARY).unwrap();
+    assert_eq!(entry(&store, VAULT, COMMENTARY).active_sha256, None);
+    assert_eq!(
+        store.admit(VAULT, &sha, "comment"),
+        Err(RunRefusal::NotActive)
+    );
+    match store.activate(VAULT, COMMENTARY, &sha, None) {
+        Err((ActivationRefusal::MissingCapabilities, missing)) => assert_eq!(
+            missing,
+            [Capability::SelectionRead, Capability::AssociationResolve]
+        ),
+        other => panic!("{:?}", other.err()),
+    }
+}
+
+#[test]
+fn the_bundled_commentary_is_on_by_default_where_its_host_can_run_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = full_host(dir.path());
+    let sha = store.bundled_hash(COMMENTARY).unwrap();
+    let listed = entry(&store, VAULT, COMMENTARY);
+    assert_eq!(listed.active_sha256.as_deref(), Some(sha.as_str()));
+    assert_eq!(listed.previous_sha256, None);
+    assert_eq!(
+        store.admit(VAULT, &sha, "comment"),
+        Ok(COMMENTARY.to_string())
+    );
+    // Nothing was written to make it so, and the debrief stays off.
+    assert!(!store.preferences_file().exists());
+    assert_eq!(entry(&store, VAULT, BUNDLED).active_sha256, None);
+    // It is on already: activation must name it, and then changes nothing.
+    assert!(matches!(
+        store.activate(VAULT, COMMENTARY, &sha, None),
+        Err((ActivationRefusal::Changed, _))
+    ));
+    let same = store.activate(VAULT, COMMENTARY, &sha, Some(&sha)).unwrap();
+    assert_eq!(same.replaced, None);
+    assert_eq!(
+        store.read(&sha),
+        ReadReply::Ok {
+            package_text: include_str!("bundled/passage-commentary.json").to_string()
+        }
+    );
+}
+
+#[test]
+fn an_explicit_off_survives_restarts_and_app_updates_and_can_be_undone() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = full_host(dir.path());
+    let sha = store.bundled_hash(COMMENTARY).unwrap();
+    store.deactivate(VAULT, COMMENTARY, &sha).unwrap();
+    let off = entry(&store, VAULT, COMMENTARY);
+    assert_eq!(
+        (off.active_sha256, off.previous_sha256.as_deref()),
+        (None, Some(sha.as_str()))
+    );
+    assert_eq!(
+        store.admit(VAULT, &sha, "comment"),
+        Err(RunRefusal::NotActive)
+    );
+    assert_eq!(
+        store.deactivate(VAULT, COMMENTARY, &sha),
+        Err(DeactivationRefusal::Changed)
+    );
+    // Other vaults keep the default.
+    assert_eq!(
+        entry(&store, "/other", COMMENTARY).active_sha256.as_deref(),
+        Some(sha.as_str())
+    );
+    drop(store);
+    assert_eq!(
+        entry(&full_host(dir.path()), VAULT, COMMENTARY).active_sha256,
+        None
+    );
+
+    // An update that ships changed commentary bytes keeps the Off, moved to the shipped version.
+    let path = root(dir.path()).join("preferences.json");
+    let mut value: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    value["vaults"][VAULT]["previous"][COMMENTARY] = json!("0".repeat(64));
+    fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    let updated = full_host(dir.path());
+    let off = entry(&updated, VAULT, COMMENTARY);
+    assert_eq!(
+        (off.active_sha256, off.previous_sha256.as_deref()),
+        (None, Some(sha.as_str()))
+    );
+    assert!(!set_aside(dir.path()).exists());
+
+    // Turning it on again is an ordinary activation from off.
+    let on = updated.activate(VAULT, COMMENTARY, &sha, None).unwrap();
+    assert_eq!(on.replaced, None);
+    let listed = entry(&updated, VAULT, COMMENTARY);
+    assert_eq!(
+        (listed.active_sha256.as_deref(), listed.previous_sha256),
+        (Some(sha.as_str()), None)
+    );
+}
+
+/// A vault whose only record is the Off is not idle: forgetting it would turn commentary on there.
+#[test]
+fn a_vault_holding_an_explicit_off_is_never_forgotten_to_make_room() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = full_host(dir.path());
+    let commentary = store.bundled_hash(COMMENTARY).unwrap();
+    store.deactivate(VAULT, COMMENTARY, &commentary).unwrap();
+    let quick = candidate(&store, &fixture("quick-note.json"));
+    for number in 1..MAX_VAULTS {
+        let vault = format!("/vault-{number}");
+        store.activate(&vault, QUICK, &quick, None).unwrap();
+        store.deactivate(&vault, QUICK, &quick).unwrap();
+    }
+    store.activate("/new", QUICK, &quick, None).unwrap();
+    let off = entry(&store, VAULT, COMMENTARY);
+    assert_eq!(
+        (off.active_sha256, off.previous_sha256.as_deref()),
+        (None, Some(commentary.as_str()))
+    );
+    // The least recently touched idle vault went instead.
+    assert_eq!(entry(&store, "/vault-1", QUICK).previous_sha256, None);
 }

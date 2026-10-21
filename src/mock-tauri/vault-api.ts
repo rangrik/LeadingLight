@@ -22,7 +22,7 @@ const diskSession = () => typeof document !== 'undefined' && document.querySelec
 
 /** A write in a disk session may fall back to memory only when every target is in the mock vault. */
 function failsClosed(body: Record<string, unknown>): boolean {
-  const targets = [body.path, body.old_path, body.vault_path].filter(target => target !== undefined)
+  const targets = [body.path, body.old_path, body.note_path, body.vault_path].filter(target => target !== undefined)
   return diskSession() && !(targets.length > 0 && targets.every(isMemoryPath))
 }
 
@@ -52,7 +52,7 @@ interface VaultApiGetRequest {
 
 interface VaultApiPostRequest {
   body: Record<string, unknown>
-  kind: 'create' | 'delete' | 'rename' | 'rename-filename' | 'save' | 'trash-list' | 'trash-move' | 'trash-restore'
+  kind: 'auto-rename-untitled' | 'create' | 'delete' | 'move-note-to-folder' | 'rename' | 'rename-filename' | 'save' | 'trash-list' | 'trash-move' | 'trash-restore'
 }
 
 const TRASH_COMMANDS = new Map<string, { kind: VaultApiPostRequest['kind'], key?: 'paths' | 'ids' }>([
@@ -125,13 +125,38 @@ function buildRequiredPathPostRequest(
   return buildRequiredPostRequest(kind, args.path, body)
 }
 
+export const DEFAULT_SEARCH_LIMIT = 20
+export const MAX_SEARCH_LIMIT = 10_000
+
+/**
+ * A search's result bound as native honours it: absent means 20; a malformed, zero or extreme
+ * bound is refused (null), never lowered, so "fewer results than asked" stays a completeness proof.
+ */
+export function searchLimit(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') return DEFAULT_SEARCH_LIMIT
+  const limit = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value
+  return typeof limit === 'number' && Number.isSafeInteger(limit) && limit >= 1 && limit <= MAX_SEARCH_LIMIT ? limit : null
+}
+
+/** The captured vault of a search request; only callers that name none use the last listed vault. */
+function explicitSearchRoot(args: Record<string, unknown>): string | null {
+  const payload = commandArgs(args)
+  return argText(payload, 'vaultPath') ?? argText(payload, 'vault_path')
+}
+
 function buildSearchRequest(args: Record<string, unknown>): VaultApiRequest | null {
   const payload = commandArgs(args)
   const query = argText(payload, 'query')
-  if (!query || !lastVaultPath) return null
+  const vaultPath = explicitSearchRoot(args) ?? lastVaultPath
+  // The mock vault answers its own searches; a request never borrows another vault's listing.
+  if (!query || !vaultPath || isMemoryPath(vaultPath)) return null
+  const requested = Reflect.get(payload, 'limit')
+  const limit = searchLimit(requested)
+  if (limit === null) throw new VaultApiRefusal('Invalid search limit')
 
   const mode = argText(payload, 'mode') ?? 'all'
-  const body: Record<string, unknown> = { mode, query, vault_path: lastVaultPath }
+  const body: Record<string, unknown> = { mode, query, vault_path: vaultPath }
+  if (requested !== undefined && requested !== null) body.limit = limit
   if (Reflect.get(payload, 'excludeFrontmatter') === true) body.exclude_frontmatter = true
   return { kind: 'search', body }
 }
@@ -163,11 +188,14 @@ function buildPostRequest(cmd: string, args: Record<string, unknown>): VaultApiR
       path: payload.path,
     })
   }
+  // Managed renames: the disk bridge returns the same exact receipts as native.
   if (cmd === 'rename_note') {
     return buildRequiredPostRequest('rename', payload.old_path, {
       new_title: payload.new_title,
+      old_title: payload.old_title,
       old_path: payload.old_path,
       vault_path: payload.vault_path,
+      open_paths: payload.open_paths,
     })
   }
   if (cmd === 'rename_note_filename') {
@@ -175,6 +203,22 @@ function buildPostRequest(cmd: string, args: Record<string, unknown>): VaultApiR
       new_filename_stem: payload.new_filename_stem,
       old_path: payload.old_path,
       vault_path: payload.vault_path,
+      open_paths: payload.open_paths,
+    })
+  }
+  if (cmd === 'move_note_to_folder') {
+    return buildRequiredPostRequest('move-note-to-folder', payload.old_path, {
+      folder_path: payload.folder_path,
+      old_path: payload.old_path,
+      vault_path: payload.vault_path,
+      open_paths: payload.open_paths,
+    })
+  }
+  if (cmd === 'auto_rename_untitled') {
+    return buildRequiredPostRequest('auto-rename-untitled', payload.note_path, {
+      note_path: payload.note_path,
+      vault_path: payload.vault_path,
+      open_paths: payload.open_paths,
     })
   }
   if (cmd === 'delete_note') return buildRequiredPathPostRequest('delete', payload, { path: payload.path })
@@ -238,6 +282,7 @@ function fetchVaultApiPostRequest(request: VaultApiPostRequest): Promise<Respons
   if (request.kind === 'delete') return fetch('/api/vault/delete', buildFetchOptions(request))
   if (request.kind === 'rename') return fetch('/api/vault/rename', buildFetchOptions(request))
   if (request.kind === 'rename-filename') return fetch('/api/vault/rename-filename', buildFetchOptions(request))
+  if (request.kind === 'move-note-to-folder' || request.kind === 'auto-rename-untitled') return fetch(`/api/vault/${request.kind}`, buildFetchOptions(request))
   return fetch('/api/vault/save', buildFetchOptions(request))
 }
 
@@ -307,14 +352,6 @@ async function tryExtensionDiskApi<T>(cmd: string, args: Record<string, unknown>
 
 export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>): Promise<T | undefined> {
   if (isExtensionCommand(cmd)) return tryExtensionDiskApi<T>(cmd, args ?? {})
-  // The desktop is the preservation boundary for folder moves. A disk-session browser
-  // must never turn an unsupported native operation into an in-memory success.
-  if (cmd === 'move_note_to_folder' && args && diskSession()) {
-    const payload = commandArgs(args)
-    if (!isMemoryPath(payload.vault_path ?? payload.vaultPath)) {
-      throw new VaultApiRefusal('Move this page in the desktop app to preserve its local references.')
-    }
-  }
   const recoveryRoute = SAVE_RECOVERY_ROUTES.get(cmd)
   if (recoveryRoute) return args ? tryDiskCommandApi<T>(recoveryRoute, args, (args.request as { vaultPath?: unknown } | undefined)?.vaultPath) : undefined
   const historyRoute = HISTORY_ROUTES.get(cmd)
@@ -327,7 +364,9 @@ export async function tryVaultApi<T>(cmd: string, args?: Record<string, unknown>
   }
   const request = buildVaultApiRequest(cmd, args)
   if (!request) return undefined
+  // A search of a captured disk vault is answered by that vault or fails: never by the mock vault.
   const exactRead = request.kind === 'entry' || (cmd === 'get_note_content' && typeof request.body.vault_path === 'string')
+    || (request.kind === 'search' && args !== undefined && explicitSearchRoot(args) !== null)
   const closed = (!isGetRequest(request) || exactRead) && failsClosed(request.body)
   if (!await checkVaultApi()) {
     if (closed) throw new VaultApiRefusal(UNAVAILABLE)

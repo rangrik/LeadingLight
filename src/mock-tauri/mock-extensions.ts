@@ -1,28 +1,45 @@
-// E1 extension commands for the browser: one model of the native package store, sessions and
-// guarded create (src-tauri/src/leadinglight_extensions), answering the frozen contract
-// (extensionApi.ts, proposalContract.ts) with the frozen TypeScript validator. It runs over a host:
+// Extension commands for the browser: one model of the native package store, sessions, guarded
+// create and (E2) bound documents, guarded append and Undo (src-tauri/src/leadinglight_extensions),
+// answering the frozen contracts (extensionApi.ts, proposalContract.ts, proposalUndoContract.ts)
+// with the frozen TypeScript validator. It runs over a host:
 // in memory for the mock vault (memoryHost), or on synthetic disk fixtures through the dev vault
 // server (scripts/vault-api-extensions.ts). Browser parity is test infrastructure, never native
 // authority. Pure: no DOM, Node, React or invoke, so the dev server and the page share it.
 import {
   EXTENSION_COMMANDS,
-  type ActivationRefusal, type ActivationReply, type CloseSessionReply, type DeactivationReply, type EndRunReply,
+  type ActivationRefusal, type ActivationReply, type CloseSessionReply, type DeactivationReply, type DocumentHandleReply, type EndRunReply,
   type ExtensionListReply, type FolderHandleReply, type HandleRefusal, type ImportCandidateReply, type InstalledExtension,
   type OpenSessionReply, type ReadExtensionReply, type RunAdmission, type RunAdmissionRefusal,
 } from '../leadinglight/extensions/extensionApi.ts'
 import {
-  E1_HOST_CAPABILITIES, EXTENSION_LIMITS, EXTENSION_SCHEMA, RESERVED_PACKAGE_ID_PREFIX, type Capability, type ExtensionPackage,
+  CAPABILITIES, EXTENSION_LIMITS, EXTENSION_SCHEMA, RESERVED_PACKAGE_ID_PREFIX, type Capability, type ExtensionPackage,
 } from '../leadinglight/extensions/extensionContract.ts'
 import { commandCapabilities, parseExtensionPackage, utf8Bytes } from '../leadinglight/extensions/extensionSchema.ts'
 import {
   PROPOSAL_COMMANDS, PROPOSAL_LIMITS, isOpaqueToken,
-  type CreateProposal, type GuardedProposal, type ProposalQueryReply, type ProposalReceipt, type ProposalRefusal,
+  type AppendProposal, type CreateProposal, type GuardedProposal, type ProposalQueryReply, type ProposalReceipt, type ProposalRefusal,
 } from '../leadinglight/proposals/proposalContract.ts'
+import { PROPOSAL_UNDO_COMMANDS } from '../leadinglight/proposals/proposalUndoContract.ts'
 import { sha256Hex } from '../leadinglight/saveOutcome.ts'
+import {
+  UNDO_BRIDGE_COMMANDS, UNDO_LIMITS, UndoLedger, appendCommitted, isDocumentPath, readUndoRequest,
+  type BoundDocument, type DocumentHost, type DocumentLookup,
+} from './mock-extensions-undo.ts'
+
+export type { BoundDocument, DocumentLookup, PageReplace, PageTrash } from './mock-extensions-undo.ts'
 
 export const EXTENSION_BRIDGE_COMMANDS: readonly string[] = [
-  ...Object.values(EXTENSION_COMMANDS), PROPOSAL_COMMANDS.submit, PROPOSAL_COMMANDS.query,
+  ...Object.values(EXTENSION_COMMANDS), PROPOSAL_COMMANDS.submit, PROPOSAL_COMMANDS.query, ...UNDO_BRIDGE_COMMANDS,
 ]
+
+/**
+ * Bundled packages on in a vault where nobody chose yet, once the host performs all they need. An
+ * explicit Off is kept as that vault's `previous` entry and is never undone by an upgrade.
+ */
+export const DEFAULT_ON_PACKAGES: ReadonlySet<string> = new Set(['leadinglight.passage-commentary'])
+/** The bundled commentary recipe: the shared fixture with only its id changed, as native ships it. */
+export const bundledCommentaryText = (fixture: string) =>
+  fixture.replace('"id": "local.passage-commentary"', '"id": "leadinglight.passage-commentary"')
 const BRIDGE_COMMAND_SET = new Set(EXTENSION_BRIDGE_COMMANDS)
 export const isExtensionCommand = (command: string) => BRIDGE_COMMAND_SET.has(command)
 
@@ -76,7 +93,7 @@ export type Publication = 'synced' | 'unsynced' | 'notPublished'
 export interface BlobScan { readonly hashes: readonly string[]; readonly complete: boolean }
 
 /** Storage and vault effects. Packages and preferences never live in a vault. */
-export interface ExtensionHost {
+export interface ExtensionHost extends DocumentHost {
   /** The exact text of each package shipped with the app, off until turned on in a vault. */
   readonly bundled: readonly string[]
   sha256(text: string): Promise<string>
@@ -127,7 +144,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 /** Native's `is_uuid`: only the canonical lowercase form, so one id never names two operations. */
 export const isCanonicalUuid = (value: string) => UUID.test(value)
 const isReserved = (packageId: string) => packageId.startsWith(RESERVED_PACKAGE_ID_PREFIX)
-const missingOf = (capabilities: readonly Capability[]) => capabilities.filter(capability => !E1_HOST_CAPABILITIES.includes(capability))
 
 function isWellFormed(text: string): boolean {
   for (let index = 0; index < text.length; index++) {
@@ -174,8 +190,9 @@ export function readProposal(value: unknown): GuardedProposal {
 }
 
 /** Every field of the request in a fixed order, so no two requests share a digest. */
-const proposalFields = (proposal: CreateProposal) =>
-  ['create', proposal.operationId, proposal.runId, proposal.content, proposal.contentSha256, proposal.folderHandle, proposal.fileName]
+const proposalFields = (proposal: GuardedProposal) => proposal.kind === 'create'
+  ? ['create', proposal.operationId, proposal.runId, proposal.content, proposal.contentSha256, proposal.folderHandle, proposal.fileName]
+  : ['append', proposal.operationId, proposal.runId, proposal.content, proposal.contentSha256, proposal.documentHandle, proposal.expectedSha256]
 
 const WINDOWS_RESERVED = new Set(['CON', 'PRN', 'AUX', 'NUL', ...[1, 2, 3, 4, 5, 6, 7, 8, 9].flatMap(n => [`COM${n}`, `LPT${n}`])])
 /** Rust's `char::is_whitespace`, which the native name check trims with. */
@@ -279,14 +296,20 @@ function importsOf(value: unknown, nextSeq: number): Imported[] | null {
 
 interface Knowledge {
   readonly bundled: (packageId: string, sha: string) => boolean
+  /** The version of a bundled package this app ships now, if it ships one. */
+  readonly current: (packageId: string) => string | null
   readonly stored: (packageId: string, sha: string) => boolean
   /** Ids already judged valid, so a vault's entries rarely need the validator again. */
   readonly validIds: Set<string>
   readonly warn: (message: string) => void
 }
 
-/** Well-formed entries, a stale bundled one dropped, and every other naming a version that exists. */
-function versionsOf(value: unknown, knowledge: Knowledge): Map<string, string> | null {
+/**
+ * Well-formed entries, every other naming a version that exists. A stale bundled activation is
+ * dropped, so that package is off; a stale bundled Off (`previous`) is mapped to the version
+ * shipped now, so an upgrade never turns back on what the person turned off.
+ */
+function versionsOf(value: unknown, knowledge: Knowledge, kind: 'active' | 'previous'): Map<string, string> | null {
   if (!isFields(value)) return null
   const versions = new Map(Object.entries(value))
   for (const [packageId, sha] of versions) {
@@ -299,6 +322,8 @@ function versionsOf(value: unknown, knowledge: Knowledge): Map<string, string> |
   const checked = new Map<string, string>()
   for (const [packageId, sha] of versions as Map<string, string>) {
     if (isReserved(packageId) && !knowledge.bundled(packageId, sha)) {
+      const now = knowledge.current(packageId)
+      if (kind === 'previous' && now !== null) { checked.set(packageId, now); continue }
       knowledge.warn('A built-in extension changed with this app; it is off until turned on again.')
       continue
     }
@@ -312,8 +337,8 @@ function entryOf(value: unknown, nextSeq: number, knowledge: Knowledge): VaultEn
   if (!isFields(value) || !hasKeys(value, ENTRY_KEYS)) return null
   const touched = own(value, 'touched')
   if (!isSeq(touched) || touched >= nextSeq) return null
-  const active = versionsOf(own(value, 'active'), knowledge)
-  const previous = versionsOf(own(value, 'previous'), knowledge)
+  const active = versionsOf(own(value, 'active'), knowledge, 'active')
+  const previous = versionsOf(own(value, 'previous'), knowledge, 'previous')
   if (!active || !previous) return null
   return [...active].some(([packageId, sha]) => previous.get(packageId) === sha) ? null : { touched, active, previous }
 }
@@ -337,6 +362,7 @@ function parsePreferences(text: string, bundled: readonly Identity[], warn: (mes
   if (!imports) return null
   const knowledge: Knowledge = {
     bundled: (packageId, sha) => bundled.some(item => item.packageId === packageId && item.sha256 === sha),
+    current: packageId => bundled.find(item => item.packageId === packageId)?.sha256 ?? null,
     stored: (packageId, sha) => imports.some(item => item.packageId === packageId && item.packageSha256 === sha),
     validIds: new Set([...imports.map(item => item.packageId), ...bundled.map(item => item.packageId)]),
     warn,
@@ -373,7 +399,9 @@ function roomFor(preferences: Preferences, packageId: string): string[] | null {
 
 function makeRoomForVault(preferences: Preferences, vault: string): boolean {
   if (preferences.vaults.has(vault) || preferences.vaults.size < BRIDGE_LIMITS.vaults) return true
-  const idle = [...preferences.vaults].filter(([, entry]) => entry.active.size === 0).sort(([, left], [, right]) => left.touched - right.touched).at(0)
+  // A vault holding a bundled Off is never idle: forgetting it would turn a default-on package back on.
+  const idle = [...preferences.vaults].filter(([, entry]) => entry.active.size === 0 && ![...entry.previous.keys()].some(isReserved))
+    .sort(([, left], [, right]) => left.touched - right.touched).at(0)
   if (idle === undefined) return false
   preferences.vaults.delete(idle[0])
   return true
@@ -387,11 +415,19 @@ export interface MemoryVault {
   pagePaths(): Iterable<string>
   /** Creates the page with exactly `content`; false when it already exists. */
   createPage(path: string, content: string): boolean
+  /** The page's text, or null when there is none. */
+  readPage(path: string): string | null
+  /** Replaces the page's text whole. */
+  writePage(path: string, content: string): void
+  /** Moves the page to the mock vault's Trash; false when it could not. */
+  trashPage(root: string, path: string): boolean
 }
 
 /** Packages, preferences and runs for this page's lifetime only; pages go to the mock vault. */
 export function memoryHost(vault: MemoryVault, bundled: readonly string[]): ExtensionHost {
   const blobs = new Map<string, string>()
+  // The preview's earlier text for an append Undo; a page reload forgets it with the sessions.
+  const retained = new Map<string, string>()
   let preferences: string | null = null
   const lookup = (root: string, folder: string): FolderLookup => {
     const segments = folderSegments(folder)
@@ -441,6 +477,37 @@ export function memoryHost(vault: MemoryVault, bundled: readonly string[]): Exte
     },
     pagePath: (roots, folder, fileName) => [roots.requested, folder.relative, fileName].filter(part => part !== '').join('/'),
     warn: () => undefined,
+    async resolveDocument(root, path): Promise<DocumentLookup> {
+      const segments = folderSegments(path)
+      if (segments === null || segments.length === 0 || !isDocumentPath(path)) return { ok: false, reason: 'outsideVault' }
+      const folder = lookup(root, segments.slice(0, -1).join('/'))
+      if (!folder.ok) return { ok: false, reason: folder.reason === 'staleRun' ? 'missing' : folder.reason }
+      const full = `${root}/${segments.join('/')}`
+      const content = vault.readPage(full)
+      if (content === null) return { ok: false, reason: 'missing' }
+      if (utf8Bytes(content) > PROPOSAL_LIMITS.contentBytes) return { ok: false, reason: 'unsupported' }
+      return { ok: true, document: { path: full, identity: full, relative: segments.join('/') }, content }
+    },
+    async replacePage(document, expectedSha256, content) {
+      const current = vault.readPage(document.path)
+      if (current === null) return { status: 'missing' }
+      if (await sha256Hex(current) !== expectedSha256) return { status: 'changed' }
+      try {
+        vault.writePage(document.path, content)
+        return { status: 'replaced', durable: true }
+      } catch {
+        return { status: 'unavailable' }
+      }
+    },
+    async trashPage(root, document, expectedSha256) {
+      const current = vault.readPage(document.path)
+      if (current === null) return { status: 'missing' }
+      if (await sha256Hex(current) !== expectedSha256) return { status: 'changed' }
+      return vault.trashPage(root, document.path) ? { status: 'trashed' } : { status: 'unavailable' }
+    },
+    retain: async (token, content) => { retained.set(token, content); return true },
+    readRetained: async token => retained.get(token) ?? null,
+    dropRetained: async token => { retained.delete(token) },
   }
 }
 
@@ -466,6 +533,8 @@ interface Run {
   revoked: boolean
   write: Write
   readonly folders: [string, BoundFolder][]
+  /** Bound pages with the exact bytes and digest each held when bound: the immutable baseline. */
+  readonly documents: [string, { readonly document: BoundDocument; readonly baselineSha256: string }][]
 }
 interface Operation { readonly owner: string; readonly digest: string; state: 'running' | ProposalReceipt; readonly settled: Promise<void> }
 interface BeginRequest { readonly sessionId: string; readonly packageSha256: string; readonly commandId: string; readonly invocationId: string }
@@ -496,9 +565,18 @@ export class ExtensionBackend {
   private seq = 0
   /** Changes whenever activation revokes runs, so an admission checked before it refuses. */
   private epoch = 0
+  /** What this host performs; native mirrors the passage host services only once qualified. */
+  private readonly capabilities: readonly Capability[]
+  private readonly undo: UndoLedger
 
-  constructor(host: ExtensionHost) {
+  constructor(host: ExtensionHost, options: { capabilities?: readonly Capability[] } = {}) {
     this.host = host
+    this.capabilities = options.capabilities ?? CAPABILITIES
+    this.undo = new UndoLedger(host, text => host.sha256(text), operationId => this.operations.has(operationId))
+  }
+
+  private missingOf(capabilities: readonly Capability[]): Capability[] {
+    return capabilities.filter(capability => !this.capabilities.includes(capability))
   }
 
   /** One command, with the caller's owner; a malformed argument rejects, as native's `Err`. */
@@ -518,13 +596,16 @@ export class ExtensionBackend {
         return this.beginRun(owner, { sessionId: text('sessionId'), packageSha256: text('packageSha256'), commandId: text('commandId'), invocationId: text('invocationId') })
       case EXTENSION_COMMANDS.endRun: return this.endRun(owner, text('sessionId'), text('invocationId'))
       case EXTENSION_COMMANDS.bindFolder: return this.bindFolder(owner, text('runId'), text('folder'))
-      case EXTENSION_COMMANDS.bindDocument:
-        // Adding to an existing page is the append milestone; E1 binds no documents.
-        text('runId')
-        text('path')
-        return { status: 'refused', reason: 'unsupported' }
+      case EXTENSION_COMMANDS.bindDocument: return this.bindDocument(owner, text('runId'), text('path'))
       case PROPOSAL_COMMANDS.submit: return this.submit(owner, readProposal(own(args, 'proposal')))
       case PROPOSAL_COMMANDS.query: return this.query(owner, text('operationId'))
+      case PROPOSAL_UNDO_COMMANDS.undo: {
+        const request = readUndoRequest(own(args, 'request'))
+        if (!request) throw new ExtensionArgumentError('The undo request could not be read.')
+        return this.undo.press(owner, request, sessionId => this.sessions.get(sessionId)?.owner === owner)
+      }
+      case PROPOSAL_UNDO_COMMANDS.query: return this.undo.query(owner, text('operationId'))
+      case PROPOSAL_UNDO_COMMANDS.release: return this.undo.release(owner, text('sessionId'), text('undoReceipt'))
       default: throw new ExtensionArgumentError(`No extension command ${command}`)
     }
   }
@@ -659,7 +740,7 @@ export class ExtensionBackend {
     const sha = await this.host.sha256(text)
     const stored = await this.withStore(preferences => this.storeVersion(preferences, sha, text, extension))
     if (!stored) return { status: 'refused', reason: 'storageUnavailable' }
-    return { status: 'candidate', packageSha256: sha, packageId: extension.id, version: extension.version, missingCapabilities: missingOf(extension.capabilities) }
+    return { status: 'candidate', packageSha256: sha, packageId: extension.id, version: extension.version, missingCapabilities: this.missingOf(extension.capabilities) }
   }
 
   /**
@@ -689,6 +770,18 @@ export class ExtensionBackend {
     return true
   }
 
+  /**
+   * The version on in this vault: the recorded one, or a default-on bundled package's when nobody
+   * chose (no record and no Off), as long as this host performs everything it needs.
+   */
+  private effectiveActive(entry: VaultEntry | undefined, packageId: string, bundled: readonly Bundled[]): string | null {
+    const recorded = entry?.active.get(packageId)
+    if (recorded !== undefined) return recorded
+    if (!DEFAULT_ON_PACKAGES.has(packageId) || entry?.previous.has(packageId)) return null
+    const shipped = bundled.find(item => item.extension.id === packageId)
+    return shipped && this.missingOf(shipped.extension.capabilities).length === 0 ? shipped.sha256 : null
+  }
+
   private async list(vaultPath: string): Promise<ExtensionListReply> {
     const roots = await this.host.vaultRoots(vaultPath)
     if (!roots) return VAULT_UNAVAILABLE
@@ -713,8 +806,9 @@ export class ExtensionBackend {
       const readable = typeof verified !== 'string' && verified.extension.id === item.packageId
       versionsOf(item.packageId, item.name).push({ packageSha256: item.packageSha256, version: item.version, readable })
     }
+    const bundled = await this.bundled()
     for (const entry of extensions) {
-      entry.activeSha256 = snapshot.vault.active.get(entry.packageId) ?? null
+      entry.activeSha256 = this.effectiveActive(snapshot.vault, entry.packageId, bundled)
       entry.previousSha256 = snapshot.vault.previous.get(entry.packageId) ?? null
     }
     return { status: 'ok', extensions }
@@ -740,9 +834,10 @@ export class ExtensionBackend {
       const verified = await this.verified(sha)
       if (typeof verified === 'string') return activationRefused(verified)
       if (verified.extension.id !== packageId) return activationRefused('unknownVersion')
-      const needed = missingOf(verified.extension.capabilities)
+      const needed = this.missingOf(verified.extension.capabilities)
       if (needed.length > 0) return activationRefused('missingCapabilities', needed)
-      const change = await this.withStore(preferences => this.setActive(preferences, { vault: roots.canonical, packageId, sha, expected, bundled }))
+      const shipped = await this.bundled()
+      const change = await this.withStore(preferences => this.setActive(preferences, { vault: roots.canonical, packageId, sha, expected, bundled, shipped }))
       if (typeof change === 'string') return activationRefused(change)
       const revokedRuns = change.replaced === null ? 0 : await this.revokePackage(roots.canonical, packageId, sha)
       return { status: 'active', packageSha256: sha, previousSha256: change.previous, revokedRuns }
@@ -755,12 +850,12 @@ export class ExtensionBackend {
    */
   private async setActive(
     preferences: Preferences,
-    request: { vault: string; packageId: string; sha: string; expected: string | null; bundled: boolean },
+    request: { vault: string; packageId: string; sha: string; expected: string | null; bundled: boolean; shipped: readonly Bundled[] },
   ): Promise<Activated | 'unknownVersion' | 'changed' | 'vaultUnavailable'> {
     const { vault, packageId, sha, expected } = request
     if (!request.bundled && !isStored(preferences, packageId, sha)) return 'unknownVersion'
     const entry = preferences.vaults.get(vault)
-    const current = entry?.active.get(packageId) ?? null
+    const current = this.effectiveActive(entry, packageId, request.shipped)
     if (current !== expected) return 'changed'
     if (current === sha) return { previous: entry?.previous.get(packageId) ?? null, replaced: null }
     if (!isVaultKey(vault)) return 'vaultUnavailable'
@@ -785,12 +880,16 @@ export class ExtensionBackend {
     const roots = await this.host.vaultRoots(vaultPath)
     if (!roots) return VAULT_UNAVAILABLE
     return this.inTransition(async () => {
+      const shipped = await this.bundled()
       const outcome = await this.withStore(async (preferences): Promise<'changed' | 'vaultUnavailable' | 'published'> => {
-        if (preferences.vaults.get(roots.canonical)?.active.get(packageId) !== expected) return 'changed'
+        if (this.effectiveActive(preferences.vaults.get(roots.canonical), packageId, shipped) !== expected) return 'changed'
+        // A default-on package turned off in a vault never seen before gets that vault's first entry.
+        if (!preferences.vaults.has(roots.canonical) && (!isVaultKey(roots.canonical) || !makeRoomForVault(preferences, roots.canonical))) return 'vaultUnavailable'
         const next = copyOf(preferences)
         const seq = takeSeq(next)
-        const target = next.vaults.get(roots.canonical)
-        if (seq === null || !target) return 'vaultUnavailable'
+        const target = next.vaults.get(roots.canonical) ?? emptyEntry()
+        next.vaults.set(roots.canonical, target)
+        if (seq === null) return 'vaultUnavailable'
         target.active.delete(packageId)
         target.previous.set(packageId, expected)
         target.touched = seq
@@ -806,17 +905,18 @@ export class ExtensionBackend {
 
   /** Run admission: this exact version active in this vault, its bytes verified now, a command this host performs. */
   private async admit(vault: string, sha: string, commandId: string): Promise<{ packageId: string } | { refused: RunAdmissionRefusal }> {
-    const bundled = (await this.bundled()).find(item => item.sha256 === sha)
+    const shipped = await this.bundled()
+    const bundled = shipped.find(item => item.sha256 === sha)
     const { packageId, active } = await this.withStore(async preferences => {
       const id = bundled?.extension.id ?? preferences.imports.find(item => item.packageSha256 === sha)?.packageId
-      return { packageId: id, active: id !== undefined && preferences.vaults.get(vault)?.active.get(id) === sha }
+      return { packageId: id, active: id !== undefined && this.effectiveActive(preferences.vaults.get(vault), id, shipped) === sha }
     })
     if (packageId === undefined || !active) return { refused: 'notActive' }
     const verified = await this.verified(sha)
     if (typeof verified === 'string' || verified.extension.id !== packageId) return { refused: 'unreadable' }
     const command = verified.extension.commands.find(item => item.id === commandId)
     if (!command) return { refused: 'unknownCommand' }
-    if (missingOf(commandCapabilities(command)).length > 0) return { refused: 'missingCapabilities' }
+    if (this.missingOf(commandCapabilities(command)).length > 0) return { refused: 'missingCapabilities' }
     return { packageId }
   }
 
@@ -835,6 +935,8 @@ export class ExtensionBackend {
       run.revoked = true
       if (run.write.state !== 'busy') this.runs.delete(id)
     }
+    // Its Undo offers end with it, once any press of them has finished.
+    void this.undo.closeSession(sessionId)
   }
 
   /** A session this owner closed, or one with a run of this owner still settling. */
@@ -875,6 +977,7 @@ export class ExtensionBackend {
     this.closeNow(sessionId)
     const ours = (run: Run) => run.session === sessionId && run.owner === owner
     await this.join(ours)
+    await this.undo.closeSession(sessionId)
     for (const [id, run] of this.runs) if (ours(run)) this.runs.delete(id)
     return { status: 'closed' }
   }
@@ -914,7 +1017,7 @@ export class ExtensionBackend {
     current.keys.set(request.invocationId, { state: 'admitted', runId })
     this.runs.set(runId, {
       session: request.sessionId, owner, invocation: request.invocationId, vault: current.vault, packageId: checked.packageId,
-      packageSha256: request.packageSha256, revoked: false, write: { state: 'free' }, folders: [],
+      packageSha256: request.packageSha256, revoked: false, write: { state: 'free' }, folders: [], documents: [],
     })
     return {
       status: 'admitted',
@@ -990,6 +1093,22 @@ export class ExtensionBackend {
     return { status: 'bound', folderHandle, displayPath: lookup.folder.relative }
   }
 
+  /** An existing page, bound to the run with the exact bytes it holds now as its immutable baseline. */
+  private async bindDocument(owner: string, runId: string, path: string): Promise<DocumentHandleReply> {
+    const stale: DocumentHandleReply = { status: 'refused', reason: 'staleRun' }
+    if (!isOpaqueToken(runId)) return stale
+    const run = this.liveRun(owner, runId)
+    if (!run) return stale
+    const lookup = await this.host.resolveDocument(run.vault.canonical, path)
+    if (!lookup.ok) return { status: 'refused', reason: lookup.reason }
+    if (!this.liveRun(owner, runId)) return stale
+    const contentSha256 = await this.host.sha256(lookup.content)
+    const documentHandle = newId('document')
+    if (run.documents.length >= UNDO_LIMITS.documentsPerRun) run.documents.shift()
+    run.documents.push([documentHandle, { document: lookup.document, baselineSha256: contentSha256 }])
+    return { status: 'bound', documentHandle, displayPath: lookup.document.relative, contentSha256 }
+  }
+
   // --- Writes -------------------------------------------------------------------------------------
 
   /**
@@ -1001,15 +1120,18 @@ export class ExtensionBackend {
     const { operationId } = proposal
     const refused = (reason: ProposalRefusal): ProposalReceipt => ({ status: 'refused', operationId, reason })
     if (!isCanonicalUuid(operationId)) return refused('operationMismatch')
-    if (proposal.kind === 'append') return refused('unsupported')
     const digest = await this.host.sha256(JSON.stringify(proposalFields(proposal)))
     const recorded = this.operations.get(operationId)
     if (recorded) return this.replay(recorded, owner, digest, operationId)
     // A full ledger takes no new id at all, so no answer here goes unrecorded.
     if (this.operations.size >= BRIDGE_LIMITS.operations) return refused('busy')
     const run = this.liveRun(owner, proposal.runId)
-    const folder = run?.folders.find(([handle]) => handle === proposal.folderHandle)?.[1]
-    if (!run || run.write.state !== 'free' || !folder) {
+    const folder = proposal.kind === 'create' ? run?.folders.find(([handle]) => handle === proposal.folderHandle)?.[1] : undefined
+    const bound = proposal.kind === 'append' ? run?.documents.find(([handle]) => handle === proposal.documentHandle)?.[1] : undefined
+    const target = folder ?? bound
+    // An append names exactly the baseline its handle was bound with.
+    const baselineMatches = proposal.kind !== 'append' || bound?.baselineSha256 === proposal.expectedSha256
+    if (!run || run.write.state !== 'free' || !target || !baselineMatches) {
       const receipt = refused(!run ? 'staleRun' : run.write.state !== 'free' ? 'operationMismatch' : 'handleMismatch')
       this.operations.set(operationId, { owner, digest, state: receipt, settled: Promise.resolve() })
       return receipt
@@ -1023,7 +1145,9 @@ export class ExtensionBackend {
     run.write = { state: 'busy', settled }
     let receipt: ProposalReceipt
     try {
-      receipt = await this.publish(run.vault, folder, proposal)
+      receipt = proposal.kind === 'create' && folder ? await this.publish(run, folder, proposal)
+        : proposal.kind === 'append' && bound ? await this.publishAppend(run, bound.document, proposal)
+        : { status: 'uncertain', operationId }
     } catch {
       receipt = { status: 'uncertain', operationId }
     }
@@ -1045,7 +1169,8 @@ export class ExtensionBackend {
   }
 
   /** Name, size and digest, then the host's exclusive creation; every refusal precedes publication. */
-  private async publish(vault: VaultRoots, folder: BoundFolder, proposal: CreateProposal): Promise<ProposalReceipt> {
+  private async publish(run: Run, folder: BoundFolder, proposal: CreateProposal): Promise<ProposalReceipt> {
+    const { vault } = run
     const { operationId, fileName, content, contentSha256 } = proposal
     const refused = (reason: ProposalRefusal): ProposalReceipt => ({ status: 'refused', operationId, reason })
     if (!validFileName(fileName)) return refused('invalidName')
@@ -1053,11 +1178,14 @@ export class ExtensionBackend {
     if (!isSha256(contentSha256) || await this.host.sha256(content) !== contentSha256) return refused('digestMismatch')
     const written = await this.host.createPage(vault, folder, fileName, content)
     switch (written.status) {
-      case 'created':
+      case 'created': {
+        const path = this.host.pagePath(vault, folder, fileName)
         return {
-          status: 'committed', kind: 'create', operationId, path: this.host.pagePath(vault, folder, fileName),
-          beforeSha256: null, afterSha256: contentSha256, durable: written.durable, undoReceipt: null,
+          status: 'committed', kind: 'create', operationId, path,
+          beforeSha256: null, afterSha256: contentSha256, durable: written.durable,
+          undoReceipt: await this.offerCreateUndo(run, [folder.relative, fileName].filter(Boolean).join('/'), path, contentSha256),
         }
+      }
       case 'exists': return { status: 'conflict', operationId, reason: 'exists' }
       case 'unavailable': return refused('storageUnavailable')
       case 'moved': return refused('handleMismatch')
@@ -1066,12 +1194,69 @@ export class ExtensionBackend {
     }
   }
 
+  /** A created page offers Undo (to Trash) while its session has room; creating replaced nothing. */
+  private async offerCreateUndo(run: Run, relative: string, path: string, afterSha256: string): Promise<string | null> {
+    if (!this.undo.hasRoom(run.session)) return null
+    // The page is written either way; a page that cannot be found again simply offers no Undo.
+    const lookup = await this.host.resolveDocument(run.vault.canonical, relative).catch(() => null)
+    if (!lookup?.ok) return null
+    const token = this.undo.newToken()
+    this.undo.register({
+      owner: run.owner, sessionId: run.session, token, kind: 'create', document: lookup.document, canonicalRoot: run.vault.canonical,
+      path, afterSha256, beforeSha256: null,
+    })
+    return token
+  }
+
+  /**
+   * Native's append order, in one step for this model: size and digest, an Undo slot, the page's
+   * bytes now against the reviewed baseline, the exact earlier bytes kept, then one guarded whole
+   * replacement. Every refusal precedes publication; an unproven publication is `uncertain`.
+   */
+  private async publishAppend(run: Run, document: BoundDocument, proposal: AppendProposal): Promise<ProposalReceipt> {
+    const { operationId, content, contentSha256, expectedSha256 } = proposal
+    const refused = (reason: ProposalRefusal): ProposalReceipt => ({ status: 'refused', operationId, reason })
+    if (utf8Bytes(content) > PROPOSAL_LIMITS.contentBytes) return refused('tooLarge')
+    if (!isSha256(contentSha256) || contentSha256 === expectedSha256 || await this.host.sha256(content) !== contentSha256) return refused('digestMismatch')
+    if (!this.undo.hasRoom(run.session)) return refused('busy')
+    const now = await this.host.resolveDocument(run.vault.canonical, document.relative)
+    if (!now.ok) return now.reason === 'missing' ? { status: 'conflict', operationId, reason: 'changed' } : refused(now.reason === 'link' ? 'link' : 'handleMismatch')
+    if (now.document.path !== document.path) return refused('handleMismatch')
+    if (await this.host.sha256(now.content) !== expectedSha256) return { status: 'conflict', operationId, reason: 'changed' }
+    const token = this.undo.newToken()
+    // The earlier text is kept, and read back, before anything changes; without it nothing is written.
+    if (!await this.host.retain(token, now.content)) return refused('storageUnavailable')
+    const replaced = await this.host.replacePage(document, expectedSha256, content)
+    if (replaced.status !== 'replaced') {
+      await this.host.dropRetained(token)
+      switch (replaced.status) {
+        case 'changed': case 'missing': return { status: 'conflict', operationId, reason: 'changed' }
+        case 'moved': return refused('handleMismatch')
+        case 'busy': return refused('busy')
+        case 'unavailable': return refused('storageUnavailable')
+        default: return { status: 'uncertain', operationId }
+      }
+    }
+    const path = joinPagePath(run.vault, document.relative)
+    this.undo.register({
+      owner: run.owner, sessionId: run.session, token, kind: 'append', document, canonicalRoot: run.vault.canonical,
+      path, afterSha256: contentSha256, beforeSha256: expectedSha256,
+    })
+    return appendCommitted(operationId, path, expectedSha256, contentSha256, replaced.durable, token)
+  }
+
   /** The recorded state for this owner's operation; anyone else's is `unknown`, never absence. */
   private query(owner: string, operationId: string): ProposalQueryReply {
     const operation = this.operations.get(operationId)
     if (!operation || operation.owner !== owner) return { status: 'unknown', operationId }
     return operation.state === 'running' ? { status: 'running', operationId } : operation.state
   }
+}
+
+/** A page path as the vault was requested, so a receipt matches the app's own entries. */
+function joinPagePath(vault: VaultRoots, relative: string): string {
+  const separator = vault.requested.includes('\\') && !vault.requested.includes('/') ? '\\' : '/'
+  return `${vault.requested.replace(/[\\/]+$/u, '')}${separator}${relative.split('/').join(separator)}`
 }
 
 /** The in-memory backend's only page owner: one page, one owner, gone on reload. */

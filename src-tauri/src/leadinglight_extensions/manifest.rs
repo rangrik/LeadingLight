@@ -57,15 +57,45 @@ impl Capability {
     }
 }
 
-/// What this host performs: form, chosen folder, exclusive create, open.
-pub(crate) const HOST_CAPABILITIES: [Capability; 2] =
-    [Capability::DocumentCreate, Capability::DocumentOpen];
+/// Performed natively: exclusive create, guarded append with a kept earlier version and Undo,
+/// and opening the result.
+pub(crate) const NATIVE_CAPABILITIES: [Capability; 3] = [
+    Capability::DocumentCreate,
+    Capability::DocumentAppend,
+    Capability::DocumentOpen,
+];
 
+/// The passage snapshot (`selection.read`) and the note linked to its source
+/// (`association.resolve`) are trusted services of the desktop UI, not native work: native never
+/// sees a passage and never judges what it means. They are offered because the E2 desktop host
+/// that performs them is qualified in this build. A build without that host must set this to
+/// false, so packages needing them, the bundled commentary included, stay off and list what is
+/// missing.
+pub(crate) const HOST_SERVICES_QUALIFIED: bool = true;
+
+const HOST_SERVICES: [Capability; 2] = [Capability::SelectionRead, Capability::AssociationResolve];
+
+/// What this host performs.
+pub(crate) fn host_capabilities() -> Vec<Capability> {
+    let mut host = NATIVE_CAPABILITIES.to_vec();
+    if HOST_SERVICES_QUALIFIED {
+        host.extend(HOST_SERVICES);
+    }
+    host.sort();
+    host
+}
+
+/// What this host lacks for `needed`. The store asks with its own host, so tests can qualify one.
+#[cfg(test)]
 pub(crate) fn missing_capabilities(needed: &[Capability]) -> Vec<Capability> {
+    missing_from(needed, &host_capabilities())
+}
+
+pub(crate) fn missing_from(needed: &[Capability], host: &[Capability]) -> Vec<Capability> {
     needed
         .iter()
         .copied()
-        .filter(|capability| !HOST_CAPABILITIES.contains(capability))
+        .filter(|capability| !host.contains(capability))
         .collect()
 }
 

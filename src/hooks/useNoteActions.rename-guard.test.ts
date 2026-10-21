@@ -199,6 +199,6 @@ describe('property writes through the page save queue', () => {
 
     await act(async () => { await result.current.handleAddProperty(entry.path, 'priority', 'high') })
 
-    expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Fix the page's properties first. Your edits are kept.")
+    expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Another change to this page couldn't be combined with your latest edits, so they're kept here but not saved.")
   })
 })

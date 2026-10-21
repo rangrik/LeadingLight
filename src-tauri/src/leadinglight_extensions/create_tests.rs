@@ -13,10 +13,9 @@ use tempfile::{PathPersistError, TempDir, TempPath};
 use super::create::{CreateIo, NativeCreateIo};
 use super::runs::MAX_OPERATIONS;
 use super::wire::{
-    ActivationReply, CloseSessionReply, CommitKind, ConflictReason, DeactivationReply,
-    DocumentHandleReply, EndRunReply, FolderHandleReply, GuardedProposal, HandleRefusal,
-    ImportReply, ListReply, OpenSessionReply, ProposalReceipt, ProposalRefusal, QueryReply,
-    QueryState, RunAdmission, RunRefusal,
+    ActivationReply, CloseSessionReply, CommitKind, ConflictReason, DeactivationReply, EndRunReply,
+    FolderHandleReply, GuardedProposal, HandleRefusal, ImportReply, ListReply, OpenSessionReply,
+    ProposalReceipt, ProposalRefusal, QueryReply, QueryState, RunAdmission, RunRefusal,
 };
 use super::{hex, test_roots, BeginRequest, Extensions};
 use crate::vault::staged_file::{sha256, NativePlatform, Platform};
@@ -156,6 +155,38 @@ fn committed(world: &World, operation_id: &str, name: &str, text: &str) -> Propo
     }
 }
 
+/// A committed create now offers Undo with a fresh token; everything else is as E1 promised.
+fn without_undo(receipt: ProposalReceipt) -> ProposalReceipt {
+    match receipt {
+        ProposalReceipt::Committed {
+            kind,
+            operation_id,
+            path,
+            before_sha256,
+            after_sha256,
+            durable,
+            undo_receipt,
+        } => {
+            assert!(
+                undo_receipt
+                    .as_deref()
+                    .is_some_and(|token| token.starts_with("undo-") && super::is_token(token)),
+                "{undo_receipt:?}"
+            );
+            ProposalReceipt::Committed {
+                kind,
+                operation_id,
+                path,
+                before_sha256,
+                after_sha256,
+                durable,
+                undo_receipt: None,
+            }
+        }
+        other => other,
+    }
+}
+
 // --- Test filesystem effects ---------------------------------------------------------------------
 
 /// Publishes for real, but only after the test releases it.
@@ -271,7 +302,10 @@ fn creates_one_new_page_and_reports_exactly_what_was_written() {
         "main",
         &proposal(&operation, &run, &folder, "Debrief.md", TEXT),
     );
-    assert_eq!(receipt, committed(&world, &operation, "Debrief.md", TEXT));
+    assert_eq!(
+        without_undo(receipt.clone()),
+        committed(&world, &operation, "Debrief.md", TEXT)
+    );
     assert_eq!(fs::read_to_string(world.page("Debrief.md")).unwrap(), TEXT);
     assert_eq!(world.pages(), ["Debrief.md"]);
     assert_eq!(
@@ -398,7 +432,10 @@ fn a_duplicate_waits_for_the_running_write_and_gets_its_answer() {
     assert!(answer.recv_timeout(Duration::from_millis(200)).is_err());
     release.send(()).unwrap();
     let first = first.join().unwrap();
-    assert_eq!(first, committed(&world, &operation, "Debrief.md", TEXT));
+    assert_eq!(
+        without_undo(first.clone()),
+        committed(&world, &operation, "Debrief.md", TEXT)
+    );
     assert_eq!(duplicate.join().unwrap(), first);
     assert_eq!(world.pages(), ["Debrief.md"]);
 }
@@ -446,7 +483,8 @@ fn closing_waits_for_an_admitted_write_and_other_windows_cannot_join_it() {
     release.send(()).unwrap();
     assert_eq!(closed.recv().unwrap(), CloseSessionReply::Closed);
     closer.join().unwrap();
-    // The write admitted before the close keeps its true result.
+    // The write admitted before the close keeps its true result, but its session is gone, so it
+    // offers no Undo.
     assert_eq!(
         write.join().unwrap(),
         committed(&world, &operation, "Debrief.md", TEXT)
@@ -673,12 +711,6 @@ fn binds_only_real_visible_folders_inside_the_vault() {
         world.extensions.bind_folder("other", &run, "Real"),
         refused(HandleRefusal::StaleRun)
     );
-    assert_eq!(
-        world.extensions.bind_document(),
-        DocumentHandleReply::Refused {
-            reason: HandleRefusal::Unsupported
-        }
-    );
 }
 
 #[test]
@@ -773,7 +805,10 @@ fn an_unprovable_publication_is_uncertain_and_keeps_its_record() {
         "main",
         &proposal(&operation, &run, &folder, "Debrief.md", TEXT),
     );
-    assert_eq!(receipt, committed(&linked, &operation, "Debrief.md", TEXT));
+    assert_eq!(
+        without_undo(receipt),
+        committed(&linked, &operation, "Debrief.md", TEXT)
+    );
 }
 
 /// Review finding 5: the read-back is bounded and checks the handle and the path, so a page
@@ -809,7 +844,7 @@ fn a_page_held_by_another_writer_is_busy() {
 }
 
 #[test]
-fn appending_is_refused_in_this_milestone() {
+fn an_append_naming_no_bound_page_writes_nothing() {
     let world = world();
     let (_, run, _) = world.ready("main");
     let operation = uuid();
@@ -823,8 +858,9 @@ fn appending_is_refused_in_this_milestone() {
     };
     assert_eq!(
         world.extensions.submit("main", &append),
-        refused(&operation, ProposalRefusal::Unsupported)
+        refused(&operation, ProposalRefusal::HandleMismatch)
     );
+    assert!(world.pages().is_empty());
 }
 
 #[test]

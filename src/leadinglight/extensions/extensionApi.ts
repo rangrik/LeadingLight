@@ -3,6 +3,7 @@
 // receives an ExtensionApi. Every id and handle is opaque here and revalidated natively; a package
 // id or command id taken from package text is never authority by itself.
 import { isOpaqueToken, type GuardedProposal, type ProposalQueryArgs, type ProposalQueryReply, type ProposalReceipt } from '../proposals/proposalContract.ts'
+import type { ReleaseUndoArgs, ReleaseUndoReply, UndoOffer, UndoQueryArgs, UndoQueryReply, UndoReceipt, UndoRequest } from '../proposals/proposalUndoContract.ts'
 import type { Capability, ExtensionDiagnostic, RunLiveness } from './extensionContract'
 
 export const EXTENSION_COMMANDS = {
@@ -165,6 +166,12 @@ export interface ExtensionApi {
   bindDocument(args: BindDocumentArgs): Promise<DocumentHandleReply | null>
   submitProposal(proposal: GuardedProposal): Promise<ProposalReceipt | null>
   queryProposal(args: ProposalQueryArgs): Promise<ProposalQueryReply | null>
+  /** One press of Undo; the reply is read against the offer it was pressed for. */
+  undoProposal(request: UndoRequest, offer: UndoOffer): Promise<UndoReceipt | null>
+  /** Asks about a press whose reply was lost; never applies anything. */
+  queryUndo(args: UndoQueryArgs, offer: UndoOffer): Promise<UndoQueryReply | null>
+  /** Gives up an Undo that is no longer offered, so native unpins what it kept for it. */
+  releaseUndo(args: ReleaseUndoArgs): Promise<ReleaseUndoReply | null>
 }
 
 // --- Reading session replies -----------------------------------------------------------------------
@@ -245,6 +252,11 @@ export interface ExtensionSession {
   /** For RunEffects.liveness: `revoked` once close begins, `cancelled` once the run is ended. */
   liveness(invocationId: string): RunLiveness
   /**
+   * The native session id once its open reply arrived, else null. An Undo offer names it, since
+   * native binds every undo token to the session its write committed in.
+   */
+  id(): string | null
+  /**
    * Stops admissions at once, then closes natively, waiting for the open reply if it is late.
    * Leave the vault only after `confirmed`. A confirmed result is kept; `unconfirmed` is not, and
    * calling again asks native again for the same session.
@@ -265,9 +277,11 @@ export function openExtensionSession(api: SessionApi, vaultPath: string): Extens
   let closeConfirmed = false
   let closeAttempt: Promise<SessionBarrier> | null = null
   const ended = new Set<string>()
+  let openedId: string | null = null
   const opened = settled(api.openSession({ vaultPath })).then(reply => {
     const parsed = parseOpenSessionReply(reply)
-    return parsed?.status === 'open' ? parsed.sessionId : null
+    openedId = parsed?.status === 'open' ? parsed.sessionId : null
+    return openedId
   })
   const refused = (reason: RunAdmissionRefusal): Admission => ({ status: 'refused', reason })
   const blocked = (invocationId: string): Admission | null =>
@@ -318,6 +332,7 @@ export function openExtensionSession(api: SessionApi, vaultPath: string): Extens
     liveness(invocationId) {
       return closed ? 'revoked' : ended.has(invocationId) ? 'cancelled' : 'live'
     },
+    id: () => openedId,
     close,
   }
 }

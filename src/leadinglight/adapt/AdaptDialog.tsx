@@ -12,7 +12,7 @@ import type { PackageView, RegistrySnapshot } from '../extensions/extensionSessi
 import { commandSentences, diagnosticLocation, missingSentence, translator, type T } from '../extensions/extensionUiText'
 import type { Adoption } from './adaptAdoption'
 import { canAttach } from './adaptAttachments'
-import { candidateFor, type CandidateState } from './adaptCandidate'
+import { candidateFor, type CandidateState, type HostReview } from './adaptCandidate'
 import type { AdaptConversation, AdaptEntry, AdaptReply } from './adaptContract'
 import {
   canSendIn, includedTurnsOf, isConnected, isSettled, turnPhaseOf,
@@ -37,6 +37,8 @@ interface Props {
   snapshot: AdaptSnapshot
   controller: AdaptController
   registry: RegistrySnapshot
+  /** The extension host's review (its controller's), so a candidate is available exactly when Turn on would be. */
+  review: HostReview
   adoptions: Readonly<Record<string, Adoption>>
   candidates: CandidateActions
   /** Settles and snapshots the page in front, on this click only. */
@@ -58,7 +60,7 @@ function MenuContent(props: ComponentProps<typeof DropdownMenuContent>) {
  * keeps the request and any running turn; nothing is sent or turned on without a click here or in
  * the E1 preview it opens.
  */
-export function AdaptDialog({ locale, snapshot, controller, registry, adoptions, candidates, onAttachPage, onClose, onKeepWriting, onCloseAutoFocus }: Props) {
+export function AdaptDialog({ locale, snapshot, controller, registry, review, adoptions, candidates, onAttachPage, onClose, onKeepWriting, onCloseAutoFocus }: Props) {
   const t = translator(locale)
   const composer = useRef<HTMLTextAreaElement | null>(null)
   const focusComposer = () => composer.current?.focus()
@@ -80,7 +82,7 @@ export function AdaptDialog({ locale, snapshot, controller, registry, adoptions,
           <WindingLine t={t} kind="closingVisit" winding={snapshot.closingVisit} />
           <WindingLine t={t} kind="signingOut" winding={snapshot.signingOut} />
           {conversation && conversation.entries.length > 0 && (
-            <Transcript t={t} locale={locale} snapshot={snapshot} conversation={conversation} controller={controller} registry={registry}
+            <Transcript t={t} locale={locale} snapshot={snapshot} conversation={conversation} controller={controller} registry={registry} review={review}
               adoptions={adoptions} candidates={candidates} onAnswer={answer} onChange={focusComposer} />
           )}
           {conversation && conversation.storage !== 'saved' && <StorageLine t={t} snapshot={snapshot} controller={controller} storage={conversation.storage} />}
@@ -215,6 +217,7 @@ interface TranscriptProps {
   conversation: AdaptConversation
   controller: AdaptController
   registry: RegistrySnapshot
+  review: HostReview
   adoptions: Readonly<Record<string, Adoption>>
   candidates: CandidateActions
   onAnswer: (text: string) => void
@@ -276,8 +279,8 @@ function ReplyView(props: TranscriptProps & { request: Request; turnId: string; 
 }
 
 function CandidateCard(props: TranscriptProps & { request: Request; turnId: string; packageText: string }) {
-  const { t, locale, registry, request, packageText, turnId, adoptions, candidates, snapshot, onChange } = props
-  const state = useMemo(() => candidateFor(packageText, request, registry), [packageText, request, registry])
+  const { t, locale, registry, review, request, packageText, turnId, adoptions, candidates, snapshot, onChange } = props
+  const state = useMemo(() => candidateFor(packageText, request, registry, review), [packageText, request, registry, review])
   const adoption = adoptions[turnId] ?? null
   const here = snapshot.visit === 'open'
   return <section className="ll-adapt-check" aria-label={t('leadinglight.adapt.checkedBy')} data-testid="adapt-candidate" data-state={state.status}

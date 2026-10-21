@@ -134,11 +134,15 @@ association handling. It is not a header copied into every note:
 
 - **New associated note:** exactly one `[Source](…)` link back to the source page and one association
   record, then the quoted passage, then your blocks.
-- **Adding to an existing associated note** (later): LeadingLight checks that the note belongs to this
-  source. It then extends that note's one association record and adds the quote and your blocks, in a single
-  reviewed change. The title and the existing link stay as they are; no second header or source is
-  added. If the note is malformed, belongs to another source or changed since you reviewed it, nothing is
-  written and your answers are kept.
+- **Adding to an existing associated note:** LeadingLight checks that the note belongs to this
+  source. It then extends that note's one association record and adds the quote and your blocks at its
+  end, in a single reviewed change of the whole note. The title and the existing link stay as they are;
+  no second header or source is added. If the note is malformed, belongs to another source, ends inside
+  an unfinished code or HTML block, or changed since you reviewed it, nothing is written and your answers
+  are kept.
+
+The person chooses where it goes in LeadingLight's own dialog: the one linked note, one of several
+linked notes, or a new separate note (numbered). LeadingLight never picks among several silently.
 
 ## Capabilities
 
@@ -151,9 +155,11 @@ association handling. It is not a header copied into every note:
 | `document.open` | a command has `openCommittedResult` |
 
 A valid package can still be unavailable on this version of LeadingLight. Turning it on stays blocked,
-and the reason is shown, until every capability it lists is supported. Right now only
-`document.create` and `document.open` are: form, chosen folder, new note, open. Passage capture,
-association and adding to an existing page come later.
+and the reason is shown, until every capability it lists is supported. This version performs all five
+for commands that capture a passage: the selected passage is read when the person asks, the linked note
+is found from its Source link, and it is added to or created beside the source. Adding to a page the
+person picks (`chosenExistingDocument`) still needs a page chooser this version does not have, so such
+a package stays unavailable and says it needs adding to an existing page.
 
 ## Strict reading and limits
 
@@ -235,11 +241,12 @@ opened afterwards. Works now.
 ```
 
 **Passage commentary** (`passage-commentary.json`): capture a selected passage, ask an optional thought,
-add to the note linked to its source or create one. Valid now; available once capture, association and
-adding are supported.
+add to the note linked to its source or create one. Works now: LeadingLight ships it on by default as
+`leadinglight.passage-commentary`, offers it on a text selection (rich editor toolbar) and in the command
+palette, and opens the note beside the source. A copy with your own fields or blocks works the same way.
 
 **Observation log** (`append-observation.json`): ask what you noticed and add a heading and quote to the
-end of a page you pick. Valid now; available once adding is supported.
+end of a page you pick. Valid, but unavailable in this version: there is no page chooser yet.
 
 ## For host developers
 
@@ -294,11 +301,15 @@ write. A committed write stays committed, and an uncertain one is queried and ne
 ### Proposal results
 
 - `conflict` and `refused` prove nothing was written. `storageUnavailable` means the folder or disk could
-  not be written before anything was published.
+  not be written before anything was published. For an addition it also covers page history: if the
+  page's earlier text could not be kept there and verified, the page is left as it was.
 - `uncertain` may already have committed. Query it; never retry automatically.
 - A query answers `running` for an operation still in flight. It answers `unknown` only when no record is
   kept, which never proves nothing was written.
 - A committed reply must match the proposal's kind and digests.
-- Adding to a page is reserved, and refused by this version. Its proposal will carry the whole reviewed
-  page, prepared by LeadingLight, with the expected digest of the page before the change. A reported
-  append must include an undo token; without one it is not a success.
+- Adding to a page carries the whole reviewed page, prepared by LeadingLight from the exact bytes it
+  bound, with the expected digest of the page before the change; it is written only if the page still
+  holds exactly those bytes. A reported append must include an undo token; without one it is not a
+  success. Undo is a host action offered to the person afterwards, never a recipe step. Its commands,
+  lifetime and limits are in `src/leadinglight/proposals/proposalUndoContract.ts` and
+  [commentary-native.md](commentary-native.md).

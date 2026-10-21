@@ -11,6 +11,7 @@ import {
   performFolderRelocation,
   loadNoteContent,
 } from './useNoteRename'
+import { RENAME_REFUSED_PREFIX } from '../leadinglight/rename/renameRefusal'
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('../mock-tauri', () => ({
@@ -29,6 +30,17 @@ const makeEntry = (overrides: Partial<VaultEntry> = {}): VaultEntry => ({
   outgoingLinks: [], template: null, sort: null, sidebarLabel: null,
   view: null, visible: null, properties: {},
   ...overrides,
+})
+
+/** A managed rename's receipt: exact source text and only the open pages it changed. */
+const receipt = (newPath: string, content = '# New\n', counts: { updated_files?: number; failed_updates?: number } = {}) => ({
+  new_path: newPath,
+  updated_files: counts.updated_files ?? 0,
+  failed_updates: counts.failed_updates ?? 0,
+  source_before_content: content,
+  source_content: content,
+  updated_open_pages: [],
+  unrefreshed_open_paths: [],
 })
 
 const makeWorkspace = (path: string, alias = 'workspace'): NonNullable<VaultEntry['workspace']> => ({
@@ -151,7 +163,7 @@ describe('useNoteRename hook', () => {
     content = '# New\n',
   ) => {
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'rename_note') return renameResult
+      if (cmd === 'rename_note') return receipt(renameResult.new_path, content, renameResult)
       if (cmd === 'get_note_content') return content
       return ''
     })
@@ -244,7 +256,7 @@ describe('useNoteRename hook', () => {
       workspace: makeWorkspace('/team', 'team'),
     })
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === command) return { new_path: newPath, updated_files: 0, failed_updates: 0 }
+      if (cmd === command) return receipt(newPath)
       if (cmd === 'get_note_content') return '# New\n'
       return ''
     })
@@ -267,7 +279,11 @@ describe('useNoteRename hook', () => {
   })
 
   it('handleRenameNote shows error toast on failure', async () => {
-    vi.mocked(mockInvoke).mockRejectedValueOnce(new Error('fail'))
+    vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
+      // A backend refusal is explicit (Amendment B1); a bare rejection would be an unknown reply.
+      if (cmd === 'rename_note') throw new Error(`${RENAME_REFUSED_PREFIX}fail`)
+      return ''
+    })
 
     const { result } = renderHook(() => useNoteRename(
       { entries: [], setToastMessage },
@@ -304,7 +320,7 @@ describe('useNoteRename hook', () => {
   it('handleRenameFilename renames the file while preserving the existing title', async () => {
     const entry = makeEntry({ path: '/vault/old-name.md', filename: 'old-name.md', title: 'Project Kickoff' })
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'rename_note_filename') return { new_path: '/vault/manual-name.md', updated_files: 1, failed_updates: 0 }
+      if (cmd === 'rename_note_filename') return receipt('/vault/manual-name.md', '# Project Kickoff\n', { updated_files: 1 })
       if (cmd === 'get_note_content') return '# Project Kickoff\n'
       return ''
     })
@@ -343,7 +359,7 @@ describe('useNoteRename hook', () => {
       hasH1: false,
     })
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'rename_note_filename') return { new_path: '/vault/business-plan-assumptions.md', updated_files: 0, failed_updates: 0 }
+      if (cmd === 'rename_note_filename') return receipt('/vault/business-plan-assumptions.md', 'Body without an H1\n')
       if (cmd === 'get_note_content') return 'Body without an H1\n'
       return ''
     })
@@ -380,7 +396,7 @@ describe('useNoteRename hook', () => {
       titleSource: 'frontmatter',
     })
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'rename_note_filename') return { new_path: '/vault/harbor.md', updated_files: 0, failed_updates: 0 }
+      if (cmd === 'rename_note_filename') return receipt('/vault/harbor.md', content)
       if (cmd === 'get_note_content') return content
       return ''
     })
@@ -405,7 +421,7 @@ describe('useNoteRename hook', () => {
       tabs = typeof update === 'function' ? update(tabs) : update
     })
     vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-      if (cmd === 'rename_note_filename') return { new_path: '/vault/fresh-title.md', updated_files: 0, failed_updates: 0 }
+      if (cmd === 'rename_note_filename') return receipt('/vault/fresh-title.md', '# Fresh Title\n')
       if (cmd === 'get_note_content') return '# Fresh Title\n'
       return ''
     })
@@ -446,7 +462,10 @@ describe('useNoteRename hook', () => {
   })
 
   it('handleRenameFilename surfaces backend conflict errors', async () => {
-    vi.mocked(mockInvoke).mockRejectedValueOnce(new Error('A note with that name already exists'))
+    vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
+      if (cmd === 'rename_note_filename') throw new Error(`${RENAME_REFUSED_PREFIX}A note with that name already exists`)
+      return ''
+    })
 
     const { result } = renderHook(() => useNoteRename(
       { entries: [makeEntry({ path: '/vault/old-name.md', filename: 'old-name.md' })], setToastMessage },

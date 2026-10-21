@@ -10,12 +10,14 @@ import type { VaultEntry } from '../types'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('../mock-tauri', () => ({ isTauri: () => true, mockInvoke: vi.fn(), updateMockContent: vi.fn(), addMockEntry: vi.fn(), trackMockChange: vi.fn() }))
 
-// Seam: the Inspector title rename reading the page back. Catches the read-back hiding text typed during the rename.
+// Seam: the Inspector title rename settling its page from the receipt. Catches text typed during the
+// rename being lost, and the rename's own change being saved over by that older-base text.
 const PAGE = '/vault/plan.md'
 const RENAMED = '/vault/new-name.md'
 const disk = new Map<string, string>()
 let renameGate: { promise: Promise<void>; open: () => void }
 let readFails: boolean
+let malformedReply: boolean
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -24,6 +26,7 @@ beforeEach(() => {
   let open!: () => void
   renameGate = { promise: new Promise<void>(resolve => { open = resolve }), open }
   readFails = false
+  malformedReply = false
   vi.mocked(invoke).mockImplementation(async (cmd: string, raw?: unknown) => {
     const args = (raw ?? {}) as { path: string; content: string; key: string; value: string; request: { path: string } }
     if (cmd === 'save_page_content') {
@@ -45,8 +48,13 @@ beforeEach(() => {
     const staged = disk.get(oldPath) ?? ''
     await renameGate.promise
     disk.delete(oldPath)
-    disk.set(RENAMED, staged.replace(/^# .*$/m, `# ${newTitle}`))
-    return { new_path: RENAMED, updated_files: 0, failed_updates: 0 }
+    const content = staged.replace(/^# .*$/m, `# ${newTitle}`)
+    disk.set(RENAMED, content)
+    // Native committed, but the reply proves nothing (the legacy shape).
+    if (malformedReply) return { new_path: RENAMED, updated_files: 0 }
+    // The managed-rename receipt: the exact bytes read and the exact bytes published.
+    return { new_path: RENAMED, updated_files: 0, failed_updates: 0, source_before_content: staged, source_content: content,
+      updated_open_pages: [], unrefreshed_open_paths: [] }
   })
 })
 afterEach(() => { vi.useRealTimers() })
@@ -64,6 +72,9 @@ function setup() {
       mutateExistingDocument: (path, mutation) => appRef.current!.mutateExistingDocument(path, mutation),
       runPageExclusive: (path, work) => appRef.current!.runPageExclusive(path, work),
       runManualRename: (path, rename) => appRef.current!.withManualRename(path, rename),
+      rebaseHeldDraft: (path, rebase) => appRef.current!.rebaseHeldDraft(path, rebase),
+      managedRenameLinkedPaths: path => appRef.current!.managedRenameLinkedPaths(path),
+      holdUnproven: path => appRef.current!.holdUnproven(path),
     })
     const app = useAppSave({
       updateEntry: vi.fn(), setTabs: notes.setTabs, handleSwitchTab: notes.handleSwitchTab, setToastMessage: vi.fn(),
@@ -95,11 +106,13 @@ it.each([
   await settle()
 
   await act(async () => { renameGate.open(); await updating })
-  expect(tab(hook)).toEqual([[RENAMED, typed]])
+  // Both survive: the words typed meanwhile and the line the rename wrote.
+  const settled = '---\ntitle: New Name\n---\n# New Name\n\nbody typed'
+  expect(tab(hook)).toEqual([[RENAMED, settled]])
 
   act(() => { hook.current.app.handleContentChange(RENAMED, `${hook.current.notes.tabs[0].content} more`) })
   await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS + 10) })
-  expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: `${typed} more` })
+  expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: `${settled} more` })
 })
 
 it('still shows the title line the rename wrote when nothing was typed meanwhile', async () => {
@@ -108,4 +121,18 @@ it('still shows the title line the rename wrote when nothing was typed meanwhile
   renameGate.open()
   await act(async () => { await hook.current.notes.handleUpdateFrontmatter(PAGE, 'title', 'New Name') })
   expect(tab(hook)).toEqual([[RENAMED, '---\ntitle: New Name\n---\n# New Name\n\nbody']])
+})
+
+it('keeps words typed after an unconfirmed Inspector title rename unsaved, so the moved page is never written back', async () => {
+  const { entry, hook } = setup()
+  await act(async () => { await hook.current.notes.handleSelectNote(entry) })
+  malformedReply = true
+  renameGate.open()
+  await act(async () => { await hook.current.notes.handleUpdateFrontmatter(PAGE, 'title', 'New Name') })
+  // No proof of the new path: the tab stays where it was, and the page takes no later words.
+  expect(tab(hook)).toEqual([[PAGE, '---\ntitle: New Name\n---\n# Plan\n\nbody']])
+  act(() => { hook.current.app.handleContentChange(PAGE, `${hook.current.notes.tabs[0].content} more`) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(AUTO_SAVE_DEBOUNCE_MS * 3) })
+  expect(Object.fromEntries(disk)).toEqual({ [RENAMED]: '---\ntitle: New Name\n---\n# New Name\n\nbody' })
+  expect(hook.current.notes.tabs[0].content).toBe('---\ntitle: New Name\n---\n# Plan\n\nbody more')
 })

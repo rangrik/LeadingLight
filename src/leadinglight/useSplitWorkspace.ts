@@ -11,6 +11,26 @@ import { edgeSlot, pagePlacement, type DropEdge, type NoteDropTarget, type PaneO
 
 export type PaneId = 0 | 1
 export type SplitOrientation = 'horizontal' | 'vertical'
+
+/** What opening a page beside the source would do now, for the dialog to say before Add. */
+export type BesideEffect =
+  | { readonly kind: 'shown' }
+  | { readonly kind: 'beside' }
+  /** The other pane holds this page, shown or retained while hidden; it is saved first and replaced. */
+  | { readonly kind: 'replaces'; readonly path: string }
+
+/**
+ * The pane that is not the source's, reserved at the person's request. The source's pane is never
+ * replaced and no pane is closed. Navigation in the reserved pane, a newer reservation there or a
+ * vault change cancels it; a page already open anywhere is focused instead of opened twice.
+ */
+export interface BesideReservation {
+  readonly pane: PaneId
+  inSession(): boolean
+  effect(path: string | null): BesideEffect
+  /** `stacked`: when the split is not open yet, open it top and bottom instead of side by side. */
+  open(entry: VaultEntry, content: string, stillWanted: () => boolean, layout: { stacked: boolean }): Promise<boolean>
+}
 interface WorkspaceSnapshot {
   paths: [string | null, string | null]
   active: PaneId
@@ -303,6 +323,60 @@ export function useSplitWorkspace(options: Options) {
     closePages([path])
     return owner === undefined ? null : reserveOpenIn(owner)
   }, [closePages, reserveOpenIn])
+  const reserveBeside = useCallback((sourcePane: PaneId): BesideReservation => {
+    const pane: PaneId = sourcePane === 0 ? 1 : 0
+    // Like reserveOpenIn, but the reserved pane may be the hidden one: being out of view does not cancel it.
+    interactionVersionRef.current += 1
+    const id = ++creationCountRef.current
+    const navigation = requestGenerationRef.current[pane] - backgroundOpensRef.current[pane]
+    const epoch = sessionRef.current
+    const inSession = () => sessionRef.current === epoch
+    const valid = () => inSession() && newestCreationRef.current[pane] < id
+      && requestGenerationRef.current[pane] - backgroundOpensRef.current[pane] === navigation
+    const held = () => paneTabsRef.current[pane][0]?.entry.path ?? controllersRef.current[pane].requestedActiveTabPathRef.current
+    const effect = (path: string | null): BesideEffect => {
+      if (path && findPane(path) !== undefined) return { kind: 'shown' }
+      const current = held()
+      return current ? { kind: 'replaces', path: current } : { kind: 'beside' }
+    }
+    const open = async (entry: VaultEntry, content: string, stillWanted: () => boolean, layout: { stacked: boolean }) => {
+      if (!inSession() || !stillWanted()) return false
+      const owner = ([0, 1] as const).find(item => paneTabsRef.current[item].some(tab => notePathsMatch(tab.entry.path, entry.path)))
+      if (owner !== undefined) {
+        // Already open: reveal and focus that editor; the layout's orientation stays as it is.
+        requestGenerationRef.current[owner] += 1
+        controllersRef.current[owner].showLoadedEntry(entry.path)
+        if (!splitRef.current && owner !== activePaneRef.current) {
+          layoutVersionRef.current += 1
+          setSplit(true)
+        }
+        focusPane(owner)
+        return true
+      }
+      if (!valid() || findPane(entry.path) !== undefined) return false
+      newestCreationRef.current[pane] = id
+      backgroundOpensRef.current[pane] += 1
+      const request = ++requestGenerationRef.current[pane]
+      let shown = false
+      beginBusy(pane)
+      try {
+        // The page it replaces is saved first; the guard is asked again at placement.
+        shown = await controllersRef.current[pane].openTabWithContent(entry, content,
+          () => inSession() && requestGenerationRef.current[pane] === request && stillWanted())
+      } finally { endBusy(pane) }
+      if (!shown || !inSession()) return false
+      if (!splitRef.current) {
+        // The source keeps its place: the new pane opens after it, stacked when side by side is too narrow.
+        layoutVersionRef.current += 1
+        if (layout.stacked) setOrientation('vertical')
+        setOrder(sourcePane === 0 ? [0, 1] : [1, 0])
+        setSplit(true)
+      }
+      focusPane(pane)
+      return true
+    }
+    return { pane, inSession, effect, open }
+  }, [beginBusy, endBusy, findPane, focusPane])
   /** Pages held by the panes right now, not as of the last render; flushes before quit use this. */
   const currentTabs = useCallback(() => [...paneTabsRef.current[0], ...paneTabsRef.current[1]], [])
   const beforeNavigate = options.beforeNavigate
@@ -490,6 +564,7 @@ export function useSplitWorkspace(options: Options) {
     handleReplaceActiveTab, handleSwitchTab, openTabWithContent, reserveOpen, closeAllTabs,
     splitWorkspace: { editorModes, editorModesReady, beginEditorModeChange, pendingPanes, suspendPersistence: () => { persistPausedRef.current = true }, activePane, split, orientation, ratio, order, focusPane, selectNoteInPane, closePane, closePages, openSplit, resize, placePane, placeNote,
       closePageAndReserveOpen,
+      reserveBeside,
       currentTabs,
       markNavigation,
       openNoteWhenLoaded,

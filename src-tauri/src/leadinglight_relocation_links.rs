@@ -59,6 +59,93 @@ pub fn retarget_incoming(
     )
 }
 
+/// Whether a page the exact transform refused could still name `target` in a local link.
+///
+/// Every local spelling the transform recognises contains the target's filename, possibly
+/// with percent escapes, character references or Markdown backslash escapes. The check folds
+/// ASCII case and those spellings; a named reference it does not know counts as a possible
+/// match. `false` therefore proves the refusal cannot hide a reference to `target`.
+pub fn may_name_target(content: &str, target: &Path) -> bool {
+    let Some(filename) = target.file_name().and_then(|name| name.to_str()) else {
+        return true;
+    };
+    let needle = filename.to_lowercase();
+    let lower = content.to_lowercase();
+    if lower.contains(&needle) {
+        return true;
+    }
+    let Some(entities) = decode_references(&lower) else {
+        return true;
+    };
+    [
+        unescape_markdown(&decode_percent(&entities)),
+        decode_percent(&unescape_markdown(&entities)),
+        decode_percent(&lower),
+        unescape_markdown(&lower),
+    ]
+    .iter()
+    .any(|spelling| spelling.to_lowercase().contains(&needle))
+}
+
+/// Decodes numeric and the common named character references; None for any other name.
+fn decode_references(text: &str) -> Option<String> {
+    let mut result = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        result.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let end = rest[1..]
+            .find(|ch: char| !ch.is_ascii_alphanumeric() && ch != '#')
+            .map(|index| index + 1)
+            .unwrap_or(rest.len());
+        let name = &rest[1..end];
+        if rest[end..].starts_with(';') && !name.is_empty() {
+            let decoded = match name {
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "quot" => Some('"'),
+                "apos" => Some('\''),
+                "nbsp" => Some('\u{a0}'),
+                _ if name.starts_with("#x") => u32::from_str_radix(&name[2..], 16)
+                    .ok()
+                    .and_then(char::from_u32),
+                _ if name.starts_with('#') => name[1..].parse().ok().and_then(char::from_u32),
+                _ => return None,
+            };
+            if let Some(ch) = decoded {
+                result.push(ch);
+                rest = &rest[end + 1..];
+                continue;
+            }
+        }
+        result.push('&');
+        rest = &rest[1..];
+    }
+    result.push_str(rest);
+    Some(result)
+}
+
+fn decode_percent(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        let hex = |byte: u8| (byte as char).to_digit(16).map(|number| number as u8);
+        match (bytes[index], bytes.get(index + 1), bytes.get(index + 2)) {
+            (b'%', Some(&high), Some(&low)) if hex(high).is_some() && hex(low).is_some() => {
+                decoded.push(hex(high).unwrap_or(0) * 16 + hex(low).unwrap_or(0));
+                index += 3;
+            }
+            (byte, _, _) => {
+                decoded.push(byte);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&decoded).into_owned()
+}
+
 impl Context {
     fn new(
         vault: &Path,
@@ -631,8 +718,32 @@ fn encode_segment(value: &str, image: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{rebase_outgoing, retarget_incoming};
+    use super::{may_name_target, rebase_outgoing, retarget_incoming};
     use std::path::Path;
+
+    #[test]
+    fn leadinglight_relocation_refused_pages_name_targets_only_through_filename_spellings() {
+        let target = Path::new("/vault/notes/weekly-review.md");
+        for content in [
+            "<a href='weekly-review.md'>Review</a>",
+            "<a href='../notes/Weekly-Review.MD'>Review</a>",
+            "<a href='weekly%2Dreview.md'>Review</a>",
+            "<img src='weekly&#45;review.md'>",
+            "<img src='weekly&#x2d;review.md'>",
+            "<a href='x'>x</a>\n\n[Review](./weekly\\-review.md)",
+            "<a href='weekly&hyphen;review.md'>an unknown named reference is not proof</a>",
+        ] {
+            assert!(may_name_target(content, target), "{content}");
+        }
+        for content in [
+            "<a href='https://example.invalid/'>Remote</a>",
+            "<img src='attachments/photo.png'> [[Weekly Review]] [[notes/weekly-review]]",
+            "---\ntitle: unclosed front matter\nweekly review without its filename",
+            "Tom & Jerry, R&D and 5% of weekly-review notes <a href='x'>",
+        ] {
+            assert!(!may_name_target(content, target), "{content}");
+        }
+    }
 
     fn outgoing(content: &str) -> Result<String, String> {
         rebase_outgoing(

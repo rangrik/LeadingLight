@@ -52,6 +52,11 @@ pub use rename::{
     move_note_to_folder_with_open_pages, FolderMoveResult, MoveNoteToFolderRequest, MoveNoteToWorkspaceRequest, RenameNoteFilenameRequest,
     RenameNoteRequest, RenameResult,
 };
+// LeadingLight managed renames: exact before/after receipts for the renderer's open pages.
+pub use rename::{
+    auto_rename_untitled_with_open_pages, rename_note_filename_with_open_pages,
+    rename_note_with_open_pages, PageRenameReceipt,
+};
 pub use title_sync::{sync_title_on_open, SyncAction};
 pub use trash::{batch_delete_notes, delete_note};
 pub use views::{

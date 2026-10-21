@@ -46,6 +46,22 @@ describe('mockHandlers additional coverage', () => {
     })
   })
 
+  // E2 commentary discovery asks for 2000 and trusts "fewer than asked" as complete.
+  it('returns every match up to the requested search bound, 20 when none is asked', async () => {
+    const { mockHandlers } = await loadHandlers()
+    const { MOCK_ENTRIES } = await import('./mock-entries')
+    const base = MOCK_ENTRIES[0]
+    for (let index = 0; index < 25; index += 1) {
+      MOCK_ENTRIES.push({ ...base, path: `/Users/luca/Laputa/commentary-${index}.md`, title: `Synthetic commentary marker ${index}` })
+    }
+    const search = (limit?: unknown) => mockHandlers.search_vault({ query: 'synthetic commentary marker', mode: 'all', limit }) as { results: unknown[] }
+    expect(search(2000).results).toHaveLength(25)
+    expect(search(25).results).toHaveLength(25)
+    expect(search().results).toHaveLength(20)
+    expect(() => search(0)).toThrow('Invalid search limit')
+    expect(() => search(20_000)).toThrow('Invalid search limit')
+  })
+
   it('renames a filename successfully and rewrites wikilinks that target the old path stem', async () => {
     const { mockHandlers } = await loadHandlers()
     const vaultPath = '/Users/mock/Test Vault'
@@ -65,7 +81,7 @@ describe('mockHandlers additional coverage', () => {
       vault_path: vaultPath,
       old_path: sourcePath,
       new_filename_stem: 'weekly-notes',
-    })).toEqual({
+    })).toMatchObject({
       new_path: `${vaultPath}/weekly-notes.md`,
       updated_files: 1,
       failed_updates: 0,
@@ -73,7 +89,8 @@ describe('mockHandlers additional coverage', () => {
 
     const content = mockHandlers.get_all_content() as Record<string, string>
     expect(content[`${vaultPath}/weekly-notes.md`]).toBe('# Meeting Notes')
-    expect(content[backlinkPath]).toBe('Links: [[weekly-notes]] and [[Meeting Notes|alias]].')
+    // Like native, the page's own title (its H1) is a legacy target too.
+    expect(content[backlinkPath]).toBe('Links: [[weekly-notes]] and [[weekly-notes|alias]].')
   })
 
   it('moves a note into another workspace without rewriting links that still use the same relative path', async () => {

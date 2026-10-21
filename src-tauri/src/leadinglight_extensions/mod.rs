@@ -1,11 +1,17 @@
-//! E1 extensions, natively: strict package validation, a local package store with per-vault
-//! activation, window-owned sessions and runs, and one guarded new page per run.
+//! Extensions, natively: strict package validation, a local package store with per-vault
+//! activation, window-owned sessions and runs, and one guarded write per run: a new page, or the
+//! whole reviewed postimage of an existing page with its exact earlier text kept first. A
+//! committed write can be undone from its window and session.
 //!
-//! The frozen contract is `src/leadinglight/extensions/extensionApi.ts` and
-//! `src/leadinglight/proposals/proposalContract.ts`; `docs/leadinglight/extensions-native.md`
-//! explains lifetimes, limits and what is not implemented (capture, association, append).
+//! The frozen contract is `src/leadinglight/extensions/extensionApi.ts`,
+//! `src/leadinglight/proposals/proposalContract.ts` and `proposalUndoContract.ts`;
+//! `docs/leadinglight/extensions-native.md` and `docs/leadinglight/commentary-native.md` explain
+//! lifetimes, limits and what native does not judge (passages and associations).
 
+#[cfg(all(test, unix))]
+mod append_tests;
 mod create;
+mod document;
 mod json;
 mod manifest;
 mod report;
@@ -21,6 +27,8 @@ mod registry_tests;
 mod runs_tests;
 #[cfg(all(test, unix))]
 mod store_tests;
+#[cfg(all(test, unix))]
+mod undo_tests;
 #[cfg(test)]
 mod validate_tests;
 
@@ -30,13 +38,16 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use crate::leadinglight_history::VaultRoots;
 
 use create::{CreateIo, NativeCreateIo, Vault};
+#[cfg(test)]
+use manifest::Capability;
 pub(crate) use runs::BeginRequest;
 use runs::Runs;
 use store::Store;
 use wire::{
     ActivationReply, CloseSessionReply, DeactivationReply, DocumentHandleReply, EndRunReply,
     FolderHandleReply, GuardedProposal, HandleRefusal, ImportReply, ListReply, OpenSessionReply,
-    ProposalReceipt, QueryReply, ReadReply, RunAdmission, RunRefusal, VaultRefusal,
+    ProposalReceipt, QueryReply, ReadReply, ReleaseUndoReply, RunAdmission, RunRefusal,
+    UndoQueryReply, UndoReceipt, UndoRequest, VaultRefusal,
 };
 
 pub(crate) fn hex(bytes: &[u8]) -> String {
@@ -95,6 +106,15 @@ impl Extensions {
 
     pub(crate) fn with_io(root: PathBuf, io: Box<dyn CreateIo>) -> Self {
         Self::from_parts(Store::new(root), io)
+    }
+
+    /// A host that also performs the given capabilities, for tests of what they enable.
+    #[cfg(test)]
+    pub(crate) fn with_host(root: PathBuf, io: Box<dyn CreateIo>, host: Vec<Capability>) -> Self {
+        Self::from_parts(
+            Store::with_host(root, Box::new(store::NativeStoreIo), host),
+            io,
+        )
     }
 
     pub(crate) fn from_parts(store: Store, io: Box<dyn CreateIo>) -> Self {
@@ -258,11 +278,18 @@ impl Extensions {
         self.runs.bind_folder(owner, run_id, folder)
     }
 
-    /// Adding to an existing page is the append milestone; E1 binds no documents.
-    pub(crate) fn bind_document(&self) -> DocumentHandleReply {
-        DocumentHandleReply::Refused {
-            reason: HandleRefusal::Unsupported,
+    pub(crate) fn bind_document(
+        &self,
+        owner: &str,
+        run_id: &str,
+        path: &str,
+    ) -> DocumentHandleReply {
+        if !is_token(run_id) {
+            return DocumentHandleReply::Refused {
+                reason: HandleRefusal::StaleRun,
+            };
         }
+        self.runs.bind_document(owner, run_id, path)
     }
 
     pub(crate) fn submit(&self, owner: &str, proposal: &GuardedProposal) -> ProposalReceipt {
@@ -271,6 +298,26 @@ impl Extensions {
 
     pub(crate) fn query(&self, owner: &str, operation_id: &str) -> QueryReply {
         self.runs.query(owner, operation_id)
+    }
+
+    pub(crate) fn undo(&self, owner: &str, request: &UndoRequest) -> UndoReceipt {
+        self.runs.undo(owner, request, self.io.as_ref())
+    }
+
+    pub(crate) fn query_undo(&self, owner: &str, operation_id: &str) -> UndoQueryReply {
+        self.runs.query_undo(owner, operation_id)
+    }
+
+    pub(crate) fn release_undo(
+        &self,
+        owner: &str,
+        session_id: &str,
+        undo_receipt: &str,
+    ) -> ReleaseUndoReply {
+        if !is_token(session_id) || !is_token(undo_receipt) {
+            return ReleaseUndoReply::Unknown;
+        }
+        self.runs.release_undo(owner, session_id, undo_receipt)
     }
 
     /// A window closed or began loading a page: its sessions end now, with no reply to lose.

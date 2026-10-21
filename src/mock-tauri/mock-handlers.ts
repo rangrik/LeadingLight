@@ -20,7 +20,11 @@ import { MOCK_CONTENT } from './mock-content'
 import { MOCK_ENTRIES } from './mock-entries'
 import { mockTrashHandlers } from './mock-trash'
 import { createSaveRecovery, memoryStore } from './mock-save-recovery'
-import { MEMORY_VAULT_ROOTS } from './vault-api'
+import { MEMORY_VAULT_ROOTS, searchLimit } from './vault-api'
+import { legacyWikilinkTargets, rebaseInPlace, rebaseOutgoing, retargetLinkedPage, vaultRelativeStem } from '../leadinglight/rename/markdownRelocation'
+import { isUntitledFilename, normalizeFilenameStem, setFrontmatterTitle, titleToSlug } from '../leadinglight/rename/renameNaming'
+import { RENAME_REFUSED_PREFIX } from '../leadinglight/rename/renameRefusal'
+import { deriveDisplayTitleState } from '../utils/noteTitle'
 
 function syncWindowContent(): void {
   if (typeof window !== 'undefined') {
@@ -222,21 +226,6 @@ function canonicalRenameTargets({ oldTitle, oldPathStem }: { oldTitle: string; o
   return [...new Set([oldTitle, oldPathStem, oldFilenameStem].filter(Boolean))]
 }
 
-function slugifyMockTitle({ title }: { title: string }) {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-}
-
-function buildRenamedMockPath({ oldPath, newTitle }: { oldPath: string; newTitle: string }) {
-  const parentDir = oldPath.replace(/\/[^/]+$/, '')
-  return `${parentDir}/${slugifyMockTitle({ title: newTitle })}.md`
-}
-
-function replaceMockTitleFrontmatter({ content, newTitle }: { content: string; newTitle: string }) {
-  return /^title:\s*/m.test(content)
-    ? content.replace(/^title:\s*.*$/m, `title: ${newTitle}`)
-    : content
-}
-
 function replaceRenamedWikilinks({ content, oldTargets, newPathStem }: {
   content: string
   oldTargets: string[]
@@ -296,63 +285,124 @@ function updateMockRenameReferences({ newPath, newPathStem, oldTargets }: {
   return updatedFiles
 }
 
-function handleRenameNote(args: { vault_path: string; old_path: string; new_title: string; old_title?: string | null }) {
-  const oldEntry = MOCK_ENTRIES.find(e => e.path === args.old_path)
-  const oldTitle = args.old_title ?? oldEntry?.title ?? ''
-  const oldContent = readMockContent({ path: args.old_path })
-  const newPath = buildRenamedMockPath({ oldPath: args.old_path, newTitle: args.new_title })
-  const oldPathStem = relativePathStem({ path: args.old_path, vaultPath: args.vault_path })
-  const newPathStem = relativePathStem({ path: newPath, vaultPath: args.vault_path })
+interface MemoryRenameReceipt {
+  new_path: string
+  updated_files: number
+  failed_updates: number
+  source_before_content: string
+  source_content: string
+  updated_open_pages: Array<{ path: string; before_content: string; content: string }>
+  unrefreshed_open_paths: string[]
+}
 
-  if (oldTitle === args.new_title && newPath === args.old_path) {
-    return { new_path: args.old_path, updated_files: 0, failed_updates: 0 }
+const parentOf = (path: string) => path.replace(/\/[^/]*$/, '')
+const memoryTitle = (path: string, content: string) => deriveDisplayTitleState({ content, filename: path.split('/').pop() ?? path }).title
+const unchangedReceipt = (path: string, before: string, content = before): MemoryRenameReceipt => ({
+  new_path: path, updated_files: 0, failed_updates: 0, source_before_content: before, source_content: content,
+  updated_open_pages: [], unrefreshed_open_paths: [],
+})
+
+/** The memory preview of a managed rename: the native transforms and receipt over MOCK_CONTENT. */
+function commitMemoryRename(rename: {
+  vaultPath: string; oldPath: string; newPath: string; before: string; content: string
+  oldTitle: string; openPaths?: readonly string[]; selfLinksUnverified?: boolean
+}): MemoryRenameReceipt {
+  const root = rename.vaultPath.replace(/\/+$/, '')
+  const { oldPath, newPath } = rename
+  const open = new Set((rename.openPaths ?? []).filter(path => path !== oldPath && path !== newPath))
+  if (newPath !== oldPath) deleteMockContent({ path: oldPath })
+  writeMockContent({ path: newPath, content: rename.content })
+  const receipt = { ...unchangedReceipt(newPath, rename.before, rename.content), failed_updates: Number(rename.selfLinksUnverified ?? false) }
+  const retarget = {
+    vault: root, oldPath, newPath,
+    oldTargets: legacyWikilinkTargets(rename.oldTitle, vaultRelativeStem(oldPath, root)),
+    newTarget: vaultRelativeStem(newPath, root),
   }
-
-  const newContent = replaceMockTitleFrontmatter({ content: oldContent, newTitle: args.new_title })
-  deleteMockContent({ path: args.old_path })
-  writeMockContent({ path: newPath, content: newContent })
-  const oldTargets = canonicalRenameTargets({ oldTitle, oldPathStem })
-  const updatedFiles = updateMockRenameReferences({ newPath, newPathStem, oldTargets })
-
+  for (const [path, text] of Object.entries(MOCK_CONTENT)) {
+    if (path === newPath || !path.startsWith(`${root}/`) || !path.endsWith('.md') || path.slice(root.length).includes('/.')) continue
+    const requested = open.delete(path)
+    const rewrite = retargetLinkedPage(text, path, retarget)
+    receipt.failed_updates += Number(rewrite.unverified)
+    if (rewrite.content === text) continue
+    writeMockContent({ path, content: rewrite.content })
+    receipt.updated_files += 1
+    if (requested) receipt.updated_open_pages.push({ path, before_content: text, content: rewrite.content })
+  }
+  receipt.unrefreshed_open_paths.push(...[...open].sort())
   syncWindowContent()
-  return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0 }
+  return receipt
+}
+
+/** A managed rename refused while its source is still in place is an explicit refusal, as native. */
+function explicitRefusal<A extends Record<string, unknown>, R>(source: (args: A) => string, run: (args: A) => R) {
+  return (args: A): R => {
+    try {
+      return run(args)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(Object.hasOwn(MOCK_CONTENT, source(args)) ? `${RENAME_REFUSED_PREFIX}${message}` : message)
+    }
+  }
+}
+
+function memoryOpenPaths(root: string, openPaths: readonly string[] | undefined): string[] {
+  const open = [...new Set(openPaths ?? [])]
+  if (open.length > 128 || open.some(path => !path.startsWith(`${root.replace(/\/+$/, '')}/`))) throw new Error('Path must stay inside the active vault')
+  return open
+}
+
+function handleRenameNote(args: { vault_path: string; old_path: string; new_title: string; old_title?: string | null; open_paths?: string[] }) {
+  const openPaths = memoryOpenPaths(args.vault_path, args.open_paths)
+  const before = readMockContent({ path: args.old_path })
+  const newTitle = args.new_title.trim()
+  if (!newTitle) throw new Error('New title cannot be empty')
+  const oldTitle = args.old_title ?? memoryTitle(args.old_path, before)
+  const filename = args.old_path.split('/').pop() ?? ''
+  const expected = `${titleToSlug(newTitle)}.md`
+  if (oldTitle === newTitle && filename === expected) return unchangedReceipt(args.old_path, before)
+  const updated = oldTitle === newTitle ? before : setFrontmatterTitle(before, newTitle)
+  if (filename === expected) {
+    writeMockContent({ path: args.old_path, content: updated })
+    syncWindowContent()
+    return unchangedReceipt(args.old_path, before, updated)
+  }
+  const stem = expected.slice(0, -3)
+  let newPath = `${parentOf(args.old_path)}/${expected}`
+  for (let attempt = 2; newPath !== args.old_path && Object.hasOwn(MOCK_CONTENT, newPath); attempt += 1) {
+    newPath = `${parentOf(args.old_path)}/${stem}-${attempt}.md`
+  }
+  const rebased = rebaseInPlace(updated, args.vault_path.replace(/\/+$/, ''), args.old_path, newPath)
+  return commitMemoryRename({
+    vaultPath: args.vault_path, oldPath: args.old_path, newPath, before, content: rebased.content,
+    oldTitle, openPaths, selfLinksUnverified: rebased.unverified,
+  })
 }
 
 function handleRenameNoteFilename(args: {
   vault_path: string
   old_path: string
   new_filename_stem: string
+  open_paths?: string[]
 }) {
-  const oldEntry = MOCK_ENTRIES.find(e => e.path === args.old_path)
-  const oldContent = readMockContent({ path: args.old_path })
-  const oldTitle = oldEntry?.title ?? ''
-  const normalizedStem = args.new_filename_stem.trim().replace(/\.md$/, '')
-  const oldFilename = args.old_path.split('/').pop() ?? ''
-  const newFilename = `${normalizedStem}.md`
+  const openPaths = memoryOpenPaths(args.vault_path, args.open_paths)
+  const stem = normalizeFilenameStem(args.new_filename_stem)
+  const before = readMockContent({ path: args.old_path })
+  const newPath = `${parentOf(args.old_path)}/${stem}.md`
+  if (newPath === args.old_path) return unchangedReceipt(args.old_path, before)
+  if (Object.hasOwn(MOCK_CONTENT, newPath)) throw new Error('A note with that name already exists')
+  const rebased = rebaseInPlace(before, args.vault_path.replace(/\/+$/, ''), args.old_path, newPath)
+  return commitMemoryRename({
+    vaultPath: args.vault_path, oldPath: args.old_path, newPath, before, content: rebased.content,
+    oldTitle: memoryTitle(args.old_path, before), openPaths, selfLinksUnverified: rebased.unverified,
+  })
+}
 
-  if (!normalizedStem) {
-    throw new Error('Invalid filename')
-  }
-  if (oldFilename === newFilename) {
-    return { new_path: args.old_path, updated_files: 0, failed_updates: 0 }
-  }
-
-  const parentDir = args.old_path.replace(/\/[^/]+$/, '')
-  const newPath = `${parentDir}/${newFilename}`
-  if (newPath !== args.old_path && Object.hasOwn(MOCK_CONTENT, newPath)) {
-    throw new Error('A note with that name already exists')
-  }
-
-  deleteMockContent({ path: args.old_path })
-  writeMockContent({ path: newPath, content: oldContent })
-
-  const oldPathStem = relativePathStem({ path: args.old_path, vaultPath: args.vault_path })
-  const newPathStem = relativePathStem({ path: newPath, vaultPath: args.vault_path })
-  const oldTargets = canonicalRenameTargets({ oldTitle, oldPathStem })
-  const updatedFiles = updateMockRenameReferences({ newPath, newPathStem, oldTargets })
-
-  syncWindowContent()
-  return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0 }
+function handleAutoRenameUntitled(args: { vault_path: string; note_path: string; open_paths?: string[] }) {
+  const content = readMockContent({ path: args.note_path })
+  const filename = args.note_path.split('/').pop() ?? ''
+  const title = deriveDisplayTitleState({ content, filename })
+  if (!isUntitledFilename(filename) || title.titleSource !== 'h1') return null
+  return handleRenameNote({ vault_path: args.vault_path, old_path: args.note_path, new_title: title.title, open_paths: args.open_paths })
 }
 
 function handleMoveNoteToFolder(args: {
@@ -366,44 +416,15 @@ function handleMoveNoteToFolder(args: {
   const folder = args.folder_path.trim().replace(/^\/+|\/+$/g, '')
   if (!source.startsWith(`${vaultRoot}/`) || folder.split('/').includes('..') || folder.includes('\\')) throw new Error('Invalid folder path')
   if (!Object.hasOwn(MOCK_CONTENT, source)) throw new Error('The page could not be found')
-  const open = [...new Set(args.open_paths ?? [])].filter(path => path !== source)
-  if (open.length > 128 || open.some(path => !path.startsWith(`${vaultRoot}/`) || !Object.hasOwn(MOCK_CONTENT, path))) throw new Error('Invalid open pages')
-  const before = new Map(Object.entries(MOCK_CONTENT).filter(([path]) => path.startsWith(`${vaultRoot}/`)))
+  const openPaths = memoryOpenPaths(vaultRoot, args.open_paths)
   const content = readMockContent({ path: source })
   const filename = source.split('/').pop() ?? ''
   const newPath = `${vaultRoot}/${folder ? `${folder}/` : ''}${filename}`
-  const receipt = {
-    source_before_content: content, source_content: content,
-    updated_open_pages: [] as Array<{ path: string; before_content: string; content: string }>,
-    unrefreshed_open_paths: [] as string[],
-  }
-  if (newPath === source) return { new_path: source, updated_files: 0, failed_updates: 0, ...receipt }
+  if (newPath === source) return unchangedReceipt(source, content)
   if (Object.hasOwn(MOCK_CONTENT, newPath)) throw new Error('A note with that name already exists')
-  // The memory preview only simulates plain pages and wikilinks; the native parser
-  // owns reference rebasing. Refuse unsupported forms before mutating this preview.
-  const needsNative = /!\[|\]\s*\(|^\s*\[[^\]]+\]:|<\s*(?:img|a)\b/im
-  if ([...before.values()].some(text => needsNative.test(text))) throw new Error('Move this page in the desktop app to preserve its local references.')
-  const oldTitle = MOCK_ENTRIES.find(entry => entry.path === source)?.title ?? ''
-  const oldPathStem = relativePathStem({ path: source, vaultPath: vaultRoot })
-  const newPathStem = relativePathStem({ path: newPath, vaultPath: vaultRoot })
-  deleteMockContent({ path: source })
-  const selfTargets = oldPathStem.includes('/') ? [oldPathStem, `${oldPathStem}.md`] : []
-  receipt.source_content = replaceRenamedWikilinks({ content, oldTargets: selfTargets, newPathStem })
-  writeMockContent({ path: newPath, content: receipt.source_content })
-  const oldTargets = canonicalRenameTargets({ oldTitle, oldPathStem })
-  let updatedFiles = 0
-  for (const [path, body] of before) {
-    if (path === source) continue
-    const replaced = replaceRenamedWikilinks({ content: body, oldTargets, newPathStem })
-    if (replaced !== body) { writeMockContent({ path, content: replaced }); updatedFiles += 1 }
-  }
-  receipt.updated_open_pages = open.flatMap(path => {
-    const old = before.get(path)!
-    const current = readMockContent({ path })
-    return current === old ? [] : [{ path, before_content: old, content: current }]
-  })
-  syncWindowContent()
-  return { new_path: newPath, updated_files: updatedFiles, failed_updates: 0, ...receipt }
+  // Any unsupported source form refuses before the original path is changed, as on the desktop.
+  const rebased = rebaseOutgoing(content, vaultRoot, source, newPath)
+  return commitMemoryRename({ vaultPath: vaultRoot, oldPath: source, newPath, before: content, content: rebased, oldTitle: memoryTitle(source, content), openPaths })
 }
 
 function handleMoveNoteToWorkspace(args: {
@@ -707,9 +728,10 @@ export const mockHandlers = {
   },
   load_vault_list: () => ({ ...mockVaultList, vaults: [...mockVaultList.vaults] }),
   save_vault_list: (args: { list: typeof mockVaultList }) => { mockVaultList = { ...args.list }; return null },
-  rename_note: handleRenameNote,
-  rename_note_filename: handleRenameNoteFilename,
+  rename_note: explicitRefusal(args => args.old_path, handleRenameNote),
+  rename_note_filename: explicitRefusal(args => args.old_path, handleRenameNoteFilename),
   move_note_to_folder: handleMoveNoteToFolder,
+  auto_rename_untitled: explicitRefusal(args => args.note_path, handleAutoRenameUntitled),
   move_note_to_workspace: handleMoveNoteToWorkspace,
   clone_repo: (args: { url: string; localPath?: string; local_path?: string }) => {
     const localPath = args.localPath ?? args.local_path ?? ''
@@ -728,7 +750,10 @@ export const mockHandlers = {
   migrate_is_a_to_type: () => 0,
   batch_archive_notes: (args: { paths: string[] }) => args.paths.length,
   batch_trash_notes: (args: { paths: string[] }) => args.paths.length,
-  search_vault: (args: { query: string; mode: string; excludeFrontmatter?: boolean }) => {
+  search_vault: (args: { query: string; mode: string; excludeFrontmatter?: boolean; limit?: unknown }) => {
+    // The same bound as native and the disk bridge: never a smaller page than was asked for.
+    const limit = searchLimit(args.limit)
+    if (limit === null) throw new Error('Invalid search limit')
     const q = (args.query ?? '').toLowerCase()
     if (!q) return { results: [], elapsed_ms: 0, query: q, mode: args.mode }
     const matches = MOCK_ENTRIES
@@ -736,7 +761,7 @@ export const mockHandlers = {
         const content = mockSearchContent(MOCK_CONTENT[e.path] ?? '', args.excludeFrontmatter)
         return e.title.toLowerCase().includes(q) || content.toLowerCase().includes(q)
       })
-      .slice(0, 20)
+      .slice(0, limit)
       .map((e, i) => ({
         title: e.title,
         path: e.path,

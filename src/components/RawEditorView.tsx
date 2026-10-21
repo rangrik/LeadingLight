@@ -37,6 +37,7 @@ import {
 } from './rawEditorAutocomplete'
 import { RawEditorAutocompleteDropdown } from './RawEditorAutocompleteDropdown'
 import { registerRawTimerStop } from './editorContentFlushRegistration'
+import { readRawSelection, registerRawSelectionReader } from '../leadinglight/commentary/rawPassageAdapter'
 
 export interface RawEditorViewProps {
   content: string
@@ -579,7 +580,26 @@ function useRawEditorEffects(
   })
 
   useRawEditorContentSync({ content, findRequest, path, setAutocomplete, setFindOpen, setRawDoc, setReplaceOpen })
+  useRawEditorSelectionReader(options.latestContentRef, pendingChanges.flush, pendingChanges.latestDocRef, viewRef)
   return { handleRemoteImagePaste }
+}
+
+/** Passage capture reads the live selection under the pane's buffer ref, after handing over pending text. */
+function useRawEditorSelectionReader(
+  bufferRef: RawEditorViewProps['latestContentRef'],
+  flush: () => void,
+  latestDocRef: React.MutableRefObject<string>,
+  viewRef: React.MutableRefObject<EditorView | null>,
+) {
+  useEffect(() => {
+    if (!bufferRef) return
+    return registerRawSelectionReader(bufferRef, () => {
+      const view = viewRef.current
+      if (!view) return null
+      flush()
+      return readRawSelection(view.state, latestDocRef.current)
+    })
+  }, [bufferRef, flush, latestDocRef, viewRef])
 }
 
 export function RawEditorView(options: RawEditorViewProps) {

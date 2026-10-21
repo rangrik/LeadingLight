@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 
 use super::json::MAX_PACKAGE_BYTES;
-use super::manifest::{self, missing_capabilities, Capability, Manifest, RESERVED_PREFIX};
+use super::manifest::{self, missing_from, Capability, Manifest, RESERVED_PREFIX};
 use super::wire::{
     ActivationRefusal, DeactivationRefusal, ImportRefusal, ImportReply, InstalledExtension,
     ReadReply, RunRefusal, StoredVersion,
@@ -56,8 +56,12 @@ const SET_ASIDE: &str = "preferences.unreadable.json";
 const PACKAGES: &str = "packages";
 const FORMAT: u32 = 1;
 
-/// Optional packages shipped with the app, off until turned on in a vault.
-const BUNDLED: &[&str] = &[include_str!("bundled/meeting-debrief.json")];
+/// Packages shipped with the app, and whether each is on in a vault that never chose. One that
+/// is on by default is on only while this host supports everything it needs.
+const BUNDLED: &[(&str, bool)] = &[
+    (include_str!("bundled/meeting-debrief.json"), false),
+    (include_str!("bundled/passage-commentary.json"), true),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -93,6 +97,7 @@ struct Bundled {
     sha256: String,
     text: &'static str,
     manifest: Manifest,
+    default_on: bool,
 }
 
 enum Unusable {
@@ -143,6 +148,8 @@ pub(crate) struct Store {
     io: Box<dyn StoreIo>,
     preferences: Mutex<Option<Preferences>>,
     bundled: Vec<Bundled>,
+    /// What this host performs; a package needing anything else cannot be turned on.
+    host: Vec<Capability>,
 }
 
 impl Store {
@@ -151,14 +158,19 @@ impl Store {
     }
 
     pub(crate) fn with_io(root: PathBuf, io: Box<dyn StoreIo>) -> Self {
+        Self::with_host(root, io, manifest::host_capabilities())
+    }
+
+    pub(crate) fn with_host(root: PathBuf, io: Box<dyn StoreIo>, host: Vec<Capability>) -> Self {
         let bundled = BUNDLED
             .iter()
             .copied()
-            .filter_map(|text| match manifest::validate(text) {
+            .filter_map(|(text, default_on)| match manifest::validate(text) {
                 Ok(manifest) => Some(Bundled {
                     sha256: hex(&sha256(text.as_bytes())),
                     text,
                     manifest,
+                    default_on,
                 }),
                 Err(diagnostics) => {
                     log::error!("A bundled extension package is invalid: {diagnostics:?}");
@@ -171,7 +183,44 @@ impl Store {
             io,
             preferences: Mutex::new(None),
             bundled,
+            host,
         }
+    }
+
+    fn missing(&self, needed: &[Capability]) -> Vec<Capability> {
+        missing_from(needed, &self.host)
+    }
+
+    /// The built-ins on in a vault that never chose, with their hashes.
+    fn default_on(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.bundled
+            .iter()
+            .filter(move |bundled| {
+                bundled.default_on && self.missing(&bundled.manifest.capabilities).is_empty()
+            })
+            .map(|bundled| (bundled.manifest.id.as_str(), bundled.sha256.as_str()))
+    }
+
+    /// The version active for a package in a vault: the one turned on there, or a built-in that
+    /// is on by default and was never turned off there. Turning a package off records it as
+    /// `previous`, which is what keeps a default-on built-in off.
+    fn active_in(&self, entry: Option<&VaultPreferences>, package_id: &str) -> Option<String> {
+        if let Some(active) = entry.and_then(|entry| entry.active.get(package_id)) {
+            return Some(active.clone());
+        }
+        let chose_off = entry.is_some_and(|entry| entry.previous.contains_key(package_id));
+        self.default_on()
+            .find(|(id, _)| *id == package_id && !chose_off)
+            .map(|(_, sha)| sha.to_string())
+    }
+
+    /// A vault whose only record is an Off for a default-on built-in is not idle: forgetting it
+    /// would turn that built-in back on there.
+    fn holds_choice(&self, entry: &VaultPreferences) -> bool {
+        !entry.active.is_empty()
+            || self.bundled.iter().any(|bundled| {
+                bundled.default_on && entry.previous.contains_key(&bundled.manifest.id)
+            })
     }
 
     fn with_preferences<T>(&self, work: impl FnOnce(&mut Preferences) -> T) -> T {
@@ -262,6 +311,18 @@ impl Store {
                 || entry.touched >= next_seq
             {
                 return None;
+            }
+            // A default-on built-in keeps an explicit Off across app updates: its Off moves forward
+            // to the version this app ships instead of being dropped with the old version.
+            for bundled in self.bundled.iter().filter(|bundled| bundled.default_on) {
+                let id = &bundled.manifest.id;
+                let stale_off = entry
+                    .previous
+                    .get(id)
+                    .is_some_and(|sha| is_sha256_hex(sha) && *sha != bundled.sha256);
+                if stale_off && !entry.active.contains_key(id) {
+                    entry.previous.insert(id.clone(), bundled.sha256.clone());
+                }
             }
             for versions in [&mut entry.active, &mut entry.previous] {
                 let shaped = versions.iter().all(|(package_id, sha)| {
@@ -506,7 +567,7 @@ impl Store {
         }
         ImportReply::Candidate {
             package_sha256: sha,
-            missing_capabilities: missing_capabilities(&manifest.capabilities),
+            missing_capabilities: self.missing(&manifest.capabilities),
             package_id: manifest.id,
             version: manifest.version,
         }
@@ -592,7 +653,8 @@ impl Store {
             group(&mut extensions, &import.package_id, &import.name).push(version);
         }
         for extension in &mut extensions {
-            extension.active_sha256 = vault_preferences.active.get(&extension.package_id).cloned();
+            extension.active_sha256 =
+                self.active_in(Some(&vault_preferences), &extension.package_id);
             extension.previous_sha256 = vault_preferences
                 .previous
                 .get(&extension.package_id)
@@ -651,7 +713,7 @@ impl Store {
         if manifest.id != package_id {
             return refuse(ActivationRefusal::UnknownVersion);
         }
-        let missing = missing_capabilities(&manifest.capabilities);
+        let missing = self.missing(&manifest.capabilities);
         if !missing.is_empty() {
             return Err((ActivationRefusal::MissingCapabilities, missing));
         }
@@ -686,9 +748,7 @@ impl Store {
             return Err(ActivationRefusal::UnknownVersion);
         }
         let entry = preferences.vaults.get(vault);
-        let current = entry
-            .and_then(|entry| entry.active.get(package_id))
-            .cloned();
+        let current = self.active_in(entry, package_id);
         if current.as_deref() != expected {
             return Err(ActivationRefusal::Changed);
         }
@@ -706,7 +766,7 @@ impl Store {
             return Err(ActivationRefusal::VaultUnavailable);
         }
         let mut next = preferences.clone();
-        if !make_room_for_vault(&mut next, vault) {
+        if !make_room_for_vault(&mut next, vault, |entry| self.holds_choice(entry)) {
             return Err(ActivationRefusal::VaultUnavailable);
         }
         let seq = take_seq(&mut next).ok_or(ActivationRefusal::VaultUnavailable)?;
@@ -736,7 +796,9 @@ impl Store {
         Ok((activated, true))
     }
 
-    /// Compare-and-set; the turned-off version becomes the previous one, so it can come back.
+    /// Compare-and-set; the turned-off version becomes the previous one, so it can come back. For
+    /// a default-on built-in that record is the explicit Off, so the vault gets an entry if it has
+    /// none.
     pub(crate) fn deactivate(
         &self,
         vault: &str,
@@ -744,22 +806,24 @@ impl Store {
         expected: &str,
     ) -> Result<(), DeactivationRefusal> {
         self.with_preferences(|preferences| {
-            let current = preferences
-                .vaults
-                .get(vault)
-                .and_then(|entry| entry.active.get(package_id));
-            if current.map(String::as_str) != Some(expected) {
+            let current = self.active_in(preferences.vaults.get(vault), package_id);
+            if current.as_deref() != Some(expected) {
                 return Err(DeactivationRefusal::Changed);
             }
-            let mut next = preferences.clone();
-            let seq = take_seq(&mut next).ok_or(DeactivationRefusal::VaultUnavailable)?;
-            if let Some(entry) = next.vaults.get_mut(vault) {
-                entry.active.remove(package_id);
-                entry
-                    .previous
-                    .insert(package_id.to_string(), expected.to_string());
-                entry.touched = seq;
+            if vault.is_empty() || vault.len() > MAX_VAULT_KEY_BYTES || vault.contains('\0') {
+                return Err(DeactivationRefusal::VaultUnavailable);
             }
+            let mut next = preferences.clone();
+            if !make_room_for_vault(&mut next, vault, |entry| self.holds_choice(entry)) {
+                return Err(DeactivationRefusal::VaultUnavailable);
+            }
+            let seq = take_seq(&mut next).ok_or(DeactivationRefusal::VaultUnavailable)?;
+            let entry = next.vaults.entry(vault.to_string()).or_default();
+            entry.active.remove(package_id);
+            entry
+                .previous
+                .insert(package_id.to_string(), expected.to_string());
+            entry.touched = seq;
             self.save(&next)
                 .map_err(|_| DeactivationRefusal::VaultUnavailable)?;
             *preferences = next;
@@ -789,10 +853,7 @@ impl Store {
         }
         .ok_or(RunRefusal::NotActive)?;
         let active = self.with_preferences(|preferences| {
-            preferences
-                .vaults
-                .get(vault)
-                .and_then(|entry| entry.active.get(&package_id))
+            self.active_in(preferences.vaults.get(vault), &package_id)
                 .is_some_and(|active| active == sha)
         });
         if !active {
@@ -807,7 +868,7 @@ impl Store {
             .iter()
             .find(|command| command.id == command_id)
             .ok_or(RunRefusal::UnknownCommand)?;
-        if !missing_capabilities(&command.capabilities).is_empty() {
+        if !self.missing(&command.capabilities).is_empty() {
             return Err(RunRefusal::MissingCapabilities);
         }
         Ok(package_id)
@@ -927,14 +988,19 @@ fn room_for(preferences: &Preferences, package_id: &str) -> Option<Vec<String>> 
     Some(evicted)
 }
 
-fn make_room_for_vault(preferences: &mut Preferences, vault: &str) -> bool {
+/// Forgets the least recently touched vault that holds no choice, when one more is needed.
+fn make_room_for_vault(
+    preferences: &mut Preferences,
+    vault: &str,
+    holds_choice: impl Fn(&VaultPreferences) -> bool,
+) -> bool {
     if preferences.vaults.contains_key(vault) || preferences.vaults.len() < MAX_VAULTS {
         return true;
     }
     let idle = preferences
         .vaults
         .iter()
-        .filter(|(_, entry)| entry.active.is_empty())
+        .filter(|(_, entry)| !holds_choice(entry))
         .min_by_key(|(_, entry)| entry.touched)
         .map(|(key, _)| key.clone());
     match idle {

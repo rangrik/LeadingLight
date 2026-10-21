@@ -52,6 +52,7 @@ import {
   CaretDown as ChevronDown,
   Code as Code2,
   Highlighter,
+  Quotes,
   TextB as Bold,
   TextItalic as Italic,
   TextStrikethrough as Strikethrough,
@@ -66,6 +67,7 @@ import { translate, type AppLocale } from '../lib/i18n'
 import { useBlockNoteFormattingToolbarHoverGuard } from './blockNoteFormattingToolbarHoverGuard'
 import { openEditorAttachmentOrUrl } from './editorAttachmentActions'
 import { turnBlocksIntoType } from './richEditorBlockTypeCommands'
+import { useCommentaryPaneAction } from '../leadinglight/commentary/commentaryContext'
 
 type TolariaBasicTextStyle =
   | 'bold'
@@ -687,6 +689,36 @@ function TolariaFileDownloadButton({ vaultPath }: { vaultPath?: string }) {
   )
 }
 
+/**
+ * Comment on passage: the one toolbar action that leaves the page, so it shows its title as text.
+ * Offered only while the pane's capture command is on and a passage is selected; the click keeps
+ * the editor's focus and selection, so the pane reads them before anything else moves.
+ */
+function TolariaCommentPassageButton() {
+  const Components = useRequiredComponentsContext()
+  const action = useCommentaryPaneAction()
+  const editor = useBlockNoteEditor<BlockSchema, InlineContentSchema, StyleSchema>()
+  const hasSelection = useEditorState({
+    editor,
+    selector: ({ editor }) => !editor.prosemirrorState.selection.empty,
+  })
+  if (!action?.available || !hasSelection || !editor.isEditable) return null
+  return (
+    <>
+      <span className="ll-commentary-toolbar-divider" aria-hidden="true" />
+      <Components.FormattingToolbar.Button
+        className="bn-button ll-commentary-toolbar-action"
+        data-test="commentOnPassage"
+        onClick={action.comment}
+        isSelected={false}
+        label={action.title}
+        mainTooltip={action.title}
+        icon={<Quotes />}
+      >{action.compact ? undefined : <span className="ll-commentary-toolbar-label">{action.title}</span>}</Components.FormattingToolbar.Button>
+    </>
+  )
+}
+
 function replaceToolbarControls(items: ReactElement[], vaultPath?: string) {
   return items.flatMap((item) => {
     switch (String(item.key)) {
@@ -725,15 +757,18 @@ function insertExtraTextStyleButtons(items: ReactElement[], locale: AppLocale) {
 }
 
 function getTolariaFormattingToolbarItems(vaultPath: string | undefined, locale: AppLocale) {
-  return insertExtraTextStyleButtons(
-    replaceToolbarControls(
-      filterTolariaFormattingToolbarItems(
-        getFormattingToolbarItems(),
+  return [
+    ...insertExtraTextStyleButtons(
+      replaceToolbarControls(
+        filterTolariaFormattingToolbarItems(
+          getFormattingToolbarItems(),
+        ),
+        vaultPath,
       ),
-      vaultPath,
+      locale,
     ),
-    locale,
-  )
+    <TolariaCommentPassageButton key="commentPassageButton" />,
+  ]
 }
 
 export function TolariaFormattingToolbar({

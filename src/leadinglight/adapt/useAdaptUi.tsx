@@ -184,7 +184,7 @@ export function useAdaptUi(options: AdaptUiOptions) {
     /** True while the dialog is open, or stepped aside for the E1 preview it opened. */
     isOpen: useCallback(() => openRef.current, []),
     dialog: visible ? (
-      <AdaptDialog locale={locale} snapshot={snapshot} controller={controller} registry={extensions.snapshot} adoptions={adoptions}
+      <AdaptDialog locale={locale} snapshot={snapshot} controller={controller} registry={extensions.snapshot} review={extensions.controller.reviewOf} adoptions={adoptions}
         candidates={candidates} onAttachPage={() => { void attachPage() }} onClose={close} onKeepWriting={keepWriting} onCloseAutoFocus={onCloseAutoFocus} />
     ) : null,
   }

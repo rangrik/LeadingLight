@@ -14,6 +14,9 @@ import {
 import { deriveDisplayTitleState, filenameStemToTitle } from '../utils/noteTitle'
 import { vaultPathForEntry } from '../utils/workspaces'
 import { relativePathStem } from '../utils/wikilink'
+import type { MutateExistingDocument } from './useAppSave'
+import type { RenameAdmission } from '../leadinglight/rename/renameAdmission'
+import { runManagedRename, type ManagedRenameResult, type RebaseHeldDraft } from '../leadinglight/rename/managedRename'
 
 interface RenameResult {
   new_path: string
@@ -30,12 +33,21 @@ interface RenameRequest {
   newTitle: string
   vaultPath: string
   oldTitle?: string
+  /** Open pages whose exact before/after text the receipt reports. */
+  openPaths?: readonly string[]
 }
 
 interface FilenameRenameRequest {
   path: string
   newFilenameStem: string
   vaultPath: string
+  openPaths?: readonly string[]
+}
+
+interface AutoRenameRequest {
+  path: string
+  vaultPath: string
+  openPaths?: readonly string[]
 }
 
 interface FolderMoveRequest {
@@ -105,15 +117,22 @@ export function needsRenameOnSave(title: string, filename: string): boolean {
   return `${slugify(title)}.md` !== filename
 }
 
-export async function performRename({ path, newTitle, vaultPath, oldTitle }: RenameRequest): Promise<RenameResult> {
+export async function performRename({ path, newTitle, vaultPath, oldTitle, openPaths = [] }: RenameRequest): Promise<RenameResult> {
   const oldTitleArg = oldTitle ?? null
   return invokeNoteCommand({
     command: 'rename_note',
     path,
     vaultPath,
-    tauriExtra: { newTitle, oldTitle: oldTitleArg },
-    mockExtra: { new_title: newTitle, old_title: oldTitleArg },
+    tauriExtra: { newTitle, oldTitle: oldTitleArg, openPaths: [...openPaths] },
+    mockExtra: { new_title: newTitle, old_title: oldTitleArg, open_paths: [...openPaths] },
   })
+}
+
+/** The one-shot untitled rename; null when the page is not renamed. */
+export async function performAutoRename({ path, vaultPath, openPaths = [] }: AutoRenameRequest): Promise<unknown> {
+  return isTauri()
+    ? invoke('auto_rename_untitled', { args: { vaultPath, notePath: path, openPaths: [...openPaths] } })
+    : mockInvoke('auto_rename_untitled', { vault_path: vaultPath, note_path: path, open_paths: [...openPaths] })
 }
 
 function invokeRenameCommand(params: {
@@ -169,18 +188,21 @@ function performSingleValueNoteCommand({
   path,
   value,
   vaultPath,
+  openPaths,
 }: {
   descriptor: SingleValueNoteCommand
   path: string
   value: string
   vaultPath: string
+  openPaths?: readonly string[]
 }) {
+  const open = openPaths ? { tauri: { openPaths: [...openPaths] }, mock: { open_paths: [...openPaths] } } : { tauri: {}, mock: {} }
   return invokeNoteCommand({
     command: descriptor.command,
     path,
     vaultPath,
-    tauriExtra: { [descriptor.tauriKey]: value },
-    mockExtra: { [descriptor.mockKey]: value },
+    tauriExtra: { [descriptor.tauriKey]: value, ...open.tauri },
+    mockExtra: { [descriptor.mockKey]: value, ...open.mock },
   })
 }
 
@@ -188,12 +210,14 @@ export async function performFilenameRename({
   path,
   newFilenameStem,
   vaultPath,
+  openPaths = [],
 }: FilenameRenameRequest): Promise<RenameResult> {
   return performSingleValueNoteCommand({
     descriptor: FILENAME_RENAME_COMMAND,
     path,
     value: newFilenameStem,
     vaultPath,
+    openPaths,
   })
 }
 
@@ -366,7 +390,11 @@ export async function reloadVaultAfterRename(reloadVault?: () => Promise<unknown
   }
 }
 
-/** Reload content for open tabs whose wikilinks may have changed after a rename. */
+/**
+ * Legacy blind reload, kept only for workspace moves and callers not yet on the managed rename
+ * seam. It replaces tab text without before-image proof; managed renames never use it.
+ * @deprecated Use `runManagedRename` receipts for filename, title and automatic renames.
+ */
 export async function reloadTabsAfterRename({
   tabPaths,
   updateTabContent,
@@ -411,6 +439,16 @@ export interface NoteRenameConfig {
   setToastMessage: (msg: string | null) => void
   reloadVault?: () => Promise<unknown>
   onPathRenamed?: (oldPath: string, newPath: string) => void
+  /** Claims each linked open page's save lane for a managed rename (useAppSave seam). */
+  mutateExistingDocument?: MutateExistingDocument
+  /** Rebases or holds the renamed page's newer text before its hold is released (useAppSave seam). */
+  rebaseHeldDraft?: RebaseHeldDraft
+  /** Pages besides the source whose text the app holds: open tabs and pending writes. */
+  linkedPaths?: (sourcePath: string) => readonly string[]
+  /** Defaults to the window's one admission shared with automatic renames. */
+  admission?: RenameAdmission
+  /** The settled outcome, for callers that keep a page path (commentary capture, cards). */
+  onRenameSettled?: (oldPath: string, result: ManagedRenameResult) => void
 }
 
 interface RenameTabDeps {
@@ -597,14 +635,47 @@ function useWorkspaceMoveHandler({
 }
 
 interface LocalRenameHandlerContext {
-  applyRenameResult: ReturnType<typeof useRenameResultApplier>['applyRenameResult']
+  config: NoteRenameConfig
+  tabDeps: RenameTabDeps
   entries: VaultEntry[]
   setToastMessage: NoteRenameConfig['setToastMessage']
   tabsRef: ReturnType<typeof useRenameResultApplier>['tabsRef']
 }
 
+/** Plain-language outcome of a managed rename; counts failed and held pages truthfully. */
+export function managedRenameToast(result: ManagedRenameResult, refused: (result: Extract<ManagedRenameResult, { status: 'refused' }>) => string): string | null {
+  switch (result.status) {
+    case 'unchanged':
+      return null
+    case 'refused':
+      return refused(result)
+    case 'unknown':
+      return translate('leadinglight.rename.unknown')
+    case 'renamed': {
+      const { receipt } = result
+      const failed = receipt.failed_updates + result.heldPaths.length + result.stalePaths.length
+      const done = renameToastMessage(receipt.updated_files, failed)
+      return result.sourceHeld
+        ? translate('leadinglight.rename.draftHeld', { done })
+        : done
+    }
+  }
+}
+
+/** The existing refusal copy for a managed rename that sent nothing or was refused before commit. */
+export function refusedRenameMessage(result: Extract<ManagedRenameResult, { status: 'refused' }>): string {
+  if (result.reason === 'native') return renameErrorMessage(result.error)
+  if (result.reason === 'busy') return translate('leadinglight.page.busy')
+  return translate('leadinglight.rename.notSaved')
+}
+
+function filenameRenameOldTitle(entry: VaultEntry | undefined, content: string | undefined, path: string): string {
+  if (content !== undefined) return deriveDisplayTitleState({ content, filename: notePathFilename(path) }).title
+  return entry?.title ?? filenameStemToTitle(notePathFilename(path))
+}
+
 function useLocalRenameHandler(context: LocalRenameHandlerContext, mode: 'title' | 'filename') {
-  const { applyRenameResult, entries, setToastMessage, tabsRef } = context
+  const { config, tabDeps, entries, setToastMessage, tabsRef } = context
   return useCallback(
     async (
       path: string,
@@ -614,32 +685,61 @@ function useLocalRenameHandler(context: LocalRenameHandlerContext, mode: 'title'
     ) => {
       const entry = findRenameEntry(entries, tabsRef.current, path)
       const renameVaultPath = resolveRenameVaultPath(entry, vaultPath)
-      const perform = mode === 'title'
-        ? () => performRename({ path, newTitle: value, vaultPath: renameVaultPath, oldTitle: entry?.title })
-        : () => performFilenameRename({ path, newFilenameStem: value, vaultPath: renameVaultPath })
       const buildEntry = mode === 'title'
         ? (currentEntry: VaultEntry | undefined, newPath: string) => buildRenamedEntry(currentEntry ?? ({} as VaultEntry), value, newPath)
         : (currentEntry: VaultEntry | undefined, newPath: string) => buildFilenameRenamedEntry(currentEntry ?? ({} as VaultEntry), newPath)
-      await runRenameAction({
-        path,
-        perform,
-        applyRenameResult,
-        buildEntry,
-        onEntryRenamed,
-        setToastMessage,
-        errorMessage: renameErrorMessage,
-        logLabel: mode === 'title' ? 'Failed to rename note' : 'Failed to rename note filename',
-        sourceContent: shownTabContent(tabsRef.current, path),
-      })
+      const shown = shownTabContent(tabsRef.current, path)
+      try {
+        const result = await runManagedRename({
+          sourcePath: path,
+          vaultPath: renameVaultPath,
+          oldTitle: mode === 'title' ? entry?.title ?? '' : filenameRenameOldTitle(entry, shown, path),
+          destination: { siblingOf: path },
+          readSource: () => loadNoteContent({ path, vaultPath: renameVaultPath }),
+          // Only after a valid receipt: a page it left unrefreshed continues from its exact bytes.
+          readPage: page => loadNoteContent({ path: page, vaultPath: renameVaultPath }),
+          dispatch: openPaths => mode === 'title'
+            ? performRename({ path, newTitle: value, vaultPath: renameVaultPath, oldTitle: entry?.title, openPaths })
+            : performFilenameRename({ path, newFilenameStem: value, vaultPath: renameVaultPath, openPaths }),
+          // The file has already moved: its new path and tab go live before anything else.
+          route: (oldPath, newPath) => {
+            const moved = buildEntry(entry, newPath)
+            config.onPathRenamed?.(oldPath, newPath)
+            tabDeps.setTabs(prev => prev.map(tab => notePathsMatch(tab.entry.path, oldPath) ? { entry: moved, content: tab.content } : tab))
+            if (notePathsMatch(tabDeps.activeTabPathRef.current, oldPath)) tabDeps.handleSwitchTab(newPath)
+          },
+        }, {
+          admission: config.admission,
+          mutateExistingDocument: config.mutateExistingDocument,
+          rebaseHeldDraft: config.rebaseHeldDraft,
+          tabsRef,
+          setTabs: tabDeps.setTabs,
+          linkedPaths: config.linkedPaths,
+        })
+        config.onRenameSettled?.(path, result)
+        if (result.status === 'renamed') {
+          const renamed = withContentTitle(buildEntry(entry, result.receipt.new_path), result.sourceText)
+          tabDeps.setTabs(prev => prev.map(tab => notePathsMatch(tab.entry.path, result.receipt.new_path) ? { ...tab, entry: renamed } : tab))
+          onEntryRenamed(path, renamed, result.sourceText)
+          await reloadVaultAfterRename(config.reloadVault)
+        } else if (result.status === 'unknown') {
+          await reloadVaultAfterRename(config.reloadVault)
+        }
+        const message = managedRenameToast(result, refusedRenameMessage)
+        if (message) setToastMessage(message)
+      } catch (err) {
+        console.error(mode === 'title' ? 'Failed to rename note:' : 'Failed to rename note filename:', err)
+        setToastMessage(renameErrorMessage(err))
+      }
     },
-    [applyRenameResult, entries, mode, setToastMessage, tabsRef],
+    [config, entries, mode, setToastMessage, tabDeps, tabsRef],
   )
 }
 
 export function useNoteRename(config: NoteRenameConfig, tabDeps: RenameTabDeps) {
   const { entries, setToastMessage, onPathRenamed } = config
   const { tabsRef, applyRenameResult } = useRenameResultApplier(config, tabDeps)
-  const handlerContext = { applyRenameResult, entries, setToastMessage, tabsRef }
+  const handlerContext = { config, tabDeps, entries, setToastMessage, tabsRef }
   const handleRenameNote = useLocalRenameHandler(handlerContext, 'title')
   const handleRenameFilename = useLocalRenameHandler(handlerContext, 'filename')
   const commitFolderRelocation = useCallback((oldPath: string, newPath: string) => {

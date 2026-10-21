@@ -8,7 +8,10 @@ import {
   attachCurrentPage, attachExtension, attachPastedText, detach, revisionBaseOf, wireAttachments, wireRevision, type AdaptAttachment,
 } from './adaptAttachments'
 import type { PackageView, RegistrySnapshot } from '../extensions/extensionSessionController'
-import { candidateFor, checkCandidate, compareVersions, expectedActiveFor } from './adaptCandidate'
+import { candidateFor, checkCandidate, compareVersions, e1Review, expectedActiveFor } from './adaptCandidate'
+import { E2_HOST_CAPABILITIES } from '../extensions/extensionContract'
+import { hostReview } from '../extensions/extensionSessionController'
+import observationText from '../extensions/fixtures/append-observation.json?raw'
 import { ADAPT_LIMITS, type AdaptAttachmentSummary, type AdaptEntry, type AdaptRevisionBase } from './adaptContract'
 
 const SHA = 'a'.repeat(64)
@@ -100,6 +103,16 @@ describe('terminal candidates', () => {
     expect(checkCandidate(commentaryText, null, none)).toMatchObject({ status: 'unavailable', missing: ['selection.read', 'association.resolve', 'document.append'] })
   })
 
+  it('follows the extension host it is given: passage commentary is ready where the host performs it', () => {
+    const e2 = (extension: Parameters<typeof hostReview>[0]) => hostReview(extension, E2_HOST_CAPABILITIES)
+    expect(checkCandidate(commentaryText, null, none, e2)).toMatchObject({ status: 'ready', review: { activation: 'available', missing: [] } })
+    // Adding to a page the person picks needs a page chooser this host does not have: still unavailable.
+    expect(checkCandidate(observationText, null, none, e2)).toMatchObject({ status: 'unavailable', missing: ['document.append'] })
+    // Identity and schema rules do not loosen with the host.
+    expect(checkCandidate(withId(commentaryText, 'leadinglight.commentary'), null, none, e2)).toMatchObject({ status: 'identity', problem: 'reservedId' })
+    expect(checkCandidate(folderPathText, null, none, e2)).toMatchObject({ status: 'invalid' })
+  })
+
   it('never lets a new request take a reserved or an existing id', () => {
     expect(checkCandidate(withId(quickText, 'leadinglight.quick'), null, none)).toMatchObject({ status: 'identity', problem: 'reservedId' })
     expect(checkCandidate(quickText, null, new Set(['local.quick-note']))).toMatchObject({ status: 'identity', problem: 'existingId' })
@@ -139,29 +152,29 @@ describe('terminal candidates', () => {
     const two = [{ version: '1.0.0', packageSha256: SHA }, { version: '1.0.5', packageSha256: OTHER }]
 
     it('revises the stored base against what the request recorded as on, on or off', () => {
-      expect(candidateFor(next, request(wasOn), registry(view(SHA))))
+      expect(candidateFor(next, request(wasOn), registry(view(SHA)), e1Review))
         .toMatchObject({ status: 'checked', check: { status: 'ready' }, change: { kind: 'revision', name: 'Quick note', from: '1.0.0' }, expected: SHA })
-      expect(candidateFor(next, request(wasOff), registry(view(null)))).toMatchObject({ status: 'checked', expected: null })
+      expect(candidateFor(next, request(wasOff), registry(view(null)), e1Review)).toMatchObject({ status: 'checked', expected: null })
     })
 
     it('is stale when what is on changed after the request: turned off, turned on, or another version', () => {
-      expect(candidateFor(next, request(wasOn), registry(view(null)))).toEqual({ status: 'stale', name: 'Quick note' })
-      expect(candidateFor(next, request(wasOff), registry(view(SHA)))).toEqual({ status: 'stale', name: 'Quick note' })
-      expect(candidateFor(next, request(wasOn), registry(view(OTHER, two)))).toEqual({ status: 'stale', name: 'Quick note' })
+      expect(candidateFor(next, request(wasOn), registry(view(null)), e1Review)).toEqual({ status: 'stale', name: 'Quick note' })
+      expect(candidateFor(next, request(wasOff), registry(view(SHA)), e1Review)).toEqual({ status: 'stale', name: 'Quick note' })
+      expect(candidateFor(next, request(wasOn), registry(view(OTHER, two)), e1Review)).toEqual({ status: 'stale', name: 'Quick note' })
     })
 
     it('refuses a revision whose base is no longer stored', () => {
-      expect(candidateFor(next, request(wasOn), registry())).toEqual({ status: 'baseMissing' })
+      expect(candidateFor(next, request(wasOn), registry(), e1Review)).toEqual({ status: 'baseMissing' })
     })
 
     it('does not offer a version that is already stored, and waits for the registry', () => {
-      expect(candidateFor(quickText, request(null), registry(view(null)))).toEqual({ status: 'stored', name: 'Quick note' })
-      expect(candidateFor(quickText, request(null), { status: 'loading', vaultPath: '/vault' })).toEqual({ status: 'waiting' })
+      expect(candidateFor(quickText, request(null), registry(view(null)), e1Review)).toEqual({ status: 'stored', name: 'Quick note' })
+      expect(candidateFor(quickText, request(null), { status: 'loading', vaultPath: '/vault' }, e1Review)).toEqual({ status: 'waiting' })
     })
 
     it('calls a change to an attached bundled extension a new extension based on it', () => {
       const attached = [{ kind: 'extension' as const, label: 'Meeting debrief · 1.0.0', bytes: 10, sha256: SHA }]
-      expect(candidateFor(quickText, request(null, attached), registry()))
+      expect(candidateFor(quickText, request(null, attached), registry(), e1Review))
         .toMatchObject({ status: 'checked', change: { kind: 'copy', of: 'Meeting debrief · 1.0.0' }, expected: null })
     })
   })

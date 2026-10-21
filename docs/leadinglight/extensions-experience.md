@@ -2,9 +2,10 @@
 
 Extensions are optional workflows that create ordinary notes. Nothing runs until you turn one on.
 An extension is a data-only package (see `extensions-catalog.md`); LeadingLight shows its own
-form, preview and buttons and performs every effect itself. This milestone creates new notes from
-a form in a folder you choose. It does not read selections, add to existing pages, use the network
-or contact any AI service.
+form, preview and buttons and performs every effect itself. Extensions create new notes from a form
+in a folder you choose, or, for a command that captures a selected passage, add to the note linked to
+that passage's page (see `commentary-experience.md`). None of them uses the network or contacts any
+AI service.
 
 ## Where things are
 
@@ -23,8 +24,8 @@ it creates its note, whether it opens it), and a sample note made from sample an
 writes nothing. **Turn on** is the only confirmation. Turning off asks nothing; notes the extension
 created stay as they are. Turning the same reviewed version back on asks nothing.
 
-A valid extension that needs something this version cannot do yet (for example selecting text in
-a page) stays visible, says what it needs, and cannot be turned on.
+A valid extension that needs something this version cannot do yet (for example adding to a page you
+pick, which needs a page chooser) stays visible, says what it needs, and cannot be turned on.
 
 ## Adding your own
 

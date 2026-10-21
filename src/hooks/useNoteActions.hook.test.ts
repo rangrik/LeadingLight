@@ -752,6 +752,12 @@ describe('useNoteActions hook', () => {
   })
 
   describe('rename note updates wikilinks', () => {
+    /** Native's managed-rename receipt: the exact bytes read and published, no linked page open. */
+    const renameReceipt = (newPath: string, content: string, updatedFiles = 0) => ({
+      new_path: newPath, updated_files: updatedFiles, failed_updates: 0, source_before_content: content,
+      source_content: content, updated_open_pages: [], unrefreshed_open_paths: [],
+    })
+
     it('handleRenameNote passes entry title as old_title to rename_note', async () => {
       const entry = makeEntry({
         path: '/test/vault/weekly-review.md',
@@ -763,7 +769,7 @@ describe('useNoteActions hook', () => {
       config.replaceEntry = replaceEntry
 
       vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-        if (cmd === 'rename_note') return { new_path: '/test/vault/sprint-retro.md', updated_files: 2 }
+        if (cmd === 'rename_note') return renameReceipt('/test/vault/sprint-retro.md', '---\nIs A: Note\n---\n# Sprint Retro\n', 2)
         if (cmd === 'get_note_content') return '---\nIs A: Note\n---\n# Sprint Retro\n'
         return ''
       })
@@ -792,7 +798,7 @@ describe('useNoteActions hook', () => {
       const config = makeConfig([])
 
       vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-        if (cmd === 'rename_note') return { new_path: '/test/vault/new.md', updated_files: 0 }
+        if (cmd === 'rename_note') return renameReceipt('/test/vault/new.md', '# New\n')
         if (cmd === 'get_note_content') return '# New\n'
         return ''
       })
@@ -808,6 +814,72 @@ describe('useNoteActions hook', () => {
       expect(mockInvoke).toHaveBeenCalledWith('rename_note', expect.objectContaining({
         old_title: null,
       }))
+    })
+
+    it('keeps a page whose rename reply proves nothing from saving later words, and says so', async () => {
+      const holdUnproven = vi.fn()
+      const config = { ...makeConfig([]), holdUnproven }
+      vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
+        // The legacy shape: native may have renamed the page, but this reply cannot prove it.
+        if (cmd === 'rename_note') return { new_path: '/test/vault/new.md', updated_files: 0 }
+        if (cmd === 'get_note_content') return '# Old\n'
+        return ''
+      })
+      const { result } = renderHook(() => useNoteActions(config))
+
+      await act(async () => {
+        await result.current.handleRenameNote('/test/vault/old.md', 'New', '/test/vault', vi.fn())
+      })
+
+      expect(holdUnproven).toHaveBeenCalledExactlyOnceWith('/test/vault/old.md')
+      expect(setToastMessage).toHaveBeenLastCalledWith(
+        "The rename couldn't be confirmed. The pages it may have changed won't save new edits in this window. Check the page list before renaming again; nothing is repeated automatically.",
+      )
+    })
+
+    it('reads a page a completed rename left unrefreshed from the rename\'s vault, so its lane can continue from those bytes', async () => {
+      const linked = '/test/vault/linked.md'
+      const unproven: unknown[] = []
+      // The page's lane as the save queue runs it: what matters here is what the rename hands it.
+      const mutateExistingDocument: NonNullable<NoteActionsConfig['mutateExistingDocument']> = (path, mutation) => {
+        const done = (async () => {
+          const result = await mutation.publish(path)
+          unproven.push(mutation.unproven?.(result) ?? null)
+          return { kind: 'returned' as const, path, result, current: true, integration: 'none' as const, latest: null }
+        })()
+        return { admitted: true, path, done }
+      }
+      const config: NoteActionsConfig = { ...makeConfig([]), managedRenameLinkedPaths: () => [linked], mutateExistingDocument }
+      vi.mocked(mockInvoke).mockImplementation(async (cmd: string, args?: unknown) => {
+        if (cmd === 'rename_note') return { ...renameReceipt('/test/vault/new.md', '# New\n'), unrefreshed_open_paths: [linked] }
+        if (cmd === 'get_note_content') return (args as { path: string }).path === linked ? 'Edited elsewhere [S](./old.md)\n' : '# New\n'
+        return ''
+      })
+      const { result } = renderHook(() => useNoteActions(config))
+
+      await act(async () => {
+        await result.current.handleRenameNote('/test/vault/old.md', 'New', '/test/vault', vi.fn())
+      })
+
+      expect(mockInvoke).toHaveBeenCalledWith('get_note_content', { path: linked, vaultPath: '/test/vault' })
+      expect(unproven).toEqual([{ current: 'Edited elsewhere [S](./old.md)\n' }])
+    })
+
+    it('does not hold a page its rename receipt proves', async () => {
+      const holdUnproven = vi.fn()
+      const config = { ...makeConfig([]), holdUnproven }
+      vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
+        if (cmd === 'rename_note') return renameReceipt('/test/vault/new.md', '# New\n')
+        if (cmd === 'get_note_content') return '# New\n'
+        return ''
+      })
+      const { result } = renderHook(() => useNoteActions(config))
+
+      await act(async () => {
+        await result.current.handleRenameNote('/test/vault/old.md', 'New', '/test/vault', vi.fn())
+      })
+
+      expect(holdUnproven).not.toHaveBeenCalled()
     })
 
     it('exposes the workspace move handler from composed note actions', async () => {
@@ -911,7 +983,7 @@ describe('useNoteActions hook', () => {
       config.replaceEntry = replaceEntry
 
       vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-        if (cmd === 'rename_note') return { new_path: '/test/vault/new-name.md', updated_files: 1 }
+        if (cmd === 'rename_note') return renameReceipt('/test/vault/new-name.md', '---\ntitle: New Name\n---\n# New Name\n', 1)
         if (cmd === 'get_note_content') return '---\ntitle: New Name\n---\n# New Name\n'
         return ''
       })
@@ -951,7 +1023,7 @@ describe('useNoteActions hook', () => {
       config.replaceEntry = vi.fn()
 
       vi.mocked(mockInvoke).mockImplementation(async (cmd: string) => {
-        if (cmd === 'rename_note') return { new_path: newPath, updated_files: 1 }
+        if (cmd === 'rename_note') return renameReceipt(newPath, '---\ntitle: New Name\nstatus: Done\n---\n# New Name\n', 1)
         if (cmd === 'get_note_content') return '---\ntitle: New Name\nstatus: Done\n---\n# New Name\n'
         if (cmd === 'save_note_content') return undefined
         return ''

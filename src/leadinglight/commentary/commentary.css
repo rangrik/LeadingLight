@@ -1,0 +1,52 @@
+/* Passage commentary: the run dialog, the toolbar action, the Commentary header button, the source
+   card and the Undo notice. Calm and quiet: existing tokens only, no new colors or motion. */
+
+.ll-commentary-dialog { width: min(640px, calc(100vw - 2rem)); max-width: none; grid-template-rows: auto minmax(0, 1fr) auto auto auto; overflow: hidden; }
+.ll-commentary-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.ll-commentary-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+/* The passage: plain text, its first lines, all of it on request. */
+.ll-commentary-passage { margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.ll-commentary-passage blockquote {
+  margin: 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--border); color: var(--muted-foreground);
+  font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; max-width: 100%;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; line-clamp: 4; overflow: hidden;
+}
+.ll-commentary-passage blockquote[data-expanded="true"] { display: block; -webkit-line-clamp: none; line-clamp: none; max-height: 40vh; overflow-y: auto; }
+.ll-commentary-show-all { padding: 0; height: auto; font-size: 12px; }
+
+.ll-commentary-destinations { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ll-commentary-destination { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+.ll-commentary-preview { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ll-commentary-preview .ll-ext-note { min-height: 0; max-height: 240px; }
+.ll-commentary-preview-toggle { display: none; }
+
+/* Compact: the dialog scrolls, the passage shows two lines and the preview waits behind its
+   toggle; the destination lines and buttons never collapse. */
+@media (max-width: 720px) {
+  .ll-commentary-dialog { padding: 18px; }
+  .ll-commentary-passage blockquote { -webkit-line-clamp: 2; line-clamp: 2; }
+  .ll-commentary-preview-toggle { display: inline-flex; align-self: flex-start; }
+  .ll-commentary-preview[data-open="false"] { display: none; }
+}
+
+/* The toolbar action: its title as text beside the icon, after a divider. */
+.ll-commentary-toolbar-divider { align-self: stretch; width: 1px; margin: 4px 2px; background: var(--border); }
+.ll-commentary-toolbar-action .ll-commentary-toolbar-label { margin-left: 4px; font-size: 13px; white-space: nowrap; }
+
+/* The Commentary header button and the source card. */
+.ll-commentary-header { gap: 4px; }
+.ll-commentary-header svg { width: 15px; height: 15px; }
+.ll-commentary-card, .ll-commentary-notice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 12px; min-height: 36px;
+  border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.45; overflow-wrap: anywhere;
+}
+.ll-commentary-card > p, .ll-commentary-notice > p { margin: 0; flex: 1 1 220px; min-width: 0; }
+.ll-commentary-card[data-state="found"] > p { color: var(--muted-foreground); }
+.ll-commentary-notice { background: var(--state-hover-subtle); }
+.ll-commentary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ll-commentary-dialog { animation: none; }
+}

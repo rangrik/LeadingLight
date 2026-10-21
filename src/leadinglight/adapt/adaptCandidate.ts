@@ -1,7 +1,8 @@
 // What a model's terminal candidate may become. The E1 validator is the authority on the package
 // itself; these rules add only identity: a new request makes a new extension, a revision keeps its
 // ordinary extension's id with a higher version, and a bundled extension is changed by making a
-// new ordinary one. Nothing here imports, activates or writes anything.
+// new ordinary one. Whether it can be turned on here is the extension host's own review, passed in
+// by the caller. Nothing here imports, activates or writes anything.
 import {
   E1_HOST_CAPABILITIES, RESERVED_PACKAGE_ID_PREFIX,
   type Capability, type ExtensionDiagnostic, type ExtensionPackage, type PackageReview,
@@ -45,20 +46,27 @@ function identityProblem(extension: ExtensionPackage, base: RevisionBase | null,
   return storedIds.has(extension.id) ? 'existingId' : null
 }
 
+/** How the extension host reviews a package: what it can turn on and what it would still miss. */
+export type HostReview = (extension: ExtensionPackage) => PackageReview
+
+/** The E1 host's review: create and open only. The app passes its controller's review instead. */
+export const e1Review: HostReview = extension => reviewPackage(extension, E1_HOST_CAPABILITIES)
+
 /**
  * Checks the exact package text from a terminal candidate. `storedIds` are the package ids the
- * registry lists now; `base` is the attached extension the request revises, if any.
+ * registry lists now; `base` is the attached extension the request revises, if any; `review` is
+ * the extension host's own review, so availability here matches its Turn on.
  */
 export function checkCandidate(packageText: string, base: RevisionBase | null, storedIds: ReadonlySet<string>,
-  host: readonly Capability[] = E1_HOST_CAPABILITIES): CandidateCheck {
+  review: HostReview = e1Review): CandidateCheck {
   const parsed = parseExtensionPackage(packageText)
   if (parsed.status === 'invalid') return { status: 'invalid', diagnostics: parsed.diagnostics, truncated: parsed.truncated }
   const { extension } = parsed
   const problem = identityProblem(extension, base, storedIds)
   if (problem) return { status: 'identity', problem, extension }
-  const review = reviewPackage(extension, host)
-  if (review.activation !== 'available') return { status: 'unavailable', extension, review, missing: review.missing }
-  return { status: 'ready', extension, review }
+  const reviewed = review(extension)
+  if (reviewed.activation !== 'available') return { status: 'unavailable', extension, review: reviewed, missing: reviewed.missing }
+  return { status: 'ready', extension, review: reviewed }
 }
 
 /** The activation a candidate's Turn on expects: the version active when the revision began. */
@@ -87,7 +95,8 @@ export type CandidateState =
  * was on then is the request's own record (`expectedActiveSha256`, null for nothing on); it is
  * compared with what is on now and is the activation's expectation, never rebuilt from today.
  */
-export function candidateFor(packageText: string, request: Extract<AdaptEntry, { kind: 'request' }> | null, registry: RegistrySnapshot): CandidateState {
+export function candidateFor(packageText: string, request: Extract<AdaptEntry, { kind: 'request' }> | null, registry: RegistrySnapshot,
+  review: HostReview): CandidateState {
   if (registry.status !== 'ready') return { status: 'waiting' }
   const { packages } = registry
   const revision = request?.revision ?? null
@@ -103,7 +112,7 @@ export function candidateFor(packageText: string, request: Extract<AdaptEntry, {
       activeSha256: revision.expectedActiveSha256, bundled: view.bundled,
     }
   }
-  const check = checkCandidate(packageText, base, new Set(packages.map(item => item.packageId)))
+  const check = checkCandidate(packageText, base, new Set(packages.map(item => item.packageId)), review)
   if (check.status !== 'invalid') {
     const { extension } = check
     if (packages.some(item => item.packageId === extension.id && item.versions.some(stored => stored.version === extension.version))) {

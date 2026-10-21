@@ -181,12 +181,13 @@ test.describe('LeadingLight local extensions', () => {
     await expect(page.getByTestId('extension-import-result')).toContainText('Where: /commands/0/steps/1/folder')
     await page.getByTestId('extension-import-dialog').getByRole('button', { name: 'Cancel' }).click()
 
-    await importPackage(page, fixture('passage-commentary.json').replace('"local.passage-commentary"', `"local.passage-commentary-${suffix}"`))
-    const commentary = page.getByTestId('extension-preview-dialog')
-    await expect(commentary.getByTestId('extension-preview-needs')).toContainText('Needs: selecting text in a page')
-    await expect(commentary.getByTestId('extension-turn-on')).toBeDisabled()
-    await commentary.getByRole('button', { name: 'Not now' }).click()
-    await expect(row(page, `local.passage-commentary-${suffix}`).getByTestId('extension-chip')).toHaveText('Unavailable in this version')
+    // Adding to a page the person picks needs a page chooser this version does not have yet.
+    await importPackage(page, fixture('append-observation.json').replace('"local.observation-log"', `"local.observation-log-${suffix}"`))
+    const observation = page.getByTestId('extension-preview-dialog')
+    await expect(observation.getByTestId('extension-preview-needs')).toContainText('Needs: adding to an existing page')
+    await expect(observation.getByTestId('extension-turn-on')).toBeDisabled()
+    await observation.getByRole('button', { name: 'Not now' }).click()
+    await expect(row(page, `local.observation-log-${suffix}`).getByTestId('extension-chip')).toHaveText('Unavailable in this version')
 
     await importPackage(page, dailyDebrief())
     await page.getByTestId('extension-preview-dialog').getByTestId('extension-turn-on').click()

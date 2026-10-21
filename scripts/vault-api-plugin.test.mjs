@@ -4,11 +4,19 @@ import { request } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer } from "vite";
 import { parseMarkdownFile } from "./vault-api-data.ts";
 import { vaultApiPlugin } from "./vault-api-plugin.ts";
+import { runVaultCommand } from "./vault-api-commands.ts";
+import { RENAME_REFUSED_PREFIX } from "../src/leadinglight/rename/renameRefusal.ts";
+import {
+	autoRenameUntitledOnDisk,
+	moveNoteToFolderOnDisk,
+	renameNoteFilenameOnDisk,
+	renameNoteOnDisk,
+} from "./vault-api-rename.ts";
 import { VAULT_API_MARKER } from "../src/mock-tauri/mock-save-recovery.ts";
 
 const titleSourceContract = JSON.parse(
@@ -154,17 +162,25 @@ test("dev vault read routes support GET and POST", () =>
 		}
 	}));
 
-test("dev vault renames preserve legacy target handling and save/delete responses", () =>
+// Like native: the title goes to front matter (never the H1) and every legacy target follows.
+test("dev vault renames follow native targets and receipts and keep save/delete responses", () =>
 	withVault(async ({ api, vault, note, link }) => {
 		const renamed = await api("/api/vault/rename", {
 			old_path: note,
 			new_title: "Updated",
 			vault_path: vault,
+			open_paths: [link],
 		});
 		assert.equal(renamed.body.updated_files, 1);
+		assert.equal(renamed.body.source_content, "---\nstatus: active\ntitle: Updated\n---\n# Original\nBody text\n");
+		assert.deepEqual(renamed.body.updated_open_pages, [{
+			path: link,
+			before_content: "# Links\n[[Original|label]] [[original]]\n",
+			content: "# Links\n[[updated|label]] [[updated]]\n",
+		}]);
 		assert.equal(
 			(await api("/api/vault/content", { path: link }, "GET")).body.content,
-			"# Links\n[[updated|label]] [[original]]\n",
+			"# Links\n[[updated|label]] [[updated]]\n",
 		);
 		const moved = await api("/api/vault/rename-filename", {
 			old_path: renamed.body.new_path,
@@ -174,7 +190,7 @@ test("dev vault renames preserve legacy target handling and save/delete response
 		assert.equal(moved.body.updated_files, 1);
 		assert.equal(
 			(await api("/api/vault/content", { path: link }, "GET")).body.content,
-			"# Links\n[[moved|label]] [[original]]\n",
+			"# Links\n[[moved|label]] [[moved]]\n",
 		);
 		assert.equal(
 			(
@@ -234,4 +250,137 @@ test("dev vault error responses preserve status codes", () =>
 		assert.equal((await api("/api/vault/command", {})).status, 400);
 		assert.equal((await api("/api/vault/save", {})).status, 400);
 		assert.equal((await api("/api/vault/delete", {})).status, 400);
+	}));
+
+// --- Managed rename bridge leaf: the same exact links and receipts as native, no server needed ---
+
+async function withDiskVault(check) {
+	const vault = realpathSync(await mkdtemp(path.join(os.tmpdir(), "leadinglight-rename-bridge-")));
+	const file = (relative) => path.join(vault, relative);
+	const write = (relative, content) => {
+		mkdirSync(path.dirname(file(relative)), { recursive: true });
+		writeFileSync(file(relative), content);
+	};
+	const read = (relative) => readFileSync(file(relative), "utf8");
+	try {
+		await check({ vault, file, write, read });
+	} finally {
+		await rm(vault, { recursive: true, force: true });
+	}
+}
+
+const COMMENTARY = "---\n_leadinglight_commentary:\n  version: 1\n  captures:\n    - exact: W1BsYW5dXQ==\n---\n# Commentary on Plan\n\n[Source](../Topics/plan.md)\n\nThoughts.\n";
+
+test("managed rename bridge: filename rename keeps the Source link with an exact receipt", () =>
+	withDiskVault(async ({ vault, file, write, read }) => {
+		write("Topics/plan.md", "# Plan\n");
+		write("Notes/commentary.md", COMMENTARY);
+		write("Notes/legacy.md", "See [[Topics/plan]] and [[plan]].\n");
+		write("Other/same-title.md", "[Plan](../Elsewhere/plan.md)\n");
+		const gone = file("Notes/closed-elsewhere.md");
+		const response = renameNoteFilenameOnDisk({
+			vault_path: vault,
+			old_path: file("Topics/plan.md"),
+			new_filename_stem: "goals",
+			open_paths: [file("Notes/commentary.md"), gone],
+		});
+		const after = COMMENTARY.replace("../Topics/plan.md", "../Topics/goals.md");
+		assert.equal(response.statusCode, 200);
+		assert.deepEqual(response.payload, {
+			new_path: file("Topics/goals.md"),
+			updated_files: 2,
+			failed_updates: 0,
+			source_before_content: "# Plan\n",
+			source_content: "# Plan\n",
+			updated_open_pages: [{ path: file("Notes/commentary.md"), before_content: COMMENTARY, content: after }],
+			unrefreshed_open_paths: [gone],
+		});
+		assert.equal(read("Notes/commentary.md"), after);
+		assert.equal(read("Notes/legacy.md"), "See [[Topics/goals]] and [[Topics/goals]].\n");
+		assert.equal(read("Other/same-title.md"), "[Plan](../Elsewhere/plan.md)\n");
+		assert.equal(existsSync(file("Topics/plan.md")), false);
+	}));
+
+test("managed rename bridge: title rename takes the free candidate and rebases self-links", () =>
+	withDiskVault(async ({ vault, file, write, read }) => {
+		write("Topics/plan.md", "# Another plan\n");
+		write("Topics/draft.md", "---\ntitle: Draft\n---\n# Draft\n\n[Top](./draft.md#draft) [Neighbor](./plan.md)\n");
+		write("Notes/commentary.md", "# C\n\n[Source](../Topics/draft.md)\n");
+		const response = renameNoteOnDisk({ vault_path: vault, old_path: file("Topics/draft.md"), new_title: "Plan" });
+		assert.equal(response.statusCode, 200);
+		assert.equal(response.payload.new_path, file("Topics/plan-2.md"));
+		assert.equal(read("Topics/plan-2.md"), "---\ntitle: Plan\n---\n# Draft\n\n[Top](./plan-2.md#draft) [Neighbor](./plan.md)\n");
+		assert.equal(read("Notes/commentary.md"), "# C\n\n[Source](../Topics/plan-2.md)\n");
+		assert.equal(read("Topics/plan.md"), "# Another plan\n");
+	}));
+
+test("managed rename bridge: folder move and auto rename keep ordinary links both ways", () =>
+	withDiskVault(async ({ vault, file, write, read }) => {
+		write("Topics/plan.md", "# Plan\n");
+		write("Notes/commentary.md", COMMENTARY);
+		mkdirSync(file("Archive/2026"), { recursive: true });
+		const moved = moveNoteToFolderOnDisk({ vault_path: vault, old_path: file("Notes/commentary.md"), folder_path: "Archive/2026" });
+		assert.equal(moved.statusCode, 200);
+		assert.equal(read("Archive/2026/commentary.md"), COMMENTARY.replace("../Topics/plan.md", "../../Topics/plan.md"));
+
+		write("untitled-note-1700000000.md", "# Harbor Plan\n");
+		write("Notes/on-untitled.md", "[Source](../untitled-note-1700000000.md)\n");
+		const auto = autoRenameUntitledOnDisk({ vault_path: vault, note_path: file("untitled-note-1700000000.md") });
+		assert.equal(auto.payload.new_path, file("harbor-plan.md"));
+		assert.equal(read("Notes/on-untitled.md"), "[Source](../harbor-plan.md)\n");
+		assert.equal(autoRenameUntitledOnDisk({ vault_path: vault, note_path: file("harbor-plan.md") }).payload, null);
+	}));
+
+test("managed rename bridge: refusals happen before any change; unparseable pages are reported", () =>
+	withDiskVault(async ({ vault, file, write, read }) => {
+		write("Topics/plan.md", "# Plan\n");
+		write("Topics/goals.md", "# Goals\n");
+		write("Notes/html.md", "<a href='../Topics/plan.md'>Plan</a> [[plan]]\n");
+		const outside = renameNoteFilenameOnDisk({ vault_path: vault, old_path: file("Topics/plan.md"), new_filename_stem: "aims", open_paths: ["/elsewhere/page.md"] });
+		assert.equal(outside.statusCode, 400);
+		const taken = renameNoteFilenameOnDisk({ vault_path: vault, old_path: file("Topics/plan.md"), new_filename_stem: "goals" });
+		// Amendment B1: a refusal before publication, with the source in place, is marked explicit.
+		assert.deepEqual([taken.statusCode, taken.payload], [409, { error: `${RENAME_REFUSED_PREFIX}A note with that name already exists` }]);
+		const gone = renameNoteFilenameOnDisk({ vault_path: vault, old_path: file("Topics/gone.md"), new_filename_stem: "aims" });
+		assert.ok(!gone.payload.error.startsWith(RENAME_REFUSED_PREFIX), "a missing source proves nothing");
+		assert.equal(renameNoteFilenameOnDisk({ vault_path: vault, old_path: file("Topics/plan.md"), new_filename_stem: "a:b" }).statusCode, 400);
+		assert.equal(read("Topics/plan.md"), "# Plan\n");
+		const renamed = renameNoteFilenameOnDisk({ vault_path: vault, old_path: file("Topics/plan.md"), new_filename_stem: "aims" });
+		// HTML is never rewritten; its legacy wikilink still follows, and the page is reported.
+		assert.equal(read("Notes/html.md"), "<a href='../Topics/plan.md'>Plan</a> [[Topics/aims]]\n");
+		assert.deepEqual([renamed.payload.updated_files, renamed.payload.failed_updates], [1, 1]);
+		write("Notes/folder-html.md", "<img src='./x.png'>\n");
+		const refused = moveNoteToFolderOnDisk({ vault_path: vault, old_path: file("Notes/folder-html.md"), folder_path: "Topics" });
+		assert.equal(refused.statusCode, 409);
+		assert.ok(!refused.payload.error.startsWith(RENAME_REFUSED_PREFIX), "folder moves keep their own contract");
+		assert.equal(read("Notes/folder-html.md"), "<img src='./x.png'>\n");
+	}));
+
+// E2 commentary discovery asks native for 2000 and trusts "fewer than asked" as complete.
+test("dev vault search keeps the requested bound and the captured vault, 20 by default", () =>
+	withDiskVault(async ({ vault, write }) => {
+		const other = realpathSync(await mkdtemp(path.join(os.tmpdir(), "leadinglight-search-other-")));
+		try {
+			for (let index = 0; index < 25; index += 1) write(`Notes/c-${index}.md`, `# Commentary ${index}\n\nsynthetic-marker\n`);
+			for (let index = 0; index < 3; index += 1) writeFileSync(path.join(other, `b-${index}.md`), "# B\n\nsynthetic-marker\n");
+			const search = (args) => runVaultCommand({ cmd: "search_vault", args: { query: "synthetic-marker", ...args } });
+			const inVault = (root) => (result) => result.path.startsWith(`${root}${path.sep}`);
+			const asked = search({ vault_path: vault, limit: 2000 });
+			assert.equal(asked.statusCode, 200);
+			assert.equal(asked.payload.results.length, 25);
+			assert.ok(asked.payload.results.every(inVault(vault)));
+			assert.equal(search({ vault_path: vault, limit: "2000" }).payload.results.length, 25);
+			assert.equal(search({ vault_path: vault }).payload.results.length, 20);
+			assert.equal(search({ vault_path: vault, limit: 21 }).payload.results.length, 21);
+			// A then B then A: each request is answered by the vault it names.
+			const fromOther = search({ vault_path: other, limit: 2000 });
+			assert.equal(fromOther.payload.results.length, 3);
+			assert.ok(fromOther.payload.results.every(inVault(other)));
+			assert.equal(search({ vault_path: vault, limit: 2000 }).payload.results.length, 25);
+			for (const limit of [0, -1, 2.5, 10_001, "many"]) {
+				assert.deepEqual(search({ vault_path: vault, limit }), { payload: { error: "Invalid search limit" }, statusCode: 400 });
+			}
+		} finally {
+			await rm(other, { recursive: true, force: true });
+		}
 	}));

@@ -14,6 +14,7 @@ use tempfile::{PathPersistError, TempDir, TempPath};
 use super::wire::{CommitKind, ConflictReason, HandleRefusal, ProposalReceipt, ProposalRefusal};
 use super::{hex, is_sha256_hex};
 use crate::leadinglight_history::lease;
+use crate::vault::atomic_replace::PublishError;
 use crate::vault::filename_rules::validate_filename_stem;
 use crate::vault::staged_file::{
     device_inode, plain_file, sha256, stage_in, NativePlatform, Platform,
@@ -47,10 +48,16 @@ pub(crate) struct Claim {
     pub(crate) folder: BoundFolder,
 }
 
-/// The two filesystem effects tests replace; everything else is ordinary filesystem work.
+/// The filesystem effects tests replace; everything else is ordinary filesystem work.
 pub(crate) trait CreateIo: Send + Sync {
     fn persist(&self, staged: TempPath, target: &Path) -> Result<(), PathPersistError>;
     fn sync_dir(&self, dir: &Path) -> std::io::Result<()>;
+    /// Replaces an existing page with its staged copy in one step: an append and its Undo.
+    fn replace(&self, original: &Path, staged: &Path) -> Result<PathBuf, PublishError> {
+        NativePlatform.publish(original, staged)
+    }
+    /// Runs after a replacement is staged and before its exact recheck.
+    fn after_stage(&self, _page: &Path) {}
 }
 
 pub(crate) struct NativeCreateIo;

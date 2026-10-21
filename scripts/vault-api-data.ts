@@ -143,6 +143,23 @@ interface SearchRequestInput {
 	excludeFrontmatter: boolean;
 	query: string;
 	vaultPath: string;
+	/** Native `search_vault` bound; 20 when the caller asks for none. */
+	limit?: number;
+}
+
+export const DEFAULT_SEARCH_LIMIT = 20;
+export const MAX_SEARCH_LIMIT = 10_000;
+
+/**
+ * The caller's result bound, as native honours it: absent means 20; a malformed, zero or
+ * extreme bound is refused (null), never silently lowered, so "fewer than asked" stays proof.
+ */
+export function searchResultLimit(value: unknown): number | null {
+	if (value === undefined || value === null || value === "") return DEFAULT_SEARCH_LIMIT;
+	const limit = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+	return typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 1 && limit <= MAX_SEARCH_LIMIT
+		? limit
+		: null;
 }
 
 function getFrontmatterValue(
@@ -531,9 +548,11 @@ export function collectVaultSearchResults({
 	excludeFrontmatter,
 	vaultPath,
 	query,
+	limit = DEFAULT_SEARCH_LIMIT,
 }: SearchRequestInput): VaultSearchResult[] {
 	const results: VaultSearchResult[] = [];
 	for (const filePath of findMarkdownFiles(vaultPath)) {
+		if (results.length >= limit) break;
 		const entry = parseMarkdownFile(filePath);
 		if (!entry || entry.trashed) continue;
 		const rawContent = readUtf8File(filePath);
@@ -541,7 +560,7 @@ export function collectVaultSearchResults({
 			results.push(searchResultFromEntry(entry));
 		}
 	}
-	return results.slice(0, 20);
+	return results;
 }
 
 function searchableSearchContent({

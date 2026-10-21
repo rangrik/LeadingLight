@@ -1,4 +1,5 @@
-//! E1 extension commands (`EXTENSION_COMMANDS` and `PROPOSAL_COMMANDS` in the frozen contract).
+//! Extension commands (`EXTENSION_COMMANDS`, `PROPOSAL_COMMANDS` and `PROPOSAL_UNDO_COMMANDS` in
+//! the frozen contracts).
 //! Each runs off the main thread and answers its expected cases as data; `Err` only means the
 //! arguments could not be read or the local store could not be located. The calling window's
 //! label is the owner of every session, run and operation; no command trusts an id alone.
@@ -10,7 +11,8 @@ use super::vault::VaultBoundary;
 use crate::leadinglight_extensions::wire::{
     ActivationReply, CloseSessionReply, DeactivationReply, DocumentHandleReply, EndRunReply,
     FolderHandleReply, GuardedProposal, ImportReply, ListReply, OpenSessionReply, ProposalReceipt,
-    QueryReply, ReadReply, RunAdmission,
+    QueryReply, ReadReply, ReleaseUndoReply, RunAdmission, UndoQueryReply, UndoReceipt,
+    UndoRequest,
 };
 use crate::leadinglight_extensions::{BeginRequest, ExtensionsState};
 use crate::leadinglight_history::VaultRoots;
@@ -153,15 +155,17 @@ pub async fn bind_extension_folder(
     run_blocking(move || extensions.bind_folder(&owner, &run_id, &folder)).await
 }
 
-/// E1 binds no documents: always `unsupported`, reading nothing.
+/// `path` is vault-relative; the run, and so the vault, belongs to the calling window.
 #[tauri::command]
 pub async fn bind_extension_document(
+    window: WebviewWindow,
     state: State<'_, ExtensionsState>,
     run_id: String,
     path: String,
 ) -> Result<DocumentHandleReply, String> {
-    let _ = (run_id, path);
-    Ok(state.get()?.bind_document())
+    let extensions = state.get()?;
+    let owner = window.label().to_string();
+    run_blocking(move || extensions.bind_document(&owner, &run_id, &path)).await
 }
 
 /// Takes `{ proposal }`: the frozen `GuardedProposal`, read strictly.
@@ -186,4 +190,41 @@ pub async fn query_document_proposal(
     let extensions = state.get()?;
     let owner = window.label().to_string();
     run_blocking(move || extensions.query(&owner, &operation_id)).await
+}
+
+/// Takes `{ request }`: the frozen `UndoRequest`, read strictly.
+#[tauri::command]
+pub async fn undo_document_proposal(
+    window: WebviewWindow,
+    state: State<'_, ExtensionsState>,
+    request: UndoRequest,
+) -> Result<UndoReceipt, String> {
+    let extensions = state.get()?;
+    let owner = window.label().to_string();
+    run_blocking(move || extensions.undo(&owner, &request)).await
+}
+
+/// Never applies or retries anything.
+#[tauri::command]
+pub async fn query_document_undo(
+    window: WebviewWindow,
+    state: State<'_, ExtensionsState>,
+    operation_id: String,
+) -> Result<UndoQueryReply, String> {
+    let extensions = state.get()?;
+    let owner = window.label().to_string();
+    run_blocking(move || extensions.query_undo(&owner, &operation_id)).await
+}
+
+/// Forgets one Undo token of the calling window's session; no page changes.
+#[tauri::command]
+pub async fn release_document_undo(
+    window: WebviewWindow,
+    state: State<'_, ExtensionsState>,
+    session_id: String,
+    undo_receipt: String,
+) -> Result<ReleaseUndoReply, String> {
+    let extensions = state.get()?;
+    let owner = window.label().to_string();
+    run_blocking(move || extensions.release_undo(&owner, &session_id, &undo_receipt)).await
 }

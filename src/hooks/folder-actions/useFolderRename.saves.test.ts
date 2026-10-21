@@ -72,8 +72,11 @@ function installNative() {
       const to = `${oldPath.slice(0, oldPath.lastIndexOf('/'))}/${stem}.md`
       disk.delete(oldPath)
       // A title rename also rewrites the page's title line.
-      disk.set(to, newTitle ? staged.replace(/^# .*$/m, `# ${newTitle}`) : staged)
-      return { new_path: to, updated_files: 0, failed_updates: 0 }
+      const content = newTitle ? staged.replace(/^# .*$/m, `# ${newTitle}`) : staged
+      disk.set(to, content)
+      // The managed rename's receipt: the exact bytes read and published; no linked page open.
+      return { new_path: to, updated_files: 0, failed_updates: 0, source_before_content: staged, source_content: content,
+        updated_open_pages: [], unrefreshed_open_paths: [] }
     }
     if (cmd === 'set_note_favorite') {
       await favoriteGate.promise
@@ -84,9 +87,11 @@ function installNative() {
     if (cmd === 'auto_rename_untitled') {
       const from = (raw as { args: { notePath: string } }).args.notePath
       const to = `${from.slice(0, from.lastIndexOf('/'))}/Plan.md`
-      disk.set(to, disk.get(from) ?? '')
+      const content = disk.get(from) ?? ''
+      disk.set(to, content)
       disk.delete(from)
-      return { new_path: to, updated_files: 0 }
+      return { new_path: to, updated_files: 0, failed_updates: 0, source_before_content: content, source_content: content,
+        updated_open_pages: [], unrefreshed_open_paths: [] }
     }
     if (cmd !== 'rename_vault_folder') return null
     renames += 1
@@ -221,7 +226,7 @@ describe('renaming a folder with pages that have unsaved work', () => {
 
     await act(async () => { expect(await hook.current.folder.renameFolder('projects', 'work')).toBe(false) })
     expect(renames).toBe(0)
-    expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Fix the page's properties first. Your edits are kept.")
+    expect(setToastMessage).toHaveBeenLastCalledWith("Can't save yet. Another change to this page couldn't be combined with your latest edits, so they're kept here but not saved.")
     expect(disk.get(page)).toBe(`---\ntitle: Plan\n${KEYS}---\nbody`)
     expect(hook.current.app.hasPendingWrite(page)).toBe(true)
     expect(hook.current.app.mutateExistingDocument(other, favoriteMutation(ON)).admitted).toBe(true)

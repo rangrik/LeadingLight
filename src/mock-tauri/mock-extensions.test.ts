@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { EXTENSION_COMMANDS } from '../leadinglight/extensions/extensionApi'
+import { E1_HOST_CAPABILITIES, type Capability } from '../leadinglight/extensions/extensionContract'
 import { PROPOSAL_COMMANDS, type CreateProposal } from '../leadinglight/proposals/proposalContract'
 import { sha256Hex } from '../leadinglight/saveOutcome'
 import {
@@ -72,6 +73,9 @@ function testHost() {
       pages.set(path, content)
       return true
     },
+    readPage: path => pages.get(path) ?? null,
+    writePage: (path, content) => { pages.set(path, content) },
+    trashPage: (_root, path) => pages.delete(path),
   }
   const base = memoryHost(vault, [BUNDLED])
   const host: ExtensionHost = {
@@ -124,9 +128,10 @@ function testHost() {
 
 type Reply = Record<string, unknown>
 
-function world(shared = testHost()) {
+/** The E1 host unless a test asks for more: form, chosen folder, exclusive create, open. */
+function world(shared = testHost(), capabilities: readonly Capability[] = E1_HOST_CAPABILITIES) {
   const { host, control } = shared
-  const backend = new ExtensionBackend(host)
+  const backend = new ExtensionBackend(host, { capabilities })
   const call = (command: string, args: unknown, owner = 'main') => backend.handle(command, args, owner) as Promise<Reply>
   const sha = (text: string) => sha256Hex(text)
   const api = {
@@ -645,7 +650,8 @@ describe('guarded create', () => {
     const { runId, folderHandle } = await w.ready()
     const proposal = await w.proposal(runId, folderHandle)
     const receipt = await w.submit(proposal)
-    expect(receipt).toEqual(committed(proposal, `${VAULT}/Meetings/Debrief.md`))
+    // A new page offers Undo (to Trash) while its session has a free slot.
+    expect(receipt).toEqual({ ...committed(proposal, `${VAULT}/Meetings/Debrief.md`), undoReceipt: expect.stringMatching(/^undo-/) })
     expect(w.control.pages.get(`${VAULT}/Meetings/Debrief.md`)).toBe(TEXT)
     expect(await w.query(proposal.operationId)).toEqual(receipt)
     expect(await w.query(proposal.operationId, 'other')).toEqual({ status: 'unknown', operationId: proposal.operationId })
@@ -802,7 +808,7 @@ describe('guarded create', () => {
     expect(w.control.creates).toBe(0)
   })
 
-  it('binds only visible folders inside the vault, refuses appending and foreign or stale runs', async () => {
+  it('binds only visible folders inside the vault, refuses an append with no bound page and foreign or stale runs', async () => {
     const w = world()
     const { runId, folderHandle } = await w.ready()
     const refused = (reason: string) => ({ status: 'refused', reason })
@@ -812,9 +818,9 @@ describe('guarded create', () => {
     expect(await w.folder(runId, 'Meetings/')).toMatchObject({ status: 'bound', displayPath: 'Meetings' })
     expect(await w.folder(runId, '')).toMatchObject({ status: 'bound', displayPath: '' })
     expect(await w.folder(runId, 'Meetings', 'other')).toEqual(refused('staleRun'))
-    expect(await w.call(C.bindDocument, { runId, path: 'Meetings/Existing.md' })).toEqual(refused('unsupported'))
+    expect(await w.call(C.bindDocument, { runId, path: 'Meetings/Existing.md' })).toMatchObject({ status: 'bound', displayPath: 'Meetings/Existing.md', contentSha256: await sha256Hex('old') })
     const append = { kind: 'append', operationId: crypto.randomUUID(), runId, content: TEXT, contentSha256: await sha256Hex(TEXT), documentHandle: 'doc-1', expectedSha256: 'a'.repeat(64) }
-    expect(await w.submit(append)).toEqual({ status: 'refused', operationId: append.operationId, reason: 'unsupported' })
+    expect(await w.submit(append)).toEqual({ status: 'refused', operationId: append.operationId, reason: 'handleMismatch' })
     const notUuid = await w.proposal(runId, folderHandle, 'Debrief.md', TEXT, 'ABC')
     expect(await w.submit(notUuid)).toEqual({ status: 'refused', operationId: 'ABC', reason: 'operationMismatch' })
     const foreign = await w.proposal(runId, folderHandle)

@@ -9,6 +9,7 @@ use std::time::UNIX_EPOCH;
 use super::history_outcome::VersionReason;
 use super::inventory::{self, Caps, Inventory, META, PAYLOAD, TMP_DIR, VERSIONS_DIR};
 use super::lock::CopyLock;
+use super::pins;
 
 const HOUR_MS: u64 = 60 * 60 * 1000;
 const DAY_MS: u64 = 24 * HOUR_MS;
@@ -97,6 +98,19 @@ pub(super) fn items(location: &inventory::Location) -> Vec<Item<'_>> {
         .collect()
 }
 
+/// The items a plan may choose from, and how many pinned ones stay beside them whatever it says,
+/// so a pin is never counted as room a removal could free.
+pub(super) fn unpinned<'a>(
+    history: &Path,
+    loc: &str,
+    items: Vec<Item<'a>>,
+) -> (Vec<Item<'a>>, usize) {
+    let (pinned, free): (Vec<Item<'a>>, Vec<Item<'a>>) = items
+        .into_iter()
+        .partition(|item| pins::is_pinned(history, loc, item.name));
+    (free, pinned.len())
+}
+
 /// Removes a recognized folder's two known files, then the folder if that left it empty.
 pub(super) fn remove_known(dir: &Path) -> bool {
     for name in [PAYLOAD, META] {
@@ -108,8 +122,13 @@ pub(super) fn remove_known(dir: &Path) -> bool {
     fs::remove_dir(dir).is_ok()
 }
 
-/// `Some(true)` when gone, `Some(false)` when moved out of the list but left in `tmp/`.
+/// `Some(true)` when gone, `Some(false)` when moved out of the list but left in `tmp/`, `None`
+/// when it stays. Every removal of a version comes here, under the copy lock, so a version an
+/// offered Undo has pinned always stays.
 pub(super) fn remove_entry(history: &Path, location: &str, name: &str) -> Option<bool> {
+    if pins::is_pinned(history, location, name) {
+        return None;
+    }
     let from = history.join(VERSIONS_DIR).join(location).join(name);
     let to = history.join(TMP_DIR).join(format!("del-{location}-{name}"));
     fs::rename(from, &to).ok()?;
@@ -154,7 +173,8 @@ pub(super) fn maintain(root: &Path, caps: Caps, now: u64) -> Option<usize> {
     }
     let mut attempted = false;
     for (key, location) in &inventory.locations {
-        for name in plan(&items(location), now, caps.per_location) {
+        let (free, pinned) = unpinned(history, key, items(location));
+        for name in plan(&free, now, caps.per_location.saturating_sub(pinned)) {
             if budget == 0 {
                 return Some(removed);
             }

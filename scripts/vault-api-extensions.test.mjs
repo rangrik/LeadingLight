@@ -132,6 +132,8 @@ test("creates one page on disk with exactly the reviewed bytes, and answers a lo
 		const proposal = api.proposal(run);
 		const receipt = await api.submit(proposal);
 		const page = path.join(vault, "Meetings", "Debrief.md");
+		// A new page offers Undo (to Trash) while its session has a free slot.
+		assert.match(receipt.undoReceipt, /^undo-[0-9a-f-]{36}$/);
 		assert.deepEqual(receipt, {
 			status: "committed",
 			kind: "create",
@@ -140,7 +142,7 @@ test("creates one page on disk with exactly the reviewed bytes, and answers a lo
 			beforeSha256: null,
 			afterSha256: sha(TEXT),
 			durable: true,
-			undoReceipt: null,
+			undoReceipt: receipt.undoReceipt,
 		});
 		assert.equal(readFileSync(page, "utf8"), TEXT);
 		assert.equal(lstatSync(page).nlink, 1);
@@ -207,7 +209,68 @@ test("binds only real visible folders inside the vault, with no link followed", 
 		assert.deepEqual(await api.bind(runId, "Alias/Inner"), refused("link"));
 		assert.equal((await api.bind(runId, "Real/Inner")).displayPath, "Real/Inner");
 		assert.equal((await api.bind(runId, "")).displayPath, "");
-		assert.deepEqual(await api.call("bind_extension_document", { runId, path: "page.md" }), refused("unsupported"));
+		const page = await api.call("bind_extension_document", { runId, path: "page.md" });
+		assert.equal(page.status, "bound");
+		assert.equal(page.displayPath, "page.md");
+		assert.equal(page.contentSha256, sha("a page"));
+		writeFileSync(path.join(outside, "x.md"), "outside");
+		assert.deepEqual(await api.call("bind_extension_document", { runId, path: "Linked/x.md" }), refused("link"));
+		assert.deepEqual(await api.call("bind_extension_document", { runId, path: "../outside/x.md" }), refused("outsideVault"));
+		assert.deepEqual(await api.call("bind_extension_document", { runId, path: "Real" }), refused("outsideVault"));
+		assert.deepEqual(await api.call("bind_extension_document", { runId, path: "Missing.md" }), refused("missing"));
+	}));
+
+test("adds to a bound page once, keeping its earlier text first, and Undo restores it exactly", () =>
+	withWorld(async ({ root, vault, make }) => {
+		const api = client(make(), vault);
+		const run = await api.ready();
+		const page = path.join(vault, "Meetings", "Existing.md");
+		const bound = await api.call("bind_extension_document", { runId: run.runId, path: "Meetings/Existing.md" });
+		const after = "old\n\n> Later\n";
+		const proposal = {
+			kind: "append", operationId: randomUUID(), runId: run.runId, content: after, contentSha256: sha(after),
+			documentHandle: bound.documentHandle, expectedSha256: bound.contentSha256,
+		};
+		const receipt = await api.submit(proposal);
+		assert.equal(receipt.status, "committed", JSON.stringify(receipt));
+		assert.equal(receipt.beforeSha256, sha("old"));
+		assert.equal(readFileSync(page, "utf8"), after);
+		assert.deepEqual(stagingLeft(path.join(vault, "Meetings")), []);
+		assert.deepEqual(readdirSync(path.join(root, "undo")), [`${receipt.undoReceipt}.md`]);
+		assert.deepEqual(await api.submit(proposal), receipt);
+
+		const request = {
+			operationId: randomUUID(), sessionId: run.sessionId, undoReceipt: receipt.undoReceipt, kind: "append",
+			expectedSha256: receipt.afterSha256, beforeSha256: receipt.beforeSha256,
+		};
+		writeFileSync(page, `${after}typed later\n`);
+		assert.deepEqual(await api.call("undo_document_proposal", { request }), { status: "conflict", operationId: request.operationId, reason: "changed" });
+		assert.equal(readFileSync(page, "utf8"), `${after}typed later\n`);
+		writeFileSync(page, after);
+		const again = { ...request, operationId: randomUUID() };
+		const undone = await api.call("undo_document_proposal", { request: again });
+		assert.equal(undone.status, "undone", JSON.stringify(undone));
+		assert.equal(readFileSync(page, "utf8"), "old");
+		assert.deepEqual(readdirSync(path.join(root, "undo")), []);
+		assert.deepEqual(await api.call("query_document_undo", { operationId: again.operationId }), undone);
+	}));
+
+test("writes nothing when the bound page changed before the append", () =>
+	withWorld(async ({ vault, make }) => {
+		const api = client(make(), vault);
+		const run = await api.ready();
+		const page = path.join(vault, "Meetings", "Existing.md");
+		const bound = await api.call("bind_extension_document", { runId: run.runId, path: "Meetings/Existing.md" });
+		writeFileSync(page, "edited elsewhere");
+		const after = "old\nadded\n";
+		const receipt = await api.submit({
+			kind: "append", operationId: randomUUID(), runId: run.runId, content: after, contentSha256: sha(after),
+			documentHandle: bound.documentHandle, expectedSha256: bound.contentSha256,
+		});
+		assert.equal(receipt.status, "conflict");
+		assert.equal(receipt.reason, "changed");
+		assert.equal(readFileSync(page, "utf8"), "edited elsewhere");
+		assert.deepEqual(stagingLeft(path.join(vault, "Meetings")), []);
 	}));
 
 test("never writes into a bound folder that was replaced, removed or turned into a link", () =>
