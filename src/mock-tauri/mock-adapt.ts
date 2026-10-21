@@ -78,7 +78,8 @@ export interface AdaptFixtureEnvelope {
   request: string
   attachments: AdaptAttachment[]
   earlierTurns: Array<{ turnId: string; request: string; reply: AdaptReply | null }>
-  changePackage: AdaptRevisionBase | null
+  /** Native's `changePackage`: only the package and its base; `expectedActiveSha256` stays local. */
+  changePackage: Pick<AdaptRevisionBase, 'packageId' | 'baseSha256'> | null
   guide: string
 }
 
@@ -668,7 +669,11 @@ export class AdaptBrowserHost {
       conversation.entries.push({
         kind: 'request', turnId: args.turnId, at, provider: args.provider, text: args.request,
         attachments: args.attachments.map(item => ({ kind: item.kind, label: item.label, bytes: utf8Length(item.text), sha256: sha256(item.text) })),
-        includedTurnIds: [...args.includeTurnIds], revision: args.revision && { packageId: args.revision.packageId, baseSha256: args.revision.baseSha256 },
+        includedTurnIds: [...args.includeTurnIds],
+        // Stored and returned exactly as given: the UI's activation compare-and-set reads it back.
+        revision: args.revision && {
+          packageId: args.revision.packageId, baseSha256: args.revision.baseSha256, expectedActiveSha256: args.revision.expectedActiveSha256,
+        },
         guide: ADAPT_FIXTURE_GUIDE,
       })
       if (conversation.title === '') conversation.title = titleOf(args.request)
@@ -681,7 +686,8 @@ export class AdaptBrowserHost {
 
     this.sentLog.push(copy({
       turnId: args.turnId, provider: args.provider, request: args.request, attachments: args.attachments, earlierTurns,
-      changePackage: args.revision, guide: ADAPT_FIXTURE_GUIDE,
+      // As native's prompt: the package being changed, never the local compare-and-set value.
+      changePackage: args.revision && { packageId: args.revision.packageId, baseSha256: args.revision.baseSha256 }, guide: ADAPT_FIXTURE_GUIDE,
     }))
     this.sentLog.splice(0, this.sentLog.length - ADAPT_FIXTURE_LIMITS.sent)
     this.start(conversation.conversationId, args.turnId, step)
@@ -836,7 +842,9 @@ const isProvider = (value: unknown) => oneOf(ADAPT_PROVIDERS, value)
 const exactly = (keys: string[], rules: Record<string, (value: unknown) => boolean> = {}) => (args: Fields) =>
   hasExactly(args, keys) && keys.every(key => (rules[key] ?? isText)(args[key]))
 const isAttachment = (value: unknown) => isFields(value) && exactly(['kind', 'label', 'text'], { kind: kind => oneOf(ADAPT_ATTACHMENT_KINDS, kind) })(value)
-const isRevisionBase = (value: unknown) => value === null || (isFields(value) && exactly(['packageId', 'baseSha256'])(value))
+/** Native's `RevisionBase`: all three keys present, `expectedActiveSha256` a string or null; its hash rules are `checkSendArgs`. */
+const isRevisionShape = (value: unknown) => value === null
+  || (isFields(value) && exactly(['packageId', 'baseSha256', 'expectedActiveSha256'], { expectedActiveSha256: active => active === null || isText(active) })(value))
 
 const ARGUMENTS: Record<AdaptCommandName, (args: Fields) => boolean> = {
   [ADAPT_COMMANDS.status]: exactly([]),
@@ -854,7 +862,7 @@ const ARGUMENTS: Record<AdaptCommandName, (args: Fields) => boolean> = {
     provider: isProvider,
     attachments: value => Array.isArray(value) && value.every(isAttachment),
     includeTurnIds: value => Array.isArray(value) && value.every(isText),
-    revision: isRevisionBase,
+    revision: isRevisionShape,
   }),
   [ADAPT_COMMANDS.cancelTurn]: exactly(['visitId', 'conversationId', 'turnId']),
 }

@@ -507,21 +507,78 @@ describe('what each Send gives the provider', () => {
     expect(run.adapt.send(run.sendArgs(fullRequest))).toMatchObject({ status: 'admitted' })
   })
 
-  it('binds a revision to its base and the package attached explicitly', () => {
-    const base = helper.adaptSamplePackage(PACKAGE_ID)
-    const revised = helper.adaptSamplePackage(PACKAGE_ID, '1.1.0', 'heading')
-    const run = opened({ turns: [{ reply: candidate(revised) }] })
-    const revision = { packageId: PACKAGE_ID, baseSha256: sha(base) }
-    const args = run.sendArgs({ request: 'Use a heading instead of a quote', revision, attachments: [{ kind: 'extension', label: 'Reading log', text: base }] })
+})
 
-    run.adapt.send(args)
+describe('a revision', () => {
+  const base = helper.adaptSamplePackage(PACKAGE_ID)
+  /** The version active when the person attached the extension: local compare-and-set data only. */
+  const ACTIVE = sha('the version active at attach time')
+  const attached: AdaptAttachment[] = [{ kind: 'extension', label: 'Reading log', text: base }]
+
+  it('keeps its original expected active version through storage and reload, and sends the provider only package and base', () => {
+    const storage = memoryStorage()
+    const run = opened({ turns: [{ reply: candidate(helper.adaptSamplePackage(PACKAGE_ID, '1.1.0', 'heading')) }] }, storage)
+    const revision = { packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: ACTIVE }
+    run.adapt.send(run.sendArgs({ request: 'Use a heading instead of a quote', revision, attachments: attached }))
     settle()
+
     const [request, reply] = run.conversation().entries
     expect(request).toMatchObject({ kind: 'request', revision, attachments: [{ kind: 'extension', sha256: sha(base) }] })
-    expect(window.__leadinglightAdaptFixture?.sent()[0]).toMatchObject({ changePackage: revision, attachments: [{ kind: 'extension', text: base }] })
+    const sent = window.__leadinglightAdaptFixture?.sent() ?? []
+    expect(sent[0].changePackage).toEqual({ packageId: PACKAGE_ID, baseSha256: sha(base) })
+    expect(JSON.stringify(sent)).not.toMatch(new RegExp(`${ACTIVE}|expectedActiveSha256`))
     const packageText = reply.kind === 'reply' && reply.reply.kind === 'candidate' ? reply.reply.packageText : ''
     const parsed = parseExtensionPackage(packageText)
     expect(parsed.status === 'valid' && [parsed.extension.id, parsed.extension.version]).toEqual([PACKAGE_ID, '1.1.0'])
+
+    // The stored copy is what a reload returns: the value observed at attach time, never rebuilt.
+    const reloaded = api(browserAdaptHost(true, storage))
+    expect(snapshot(reloaded, visitOf(reloaded), run.conversationId).entries[0]).toMatchObject({ kind: 'request', revision })
+  })
+
+  it('accepts an explicit null when nothing was active, and keeps it null', () => {
+    const run = opened({ turns: [{ reply: candidate() }] })
+    const revision = { packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: null }
+
+    expect(run.adapt.send(run.sendArgs({ revision, attachments: attached }))).toMatchObject({ status: 'admitted' })
+    expect(run.conversation().entries[0]).toMatchObject({ kind: 'request', revision })
+    expect(window.__leadinglightAdaptFixture?.sent()[0].changePackage).toEqual({ packageId: PACKAGE_ID, baseSha256: sha(base) })
+  })
+
+  it('never admits a revision whose expected active version is missing, extra, mistyped or malformed', () => {
+    const run = opened({ turns: [{ reply: question }] })
+    const send = run.sendArgs({ attachments: attached })
+    const rejects = (revision: unknown) =>
+      expect(() => run.host.handle(ADAPT_COMMANDS.send, { args: { ...send, revision } })).toThrow(AdaptArgumentError)
+
+    // A shape native cannot deserialize: the call is rejected, as native answers `Err`.
+    rejects({ packageId: PACKAGE_ID, baseSha256: sha(base) })
+    rejects({ packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: ACTIVE, observedAt: '2026-10-20T00:00:00Z' })
+    rejects({ packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: 7 })
+    // Well-typed but not a lowercase SHA-256: refused by the contract's check, as native's.
+    for (const expectedActiveSha256 of [ACTIVE.toUpperCase(), ACTIVE.slice(1), '']) {
+      expect(run.adapt.send({ ...send, revision: { packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256 } }))
+        .toEqual({ status: 'refused', reason: 'invalidRequest' })
+    }
+    expect(run.conversation().entries).toEqual([])
+    expect(sentCount()).toBe(0)
+    // Nothing was consumed: a valid revision takes the first step.
+    run.adapt.send({ ...send, revision: { packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: ACTIVE } })
+    settle()
+    expect(run.last()).toMatchObject({ kind: 'reply', reply: question })
+  })
+
+  it('treats a stored revision without the field as unreadable state, never guessing it', () => {
+    const storage = memoryStorage()
+    const run = opened({ turns: [{ reply: candidate() }] }, storage)
+    run.adapt.send(run.sendArgs({ revision: { packageId: PACKAGE_ID, baseSha256: sha(base), expectedActiveSha256: ACTIVE }, attachments: attached }))
+    settle()
+    const state = JSON.parse(storage.getItem(ADAPT_FIXTURE_STATE_KEY) as string)
+    delete state.conversations[0].entries[0].revision.expectedActiveSha256
+    storage.setItem(ADAPT_FIXTURE_STATE_KEY, JSON.stringify(state))
+
+    const reloaded = api(browserAdaptHost(true, storage))
+    expect(reloaded.read(visitOf(reloaded), run.conversationId)).toEqual({ status: 'unknownConversation' })
   })
 })
 

@@ -160,7 +160,18 @@ export type AdaptDeleteConversationReply =
   | { status: 'refused'; reason: 'running' | 'storageUnavailable' }
 
 export interface AdaptAttachmentSummary { kind: AdaptAttachmentKind; label: string; bytes: number; sha256: string }
-export interface AdaptRevisionBase { packageId: string; baseSha256: string }
+/**
+ * What a change is based on, captured by the UI when the person attached the extension:
+ * - `packageId` and `baseSha256` name the exact version being changed;
+ * - `expectedActiveSha256` is the version that was active in the vault at that moment, `null` when
+ *   none was.
+ *
+ * The host stores it with the request and returns it unchanged. It is local metadata for the UI's
+ * compare-and-set at activation: a later activation compares against this original value, never one
+ * re-read afterwards. It is not sent to the provider, and it must always be present; it is never
+ * guessed.
+ */
+export interface AdaptRevisionBase { packageId: string; baseSha256: string; expectedActiveSha256: string | null }
 
 /** Plain prose only; never Markdown, HTML or links to fetch. `packageText` is untrusted JSON text. */
 export type AdaptReply =
@@ -347,6 +358,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const isSha256 = (value: unknown): value is string => typeof value === 'string' && SHA256.test(value)
 export const isTurnId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
 
+/** Exactly the three fields, with the original expected active hash present: `null` or a hash. */
+export function isRevisionBase(value: unknown): value is AdaptRevisionBase {
+  if (!isFields(value) || !hasKeys(value, ['packageId', 'baseSha256', 'expectedActiveSha256'])) return false
+  const { packageId, baseSha256, expectedActiveSha256 } = value
+  return isOpaqueToken(packageId) && isSha256(baseSha256) && (expectedActiveSha256 === null || isSha256(expectedActiveSha256))
+}
+
 /** What native refuses as `invalidRequest` or `tooLarge`; null when the arguments may be sent. */
 export function checkSendArgs(args: AdaptSendArgs): 'invalidRequest' | 'tooLarge' | null {
   const { request, attachments, includeTurnIds, revision } = args
@@ -358,7 +376,7 @@ export function checkSendArgs(args: AdaptSendArgs): 'invalidRequest' | 'tooLarge
       && isPlainLine(item.label, ADAPT_LIMITS.labelChars) && isWellFormedText(item.text) && item.text.trim() !== '')
     && includeTurnIds.length <= ADAPT_LIMITS.includedTurns && includeTurnIds.every(isTurnId)
     && new Set(includeTurnIds).size === includeTurnIds.length && !includeTurnIds.includes(args.turnId)
-    && (revision === null || (isOpaqueToken(revision.packageId) && isSha256(revision.baseSha256)))
+    && (revision === null || isRevisionBase(revision))
   if (!shaped) return 'invalidRequest'
   const attached = attachments.map(item => utf8Length(item.text))
   if (utf8Length(request) > ADAPT_LIMITS.requestBytes || attached.some(bytes => bytes > ADAPT_LIMITS.attachmentBytes)) return 'tooLarge'
@@ -540,9 +558,9 @@ function parseAttachmentSummary(value: unknown): AdaptAttachmentSummary | null {
 
 function parseRevisionBase(value: unknown): AdaptRevisionBase | null | undefined {
   if (value === null) return null
-  if (!isFields(value) || !hasKeys(value, ['packageId', 'baseSha256'])) return undefined
-  const { packageId, baseSha256 } = value
-  return isOpaqueToken(packageId) && isSha256(baseSha256) ? { packageId, baseSha256 } : undefined
+  if (!isRevisionBase(value)) return undefined
+  const { packageId, baseSha256, expectedActiveSha256 } = value
+  return { packageId, baseSha256, expectedActiveSha256 }
 }
 
 const REQUEST_KEYS = ['kind', 'turnId', 'at', 'provider', 'text', 'attachments', 'includedTurnIds', 'revision', 'guide']

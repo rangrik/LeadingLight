@@ -116,7 +116,8 @@ A held turn stays `working`.
 - **`adaptFixtureSent(page)`** answers exactly what each admitted Send gave the fixture provider in
   this page load, as `{ turnId, provider, request, attachments, earlierTurns, changePackage, guide }`.
   It keeps the last 16. Each envelope is built only from that Send's arguments and the visible request
-  and reply text of the turns it names. No earlier attachment is carried along.
+  and reply text of the turns it names. No earlier attachment is carried along. As in native's
+  prompt, `changePackage` is `{ packageId, baseSha256 }` only.
 - **`adaptSamplePackage(id, version, variant)`** answers valid E1 package text: one form field, then
   one new note in a chosen folder. For a revision candidate, use the same id with a higher version.
 
@@ -140,6 +141,22 @@ deserialization does, and the UI reads the result as no reply.
 8. `providerUnavailable`, then `notConnected`
 9. `invalidRequest`, when an included turn is not a finished turn of this conversation
 10. `tooLarge`, when the payload is over 512 KiB counting the included turns
+
+**A revision** has three fields in the request and two in the provider envelope:
+
+- **In the Send and in the stored request entry:** `{ packageId, baseSha256, expectedActiveSha256 }`.
+  `expectedActiveSha256` is the version that was active when the person attached the extension, or
+  `null` when none was. It is stored and returned exactly as given, including across a reload,
+  because the UI's activation compare-and-set must use that original value.
+- **In the provider envelope:** `changePackage` carries only `packageId` and `baseSha256`.
+  `expectedActiveSha256` never leaves the host.
+- **When it is malformed:**
+  - a missing or extra key, or a value that is neither a string nor `null`, rejects the call, as
+    native deserialization does;
+  - a string that is not a lowercase SHA-256 is refused `invalidRequest` by `checkSendArgs`;
+  - nothing is admitted or sent either way.
+- **Older stored state.** A stored request whose revision lacks the field is unreadable, so the
+  fixture starts fresh rather than guessing it.
 
 **Cancel.** Cancel affects only the named conversation's turn, through any open visit of its vault.
 The same turn id running in another conversation is untouched.
@@ -236,6 +253,10 @@ as invoked. Every reply is read by the contract's own `parse*Reply` readers. The
   - failures and limits without retry;
   - the fresh per-Send envelope and the payload bound;
   - revision candidates.
+- **Revisions:** an explicit `null` and a hash both accepted and stored; the original expected
+  active version kept through a reload; the provider envelope never carrying it; a missing, extra,
+  mistyped or malformed value never admitted; and a stored revision without the field read as
+  unreadable.
 - **Local saving:** save failure, then close and reopen, then a local-only save, then reload; an
   unconfirmed outcome; a refused `sessionStorage`.
 - **Visits and disconnect:** a closing visit answering `stopping`; disconnect answering `stopping`

@@ -69,9 +69,40 @@ describe('what a Send may carry', () => {
     expect(checkSendArgs(send({ includeTurnIds: [TURN_1, TURN_1] }))).toBe('invalidRequest')
     expect(checkSendArgs(send({ includeTurnIds: [TURN_3] }))).toBe('invalidRequest')
     expect(checkSendArgs(send({ turnId: 'not-a-uuid' }))).toBe('invalidRequest')
-    expect(checkSendArgs(send({ revision: { packageId: 'local.weekly-review', baseSha256: 'ABC' } }))).toBe('invalidRequest')
+    expect(checkSendArgs(send({ revision: { packageId: 'local.weekly-review', baseSha256: 'ABC', expectedActiveSha256: null } }))).toBe('invalidRequest')
     const many = Array.from({ length: ADAPT_LIMITS.attachments + 1 }, () => ({ kind: 'pastedText' as const, label: 'Text', text: 'x' }))
     expect(checkSendArgs(send({ attachments: many }))).toBe('invalidRequest')
+  })
+})
+
+describe('a revision keeps the version that was active when it was asked for', () => {
+  const OTHER_SHA = 'c'.repeat(64)
+  const base = (expectedActiveSha256: unknown) => ({ packageId: 'local.weekly-review', baseSha256: SHA, expectedActiveSha256 })
+  const missing = { packageId: 'local.weekly-review', baseSha256: SHA }
+  const withRevision = (revision: unknown) => send({ revision: revision as AdaptSendArgs['revision'] })
+
+  it('sends an explicit expected version, none, or no revision at all', () => {
+    expect(checkSendArgs(withRevision(base(null)))).toBeNull()
+    expect(checkSendArgs(withRevision(base(OTHER_SHA)))).toBeNull()
+    expect(checkSendArgs(send({ revision: null }))).toBeNull()
+  })
+
+  it('never guesses a missing or malformed expected version', () => {
+    for (const revision of [missing, base('ABC'), base(''), base(undefined), { ...base(null), activeSha256: null }]) {
+      expect(checkSendArgs(withRevision(revision))).toBe('invalidRequest')
+    }
+  })
+
+  it('reads the stored request with its original expected version, unchanged', () => {
+    const asked = (revision: unknown) => conversation([{ ...request(TURN_1), revision }, reply(TURN_1)])
+    for (const expected of [OTHER_SHA, null]) {
+      const parsed = parseReadConversationReply(asked(base(expected)), READ)
+      const stored = parsed?.status === 'ok' ? parsed.conversation.entries[0] : null
+      expect(stored?.kind === 'request' && stored.revision).toEqual(base(expected))
+    }
+    expect(parseReadConversationReply(asked(missing), READ)).toBeNull()
+    expect(parseReadConversationReply(asked(base('not-a-hash')), READ)).toBeNull()
+    expect(parseReadConversationReply(asked(null), READ)).not.toBeNull()
   })
 })
 
