@@ -12,6 +12,7 @@ import { HISTORY_COMMANDS, memoryPageHistory, runHistoryCommand } from './mock-h
 import { SAVE_RECOVERY_COMMANDS } from './mock-save-recovery'
 import { MOCK_ENTRIES } from './mock-entries'
 import { EXTENSION_BRIDGE_COMMANDS, ExtensionBackend, MEMORY_OWNER, memoryHost, type MemoryVault } from './mock-extensions'
+import { ADAPT_COMMAND_LIST, browserAdaptHost } from './mock-adapt'
 import { MEMORY_VAULT_ROOTS, tryVaultApi } from './vault-api'
 import bundledMeetingDebrief from '../../src-tauri/src/leadinglight_extensions/bundled/meeting-debrief.json?raw'
 
@@ -33,6 +34,9 @@ const runMemoryExtensions = (command: string, args: unknown) => {
   memoryExtensions ??= new ExtensionBackend(memoryHost(mockVaultPages, [bundledMeetingDebrief]))
   return memoryExtensions.handle(command, args ?? {}, MEMORY_OWNER)
 }
+
+// Adapt has no provider in the browser unless a test installed the explicit fixture at page load.
+const adaptHost = browserAdaptHost()
 
 type MockHandler = (args?: unknown) => unknown
 
@@ -68,6 +72,8 @@ const registeredMockHandlers: Record<string, MockHandler> = {
   // E1 extensions: the dev server in a disk session, which fails closed; otherwise the mock vault.
   ...Object.fromEntries(EXTENSION_BRIDGE_COMMANDS.map(command => [command, async (args?: unknown) =>
     (await tryVaultApi(command, args as Record<string, unknown> | undefined)) ?? runMemoryExtensions(command, args)])),
+  // Adapt never reaches the dev server or the network; the desktop harness calls these directly.
+  ...Object.fromEntries(ADAPT_COMMAND_LIST.map(command => [command, (args?: unknown) => adaptHost.handle(command, args)])),
 }
 
 export function isTauri(): boolean {
