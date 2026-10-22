@@ -63,37 +63,55 @@ export function PageView({
     el.style.height = `${el.scrollHeight}px`;
   }, [title]);
 
+  // Blank page space belongs to the page: with no block active (and no popup open), a click at
+  // the title's height goes to the title, below it into the body (see placeAt). The title,
+  // blocks and controls handle their own clicks.
+  const onBlankMouseDown = (e: React.MouseEvent) => {
+    const editor = editorRef.current;
+    const title = titleRef.current;
+    if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
+    if ((e.target as HTMLElement).closest(".ProseMirror, .ll-handle, textarea, input, button, a, [role]")) return;
+    if (e.clientY <= title.getBoundingClientRect().bottom) {
+      e.preventDefault();
+      title.focus();
+      title.setSelectionRange(title.value.length, title.value.length);
+    } else if (editor.placeAt(e.clientX, e.clientY)) e.preventDefault();
+  };
+
   return (
-    <div className="mx-auto w-full max-w-[760px] px-16 pt-10 pb-48">
-      <textarea
-        aria-label="Title"
-        className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
-        onChange={(e) => {
-          const value = e.currentTarget.value.replace(/\n/g, "");
-          setTitle(value);
-          onRename(page.id, value);
-          queue({ title: value });
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === "ArrowDown") {
-            e.preventDefault();
-            editorRef.current?.focus("start");
-          }
-        }}
-        placeholder="Untitled"
-        ref={titleRef}
-        rows={1}
-        value={title}
-      />
-      <div className="mt-3">
-        <BlockEditor
-          assets={assets}
-          content={page.content}
-          onChange={(read) => queue({ content: read })}
-          onExitTop={() => titleRef.current?.focus()}
-          openLink={openLink}
-          ref={editorRef}
+    <div className="min-h-full" onMouseDown={onBlankMouseDown}>
+      <div className="mx-auto w-full max-w-[760px] px-16 pt-10 pb-8">
+        <textarea
+          aria-label="Title"
+          className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
+          onChange={(e) => {
+            const value = e.currentTarget.value.replace(/\n/g, "");
+            setTitle(value);
+            onRename(page.id, value);
+            queue({ title: value });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === "ArrowDown") {
+              e.preventDefault();
+              editorRef.current?.focus("start");
+            }
+          }}
+          placeholder="Untitled"
+          ref={titleRef}
+          rows={1}
+          value={title}
         />
+        <div className="mt-3">
+          <BlockEditor
+            assets={assets}
+            content={page.content}
+            onChange={(read) => queue({ content: read })}
+            onExitTop={() => titleRef.current?.focus()}
+            openLink={openLink}
+            ref={editorRef}
+          />
+        </div>
       </div>
     </div>
   );

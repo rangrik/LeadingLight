@@ -103,7 +103,8 @@ Feature: Block kinds
 
   Scenario: Columns hold blocks side by side
     When I type "/columns" and press Enter
-    Then two empty columns are shown side by side, each outlined while empty
+    Then two empty columns are shown side by side, each showing a muted "Empty column" hint while empty
+    And typing into one moves nothing: no text or block below shifts
     And the cursor is in the first column
     When I type "left" and press Tab and type "right"
     Then the first column contains "left" and the second contains "right"

@@ -13,13 +13,15 @@ Feature: App shell
     Given the app is open in a browser at 1280x800
 
   # Native only (checked by measuring AppKit's button frames, not by driving the window):
-  # the traffic lights are centred on the panel header's middle line, and with the sidebar
-  # open, the sidebar's name row starts below them.
+  # the traffic lights' centre is 26 pt below the window's top, on the panel header's middle
+  # line, as in Apple Notes; with the sidebar open, the logo tile starts 15 pt below them.
 
   Scenario: Layout
     Then the sidebar is 256 px wide and shows "LeadingLight" at its top
     And the page panel has rounded corners and an 8 px gap to the window's top, right and bottom edges
     And the sidebar's background colour shows in that gap
+    And in a browser the panel header is 64 px tall, level with the sidebar's logo row
+    # In the app it is 36 px, level with the traffic lights (see the native note above).
 
   Scenario: The panel header shows where you are
     Given I have created a page titled "Trip to Kyoto"

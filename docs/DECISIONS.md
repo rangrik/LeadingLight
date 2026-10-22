@@ -60,5 +60,6 @@ sidebar-08; drag-to-resize was dropped with the switch.
 Native-only behaviour (SQLite, files, traffic-light room) checks the app identifier,
 not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
 
-The traffic lights are centred on the page panel's header line (y 40). AppKit puts a
-light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 42.
+The traffic lights are centred on the page panel's header line, 26 pt down as in Apple Notes,
+with the header 36 px tall (sidebar-08's 64 px left too much empty bar above the lights).
+AppKit puts a light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 28.

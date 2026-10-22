@@ -25,6 +25,8 @@ Conventions:
   reads the new caret position on the next task; a human can't type faster than that.
 - Dialogs and the sidebar animate for 200 ms. Wait for the animation before a screenshot.
 - `berthd browser eval` reads a first argument containing "/" as a location; write `\x2f` in the JS instead.
+- Synthetic drag events skip the browser's own drag start, so they can't show that a drag
+  starts. `qa/editor.spec.ts` drags with Playwright's real mouse; trust it for that part.
 - A media block selected between two other media blocks loses its selection on the next harness
   input. That's Chromium plus DevTools input, not the app (see `docs/DEFERRED.md`); don't report it.
 - In dev the editor instance is on `window.__editor` for reading state (`__editor.state`, `__editor.getJSON()`).

@@ -54,6 +54,17 @@ Feature: Selecting blocks
     When I select the block "two" and type "x"
     Then the body still contains "one", "two", "three", "four" unchanged
 
+  Scenario: Meta+A selects every block
+    When I click into "two" and press Meta+A
+    Then every block shows the selected tint, in light and in dark mode
+    And on a page with headings, a quote, a divider and media, the tint is one unbroken shape
+    When I press Backspace
+    Then the body is one empty paragraph with the cursor in it
+    When the cursor is in a code block and I press Meta+A
+    Then only the code is selected
+    When I press Meta+A again
+    Then every block shows the selected tint
+
   Scenario: Clicking elsewhere clears the selection
     When I select the block "two"
     And I click into "four"
