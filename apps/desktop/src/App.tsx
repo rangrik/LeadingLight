@@ -21,15 +21,19 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { DeletePageDialog } from "@/components/delete-page-dialog";
-import { PageIconView } from "@/components/page-icon";
+import { PageIconView, RowIcon } from "@/components/page-icon";
 import { PaneArea } from "@/components/pane-area";
 import { armDrag } from "@/components/pane-drag";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { pageLabel } from "@/lib/labels";
-import { type ObjectPatch, type ObjectSummary, objects } from "@/lib/objects";
+import { type ObjectSummary, objects } from "@/lib/objects";
 import { closePane, focusedPage, leaves, openPage, panes, showOnly } from "@/lib/panes";
 import { isNative } from "@/lib/platform";
-import { flushAll, reportSaveError } from "@/lib/saving";
+import { flushAll } from "@/lib/saving";
+import { createPage, describe, forgetPage, iconFor, loadSpace, space, typeView } from "@/lib/space";
+
+// Tags and daily notes have their own places; templates show in their type's settings.
+const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 
@@ -50,7 +54,7 @@ function useSystemTheme() {
 
 export default function App() {
   useSystemTheme();
-  const [pages, setPages] = useState<ObjectSummary[]>([]);
+  const { pages, types } = space.use();
   const { root } = panes.use();
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
@@ -62,22 +66,14 @@ export default function App() {
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
 
   useEffect(() => {
-    objects
-      .list()
-      .then((list) => {
-        setPages(list);
-        showOnly(list[0]?.id ?? null);
-      })
+    loadSpace()
+      .then((list) => showOnly(list.find(listed)?.id ?? null))
       .catch(console.error);
   }, []);
 
   const create = useCallback(() => {
-    objects
-      .create()
-      .then((obj) => {
-        setPages((prev) => [obj, ...prev]);
-        openPage(obj.id);
-      })
+    createPage()
+      .then((obj) => openPage(obj.id))
       .catch(console.error);
   }, []);
 
@@ -85,22 +81,15 @@ export default function App() {
   const remove = useCallback(
     (id: string) => {
       objects.remove(id).catch(console.error);
-      setPages((prev) => prev.filter((p) => p.id !== id));
+      forgetPage(id);
       const { root } = panes.get();
       const open = root && leaves(root).find((l) => l.page === id);
       if (!open) return;
       if (root.kind === "split") closePane(open.id);
-      else showOnly(pages.find((p) => p.id !== id)?.id ?? null);
+      else showOnly(pages.find((p) => p.id !== id && listed(p))?.id ?? null);
     },
     [pages],
   );
-
-  // The sidebar and the breadcrumb follow the title and icon as they change; saving is debounced.
-  const onSummary = useCallback((id: string, patch: Partial<ObjectSummary>) => {
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-  }, []);
-
-  const save = useCallback((id: string, patch: ObjectPatch) => objects.update(id, patch).catch(reportSaveError), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -145,16 +134,21 @@ export default function App() {
     };
   }, []);
 
-  const summary = (id: string) => pages.find((p) => p.id === id);
-  const shown = current === undefined ? undefined : summary(current);
-  const iconOf = (p?: ObjectSummary) => (p?.icon ? <PageIconView icon={p.icon} /> : <FileText />);
-  const navPages = pages.map((p) => ({
+  const shown = current === undefined ? undefined : describe(current);
+  const navPages = pages.filter(listed).map((p) => ({
     name: pageLabel(p.title),
-    icon: iconOf(p),
+    icon: <RowIcon icon={iconFor(p)} />,
     isActive: p.id === current,
     onSelect: () => openPage(p.id),
     onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
     onDelete: () => setPendingDelete(p),
+  }));
+  const navTypes = types.map((t) => ({
+    name: t.plural,
+    icon: <RowIcon icon={t.icon} />,
+    isActive: current === typeView(t.id),
+    onSelect: () => openPage(typeView(t.id)),
+    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
   }));
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
@@ -162,7 +156,7 @@ export default function App() {
   return (
     <ToastProvider>
     <SidebarProvider className="isolate h-svh overflow-hidden" onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)}>
-      <AppSidebar onCreate={create} pages={navPages} />
+      <AppSidebar onCreate={create} pages={navPages} types={navTypes} />
       <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
         <header className="flex h-16 shrink-0 items-center gap-2" data-tauri-drag-region>
           <div
@@ -176,13 +170,13 @@ export default function App() {
             <Separator className="mr-2 h-4" orientation="vertical" />
             <Breadcrumb>
               <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">Pages</BreadcrumbItem>
-                {current !== undefined && (
+                <BreadcrumbItem className="hidden md:block">{shown?.parent ?? "Pages"}</BreadcrumbItem>
+                {shown && (
                   <>
                     <BreadcrumbSeparator className="hidden md:block" />
                     <BreadcrumbItem className="min-w-0">
-                      {shown?.icon && <PageIconView icon={shown.icon} />}
-                      <BreadcrumbPage className="max-w-[40ch] truncate">{pageLabel(shown?.title ?? "")}</BreadcrumbPage>
+                      {shown.icon && <PageIconView icon={shown.icon} />}
+                      <BreadcrumbPage className="max-w-[40ch] truncate">{shown.title}</BreadcrumbPage>
                     </BreadcrumbItem>
                   </>
                 )}
@@ -191,7 +185,7 @@ export default function App() {
           </div>
         </header>
         {root ? (
-          <PaneArea onSave={save} onSummary={onSummary} summary={summary} />
+          <PaneArea />
         ) : (
           <div className="min-h-0 flex-1">
             <Empty className="h-full">

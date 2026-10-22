@@ -1,7 +1,7 @@
 // Pages side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon), app/src/lib/layout.ts.
 // Changes: a leaf shows a page; worktrees, swap, neighbours and moves between tabs dropped;
 // a small store holds the tree instead of zustand.
-import { useSyncExternalStore } from "react";
+import { createStore } from "./state";
 
 export type Leaf = { kind: "leaf"; id: string; page: string };
 export type PaneNode = Leaf | { kind: "split"; id: string; dir: "row" | "col"; ratio: number; a: PaneNode; b: PaneNode };
@@ -98,24 +98,6 @@ export function sideAt(u: number, v: number): Side {
   return (Object.keys(d) as Side[]).reduce((a, b) => (d[b] < d[a] ? b : a));
 }
 
-// A value React components can follow, readable outside React too (the drag needs that).
-export function createStore<T>(initial: T) {
-  let value = initial;
-  const subs = new Set<() => void>();
-  const subscribe = (fn: () => void) => {
-    subs.add(fn);
-    return () => void subs.delete(fn);
-  };
-  return {
-    get: () => value,
-    set(next: T) {
-      value = next;
-      for (const fn of subs) fn();
-    },
-    use: () => useSyncExternalStore(subscribe, () => value),
-  };
-}
-
 // The open pages and the one that has the keyboard.
 export const panes = createStore<{ root: PaneNode | null; focus: string }>({ root: null, focus: "" });
 
@@ -167,4 +149,13 @@ export function focusPane(id: string) {
 export function resizePanes(split: string, ratio: number) {
   const { root, focus } = panes.get();
   if (root) panes.set({ root: setRatio(root, split, ratio), focus });
+}
+
+// Shift-click: show a page next to the focused one, or focus it where it is already open.
+export function openBeside(page: string) {
+  const { root, focus } = panes.get();
+  const open = openLeaf(page);
+  if (open) panes.set({ root, focus: open.id });
+  else if (root) placePage(page, focus, "right");
+  else showOnly(page);
 }

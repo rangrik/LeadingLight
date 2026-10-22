@@ -1,6 +1,6 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), and only NavProjects (as Pages); NavMain, NavSecondary and NavUser wait for content.
+// skips it), and NavProjects as Pages under our Types; NavMain, NavSecondary and NavUser wait for content.
 import {
   Sidebar,
   SidebarContent,
@@ -11,6 +11,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { NavProjects } from "./nav-projects";
+import { NavTypes } from "./nav-types";
 
 // The app mark (a t whose crossbar ends in a dot), placed as in the app icon's tile. Drawn in
 // currentColor so the tile's theme colours apply.
@@ -28,10 +29,12 @@ function Mark({ className }: { className?: string }) {
 
 export function AppSidebar({
   pages,
+  types,
   onCreate,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   pages: React.ComponentProps<typeof NavProjects>["projects"];
+  types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
 }) {
   const { isMobile, state } = useSidebar();
@@ -53,6 +56,9 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <nav aria-label="Types">
+          <NavTypes types={types} />
+        </nav>
         <nav aria-label="Pages">
           <NavProjects onCreate={onCreate} projects={pages} />
         </nav>

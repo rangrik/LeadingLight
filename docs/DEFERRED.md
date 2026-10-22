@@ -18,6 +18,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Stickers as page icons and in pages | Waiting to hear what "stickers" should be; a free set like Microsoft's 3D emoji is the guess. | When that's settled. |
 | 2026-10-22 | Unsplash covers | Needs an Unsplash developer key, and Unsplash photos must load from Unsplash, so they won't show offline. | When there's a key and offline covers are accepted. |
 | 2026-10-22 | Emoji skin tones | Not asked for; every emoji shows in its default tone. | When asked. |
+| 2026-10-22 | Deleting a property everywhere | Removing it from a page or a type covers tidying up, and its values stay stored either way. | Someone wants unused properties gone from the "Add property" list. |
 | 2026-10-22 | Mermaid diagrams in code blocks | A large extra dependency for a niche use. | When asked. |
 | 2026-10-22 | Highlight blocks from reading integrations | There are no integrations to bring highlights in. | When an integration is built. |
 | 2026-10-22 | Width options for columns and groups | Equal widths cover the common case. | When asked. |

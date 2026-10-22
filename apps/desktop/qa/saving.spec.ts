@@ -76,3 +76,27 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
   );
   expect(stored).toMatchObject({ later: { kept: true }, description: "Ten days" });
 });
+
+// Seam: the browser store's upgrade from version 1, which had pages only. Catches existing
+// pages vanishing, or the starter types missing, after the upgrade.
+test("Pages stored before types existed survive the upgrade", async ({ page }) => {
+  // Any page of the same origin that isn't the app, so the app can't upgrade the store first.
+  await page.goto("/src-tauri/icons/32x32.png");
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        const req = indexedDB.open("leadinglight", 1);
+        req.onupgradeneeded = () => {
+          const obj = { id: "v1", typeId: "page", title: "From v1", content: null, properties: {}, createdAt: 1, updatedAt: 1 };
+          req.result.createObjectStore("objects", { keyPath: "id" }).put(obj);
+        };
+        req.onsuccess = () => {
+          req.result.close();
+          done();
+        };
+      }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "From v1" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
+});

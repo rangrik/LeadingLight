@@ -1,5 +1,5 @@
 import { EmojiGrid } from "@leadinglight/editor/emoji";
-import { Check, ImageUp } from "lucide-react";
+import { Check, FileText, ImageUp } from "lucide-react";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Input } from "@leadinglight/ui/components/input";
@@ -49,6 +49,10 @@ export function PageIconView({ icon, large }: { icon: PageIcon; large?: boolean 
   }
   return <LucideIcon className={cn(COLORS[icon.color].text, large ? "size-16 [&_*]:stroke-[1.5]" : "size-4")} name={icon.name} />;
 }
+
+// In rows: the page's icon, or the page symbol when it has none.
+export const RowIcon = ({ icon }: { icon?: PageIcon }) =>
+  icon ? <PageIconView icon={icon} /> : <FileText className="size-4 shrink-0 text-muted-foreground" />;
 
 const LAST_COLOR = "ll.iconColor";
 

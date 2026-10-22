@@ -5,14 +5,16 @@ import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { CoverBand, CoverPicker } from "@/components/page-cover";
 import { IconPicker, PageIconView } from "@/components/page-icon";
+import { PropertyPanel } from "@/components/property-panel";
 import { assets } from "@/lib/assets";
 import { openLink } from "@/lib/links";
-import type { LLObject, ObjectPatch, ObjectSummary } from "@/lib/objects";
+import type { LLObject, ObjectPatch } from "@/lib/objects";
 import { type PageCover, type PageIcon, readCover, readIcon } from "@/lib/page-meta";
 import { trackFlush } from "@/lib/saving";
+import { pageOf, patchSummary, savePage } from "@/lib/space";
 
 // The body is read only when a save runs, not on every keystroke.
-type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown> };
+type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
 
 const SAVE_DELAY_MS = 500;
 
@@ -26,16 +28,9 @@ const fit = (el: HTMLTextAreaElement | null) => {
   el.style.height = `${el.scrollHeight}px`;
 };
 
-export function PageView({
-  page,
-  onSummary,
-  onSave,
-}: {
-  page: LLObject;
-  onSummary: (id: string, patch: Partial<ObjectSummary>) => void;
-  onSave: (id: string, patch: ObjectPatch) => Promise<void>;
-}) {
+export function PageView({ page }: { page: LLObject }) {
   const [title, setTitle] = useState(page.title);
+  const [typeId, setTypeId] = useState(page.typeId);
   const [props, setProps] = useState(page.properties);
   const latest = useRef(page.properties);
   const [adding, setAdding] = useState(false);
@@ -48,14 +43,12 @@ export function PageView({
 
   const flush = async () => {
     clearTimeout(timer.current);
-    const { title, content, properties } = pending.current;
+    const { content, ...rest } = pending.current;
     pending.current = {};
-    if (title === undefined && !content && !properties) return;
-    const patch: ObjectPatch = {};
-    if (title !== undefined) patch.title = title;
+    if (!content && Object.keys(rest).length === 0) return;
+    const patch: ObjectPatch = { ...rest };
     if (content) patch.content = content();
-    if (properties) patch.properties = properties;
-    await onSave(page.id, patch);
+    await savePage(page.id, patch);
   };
 
   const queue = (patch: Pending) => {
@@ -71,12 +64,15 @@ export function PageView({
     else next[key] = value;
     latest.current = next;
     setProps(next);
+    patchSummary(page.id, { properties: next });
     queue({ properties: next });
   };
-  const setIcon = (icon?: PageIcon) => {
-    setProp("icon", icon);
-    onSummary(page.id, { icon });
+  const setType = (next: string) => {
+    setTypeId(next);
+    patchSummary(page.id, { typeId: next });
+    queue({ typeId: next });
   };
+  const setIcon = (icon?: PageIcon) => setProp("icon", icon);
   const setCover = (cover?: PageCover) => setProp("cover", cover);
 
   const icon = readIcon(props.icon);
@@ -162,7 +158,7 @@ export function PageView({
               onChange={(e) => {
                 const value = e.currentTarget.value.replace(/\n/g, "");
                 setTitle(value);
-                onSummary(page.id, { title: value });
+                patchSummary(page.id, { title: value });
                 queue({ title: value });
               }}
               onKeyDown={toBody}
@@ -190,6 +186,7 @@ export function PageView({
             />
           )}
         </div>
+        <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
         <div className="mt-3">
           <BlockEditor
             assets={assets}
