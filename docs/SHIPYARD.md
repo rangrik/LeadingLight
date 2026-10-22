@@ -3,8 +3,8 @@
 ## Status, 2026-10-22
 
 Chosen and done: Shipyard's app source is vendored whole under `vendor/shipyard`
-(docs/DECISIONS.md, 6). Wired into the app: the 23 themes (and code-block tokens
-that follow them), Settings in our own shell (General, Appearance, Shortcuts, About, on
+(docs/DECISIONS.md, 6). Wired into the app: the 23 themes (palettes now ours in `packages/themes`, engine
+Shipyard's; code-block tokens follow them), Settings in our own shell (General, Appearance, Shortcuts, About, on
 Shipyard's section components), text size and zoom,
 stillness, the shortcuts table driving the Mac menu bar, and the mock agent
 connection. Vendored and building but not mounted: the conversation UI, the agent

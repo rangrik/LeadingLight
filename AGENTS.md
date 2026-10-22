@@ -12,6 +12,7 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
   `https://coss.com/ui/docs/components/<name>.md` per component, https://coss.com/ui/llms.txt (index).
   Add one with `cd packages/ui && pnpm dlx shadcn@latest add @coss/<name>`.
 - `packages/editor` — our block editor, built on TipTap/ProseMirror. Import as `@leadinglight/editor/editor`.
+- `packages/themes` — the 23 theme palettes, ours to edit; `pnpm check:themes` keeps them readable.
 - `vendor/shipyard` — Shipyard's app source, verbatim (MIT), synced from upstream with
   `pnpm sync:shipyard`. Never edit it; read `vendor/shipyard/README.md`. In `apps/desktop`,
   `@/` is the vendored tree and `~/` is our own `src/`.

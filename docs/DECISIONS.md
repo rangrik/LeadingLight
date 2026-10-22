@@ -73,7 +73,8 @@ fixes upstream keeps shipping. So its `app/src`, scripts, perf and plugin source
 under `vendor/shipyard` unchanged, mirroring upstream's paths; `UPSTREAM.json` records
 the commit and `scripts/sync-shipyard.sh` applies upstream's diff with a 3-way merge.
 Nothing in there is edited: our code imports it (`@/` is the vendored tree's alias, `~/`
-is ours) and overrides by alias (the shortcuts table) or CSS. Its `index.css` is the
+is ours) and overrides by alias (the shortcuts table, the theme palettes in
+`packages/themes`) or CSS. Its `index.css` is the
 Tailwind root, with the system font put back after it. The agent code runs on its mock
 fixtures (`__BERTH_DEMO__`) until LeadingLight has an agent backend. What was chosen to
 wire in, and what was left out, is in `docs/SHIPYARD.md`.

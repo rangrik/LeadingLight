@@ -25,6 +25,7 @@
     "paths": {
       "~/*": ["./src/*"],
       "@/lib/shortcuts.json": ["./src/lib/shortcuts.json"],
+      "@/themes/builtin": ["../../packages/themes/src/builtin.ts"],
       "@/*": ["../../vendor/shipyard/app/src/*"],
       "@berth/plugin": ["../../vendor/shipyard/packages/plugin-sdk/src/index.ts"],
       "@berth/plugin/ui": ["../../vendor/shipyard/packages/plugin-sdk/src/ui.ts"],

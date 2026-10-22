@@ -30,8 +30,9 @@ export default defineConfig(() => ({
   define: { __BERTH_DEMO__: "true", __BERTH_COMMIT__: JSON.stringify(upstream.commit.slice(0, 7)), __BERTH_VERSION__: JSON.stringify(upstream.version) },
   resolve: {
     alias: [
-      // Our shortcuts table, in Shipyard's place (vendor/shipyard/README.md).
+      // Our shortcuts table and our themes, in Shipyard's places (vendor/shipyard/README.md).
       { find: "@/lib/shortcuts.json", replacement: path.resolve(here, "src/lib/shortcuts.json") },
+      { find: "@/themes/builtin", replacement: path.resolve(here, "../../packages/themes/src/builtin.ts") },
       { find: /^@\//, replacement: `${path.join(shipyard, "app/src")}/` },
       { find: "@berth/plugin/ui", replacement: path.join(shipyard, "packages/plugin-sdk/src/ui.ts") },
       { find: "@berth/plugin", replacement: path.join(shipyard, "packages/plugin-sdk/src/index.ts") },
