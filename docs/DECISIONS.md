@@ -71,3 +71,11 @@ one kind of object, the page. A type is a bundle the user edits, and any page ca
 property beyond its type's. Property definitions are shared by the whole space, as in
 Obsidian, so lists can sort and group across types. Tags, collections and daily notes are
 pages with a type and a relation, not special code. No saved queries.
+
+## 7. Links are ids in the body; backlinks are a search
+
+A link stores only the page's id, so it follows renames and icon changes. Backlinks are found by
+searching stored pages for that id rather than kept in a links table, so nothing can fall out of
+step. A change to another page (linking a mention, merging a tag) goes through that page's editor
+when it is open, so its pane never saves its own copy over the change. Every page's summary and
+properties stay in memory, which is what lists, cards and the link menu read.

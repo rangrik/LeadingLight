@@ -1,9 +1,11 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), and NavProjects as Pages under our Types; NavMain, NavSecondary and NavUser wait for content.
+import { CalendarDays } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroup,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -31,8 +33,12 @@ export function AppSidebar({
   pages,
   types,
   onCreate,
+  onToday,
+  todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  onToday: () => void;
+  todayActive: boolean;
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
@@ -56,6 +62,16 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
+        <SidebarGroup className="pb-0">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={onToday}>
+                <CalendarDays />
+                <span>Today</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
         <nav aria-label="Types">
           <NavTypes types={types} />
         </nav>

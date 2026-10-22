@@ -20,20 +20,23 @@ import { Separator } from "@leadinglight/ui/components/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { goToDay } from "@/components/daily-bar";
 import { DeletePageDialog } from "@/components/delete-page-dialog";
 import { PageIconView, RowIcon } from "@/components/page-icon";
 import { PaneArea } from "@/components/pane-area";
 import { armDrag } from "@/components/pane-drag";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { pageLabel } from "@/lib/labels";
-import { type ObjectSummary, objects } from "@/lib/objects";
-import { closePane, focusedPage, leaves, openPage, panes, showOnly } from "@/lib/panes";
+import { dailyFor, today } from "@/lib/daily";
+import type { ObjectSummary } from "@/lib/objects";
+import { focusedPage, openPage, panes, showOnly } from "@/lib/panes";
 import { isNative } from "@/lib/platform";
 import { flushAll } from "@/lib/saving";
-import { createPage, describe, forgetPage, iconFor, loadSpace, space, typeView } from "@/lib/space";
+import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "@/lib/space";
+import { PAGE_TYPE } from "@/lib/store";
+import { newPage } from "@/lib/templates";
 
 // Tags and daily notes have their own places; templates show in their type's settings.
-const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 
@@ -72,24 +75,11 @@ export default function App() {
   }, []);
 
   const create = useCallback(() => {
-    createPage()
+    newPage(PAGE_TYPE)
       .then((obj) => openPage(obj.id))
       .catch(console.error);
   }, []);
 
-  // A deleted page's pane closes; when it was the only one, the next page takes its place.
-  const remove = useCallback(
-    (id: string) => {
-      objects.remove(id).catch(console.error);
-      forgetPage(id);
-      const { root } = panes.get();
-      const open = root && leaves(root).find((l) => l.page === id);
-      if (!open) return;
-      if (root.kind === "split") closePane(open.id);
-      else showOnly(pages.find((p) => p.id !== id && listed(p))?.id ?? null);
-    },
-    [pages],
-  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -156,7 +146,7 @@ export default function App() {
   return (
     <ToastProvider>
     <SidebarProvider className="isolate h-svh overflow-hidden" onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)}>
-      <AppSidebar onCreate={create} pages={navPages} types={navTypes} />
+      <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
       <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
         <header className="flex h-16 shrink-0 items-center gap-2" data-tauri-drag-region>
           <div
@@ -209,7 +199,7 @@ export default function App() {
       <DeletePageDialog
         onCancel={() => setPendingDelete(null)}
         onConfirm={(id) => {
-          remove(id);
+          removePage(id);
           setPendingDelete(null);
         }}
         page={pendingDelete}

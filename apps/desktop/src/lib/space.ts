@@ -3,6 +3,7 @@ import { pageLabel } from "./labels";
 import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "./objects";
 import { type PageIcon, readIcon } from "./page-meta";
 import { reportSaveError } from "./saving";
+import { closePane, leaves, panes, showOnly } from "./panes";
 import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
@@ -90,6 +91,23 @@ export function forgetPage(id: string) {
   set({ pages: space.get().pages.filter((p) => p.id !== id) });
 }
 
+// What the sidebar's Pages list shows: tags and daily notes have their own places, and
+// templates show in their type's settings.
+export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
+
+// A deleted page's pane closes; when it was the only one, the next page takes its place.
+export function removePage(id: string) {
+  objects.remove(id).catch(console.error);
+  forgetPage(id);
+  // A deleted default template is no longer the default.
+  for (const t of space.get().types.filter((t) => t.template === id)) void putType({ ...t, template: undefined });
+  const { root } = panes.get();
+  const open = root && leaves(root).find((l) => l.page === id);
+  if (!open) return;
+  if (root.kind === "split") closePane(open.id);
+  else showOnly(space.get().pages.find(listed)?.id ?? null);
+}
+
 export const markSaved = () => set({ saved: space.get().saved + 1 });
 
 export async function putType(type: TypeDef) {
@@ -97,9 +115,15 @@ export async function putType(type: TypeDef) {
   await objects.putType(type);
 }
 
+// Its pages become plain pages; its templates go with it.
 export async function deleteType(id: string) {
   const { pages, types } = space.get();
-  set({ types: types.filter((t) => t.id !== id), pages: pages.map((p) => (p.typeId === id ? { ...p, typeId: PAGE_TYPE } : p)) });
+  const templates = pages.filter((p) => p.properties.templateOf === id);
+  set({
+    types: types.filter((t) => t.id !== id),
+    pages: pages.filter((p) => !templates.includes(p)).map((p) => (p.typeId === id ? { ...p, typeId: PAGE_TYPE } : p)),
+  });
+  await Promise.all(templates.map((t) => objects.remove(t.id)));
   await objects.deleteType(id);
 }
 

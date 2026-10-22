@@ -1,24 +1,30 @@
-import { ArrowDown, ArrowUp, Plus, Settings2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Plus, Settings2, Star, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Field, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { ObjectList } from "@/components/object-list";
 import { IconPicker, PageIconView, RowIcon } from "@/components/page-icon";
-import { armDrag } from "@/components/pane-drag";
 import { AddProperty } from "@/components/property-panel";
-import { KIND_ICONS, visit } from "@/components/property-value";
-import type { LinkView, TypeDef } from "@/lib/catalog";
+import { KIND_ICONS } from "@/components/property-value";
+import type { LinkView, TypeDef, ViewSettings } from "@/lib/catalog";
 import { pageLabel } from "@/lib/labels";
 import { type Color, COLORS } from "@/lib/page-meta";
 import { openPage } from "@/lib/panes";
-import { createPage, deleteType, iconFor, propOf, putType, space, typeOf, typeView } from "@/lib/space";
+import { deleteType, propOf, putType, space, typeOf, typeView } from "@/lib/space";
 import { PAGE_TYPE } from "@/lib/store";
+import { goToDay } from "@/components/daily-bar";
+import { DAILY, today } from "@/lib/daily";
+import { newPage, newTemplate, templatesOf } from "@/lib/templates";
 
 export const LINK_VIEWS: Record<LinkView, string> = { line: "Line", card: "Small card", wide: "Wide card", page: "Page" };
+const DEFAULT_VIEW: ViewSettings = { kind: "list", sort: { by: "title" } };
+const DAILY_VIEW: ViewSettings = { kind: "list", sort: { by: "day", desc: true } };
 
 // A type's home: its name, a New button, its settings and its pages.
 export function TypeView({ typeId }: { typeId: string }) {
@@ -26,39 +32,54 @@ export function TypeView({ typeId }: { typeId: string }) {
   const [editing, setEditing] = useState(false);
   const type = typeOf(typeId);
   const items = pages.filter((p) => p.typeId === type.id && !p.properties.templateOf);
-  const create = async () => openPage((await createPage({ typeId: type.id })).id);
+  const templates = templatesOf(type.id);
+  // Daily notes are one per day: "New" opens today's.
+  const create = async (template?: string) => (type.id === DAILY ? goToDay(today()) : openPage((await newPage(type.id, {}, template)).id));
+  const view = type.view ?? (type.id === DAILY ? DAILY_VIEW : DEFAULT_VIEW);
+  const defs = (ids: string[]) => ids.map(propOf).filter((p) => p !== undefined);
   return (
-    <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pt-10 pb-48 @xl:pe-16">
+    // A type's view isn't read like a page: it takes the pane's width in every view, so
+    // switching views never moves its header.
+    <div className="mx-auto w-full max-w-[1200px] ps-16 pe-6 pt-10 pb-48 @xl:pe-16">
       {type.icon && (
         <div className="mb-3">
           <PageIconView icon={type.icon} large />
         </div>
       )}
       <h1 className="font-bold font-heading text-[36px] leading-[1.2] tracking-tight">{type.plural}</h1>
-      <div className="-ms-2 mt-3 flex items-center gap-1">
-        <Button className="text-muted-foreground" onClick={() => void create()} size="sm" variant="ghost">
+      <div className="-ms-2 mt-3 flex flex-wrap items-center gap-1">
+        <Button aria-label={`New ${type.name.toLowerCase()}`} className="text-muted-foreground" onClick={() => void create()} size="sm" variant="ghost">
           <Plus />
-          New {type.name.toLowerCase()}
+          <span className="hidden @md:inline">New {type.name.toLowerCase()}</span>
         </Button>
-        <Button className="text-muted-foreground" onClick={() => setEditing(true)} size="sm" variant="ghost">
+        {templates.length > 0 && (
+          <Menu>
+            <MenuTrigger render={<Button aria-label="New from a template" className="-ms-1 text-muted-foreground" size="icon-sm" variant="ghost" />}>
+              <ChevronDown />
+            </MenuTrigger>
+            <MenuPopup align="start">
+              {templates.map((t) => (
+                <MenuItem key={t.id} onClick={() => void create(t.id)}>
+                  {pageLabel(t.title)}
+                </MenuItem>
+              ))}
+            </MenuPopup>
+          </Menu>
+        )}
+        <Button aria-label="Type settings" className="text-muted-foreground" onClick={() => setEditing(true)} size="sm" variant="ghost">
           <Settings2 />
-          Type settings
+          <span className="hidden @md:inline">Type settings</span>
         </Button>
       </div>
-      <div className="-ms-2 mt-4 flex flex-col">
-        {items.length === 0 && <p className="px-2 py-1.5 text-muted-foreground text-sm">No {type.plural.toLowerCase()} yet</p>}
-        {items.map((p) => (
-          <button
-            className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm transition-colors duration-150 hover:bg-accent"
-            key={p.id}
-            onClick={(e) => visit(p.id, e)}
-            onPointerDown={(e) => armDrag(e, { page: p.id, label: pageLabel(p.title) })}
-            type="button"
-          >
-            <RowIcon icon={iconFor(p)} />
-            <span className="truncate">{pageLabel(p.title)}</span>
-          </button>
-        ))}
+      <div className="mt-4">
+        <ObjectList
+          card={defs(type.card)}
+          empty={`No ${type.plural.toLowerCase()} yet`}
+          items={items}
+          onSettings={(view) => void putType({ ...type, view })}
+          props={defs(type.props)}
+          settings={view}
+        />
       </div>
       {editing && <TypeSettings onClose={() => setEditing(false)} type={type} />}
     </div>
@@ -181,6 +202,47 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
                   Add property
                 </Button>
               </AddProperty>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <p className="font-medium text-sm">Templates</p>
+            <div className="flex w-full flex-col">
+              {templatesOf(type.id).map((t) => (
+                <div className="flex h-9 items-center gap-2 text-sm" key={t.id}>
+                  <button
+                    className="min-w-0 flex-1 truncate text-left hover:underline"
+                    onClick={() => {
+                      onClose();
+                      openPage(t.id);
+                    }}
+                    type="button"
+                  >
+                    {pageLabel(t.title)}
+                  </button>
+                  <Button
+                    aria-label={`Make ${pageLabel(t.title)} the default`}
+                    aria-pressed={draft.template === t.id}
+                    onClick={() => set({ template: draft.template === t.id ? undefined : t.id })}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Star className={cn(draft.template === t.id && "fill-current text-amber-500")} />
+                  </Button>
+                </div>
+              ))}
+              <Button
+                className="mt-1 self-start text-muted-foreground"
+                onClick={async () => {
+                  const t = await newTemplate(type.id);
+                  onClose();
+                  openPage(t.id);
+                }}
+                size="sm"
+                variant="ghost"
+              >
+                <Plus />
+                New template
+              </Button>
             </div>
           </div>
         </DialogPanel>

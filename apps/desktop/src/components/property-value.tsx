@@ -265,7 +265,21 @@ function SelectValue({ prop, value, onChange }: { prop: PropDef; value: string[]
 }
 
 // Pages the picker offers: of the property's type, when it has one.
-export function PagePicker({ typeId, exclude, onPick, label, empty: isEmpty }: { typeId?: string; exclude: string[]; onPick: (id: string) => void; label: string; empty?: boolean }) {
+export function PagePicker({
+  typeId,
+  exclude,
+  onPick,
+  label,
+  empty: isEmpty,
+  trigger,
+}: {
+  typeId?: string;
+  exclude: string[];
+  onPick: (id: string) => void;
+  label: string;
+  empty?: boolean;
+  trigger?: React.ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { pages } = space.use();
@@ -282,7 +296,9 @@ export function PagePicker({ typeId, exclude, onPick, label, empty: isEmpty }: {
   const create = async () => done((await createPage({ title: query.trim(), typeId: typeId ?? "page" })).id);
   return (
     <Popover onOpenChange={setOpen} open={open}>
-      {isEmpty ? (
+      {trigger ? (
+        <PopoverTrigger render={trigger} />
+      ) : isEmpty ? (
         <PopoverTrigger render={<Trigger aria-label={label} />}>{empty}</PopoverTrigger>
       ) : (
         <PopoverTrigger render={<Button aria-label={label} className="text-muted-foreground" size="icon-xs" variant="ghost" />}>
@@ -304,7 +320,7 @@ export function PagePicker({ typeId, exclude, onPick, label, empty: isEmpty }: {
               <span className="truncate">{pageLabel(p.title)}</span>
             </button>
           ))}
-          {query.trim() && (
+          {query.trim() && !shown.some((p) => pageLabel(p.title).toLowerCase() === q) && (
             <button className="flex h-8 items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-accent" onClick={() => void create()} type="button">
               <Plus className="size-4" />
               Create “{query.trim()}”
@@ -319,7 +335,7 @@ export function PagePicker({ typeId, exclude, onPick, label, empty: isEmpty }: {
 function RelationValue({ prop, value, onChange }: { prop: PropDef; value: string[]; onChange: (v?: string[]) => void }) {
   const set = (next: string[]) => onChange(next.length ? next : undefined);
   return (
-    <div className="flex min-h-8 flex-wrap items-center gap-1 py-1">
+    <div className={cn("flex min-h-8 w-full flex-wrap items-center gap-1", value.length > 0 && "py-1")}>
       {value.map((id) => (
         <PageChip id={id} key={id} onRemove={() => set(value.filter((v) => v !== id))} />
       ))}

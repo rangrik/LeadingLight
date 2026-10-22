@@ -142,6 +142,12 @@ export function closePane(id: string) {
   panes.set({ root: rest, focus: next });
 }
 
+// Shows another page in a given pane.
+export function showIn(id: string, page: string) {
+  const { root, focus } = panes.get();
+  if (root) panes.set({ root: mapLeaf(root, id, (l) => ({ ...l, page })), focus });
+}
+
 export function focusPane(id: string) {
   if (panes.get().focus !== id) panes.set({ ...panes.get(), focus: id });
 }

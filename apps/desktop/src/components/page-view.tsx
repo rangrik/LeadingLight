@@ -1,20 +1,23 @@
 import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
-import { AlignLeft, ImageIcon, Smile } from "lucide-react";
+import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks } from "@/components/backlinks";
+import { CreatedThisDay, DailyBar } from "@/components/daily-bar";
 import { linkHost } from "@/components/link-views";
 import { CoverBand, CoverPicker } from "@/components/page-cover";
 import { IconPicker, PageIconView } from "@/components/page-icon";
 import { PropertyPanel } from "@/components/property-panel";
+import { PagePicker } from "@/components/property-value";
+import { TagPanel } from "@/components/tag-panel";
 import { assets } from "@/lib/assets";
 import { openLink } from "@/lib/links";
 import { registerLive } from "@/lib/live";
 import type { LLObject, ObjectPatch } from "@/lib/objects";
 import { type PageCover, type PageIcon, readCover, readIcon } from "@/lib/page-meta";
 import { trackFlush } from "@/lib/saving";
-import { pageOf, patchSummary, savePage } from "@/lib/space";
+import { pageOf, patchSummary, savePage, typeOf } from "@/lib/space";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -84,6 +87,11 @@ export function PageView({ page }: { page: LLObject }) {
   const icon = readIcon(props.icon);
   const cover = readCover(props.cover);
   const description = typeof props.description === "string" ? props.description : undefined;
+  const templateOf = typeof props.templateOf === "string" ? props.templateOf : undefined;
+  const day = typeId === "daily" && typeof props.day === "string" ? props.day : undefined;
+  const tags = Array.isArray(props.tags) ? (props.tags as string[]) : [];
+  // Types with a Tags property show it as a row already.
+  const canTag = !typeOf(typeId).props.includes("tags") && tags.length === 0;
 
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
@@ -149,6 +157,20 @@ export function PageView({ page }: { page: LLObject }) {
                   </Button>
                 </CoverPicker>
               )}
+              {canTag && (
+                <PagePicker
+                  exclude={tags}
+                  label="Add tag"
+                  onPick={(id) => setProp("tags", [...tags, id])}
+                  trigger={
+                    <Button aria-label="Add tag" className="text-muted-foreground" size="sm" variant="ghost">
+                      <Hash />
+                      <Label>Add tag</Label>
+                    </Button>
+                  }
+                  typeId="tag"
+                />
+              )}
               {description === undefined && (
                 <Button
                   aria-label="Add description"
@@ -199,7 +221,15 @@ export function PageView({ page }: { page: LLObject }) {
             />
           )}
         </div>
+        {templateOf && (
+          <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">
+            <LayoutTemplate className="size-4" />
+            Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
+          </p>
+        )}
         <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
+        {day && <DailyBar day={day} />}
+        {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="mt-3">
           <BlockEditor
             assets={assets}
@@ -211,6 +241,7 @@ export function PageView({ page }: { page: LLObject }) {
             ref={editorRef}
           />
         </div>
+        {day && <CreatedThisDay day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
     </>

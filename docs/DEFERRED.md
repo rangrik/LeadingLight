@@ -19,6 +19,9 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Stickers as page icons and in pages | Waiting to hear what "stickers" should be; a free set like Microsoft's 3D emoji is the guess. | When that's settled. |
 | 2026-10-22 | Unsplash covers | Needs an Unsplash developer key, and Unsplash photos must load from Unsplash, so they won't show offline. | When there's a key and offline covers are accepted. |
 | 2026-10-22 | Emoji skin tones | Not asked for; every emoji shows in its default tone. | When asked. |
+| 2026-10-22 | Editing values inside lists, and dragging cards between board columns | Lists show values; changing one opens the page. Editing in cells means a second editor for every kind. | Someone fills in many pages of a type at once. |
+| 2026-10-22 | Starting a page from a template with a slash command | "New" with its template menu covers it; the slash menu would need to create and link in one step. | When asked. |
+| 2026-10-22 | Editing a two-way relation from the other side | The other side shows the linked pages read only; adding one there would write to another page. | When asked. |
 | 2026-10-22 | Deleting a property everywhere | Removing it from a page or a type covers tidying up, and its values stay stored either way. | Someone wants unused properties gone from the "Add property" list. |
 | 2026-10-22 | Mermaid diagrams in code blocks | A large extra dependency for a niche use. | When asked. |
 | 2026-10-22 | Highlight blocks from reading integrations | There are no integrations to bring highlights in. | When an integration is built. |

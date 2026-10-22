@@ -28,7 +28,7 @@ export async function editPage(id: string, change: Change) {
   }
   const obj = await objects.get(id);
   if (!obj) return;
-  const content = change.content?.(obj.content ?? { type: "doc", content: [] });
+  const content = obj.content ? change.content?.(obj.content) : undefined;
   const properties = change.properties?.(obj.properties);
   await objects.update(id, { ...(content && { content }), ...(properties && { properties }) });
   if (properties) patchSummary(id, { properties });

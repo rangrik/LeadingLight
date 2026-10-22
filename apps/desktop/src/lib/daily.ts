@@ -1,5 +1,6 @@
 import { fromIso, isoDay } from "./format";
-import { createPage, space } from "./space";
+import { space } from "./space";
+import { newPage } from "./templates";
 
 export const DAILY = "daily";
 
@@ -22,7 +23,7 @@ export function ensureDaily(day: string): Promise<string> {
   if (found) return Promise.resolve(found.id);
   let made = making.get(day);
   if (!made) {
-    made = createPage({ typeId: DAILY, title: dailyTitle(day), properties: { day } }).then((p) => p.id);
+    made = newPage(DAILY, { title: dailyTitle(day), properties: { day } }).then((p) => p.id);
     making.set(day, made);
     void made.finally(() => making.delete(day));
   }
