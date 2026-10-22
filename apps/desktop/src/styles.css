@@ -1,1 +1,35 @@
 @import "@leadinglight/ui/globals.css";
+@import "@leadinglight/editor/editor.css";
+@source "../../../packages/editor/src";
+
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Desktop feel: chrome is not selectable, only text you can edit. */
+body {
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+  user-select: none;
+}
+input,
+textarea,
+[contenteditable] {
+  user-select: text;
+}
+
+/* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
+:where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}

@@ -5,7 +5,7 @@
   "identifier": "com.leadinglight.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
@@ -14,11 +14,25 @@
       {
         "title": "LeadingLight",
         "width": 1100,
-        "height": 720
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 480,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 42
+        }
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$APPDATA/assets/**"
+        ]
+      }
     }
   },
   "bundle": {

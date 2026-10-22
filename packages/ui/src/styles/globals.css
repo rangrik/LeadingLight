@@ -12,9 +12,9 @@
     --animate-toast-success-even: toast-success-even 0.32s cubic-bezier(0.5, 1, 0.89, 1);
     --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
     --animate-toast-error-even: toast-error-even 0.28s cubic-bezier(0.5, 1, 0.89, 1);
-    --font-heading: 'Inter Variable', sans-serif;
-    --font-mono: 'Geist Mono Variable', monospace;
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-heading: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', 'Geist Mono Variable', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
     --color-sidebar-primary: var(--sidebar-primary);

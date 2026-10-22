@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "pnpm --filter @leadinglight/desktop tauri dev",
     "build": "pnpm --filter @leadinglight/desktop tauri build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "qa": "pnpm --filter @leadinglight/desktop qa"
   }
 }

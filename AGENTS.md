@@ -1,0 +1,76 @@
+# LeadingLight
+
+A local-first notes app in the spirit of Capacities: every note is an object of
+a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 19
++ Vite + Tailwind 4. macOS first.
+
+## Layout
+
+- `apps/desktop` — the app. `src/` is React, `src-tauri/` is Rust (window, SQLite migrations).
+- `packages/ui` — COSS UI components (shadcn-style, on Base UI). Import as `@leadinglight/ui/components/<name>`.
+  Docs: https://coss.com/ui/docs/get-started (setup), https://coss.com/ui/docs/styling (tokens, `isolate`),
+  `https://coss.com/ui/docs/components/<name>.md` per component, https://coss.com/ui/llms.txt (index).
+  Add one with `cd packages/ui && pnpm dlx shadcn@latest add @coss/<name>`.
+- `packages/editor` — our block editor, built on TipTap/ProseMirror. Import as `@leadinglight/editor/editor`.
+- `features/` — Gherkin specs. This is the contract for what the app does.
+- `docs/DECISIONS.md` — why things are the way they are. Read it before touching an architecture piece.
+- `docs/PLAN.md` — milestones.
+
+## Commands
+
+```sh
+pnpm install
+pnpm dev                                   # Tauri window (SQLite storage)
+pnpm --filter @leadinglight/desktop dev    # browser only at :1420 (IndexedDB storage)
+pnpm typecheck
+pnpm qa                                    # Playwright, headless Chromium, against :1420
+```
+
+## Design rules
+
+- It should feel like an Apple app: calm, uniform, nothing decorative. When unsure, remove.
+- Typography: the system font (SF Pro on macOS). Editor sizes live in `packages/editor/src/editor.css`.
+- Icons: lucide only, 16px in rows and toolbars. No second icon set.
+- No focus rings or outlines on buttons, rows, menu items. Text fields keep a soft ring.
+- Light and dark follow the system. Colors come from theme tokens in `packages/ui/src/styles/globals.css`. No hardcoded hex in app code.
+- Motion: 150–200 ms, ease-out, only on state changes (hover, open, collapse).
+- Build UI from COSS components, as shipped: Sidebar, Menu, Toolbar, Toggle, Select, Popover,
+  Tooltip, Kbd, Input, Button, AlertDialog, Empty. Compose them with Base UI's `render` prop rather
+  than restyling. Only when focus must stay in the editor (the slash menu) or the editor positions
+  the surface itself, copy the COSS classes (see `surface` in `packages/editor/src/ui.tsx`).
+  Edits to files in `packages/ui` stay rare, small, and marked with a `LeadingLight:` comment.
+- Before building any block or layout by hand, look for the official one. shadcn serves Base UI
+  versions of its blocks (`https://ui.shadcn.com/r/styles/base-vega/<block>.json`); copy their
+  higher-order files as-is, point imports at COSS's primitives, and list every change at the top of
+  each file. Never install their primitives over COSS's.
+- The shell is shadcn's sidebar-08 (base-vega) copied this way: `apps/desktop/src/components/sidebar/`.
+  Mobbin is the reference library for patterns.
+- Check every bit. Pixel alignment is part of correctness: a block handle centred on the
+  block's first line, icons centred in their buttons, text baselines lined up across a row,
+  one gutter width, one row height, one radius. Zoom into screenshots; an "almost" is a bug.
+
+## How a change gets built
+
+1. Write or update the Gherkin in `features/` first. Concrete steps, concrete expectations, failure cases too.
+2. Build it.
+3. Typecheck. Do one short smoke in a headless browser yourself.
+4. Hand QA to a subagent: model Sonnet 5.5, effort xhigh. It drives the browser build
+   (`pnpm --filter @leadinglight/desktop dev`, port 1420, bound to 127.0.0.1) in the worktree's
+   Berth agent browser (`berthd browser … --tab qa`), which the user can watch live in Shipyard.
+   It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
+   drives the native Tauri window.
+5. Fix what it found. Re-run QA on the failed scenarios.
+
+Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
+regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
+
+## Rules for any developer (human or agent)
+
+- Comments and docstrings: under 2 lines, simple words, only the "why".
+- Tests go at critical seams only. Before adding one, name the seam it guards and the failure it catches.
+- A test must not dwarf the thing it tests.
+- Never add a test just because a reviewer asked for coverage. Ask what breaks.
+- Decision records and plans stay short.
+- Write plain English. If a word needs a definition, use a simpler word.
+- Watch the diff size. Removing code is the goal; every added line needs a reason.
+- Commit only when asked.

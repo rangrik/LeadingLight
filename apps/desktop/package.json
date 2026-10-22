@@ -8,16 +8,23 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "qa": "playwright test -c qa/playwright.config.ts --project qa",
+    "qa:gallery": "playwright test -c qa/playwright.config.ts --project gallery"
   },
   "dependencies": {
+    "@leadinglight/editor": "workspace:*",
     "@leadinglight/ui": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-sql": "^2.6.0",
+    "lucide-react": "^1.61.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
     "@types/node": "^26.6.5",

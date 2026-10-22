@@ -17,8 +17,9 @@ export default defineConfig(() => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // IPv4 so the Berth proxy can reach it; Tauri loads it by the same address.
+    host: host || "127.0.0.1",
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
-    watch: { ignored: ["**/src-tauri/**"] },
+    watch: { ignored: ["**/src-tauri/**", "**/qa/**"] },
   },
 }));

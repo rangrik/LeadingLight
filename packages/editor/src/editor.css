@@ -1,0 +1,353 @@
+/* Block editor. Sizes are in em so the whole scale follows the base font size. */
+
+/* The root also covers the handle gutter, so the pointer can travel to the handle. */
+.ll-editor-root {
+  position: relative;
+  margin-left: -56px;
+  padding-left: 56px;
+}
+
+.ll-editor {
+  outline: none;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--foreground);
+  caret-color: var(--foreground);
+}
+
+/* Every top-level element is a block; nested containers lay their blocks out the same way. */
+.ll-editor > *,
+.ll-editor :is(.ll-column, .ll-group, [data-type="detailsContent"]) > * {
+  margin: 0;
+  padding: 3px 0;
+}
+
+.ll-editor h1,
+.ll-editor h2,
+.ll-editor h3,
+.ll-editor h4 {
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
+}
+.ll-editor h1 { font-size: 1.625em; margin-top: 1.25em; }
+.ll-editor h2 { font-size: 1.375em; margin-top: 1.1em; }
+.ll-editor h3 { font-size: 1.1875em; margin-top: 0.9em; }
+.ll-editor h4 { font-size: 1.0625em; margin-top: 0.8em; font-weight: 600; }
+.ll-editor > :is(h1, h2, h3, h4):first-child { margin-top: 0; }
+.ll-editor p[data-small] { font-size: 0.875em; line-height: 1.55; }
+
+/* Nested text (list items, to-dos, quotes, toggle titles) starts one 24px inset in.
+   Lists: Tailwind's preflight removes markers, so put them back here. */
+.ll-editor { --ll-inset: 24px; }
+.ll-editor ul,
+.ll-editor ol { padding-left: var(--ll-inset); }
+.ll-editor ul { list-style: disc; }
+.ll-editor ul ul { list-style: circle; }
+.ll-editor ol { list-style: decimal; }
+.ll-editor li { padding: 1px 0; }
+.ll-editor li > p { padding: 0; }
+.ll-editor li::marker { color: var(--muted-foreground); }
+
+/* To-do list. The item's node view carries data-checked, the list carries data-type.
+   The checkbox is TipTap's native input drawn like COSS's Checkbox (16px, 4px radius, primary when checked). */
+.ll-editor ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.ll-editor ul[data-type="taskList"] > li { display: flex; gap: calc(var(--ll-inset) - 16px); align-items: flex-start; }
+.ll-editor ul[data-type="taskList"] > li > label { flex: none; display: flex; height: 1.6em; align-items: center; }
+.ll-editor ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
+.ll-editor ul[data-type="taskList"] input[type="checkbox"] {
+  appearance: none;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--input);
+  background: var(--background);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+}
+.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"]:not(:checked) {
+  background: color-mix(in srgb, var(--input) 32%, transparent);
+}
+.ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: none;
+}
+.ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: var(--primary-foreground);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.252 12.7 10.2 18.63 18.748 5.37'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.ll-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+/* Quote: the bar sits on the block's edge, the text at the inset. */
+.ll-editor blockquote {
+  border-left: 3px solid color-mix(in srgb, var(--foreground) 24%, transparent);
+  padding: 2px 0 2px calc(var(--ll-inset) - 3px);
+  margin: 4px 0;
+}
+.ll-editor blockquote > p { padding: 0; }
+
+/* Toggle: a 24px button holding lucide's chevron-right, on the title line; title and content
+   both start at the inset. */
+.ll-editor .ll-toggle { display: flex; align-items: flex-start; }
+.ll-editor .ll-toggle > button {
+  flex: none;
+  display: grid;
+  place-content: center;
+  width: var(--ll-inset);
+  height: 1.6em;
+  margin-top: 3px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.ll-editor .ll-toggle > button:hover { background: var(--accent); color: var(--foreground); }
+.ll-editor .ll-toggle > button::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  background: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  transition: transform 150ms ease-out;
+}
+.ll-editor .ll-toggle.is-open > button::before { transform: rotate(90deg); }
+.ll-editor .ll-toggle > div { flex: 1; min-width: 0; }
+.ll-editor summary { display: block; padding: 3px 0; cursor: text; }
+.ll-editor summary::-webkit-details-marker { display: none; }
+
+/* Code */
+.ll-editor .ll-code { padding: 3px 0; }
+.ll-editor pre {
+  background: var(--muted);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin: 3px 0;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  tab-size: 2;
+}
+.ll-editor pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+.ll-editor code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+.ll-editor .hljs-comment, .ll-editor .hljs-quote { color: var(--muted-foreground); font-style: italic; }
+.ll-editor .hljs-keyword, .ll-editor .hljs-selector-tag, .ll-editor .hljs-literal, .ll-editor .hljs-built_in, .ll-editor .hljs-meta { color: var(--color-violet-700); }
+.ll-editor .hljs-string, .ll-editor .hljs-attr, .ll-editor .hljs-symbol, .ll-editor .hljs-addition { color: var(--color-emerald-700); }
+.ll-editor .hljs-number, .ll-editor .hljs-regexp, .ll-editor .hljs-deletion { color: var(--color-amber-700); }
+.ll-editor .hljs-title, .ll-editor .hljs-function, .ll-editor .hljs-section, .ll-editor .hljs-name, .ll-editor .hljs-selector-id, .ll-editor .hljs-selector-class { color: var(--color-blue-700); }
+.ll-editor .hljs-type, .ll-editor .hljs-class, .ll-editor .hljs-variable, .ll-editor .hljs-template-variable { color: var(--color-teal-700); }
+.dark .ll-editor .hljs-keyword, .dark .ll-editor .hljs-selector-tag, .dark .ll-editor .hljs-literal, .dark .ll-editor .hljs-built_in, .dark .ll-editor .hljs-meta { color: var(--color-violet-400); }
+.dark .ll-editor .hljs-string, .dark .ll-editor .hljs-attr, .dark .ll-editor .hljs-symbol, .dark .ll-editor .hljs-addition { color: var(--color-emerald-400); }
+.dark .ll-editor .hljs-number, .dark .ll-editor .hljs-regexp, .dark .ll-editor .hljs-deletion { color: var(--color-amber-400); }
+.dark .ll-editor .hljs-title, .dark .ll-editor .hljs-function, .dark .ll-editor .hljs-section, .dark .ll-editor .hljs-name, .dark .ll-editor .hljs-selector-id, .dark .ll-editor .hljs-selector-class { color: var(--color-blue-400); }
+.dark .ll-editor .hljs-type, .dark .ll-editor .hljs-class, .dark .ll-editor .hljs-variable, .dark .ll-editor .hljs-template-variable { color: var(--color-teal-400); }
+
+/* Table */
+.ll-editor .tableWrapper { overflow-x: auto; padding: 3px 0; }
+.ll-editor table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  width: 100%;
+  margin: 0;
+  font-size: 0.9375em;
+}
+.ll-editor td,
+.ll-editor th {
+  position: relative;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  vertical-align: top;
+  min-width: 48px;
+}
+.ll-editor th { background: var(--muted); font-weight: 600; text-align: left; }
+.ll-editor :is(td, th) > p { padding: 0; }
+.ll-editor .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--info) 12%, transparent);
+  pointer-events: none;
+}
+.ll-editor .column-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: -1px;
+  right: -2px;
+  width: 3px;
+  background: var(--info);
+  pointer-events: none;
+}
+.ll-editor.resize-cursor { cursor: col-resize; }
+
+/* Layout */
+.ll-editor .ll-columns {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 24px;
+  margin: 3px 0;
+}
+.ll-editor .ll-column { min-width: 0; border-radius: 6px; }
+/* An empty column has nothing to show, so outline it until it gets content. */
+.ll-editor .ll-column:has(> p:only-child > br:only-child) {
+  outline: 1px dashed color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  outline-offset: 4px;
+}
+.ll-editor .ll-group {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+  margin: 6px 0;
+  background: color-mix(in srgb, var(--muted) 50%, transparent);
+}
+
+/* Divider */
+.ll-editor hr {
+  border: none;
+  height: 1px;
+  background: var(--border);
+  padding: 0;
+  margin: 12px 0;
+}
+
+/* Media */
+.ll-editor .ll-media { padding: 6px 0; }
+.ll-editor .ll-image-frame { max-width: 100%; }
+.ll-editor .ll-image { display: block; width: 100%; border-radius: var(--radius); }
+.ll-editor .ll-media[data-width="small"] .ll-image-frame { width: 240px; }
+.ll-editor .ll-media[data-width="medium"] .ll-image-frame { width: 60%; }
+.ll-editor .ll-media[data-width="full"] .ll-image-frame { width: 100%; }
+/* Selected media is outlined, text is tinted: a tint would spill past a narrow image, and one rule
+   for every media kind keeps them alike. The selection classes sit on TipTap's node element. */
+.ll-editor :is(.node-image, .node-video, .node-audio, .node-file, .node-embed):is(.ll-selected, .ProseMirror-selectednode) { background: none; box-shadow: none; }
+.ll-editor :is(.node-image, .node-video, .node-audio, .node-file, .node-embed):is(.ll-selected, .ProseMirror-selectednode) :is(.ll-image, .ll-player, .ll-file, .ll-embed, .ll-media-empty) {
+  outline: 2px solid var(--info);
+  outline-offset: 2px;
+}
+/* The video rounds its own top corners, since clipping the player would also clip its edge shadow.
+   A tall video letterboxes at 70vh, so its controls stay on screen. */
+.ll-editor .ll-video {
+  display: block;
+  width: 100%;
+  max-height: 70vh;
+  background: black;
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
+/* Full screen holds the whole player: the picture fills what the controls row leaves. */
+.ll-editor .ll-player:fullscreen { display: flex; flex-direction: column; border: 0; border-radius: 0; }
+.ll-editor .ll-player:fullscreen .ll-video { height: 100%; max-height: none; object-fit: contain; border-radius: 0; }
+.ll-editor .ll-player:fullscreen::before { content: none; }
+/* A read-only page offers no way to fill an empty media block. Hidden, not removed, so the
+   row keeps its height. */
+.ll-editor[contenteditable="false"] .ll-media-empty > :not(svg, span) { visibility: hidden; }
+/* While a block's own field is in use, it isn't "selected" in any way the user cares about. */
+.ll-editor :is(.ll-selected, .ProseMirror-selectednode):focus-within { background: none; box-shadow: none; }
+.ll-editor :is(.node-image, .node-video, .node-audio, .node-file, .node-embed):focus-within .ll-media-empty { outline: none; }
+.ll-editor .ll-embed {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--muted);
+}
+.ll-editor .ll-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* Emoji prefix: a 1em box sharing the text's baseline, so it never makes the line taller.
+   The hover fill is a shadow, which takes no space either. */
+.ll-editor .ll-emoji {
+  display: inline-block;
+  width: 1.25em;
+  height: 1em;
+  margin-right: 0.375em;
+  line-height: 1;
+  text-align: center;
+  vertical-align: baseline;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.ll-editor .ll-emoji:hover { background: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+.ll-editor[contenteditable="false"] .ll-emoji { pointer-events: none; }
+
+/* Inline marks */
+.ll-editor a {
+  color: var(--info);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--info) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.ll-editor a:hover { text-decoration-color: currentColor; }
+.ll-editor mark {
+  background: color-mix(in srgb, var(--color-yellow-300) 50%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.dark .ll-editor mark {
+  background: color-mix(in srgb, var(--color-yellow-400) 35%, transparent);
+}
+.ll-editor s { color: var(--muted-foreground); }
+/* The selected text while focus is in the link field. */
+.ll-editor .ll-blur-selection { background-color: Highlight; }
+
+/* Placeholder, set by the Placeholder extension on the block under the cursor. */
+.ll-editor :is(p, h1, h2, h3, h4, summary).is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* Selected blocks: a soft tint that reaches 4px past the text on each side, half the handle's gap. The side shadows
+   don't reach up or down, so a run of selected blocks reads as one shape with no overlap. */
+.ll-editor .ll-selected,
+.ll-editor .ProseMirror-selectednode {
+  --ll-tint: color-mix(in srgb, var(--info) 10%, transparent);
+  background: var(--ll-tint);
+  box-shadow: -4px 0 0 0 var(--ll-tint), 4px 0 0 0 var(--ll-tint);
+  border-radius: 6px;
+}
+.ll-editor .ll-selected + .ll-selected { border-top-left-radius: 0; border-top-right-radius: 0; }
+.ll-editor .ll-selected:has(+ .ll-selected) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.ll-editor hr.ProseMirror-selectednode { background: var(--info); }
+
+/* Where a dragged block or file will land. */
+.ll-drop-line {
+  position: absolute;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--info);
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* Block handle fades in next to the hovered block. */
+.ll-handle {
+  animation: ll-fade-in 120ms ease-out;
+}
+@keyframes ll-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

@@ -30,7 +30,8 @@ const SIDEBAR_COOKIE_MAX_AGE: number = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH: string = "16rem";
 const SIDEBAR_WIDTH_MOBILE: string = "18rem";
 const SIDEBAR_WIDTH_ICON: string = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT: string = "b";
+// LeadingLight: ⌘\ instead of ⌘B, because ⌘B is bold in the editor.
+const SIDEBAR_KEYBOARD_SHORTCUT: string = "\\";
 
 const sidebarMenuButtonVariants = cva(
   "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-lg p-2 text-left text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pe-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0",
@@ -106,7 +107,8 @@ export function SidebarProvider({
       }
 
       // This sets the cookie to keep the sidebar state.
-      await cookieStore.set({
+      // LeadingLight: the macOS webview has no cookieStore on the app's own scheme.
+      await globalThis.cookieStore?.set({
         expires: Date.now() + SIDEBAR_COOKIE_MAX_AGE * 1000,
         name: SIDEBAR_COOKIE_NAME,
         path: "/",
