@@ -2,7 +2,6 @@ import { ArrowLeft, Info, Keyboard, Palette } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { AboutSection } from "@/views/settings/about-section";
-import { AppearanceSection } from "@/views/settings/appearance-section";
 import { closeSettings, openSettings, type SettingsSectionId } from "@/views/settings/open";
 import { ShortcutsSection } from "@/views/settings/shortcuts-section";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -19,11 +18,12 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { PanelHeader } from "~/components/panel-header";
+import { AppearanceSection } from "~/components/settings/appearance-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. The sections themselves are Shipyard's (vendor/shipyard); the ones about agents,
-// machines and Shipyard's own General stay out until there is something of ours behind them.
+// one. Appearance is ours; Shortcuts and About are Shipyard's (vendor/shipyard); the ones
+// about agents, machines and Shipyard's own General stay out until there is ours behind them.
 const SECTIONS: { id: SettingsSectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
