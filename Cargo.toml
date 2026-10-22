@@ -9,3 +9,7 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# Proc macros are libraries loaded during the build; macOS 27 refuses to load them once stripped.
+[profile.release.build-override]
+strip = false
