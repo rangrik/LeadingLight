@@ -1,0 +1,28 @@
+/* The clean reading column over a chat background: the page's own colour
+   behind the conversation and its composer, at least 86% and as opaque as
+   the background needs for text to read over it (--chat-sheet, from a
+   contrast check in chat-background-render.ts). It eases in over 96px
+   from just outside the column's edges, so the background lives in the
+   margins and only whispers under the text. */
+.cb-sheet {
+  background: color-mix(in srgb, var(--background) var(--chat-sheet, 88%), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 96px, #000 calc(100% - 96px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 96px, #000 calc(100% - 96px), transparent);
+}
+/* Settings' preview is small: a shorter fade. */
+.cb-sheet-preview {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+/* At Full the column is the pane, so text runs to its edges: the sheet
+   eases off toward them gently and never below three quarters, so the
+   background shows at the sides but still only whispers under text. */
+.cb-sheet[data-full] {
+  -webkit-mask-image: linear-gradient(to right, rgb(0 0 0 / 0.75), #000 22%, #000 78%, rgb(0 0 0 / 0.75));
+  mask-image: linear-gradient(to right, rgb(0 0 0 / 0.75), #000 22%, #000 78%, rgb(0 0 0 / 0.75));
+}
+/* A picture shown as it is gets frosted glass. */
+.cb-sheet[data-glass] {
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  backdrop-filter: blur(24px) saturate(1.3);
+}

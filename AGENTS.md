@@ -12,6 +12,9 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
   `https://coss.com/ui/docs/components/<name>.md` per component, https://coss.com/ui/llms.txt (index).
   Add one with `cd packages/ui && pnpm dlx shadcn@latest add @coss/<name>`.
 - `packages/editor` — our block editor, built on TipTap/ProseMirror. Import as `@leadinglight/editor/editor`.
+- `vendor/shipyard` — Shipyard's app source, verbatim (MIT), synced from upstream with
+  `pnpm sync:shipyard`. Never edit it; read `vendor/shipyard/README.md`. In `apps/desktop`,
+  `@/` is the vendored tree and `~/` is our own `src/`.
 - `features/` — Gherkin specs. This is the contract for what the app does.
 - `docs/DECISIONS.md` — why things are the way they are. Read it before touching an architecture piece.
 - `docs/PLAN.md` — milestones.
@@ -25,6 +28,9 @@ pnpm dev                                   # Tauri window (SQLite storage)
 pnpm --filter @leadinglight/desktop dev    # browser only at :1420 (IndexedDB storage)
 pnpm typecheck
 pnpm qa                                    # Playwright, headless Chromium, against :1420
+QA_PORT=$BERTH_PORT pnpm qa                # in a Berth worktree, when :1420 is another checkout's
+pnpm check:themes                          # every built-in theme keeps its contrast
+pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor/shipyard
 ```
 
 ## Design rules
@@ -56,7 +62,7 @@ pnpm qa                                    # Playwright, headless Chromium, agai
 2. Build it.
 3. Typecheck. Do one short smoke in a headless browser yourself.
 4. Hand QA to a subagent: model Sonnet 5.5, effort xhigh. It drives the browser build
-   (`pnpm --filter @leadinglight/desktop dev`, port 1420, bound to 127.0.0.1) in the worktree's
+   (`pnpm --filter @leadinglight/desktop dev`, port 1420 or `$BERTH_PORT`, bound to 127.0.0.1) in the worktree's
    Berth agent browser (`berthd browser … --tab qa`), which the user can watch live in Shipyard.
    It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
    drives the native Tauri window.

@@ -1,0 +1,16 @@
+{
+  "name": "berth-plugin-hello-ports",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@berth/plugin": "file:../../packages/plugin-sdk",
+    "@types/react": "^19.1.8",
+    "esbuild": "^0.25.0",
+    "typescript": "~6.0.3"
+  }
+}

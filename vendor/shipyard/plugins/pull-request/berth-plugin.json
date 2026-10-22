@@ -1,0 +1,8 @@
+{
+  "id": "pull-request",
+  "name": "Pull request",
+  "version": "0.1.0",
+  "description": "The worktree branch's pull request: checks, reviews and comments, or open one.",
+  "main": "dist/index.js",
+  "builtin": true
+}

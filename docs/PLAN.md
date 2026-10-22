@@ -25,6 +25,15 @@ See `features/blocks.feature`, `features/selection.feature`, `features/polish.fe
 
 What this milestone left out is in `DEFERRED.md`.
 
+## M1.75 — Shipyard inside (now)
+
+Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes,
+Settings, shortcuts and the menu bar, zoom, stillness, the mock agent connection.
+
+- Our own Settings container and copy; agent sections out.
+- An agents area on the conversation UI, on mock data first, then a backend.
+- Ask about a selection: a provider behind one `ask` interface (Settings › AI).
+
 ## M2 — Objects (deferred, see `DEFERRED.md`)
 
 - Object types with properties (text, date, number, select, relation). A type picker

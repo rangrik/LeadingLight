@@ -21,11 +21,15 @@
     "noFallthroughCasesInSwitch": true,
 
     "paths": {
-      "@/*": ["./src/*"],
+      "~/*": ["./src/*"],
+      "@/lib/shortcuts.json": ["./src/lib/shortcuts.json"],
+      "@/*": ["../../vendor/shipyard/app/src/*"],
+      "@berth/plugin": ["../../vendor/shipyard/packages/plugin-sdk/src/index.ts"],
+      "@berth/plugin/ui": ["../../vendor/shipyard/packages/plugin-sdk/src/ui.ts"],
       "@leadinglight/ui/*": ["../../packages/ui/src/*"],
       "@leadinglight/editor/*": ["../../packages/editor/src/*"]
     }
   },
-  "include": ["src", "qa"],
+  "include": ["src", "qa", "../../vendor/shipyard/app/src/vite-env.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

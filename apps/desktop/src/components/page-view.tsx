@@ -1,9 +1,9 @@
 import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { assets } from "@/lib/assets";
-import { openLink } from "@/lib/links";
-import type { LLObject, ObjectPatch } from "@/lib/objects";
-import { trackFlush } from "@/lib/saving";
+import { assets } from "~/lib/assets";
+import { openLink } from "~/lib/links";
+import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { trackFlush } from "~/lib/saving";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc };

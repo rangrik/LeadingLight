@@ -1,0 +1,940 @@
+{
+ "$schema": "berth.visualdiff/v1",
+ "title": "Visual changes: search-perf vs accepted",
+ "created": "2026-10-07T17:07:18.800176Z",
+ "base": {
+  "kind": "baseline",
+  "label": "accepted",
+  "commit": "e60622c",
+  "taken": "2026-10-07T17:07:13Z"
+ },
+ "head": {
+  "kind": "worktree",
+  "label": "search-perf",
+  "url": "http://search-perf.shop.devl.localhost:1377",
+  "commit": "e60622c"
+ },
+ "settings": {
+  "sizes": [
+   375,
+   768,
+   1280
+  ],
+  "scale": 1,
+  "threshold": 0.03,
+  "unchanged_below": 0.02,
+  "max_height": 4000,
+  "color_scheme": "light",
+  "color_schemes": [
+   "light"
+  ],
+  "reduced_motion": true,
+  "mask": [
+   "time",
+   ".avatar"
+  ],
+  "chromium": "chromium_headless_shell-1243"
+ },
+ "summary": {
+  "shots": 18,
+  "changed": 0,
+  "unchanged": 18,
+  "new": 0,
+  "removed": 0,
+  "errors": 0,
+  "regions": 0,
+  "layout": 0,
+  "max_pct": 0,
+  "text": "No visual changes · 6 pages × 3 sizes"
+ },
+ "pages": [
+  {
+   "path": "/about",
+   "title": "About · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "f2993ae96e4ed548.png",
+      "w": 375,
+      "h": 1127,
+      "status": 200
+     },
+     "after": {
+      "img": "7c11c548cc5947bd.png",
+      "w": 375,
+      "h": 1127,
+      "status": 200,
+      "ms": 778
+     },
+     "changed_px": 12,
+     "changed_pct": 0.003,
+     "aa_px": 58,
+     "masks": [
+      [
+       156,
+       236,
+       53,
+       19
+      ],
+      [
+       19,
+       403,
+       44,
+       44
+      ],
+      [
+       19,
+       501,
+       44,
+       44
+      ],
+      [
+       19,
+       599,
+       44,
+       44
+      ],
+      [
+       19,
+       697,
+       44,
+       44
+      ],
+      [
+       19,
+       795,
+       44,
+       44
+      ],
+      [
+       19,
+       893,
+       44,
+       44
+      ],
+      [
+       156,
+       236,
+       53,
+       19
+      ],
+      [
+       19,
+       403,
+       44,
+       44
+      ],
+      [
+       19,
+       501,
+       44,
+       44
+      ],
+      [
+       19,
+       599,
+       44,
+       44
+      ],
+      [
+       19,
+       697,
+       44,
+       44
+      ],
+      [
+       19,
+       795,
+       44,
+       44
+      ],
+      [
+       19,
+       893,
+       44,
+       44
+      ],
+      [
+       156,
+       236,
+       56,
+       19
+      ],
+      [
+       19,
+       403,
+       44,
+       44
+      ],
+      [
+       19,
+       501,
+       44,
+       44
+      ],
+      [
+       19,
+       599,
+       44,
+       44
+      ],
+      [
+       19,
+       697,
+       44,
+       44
+      ],
+      [
+       19,
+       795,
+       44,
+       44
+      ],
+      [
+       19,
+       893,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 7
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "1c48a4573666e879.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200
+     },
+     "after": {
+      "img": "3836253bcb41e583.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 745
+     },
+     "changed_px": 14,
+     "changed_pct": 0.002,
+     "aa_px": 80,
+     "masks": [
+      [
+       520,
+       190,
+       53,
+       19
+      ],
+      [
+       19,
+       357,
+       44,
+       44
+      ],
+      [
+       280,
+       357,
+       44,
+       44
+      ],
+      [
+       541,
+       357,
+       44,
+       44
+      ],
+      [
+       19,
+       455,
+       44,
+       44
+      ],
+      [
+       280,
+       455,
+       44,
+       44
+      ],
+      [
+       541,
+       455,
+       44,
+       44
+      ],
+      [
+       520,
+       190,
+       53,
+       19
+      ],
+      [
+       19,
+       357,
+       44,
+       44
+      ],
+      [
+       280,
+       357,
+       44,
+       44
+      ],
+      [
+       541,
+       357,
+       44,
+       44
+      ],
+      [
+       19,
+       455,
+       44,
+       44
+      ],
+      [
+       280,
+       455,
+       44,
+       44
+      ],
+      [
+       541,
+       455,
+       44,
+       44
+      ],
+      [
+       520,
+       190,
+       56,
+       19
+      ],
+      [
+       19,
+       357,
+       44,
+       44
+      ],
+      [
+       280,
+       357,
+       44,
+       44
+      ],
+      [
+       541,
+       357,
+       44,
+       44
+      ],
+      [
+       19,
+       455,
+       44,
+       44
+      ],
+      [
+       280,
+       455,
+       44,
+       44
+      ],
+      [
+       541,
+       455,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 10
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "07a043d476999e9c.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200
+     },
+     "after": {
+      "img": "70adb2934c532cfc.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 743
+     },
+     "changed_px": 14,
+     "changed_pct": 0.001,
+     "aa_px": 72,
+     "masks": [
+      [
+       600,
+       203,
+       53,
+       19
+      ],
+      [
+       99,
+       370,
+       44,
+       44
+      ],
+      [
+       326,
+       370,
+       44,
+       44
+      ],
+      [
+       553,
+       370,
+       44,
+       44
+      ],
+      [
+       780,
+       370,
+       44,
+       44
+      ],
+      [
+       1007,
+       370,
+       44,
+       44
+      ],
+      [
+       99,
+       468,
+       44,
+       44
+      ],
+      [
+       600,
+       203,
+       53,
+       19
+      ],
+      [
+       99,
+       370,
+       44,
+       44
+      ],
+      [
+       326,
+       370,
+       44,
+       44
+      ],
+      [
+       553,
+       370,
+       44,
+       44
+      ],
+      [
+       780,
+       370,
+       44,
+       44
+      ],
+      [
+       1007,
+       370,
+       44,
+       44
+      ],
+      [
+       99,
+       468,
+       44,
+       44
+      ],
+      [
+       600,
+       203,
+       56,
+       19
+      ],
+      [
+       99,
+       370,
+       44,
+       44
+      ],
+      [
+       326,
+       370,
+       44,
+       44
+      ],
+      [
+       553,
+       370,
+       44,
+       44
+      ],
+      [
+       780,
+       370,
+       44,
+       44
+      ],
+      [
+       1007,
+       370,
+       44,
+       44
+      ],
+      [
+       99,
+       468,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 18
+    }
+   ],
+   "max_pct": 0.003
+  },
+  {
+   "path": "/",
+   "title": "Everyday goods · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "7d85165597115dbe.png",
+      "w": 375,
+      "h": 1823,
+      "status": 200
+     },
+     "after": {
+      "img": "7d85165597115dbe.png",
+      "w": 375,
+      "h": 1823,
+      "status": 200,
+      "ms": 822
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 10
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "35bfd7144a05ec26.png",
+      "w": 768,
+      "h": 1099,
+      "status": 200
+     },
+     "after": {
+      "img": "35bfd7144a05ec26.png",
+      "w": 768,
+      "h": 1099,
+      "status": 200,
+      "ms": 778
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 19
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "fe3422b474be78da.png",
+      "w": 1280,
+      "h": 855,
+      "status": 200
+     },
+     "after": {
+      "img": "fe3422b474be78da.png",
+      "w": 1280,
+      "h": 855,
+      "status": 200,
+      "ms": 844
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 15
+    }
+   ],
+   "max_pct": 0
+  },
+  {
+   "path": "/search",
+   "title": "Search · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "af57301744a34532.png",
+      "w": 375,
+      "h": 2469,
+      "status": 200
+     },
+     "after": {
+      "img": "af57301744a34532.png",
+      "w": 375,
+      "h": 2469,
+      "status": 200,
+      "ms": 826
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 15
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "402b067de75aa415.png",
+      "w": 768,
+      "h": 1296,
+      "status": 200
+     },
+     "after": {
+      "img": "402b067de75aa415.png",
+      "w": 768,
+      "h": 1296,
+      "status": 200,
+      "ms": 747
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 13
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "9834ef92a71c2950.png",
+      "w": 1280,
+      "h": 1053,
+      "status": 200
+     },
+     "after": {
+      "img": "9834ef92a71c2950.png",
+      "w": 1280,
+      "h": 1053,
+      "status": 200,
+      "ms": 756
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 22
+    }
+   ],
+   "max_pct": 0
+  },
+  {
+   "path": "/login",
+   "title": "Sign in · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "84aa7bb825188dca.png",
+      "w": 375,
+      "h": 812,
+      "status": 200
+     },
+     "after": {
+      "img": "84aa7bb825188dca.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 728
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 7
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "51e6780afb725a84.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200
+     },
+     "after": {
+      "img": "51e6780afb725a84.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 801
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 18
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "00cb3bad12435940.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200
+     },
+     "after": {
+      "img": "00cb3bad12435940.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 795
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 16
+    }
+   ],
+   "max_pct": 0
+  },
+  {
+   "path": "/account",
+   "title": "Your account · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "79b25d1a08c09fc9.png",
+      "w": 375,
+      "h": 812,
+      "status": 200
+     },
+     "after": {
+      "img": "79b25d1a08c09fc9.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 692
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 5
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "9574e6d96284ce40.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200
+     },
+     "after": {
+      "img": "9574e6d96284ce40.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 699
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 12
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "7050e22ec934e5cf.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200
+     },
+     "after": {
+      "img": "7050e22ec934e5cf.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 691
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 16
+    }
+   ],
+   "max_pct": 0
+  },
+  {
+   "path": "/deals",
+   "title": "Deals · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "55a1f3aeb8fe0a03.png",
+      "w": 375,
+      "h": 1340,
+      "status": 200
+     },
+     "after": {
+      "img": "55a1f3aeb8fe0a03.png",
+      "w": 375,
+      "h": 1340,
+      "status": 200,
+      "ms": 781
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 6
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "ad635bbadb873e65.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200
+     },
+     "after": {
+      "img": "ad635bbadb873e65.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 700
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 13
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "b53bb3c7c302ea2b.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200
+     },
+     "after": {
+      "img": "b53bb3c7c302ea2b.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 704
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 19
+    }
+   ],
+   "max_pct": 0
+  }
+ ],
+ "timing": {
+  "total_ms": 5210,
+  "browser_start_ms": 77,
+  "shoot_ms": 4689,
+  "diff_ms": 145,
+  "write_ms": 74,
+  "bytes": 1281490,
+  "all_bytes": 1281490
+ }
+}

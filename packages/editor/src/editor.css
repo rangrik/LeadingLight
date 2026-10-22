@@ -150,17 +150,19 @@
   border-radius: 4px;
   padding: 0.15em 0.35em;
 }
-.ll-editor .hljs-comment, .ll-editor .hljs-quote { color: var(--muted-foreground); font-style: italic; }
-.ll-editor .hljs-keyword, .ll-editor .hljs-selector-tag, .ll-editor .hljs-literal, .ll-editor .hljs-built_in, .ll-editor .hljs-meta { color: var(--color-violet-700); }
-.ll-editor .hljs-string, .ll-editor .hljs-attr, .ll-editor .hljs-symbol, .ll-editor .hljs-addition { color: var(--color-emerald-700); }
-.ll-editor .hljs-number, .ll-editor .hljs-regexp, .ll-editor .hljs-deletion { color: var(--color-amber-700); }
-.ll-editor .hljs-title, .ll-editor .hljs-function, .ll-editor .hljs-section, .ll-editor .hljs-name, .ll-editor .hljs-selector-id, .ll-editor .hljs-selector-class { color: var(--color-blue-700); }
-.ll-editor .hljs-type, .ll-editor .hljs-class, .ll-editor .hljs-variable, .ll-editor .hljs-template-variable { color: var(--color-teal-700); }
-.dark .ll-editor .hljs-keyword, .dark .ll-editor .hljs-selector-tag, .dark .ll-editor .hljs-literal, .dark .ll-editor .hljs-built_in, .dark .ll-editor .hljs-meta { color: var(--color-violet-400); }
-.dark .ll-editor .hljs-string, .dark .ll-editor .hljs-attr, .dark .ll-editor .hljs-symbol, .dark .ll-editor .hljs-addition { color: var(--color-emerald-400); }
-.dark .ll-editor .hljs-number, .dark .ll-editor .hljs-regexp, .dark .ll-editor .hljs-deletion { color: var(--color-amber-400); }
-.dark .ll-editor .hljs-title, .dark .ll-editor .hljs-function, .dark .ll-editor .hljs-section, .dark .ll-editor .hljs-name, .dark .ll-editor .hljs-selector-id, .dark .ll-editor .hljs-selector-class { color: var(--color-blue-400); }
-.dark .ll-editor .hljs-type, .dark .ll-editor .hljs-class, .dark .ll-editor .hljs-variable, .dark .ll-editor .hljs-template-variable { color: var(--color-teal-400); }
+/* Token colours come from the theme as --code-* (apps/desktop/src/lib/use-code-colors.ts);
+   without them, Tailwind's palette. */
+.ll-editor .hljs-comment, .ll-editor .hljs-quote { color: var(--code-comment, var(--muted-foreground)); font-style: italic; }
+.ll-editor .hljs-keyword, .ll-editor .hljs-selector-tag, .ll-editor .hljs-literal, .ll-editor .hljs-built_in, .ll-editor .hljs-meta { color: var(--code-keyword, var(--color-violet-700)); }
+.ll-editor .hljs-string, .ll-editor .hljs-attr, .ll-editor .hljs-symbol, .ll-editor .hljs-addition { color: var(--code-string, var(--color-emerald-700)); }
+.ll-editor .hljs-number, .ll-editor .hljs-regexp, .ll-editor .hljs-deletion { color: var(--code-number, var(--color-amber-700)); }
+.ll-editor .hljs-title, .ll-editor .hljs-function, .ll-editor .hljs-section, .ll-editor .hljs-name, .ll-editor .hljs-selector-id, .ll-editor .hljs-selector-class { color: var(--code-title, var(--color-blue-700)); }
+.ll-editor .hljs-type, .ll-editor .hljs-class, .ll-editor .hljs-variable, .ll-editor .hljs-template-variable { color: var(--code-type, var(--color-teal-700)); }
+.dark .ll-editor .hljs-keyword, .dark .ll-editor .hljs-selector-tag, .dark .ll-editor .hljs-literal, .dark .ll-editor .hljs-built_in, .dark .ll-editor .hljs-meta { color: var(--code-keyword, var(--color-violet-400)); }
+.dark .ll-editor .hljs-string, .dark .ll-editor .hljs-attr, .dark .ll-editor .hljs-symbol, .dark .ll-editor .hljs-addition { color: var(--code-string, var(--color-emerald-400)); }
+.dark .ll-editor .hljs-number, .dark .ll-editor .hljs-regexp, .dark .ll-editor .hljs-deletion { color: var(--code-number, var(--color-amber-400)); }
+.dark .ll-editor .hljs-title, .dark .ll-editor .hljs-function, .dark .ll-editor .hljs-section, .dark .ll-editor .hljs-name, .dark .ll-editor .hljs-selector-id, .dark .ll-editor .hljs-selector-class { color: var(--code-title, var(--color-blue-400)); }
+.dark .ll-editor .hljs-type, .dark .ll-editor .hljs-class, .dark .ll-editor .hljs-variable, .dark .ll-editor .hljs-template-variable { color: var(--code-type, var(--color-teal-400)); }
 
 /* Table */
 .ll-editor .tableWrapper { overflow-x: auto; padding: 3px 0; }

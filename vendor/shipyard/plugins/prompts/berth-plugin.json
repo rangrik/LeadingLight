@@ -1,0 +1,9 @@
+{
+  "id": "prompts",
+  "name": "Prompt library",
+  "version": "0.1.0",
+  "description": "Saved prompts with {{variables}}: send one to an agent from ⌘K or a pane's menu, or to several agents at once.",
+  "main": "dist/index.js",
+  "builtin": true,
+  "defaultEnabled": true
+}

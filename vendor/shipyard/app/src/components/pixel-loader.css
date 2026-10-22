@@ -1,0 +1,12 @@
+/* PixelLoader's grid (pixel-loader.tsx): nine cells in the text's colour,
+   sized to its font, faint until the chevron of light passes over them. */
+.px-grid { display: inline-grid; flex-shrink: 0; grid-template-columns: repeat(3, 0.28em); gap: 0.1em; }
+.px-grid i { width: 0.28em; height: 0.28em; border-radius: 0.04em; background: currentColor; opacity: 0.2; animation: px-on 650ms ease-in-out infinite; }
+@keyframes px-on { 40% { opacity: 1; } }
+
+:root[data-berth-hidden] .px-grid i { animation-play-state: paused; }
+/* Still: a ">" of lit cells, the front as it would be mid-sweep. */
+@media (prefers-reduced-motion: reduce) {
+  .px-grid i { animation: none; }
+  .px-grid i:is(:nth-child(1), :nth-child(5), :nth-child(7)) { opacity: 0.75; }
+}

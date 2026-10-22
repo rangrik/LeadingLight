@@ -62,3 +62,17 @@ not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
 
 The traffic lights are centred on the page panel's header line (y 40). AppKit puts a
 light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 42.
+
+## 6. Shipyard is vendored, verbatim, and synced from upstream
+
+Shipyard (cosscom/shipyard, MIT) is the same stack as ours (Tauri 2, React 19, COSS UI)
+and has themes, Settings, a type scale and grid, a shortcuts table with a Mac menu bar,
+and an agent conversation UI we want. Rewriting them would cost months and lose the
+fixes upstream keeps shipping. So its `app/src`, scripts, perf and plugin sources live
+under `vendor/shipyard` unchanged, mirroring upstream's paths; `UPSTREAM.json` records
+the commit and `scripts/sync-shipyard.sh` applies upstream's diff with a 3-way merge.
+Nothing in there is edited: our code imports it (`@/` is the vendored tree's alias, `~/`
+is ours) and overrides by alias (the shortcuts table) or CSS. Its `index.css` is the
+Tailwind root, with the system font put back after it. The agent code runs on its mock
+fixtures (`__BERTH_DEMO__`) until LeadingLight has an agent backend. What was chosen to
+wire in, and what was left out, is in `docs/SHIPYARD.md`.

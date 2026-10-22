@@ -1,3 +1,6 @@
 packages:
   - apps/*
   - packages/*
+  # Shipyard, vendored (vendor/shipyard/README.md).
+  - vendor/shipyard/app
+  - vendor/shipyard/packages/plugin-sdk

@@ -6,6 +6,8 @@
     "dev": "pnpm --filter @leadinglight/desktop tauri dev",
     "build": "pnpm --filter @leadinglight/desktop tauri build",
     "typecheck": "pnpm -r typecheck",
-    "qa": "pnpm --filter @leadinglight/desktop qa"
+    "qa": "pnpm --filter @leadinglight/desktop qa",
+    "check:themes": "pnpm --filter @leadinglight/shipyard run check:themes",
+    "sync:shipyard": "scripts/sync-shipyard.sh"
   }
 }

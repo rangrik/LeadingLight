@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": [],
+    "typeRoots": ["../app/node_modules/@types"],
+    "paths": {
+      "@berth/plugin": ["../packages/plugin-sdk/src/index.ts"],
+      "@berth/plugin/ui": ["../packages/plugin-sdk/src/ui.ts"],
+      "react": ["../app/node_modules/@types/react"],
+      "react/jsx-runtime": ["../app/node_modules/@types/react/jsx-runtime"]
+    }
+  },
+  "include": ["*/src/**/*"],
+  "exclude": ["hello-ports"]
+}

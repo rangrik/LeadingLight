@@ -1,30 +1,26 @@
-@import "@leadinglight/ui/globals.css";
+/* Shipyard's stylesheet is the Tailwind root: the COSS tokens, the type scale,
+   the layout grid, density and themes (vendor/shipyard/README.md). */
+@import "../../../vendor/shipyard/app/src/index.css";
 @import "@leadinglight/editor/editor.css";
+@source "../../../packages/ui/src";
 @source "../../../packages/editor/src";
+@source "../../../vendor/shipyard/app/src";
 
-html {
-  color-scheme: light;
-}
-html.dark {
-  color-scheme: dark;
-}
-
-html,
-body,
-#root {
-  height: 100%;
+/* The system font first (docs/DECISIONS.md, 2); Shipyard's Inter is the fallback. */
+@theme inline {
+  --font-heading: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', monospace;
 }
 
-/* Desktop feel: chrome is not selectable, only text you can edit. */
-body {
-  -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-  user-select: none;
+/* Shipyard's Settings nav is as wide as our sidebar (its own default is 304px). */
+.ll-settings {
+  --sidebar-w: 256px;
 }
-input,
-textarea,
-[contenteditable] {
-  user-select: text;
+/* Its nav keeps a 40px strip for traffic lights placed at y 20; ours sit at y 40
+   (App.tsx chrome), so in the Mac app the strip grows to clear them. */
+.ll-settings nav > .h-bar {
+  height: max(40px, calc(var(--traffic-top) + 16px));
 }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
