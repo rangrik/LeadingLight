@@ -31,6 +31,7 @@ pnpm qa                                    # Playwright, headless Chromium, agai
 QA_PORT=$BERTH_PORT pnpm qa                # in a Berth worktree, when :1420 is another checkout's
 pnpm check:themes                          # every built-in theme keeps its contrast
 pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor/shipyard
+pnpm install:app                           # build the Mac app and put it in /Applications
 ```
 
 ## Design rules
@@ -68,6 +69,9 @@ pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor
    drives the native Tauri window.
 5. Fix what it found. Re-run QA on the failed scenarios.
 6. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
+7. Once the change is merged into main, build the Mac app from main and install it
+   (`pnpm install:app`, which refuses while the app is running: ask the user to quit it, never
+   kill it), then ask the user to test it, saying what to try and what to look at.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
