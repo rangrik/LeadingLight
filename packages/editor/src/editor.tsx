@@ -23,15 +23,63 @@ function known(schema: Schema, node: JSONContent): JSONContent | null {
   return { ...node, marks: node.marks?.filter((m) => schema.marks[m.type]), content };
 }
 
+export type Selected = { text: string; from: number; to: number };
+
 export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
   // For changes made from outside the page (linking a mention, merging a tag).
   getJSON: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
+  // Focus back where the caret was, for a panel giving the keyboard back.
+  refocus: () => void;
   hasFocus: () => boolean;
   placeAt: (x: number, y: number) => boolean;
   clearBlocks: () => void;
+  selection: () => Selected;
+  find: (text: string, near: number) => Selected | null;
+  // The page as plain text, for an assistant's context.
+  text: () => string;
+  // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
+  // takes focus: the panel that inserts keeps the keyboard.
+  insertAfter: (pos: number, html: string) => void;
+  replaceRange: (from: number, to: number, html: string) => void;
 };
+
+const selected = (editor: Editor): Selected => {
+  const { from, to } = editor.state.selection;
+  return { text: editor.state.doc.textBetween(from, to, "\n"), from, to };
+};
+
+// Where text (as selection() wrote it, "\n" between blocks) now is, nearest to where it was:
+// an answer's Insert or Replace must not trust positions from before the page was edited.
+function locate(editor: Editor, text: string, near: number): Selected | null {
+  if (!text) return null;
+  let s = "";
+  const at: number[] = [];
+  let first = true;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.isTextblock) {
+      if (!first) {
+        s += "\n";
+        at.push(-1);
+      }
+      first = false;
+    }
+    if (node.isText && node.text) {
+      for (let i = 0; i < node.text.length; i++) at.push(pos + i);
+      s += node.text;
+    }
+    return true;
+  });
+  let best: Selected | null = null;
+  for (let i = s.indexOf(text); i >= 0; i = s.indexOf(text, i + 1)) {
+    const from = at[i];
+    const last = at[i + text.length - 1];
+    if (from < 0 || last < 0) continue;
+    if (!best || Math.abs(from - near) < Math.abs(best.from - near)) best = { text, from, to: last + 1 };
+  }
+  return best;
+}
 
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
 
@@ -107,6 +155,7 @@ export function BlockEditor({
   openLink,
   links,
   readOnly,
+  onAsk,
   ref,
 }: {
   content: EditorDoc | null;
@@ -118,6 +167,8 @@ export function BlockEditor({
   readOnly?: boolean;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
+  // Given, the selection toolbar offers Ask with the selected words.
+  onAsk?: (selected: Selected) => void;
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
@@ -195,6 +246,22 @@ export function BlockEditor({
       },
       getJSON: () => editor.getJSON(),
       setContent: (doc) => editor.commands.setContent(doc),
+      refocus: () => {
+        editor.commands.focus();
+        editor.view.focus();
+      },
+      selection: () => selected(editor),
+      find: (text, near) => locate(editor, text, near),
+      text: () => editor.getText(),
+      insertAfter: (pos, html) => {
+        const doc = editor.state.doc;
+        const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+        editor.commands.insertContentAt($pos.depth ? $pos.after(1) : $pos.pos, html);
+      },
+      replaceRange: (from, to, html) => {
+        const size = editor.state.doc.content.size;
+        editor.commands.insertContentAt({ from: Math.min(from, size), to: Math.min(to, size) }, html);
+      },
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),
       placeAt: (x, y) => placeAt(editor, x, y),
@@ -218,7 +285,7 @@ export function BlockEditor({
       )}
       <EditorContent editor={editor} />
       <BlockHandle editor={editor} />
-      <SelectionToolbar editor={editor} />
+      <SelectionToolbar editor={editor} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} />
       <TableToolbar editor={editor} />
       <EmojiPicker editor={editor} />
     </div>

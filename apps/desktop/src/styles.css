@@ -13,6 +13,18 @@
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', monospace;
 }
 
+/* Answers in the agent panel: Markdown from micromark, kept quiet. */
+.ll-answer > * + * { margin-top: 0.5rem; }
+.ll-answer ul { list-style: disc; padding-left: 1.25rem; }
+.ll-answer ol { list-style: decimal; padding-left: 1.25rem; }
+.ll-answer h1, .ll-answer h2, .ll-answer h3 { font-weight: 600; }
+.ll-answer a { text-decoration: underline; }
+.ll-answer code { font-family: var(--font-mono); font-size: 0.875em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.3em; }
+.ll-answer pre { background: var(--muted); border-radius: var(--radius); padding: 0.5rem 0.75rem; overflow-x: auto; }
+.ll-answer pre code { background: none; padding: 0; }
+/* While an answer streams, a caret at the end of its last line. */
+.ll-answer[data-streaming] > :last-child::after { content: "▍"; color: var(--muted-foreground); }
+
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
   outline: none;

@@ -1,7 +1,9 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// The menu bar, built from src/lib/shortcuts.json (Shipyard's, see
-// vendor/shipyard/README.md). Each item tells the webview as berth://menu.
+// Claude through the installed Claude Code (agent.rs), and the menu bar, built from
+// src/lib/shortcuts.json (Shipyard's, see vendor/shipyard/README.md); each item tells
+// the webview as berth://menu.
+mod agent;
 mod menu;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
@@ -50,6 +52,8 @@ pub fn run() {
                 .add_migrations(DB_URL, migrations())
                 .build(),
         )
+        .manage(agent::Agents::default())
+        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_cancel])
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             menu_bar(_app)?;

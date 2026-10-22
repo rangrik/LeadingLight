@@ -1,7 +1,7 @@
-import { ArrowLeft, Info, Keyboard, Palette } from "lucide-react";
+import { ArrowLeft, Info, Keyboard, Palette, Sparkles } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { closeSettings, openSettings, type SettingsSectionId } from "@/views/settings/open";
+import { closeSettings } from "@/views/settings/open";
 import { ShortcutsSection } from "@/views/settings/shortcuts-section";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
@@ -18,21 +18,27 @@ import {
 } from "@leadinglight/ui/components/sidebar";
 import { PanelHeader } from "~/components/panel-header";
 import { AboutSection } from "~/components/settings/about-section";
+import { AiSection } from "~/components/settings/ai-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. Appearance and About are ours; Shortcuts is Shipyard's (vendor/shipyard); the ones
-// about agents, machines and Shipyard's own General stay out until there is ours behind them.
-const SECTIONS: { id: SettingsSectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
+// one. Appearance, AI and About are ours; Shortcuts is Shipyard's (vendor/shipyard); the
+// ones about agents, machines and Shipyard's own General stay out until there is ours.
+export type SectionId = "appearance" | "ai" | "shortcuts" | "about";
+
+const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
+  { id: "ai", title: "AI", icon: Sparkles, Component: AiSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
   { id: "about", title: "About", icon: Info, Component: AboutSection },
 ];
 
+export const openSection = (id: SectionId) => useStore.getState().setView({ kind: "settings", section: id });
+
 export function SettingsView({ open, onOpenChange, style }: { open: boolean; onOpenChange: (open: boolean) => void; style?: React.CSSProperties }) {
   const view = useStore((s) => s.view);
-  const id = (view.kind === "settings" && SECTIONS.some((s) => s.id === view.section) ? view.section : "appearance") as SettingsSectionId;
+  const id = (view.kind === "settings" && SECTIONS.some((s) => s.id === view.section) ? view.section : "appearance") as SectionId;
   const current = SECTIONS.find((s) => s.id === id)!;
 
   // Esc goes back to the app, unless something in the page has it (a field, a menu or a dialog).
@@ -61,7 +67,7 @@ export function SettingsView({ open, onOpenChange, style }: { open: boolean; onO
   );
 }
 
-function SettingsSidebar({ current }: { current: SettingsSectionId }) {
+function SettingsSidebar({ current }: { current: SectionId }) {
   const { isMobile, state } = useSidebar();
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset">
@@ -88,7 +94,7 @@ function SettingsSidebar({ current }: { current: SettingsSectionId }) {
                     aria-current={s.id === current ? "page" : undefined}
                     data-testid={`settings-nav-${s.id}`}
                     isActive={s.id === current}
-                    onClick={() => openSettings(s.id)}
+                    onClick={() => openSection(s.id)}
                   >
                     <s.icon />
                     <span>{s.title}</span>

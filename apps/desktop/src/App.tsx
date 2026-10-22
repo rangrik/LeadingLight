@@ -19,6 +19,7 @@ import {
 } from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { AgentPanel } from "~/components/agent-panel";
 import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { PageIconView, RowIcon } from "~/components/page-icon";
@@ -164,7 +165,7 @@ export default function App() {
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
         <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
-        <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
+        <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
           <PanelHeader
             current={shown?.title ?? null}
             icon={shown?.icon && <PageIconView icon={shown.icon} />}
@@ -192,6 +193,8 @@ export default function App() {
               </Empty>
             </div>
           )}
+          {/* The agent panel docks inside the page panel (lib/ask.ts opens it). */}
+          {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}

@@ -11,6 +11,7 @@ import { IconPicker, PageIconView } from "~/components/page-icon";
 import { PropertyPanel } from "~/components/property-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
+import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { openLink } from "~/lib/links";
 import { registerLive } from "~/lib/live";
@@ -113,6 +114,15 @@ export function PageView({ page }: { page: LLObject }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The agent panel asks about this page while it is in front (lib/ask.ts); with panes side
+  // by side, that is the page last worked in.
+  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => editorRef.current?.text() ?? "" };
+  useEffect(() => {
+    registerPage(askPage, editorRef.current);
+    return () => unregisterPage(page.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id]);
+
   useLayoutEffect(() => fit(titleRef.current), [title]);
   useLayoutEffect(() => fit(descriptionRef.current), [description]);
 
@@ -146,7 +156,7 @@ export function PageView({ page }: { page: LLObject }) {
   };
 
   return (
-    <div className="min-h-full" onMouseDown={onBlankMouseDown}>
+    <div className="min-h-full" onFocusCapture={() => registerPage(askPage, editorRef.current)} onMouseDown={onBlankMouseDown}>
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes. */}
       <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
@@ -259,6 +269,7 @@ export function PageView({ page }: { page: LLObject }) {
           <BlockEditor
             assets={assets}
             content={page.content}
+            onAsk={openAsk}
             onChange={(read) => queue({ content: read })}
             links={linkHost}
             onExitTop={() => titleRef.current?.focus()}
