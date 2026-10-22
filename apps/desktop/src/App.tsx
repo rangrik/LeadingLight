@@ -17,7 +17,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
-import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
@@ -29,6 +29,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { dailyFor, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { pageLabel } from "~/lib/labels";
@@ -42,9 +43,8 @@ import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 
-// Tags and daily notes have their own places; templates show in their type's settings.
-
 const SIDEBAR_KEY = "ll.sidebar.open";
+const WIDTH_KEY = "ll.sidebar.width";
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
@@ -52,12 +52,13 @@ const SettingsView = lazy(() => import("~/components/settings/settings-view").th
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
 // middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
 // The app's header is 36 px, level with the lights; a browser keeps sidebar-08's 64 px, level
-// with the sidebar's logo row.
-const chrome = (native: boolean) =>
+// with the sidebar's logo row. "?mac" lays a browser out as the app, for checking.
+const chrome = (native: boolean, sidebarWidth: number) =>
   ({
     "--traffic-top": native ? "24px" : "0px",
     "--traffic-left": native ? "72px" : "0px",
     "--header-height": native ? "36px" : "64px",
+    "--sidebar-width": `${sidebarWidth}px`,
   }) as React.CSSProperties;
 
 export default function App() {
@@ -96,11 +97,15 @@ export default function App() {
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
   const [native, setNative] = useState(false);
+  const mac = native || new URLSearchParams(location.search).has("mac");
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
+  const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
 
   useEffect(() => void isNative.then(setNative), []);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
@@ -167,14 +172,25 @@ export default function App() {
   // Under Settings it stays mounted, so the page's edits are kept, and goes inert; the
   // sidebar's own ⌘\ is then the Settings shell's to handle.
   const shell = (
-      <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
+      <SidebarProvider
+        // Nothing slides while the sidebar's edge is dragged, so the sidebar keeps up with the pointer.
+        className="isolate h-svh overflow-hidden data-resizing:**:transition-none"
+        data-resizing={resizing || undefined}
+        inert={settings || undefined}
+        onOpenChange={(open) => !settings && setSidebarOpen(open)}
+        open={sidebarOpen}
+        style={chrome(mac, sidebarWidth)}
+      >
+        {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
+        {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+        <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
         <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {root ? (
-            <PaneArea />
+            <PaneArea windowToggle={mac} />
           ) : (
             <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
-              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} />
+              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} toggle={!mac} />
               <Empty className="min-h-0 flex-1">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -215,7 +231,7 @@ export default function App() {
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
-                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)} />
+                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
               </Suspense>
             </div>
           )}

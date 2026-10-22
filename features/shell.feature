@@ -6,7 +6,10 @@ Feature: App shell
 
   Names used below:
   - card header: the bar at the top of a page's card
-  - "Toggle Sidebar" button at the left of the first card's header
+  - "Toggle Sidebar": in the app, in the title bar just right of the traffic lights, as in the
+    Claude app; in a browser (no traffic lights), at the left of the first card's header
+  - sidebar edge: the 8 px gap between the sidebar and the first card
+  - the app's chrome in a browser: open the app with "?mac" to lay it out as the Mac app does
   - breadcrumb: navigation "breadcrumb" in a card header
   - sidebar page list: navigation "Pages"
 
@@ -37,6 +40,27 @@ Feature: App shell
     Then the sidebar slides away and the card takes the full width, keeping its 8 px gap on every side
     When I click "Toggle Sidebar" again
     Then the sidebar is shown again at 256 px
+
+  Scenario: The sidebar button sits beside the traffic lights in the app
+    Given the app's chrome ("?mac")
+    Then "Toggle Sidebar" is 32 px square, its centre 26 px below the window's top (level with the
+      traffic lights) and its left edge 86 px from the window's left, 8 px after the lights
+    And it isn't in any card's header
+    When I click it
+    Then the sidebar slides away and the button stays exactly where it was
+    And the first card's breadcrumb starts 12 px after the button
+    When I click it again
+    Then the sidebar is back and the button still hasn't moved
+
+  Scenario: Resizing the sidebar
+    When I hover the sidebar edge
+    Then a small grip shows in it and the pointer is a resize arrow
+    When I drag the sidebar edge 100 px to the right
+    Then the sidebar is 356 px wide and the cards move with it, 8 px from it
+    When I drag it far to the left, then far to the right
+    Then it stops at 200 px, then at 400 px
+    And after a reload it is still 400 px wide, and Settings' sidebar is as wide
+    And collapsing and expanding it brings it back at 400 px
 
   Scenario: Sidebar collapses and expands with Meta+Backslash
     When I press Meta+\

@@ -54,8 +54,9 @@ runs to the top edge like Notes or Craft. The shell is shadcn's sidebar-08 block
 higher-order files (app-sidebar, nav-projects, the page layout) on COSS's primitives.
 Installing the block itself would replace COSS's primitives with shadcn's. Two marked edits to
 COSS's sidebar: ⌘\ toggles it (⌘B is bold in the editor), and the cookie write is
-skipped where the webview has no cookieStore. The sidebar is fixed at 256 px, like
-sidebar-08; drag-to-resize was dropped with the switch.
+skipped where the webview has no cookieStore. The sidebar starts at sidebar-08's 256 px and
+can be dragged from 200 to 400 px by its edge, the gap before the first card. In the app its
+button sits beside the traffic lights, as in the Claude app, so it never moves.
 Each open page is its own card in the inset's place, with the inset's look and its own
 header, 8 px apart, so pages side by side read as separate pages rather than one split
 panel. The page column starts at the left, not centred.

@@ -42,7 +42,7 @@ const place = (r: Rect, s: Size) => {
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
 // splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea() {
+export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const { root, focus } = panes.use();
@@ -81,6 +81,7 @@ export function PaneArea() {
                 current={shown.title}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
                 lead={rect.x < EPS && rect.y < EPS}
+                toggle={!windowToggle}
                 muted={split && leaf.id !== focus}
                 onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
                 root={shown.parent ?? "Pages"}
@@ -141,7 +142,7 @@ function DividerHandle({ d, area, size }: { d: Divider; area: React.RefObject<HT
   return (
     <div
       aria-orientation={row ? "vertical" : "horizontal"}
-      className={cn("absolute z-10", row ? "cursor-col-resize" : "cursor-row-resize")}
+      className={cn("group/gap absolute z-10 flex items-center justify-center", row ? "cursor-col-resize" : "cursor-row-resize")}
       onPointerDown={(e) => {
         const box = area.current?.getBoundingClientRect();
         if (!box) return;
@@ -168,6 +169,9 @@ function DividerHandle({ d, area, size }: { d: Divider; area: React.RefObject<HT
       }}
       role="separator"
       style={style}
-    />
+    >
+      {/* A grip on hover, so the gap reads as something to drag. */}
+      <span className={cn("rounded-full bg-muted-foreground/40 opacity-0 transition-opacity duration-150 group-hover/gap:opacity-100", row ? "h-8 w-1" : "h-1 w-8")} />
+    </div>
   );
 }

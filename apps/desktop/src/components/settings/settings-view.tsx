@@ -14,6 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarTrigger,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { PanelHeader } from "~/components/panel-header";
@@ -36,7 +37,9 @@ const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?
 
 export const openSection = (id: SectionId) => useStore.getState().setView({ kind: "settings", section: id });
 
-export function SettingsView({ open, onOpenChange, style }: { open: boolean; onOpenChange: (open: boolean) => void; style?: React.CSSProperties }) {
+type Props = { open: boolean; onOpenChange: (open: boolean) => void; style?: React.CSSProperties; windowToggle?: boolean };
+
+export function SettingsView({ open, onOpenChange, style, windowToggle }: Props) {
   const view = useStore((s) => s.view);
   const id = (view.kind === "settings" && SECTIONS.some((s) => s.id === view.section) ? view.section : "appearance") as SectionId;
   const current = SECTIONS.find((s) => s.id === id)!;
@@ -56,9 +59,11 @@ export function SettingsView({ open, onOpenChange, style }: { open: boolean; onO
 
   return (
     <SidebarProvider className="isolate h-svh overflow-hidden" onOpenChange={onOpenChange} open={open} style={style}>
+      {/* Where the app's shell has it, beside the traffic lights (App.tsx). */}
+      {windowToggle && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
       <SettingsSidebar current={id} />
       <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-        <PanelHeader current={current.title} root="Settings" sidebarOpen={open} />
+        <PanelHeader current={current.title} root="Settings" sidebarOpen={open} toggle={!windowToggle} />
         <div className="min-h-0 flex-1 overflow-y-auto" data-testid={`settings-${id}`}>
           <current.Component key={id} />
         </div>

@@ -90,6 +90,8 @@ Feature: Pages side by side
 
   Scenario: Resizing two pages
     Given "A" is on the left and "B" on the right
+    When I hover the gap between them
+    Then a small grip shows in the middle of the gap and the pointer is a resize arrow
     When I drag the gap between them to 30% across the page area
     Then "A" is 30% of the page area wide and "B" 70%, less half the gap each
     When I drag the gap to 2% across
