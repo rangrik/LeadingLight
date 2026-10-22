@@ -114,6 +114,15 @@ test("Text size steps the interface and Meta+0 resets it", async ({ page }) => {
   expect(await page.evaluate(() => document.documentElement.style.fontSize)).toBe("");
 });
 
+test("About shows which build this is", async ({ page }) => {
+  await page.keyboard.press("Meta+,");
+  await page.getByTestId("settings-nav-about").click();
+  const about = page.getByTestId("settings-about");
+  await expect(about.getByRole("heading", { name: "About" })).toBeVisible();
+  await expect(about.getByText(/^[0-9a-f]{7,}(\+dirty)?$/)).toBeVisible();
+  await expect(about.getByText("Shipyard", { exact: true })).toBeVisible();
+});
+
 test("Meta+/ opens the Keyboard shortcuts sheet with our table", async ({ page }) => {
   await page.keyboard.press("Meta+/");
   const sheet = page.getByRole("dialog");

@@ -1,7 +1,6 @@
 import { ArrowLeft, Info, Keyboard, Palette } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
-import { AboutSection } from "@/views/settings/about-section";
 import { closeSettings, openSettings, type SettingsSectionId } from "@/views/settings/open";
 import { ShortcutsSection } from "@/views/settings/shortcuts-section";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -18,11 +17,12 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { PanelHeader } from "~/components/panel-header";
+import { AboutSection } from "~/components/settings/about-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. Appearance is ours; Shortcuts and About are Shipyard's (vendor/shipyard); the ones
+// one. Appearance and About are ours; Shortcuts is Shipyard's (vendor/shipyard); the ones
 // about agents, machines and Shipyard's own General stay out until there is ours behind them.
 const SECTIONS: { id: SettingsSectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
@@ -92,6 +92,8 @@ function SettingsSidebar({ current }: { current: SettingsSectionId }) {
                   >
                     <s.icon />
                     <span>{s.title}</span>
+                    {/* The build beside About, so a glance says which app this is. */}
+                    {s.id === "about" && <span className="ml-auto text-xs tabular-nums opacity-60">{__LL_COMMIT__}</span>}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

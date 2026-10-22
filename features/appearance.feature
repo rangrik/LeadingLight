@@ -68,6 +68,12 @@ Feature: Appearance and settings
   Scenario: Every theme keeps its text readable
     Then the contrast check (pnpm check:themes) passes for every built-in theme
 
+  Scenario: About says which build this is
+    Given Settings › About is open
+    Then it shows the version, the commit the app was built from (with "+dirty" if the tree
+      had uncommitted changes), when it was built, and the Shipyard version it is built on
+    And the same commit shows beside "About" in the sidebar
+
   Scenario: Keyboard shortcuts are listed in one place
     Given Settings › Shortcuts is open
     Then it lists "New page" with ⌘N, "Save now" with ⌘S, "Show or hide the sidebar" with ⌘\ and "Settings" with ⌘,
