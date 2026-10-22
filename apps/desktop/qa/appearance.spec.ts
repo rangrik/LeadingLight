@@ -24,10 +24,14 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await page.keyboard.press("Meta+,");
   await expect(settingsNav(page)).toBeVisible();
   await expect(settingsNav(page).getByRole("button", { name: "Back to app" })).toBeVisible();
-  // The pages underneath are covered and inert, not unmounted (their edits are kept),
-  // and the sidebar's own key doesn't reach it either.
+  // The pages underneath are covered and inert, not unmounted (their edits are kept).
   await expect(page.locator("[inert]").getByRole("navigation", { name: "Pages" })).toBeAttached();
+  // Settings wears the app's shell: the same sidebar header, and ⌘\ folds it once, not twice.
+  await expect(page.locator(".ll-settings").getByText("LeadingLight", { exact: true })).toBeVisible();
   await page.keyboard.press("Meta+\\");
+  expect(await page.evaluate(() => localStorage.getItem("ll.sidebar.open"))).toBe("false");
+  await page.keyboard.press("Meta+\\");
+  expect(await page.evaluate(() => localStorage.getItem("ll.sidebar.open"))).toBe("true");
   await page.keyboard.press("Escape");
   await expect(settingsNav(page)).toBeHidden();
   await expect(page.locator("[inert]")).toHaveCount(0);

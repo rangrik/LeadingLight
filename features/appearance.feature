@@ -12,8 +12,10 @@ Feature: Appearance and settings
 
   Scenario: Settings opens with Meta+, and closes with Escape
     When I press Meta+,
-    Then Settings is shown with a nav of sections and "Back to app" at its top
+    Then Settings is shown in the app's own shell: the sidebar with the mark and "LeadingLight" at
+      its top, "Back to app", then Appearance, Shortcuts and About; the section in the panel, Appearance first
     And the pages underneath are covered and inert: no click or key reaches them
+    And Meta+\ folds and unfolds the sidebar as it does on a page
     When I press Escape
     Then the pages are shown again, on the page that was open
 

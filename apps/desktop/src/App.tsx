@@ -17,19 +17,11 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@leadinglight/ui/components/breadcrumb";
-import { Separator } from "@leadinglight/ui/components/separator";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
+import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
-import { cn } from "@leadinglight/ui/lib/utils";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { PageView } from "~/components/page-view";
+import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { pageLabel } from "~/lib/labels";
 import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "~/lib/objects";
@@ -40,8 +32,8 @@ import { useShortcuts } from "~/lib/use-shortcuts";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 
-// Settings loads on first use, as in Shipyard: most of the vendored tree sits behind it.
-const SettingsView = lazy(() => import("@/views/settings/settings-view").then((m) => ({ default: m.SettingsView })));
+// Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
+const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
 
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
 // middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
@@ -81,7 +73,7 @@ export default function App() {
   }, [settings]);
   // Its code is fetched once the app has settled, so the first ⌘, paints at once.
   useEffect(() => {
-    const t = window.setTimeout(() => void import("@/views/settings/settings-view"), 1500);
+    const t = window.setTimeout(() => void import("~/components/settings/settings-view"), 1500);
     return () => window.clearTimeout(t);
   }, []);
 
@@ -148,10 +140,8 @@ export default function App() {
 
   const save = useCallback((id: string, patch: ObjectPatch) => objects.update(id, patch).catch(reportSaveError), []);
 
-  // The sidebar is left alone under Settings (⌘\ from the menu bar or the sidebar's own key).
-  const toggleSidebar = useCallback(() => {
-    if (useStore.getState().view.kind !== "settings") setSidebarOpen((open) => !open);
-  }, []);
+  // One sidebar state for the pages and Settings, so folding it in one holds in the other.
+  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
   useShortcuts(useMemo(() => ({ newPage: create, toggleSidebar }), [create, toggleSidebar]));
 
   // Save pending edits whenever the app might be about to go away.
@@ -191,36 +181,13 @@ export default function App() {
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
   // is 36 px in the app (see chrome) and a window drag area with room for the traffic lights, and
   // the crumbs are Pages and the title.
-  // Under Settings it stays mounted, so the page's edits are kept, and goes inert.
+  // Under Settings it stays mounted, so the page's edits are kept, and goes inert; the
+  // sidebar's own ⌘\ is then the Settings shell's to handle.
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
         <AppSidebar onCreate={create} pages={navPages} />
         <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-          <header className="flex h-(--header-height) shrink-0 items-center gap-2" data-tauri-drag-region>
-            <div
-              className={cn(
-                "flex min-w-0 items-center gap-2 px-4 transition-[padding] duration-200 ease-linear",
-                !sidebarOpen && "ps-[calc(var(--traffic-left)_+_1rem)]",
-              )}
-            >
-              <SidebarTrigger className="-ml-1" />
-              {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
-              <Separator className="mr-2 h-4" orientation="vertical" />
-              <Breadcrumb>
-                <BreadcrumbList>
-                  <BreadcrumbItem className="hidden md:block">Pages</BreadcrumbItem>
-                  {title !== null && (
-                    <>
-                      <BreadcrumbSeparator className="hidden md:block" />
-                      <BreadcrumbItem className="min-w-0">
-                        <BreadcrumbPage className="max-w-[40ch] truncate">{pageLabel(title)}</BreadcrumbPage>
-                      </BreadcrumbItem>
-                    </>
-                  )}
-                </BreadcrumbList>
-              </Breadcrumb>
-            </div>
-          </header>
+          <PanelHeader current={title === null ? null : pageLabel(title)} root="Pages" sidebarOpen={sidebarOpen} />
           <div className="min-h-0 flex-1 overflow-y-auto">
             {active ? (
               <PageView key={active.id} onRename={rename} onSave={save} page={active} />
@@ -260,9 +227,9 @@ export default function App() {
         <TooltipProvider delay={300}>
           {shell}
           {settings && (
-            <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 h-svh bg-background outline-hidden" style={chrome(native)}>
+            <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
-                <SettingsView />
+                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)} />
               </Suspense>
             </div>
           )}

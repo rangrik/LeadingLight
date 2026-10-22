@@ -13,16 +13,6 @@
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', monospace;
 }
 
-/* Shipyard's Settings nav is as wide as our sidebar (its own default is 304px). */
-.ll-settings {
-  --sidebar-w: 256px;
-}
-/* Its nav keeps a 40px strip for traffic lights placed at y 20; ours sit at y 40
-   (App.tsx chrome), so in the Mac app the strip grows to clear them. */
-.ll-settings nav > .h-bar {
-  height: max(40px, calc(var(--traffic-top) + 16px));
-}
-
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
   outline: none;

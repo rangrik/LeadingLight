@@ -1,3 +1,4 @@
+import process from "node:process";
 import { defineConfig } from "@playwright/test";
 
 // QA_PORT picks another port when 1420 belongs to another checkout's dev server

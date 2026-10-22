@@ -1,6 +1,7 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), and only NavProjects (as Pages); NavMain, NavSecondary and NavUser wait for content.
+// The header is its own export, so Settings' sidebar wears the same one.
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +27,26 @@ function Mark({ className }: { className?: string }) {
   );
 }
 
+export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
+  return (
+    <SidebarHeader className="pt-[calc(var(--traffic-top)_+_0.5rem)]" data-tauri-drag-region>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton render={<a href="#" />} size="lg">
+            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+              <Mark className="size-8" />
+            </div>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">LeadingLight</span>
+              <span className="truncate text-xs">{subtitle}</span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarHeader>
+  );
+}
+
 export function AppSidebar({
   pages,
   onCreate,
@@ -37,21 +58,7 @@ export function AppSidebar({
   const { isMobile, state } = useSidebar();
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
-      <SidebarHeader className="pt-[calc(var(--traffic-top)_+_0.5rem)]" data-tauri-drag-region>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton render={<a href="#" />} size="lg">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Mark className="size-8" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">LeadingLight</span>
-                <span className="truncate text-xs">Notes</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+      <AppSidebarHeader subtitle="Notes" />
       <SidebarContent>
         <nav aria-label="Pages">
           <NavProjects onCreate={onCreate} projects={pages} />
