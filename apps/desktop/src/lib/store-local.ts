@@ -1,3 +1,4 @@
+import { readIcon } from "./page-meta";
 import { asDoc, type LLObject, newObject, type ObjectStore } from "./store";
 
 // Browser-only store for dev, QA and previews. IndexedDB with one record per page, so a big
@@ -45,7 +46,7 @@ export const localStore: ObjectStore = {
     const all = await tx<LLObject[]>("readonly", (s) => s.getAll());
     return all
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(({ id, typeId, title, createdAt }) => ({ id, typeId, title, createdAt }));
+      .map(({ id, typeId, title, properties, createdAt }) => ({ id, typeId, title, icon: readIcon(properties?.icon), createdAt }));
   },
 
   async get(id) {

@@ -2,11 +2,10 @@ import { type Editor, Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { useEditorState } from "@tiptap/react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Input } from "@leadinglight/ui/components/input";
 import { Popover, PopoverPopup } from "@leadinglight/ui/components/popover";
-import { EMOJI } from "./emoji-data";
+import { EmojiGrid } from "./emoji-grid";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -117,12 +116,10 @@ function emojiButton(emoji: string, pos: number, editable: boolean): HTMLElement
 
 export function EmojiPicker({ editor }: { editor: Editor }) {
   const picker = useEditorState({ editor, selector: ({ editor }) => pickerKey.getState(editor.state) ?? null });
-  const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const anchor = picker ? editor.view.dom.querySelector<HTMLElement>(`[data-emoji-button="${picker.pos}"]`) : null;
 
   const close = () => {
-    setQuery("");
     editor.view.dispatch(editor.state.tr.setMeta(pickerKey, null));
     editor.view.focus();
   };
@@ -131,35 +128,11 @@ export function EmojiPicker({ editor }: { editor: Editor }) {
     if (node) editor.view.dispatch(editor.state.tr.setNodeMarkup(picker.pos, undefined, { ...node.attrs, emoji }));
     close();
   };
-  // Typing or pasting an emoji picks it straight away.
-  const onInput = (value: string) => {
-    const first = [...new Intl.Segmenter().segment(value)][0]?.segment;
-    if (first && /\p{Extended_Pictographic}/u.test(first)) return choose(first);
-    setQuery(value);
-  };
-  const q = query.trim().toLowerCase();
-  const items = q ? EMOJI.filter(([, name]) => name.includes(q)) : EMOJI;
 
   return (
     <Popover onOpenChange={(open) => !open && close()} open={Boolean(anchor)}>
-      <PopoverPopup align="start" anchor={anchor} aria-label="Emoji" className="w-72" initialFocus={inputRef}>
-        <Input
-          aria-label="Search emoji"
-          onChange={(e) => onInput(e.currentTarget.value)}
-          placeholder="Search, or type an emoji"
-          ref={inputRef}
-          size="sm"
-          type="search"
-          value={query}
-        />
-        <div className="-mx-1 mt-2 grid max-h-48 grid-cols-8 overflow-y-auto">
-          {items.map(([emoji, name]) => (
-            <Button aria-label={name} className="text-lg" key={emoji} onClick={() => choose(emoji)} size="icon-sm" variant="ghost">
-              {emoji}
-            </Button>
-          ))}
-          {items.length === 0 && <p className="col-span-8 px-1 py-2 text-muted-foreground text-sm">No results</p>}
-        </div>
+      <PopoverPopup align="start" anchor={anchor} aria-label="Emoji" className="w-80" initialFocus={inputRef}>
+        {anchor && <EmojiGrid inputRef={inputRef} onPick={choose} />}
         <Button className="mt-2 w-full" onClick={() => choose(null)} size="xs" variant="ghost">
           Remove emoji
         </Button>

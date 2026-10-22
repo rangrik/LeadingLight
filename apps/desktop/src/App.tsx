@@ -21,6 +21,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { DeletePageDialog } from "@/components/delete-page-dialog";
+import { PageIconView } from "@/components/page-icon";
 import { PaneArea } from "@/components/pane-area";
 import { armDrag } from "@/components/pane-drag";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
@@ -94,9 +95,9 @@ export default function App() {
     [pages],
   );
 
-  // The sidebar and the breadcrumb follow the title as it is typed; saving is debounced.
-  const rename = useCallback((id: string, title: string) => {
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
+  // The sidebar and the breadcrumb follow the title and icon as they change; saving is debounced.
+  const onSummary = useCallback((id: string, patch: Partial<ObjectSummary>) => {
+    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
   }, []);
 
   const save = useCallback((id: string, patch: ObjectPatch) => objects.update(id, patch).catch(reportSaveError), []);
@@ -144,11 +145,12 @@ export default function App() {
     };
   }, []);
 
-  const titleOf = (id: string) => pages.find((p) => p.id === id)?.title ?? "";
-  const title = current === undefined ? null : titleOf(current);
+  const summary = (id: string) => pages.find((p) => p.id === id);
+  const shown = current === undefined ? undefined : summary(current);
+  const iconOf = (p?: ObjectSummary) => (p?.icon ? <PageIconView icon={p.icon} /> : <FileText />);
   const navPages = pages.map((p) => ({
     name: pageLabel(p.title),
-    icon: <FileText />,
+    icon: iconOf(p),
     isActive: p.id === current,
     onSelect: () => openPage(p.id),
     onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
@@ -175,11 +177,12 @@ export default function App() {
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem className="hidden md:block">Pages</BreadcrumbItem>
-                {title !== null && (
+                {current !== undefined && (
                   <>
                     <BreadcrumbSeparator className="hidden md:block" />
                     <BreadcrumbItem className="min-w-0">
-                      <BreadcrumbPage className="max-w-[40ch] truncate">{pageLabel(title)}</BreadcrumbPage>
+                      {shown?.icon && <PageIconView icon={shown.icon} />}
+                      <BreadcrumbPage className="max-w-[40ch] truncate">{pageLabel(shown?.title ?? "")}</BreadcrumbPage>
                     </BreadcrumbItem>
                   </>
                 )}
@@ -188,7 +191,7 @@ export default function App() {
           </div>
         </header>
         {root ? (
-          <PaneArea label={(id) => pageLabel(titleOf(id))} onRename={rename} onSave={save} />
+          <PaneArea onSave={save} onSummary={onSummary} summary={summary} />
         ) : (
           <div className="min-h-0 flex-1">
             <Empty className="h-full">

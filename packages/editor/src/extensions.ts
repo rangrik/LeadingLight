@@ -67,6 +67,8 @@ const Toggle = Details.extend({
 });
 
 const hint = (node: PMNode) => {
+  // An emoji line has its emoji where the hint would be drawn.
+  if (node.attrs.emoji) return null;
   if (node.type.name === "heading") return `Heading ${node.attrs.level}`;
   if (node.type.name === "detailsSummary") return "Toggle";
   return node.type.name === "paragraph" ? "Type '/' for commands" : null;

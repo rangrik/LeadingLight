@@ -1,5 +1,6 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import { fromBlockNote } from "./blocknote";
+import type { PageIcon } from "./page-meta";
 
 export const PAGE_TYPE = "page";
 
@@ -7,6 +8,7 @@ export type ObjectSummary = {
   id: string;
   typeId: string;
   title: string;
+  icon?: PageIcon;
   createdAt: number;
 };
 
@@ -16,7 +18,8 @@ export type LLObject = ObjectSummary & {
   updatedAt: number;
 };
 
-export type ObjectPatch = Partial<Pick<LLObject, "title" | "content">>;
+// properties replaces the whole map: only one editor holds a page, so it has every value.
+export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properties">>;
 
 export interface ObjectStore {
   list(): Promise<ObjectSummary[]>;

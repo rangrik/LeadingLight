@@ -7,11 +7,13 @@ import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { armDrag, DragGhost, DropOverlay } from "@/components/pane-drag";
 import { PageView } from "@/components/page-view";
-import { type LLObject, type ObjectPatch, objects } from "@/lib/objects";
+import { PageIconView } from "@/components/page-icon";
+import { pageLabel } from "@/lib/labels";
+import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "@/lib/objects";
 import { closePane, type Divider, focusPane, layout, panes, type Rect, resizePanes } from "@/lib/panes";
 
 type PageProps = {
-  onRename: (id: string, title: string) => void;
+  onSummary: (id: string, patch: Partial<ObjectSummary>) => void;
   onSave: (id: string, patch: ObjectPatch) => Promise<void>;
 };
 
@@ -26,7 +28,8 @@ const px = (r: Rect, s: Size) => {
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
 // splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea({ label, ...page }: PageProps & { label: (page: string) => string }) {
+export function PaneArea({ summary, ...page }: PageProps & { summary: (page: string) => ObjectSummary | undefined }) {
+  const label = (id: string) => pageLabel(summary(id)?.title ?? "");
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const { root, focus } = panes.use();
@@ -62,7 +65,7 @@ export function PaneArea({ label, ...page }: PageProps & { label: (page: string)
                 className="group/header box-content flex h-9 shrink-0 items-center gap-2 border-b ps-5 pe-1.5 text-sm"
                 onPointerDown={(e) => armDrag(e, { page: leaf.page, label: label(leaf.page) })}
               >
-                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                <PaneIcon icon={summary(leaf.page)?.icon} />
                 <span className={cn("min-w-0 flex-1 truncate", leaf.id === focus ? "text-foreground" : "text-muted-foreground")}>
                   {label(leaf.page)}
                 </span>
@@ -89,7 +92,10 @@ export function PaneArea({ label, ...page }: PageProps & { label: (page: string)
   );
 }
 
-function PagePane({ id, onRename, onSave }: PageProps & { id: string }) {
+const PaneIcon = ({ icon }: { icon?: ObjectSummary["icon"] }) =>
+  icon ? <PageIconView icon={icon} /> : <FileText className="size-4 shrink-0 text-muted-foreground" />;
+
+function PagePane({ id, onSummary, onSave }: PageProps & { id: string }) {
   const [page, setPage] = useState<LLObject | null>(null);
   useEffect(() => {
     let stale = false;
@@ -105,7 +111,7 @@ function PagePane({ id, onRename, onSave }: PageProps & { id: string }) {
   // Its own scroller, so each page opens at its top and narrow panes can be measured.
   return (
     <div className="@container min-h-0 flex-1 overflow-y-auto" key={id}>
-      <PageView onRename={onRename} onSave={onSave} page={page} />
+      <PageView onSave={onSave} onSummary={onSummary} page={page} />
     </div>
   );
 }
