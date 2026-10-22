@@ -1,13 +1,16 @@
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
-// app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, one header
-// with a title and a close button, no Compare tabs, no tabs kept mounted while hidden.
+// app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
+// with its own header (crumbs and a close button), no Compare tabs, no tabs kept mounted while hidden.
 import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@leadinglight/ui/components/button";
+import { useSidebar } from "@leadinglight/ui/components/sidebar";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { RowIcon } from "~/components/page-icon";
+import { PageIconView } from "~/components/page-icon";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
 import { PageView } from "~/components/page-view";
+import { PanelHeader } from "~/components/panel-header";
 import { TypeView } from "~/components/type-view";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, panes, type Rect, resizePanes } from "~/lib/panes";
@@ -15,11 +18,26 @@ import { describe, space, TYPE_VIEW } from "~/lib/space";
 
 type Size = { w: number; h: number };
 
+// A page's card: the sidebar-08 inset panel's look, one per open page.
+export const CARD = "bg-background md:rounded-xl md:shadow-sm/5";
+const GAP = 8; // between cards, as between a card and the window's edge
+const EPS = 1e-6;
+
 // Edges rounded to whole pixels, so icons and text stay sharp at any split.
-const px = (r: Rect, s: Size) => {
+const edges = (r: Rect, s: Size) => {
   const left = Math.round(r.x * s.w);
   const top = Math.round(r.y * s.h);
   return { left, top, width: Math.round((r.x + r.w) * s.w) - left, height: Math.round((r.y + r.h) * s.h) - top };
+};
+
+// A card gives up half the gap on each side it shares with another card.
+const place = (r: Rect, s: Size) => {
+  const { left, top, width, height } = edges(r, s);
+  const start = r.x > EPS ? GAP / 2 : 0;
+  const above = r.y > EPS ? GAP / 2 : 0;
+  const end = r.x + r.w < 1 - EPS ? GAP / 2 : 0;
+  const below = r.y + r.h < 1 - EPS ? GAP / 2 : 0;
+  return { left: left + start, top: top + above, width: width - start - end, height: height - above - below };
 };
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
@@ -28,13 +46,15 @@ export function PaneArea() {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0 });
   const { root, focus } = panes.use();
+  const { open: sidebarOpen } = useSidebar();
   space.use(); // titles and icons follow edits
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
     const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
     measure();
-    const observer = new ResizeObserver(measure);
+    // Drawn before the frame paints, so cards keep up with the sidebar as it slides.
+    const observer = new ResizeObserver(() => flushSync(measure));
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -42,7 +62,8 @@ export function PaneArea() {
   const { leaves, dividers } = layout(root);
   const split = leaves.length > 1;
   return (
-    <div className="relative min-h-0 flex-1" data-pane-area ref={area}>
+    // The stage's colour, so the gaps show where narrow windows drop the cards' corners.
+    <div className="relative min-h-0 flex-1 bg-sidebar" data-pane-area ref={area}>
       {[...leaves]
         .sort((a, b) => (a.leaf.id < b.leaf.id ? -1 : 1))
         .map(({ leaf, rect }) => {
@@ -50,34 +71,33 @@ export function PaneArea() {
           return (
             <section
               aria-label={shown.title}
-              className={cn("absolute flex flex-col overflow-hidden", rect.x > 0 && "border-l", rect.y > 0 && "border-t")}
+              className={cn("group/card absolute flex flex-col overflow-hidden", CARD)}
               key={leaf.id}
               onFocusCapture={() => focusPane(leaf.id)}
               onPointerDownCapture={() => focusPane(leaf.id)}
-              style={px(rect, size)}
+              style={place(rect, size)}
             >
-              {split && (
-                // box-content keeps the 1 px border out of the 36 px row, so its contents sit on whole
-                // pixels; ps-5 lines the icon up with the sidebar toggle above.
-                <div
-                  className="group/header box-content flex h-9 shrink-0 items-center gap-2 border-b ps-5 pe-1.5 text-sm"
-                  onPointerDown={(e) => armDrag(e, { page: leaf.page, label: shown.title })}
-                >
-                  <RowIcon icon={shown.icon} />
-                  <span className={cn("min-w-0 flex-1 truncate", leaf.id === focus ? "text-foreground" : "text-muted-foreground")}>
-                    {shown.title}
-                  </span>
+              <PanelHeader
+                current={shown.title}
+                icon={shown.icon && <PageIconView icon={shown.icon} />}
+                lead={rect.x < EPS && rect.y < EPS}
+                muted={split && leaf.id !== focus}
+                onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
+                root={shown.parent ?? "Pages"}
+                sidebarOpen={sidebarOpen}
+              >
+                {split && (
                   <Button
                     aria-label="Close page"
-                    className={cn(leaf.id !== focus && "opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100")}
+                    className={cn(leaf.id !== focus && "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100")}
                     onClick={() => closePane(leaf.id)}
                     size="icon-xs"
                     variant="ghost"
                   >
                     <X className="size-4" />
                   </Button>
-                </div>
-              )}
+                )}
+              </PanelHeader>
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div className="@container min-h-0 flex-1 overflow-y-auto" key={leaf.page}>
                 {leaf.page.startsWith(TYPE_VIEW) ? <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} /> : <PagePane id={leaf.page} />}
@@ -88,7 +108,7 @@ export function PaneArea() {
       {dividers.map((d) => (
         <DividerHandle area={area} d={d} key={d.id} size={size} />
       ))}
-      <DropOverlay />
+      <DropOverlay at={(r) => place(r, size)} />
       <DragGhost />
     </div>
   );
@@ -109,11 +129,15 @@ function PagePane({ id }: { id: string }) {
   return page?.id === id ? <PageView page={page} /> : null;
 }
 
-// The invisible, wider grab area over the line between two panes.
+// The invisible grab area filling the gap between two cards.
 function DividerHandle({ d, area, size }: { d: Divider; area: React.RefObject<HTMLDivElement | null>; size: Size }) {
   const row = d.dir === "row";
-  const line = px(row ? { ...d.area, x: d.at, w: 0 } : { ...d.area, y: d.at, h: 0 }, size);
-  const style = row ? { ...line, left: line.left - 3, width: 6 } : { ...line, top: line.top - 3, height: 6 };
+  // Along the gap, it spans the split's cards only, so it never reaches into a crossing gap.
+  const line = edges(row ? { ...d.area, x: d.at, w: 0 } : { ...d.area, y: d.at, h: 0 }, size);
+  const span = place(d.area, size);
+  const style = row
+    ? { left: line.left - GAP / 2, width: GAP, top: span.top, height: span.height }
+    : { top: line.top - GAP / 2, height: GAP, left: span.left, width: span.width };
   return (
     <div
       aria-orientation={row ? "vertical" : "horizontal"}

@@ -1,29 +1,32 @@
 Feature: App shell
   The window uses the sidebar-08 layout built from COSS UI: a sidebar on the left with the
-  app's name at the top and the page list below it, and the open page in an inset panel
-  with rounded corners on the right. On macOS the title bar is an overlay; in a browser
+  app's name at the top and the page list below it, and on the right a stage where each open
+  page is a card with rounded corners (one card fills it; see panes.feature for more). On macOS the title bar is an overlay; in a browser
   there is no title bar.
 
   Names used below:
-  - "Toggle Sidebar" button at the left of the panel header
-  - breadcrumb: navigation "breadcrumb" in the panel header
+  - card header: the bar at the top of a page's card
+  - "Toggle Sidebar" button at the left of the first card's header
+  - breadcrumb: navigation "breadcrumb" in a card header
   - sidebar page list: navigation "Pages"
 
   Background:
     Given the app is open in a browser at 1280x800
 
   # Native only (checked by measuring AppKit's button frames, not by driving the window):
-  # the traffic lights' centre is 26 pt below the window's top, on the panel header's middle
+  # the traffic lights' centre is 26 pt below the window's top, on the card header's middle
   # line, as in Apple Notes; with the sidebar open, the logo tile starts 15 pt below them.
 
   Scenario: Layout
     Then the sidebar is 256 px wide and shows "LeadingLight" at its top
-    And the page panel has rounded corners and an 8 px gap to the window's top, right and bottom edges
+    And the page's card has rounded corners and an 8 px gap to the window's top, right and bottom edges
     And the sidebar's background colour shows in that gap
-    And in a browser the panel header is 64 px tall, level with the sidebar's logo row
+    And in a browser the card header is 64 px tall, level with the sidebar's logo row
+    And the page's title and body start at the card's left, after the 64 px gutter, not centred:
+      a wide window leaves the room on the right
     # In the app it is 36 px, level with the traffic lights (see the native note above).
 
-  Scenario: The panel header shows where you are
+  Scenario: The card header shows where you are
     Given I have created a page titled "Trip to Kyoto"
     Then the breadcrumb reads "Pages" then "Trip to Kyoto"
     When I change the title to "Trip to Osaka"
@@ -31,7 +34,7 @@ Feature: App shell
 
   Scenario: Sidebar collapses and expands from the button
     When I click "Toggle Sidebar"
-    Then the sidebar slides away and the panel takes the full width, keeping its 8 px gap on every side
+    Then the sidebar slides away and the card takes the full width, keeping its 8 px gap on every side
     When I click "Toggle Sidebar" again
     Then the sidebar is shown again at 256 px
 

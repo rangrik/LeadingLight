@@ -159,7 +159,7 @@ export function PageView({ page }: { page: LLObject }) {
     <div className="min-h-full" onFocusCapture={() => registerPage(askPage, editorRef.current)} onMouseDown={onBlankMouseDown}>
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes. */}
-      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
+      <div className="w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
         <div className={cn("group/head", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>

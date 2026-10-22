@@ -19,11 +19,12 @@ import {
 } from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
-import { PageIconView, RowIcon } from "~/components/page-icon";
-import { PaneArea } from "~/components/pane-area";
+import { RowIcon } from "~/components/page-icon";
+import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
@@ -33,7 +34,7 @@ import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
@@ -140,7 +141,6 @@ export default function App() {
     };
   }, []);
 
-  const shown = current === undefined ? undefined : describe(current);
   const navPages = pages.filter(listed).map((p) => ({
     name: pageLabel(p.title),
     icon: <RowIcon icon={iconFor(p)} />,
@@ -157,26 +157,21 @@ export default function App() {
     onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
   }));
 
-  // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
-  // is 36 px in the app (see chrome) and a window drag area with room for the traffic lights, and
-  // the crumbs are Pages and the title.
+  // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
+  // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
+  // chrome) and a window drag area with room for the traffic lights.
   // Under Settings it stays mounted, so the page's edits are kept, and goes inert; the
   // sidebar's own ⌘\ is then the Settings shell's to handle.
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
         <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
-        <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-          <PanelHeader
-            current={shown?.title ?? null}
-            icon={shown?.icon && <PageIconView icon={shown.icon} />}
-            root={shown?.parent ?? "Pages"}
-            sidebarOpen={sidebarOpen}
-          />
+        <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {root ? (
             <PaneArea />
           ) : (
-            <div className="min-h-0 flex-1">
-              <Empty className="h-full">
+            <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
+              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} />
+              <Empty className="min-h-0 flex-1">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <FileText />

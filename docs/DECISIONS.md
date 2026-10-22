@@ -56,6 +56,9 @@ Installing the block itself would replace COSS's primitives with shadcn's. Two m
 COSS's sidebar: ⌘\ toggles it (⌘B is bold in the editor), and the cookie write is
 skipped where the webview has no cookieStore. The sidebar is fixed at 256 px, like
 sidebar-08; drag-to-resize was dropped with the switch.
+Each open page is its own card in the inset's place, with the inset's look and its own
+header, 8 px apart, so pages side by side read as separate pages rather than one split
+panel. The page column starts at the left, not centred.
 
 Native-only behaviour (SQLite, files, traffic-light room) checks the app identifier,
 not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
