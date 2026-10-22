@@ -48,8 +48,34 @@ const ExitTop = Extension.create<{ onExitTop: () => boolean }>({
   },
 });
 
-// Enter in an open toggle's title moves into its empty first line instead of adding another.
+// Toggles take their first line as the title (TipTap's setDetails leaves it empty), and Enter in an
+// open toggle's title moves into its empty first line instead of adding another.
 const Toggle = Details.extend({
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setDetails:
+        () =>
+        ({ state, tr, dispatch }) => {
+          const range = state.selection.$from.blockRange(state.selection.$to);
+          const lines = range && state.doc.slice(range.start, range.end).content;
+          const title = lines?.firstChild;
+          if (!range || !lines || !title?.isTextblock) return false;
+          const { detailsSummary, detailsContent, paragraph } = state.schema.nodes;
+          const body = lines.cut(title.nodeSize);
+          const toggle = this.type.create(null, [
+            detailsSummary.create(null, title.content),
+            detailsContent.create(null, body.size ? body : paragraph.create()),
+          ]);
+          if (dispatch) {
+            tr.replaceWith(range.start, range.end, toggle);
+            tr.setSelection(TextSelection.create(tr.doc, range.start + 2 + title.content.size));
+          }
+          return true;
+        },
+    };
+  },
+
   addKeyboardShortcuts() {
     const parent = (this.parent?.() ?? {}) as Record<string, KeyboardShortcutCommand>;
     return {

@@ -16,6 +16,21 @@ test("Escape in the slash menu, then Backspace, only edits text", async ({ page 
   await expect(body.locator("p").first()).toHaveText("keep me");
 });
 
+// Seam: the browser's own right-click (on macOS it selects a word) against our block selection.
+// Catches the block menu opening on a word, so its Delete removes nothing.
+test("Right-clicking selected blocks opens the block menu for all of them", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("textbox", { name: "Title" }).press("Enter");
+  await page.keyboard.type("one\ntwo words\nthree words");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Shift+ArrowUp");
+  const paragraphs = page.getByRole("textbox", { name: "Page body" }).locator("p");
+  await paragraphs.nth(2).click({ button: "right", position: { x: 10, y: 10 } });
+  await page.getByRole("menu", { name: "Block" }).getByRole("menuitem", { name: /^Delete/ }).click();
+  await expect(paragraphs).toHaveText(["one"]);
+});
+
 // Seam: the browser's own drag start, from a real pointer on the handle, into our drop handler.
 // Catches a drag that never starts (a cancelled mousedown did that); synthetic drag events can't.
 test("Dragging the handle with a real mouse moves the block", async ({ page }) => {

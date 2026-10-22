@@ -1,4 +1,4 @@
-import type { Editor, Range } from "@tiptap/core";
+import type { ChainedCommands, Editor, Range } from "@tiptap/core";
 import {
   ALargeSmall,
   ArrowDownAZ,
@@ -36,6 +36,8 @@ export type SlashItem = {
   hint?: string;
   icon: LucideIcon;
   run: (editor: Editor, range: Range) => void;
+  // Set on kinds a block can be turned into (block menu): the commands that reshape a plain line.
+  turn?: (chain: ChainedCommands) => ChainedCommands;
 };
 
 // Remove the typed "/query" and reset the block before applying a kind.
@@ -49,35 +51,48 @@ const item = (
   run: SlashItem["run"],
   hint?: string,
 ): SlashItem => ({ id, title, section, keywords, icon, run, hint });
+const kind = (
+  id: string,
+  title: string,
+  section: string,
+  keywords: string,
+  icon: LucideIcon,
+  turn: NonNullable<SlashItem["turn"]>,
+  hint?: string,
+): SlashItem => ({ ...item(id, title, section, keywords, icon, (e, r) => turn(start(e, r)).run(), hint), turn });
 
 export const SLASH_ITEMS: SlashItem[] = [
-  item("text", "Text", "Basic", "paragraph plain", Type, (e, r) => start(e, r).setParagraph().run()),
-  item("small", "Small text", "Basic", "caption fine print", ALargeSmall, (e, r) =>
-    start(e, r).setParagraph().updateAttributes("paragraph", { small: true }).run(),
+  kind("text", "Text", "Basic", "paragraph plain", Type, (c) => c.setParagraph()),
+  kind("small", "Small text", "Basic", "caption fine print", ALargeSmall, (c) =>
+    c.setParagraph().updateAttributes("paragraph", { small: true }),
   ),
-  item("h1", "Heading 1", "Basic", "h1 title", Heading1, (e, r) => start(e, r).setHeading({ level: 1 }).run(), "#"),
-  item("h2", "Heading 2", "Basic", "h2 subtitle", Heading2, (e, r) => start(e, r).setHeading({ level: 2 }).run(), "##"),
-  item("h3", "Heading 3", "Basic", "h3", Heading3, (e, r) => start(e, r).setHeading({ level: 3 }).run(), "###"),
-  item("h4", "Heading 4", "Basic", "h4", Heading4, (e, r) => start(e, r).setHeading({ level: 4 }).run(), "####"),
-  item("quote", "Quote", "Basic", "blockquote", Quote, (e, r) => start(e, r).setBlockquote().run(), ">"),
+  kind("h1", "Heading 1", "Basic", "h1 title", Heading1, (c) => c.setHeading({ level: 1 }), "#"),
+  kind("h2", "Heading 2", "Basic", "h2 subtitle", Heading2, (c) => c.setHeading({ level: 2 }), "##"),
+  kind("h3", "Heading 3", "Basic", "h3", Heading3, (c) => c.setHeading({ level: 3 }), "###"),
+  kind("h4", "Heading 4", "Basic", "h4", Heading4, (c) => c.setHeading({ level: 4 }), "####"),
+  kind("quote", "Quote", "Basic", "blockquote", Quote, (c) => c.setBlockquote(), ">"),
   // Opened in a second step: a toggle created open races TipTap's own opening timer.
-  item("toggle", "Toggle", "Basic", "collapse details expand", SquareChevronRight, (e, r) => {
-    start(e, r).setDetails().run();
-    e.commands.updateAttributes("details", { open: true });
-  }),
+  {
+    ...kind("toggle", "Toggle", "Basic", "collapse details expand", SquareChevronRight, (c) => c.setDetails()),
+    run: (e, r) => {
+      start(e, r).setDetails().run();
+      e.commands.updateAttributes("details", { open: true });
+    },
+  },
   item("emoji", "Emoji", "Basic", "icon prefix", Sparkles, (e, r) =>
     e.chain().focus().deleteRange(r).setEmoji(DEFAULT_EMOJI).run(),
   ),
-  item("bullet", "Bullet list", "Lists", "unordered ul", List, (e, r) => start(e, r).toggleBulletList().run(), "-"),
-  item("numbered", "Numbered list", "Lists", "ordered ol", ListOrdered, (e, r) => start(e, r).toggleOrderedList().run(), "1."),
-  item("alpha", "Alphabetical list", "Lists", "letters abc", ArrowDownAZ, (e, r) =>
-    start(e, r).toggleOrderedList().updateAttributes("orderedList", { type: "a" }).run(), "a.",
+  kind("bullet", "Bullet list", "Lists", "unordered ul", List, (c) => c.toggleBulletList(), "-"),
+  kind("numbered", "Numbered list", "Lists", "ordered ol", ListOrdered, (c) => c.toggleOrderedList(), "1."),
+  // Made with their type, so TipTap joins them to a neighbouring list of the same type.
+  kind("alpha", "Alphabetical list", "Lists", "letters abc", ArrowDownAZ, (c) =>
+    c.toggleList("orderedList", "listItem", false, { type: "a" }), "a.",
   ),
-  item("roman", "Roman list", "Lists", "numerals", Landmark, (e, r) =>
-    start(e, r).toggleOrderedList().updateAttributes("orderedList", { type: "i" }).run(), "i.",
+  kind("roman", "Roman list", "Lists", "numerals", Landmark, (c) =>
+    c.toggleList("orderedList", "listItem", false, { type: "i" }), "i.",
   ),
-  item("todo", "To-do list", "Lists", "todo task checkbox check", SquareCheck, (e, r) => start(e, r).toggleTaskList().run(), "[]"),
-  item("code", "Code block", "Blocks", "pre snippet", Code, (e, r) => start(e, r).setCodeBlock().run(), "```"),
+  kind("todo", "To-do list", "Lists", "todo task checkbox check", SquareCheck, (c) => c.toggleTaskList(), "[]"),
+  kind("code", "Code block", "Blocks", "pre snippet", Code, (c) => c.setCodeBlock(), "```"),
   item("table", "Table", "Blocks", "grid rows columns", Table, (e, r) =>
     e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
   ),

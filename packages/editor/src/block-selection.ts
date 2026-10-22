@@ -111,6 +111,30 @@ export const topLevelOf = (doc: PMNode, pos: number) => {
   return $p.depth ? $p.before(1) : pos;
 };
 
+export function deleteBlocks(view: EditorView): boolean {
+  const { selection, tr, schema } = view.state;
+  if (!selectedBlocks(selection)) return false;
+  // deleteRange also removes a list whose items are all gone.
+  tr.deleteRange(selection.from, selection.to);
+  if (tr.doc.childCount === 0) tr.insert(0, schema.nodes.paragraph.create());
+  tr.setSelection(Selection.near(tr.doc.resolve(tr.mapping.map(selection.from)), 1));
+  view.dispatch(tr);
+  return true;
+}
+
+// Copies the selected blocks, or the block holding the cursor, in right after them.
+export function duplicateBlocks(view: EditorView): boolean {
+  const { doc, selection, tr } = view.state;
+  const pos = blockPosAt(doc, selection.from);
+  const range = selectedBlocks(selection) ?? { from: pos, to: pos + (doc.nodeAt(pos)?.nodeSize ?? 0) };
+  const copy = doc.slice(range.from, range.to).content;
+  tr.insert(range.to, copy);
+  // Selected blocks hand the selection to the copy, so ⌘D again copies the copy.
+  if (selectedBlocks(selection)) tr.setSelection(BlockSelection.between(tr.doc.resolve(range.to), tr.doc.resolve(range.to + copy.size)));
+  view.dispatch(tr.scrollIntoView());
+  return true;
+}
+
 function anchorAndHead(selection: Selection, doc: PMNode): { anchor: number; head: number } {
   if (selection instanceof BlockSelection) return { anchor: selection.anchorBlock, head: selection.headBlock };
   const pos = blockPosAt(doc, selection.from);
@@ -176,16 +200,7 @@ export const BlockSelectionExtension = Extension.create({
       this.editor.view.dispatch(tr.setSelection(textEnd));
       return true;
     };
-    const remove = () => {
-      const { selection, tr } = this.editor.state;
-      if (!selectedBlocks(selection)) return false;
-      // deleteRange also removes a list whose items are all gone.
-      tr.deleteRange(selection.from, selection.to);
-      if (tr.doc.childCount === 0) tr.insert(0, this.editor.schema.nodes.paragraph.create());
-      tr.setSelection(Selection.near(tr.doc.resolve(tr.mapping.map(selection.from)), 1));
-      this.editor.view.dispatch(tr);
-      return true;
-    };
+    const remove = () => deleteBlocks(this.editor.view);
     return {
       Escape: () => {
         const { selection, doc } = this.editor.state;
@@ -219,6 +234,7 @@ export const BlockSelectionExtension = Extension.create({
       ArrowUp: () => leave(-1),
       Backspace: remove,
       Delete: remove,
+      "Mod-d": () => duplicateBlocks(this.editor.view),
     };
   },
 
