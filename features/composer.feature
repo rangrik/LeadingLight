@@ -50,7 +50,8 @@ Feature: The ask bar, the composer and agents
   Scenario: Mention another page
     Given there is a page titled "Glossary"
     When I type "@Glos" in the composer and choose "Glossary"
-    Then "@Glossary" sits in the field, and that page's text goes along as context
+    Then "@Glossary" sits in the field, and that page's text goes along with the question
+    And it goes along again only when it has changed, even in a thread that already started
 
   Scenario: Slash commands do things with the words
     Given the panel is open with "powerhouse" quoted

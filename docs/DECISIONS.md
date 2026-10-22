@@ -121,6 +121,11 @@ field is a composer in synara's spirit: `@` mentions an agent or another page, `
 things to do with the words, and the model and effort sit in its footer. Agents are not a
 new format: they are Claude Code's agent files (name, description and model in the front
 matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
-three that ship with the app. A mentioned agent's prompt leads the system prompt and its model
-wins for that question; a mentioned page's text goes along as context. Mentions sit as chips
-above the field rather than inline, which keeps the field a plain textarea.
+three that ship with the app. A mentioned agent's model wins for that question. Mentions sit
+as chips above the field rather than inline, which keeps the field a plain textarea.
+
+Claude Code keeps a session's first system prompt and ignores a new one on `--resume`. So
+the system prompt holds only the fixed role, and everything that can change between
+questions travels in the question itself: the note's text, a mentioned page's text and a
+mentioned agent's instructions, each sent again only when it has changed since the thread
+last saw it.
