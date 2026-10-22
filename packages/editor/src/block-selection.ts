@@ -10,6 +10,7 @@ import {
 } from "@tiptap/pm/state";
 import type { Mappable } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { linkMenuOpen } from "./page-links";
 import { slashMenuOpen } from "./slash-menu";
 
 // Whole top-level blocks, from the anchor block to the head block.
@@ -137,7 +138,7 @@ export const BlockSelectionExtension = Extension.create({
       Escape: () => {
         const { selection, doc } = this.editor.state;
         // Escape with the slash menu open only closes the menu.
-        if (slashMenuOpen(this.editor.state)) return false;
+        if (slashMenuOpen(this.editor.state) || linkMenuOpen(this.editor.state)) return false;
         if (selectedBlocks(selection)) return enter();
         const pos = blockPosAt(doc, selection.from);
         return select(pos, pos);

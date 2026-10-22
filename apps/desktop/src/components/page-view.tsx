@@ -3,11 +3,14 @@ import { AlignLeft, ImageIcon, Smile } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { Backlinks } from "@/components/backlinks";
+import { linkHost } from "@/components/link-views";
 import { CoverBand, CoverPicker } from "@/components/page-cover";
 import { IconPicker, PageIconView } from "@/components/page-icon";
 import { PropertyPanel } from "@/components/property-panel";
 import { assets } from "@/lib/assets";
 import { openLink } from "@/lib/links";
+import { registerLive } from "@/lib/live";
 import type { LLObject, ObjectPatch } from "@/lib/objects";
 import { type PageCover, type PageIcon, readCover, readIcon } from "@/lib/page-meta";
 import { trackFlush } from "@/lib/saving";
@@ -58,14 +61,17 @@ export function PageView({ page }: { page: LLObject }) {
   };
 
   // Every other stored property, including ones this version doesn't know, is kept as it was.
-  const setProp = (key: string, value: unknown) => {
-    const next = { ...latest.current };
-    if (value === undefined) delete next[key];
-    else next[key] = value;
+  const replaceProps = (next: Record<string, unknown>) => {
     latest.current = next;
     setProps(next);
     patchSummary(page.id, { properties: next });
     queue({ properties: next });
+  };
+  const setProp = (key: string, value: unknown) => {
+    const next = { ...latest.current };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    replaceProps(next);
   };
   const setType = (next: string) => {
     setTypeId(next);
@@ -84,8 +90,15 @@ export function PageView({ page }: { page: LLObject }) {
   useEffect(() => {
     if (!page.title && !page.content) titleRef.current?.focus();
     const untrack = trackFlush(flush);
+    const unlive = registerLive(page.id, {
+      content: () => editorRef.current?.getJSON() ?? page.content ?? { type: "doc", content: [] },
+      setContent: (doc) => editorRef.current?.setContent(doc),
+      properties: () => latest.current,
+      setProperties: replaceProps,
+    });
     return () => {
       untrack();
+      unlive();
       void flush();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -192,11 +205,13 @@ export function PageView({ page }: { page: LLObject }) {
             assets={assets}
             content={page.content}
             onChange={(read) => queue({ content: read })}
+            links={linkHost}
             onExitTop={() => titleRef.current?.focus()}
             openLink={openLink}
             ref={editorRef}
           />
         </div>
+        <Backlinks id={page.id} title={title} />
       </div>
     </>
   );

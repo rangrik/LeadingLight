@@ -59,7 +59,14 @@ export function PageChip({ id, onRemove }: { id: string; onRemove?: () => void }
   const page = pageOf(id);
   return (
     <Badge className="group/chip h-6 max-w-full gap-1.5 px-1.5 sm:h-6 sm:text-sm" render={<span />} size="lg" variant="outline">
-      <button className="flex min-w-0 items-center gap-1.5" onClick={(e) => visit(id, e)} type="button">
+      <button
+        className="flex min-w-0 items-center gap-1.5"
+        onClick={(e) => {
+          e.stopPropagation(); // inside a card, the chip opens its own page
+          visit(id, e);
+        }}
+        type="button"
+      >
         <RowIcon icon={page && iconFor(page)} />
         <span className="truncate">{page ? pageLabel(page.title) : "Deleted page"}</span>
       </button>

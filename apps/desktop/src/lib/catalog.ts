@@ -27,6 +27,8 @@ export type PropOptions = {
 export type PropDef = { id: string; name: string; kind: Kind; options: PropOptions; createdAt: number };
 
 export type LinkView = "line" | "card" | "wide" | "page";
+// How a list of pages shows: kept per type.
+export type ViewSettings = { kind: "list" | "table" | "gallery" | "board"; sort: { by: string; desc?: boolean }; group?: string };
 export type TypeDef = {
   id: string;
   name: string;
@@ -38,6 +40,7 @@ export type TypeDef = {
   linkView: LinkView;
   template?: string; // the default template's page id
   system?: boolean; // can't be deleted: the app relies on it
+  view?: ViewSettings; // its list of pages
   createdAt: number;
 };
 

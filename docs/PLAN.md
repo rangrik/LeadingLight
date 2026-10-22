@@ -56,7 +56,8 @@ Links
 - `@` and `[[` search titles and aliases and insert a link; "Create …" makes a new page.
 - A link on its own line shows as a line, a small card, a wide card, or the page itself,
   editable in place. The type sets the default; each link can change it.
-- Links follow renames. A `links` table is rebuilt from the body and properties on save.
+- Links follow renames. Backlinks are found by searching stored pages for the page's id,
+  so there is no links table to keep in step.
 - Backlinks sit at the end of every page, grouped by source, each with the line around
   it. Links from properties show the property's name. Unlinked mentions get a Link button.
 - Shift-click opens a page in a side panel, up to three stacked.
@@ -72,9 +73,9 @@ Made from the same parts
 - Collection: a page whose relation lists its members.
 - Daily note: one page per day, a calendar, and date links such as `@today`.
 
-Storage: a `properties` table holds definitions. Values stay in each page's `properties`
-JSON; a page's own properties are the values its type doesn't list. A `links` table holds
-links. The browser store mirrors both.
+Storage: a `property_defs` table holds definitions, and types keep their settings in
+`object_types`. Values stay in each page's `properties` JSON; a page's own properties are the
+values its type doesn't list. The browser store mirrors both.
 
 Property kinds, list views, page layouts, icon and cover sources, and starter types each
 sit in one list, so each can become an extension later.

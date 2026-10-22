@@ -8,6 +8,7 @@ import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
+import type { LinkHost } from "./page-links";
 import { SelectionToolbar } from "./selection-toolbar";
 import { TableToolbar } from "./table";
 
@@ -20,7 +21,12 @@ function known(schema: Schema, node: JSONContent): JSONContent | null {
   return { ...node, marks: node.marks?.filter((m) => schema.marks[m.type]), content };
 }
 
-export type BlockEditorHandle = { focus: (position?: FocusPosition) => void };
+export type BlockEditorHandle = {
+  focus: (position?: FocusPosition) => void;
+  // For changes made from outside the page (linking a mention, merging a tag).
+  getJSON: () => EditorDoc;
+  setContent: (doc: EditorDoc) => void;
+};
 
 export function BlockEditor({
   content,
@@ -28,12 +34,17 @@ export function BlockEditor({
   onChange,
   onExitTop,
   openLink,
+  links,
+  readOnly,
   ref,
 }: {
   content: EditorDoc | null;
   assets: AssetStore;
   // Gets a reader, not the document: serialising a long page on every keystroke is slow.
-  onChange: (read: () => EditorDoc) => void;
+  onChange?: (read: () => EditorDoc) => void;
+  links?: LinkHost;
+  // An embedded page: shown, never edited or saved from here.
+  readOnly?: boolean;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
   ref?: Ref<BlockEditorHandle>;
@@ -49,6 +60,7 @@ export function BlockEditor({
       createExtensions({
         assets,
         openLink: openLink ?? ((href) => void window.open(href, "_blank", "noopener")),
+        links,
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
@@ -76,7 +88,7 @@ export function BlockEditor({
   const editor = useEditor({
     extensions,
     content: start ?? undefined,
-    editable: !unreadable,
+    editable: !unreadable && !readOnly,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -87,11 +99,11 @@ export function BlockEditor({
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor }) => !unreadable && onChangeRef.current(() => editor.getJSON()),
+    onUpdate: ({ editor }) => !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
 
   // Dev-only hook so QA scripts can read editor state.
-  if (import.meta.env.DEV) (window as unknown as { __editor: unknown }).__editor = editor;
+  if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
 
   // TipTap focuses on the next frame; focusing the view too makes it immediate.
   useImperativeHandle(
@@ -101,6 +113,8 @@ export function BlockEditor({
         editor.commands.focus(position);
         editor.view.focus();
       },
+      getJSON: () => editor.getJSON(),
+      setContent: (doc) => editor.commands.setContent(doc),
     }),
     [editor],
   );
