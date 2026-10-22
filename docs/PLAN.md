@@ -30,8 +30,9 @@ What this milestone left out is in `DEFERRED.md`.
 
 Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes (ours
 in `packages/themes`), Settings in our shell, shortcuts and the menu bar, zoom,
-stillness, the mock agent connection, and Ask about this: a panel in the note that asks
-Claude through the Claude Code sign-in on this Mac (Settings › AI, `features/ask.feature`).
+stillness, the mock agent connection, and Ask about this: a bar beside the selected words
+and a panel in the note that ask Claude through the Claude Code sign-in on this Mac, with a
+composer that mentions agents and pages (`features/ask.feature`, `features/composer.feature`).
 
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).

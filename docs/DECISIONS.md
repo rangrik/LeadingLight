@@ -91,3 +91,15 @@ sidecar, so the protocol is spoken directly. The browser build has a stand-in th
 streams a fixed answer, so the panel can be tried and tested without Claude Code.
 Anthropic's terms allow this for one's own login; shipping it to others would need
 their approval.
+
+## 8. Asking happens by the words; agents are Claude Code's agent files
+
+Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
+field that sends at once, and Quote in reply for a longer question in the panel. The panel's
+field is a composer in synara's spirit: `@` mentions an agent or another page, `/` offers
+things to do with the words, and the model and effort sit in its footer. Agents are not a
+new format: they are Claude Code's agent files (name, description and model in the front
+matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
+three that ship with the app. A mentioned agent's prompt leads the system prompt and its model
+wins for that question; a mentioned page's text goes along as context. Mentions sit as chips
+above the field rather than inline, which keeps the field a plain textarea.

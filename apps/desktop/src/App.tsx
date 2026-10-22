@@ -20,11 +20,13 @@ import {
 import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { AgentPanel } from "~/components/agent-panel";
+import { AskBar } from "~/components/ask-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { pageLabel } from "~/lib/labels";
+import { setPages as setAskPages } from "~/lib/ask";
 import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "~/lib/objects";
 import { isNative } from "~/lib/platform";
 import { flushAll, reportSaveError } from "~/lib/saving";
@@ -88,6 +90,8 @@ export default function App() {
   useEffect(() => void isNative.then(setNative), []);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  // The composer's @mentions of other pages read the same list.
+  useEffect(() => setAskPages(pages.map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
     objects
@@ -189,7 +193,7 @@ export default function App() {
         <AppSidebar onCreate={create} pages={navPages} />
         <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
           <PanelHeader current={title === null ? null : pageLabel(title)} root="Pages" sidebarOpen={sidebarOpen} />
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto" data-page-scroller>
             {active ? (
               <PageView key={active.id} onRename={rename} onSave={save} page={active} />
             ) : (
@@ -210,7 +214,8 @@ export default function App() {
               </Empty>
             )}
           </div>
-          {/* The agent panel docks inside the page panel (lib/ask.ts opens it). */}
+          {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
+          {active && <AskBar />}
           {active && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog

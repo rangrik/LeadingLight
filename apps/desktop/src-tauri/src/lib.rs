@@ -45,7 +45,7 @@ pub fn run() {
                 .build(),
         )
         .manage(agent::Agents::default())
-        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_cancel])
+        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_cancel, agent::agent_list, agent::agent_folder])
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             menu_bar(_app)?;
