@@ -12,6 +12,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Block references (`((`) and tags on single blocks | Every block needs a lasting id, and editing one block in several pages at once is the hardest part of ProseMirror. | After M2's links and backlinks ship. |
 | 2026-10-22 | Images, web links, PDFs and audio as pages | They fit the page model as pages whose main property is the file or link, but each needs its own preview, fetch or reader work. | After M2. |
 | 2026-10-22 | Graph view | Needs the links table first, and shows little until there are many links. | After M2, when asked. |
+| 2026-10-22 | Side-by-side pages kept after a reload or restart | Asked for the simplest form; a reload opens one page, as before. | Someone misses their layout after a restart. |
+| 2026-10-22 | Splitting, moving or resizing panes from the keyboard or a menu, and dropping on a page's middle | Dragging covers the ask; Shipyard's swap-on-middle and split commands were left out, and dividers can't take focus. | When asked, or with the command palette. |
 | 2026-10-22 | One page open in two places at once | Two editors on one page need shared editing state. Capacities doesn't allow it either. | When asked. |
 | 2026-10-22 | Mermaid diagrams in code blocks | A large extra dependency for a niche use. | When asked. |
 | 2026-10-22 | Highlight blocks from reading integrations | There are no integrations to bring highlights in. | When an integration is built. |

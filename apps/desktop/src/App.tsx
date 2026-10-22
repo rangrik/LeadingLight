@@ -21,10 +21,12 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { DeletePageDialog } from "@/components/delete-page-dialog";
-import { PageView } from "@/components/page-view";
+import { PaneArea } from "@/components/pane-area";
+import { armDrag } from "@/components/pane-drag";
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { pageLabel } from "@/lib/labels";
-import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "@/lib/objects";
+import { type ObjectPatch, type ObjectSummary, objects } from "@/lib/objects";
+import { closePane, focusedPage, leaves, openPage, panes, showOnly } from "@/lib/panes";
 import { isNative } from "@/lib/platform";
 import { flushAll, reportSaveError } from "@/lib/saving";
 
@@ -48,8 +50,8 @@ function useSystemTheme() {
 export default function App() {
   useSystemTheme();
   const [pages, setPages] = useState<ObjectSummary[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [active, setActive] = useState<LLObject | null>(null);
+  const { root } = panes.use();
+  const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
   const [native, setNative] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
@@ -63,44 +65,33 @@ export default function App() {
       .list()
       .then((list) => {
         setPages(list);
-        setActiveId(list[0]?.id ?? null);
+        showOnly(list[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
-
-  useEffect(() => {
-    if (!activeId) {
-      setActive(null);
-      return;
-    }
-    let stale = false;
-    objects
-      .get(activeId)
-      .then((obj) => !stale && setActive(obj))
-      .catch(console.error);
-    return () => {
-      stale = true;
-    };
-  }, [activeId]);
 
   const create = useCallback(() => {
     objects
       .create()
       .then((obj) => {
         setPages((prev) => [obj, ...prev]);
-        setActive(obj);
-        setActiveId(obj.id);
+        openPage(obj.id);
       })
       .catch(console.error);
   }, []);
 
+  // A deleted page's pane closes; when it was the only one, the next page takes its place.
   const remove = useCallback(
     (id: string) => {
       objects.remove(id).catch(console.error);
       setPages((prev) => prev.filter((p) => p.id !== id));
-      if (id === activeId) setActiveId(pages.find((p) => p.id !== id)?.id ?? null);
+      const { root } = panes.get();
+      const open = root && leaves(root).find((l) => l.page === id);
+      if (!open) return;
+      if (root.kind === "split") closePane(open.id);
+      else showOnly(pages.find((p) => p.id !== id)?.id ?? null);
     },
-    [activeId, pages],
+    [pages],
   );
 
   // The sidebar and the breadcrumb follow the title as it is typed; saving is debounced.
@@ -153,12 +144,14 @@ export default function App() {
     };
   }, []);
 
-  const title = active ? (pages.find((p) => p.id === active.id)?.title ?? active.title) : null;
+  const titleOf = (id: string) => pages.find((p) => p.id === id)?.title ?? "";
+  const title = current === undefined ? null : titleOf(current);
   const navPages = pages.map((p) => ({
     name: pageLabel(p.title),
     icon: <FileText />,
-    isActive: p.id === activeId,
-    onSelect: () => setActiveId(p.id),
+    isActive: p.id === current,
+    onSelect: () => openPage(p.id),
+    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
     onDelete: () => setPendingDelete(p),
   }));
 
@@ -194,10 +187,10 @@ export default function App() {
             </Breadcrumb>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {active ? (
-            <PageView key={active.id} onRename={rename} onSave={save} page={active} />
-          ) : (
+        {root ? (
+          <PaneArea label={(id) => pageLabel(titleOf(id))} onRename={rename} onSave={save} />
+        ) : (
+          <div className="min-h-0 flex-1">
             <Empty className="h-full">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
@@ -213,8 +206,8 @@ export default function App() {
                 </Button>
               </EmptyContent>
             </Empty>
-          )}
-        </div>
+          </div>
+        )}
       </SidebarInset>
       <DeletePageDialog
         onCancel={() => setPendingDelete(null)}

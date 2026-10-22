@@ -64,7 +64,8 @@ export function PageView({
   }, [title]);
 
   return (
-    <div className="mx-auto w-full max-w-[760px] px-16 pt-10 pb-48">
+    // The left padding is the block handle's gutter; the right one gives way in narrow panes.
+    <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pt-10 pb-48 @xl:pe-16">
       <textarea
         aria-label="Title"
         className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
