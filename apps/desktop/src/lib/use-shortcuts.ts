@@ -7,6 +7,9 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 
+// Punctuation keys as the table's accelerators name them.
+const CODES: Record<string, string | undefined> = { Slash: "/", Backslash: "\\", Comma: ",", Period: ".", Equal: "=", Minus: "-" };
+
 // The keys in lib/shortcuts.json, by id. In the Mac app the menu bar takes
 // each key first and says which one (menu.rs emits berth://menu); in a
 // browser the page reads the keys itself. The sidebar's ⌘\ is the sidebar's
@@ -38,10 +41,12 @@ export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }
     };
     const byAccel = new Map(SHORTCUTS.filter((s) => s.accel && s.id !== "sidebar").map((s) => [s.accel as string, s.id]));
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.length > 1) return;
-      // ⌘+ arrives as "=" or, with Shift held on some layouts, "+".
-      const key = e.key === "+" ? "=" : e.key.length === 1 ? e.key.toUpperCase() : e.key;
-      const id = byAccel.get(`CmdOrCtrl+${e.shiftKey && key !== "=" ? "Shift+" : ""}${key}`);
+      // The editor's own keys (⌘B, ⌘/ for the block menu) are handled before this.
+      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey)) return;
+      // By physical key, so Option and Shift (which change e.key) still match the table.
+      const key = e.code.startsWith("Key") ? e.code.slice(3) : e.code.startsWith("Digit") ? e.code.slice(5) : CODES[e.code];
+      if (!key) return;
+      const id = byAccel.get(`CmdOrCtrl+${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${key}`);
       if (!id) return;
       e.preventDefault();
       run(id);

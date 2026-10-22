@@ -77,9 +77,10 @@ Feature: Appearance and settings
   Scenario: Keyboard shortcuts are listed in one place
     Given Settings › Shortcuts is open
     Then it lists "New page" with ⌘N, "Save now" with ⌘S, "Show or hide the sidebar" with ⌘\ and "Settings" with ⌘,
-    And the editor's own keys (⌘B, ⌘I) are not in it: the editor's toolbar shows those
-    When I press Meta+/
+    And the editor's own keys (⌘B, ⌘I, ⌘/ for the block menu) are not in it: the editor shows those
+    When I press Meta+Alt+/
     Then the Keyboard shortcuts sheet opens with the same list
+    And Meta+/ in the editor opens the block menu, not the sheet
 
   # Native only: the menu bar is built from the same table (src-tauri/src/menu.rs),
   # so macOS can never take ⌘N or ⌘\ before the page sees them.

@@ -123,12 +123,19 @@ test("About shows which build this is", async ({ page }) => {
   await expect(about.getByText("Shipyard", { exact: true })).toBeVisible();
 });
 
-test("Meta+/ opens the Keyboard shortcuts sheet with our table", async ({ page }) => {
-  await page.keyboard.press("Meta+/");
+test("Meta+Alt+/ opens the Keyboard shortcuts sheet with our table", async ({ page }) => {
+  await page.keyboard.press("Meta+Alt+/");
   const sheet = page.getByRole("dialog");
   await expect(sheet).toBeVisible();
   await expect(sheet.getByText("New page")).toBeVisible();
   await expect(sheet.getByText("Settings", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
+  // ⌘/ belongs to the editor's block menu, so no sheet.
+  await pages(page).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("textbox", { name: "Title" }).press("Enter");
+  await page.keyboard.type("a line");
+  await page.keyboard.press("Meta+/");
+  await expect(sheet).toBeHidden();
+  await expect(page.getByRole("menu")).toBeVisible();
 });

@@ -8,6 +8,6 @@
     { "id": "zoom-out", "group": "View", "label": "Zoom out", "keys": "⌘−", "accel": "CmdOrCtrl+-" },
     { "id": "zoom-reset", "group": "View", "label": "Actual size", "keys": "⌘0", "accel": "CmdOrCtrl+0" },
     { "id": "settings", "group": "Go", "label": "Settings…", "keys": "⌘,", "accel": "CmdOrCtrl+," },
-    { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘/", "accel": "CmdOrCtrl+/" }
+    { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘⌥/", "accel": "CmdOrCtrl+Alt+/", "what": "The editor's block menu has ⌘/" }
   ]
 }
