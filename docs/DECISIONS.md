@@ -111,3 +111,15 @@ searching stored pages for that id rather than kept in a links table, so nothing
 step. A change to another page (linking a mention, merging a tag) goes through that page's editor
 when it is open, so its pane never saves its own copy over the change. Every page's summary and
 properties stay in memory, which is what lists, cards and the link menu read.
+
+## 10. Asking happens by the words; agents are Claude Code's agent files
+
+Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
+field that sends at once, and Quote in reply for a longer question in the panel. The panel's
+field is a composer in synara's spirit: `@` mentions an agent or another page, `/` offers
+things to do with the words, and the model and effort sit in its footer. Agents are not a
+new format: they are Claude Code's agent files (name, description and model in the front
+matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
+three that ship with the app. A mentioned agent's prompt leads the system prompt and its model
+wins for that question; a mentioned page's text goes along as context. Mentions sit as chips
+above the field rather than inline, which keeps the field a plain textarea.

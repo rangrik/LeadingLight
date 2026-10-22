@@ -6,6 +6,7 @@ Feature: Ask about this
 
   Names used below:
   - Ask: the last item of the selection toolbar, and ⌘J
+  - the ask bar: toolbar "Ask Claude" beside the selected words (features/composer.feature)
   - the agent panel: region "Agent" inside the page panel, docked to a corner of the note
 
   Background:
@@ -14,15 +15,17 @@ Feature: Ask about this
 
   Scenario: Ask from the selection toolbar
     When I select "powerhouse" and click Ask
-    Then the agent panel opens in the bottom-right corner of the note
-    And it quotes "powerhouse" above the question field, which has focus
+    Then the ask bar appears above the words, its field focused
     When I type "What does this mean?" and press Enter
-    Then the question shows, then the answer streams in below it, as Markdown
+    Then the agent panel opens in the bottom-right corner of the note
+    And it shows "powerhouse" quoted, the question under it, then the answer streams in as Markdown
     And while it streams a Stop button shows; when it ends the field is ready for a follow-up
 
   Scenario: Ask with ⌘J
     When I select "the cell" and press Meta+J
-    Then the agent panel opens with "the cell" quoted
+    Then the ask bar appears by "the cell"
+    When I click "Quote in reply"
+    Then the agent panel opens with "the cell" quoted above the question field, which has focus
     When nothing is selected and I press Meta+J
     Then the panel opens with no quote, ready to ask about the whole page
 
@@ -61,7 +64,8 @@ Feature: Ask about this
     Given the agent panel is open
     When I choose "Top left" from its corner menu
     Then it sits in the top-left corner of the note and stays there when I reopen it
-    And its bottom-right edge can be dragged to resize it, no smaller than 280 by 240
+    And the corner facing the page shows a resize mark that fills in when the pointer is over it
+    And dragging that mark resizes it, no smaller than 280 by 240
 
   Scenario: Closing and reopening
     Given an answer has arrived

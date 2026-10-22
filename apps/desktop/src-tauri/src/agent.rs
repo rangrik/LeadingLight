@@ -186,10 +186,111 @@ pub async fn agent_ask(app: AppHandle, agents: State<'_, Agents>, ask: Ask, on_e
     Ok(())
 }
 
+// An agent as Claude Code keeps them: a Markdown file with name, description and model in
+// its front matter and the prompt below. Read from ~/.claude/agents and the app's own folder.
+#[derive(Serialize)]
+pub struct Agent {
+    id: String,
+    name: String,
+    description: Option<String>,
+    model: Option<String>,
+    prompt: String,
+    source: String,
+}
+
+fn unquote(v: &str) -> String {
+    let v = v.trim();
+    v.strip_prefix('"').and_then(|s| s.strip_suffix('"')).or_else(|| v.strip_prefix('\'').and_then(|s| s.strip_suffix('\''))).unwrap_or(v).to_string()
+}
+
+fn parse_agent(path: &std::path::Path) -> Option<Agent> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let (front, body) = match text.strip_prefix("---") {
+        Some(rest) => {
+            let end = rest.find("\n---")?;
+            (rest[..end].to_string(), rest[end + 4..].trim().to_string())
+        }
+        None => (String::new(), text.trim().to_string()),
+    };
+    let (mut name, mut description, mut model) = (None, None, None);
+    for line in front.lines() {
+        if let Some((key, value)) = line.split_once(':') {
+            match key.trim() {
+                "name" => name = Some(unquote(value)),
+                "description" => description = Some(unquote(value)),
+                "model" => model = Some(unquote(value)),
+                _ => {}
+            }
+        }
+    }
+    // A file with no name is not an agent Claude Code would load either.
+    let name = name.filter(|n| !n.is_empty())?;
+    let source = path.display().to_string();
+    Some(Agent {
+        id: format!("file:{source}"),
+        name,
+        description: description.filter(|d| !d.is_empty()),
+        model: model.filter(|m| !m.is_empty() && m != "inherit"),
+        prompt: body,
+        source,
+    })
+}
+
+fn agents_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("agents");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+#[tauri::command]
+pub fn agent_folder(app: AppHandle) -> Result<String, String> {
+    Ok(agents_dir(&app)?.display().to_string())
+}
+
+#[tauri::command]
+pub fn agent_list(app: AppHandle) -> Vec<Agent> {
+    let mut dirs = Vec::new();
+    if let Ok(own) = agents_dir(&app) {
+        dirs.push(own);
+    }
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
+        dirs.push(home.join(".claude/agents"));
+    }
+    let mut out = Vec::new();
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        let mut files: Vec<PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "md")).collect();
+        files.sort();
+        out.extend(files.iter().filter_map(|p| parse_agent(p)));
+    }
+    out
+}
+
 #[tauri::command]
 pub fn agent_cancel(agents: State<'_, Agents>, id: String) {
     if let Some(mut child) = agents.0.lock().ok().and_then(|mut m| m.remove(&id)) {
         let _ = child.kill();
         let _ = child.wait();
+    }
+}
+
+// The seam the browser QA cannot reach: a person's agent file into the @ menu. A nameless
+// file must be left out, and the prompt must be the body alone.
+#[cfg(test)]
+mod tests {
+    use super::parse_agent;
+
+    #[test]
+    fn reads_front_matter_and_skips_a_nameless_file() {
+        let dir = std::env::temp_dir().join(format!("ll-agents-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let good = dir.join("reviewer.md");
+        std::fs::write(&good, "---\nname: Reviewer\ndescription: \"Reads: closely\"\nmodel: inherit\n---\n\nBe strict.\n").unwrap();
+        let bad = dir.join("notes.md");
+        std::fs::write(&bad, "---\ndescription: no name here\n---\nnothing").unwrap();
+        let a = parse_agent(&good).unwrap();
+        assert_eq!((a.name.as_str(), a.description.as_deref(), a.model.as_deref(), a.prompt.as_str()), ("Reviewer", Some("Reads: closely"), None, "Be strict."));
+        assert!(parse_agent(&bad).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

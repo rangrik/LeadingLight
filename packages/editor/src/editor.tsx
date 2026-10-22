@@ -37,6 +37,9 @@ export type BlockEditorHandle = {
   clearBlocks: () => void;
   selection: () => Selected;
   find: (text: string, near: number) => Selected | null;
+  // A fresh DOM range for a span of the page, made each time a surface places itself by the
+  // words: a Range kept from before collapses once the editor redraws those nodes.
+  domRange: (from: number, to: number) => Range | null;
   // The page as plain text, for an assistant's context.
   text: () => string;
   // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
@@ -246,12 +249,24 @@ export function BlockEditor({
       },
       getJSON: () => editor.getJSON(),
       setContent: (doc) => editor.commands.setContent(doc),
-      refocus: () => {
-        editor.commands.focus();
-        editor.view.focus();
-      },
+      // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
+      // from a surface (the ask bar) opened in between.
+      refocus: () => editor.view.focus(),
       selection: () => selected(editor),
       find: (text, near) => locate(editor, text, near),
+      domRange: (from, to) => {
+        if (from >= to || from < 0 || to > editor.state.doc.content.size) return null;
+        try {
+          const a = editor.view.domAtPos(from);
+          const b = editor.view.domAtPos(to);
+          const range = document.createRange();
+          range.setStart(a.node, a.offset);
+          range.setEnd(b.node, b.offset);
+          return range;
+        } catch {
+          return null;
+        }
+      },
       text: () => editor.getText(),
       insertAfter: (pos, html) => {
         const doc = editor.state.doc;

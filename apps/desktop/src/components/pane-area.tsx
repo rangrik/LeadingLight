@@ -99,7 +99,7 @@ export function PaneArea() {
                 )}
               </PanelHeader>
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
-              <div className="@container min-h-0 flex-1 overflow-y-auto" key={leaf.page}>
+              <div className="@container min-h-0 flex-1 overflow-y-auto" data-page-scroller key={leaf.page}>
                 {leaf.page.startsWith(TYPE_VIEW) ? <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} /> : <PagePane id={leaf.page} />}
               </div>
             </section>

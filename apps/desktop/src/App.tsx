@@ -21,6 +21,7 @@ import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sideb
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
+import { AskBar } from "~/components/ask-bar";
 import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { RowIcon } from "~/components/page-icon";
@@ -29,6 +30,7 @@ import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { dailyFor, today } from "~/lib/daily";
+import { setPages as setAskPages } from "~/lib/ask";
 import { pageLabel } from "~/lib/labels";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
@@ -99,6 +101,8 @@ export default function App() {
   useEffect(() => void isNative.then(setNative), []);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  // The composer's @mentions of other pages read the same list as the sidebar.
+  useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
     loadSpace()
@@ -188,7 +192,8 @@ export default function App() {
               </Empty>
             </div>
           )}
-          {/* The agent panel docks inside the page panel (lib/ask.ts opens it). */}
+          {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
+          {root && <AskBar />}
           {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog

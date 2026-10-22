@@ -1,8 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // Scenarios from features/ask.feature, on the browser build's stand-in answers.
-// The seam: the selection toolbar and ⌘J into the panel, the panel into the editor
-// (insert), the keyboard staying out of the page, and the signed-out state.
+// The seam: the selection toolbar and ⌘J into the ask bar and the panel, the panel into
+// the editor (insert), the keyboard staying out of the page, and the signed-out state.
+const bar = (page: Page) => page.getByRole("toolbar", { name: "Ask Claude" });
 const panel = (page: Page) => page.getByRole("region", { name: "Agent" });
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 const question = (page: Page) => page.getByRole("textbox", { name: "Question" });
@@ -27,15 +28,17 @@ async function select(page: Page, word: string) {
   }, word);
 }
 
-test("Ask from the selection toolbar, then insert the answer below", async ({ page }) => {
+test("Ask from the selection toolbar through the bar, then insert the answer below", async ({ page }) => {
   await pageWith(page, "The mitochondria is the powerhouse of the cell.");
   await select(page, "powerhouse");
   await page.getByRole("button", { name: "Ask about this" }).click();
-  await expect(panel(page)).toBeVisible();
-  await expect(panel(page).locator("blockquote")).toHaveText("powerhouse");
-  await expect(question(page)).toBeFocused();
+  await expect(bar(page)).toBeVisible();
+  await expect(bar(page).getByRole("textbox", { name: "Ask Claude about this" })).toBeFocused();
   await page.keyboard.type("What does this mean?");
   await page.keyboard.press("Enter");
+  await expect(bar(page)).toBeHidden();
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).locator("blockquote")).toHaveText("powerhouse");
   await expect(panel(page)).toContainText("What does this mean?");
   await expect(panel(page)).toContainText("About “powerhouse”");
   await panel(page).getByRole("button", { name: "Insert below" }).click();
@@ -49,7 +52,7 @@ test("Replace finds the words again after the page was edited", async ({ page })
   await pageWith(page, "The mitochondria is the powerhouse of the cell.");
   await select(page, "powerhouse");
   await page.keyboard.press("Meta+J");
-  await question(page).fill("Simpler word?");
+  await bar(page).getByRole("textbox", { name: "Ask Claude about this" }).fill("Simpler word?");
   await page.keyboard.press("Enter");
   await expect(panel(page).getByRole("button", { name: "Replace" })).toBeVisible();
   await page.evaluate(() => {
