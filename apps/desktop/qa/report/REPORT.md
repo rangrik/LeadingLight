@@ -147,4 +147,4 @@ Tall video caps at 70% of the window; full screen still fills it. Screenshots ar
 |---|---|---|---|
 | R7-1 | Read-only missing-file rows were 42 px, not 46 | cosmetic | Fixed: the button is hidden, not removed |
 | R7-2 | Read-only emoji was still a focusable "Change emoji" button | accessibility | Fixed: plain text there |
-| R7-3 | A media block between two media blocks lost its selection after the harness's blur and focus | low | Open: seen only under the harness; Backspace still works |
+| R7-3 | A media block between two media blocks lost its selection after the harness's blur and focus | low | Deferred: Chromium with DevTools input only; the Mac app (WebKit) keeps the selection. See `docs/DEFERRED.md` |

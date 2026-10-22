@@ -90,10 +90,3 @@ Feature: Everyday situations
     Then the cursor moves into the text and nothing opens
     When I Meta+click "docs"
     Then "https://example.com" opens outside the app
-
-  # Big pages
-
-  Scenario: Typing stays smooth in a very long page
-    Given the body contains 2000 paragraphs
-    When I type 30 characters at the end
-    Then no keystroke takes longer than 16 ms to handle

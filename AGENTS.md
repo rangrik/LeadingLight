@@ -15,6 +15,7 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
 - `features/` — Gherkin specs. This is the contract for what the app does.
 - `docs/DECISIONS.md` — why things are the way they are. Read it before touching an architecture piece.
 - `docs/PLAN.md` — milestones.
+- `docs/DEFERRED.md` — issues and features put off, with the date, why, and what would bring each back.
 
 ## Commands
 
@@ -60,6 +61,7 @@ pnpm qa                                    # Playwright, headless Chromium, agai
    It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
    drives the native Tauri window.
 5. Fix what it found. Re-run QA on the failed scenarios.
+6. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.

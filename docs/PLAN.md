@@ -23,10 +23,9 @@ See `features/blocks.feature`, `features/selection.feature`, `features/polish.fe
 - Block selection: handle click, shift-click range, Escape, Shift+Arrow, delete, copy, drag, group.
 - Pixel precision pass on every block kind.
 
-Not in this milestone: block actions (turn into, colors, highlights), Mermaid in code blocks,
-highlight blocks from reading integrations, width options for columns and groups.
+What this milestone left out is in `DEFERRED.md`.
 
-## M2 — Objects
+## M2 — Objects (deferred, see `DEFERRED.md`)
 
 - Object types with properties (text, date, number, select, relation). A type picker
   on create. A property header above the body.
