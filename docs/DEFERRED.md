@@ -6,7 +6,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
 | 2026-10-22 | Virtualized or paged editing for very long pages | A keystroke on a 2000-paragraph page takes 8–11 ms (the first about 13 ms), inside a 16 ms frame. Rendering part of a page needs a new editor architecture and tends to break browser find, cross-block selection and copy. | Someone finds typing slow. To check: fill a page with 2000 paragraphs (`__editor.commands.setContent`), type 30 keys, time each from keydown to its transaction; the budget is 16 ms. |
-| 2026-10-22 | Block actions: turn into, colours, highlights | Left out of the block set on request; selecting blocks came first. | After M2, or when asked. |
+| 2026-10-22 | ⌘D and ⌫ while the block menu is open | The open menu holds focus, so the shortcuts it shows only work once it closes. Small, and nobody has asked. | Someone presses a shortcut with the menu open and expects it to run. |
+| 2026-10-22 | Block menu items Notion has beyond Turn into, Duplicate and Delete: colours and highlights, copy link to block, move to another page, comments | Colours need a new block attribute and a palette that reads in light and dark. Links, moves and comments need block ids and links between pages. | Colours when asked; the rest with M2. |
 | 2026-10-22 | Math blocks | Left out of the block set on request. | When asked. |
 | 2026-10-22 | M2: object types with properties (text, date, number, select, relation), a type picker on create, a property header above the body | Put off to start using the page editor first. Needs the first two or three real types (e.g. Person, Book, Meeting) to shape the design. | When M2 starts. |
 | 2026-10-22 | M2: `@` mentions of objects, with backlinks | Builds on object types. | With M2. |

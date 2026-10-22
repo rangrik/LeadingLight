@@ -82,6 +82,13 @@ test("gallery @gallery", async ({ page }) => {
   await shot(page, "05-block-handle");
 
   await page.getByRole("button", { name: "Drag to move" }).click();
+  await page.getByRole("menuitem", { name: "Turn into" }).hover();
+  await expect(page.getByRole("menuitem", { name: "Heading 1" })).toBeVisible();
+  await shot(page, "06a-block-menu");
+  // One Escape for the submenu, one for the menu.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.keyboard.press("Shift+ArrowDown");
   await shot(page, "06-block-selection");
   await page.keyboard.press("Escape");
@@ -125,4 +132,11 @@ test("gallery @gallery", async ({ page }) => {
   await page.keyboard.type("/");
   await expect(page.getByRole("listbox", { name: "Insert block" })).toBeVisible();
   await shot(page, "11-dark-slash-menu");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Backspace");
+
+  await body(page).getByText("Kyoto is best").hover();
+  await page.getByRole("button", { name: "Drag to move" }).click();
+  await expect(page.getByRole("menu", { name: "Block" })).toBeVisible();
+  await shot(page, "12-dark-block-menu");
 });

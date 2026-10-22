@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/core";
 import { GripVertical, Plus } from "lucide-react";
 import { type DragEvent, type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { BlockMenu, type MenuAt } from "./block-menu";
 import { BlockSelection, blockPosAt, ITEMS, itemPos, selectedBlocks, topLevelOf } from "./block-selection";
 import { keepFocus } from "./ui";
 
@@ -80,11 +81,15 @@ function selectBlock(editor: Editor, pos: number, extend: boolean) {
   view.focus();
 }
 
+// Dragging or opening the menu of a selected block acts on the whole selection.
+function inSelection(editor: Editor, pos: number): boolean {
+  const range = selectedBlocks(editor.state.selection);
+  return Boolean(range && pos >= range.from && pos < range.to);
+}
+
 function startDrag(editor: Editor, pos: number, e: DragEvent) {
   const { view } = editor;
-  const range = selectedBlocks(view.state.selection);
-  // Dragging a block that is part of the selection moves the whole selection.
-  if (!range || pos < range.from || pos >= range.to) selectBlock(editor, pos, false);
+  if (!inSelection(editor, pos)) selectBlock(editor, pos, false);
   const selection = view.state.selection;
   const dom = view.nodeDOM(pos);
   e.dataTransfer.effectAllowed = "move";
@@ -120,10 +125,13 @@ function addBlockAfter(editor: Editor, pos: number) {
 
 export function BlockHandle({ editor }: { editor: Editor }) {
   const [target, setTarget] = useState<Target | null>(null);
+  const [menu, setMenu] = useState<MenuAt | null>(null);
+  const fromHandle = menu?.side === "left";
 
+  // While the menu is open the handle stays beside its block.
   useEffect(() => {
     const root = editor.view.dom.closest<HTMLElement>(".ll-editor-root");
-    if (!root) return;
+    if (!root || menu) return;
     let raf = 0;
     let hide = 0;
     const onMove = (e: MouseEvent) => {
@@ -135,49 +143,95 @@ export function BlockHandle({ editor }: { editor: Editor }) {
     const onLeave = () => {
       hide = window.setTimeout(() => setTarget(null), HIDE_DELAY);
     };
-    const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
-      if (transaction.docChanged) setTarget(null);
-    };
     root.addEventListener("mousemove", onMove);
     root.addEventListener("mouseleave", onLeave);
-    editor.on("transaction", onTransaction);
     return () => {
       cancelAnimationFrame(raf);
       window.clearTimeout(hide);
       root.removeEventListener("mousemove", onMove);
       root.removeEventListener("mouseleave", onLeave);
+    };
+  }, [editor, menu]);
+
+  useEffect(() => {
+    const root = editor.view.dom.closest<HTMLElement>(".ll-editor-root");
+    if (!root) return;
+    const onTransaction = ({ transaction }: { transaction: { docChanged: boolean } }) => {
+      if (transaction.docChanged) setTarget(null);
+    };
+    // Right-clicking selected blocks opens their menu at the pointer, instead of the browser's.
+    const onContextMenu = (e: MouseEvent) => {
+      if (!editor.isEditable || !(e.target as Element).closest(".ll-selected")) return;
+      e.preventDefault();
+      setMenu({ rect: new DOMRect(e.clientX, e.clientY), side: "bottom" });
+    };
+    // Meta+/ opens it beside the selected blocks, or the block holding the cursor.
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "/" || !(e.metaKey || e.ctrlKey) || !editor.isEditable) return;
+      e.preventDefault();
+      const { doc, selection } = editor.state;
+      if (!selectedBlocks(selection)) selectBlock(editor, blockPosAt(doc, selection.from), false);
+      const first = editor.view.nodeDOM(selectedBlocks(editor.state.selection)?.from ?? 0);
+      const t = first instanceof HTMLElement && findBlock(editor, root, firstLineCenter(first));
+      if (!t) return;
+      const box = root.getBoundingClientRect();
+      setTarget(t);
+      setMenu({ rect: new DOMRect(box.left + t.left + SIZE, box.top + t.top, SIZE, SIZE), side: "left" });
+    };
+    editor.on("transaction", onTransaction);
+    root.addEventListener("contextmenu", onContextMenu);
+    editor.view.dom.addEventListener("keydown", onKeyDown);
+    return () => {
       editor.off("transaction", onTransaction);
+      root.removeEventListener("contextmenu", onContextMenu);
+      editor.view.dom.removeEventListener("keydown", onKeyDown);
     };
   }, [editor]);
 
-  if (!target || !editor.isEditable) return null;
+  const openMenu = (pos: number, e: ReactMouseEvent<HTMLElement>) => {
+    if (!inSelection(editor, pos)) selectBlock(editor, pos, false);
+    setMenu({ rect: e.currentTarget.getBoundingClientRect(), side: "left" });
+  };
 
   // COSS ghost buttons; icons stay 16px (icon-xs would shrink them to 14px).
   return (
-    <div className="ll-handle absolute flex items-center" contentEditable={false} style={{ top: target.top, left: target.left }}>
-      <Button
-        aria-label="Add block"
-        className="text-muted-foreground"
-        onClick={() => addBlockAfter(editor, target.pos)}
-        onMouseDown={keepFocus}
-        size="icon-xs"
-        variant="ghost"
-      >
-        <Plus className="size-4" />
-      </Button>
-      <Button
-        aria-label="Drag to move"
-        className="cursor-grab text-muted-foreground active:cursor-grabbing"
-        draggable
-        onClick={(e: ReactMouseEvent) => selectBlock(editor, target.pos, e.shiftKey)}
-        onDragEnd={() => endDrag(editor)}
-        onDragStart={(e: DragEvent) => startDrag(editor, target.pos, e)}
-        // No keepFocus here: a cancelled mousedown stops the browser from starting a drag.
-        size="icon-xs"
-        variant="ghost"
-      >
-        <GripVertical className="size-4" />
-      </Button>
-    </div>
+    <>
+      {target && editor.isEditable && (
+        <div className="ll-handle absolute flex items-center" contentEditable={false} style={{ top: target.top, left: target.left }}>
+          <Button
+            aria-label="Add block"
+            className="text-muted-foreground"
+            onClick={() => addBlockAfter(editor, target.pos)}
+            onMouseDown={keepFocus}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <Plus className="size-4" />
+          </Button>
+          <Button
+            aria-expanded={fromHandle}
+            aria-haspopup="menu"
+            aria-label="Drag to move"
+            className="cursor-grab text-muted-foreground active:cursor-grabbing"
+            data-pressed={fromHandle || undefined}
+            draggable
+            // Shift-click only extends the selection; a plain click opens the menu too.
+            onClick={(e: ReactMouseEvent<HTMLElement>) => (e.shiftKey ? selectBlock(editor, target.pos, true) : openMenu(target.pos, e))}
+            onContextMenu={(e: ReactMouseEvent<HTMLElement>) => {
+              e.preventDefault();
+              openMenu(target.pos, e);
+            }}
+            onDragEnd={() => endDrag(editor)}
+            onDragStart={(e: DragEvent) => startDrag(editor, target.pos, e)}
+            // No keepFocus here: a cancelled mousedown stops the browser from starting a drag.
+            size="icon-xs"
+            variant="ghost"
+          >
+            <GripVertical className="size-4" />
+          </Button>
+        </div>
+      )}
+      <BlockMenu at={menu} editor={editor} onClose={() => setMenu(null)} />
+    </>
   );
 }

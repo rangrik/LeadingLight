@@ -21,6 +21,7 @@ See `features/blocks.feature`, `features/selection.feature`, `features/polish.fe
 - Media: image (file, paste, drop; width presets), video, audio, file card, embed (YouTube and
   other URLs). Files are stored next to the database in the app, as data URLs in the browser.
 - Block selection: handle click, shift-click range, Escape, Shift+Arrow, delete, copy, drag, group.
+- Block menu from the handle, a right-click or ⌘/: turn into, duplicate, delete.
 - Pixel precision pass on every block kind.
 
 What this milestone left out is in `DEFERRED.md`.
