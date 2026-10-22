@@ -8,10 +8,11 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Virtualized or paged editing for very long pages | A keystroke on a 2000-paragraph page takes 8–11 ms (the first about 13 ms), inside a 16 ms frame. Rendering part of a page needs a new editor architecture and tends to break browser find, cross-block selection and copy. | Someone finds typing slow. To check: fill a page with 2000 paragraphs (`__editor.commands.setContent`), type 30 keys, time each from keydown to its transaction; the budget is 16 ms. |
 | 2026-10-22 | Block actions: turn into, colours, highlights | Left out of the block set on request; selecting blocks came first. | After M2, or when asked. |
 | 2026-10-22 | Math blocks | Left out of the block set on request. | When asked. |
-| 2026-10-22 | M2: object types with properties (text, date, number, select, relation), a type picker on create, a property header above the body | Put off to start using the page editor first. Needs the first two or three real types (e.g. Person, Book, Meeting) to shape the design. | When M2 starts. |
-| 2026-10-22 | M2: `@` mentions of objects, with backlinks | Builds on object types. | With M2. |
-| 2026-10-22 | M2: daily notes | Builds on object types. | With M2. |
-| 2026-10-22 | Object blocks | Need object types, which arrive in M2. | With M2. |
+| 2026-10-22 | Queries: saved, rule-based lists of pages | Left out of M2 on request. Lists of a type, a tag, a relation or backlinks, with sort and group, cover most uses. | A list someone needs can't be built without a saved rule. |
+| 2026-10-22 | Block references (`((`) and tags on single blocks | Every block needs a lasting id, and editing one block in several pages at once is the hardest part of ProseMirror. | After M2's links and backlinks ship. |
+| 2026-10-22 | Images, web links, PDFs and audio as pages | They fit the page model as pages whose main property is the file or link, but each needs its own preview, fetch or reader work. | After M2. |
+| 2026-10-22 | Graph view | Needs the links table first, and shows little until there are many links. | After M2, when asked. |
+| 2026-10-22 | One page open in two places at once | Two editors on one page need shared editing state. Capacities doesn't allow it either. | When asked. |
 | 2026-10-22 | Mermaid diagrams in code blocks | A large extra dependency for a niche use. | When asked. |
 | 2026-10-22 | Highlight blocks from reading integrations | There are no integrations to bring highlights in. | When an integration is built. |
 | 2026-10-22 | Width options for columns and groups | Equal widths cover the common case. | When asked. |

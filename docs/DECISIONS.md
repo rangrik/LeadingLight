@@ -62,3 +62,12 @@ not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
 
 The traffic lights are centred on the page panel's header line (y 40). AppKit puts a
 light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 42.
+
+## 6. One kind of object; types and properties are data
+
+Capacities builds its basic types into the app and gives each custom type its own
+properties. A plain page can have none, and a single page can't have one of its own. We keep
+one kind of object, the page. A type is a bundle the user edits, and any page can add any
+property beyond its type's. Property definitions are shared by the whole space, as in
+Obsidian, so lists can sort and group across types. Tags, collections and daily notes are
+pages with a type and a relation, not special code. No saved queries.
