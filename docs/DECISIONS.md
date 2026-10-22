@@ -78,3 +78,16 @@ is ours) and overrides by alias (the shortcuts table, the theme palettes in
 Tailwind root, with the system font put back after it. The agent code runs on its mock
 fixtures (`__BERTH_DEMO__`) until LeadingLight has an agent backend. What was chosen to
 wire in, and what was left out, is in `docs/SHIPYARD.md`.
+
+## 7. Claude through the Claude Code on this Mac, driven as a subprocess
+
+The AI answers through the Claude Code the person installed and signed into, so the
+app holds no key and the subscription pays. Rust spawns that binary as `claude -p`
+speaking stream-json, with no tools, our own system prompt and an empty settings
+list, and drops any API key from the child's environment so the sign-in wins (synara
+does the same through the Agent SDK). The SDK is a typed wrapper over this very
+protocol; using it in a Tauri app would mean shipping a JavaScript runtime as a
+sidecar, so the protocol is spoken directly. The browser build has a stand-in that
+streams a fixed answer, so the panel can be tried and tested without Claude Code.
+Anthropic's terms allow this for one's own login; shipping it to others would need
+their approval.

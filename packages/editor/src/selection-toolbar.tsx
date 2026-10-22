@@ -1,7 +1,7 @@
 import { type Editor, isTextSelection } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { Bold, Code, Highlighter, Italic, Link, Strikethrough, Underline, Unlink } from "lucide-react";
+import { Bold, Code, Highlighter, Italic, Link, Sparkles, Strikethrough, Underline, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Input } from "@leadinglight/ui/components/input";
 import { Toolbar, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
@@ -57,7 +57,8 @@ function LinkEditor({
   );
 }
 
-export function SelectionToolbar({ editor }: { editor: Editor }) {
+// onAsk, when given, adds Ask at the end: the app opens its agent panel on the selection.
+export function SelectionToolbar({ editor, onAsk }: { editor: Editor; onAsk?: () => void }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const s = useEditorState({
@@ -153,6 +154,22 @@ export function SelectionToolbar({ editor }: { editor: Editor }) {
               <ToolButton label="Link" onClick={openLink} pressed={s.link}>
                 <Link />
               </ToolButton>
+              {onAsk && (
+                <>
+                  <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
+                  <ToolButton
+                    label="Ask about this"
+                    onClick={() => {
+                      onAsk();
+                      // The panel takes over; the toolbar would otherwise stay over the text.
+                      editor.view.dispatch(editor.state.tr.setMeta("selectionToolbar", "hide"));
+                    }}
+                    shortcut="⌘J"
+                  >
+                    <Sparkles />
+                  </ToolButton>
+                </>
+              )}
             </>
           )}
         </Toolbar>

@@ -1,5 +1,6 @@
 import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { openLink } from "~/lib/links";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
@@ -55,6 +56,12 @@ export function PageView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The agent panel asks about this page while it is in front (lib/ask.ts).
+  useEffect(() => {
+    registerPage({ id: page.id, title: () => titleRef.current?.value ?? "", text: () => editorRef.current?.text() ?? "" }, editorRef.current);
+    return () => unregisterPage(page.id);
+  }, [page.id]);
+
   // The title wraps like a heading instead of clipping.
   useLayoutEffect(() => {
     const el = titleRef.current;
@@ -107,6 +114,7 @@ export function PageView({
           <BlockEditor
             assets={assets}
             content={page.content}
+            onAsk={openAsk}
             onChange={(read) => queue({ content: read })}
             onExitTop={() => titleRef.current?.focus()}
             openLink={openLink}

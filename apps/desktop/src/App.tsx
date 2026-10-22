@@ -19,6 +19,7 @@ import {
 } from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { AgentPanel } from "~/components/agent-panel";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
@@ -186,7 +187,7 @@ export default function App() {
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
         <AppSidebar onCreate={create} pages={navPages} />
-        <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
+        <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
           <PanelHeader current={title === null ? null : pageLabel(title)} root="Pages" sidebarOpen={sidebarOpen} />
           <div className="min-h-0 flex-1 overflow-y-auto">
             {active ? (
@@ -209,6 +210,8 @@ export default function App() {
               </Empty>
             )}
           </div>
+          {/* The agent panel docks inside the page panel (lib/ask.ts opens it). */}
+          {active && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}

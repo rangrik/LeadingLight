@@ -4,6 +4,7 @@ import { SHORTCUTS } from "@/lib/shortcuts";
 import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
+import { openAsk } from "~/lib/ask";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 
@@ -35,6 +36,8 @@ export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }
           return zoom(0, "ui");
         case "settings":
           return openSettings();
+        case "ask":
+          return openAsk();
         case "shortcuts":
           return toggleShortcuts();
       }

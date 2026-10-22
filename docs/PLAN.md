@@ -28,12 +28,13 @@ What this milestone left out is in `DEFERRED.md`.
 
 ## M1.75 — Shipyard inside (now)
 
-Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes,
-Settings, shortcuts and the menu bar, zoom, stillness, the mock agent connection.
+Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes (ours
+in `packages/themes`), Settings in our shell, shortcuts and the menu bar, zoom,
+stillness, the mock agent connection, and Ask about this: a panel in the note that asks
+Claude through the Claude Code sign-in on this Mac (Settings › AI, `features/ask.feature`).
 
-- Our own Settings container and copy; agent sections out.
 - An agents area on the conversation UI, on mock data first, then a backend.
-- Ask about a selection: a provider behind one `ask` interface (Settings › AI).
+- The designer's pass on Settings and the agent panel (the brief).
 
 ## M2 — Objects (deferred, see `DEFERRED.md`)
 
