@@ -54,6 +54,17 @@ Feature: Selecting blocks
     When I select the block "two" and type "x"
     Then the body still contains "one", "two", "three", "four" unchanged
 
+  Scenario: Pressing a handle again and again shows one steady highlight
+    When I click the handle of "two" five times, slowly and quickly, and hold the last press
+    Then "two" shows only the block tint the whole time: no text highlight appears on press,
+      and nothing flickers between clicks
+    And with "Link" open on a text selection, that selection stays visible while I type the URL,
+      in the system's selection colour and as tall as the line, like a normal selection
+    When I click into the title while blocks are selected
+    Then the blocks are no longer selected, so only the title's own selection shows
+    When I drag a block to the end of the page
+    Then only that block is selected afterwards, not the empty line kept below it
+
   Scenario: Meta+A selects every block
     When I click into "two" and press Meta+A
     Then every block shows the selected tint, in light and in dark mode

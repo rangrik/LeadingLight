@@ -10,7 +10,6 @@ import Underline from "@tiptap/extension-underline";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Typography from "@tiptap/extension-typography";
-import { Selection } from "@tiptap/extensions";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
@@ -94,6 +93,26 @@ const Placeholder = Extension.create({
             const pos = selection.$from.before();
             return DecorationSet.create(doc, [Decoration.node(pos, pos + node.nodeSize, { class: "is-empty", "data-placeholder": text })]);
           },
+        },
+      }),
+    ];
+  },
+});
+
+// Keeps selected text visible while focus is in the link field. Text only: a block selection has
+// its tint, and pressing a block handle takes focus for a moment, which mustn't flash a highlight.
+const BlurSelection = Extension.create({
+  name: "blurSelection",
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        key: new PluginKey("blurSelection"),
+        props: {
+          decorations: ({ doc, selection }) =>
+            editor.isFocused || selection.empty || !(selection instanceof TextSelection)
+              ? null
+              : DecorationSet.create(doc, [Decoration.inline(selection.from, selection.to, { class: "ll-blur-selection" })]),
         },
       }),
     ];
@@ -189,8 +208,7 @@ export function createExtensions(opts: {
     EmojiPrefix,
     ...createMedia(opts.assets),
     Placeholder,
-    // Keeps the selected text visible while focus is in the link field.
-    Selection.configure({ className: "ll-blur-selection" }),
+    BlurSelection,
     SlashCommands,
     BlockSelectionExtension,
     SelectAll,

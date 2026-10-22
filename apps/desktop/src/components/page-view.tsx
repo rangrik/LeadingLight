@@ -85,6 +85,7 @@ export function PageView({
         <textarea
           aria-label="Title"
           className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
+          onFocus={() => editorRef.current?.clearBlocks()}
           onChange={(e) => {
             const value = e.currentTarget.value.replace(/\n/g, "");
             setTitle(value);

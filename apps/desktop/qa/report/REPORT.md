@@ -217,3 +217,20 @@ nothing; 1,018 real margin clicks swept. Screenshots are `r11-*`.
 |---|---|---|---|
 | R11-1 | A right-margin click beside a code block's first line went to the code's start | minor | Fixed: the line is found from its start and walked to its end; hidden code controls ignore the pointer. Verified by a real-click sweep (Playwright, headless): every band lands on the line at that height, both sides, for paragraph, wrapped paragraph, heading, to-dos, code and tables |
 | R11-2 | The 1 px row at a block join went to the block below | cosmetic | Fixed: lines are taken from the block beside the click only |
+
+## Round 12 — repeated handle clicks (user-reported)
+
+The user saw unpredictable highlights when clicking block handles again and again. Cause: every
+press on a handle takes focus out of the editor until release, and TipTap's "keep the selection
+visible while unfocused" highlight then painted the system colour over the selected block's text,
+on top of its tint, flashing on each press. Replaced with our own, for text selections only.
+**Every handle case PASS**: slow, fast, across block kinds, Shift-ranges, hold, Add block, after
+Meta+A and Escape; link field still keeps its selection visible. Screenshots are `r12-*`.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R12-1 | The link-field highlight was shorter than a real selection (and pale in Chromium's dark mode) | low | Fixed: line-tall; WebKit, the app's engine, already gives the native dark colour |
+| R12-2 | After a drop at the page end, the selection also took the empty line kept below | low | Fixed: content inserted at a selection's edge stays outside it |
+| R12-3 | Selected blocks stayed tinted while typing in the title | low | Fixed: focusing the title clears them |
+
+Verified in WebKit headless (Playwright) after the fixes; no further QA round.

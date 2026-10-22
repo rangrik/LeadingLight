@@ -339,7 +339,14 @@
 }
 .ll-editor s { color: var(--muted-foreground); }
 /* The selected text while focus is in the link field. */
-.ll-editor .ll-blur-selection { background-color: Highlight; }
+/* The system's selection colour, as tall as the line like a real selection (an inline background
+   only covers the font's height). */
+.ll-editor .ll-blur-selection {
+  background-color: Highlight;
+  padding-block: calc((1lh - 1.2em) / 2);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
 
 /* Placeholder, set by the Placeholder extension on the block under the cursor. */
 .ll-editor :is(p, h1, h2, h3, h4, summary).is-empty::before {

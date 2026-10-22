@@ -42,8 +42,10 @@ export class BlockSelection extends Selection {
     return this.anchor <= this.head ? this.head - (this.$head.nodeBefore?.nodeSize ?? 0) : this.head;
   }
 
+  // Content inserted right at either edge (the empty line kept at the page end) stays outside.
   map(doc: PMNode, mapping: Mappable): Selection {
-    return BlockSelection.between(doc.resolve(mapping.map(this.anchor)), doc.resolve(mapping.map(this.head)));
+    const out = this.anchor <= this.head ? 1 : -1;
+    return BlockSelection.between(doc.resolve(mapping.map(this.anchor, out)), doc.resolve(mapping.map(this.head, -out)));
   }
 
   eq(other: Selection): boolean {

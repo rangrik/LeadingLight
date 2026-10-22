@@ -7,6 +7,7 @@ import { type Ref, useImperativeHandle, useMemo, useRef } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
+import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
 import { SelectionToolbar } from "./selection-toolbar";
@@ -25,6 +26,7 @@ export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
   hasFocus: () => boolean;
   placeAt: (x: number, y: number) => boolean;
+  clearBlocks: () => void;
 };
 
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
@@ -184,6 +186,11 @@ export function BlockEditor({
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),
       placeAt: (x, y) => placeAt(editor, x, y),
+      // Selected blocks give way when focus goes elsewhere on the page (the title).
+      clearBlocks: () => {
+        const range = selectedBlocks(editor.state.selection);
+        if (range) editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(range.from), 1)));
+      },
     }),
     [editor],
   );
