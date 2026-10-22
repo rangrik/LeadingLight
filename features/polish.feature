@@ -85,7 +85,10 @@ Feature: Visual precision
 
   Scenario: Text rhythm
     Then the body's line height is 1.6 times its font size
-    And consecutive paragraphs are separated by exactly 6 px of vertical space
+    And consecutive paragraphs are separated by exactly 10 px of vertical space, list items by 4 px
+    And every block's visible edge (text, quote bar, code box, table border, media card, group border)
+      is 10 px from the next block's, nested list items included; a divider has 15 px each side
+    And that holds below an open toggle, for one or two lists inside a quote, and around columns
     And a heading 1 has more space above it than below it
 
   Scenario: Dark mode keeps the same geometry

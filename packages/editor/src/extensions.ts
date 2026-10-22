@@ -1,16 +1,20 @@
 import { Extension, type KeyboardShortcutCommand } from "@tiptap/core";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
+import Bold from "@tiptap/extension-bold";
+import Code from "@tiptap/extension-code";
 import Highlight from "@tiptap/extension-highlight";
+import Italic from "@tiptap/extension-italic";
+import Strike from "@tiptap/extension-strike";
+import Underline from "@tiptap/extension-underline";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Typography from "@tiptap/extension-typography";
-import { Selection } from "@tiptap/extensions";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import type { AssetStore } from "./assets";
-import { BlockSelectionExtension } from "./block-selection";
+import { BlockSelectionExtension, SelectAll } from "./block-selection";
 import { CodeBlock } from "./code-block";
 import { BlockDrop } from "./drop";
 import { EmojiPrefix } from "./emoji-prefix";
@@ -95,6 +99,26 @@ const Placeholder = Extension.create({
   },
 });
 
+// Keeps selected text visible while focus is in the link field. Text only: a block selection has
+// its tint, and pressing a block handle takes focus for a moment, which mustn't flash a highlight.
+const BlurSelection = Extension.create({
+  name: "blurSelection",
+  addProseMirrorPlugins() {
+    const editor = this.editor;
+    return [
+      new Plugin({
+        key: new PluginKey("blurSelection"),
+        props: {
+          decorations: ({ doc, selection }) =>
+            editor.isFocused || selection.empty || !(selection instanceof TextSelection)
+              ? null
+              : DecorationSet.create(doc, [Decoration.inline(selection.from, selection.to, { class: "ll-blur-selection" })]),
+        },
+      }),
+    ];
+  },
+});
+
 // Lists, tables, code and columns use Tab first; anywhere else it must not move focus out of the page.
 const KeepTab = Extension.create({
   name: "keepTab",
@@ -142,6 +166,9 @@ const OpenLinks = Extension.create<{ open: (href: string) => void }>({
   },
 });
 
+// A new line starts plain instead of carrying bold, italic and the rest on, as in Notion.
+const plain = { keepOnSplit: false };
+
 export function createExtensions(opts: {
   onExitTop: () => boolean;
   assets: AssetStore;
@@ -149,17 +176,27 @@ export function createExtensions(opts: {
 }) {
   return [
     StarterKit.configure({
+      bold: false,
+      italic: false,
+      underline: false,
+      strike: false,
+      code: false,
       heading: { levels: [1, 2, 3, 4] },
       codeBlock: false,
       orderedList: false,
       link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
       dropcursor: { color: "var(--info)", width: 2 },
     }),
+    Bold.extend(plain),
+    Italic.extend(plain),
+    Underline.extend(plain),
+    Strike.extend(plain),
+    Code.extend(plain),
     CodeBlock,
     TaskList,
     TaskItem.configure({ nested: true }),
     OrderedListStyles,
-    Highlight,
+    Highlight.extend(plain),
     Typography,
     Toggle.configure({ persist: true, HTMLAttributes: { class: "ll-toggle" } }),
     DetailsSummary,
@@ -171,10 +208,10 @@ export function createExtensions(opts: {
     EmojiPrefix,
     ...createMedia(opts.assets),
     Placeholder,
-    // Keeps the selected text visible while focus is in the link field.
-    Selection.configure({ className: "ll-blur-selection" }),
+    BlurSelection,
     SlashCommands,
     BlockSelectionExtension,
+    SelectAll,
     BlockDrop,
     Unformat,
     KeepTab,

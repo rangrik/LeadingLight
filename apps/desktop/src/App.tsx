@@ -44,9 +44,15 @@ const SIDEBAR_KEY = "ll.sidebar.open";
 const SettingsView = lazy(() => import("@/views/settings/settings-view").then((m) => ({ default: m.SettingsView })));
 
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
-// middle line (y 40; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
+// middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
+// The app's header is 36 px, level with the lights; a browser keeps sidebar-08's 64 px, level
+// with the sidebar's logo row.
 const chrome = (native: boolean) =>
-  ({ "--traffic-top": native ? "40px" : "0px", "--traffic-left": native ? "72px" : "0px" }) as React.CSSProperties;
+  ({
+    "--traffic-top": native ? "24px" : "0px",
+    "--traffic-left": native ? "72px" : "0px",
+    "--header-height": native ? "36px" : "64px",
+  }) as React.CSSProperties;
 
 export default function App() {
   // Shipyard's pieces (vendor/shipyard/README.md): the theme, its agent data
@@ -183,13 +189,14 @@ export default function App() {
   }));
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
-  // is a window drag area with room for the traffic lights, and the crumbs are Pages and the title.
+  // is 36 px in the app (see chrome) and a window drag area with room for the traffic lights, and
+  // the crumbs are Pages and the title.
   // Under Settings it stays mounted, so the page's edits are kept, and goes inert.
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
         <AppSidebar onCreate={create} pages={navPages} />
         <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-          <header className="flex h-16 shrink-0 items-center gap-2" data-tauri-drag-region>
+          <header className="flex h-(--header-height) shrink-0 items-center gap-2" data-tauri-drag-region>
             <div
               className={cn(
                 "flex min-w-0 items-center gap-2 px-4 transition-[padding] duration-200 ease-linear",

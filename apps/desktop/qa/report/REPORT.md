@@ -148,3 +148,89 @@ Tall video caps at 70% of the window; full screen still fills it. Screenshots ar
 | R7-1 | Read-only missing-file rows were 42 px, not 46 | cosmetic | Fixed: the button is hidden, not removed |
 | R7-2 | Read-only emoji was still a focusable "Change emoji" button | accessibility | Fixed: plain text there |
 | R7-3 | A media block between two media blocks lost its selection after the harness's blur and focus | low | Deferred: Chromium with DevTools input only; the Mac app (WebKit) keeps the selection. See `docs/DEFERRED.md` |
+
+## Round 8 — blank-space clicks, Meta+A, spacing, plain new lines (user-reported)
+
+**All scenarios PASS** (editor 4/4, selection 10/10, polish 12/12); stopped early on request.
+Screenshots are `r8-*`. Found in extra situations, all fixed for round 9:
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R8-1 | A blank click above or beside the title added a line before the first block | minor | Fixed: those go to the title; the title-to-body gap goes to the body's start |
+| R8-2 | Meta+A's tint broke into stripes at headings, quotes, dividers and media | minor | Fixed: all block spacing is padding; media tint inside a run |
+| R8-3 | A side-margin click beside a to-do, toggle, table or group landed in the next block | minor | Fixed: it finds the line at that height |
+| R8-4 | Gaps between block kinds ranged from 8 to 17 px | cosmetic | Fixed: visible edges 10 px apart; dividers 15 |
+| R8-5 | With the link field open, a blank click added a line and lost the selection | minor | Fixed: focus in the editor's toolbars counts as active |
+| R8-6 | On a read-only page a blank click held focus on the title | cosmetic | Fixed: the click is only cancelled when it acts |
+
+Also from the user in this round: block drags never started with a real mouse (the handle
+cancelled mousedown) and Tauri swallowed all drags on macOS (`dragDropEnabled`); list items
+weren't blocks; the panel header wasted space above the window buttons. All changed for round 9.
+
+## Round 9 — real drags, list items as blocks, one spacing rhythm
+
+**60 run, 58 PASS, 2 FAIL.** editor 28/29, selection 10/10, polish 11/12, shell 9/9. Every
+visible edge is 10 px from the next block's across 361 kind pairs (dividers 15); Meta+A tints one
+unbroken shape on 41 blocks; handles sit at 0.00 px on every kind and list depth. Screenshots
+are `r9-*`.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R9-1 | A blank click left the link field open | minor | Fixed: leaving the toolbar closes it |
+| R9-2 | 15 px below an open toggle | minor | Fixed |
+| R9-3 | A list inside a quote broke the rhythm by 2 px | cosmetic | Fixed |
+| R9-4 | The empty-columns outline touched its neighbours | minor | Fixed |
+| R9-5 | Margin clicks beside a table or columns went to the second cell | minor | Fixed: first cell from the left, last from the right |
+| R9-6 | A bullet item dropped on a numbered list turned numbered | minor | Fixed: items join only lists of their kind |
+| R9-7 | Items inside columns, groups, toggles and quotes had no handle of their own | minor | Fixed |
+| R9-8 | Shift+Arrow past a list's end jumped two steps | cosmetic | Fixed: the whole list first |
+| R9-9 | Escape twice on an item with children left the cursor in a child | cosmetic | Fixed |
+| R9-10 | Plain-text copy of items had blank lines | cosmetic | Fixed: one line per line of text |
+| R9-11 | A drop line showed where the drop does nothing | cosmetic | Fixed |
+| R9-12 | A read-only page's title takes clicks | by design | Kept (R6-2) |
+
+## Round 10 — re-check of round 9
+
+**All 11 re-checks PASS.** Meta+A one shape on every kind; handles 0.00 px on 21 top-level
+blocks and 17 list items; read-only body unchanged. Screenshots are `r10-*`.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R10-1 | In side-by-side columns, hovering an item in column 1 targeted column 2's item | major | Fixed: inside columns the columns block keeps the handle (per-item there is deferred) |
+| R10-2 | A column-2 item's handle covered column 1's text | minor | Gone with R10-1 |
+| R10-3 | In a quote, the list lost its marker indent and the handle sat on the bar | minor | Fixed: indent kept; container items' handles sit in the gutter |
+| R10-4 | Margin clicks in a block's padding landed on the wrong line or cell | minor | Fixed: find the line under the pointer, clamp into its text |
+| R10-5 | Two lists in a quote were 12 px apart | cosmetic | Fixed |
+| R10-6 | The empty-column outline sat 0.6 px off the rhythm | cosmetic | Replaced: an "Empty column" hint, no outline |
+| R10-7 | Typing into an empty column shifted text and blocks | cosmetic | Fixed: the hint changes no layout |
+| R10-8 | Dropping an item at its own list's edge split the list | cosmetic | Fixed: no line, no change |
+| R10-9 | After deleting a quote's only item the cursor landed one character in | cosmetic | Fixed |
+| R10-10 | Shift+Arrow from a list in a container selects the container | low | By design, spec reworded |
+
+## Round 11 — re-check of round 10
+
+**14 of 15 PASS.** Columns keep one handle; quote lists keep their indent with handles clear of
+the bar; empty columns show a hint and nothing moves when typing; list-edge drops change
+nothing; 1,018 real margin clicks swept. Screenshots are `r11-*`.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R11-1 | A right-margin click beside a code block's first line went to the code's start | minor | Fixed: the line is found from its start and walked to its end; hidden code controls ignore the pointer. Verified by a real-click sweep (Playwright, headless): every band lands on the line at that height, both sides, for paragraph, wrapped paragraph, heading, to-dos, code and tables |
+| R11-2 | The 1 px row at a block join went to the block below | cosmetic | Fixed: lines are taken from the block beside the click only |
+
+## Round 12 — repeated handle clicks (user-reported)
+
+The user saw unpredictable highlights when clicking block handles again and again. Cause: every
+press on a handle takes focus out of the editor until release, and TipTap's "keep the selection
+visible while unfocused" highlight then painted the system colour over the selected block's text,
+on top of its tint, flashing on each press. Replaced with our own, for text selections only.
+**Every handle case PASS**: slow, fast, across block kinds, Shift-ranges, hold, Add block, after
+Meta+A and Escape; link field still keeps its selection visible. Screenshots are `r12-*`.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| R12-1 | The link-field highlight was shorter than a real selection (and pale in Chromium's dark mode) | low | Fixed: line-tall; WebKit, the app's engine, already gives the native dark colour |
+| R12-2 | After a drop at the page end, the selection also took the empty line kept below | low | Fixed: content inserted at a selection's edge stays outside it |
+| R12-3 | Selected blocks stayed tinted while typing in the title | low | Fixed: focusing the title clears them |
+
+Verified in WebKit headless (Playwright) after the fixes; no further QA round.
