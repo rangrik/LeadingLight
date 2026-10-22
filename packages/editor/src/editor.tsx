@@ -1,19 +1,29 @@
 import { type Editor, type FocusPosition, getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
+import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { EditorContent, useEditor } from "@tiptap/react";
+import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
-import { type Ref, useImperativeHandle, useMemo, useRef } from "react";
+import { type Ref, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
+import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
 import { SelectionToolbar } from "./selection-toolbar";
+import { type NotesStore, Sidenotes } from "./sidenotes";
 import { TableToolbar } from "./table";
+import { TableOfContents } from "./toc";
+
+export type { NotesStore } from "./sidenotes";
+export { citesIn } from "./anchors";
 
 export type EditorDoc = JSONContent;
+
+// How a page looks: Plain is the calm default, Playful adds hand-made touches (see editor.css).
+export type PageStyle = "plain" | "playful";
 
 // The parts of a document the schema knows: unknown nodes and marks are left out.
 function known(schema: Schema, node: JSONContent): JSONContent | null {
@@ -27,7 +37,14 @@ export type BlockEditorHandle = {
   hasFocus: () => boolean;
   placeAt: (x: number, y: number) => boolean;
   clearBlocks: () => void;
+  // Quotes words from another page, with a reference back to them (see DECISIONS.md, 6).
+  insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
+  // Scrolls to an anchor (a note, quoted words, or a reference) and lights it for a moment.
+  reveal: (id: string) => void;
 };
+
+// Where "Add to essay" sends selected words.
+export type QuoteTarget = { essay: string; add: (text: string, id: string) => void };
 
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
 
@@ -100,7 +117,12 @@ export function BlockEditor({
   assets,
   onChange,
   onExitTop,
-  openLink,
+  openLink: open = (href) => void window.open(href, "_blank", "noopener"),
+  style = "plain",
+  notes,
+  quoteTo,
+  quotes,
+  onCites,
   ref,
 }: {
   content: EditorDoc | null;
@@ -109,22 +131,43 @@ export function BlockEditor({
   onChange: (read: () => EditorDoc) => void;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
+  style?: PageStyle;
+  // Where sidenotes keep their text; without it the page can't take notes.
+  notes?: NotesStore;
+  quoteTo?: QuoteTarget;
+  // The quotes this page's essay still holds (null until known); words whose quote is gone stop
+  // showing as quoted, and are dropped from the page when it first learns which are gone.
+  quotes?: string[] | null;
+  // Hears which quotes (cite ids) this page holds, whenever that changes.
+  onCites?: (ids: string[]) => void;
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
   const onChangeRef = useRef(onChange);
   const onExitTopRef = useRef(onExitTop);
+  const notesRef = useRef(notes);
+  const openRef = useRef(open);
   onChangeRef.current = onChange;
   onExitTopRef.current = onExitTop;
+  notesRef.current = notes;
+  openRef.current = open;
+  // The note just added, which opens with the cursor in it.
+  const [newNote, setNewNote] = useState<string | null>(null);
 
   const extensions = useMemo(
     () =>
       createExtensions({
         assets,
-        openLink: openLink ?? ((href) => void window.open(href, "_blank", "noopener")),
+        openLink: (href) => openRef.current(href),
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
+        },
+        onNote: (id, quote) => {
+          if (!notesRef.current) return false;
+          notesRef.current.add(id, quote);
+          setNewNote(id);
+          return true;
         },
       }),
     // The store is a module-level singleton in the app.
@@ -175,6 +218,54 @@ export function BlockEditor({
   // Dev-only hook so QA scripts can read editor state.
   if (import.meta.env.DEV) (window as unknown as { __editor: unknown }).__editor = editor;
 
+  // Words whose thought is gone (its Thoughts page or block was deleted) stop being noted, each
+  // time the notes (re)load.
+  useEffect(() => {
+    if (!notes || unreadable) return;
+    const tr = editor.state.tr;
+    for (const a of anchors(tr.doc, "note")) if (!notes.read(a.id)) tr.removeMark(a.from, a.to, editor.schema.marks.note.create({ id: a.id }));
+    if (tr.docChanged) editor.view.dispatch(tr.setMeta("addToHistory", false));
+  }, [editor, notes, unreadable]);
+
+  const pruned = useRef(false);
+  useEffect(() => {
+    if (!quotes || unreadable) return;
+    const tr = setLiveQuotes(editor.state.tr, quotes);
+    if (!pruned.current) {
+      pruned.current = true;
+      const live = new Set(quotes);
+      for (const a of anchors(tr.doc, "cited")) if (!live.has(a.id)) tr.removeMark(a.from, a.to, editor.schema.marks.cited.create(a.attrs));
+      tr.setMeta("addToHistory", false);
+    }
+    editor.view.dispatch(tr);
+  }, [editor, quotes, unreadable]);
+
+  const onCitesRef = useRef(onCites);
+  onCitesRef.current = onCites;
+  useEffect(() => {
+    let last: string | undefined;
+    const report = () => {
+      if (!onCitesRef.current) return;
+      const ids: string[] = [];
+      editor.state.doc.descendants((node) => void (node.type.name === "cite" && ids.push(node.attrs.id)));
+      if (ids.join(" ") === last) return;
+      last = ids.join(" ");
+      onCitesRef.current?.(ids);
+    };
+    report();
+    editor.on("update", report);
+    return () => void editor.off("update", report);
+  }, [editor]);
+
+  // A quote goes after the block holding the cursor once the page has been written in, else at
+  // the end. An empty line there is replaced rather than left above the quote.
+  const touched = useRef(false);
+  useEffect(() => {
+    const touch = () => (touched.current = true);
+    editor.on("focus", touch);
+    return () => void editor.off("focus", touch);
+  }, [editor]);
+
   // TipTap focuses on the next frame; focusing the view too makes it immediate.
   useImperativeHandle(
     ref,
@@ -191,12 +282,63 @@ export function BlockEditor({
         const range = selectedBlocks(editor.state.selection);
         if (range) editor.view.dispatch(editor.state.tr.setSelection(Selection.near(editor.state.doc.resolve(range.from), 1)));
       },
+      insertQuote: ({ text, id, href, label }) => {
+        const { doc, selection } = editor.state;
+        const quote = editor.schema.nodeFromJSON({
+          type: "blockquote",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `${text} ` }, { type: "cite", attrs: { id, href, label } }] }],
+        });
+        const { $head } = selection;
+        const [from, to] = !touched.current
+          ? [doc.content.size - (doc.lastChild?.nodeSize ?? 0), doc.content.size]
+          : $head.depth
+            ? [$head.before(1), $head.after(1)]
+            : [selection.from, selection.to];
+        const range = isEmptyLine(doc.nodeAt(from)) ? { from, to } : to;
+        const start = typeof range === "number" ? range : from;
+        // Its own undo step, closed on both sides, so an undo never takes it with other edits.
+        editor
+          .chain()
+          .command(({ tr }) => !!closeHistory(tr))
+          .insertContentAt(range, [quote.toJSON(), { type: "paragraph" }])
+          .setTextSelection(start + quote.nodeSize + 1)
+          .scrollIntoView()
+          .run();
+        editor.view.dispatch(closeHistory(editor.state.tr));
+        touched.current = true;
+      },
+      reveal: (id) => {
+        // The cursor goes to the end of the anchor too, so typing continues there.
+        const { doc } = editor.state;
+        let at = [...anchors(doc, "note"), ...anchors(doc, "cited")].find((a) => a.id === id)?.to;
+        doc.descendants((node, pos) => {
+          if (node.type.name === "cite" && node.attrs.id === id) at = pos + 1;
+        });
+        if (at !== undefined) editor.chain().setTextSelection(at).focus(undefined, { scrollIntoView: false }).run();
+        const sel = ["note", "cited", "cite"].map((k) => `[data-${k}="${CSS.escape(id)}"]`).join(", ");
+        const els = [...editor.view.dom.querySelectorAll<HTMLElement>(sel)];
+        els[0]?.scrollIntoView({ block: "center", behavior: "smooth" });
+        // An animation, not a class: changing the text's DOM would make the editor re-read it.
+        const tint = "color-mix(in srgb, var(--info) 24%, transparent)";
+        for (const el of els) el.animate([{ backgroundColor: tint }, { backgroundColor: tint, offset: 0.6 }, { backgroundColor: "transparent" }], 1400);
+      },
     }),
     [editor],
   );
 
+  const quote = quoteTo && {
+    label: "Add to essay",
+    run: () => {
+      const [from, to] = trimmed(editor.state.doc, editor.state.selection.from, editor.state.selection.to);
+      const id = newId();
+      editor.chain().setTextSelection({ from, to }).setMark("cited", { id, essay: quoteTo.essay }).setTextSelection(to).run();
+      quoteTo.add(editor.state.doc.textBetween(from, to, " ").trim(), id);
+    },
+  };
+  const hasNotes = useEditorState({ editor, selector: ({ editor }) => anchors(editor.state.doc, "note").length > 0 });
+
   return (
-    <div className="ll-editor-root">
+    <div className="ll-editor-root" data-notes={(notes && hasNotes) || undefined} data-style={style}>
       {unreadable && (
         <Alert className="mb-3" variant="warning">
           <TriangleAlert />
@@ -204,9 +346,12 @@ export function BlockEditor({
           <AlertDescription>It opens read-only, so nothing in it is lost.</AlertDescription>
         </Alert>
       )}
+      {/* Before the text, so Tab from the title reaches it (the text keeps Tab for itself). */}
+      <TableOfContents editor={editor} />
       <EditorContent editor={editor} />
+      {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       <BlockHandle editor={editor} />
-      <SelectionToolbar editor={editor} />
+      <SelectionToolbar editor={editor} note={Boolean(notes)} quote={quote} />
       <TableToolbar editor={editor} />
       <EmojiPicker editor={editor} />
     </div>

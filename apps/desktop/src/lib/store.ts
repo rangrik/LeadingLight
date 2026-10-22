@@ -7,16 +7,16 @@ export type ObjectSummary = {
   id: string;
   typeId: string;
   title: string;
+  properties: Record<string, unknown>;
   createdAt: number;
 };
 
 export type LLObject = ObjectSummary & {
   content: EditorDoc | null;
-  properties: Record<string, unknown>;
   updatedAt: number;
 };
 
-export type ObjectPatch = Partial<Pick<LLObject, "title" | "content">>;
+export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properties">>;
 
 export interface ObjectStore {
   list(): Promise<ObjectSummary[]>;

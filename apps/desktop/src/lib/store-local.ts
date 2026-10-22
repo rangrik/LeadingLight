@@ -45,7 +45,7 @@ export const localStore: ObjectStore = {
     const all = await tx<LLObject[]>("readonly", (s) => s.getAll());
     return all
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(({ id, typeId, title, createdAt }) => ({ id, typeId, title, createdAt }));
+      .map(({ id, typeId, title, properties, createdAt }) => ({ id, typeId, title, properties, createdAt }));
   },
 
   async get(id) {

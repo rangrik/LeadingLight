@@ -1,7 +1,7 @@
 import { type Editor, isTextSelection } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { Bold, Code, Highlighter, Italic, Link, Strikethrough, Underline, Unlink } from "lucide-react";
+import { Bold, Code, Highlighter, Italic, Link, MessageSquarePlus, Strikethrough, TextQuote, Underline, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Input } from "@leadinglight/ui/components/input";
 import { Toolbar, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
@@ -57,7 +57,8 @@ function LinkEditor({
   );
 }
 
-export function SelectionToolbar({ editor }: { editor: Editor }) {
+// `note` offers "Add sidenote"; `quote` offers "Add to essay" once the page has one.
+export function SelectionToolbar({ editor, note, quote }: { editor: Editor; note?: boolean; quote?: { label: string; run: () => void } }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const s = useEditorState({
@@ -153,6 +154,17 @@ export function SelectionToolbar({ editor }: { editor: Editor }) {
               <ToolButton label="Link" onClick={openLink} pressed={s.link}>
                 <Link />
               </ToolButton>
+              {(note || quote) && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}
+              {note && (
+                <ToolButton label="Add sidenote" onClick={() => editor.commands.addSidenote()} shortcut="⌘⇧M">
+                  <MessageSquarePlus />
+                </ToolButton>
+              )}
+              {quote && (
+                <ToolButton label={quote.label} onClick={quote.run}>
+                  <TextQuote />
+                </ToolButton>
+              )}
             </>
           )}
         </Toolbar>

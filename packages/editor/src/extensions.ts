@@ -7,12 +7,12 @@ import Highlight from "@tiptap/extension-highlight";
 import Italic from "@tiptap/extension-italic";
 import Strike from "@tiptap/extension-strike";
 import Underline from "@tiptap/extension-underline";
-import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import Typography from "@tiptap/extension-typography";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
+import { Cite, Cited, Note, Thought } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockSelectionExtension, SelectAll } from "./block-selection";
 import { CodeBlock } from "./code-block";
@@ -23,6 +23,7 @@ import { OrderedListStyles } from "./lists";
 import { createMedia } from "./media";
 import { SlashCommands, slashMenuOpen } from "./slash-menu";
 import { Tables } from "./table";
+import { Todo } from "./todo";
 
 // ArrowUp on the first line, or Backspace in a lone empty block, hands focus back to the title.
 // Low priority so menus get the keys first.
@@ -70,25 +71,27 @@ const Toggle = Details.extend({
   },
 });
 
-const hint = (node: PMNode) => {
+const hint = (node: PMNode, paragraph: string) => {
   if (node.type.name === "heading") return `Heading ${node.attrs.level}`;
   if (node.type.name === "detailsSummary") return "Toggle";
-  return node.type.name === "paragraph" ? "Type '/' for commands" : null;
+  return node.type.name === "paragraph" ? paragraph : null;
 };
 
 // The hint on the empty line holding the text cursor, at any depth (columns, toggles, lists,
 // cells). Ours because TipTap's nested mode leaves old hints behind (3.32).
-const Placeholder = Extension.create({
+const Placeholder = Extension.create<{ paragraph: string }>({
   name: "placeholder",
+  addOptions: () => ({ paragraph: "Type '/' for commands" }),
   addProseMirrorPlugins() {
     const editor = this.editor;
+    const paragraph = this.options.paragraph;
     return [
       new Plugin({
         key: new PluginKey("placeholder"),
         props: {
           decorations: ({ doc, selection }) => {
             const node = selection.$from.parent;
-            const text = selection instanceof TextSelection && selection.empty && !node.content.size && hint(node);
+            const text = selection instanceof TextSelection && selection.empty && !node.content.size && hint(node, paragraph);
             if (!text || !editor.isEditable) return null;
             const pos = selection.$from.before();
             return DecorationSet.create(doc, [Decoration.node(pos, pos + node.nodeSize, { class: "is-empty", "data-placeholder": text })]);
@@ -144,15 +147,30 @@ const Unformat = Extension.create({
   },
 });
 
-// Meta+click (Ctrl+click elsewhere) opens a link; a plain click puts the cursor in it.
+// Meta+click (Ctrl+click elsewhere) opens a link; a plain click puts the cursor in it. Chips and
+// quotes that point into the app (data-href) open on a plain click and never take the cursor.
 const OpenLinks = Extension.create<{ open: (href: string) => void }>({
   name: "openLinks",
   addOptions: () => ({ open: () => {} }),
   addProseMirrorPlugins() {
+    const chip = (e: Event) => (e.target as HTMLElement).closest("[data-href], [data-note-chip]");
     return [
       new Plugin({
         key: new PluginKey("openLinks"),
         props: {
+          handleDOMEvents: {
+            mousedown: (_view, event) => {
+              if (!chip(event)) return false;
+              event.preventDefault();
+              return true;
+            },
+            click: (_view, event) => {
+              const href = chip(event)?.getAttribute("data-href");
+              if (!href) return false;
+              this.options.open(href);
+              return true;
+            },
+          },
           handleClick: (_view, _pos, event) => {
             if (!(event.metaKey || event.ctrlKey)) return false;
             const href = (event.target as HTMLElement).closest("a[href]")?.getAttribute("href");
@@ -173,6 +191,8 @@ export function createExtensions(opts: {
   onExitTop: () => boolean;
   assets: AssetStore;
   openLink: (href: string) => void;
+  onNote?: (id: string, quote: string) => boolean;
+  placeholder?: string;
 }) {
   return [
     StarterKit.configure({
@@ -194,7 +214,7 @@ export function createExtensions(opts: {
     Code.extend(plain),
     CodeBlock,
     TaskList,
-    TaskItem.configure({ nested: true }),
+    Todo.configure({ nested: true }),
     OrderedListStyles,
     Highlight.extend(plain),
     Typography,
@@ -207,7 +227,11 @@ export function createExtensions(opts: {
     Group,
     EmojiPrefix,
     ...createMedia(opts.assets),
-    Placeholder,
+    Note.configure({ onAdd: opts.onNote ?? null }),
+    Cited,
+    Thought,
+    Cite,
+    opts.placeholder ? Placeholder.configure({ paragraph: opts.placeholder }) : Placeholder,
     BlurSelection,
     SlashCommands,
     BlockSelectionExtension,

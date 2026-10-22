@@ -63,3 +63,12 @@ not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
 The traffic lights are centred on the page panel's header line, 26 pt down as in Apple Notes,
 with the header 36 px tall (sidebar-08's 64 px left too much empty bar above the lights).
 AppKit puts a light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 28.
+
+## 6. Sidenotes, thoughts and essays are linked pages
+
+A sidenote's anchor is a `note` mark in the page; its text is a `thought` block in the page's
+Thoughts page, so all raw thoughts on a page can be read in one place. An essay is a page too.
+The links live in `properties`: the source keeps `thoughts` and `essay` ids, and each child keeps
+`parent` and `role`. Text quoted into an essay gets a `cited` mark, and the essay a `cite` chip;
+both point at each other with `ll:<page id>#<anchor id>` hrefs, which the app opens itself.
+This is ahead of M2's `links` table on purpose: when that lands, these move into it.

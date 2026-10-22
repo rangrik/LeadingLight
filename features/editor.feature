@@ -128,6 +128,31 @@ Feature: Block editor
     When I wait 1 second and reload the browser
     Then the item is still checked
 
+  Scenario: Checking a to-do draws it off like a pen, in a Playful page
+    Given a page in the Playful style (see styles.feature) with a to-do "Book the Friday train to Jaipur"
+    When I click its checkbox
+    Then a hand-drawn check is drawn over the box, its flick leaving the box's top-right corner
+    And then a wobbly line is drawn through the words, left to right
+    And the words turn muted, the box stays unfilled, and the cursor does not jump
+    When I click the checkbox again
+    Then the check and the line fade out instead of being drawn backwards, and the words return to normal
+    When I check it once more
+    Then the check and the line are drawn with a new wobble
+
+  Scenario: The line follows the to-do's own words
+    Given a Playful page with a checked to-do long enough to wrap onto two lines
+    Then each row has its own line, the second drawn after the first
+    When I type more words at its end, or make the window narrower
+    Then the lines still cover exactly the text, one per row
+    And an unchecked to-do nested under it is neither struck nor muted
+    And a checked to-do with no text shows the check and no line
+
+  Scenario: Checked to-dos rest still
+    Given a Playful page with a checked to-do
+    When I reload, or open another page and come back
+    Then the check and the line are already there, with nothing animating
+    And with the system set to reduce motion, checking fades the marks in instead of drawing them
+
   Scenario: Clicking blank page space opens a line, when no block is active
     Given the body holds a heading "Plan" and a paragraph "Notes"
     And the cursor is not in the body (I clicked the sidebar)

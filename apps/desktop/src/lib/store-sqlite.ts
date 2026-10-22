@@ -36,9 +36,9 @@ function fromRow(r: Row): LLObject {
 export const sqliteStore: ObjectStore = {
   async list() {
     const rows = await (await db()).select<Row[]>(
-      "SELECT id, type_id, title, created_at FROM objects WHERE deleted_at IS NULL ORDER BY created_at DESC",
+      "SELECT id, type_id, title, properties, created_at FROM objects WHERE deleted_at IS NULL ORDER BY created_at DESC",
     );
-    return rows.map((r) => ({ id: r.id, typeId: r.type_id, title: r.title, createdAt: r.created_at }));
+    return rows.map((r) => ({ id: r.id, typeId: r.type_id, title: r.title, properties: JSON.parse(r.properties), createdAt: r.created_at }));
   },
 
   async get(id) {
@@ -60,8 +60,8 @@ export const sqliteStore: ObjectStore = {
 
   async update(id, patch) {
     await (await db()).execute(
-      "UPDATE objects SET title = COALESCE($1, title), content = COALESCE($2, content), updated_at = $3 WHERE id = $4",
-      [patch.title ?? null, patch.content ? JSON.stringify(patch.content) : null, Date.now(), id],
+      "UPDATE objects SET title = COALESCE($1, title), content = COALESCE($2, content), properties = COALESCE($3, properties), updated_at = $4 WHERE id = $5",
+      [patch.title ?? null, patch.content ? JSON.stringify(patch.content) : null, patch.properties ? JSON.stringify(patch.properties) : null, Date.now(), id],
     );
   },
 
