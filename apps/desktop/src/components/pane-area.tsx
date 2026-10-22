@@ -5,13 +5,13 @@ import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { RowIcon } from "@/components/page-icon";
-import { armDrag, DragGhost, DropOverlay } from "@/components/pane-drag";
-import { PageView } from "@/components/page-view";
-import { TypeView } from "@/components/type-view";
-import { type LLObject, objects } from "@/lib/objects";
-import { closePane, type Divider, focusPane, layout, panes, type Rect, resizePanes } from "@/lib/panes";
-import { describe, space, TYPE_VIEW } from "@/lib/space";
+import { RowIcon } from "~/components/page-icon";
+import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
+import { PageView } from "~/components/page-view";
+import { TypeView } from "~/components/type-view";
+import { type LLObject, objects } from "~/lib/objects";
+import { closePane, type Divider, focusPane, layout, panes, type Rect, resizePanes } from "~/lib/panes";
+import { describe, space, TYPE_VIEW } from "~/lib/space";
 
 type Size = { w: number; h: number };
 

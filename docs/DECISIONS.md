@@ -60,10 +60,26 @@ sidebar-08; drag-to-resize was dropped with the switch.
 Native-only behaviour (SQLite, files, traffic-light room) checks the app identifier,
 not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
 
-The traffic lights are centred on the page panel's header line (y 40). AppKit puts a
-light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 42.
+The traffic lights are centred on the page panel's header line, 26 pt down as in Apple Notes,
+with the header 36 px tall (sidebar-08's 64 px left too much empty bar above the lights).
+AppKit puts a light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 28.
 
-## 6. One kind of object; types and properties are data
+## 6. Shipyard is vendored, verbatim, and synced from upstream
+
+Shipyard (cosscom/shipyard, MIT) is the same stack as ours (Tauri 2, React 19, COSS UI)
+and has themes, Settings, a type scale and grid, a shortcuts table with a Mac menu bar,
+and an agent conversation UI we want. Rewriting them would cost months and lose the
+fixes upstream keeps shipping. So its `app/src`, scripts, perf and plugin sources live
+under `vendor/shipyard` unchanged, mirroring upstream's paths; `UPSTREAM.json` records
+the commit and `scripts/sync-shipyard.sh` applies upstream's diff with a 3-way merge.
+Nothing in there is edited: our code imports it (`@/` is the vendored tree's alias, `~/`
+is ours) and overrides by alias (the shortcuts table, the theme palettes in
+`packages/themes`) or CSS. Its `index.css` is the
+Tailwind root, with the system font put back after it. The agent code runs on its mock
+fixtures (`__BERTH_DEMO__`) until LeadingLight has an agent backend. What was chosen to
+wire in, and what was left out, is in `docs/SHIPYARD.md`.
+
+## 7. One kind of object; types and properties are data
 
 Capacities builds its basic types into the app and gives each custom type its own
 properties. A plain page can have none, and a single page can't have one of its own. We keep
@@ -72,7 +88,7 @@ property beyond its type's. Property definitions are shared by the whole space, 
 Obsidian, so lists can sort and group across types. Tags, collections and daily notes are
 pages with a type and a relation, not special code. No saved queries.
 
-## 7. Links are ids in the body; backlinks are a search
+## 8. Links are ids in the body; backlinks are a search
 
 A link stores only the page's id, so it follows renames and icon changes. Backlinks are found by
 searching stored pages for that id rather than kept in a links table, so nothing can fall out of

@@ -7,8 +7,8 @@ import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/componen
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { cn } from "@leadinglight/ui/lib/utils";
 import iconsUrl from "@iconify-json/lucide/icons.json?url";
-import { assets } from "@/lib/assets";
-import { type Color, COLORS, type PageIcon } from "@/lib/page-meta";
+import { assets } from "~/lib/assets";
+import { type Color, COLORS, type PageIcon } from "~/lib/page-meta";
 
 // Lucide's whole set as one file, fetched on first use: importing it would put every icon in
 // the main bundle.

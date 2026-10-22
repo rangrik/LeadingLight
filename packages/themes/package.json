@@ -1,0 +1,19 @@
+{
+  "name": "@leadinglight/themes",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "LeadingLight's themes: the palettes are ours to edit; the engine that applies and checks them is Shipyard's (vendor/shipyard).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./builtin": "./src/builtin.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check": "node --experimental-strip-types --test src/contrast.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "~6.0.3"
+  }
+}

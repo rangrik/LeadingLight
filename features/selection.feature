@@ -14,9 +14,10 @@ Feature: Selecting blocks
     When I hover "two" and click "Drag to move"
     Then the block "two" is selected and no other block is
     And the block has the selected tint
+    And the block menu is open (features/block-menu.feature)
 
   Scenario: Shift-clicking another handle selects the range
-    When I hover "two" and click "Drag to move"
+    When I hover "two", click "Drag to move" and press Escape to close the block menu
     And I hover "four" and shift-click "Drag to move"
     Then the blocks "two", "three" and "four" are selected
 
@@ -53,6 +54,28 @@ Feature: Selecting blocks
   Scenario: Typing while blocks are selected changes nothing
     When I select the block "two" and type "x"
     Then the body still contains "one", "two", "three", "four" unchanged
+
+  Scenario: Pressing a handle again and again shows one steady highlight
+    When I click the handle of "two" five times, slowly and quickly, and hold the last press
+    Then "two" shows only the block tint the whole time: no text highlight appears on press,
+      and nothing flickers between clicks
+    And with "Link" open on a text selection, that selection stays visible while I type the URL,
+      in the system's selection colour and as tall as the line, like a normal selection
+    When I click into the title while blocks are selected
+    Then the blocks are no longer selected, so only the title's own selection shows
+    When I drag a block to the end of the page
+    Then only that block is selected afterwards, not the empty line kept below it
+
+  Scenario: Meta+A selects every block
+    When I click into "two" and press Meta+A
+    Then every block shows the selected tint, in light and in dark mode
+    And on a page with headings, a quote, a divider and media, the tint is one unbroken shape
+    When I press Backspace
+    Then the body is one empty paragraph with the cursor in it
+    When the cursor is in a code block and I press Meta+A
+    Then only the code is selected
+    When I press Meta+A again
+    Then every block shows the selected tint
 
   Scenario: Clicking elsewhere clears the selection
     When I select the block "two"

@@ -3,14 +3,14 @@ import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Calendar } from "@leadinglight/ui/components/calendar";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
-import { RowIcon } from "@/components/page-icon";
-import { armDrag } from "@/components/pane-drag";
-import { visit } from "@/components/property-value";
-import { DAILY, ensureDaily, shiftDay, today } from "@/lib/daily";
-import { fromIso, isoDay } from "@/lib/format";
-import { pageLabel } from "@/lib/labels";
-import { openPage } from "@/lib/panes";
-import { iconFor, space } from "@/lib/space";
+import { RowIcon } from "~/components/page-icon";
+import { armDrag } from "~/components/pane-drag";
+import { visit } from "~/components/property-value";
+import { DAILY, ensureDaily, shiftDay, today } from "~/lib/daily";
+import { fromIso, isoDay } from "~/lib/format";
+import { pageLabel } from "~/lib/labels";
+import { openPage } from "~/lib/panes";
+import { iconFor, space } from "~/lib/space";
 
 export const goToDay = async (day: string) => openPage(await ensureDaily(day));
 

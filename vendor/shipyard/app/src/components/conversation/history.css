@@ -1,0 +1,23 @@
+/* A long chat's rows: one drawn again as it scrolls back into view keeps
+   still rather than moving in a second time. */
+.cv-still .cv-in, .cv-still.cv-in { animation: none; }
+
+/* ⌘F in a chat: every match tinted, the current one solid. */
+::highlight(chat-find) { background-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+::highlight(chat-find-now) { background-color: color-mix(in srgb, var(--warning) 85%, transparent); color: black; }
+.hs-find { animation: hs-drop 160ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes hs-drop { from { opacity: 0; transform: translateY(-4px); } }
+
+/* A prompt's actions sit under it, shown while the pointer is on it or a
+   key moves into them. */
+.hs-prompt .hs-acts { opacity: 0; transition: opacity 120ms ease; }
+.hs-prompt:hover .hs-acts, .hs-prompt:focus-within .hs-acts, .hs-acts[data-open] { opacity: 1; }
+@media (hover: none) { .hs-prompt .hs-acts { opacity: 1; } }
+
+/* The rewound turns, while the agent's record catches up. */
+.hs-rewound { background-image: repeating-linear-gradient(90deg, var(--border) 0 6px, transparent 6px 12px); background-size: 100% 1px; background-repeat: no-repeat; background-position: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-find { animation: none; }
+  .hs-prompt .hs-acts { transition: none; }
+}

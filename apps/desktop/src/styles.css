@@ -1,30 +1,16 @@
-@import "@leadinglight/ui/globals.css";
+/* Shipyard's stylesheet is the Tailwind root: the COSS tokens, the type scale,
+   the layout grid, density and themes (vendor/shipyard/README.md). */
+@import "../../../vendor/shipyard/app/src/index.css";
 @import "@leadinglight/editor/editor.css";
+@source "../../../packages/ui/src";
 @source "../../../packages/editor/src";
+@source "../../../vendor/shipyard/app/src";
 
-html {
-  color-scheme: light;
-}
-html.dark {
-  color-scheme: dark;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-/* Desktop feel: chrome is not selectable, only text you can edit. */
-body {
-  -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-  user-select: none;
-}
-input,
-textarea,
-[contenteditable] {
-  user-select: text;
+/* The system font first (docs/DECISIONS.md, 2); Shipyard's Inter is the fallback. */
+@theme inline {
+  --font-heading: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', monospace;
 }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */

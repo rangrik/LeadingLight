@@ -8,8 +8,8 @@ import {
   AlertDialogTitle,
 } from "@leadinglight/ui/components/alert-dialog";
 import { Button } from "@leadinglight/ui/components/button";
-import { pageLabel } from "@/lib/labels";
-import type { ObjectSummary } from "@/lib/objects";
+import { pageLabel } from "~/lib/labels";
+import type { ObjectSummary } from "~/lib/objects";
 
 export function DeletePageDialog({
   page,

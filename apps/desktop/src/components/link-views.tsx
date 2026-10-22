@@ -6,19 +6,19 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Card } from "@leadinglight/ui/components/card";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { PageIconView, RowIcon } from "@/components/page-icon";
-import { ValueView, visit } from "@/components/property-value";
-import { LINK_VIEWS } from "@/components/type-view";
-import { assets } from "@/lib/assets";
-import type { LinkView } from "@/lib/catalog";
-import { dailyTitle, ensureDaily, shiftDay, today } from "@/lib/daily";
-import { pageLabel } from "@/lib/labels";
-import { openLink } from "@/lib/links";
-import { type LLObject, type ObjectSummary, objects } from "@/lib/objects";
-import { COLORS, readCover } from "@/lib/page-meta";
-import { focusedPage } from "@/lib/panes";
-import { createPage, iconFor, pageOf, propOf, space, typeOf } from "@/lib/space";
-import { PAGE_TYPE } from "@/lib/store";
+import { PageIconView, RowIcon } from "~/components/page-icon";
+import { ValueView, visit } from "~/components/property-value";
+import { LINK_VIEWS } from "~/components/type-view";
+import { assets } from "~/lib/assets";
+import type { LinkView } from "~/lib/catalog";
+import { dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
+import { pageLabel } from "~/lib/labels";
+import { openLink } from "~/lib/links";
+import { type LLObject, type ObjectSummary, objects } from "~/lib/objects";
+import { COLORS, readCover } from "~/lib/page-meta";
+import { focusedPage } from "~/lib/panes";
+import { createPage, iconFor, pageOf, propOf, space, typeOf } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
 
 const aliasesOf = (p: ObjectSummary) =>
   String(p.properties.aliases ?? "")
@@ -106,7 +106,7 @@ export function PageCard({ page, wide, className }: { page: ObjectSummary; wide?
     <Card
       className={cn("ll-link-surface cursor-default overflow-hidden rounded-xl text-left before:rounded-[calc(var(--radius-xl)-1px)]", wide ? "w-full" : "w-64", className)}
       onClick={(e: React.MouseEvent) => visit(page.id, e)}
-      onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && visit(page.id, e as unknown as React.MouseEvent)}
+      onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && e.target === e.currentTarget && visit(page.id, e as unknown as React.MouseEvent)}
       render={<div role="link" tabIndex={0} />}
     >
       {cover && (
@@ -169,7 +169,7 @@ function LinkBlock({ id, view, setView }: { id: string; view: string | null; set
   return (
     <div className={cn("group/link relative py-1", (shown === "line" || shown === "card") && "w-fit max-w-full pe-10")}>
       {shown === "line" && (
-        <button className="ll-link-surface ll-row -ms-1 flex h-8 max-w-full items-center gap-2 rounded-md px-1 text-left font-medium hover:bg-accent" onClick={(e) => visit(id, e)} type="button">
+        <button className="ll-link-surface ll-row -ms-1 flex h-8 max-w-[calc(100%+0.25rem)] items-center gap-2 rounded-md px-1 text-left font-medium hover:bg-accent" onClick={(e) => visit(id, e)} type="button">
           <RowIcon icon={iconFor(page)} />
           <span className="truncate underline decoration-muted-foreground/40 underline-offset-2">{pageLabel(page.title)}</span>
         </button>

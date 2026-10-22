@@ -14,11 +14,13 @@ function LinkEditor({
   onApply,
   onRemove,
   onClose,
+  onLeave,
 }: {
   href: string;
   onApply: (href: string) => boolean;
   onRemove: () => void;
   onClose: () => void;
+  onLeave: () => void;
 }) {
   const [value, setValue] = useState(href);
   const [invalid, setInvalid] = useState(false);
@@ -35,6 +37,8 @@ function LinkEditor({
         aria-label="Link URL"
         autoFocus
         className="min-w-0 flex-1"
+        // Focus going anywhere outside the toolbar (a click on the page) closes the field.
+        onBlur={(e) => !e.currentTarget.closest("[role=toolbar]")?.contains(e.relatedTarget as Node | null) && onLeave()}
         onChange={(e) => {
           setValue(e.currentTarget.value);
           setInvalid(false);
@@ -116,6 +120,10 @@ export function SelectionToolbar({ editor }: { editor: Editor }) {
                 return ok;
               }}
               onClose={cancelLink}
+              onLeave={() => {
+                closeLink();
+                editor.view.dispatch(editor.state.tr.setMeta("selectionToolbar", "hide"));
+              }}
               onRemove={() => {
                 chain().extendMarkRange("link").unsetLink().run();
                 closeLink();

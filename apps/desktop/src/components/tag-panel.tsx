@@ -1,16 +1,16 @@
 import { Merge } from "lucide-react";
 import { useState } from "react";
-import { showIn } from "@/lib/panes";
+import { showIn } from "~/lib/panes";
 import { Button } from "@leadinglight/ui/components/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
-import { ObjectList } from "@/components/object-list";
-import { RowIcon } from "@/components/page-icon";
-import type { ViewSettings } from "@/lib/catalog";
-import { pageLabel } from "@/lib/labels";
-import { editPage } from "@/lib/live";
-import { objects } from "@/lib/objects";
-import { closePane, leaves, openPage, panes } from "@/lib/panes";
-import { forgetPage, iconFor, propOf, space, typeOf } from "@/lib/space";
+import { ObjectList } from "~/components/object-list";
+import { RowIcon } from "~/components/page-icon";
+import type { ViewSettings } from "~/lib/catalog";
+import { pageLabel } from "~/lib/labels";
+import { editPage } from "~/lib/live";
+import { objects } from "~/lib/objects";
+import { closePane, leaves, openPage, panes } from "~/lib/panes";
+import { forgetPage, iconFor, propOf, space, typeOf } from "~/lib/space";
 
 const ids = (v: unknown) => (Array.isArray(v) ? v : []);
 const DEFAULT_VIEW: ViewSettings = { kind: "list", sort: { by: "title" } };

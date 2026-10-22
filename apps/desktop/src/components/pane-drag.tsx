@@ -6,8 +6,8 @@
 // drag only after a few pixels, so clicks still click. Escape, or the window losing focus, cancels.
 import { FileText } from "lucide-react";
 import { createPortal } from "react-dom";
-import { createStore } from "@/lib/state";
-import { bounds, layout, leaf, leaves, movePane, panes, place, placePage, type Rect, type Side, sideAt } from "@/lib/panes";
+import { createStore } from "~/lib/state";
+import { bounds, layout, leaf, leaves, movePane, panes, place, placePage, type Rect, type Side, sideAt } from "~/lib/panes";
 
 type Source = { page: string; label: string };
 type Target = { pane: string; side: Side; rect: Rect; label: string };

@@ -2,13 +2,13 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { RowIcon } from "@/components/page-icon";
-import { visit } from "@/components/property-value";
-import { hasBlockLink, lineText, linesMentioning, linesSaying, linkFirst } from "@/lib/doc-links";
-import { pageLabel } from "@/lib/labels";
-import { editPage } from "@/lib/live";
-import { type LLObject, objects } from "@/lib/objects";
-import { iconFor, pageOf, space, typeOf } from "@/lib/space";
+import { RowIcon } from "~/components/page-icon";
+import { visit } from "~/components/property-value";
+import { hasBlockLink, lineText, linesMentioning, linesSaying, linkFirst } from "~/lib/doc-links";
+import { pageLabel } from "~/lib/labels";
+import { editPage } from "~/lib/live";
+import { type LLObject, objects } from "~/lib/objects";
+import { iconFor, pageOf, space, typeOf } from "~/lib/space";
 
 type Source = { page: LLObject; lines: string[]; via: string[]; block: boolean };
 

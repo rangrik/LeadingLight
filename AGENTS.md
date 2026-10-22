@@ -12,6 +12,10 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
   `https://coss.com/ui/docs/components/<name>.md` per component, https://coss.com/ui/llms.txt (index).
   Add one with `cd packages/ui && pnpm dlx shadcn@latest add @coss/<name>`.
 - `packages/editor` — our block editor, built on TipTap/ProseMirror. Import as `@leadinglight/editor/editor`.
+- `packages/themes` — the 23 theme palettes, ours to edit; `pnpm check:themes` keeps them readable.
+- `vendor/shipyard` — Shipyard's app source, verbatim (MIT), synced from upstream with
+  `pnpm sync:shipyard`. Never edit it; read `vendor/shipyard/README.md`. In `apps/desktop`,
+  `@/` is the vendored tree and `~/` is our own `src/`.
 - `features/` — Gherkin specs. This is the contract for what the app does.
 - `docs/DECISIONS.md` — why things are the way they are. Read it before touching an architecture piece.
 - `docs/PLAN.md` — milestones.
@@ -25,6 +29,10 @@ pnpm dev                                   # Tauri window (SQLite storage)
 pnpm --filter @leadinglight/desktop dev    # browser only at :1420 (IndexedDB storage)
 pnpm typecheck
 pnpm qa                                    # Playwright, headless Chromium, against :1420
+QA_PORT=$BERTH_PORT pnpm qa                # in a Berth worktree, when :1420 is another checkout's
+pnpm check:themes                          # every built-in theme keeps its contrast
+pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor/shipyard
+pnpm install:app                           # build the Mac app and put it in /Applications
 ```
 
 ## Design rules
@@ -56,12 +64,15 @@ pnpm qa                                    # Playwright, headless Chromium, agai
 2. Build it.
 3. Typecheck. Do one short smoke in a headless browser yourself.
 4. Hand QA to a subagent: model Sonnet 5.5, effort xhigh. It drives the browser build
-   (`pnpm --filter @leadinglight/desktop dev`, port 1420, bound to 127.0.0.1) in the worktree's
+   (`pnpm --filter @leadinglight/desktop dev`, port 1420 or `$BERTH_PORT`, bound to 127.0.0.1) in the worktree's
    Berth agent browser (`berthd browser … --tab qa`), which the user can watch live in Shipyard.
    It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
    drives the native Tauri window.
 5. Fix what it found. Re-run QA on the failed scenarios.
 6. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
+7. Once the change is merged into main, build the Mac app from main and install it
+   (`pnpm install:app`, which refuses while the app is running: ask the user to quit it, never
+   kill it), then ask the user to test it, saying what to try and what to look at.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.

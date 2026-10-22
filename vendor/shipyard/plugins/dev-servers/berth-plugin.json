@@ -1,0 +1,8 @@
+{
+  "id": "dev-servers",
+  "name": "Dev servers",
+  "version": "0.1.0",
+  "description": "Every dev server on every box, by worktree: open it in a tab, copy its URL, start or stop the repo's services.",
+  "main": "dist/index.js",
+  "builtin": true
+}

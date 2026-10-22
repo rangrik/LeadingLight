@@ -22,16 +22,16 @@ import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Input } from "@leadinglight/ui/components/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { RowIcon } from "@/components/page-icon";
-import { assets } from "@/lib/assets";
-import type { Choice, DateValue, FileValue, Kind, PropDef } from "@/lib/catalog";
-import { formatDate, formatMoment, fromIso, isDateValue, isoDay } from "@/lib/format";
-import { pageLabel } from "@/lib/labels";
-import { openLink } from "@/lib/links";
-import type { ObjectSummary } from "@/lib/objects";
-import { COLORS, type Color } from "@/lib/page-meta";
-import { openBeside, openPage } from "@/lib/panes";
-import { createPage, iconFor, pageOf, putProp, space, typeOf } from "@/lib/space";
+import { RowIcon } from "~/components/page-icon";
+import { assets } from "~/lib/assets";
+import type { Choice, DateValue, FileValue, Kind, PropDef } from "~/lib/catalog";
+import { formatDate, formatMoment, fromIso, isDateValue, isoDay } from "~/lib/format";
+import { pageLabel } from "~/lib/labels";
+import { openLink } from "~/lib/links";
+import type { ObjectSummary } from "~/lib/objects";
+import { COLORS, type Color } from "~/lib/page-meta";
+import { openBeside, openPage } from "~/lib/panes";
+import { createPage, iconFor, pageOf, putProp, space, typeOf } from "~/lib/space";
 
 export const KIND_ICONS: Record<Kind, LucideIcon> = {
   text: ALargeSmall,

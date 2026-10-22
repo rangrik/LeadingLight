@@ -1,0 +1,8 @@
+{
+  "id": "notes",
+  "name": "Notes",
+  "version": "0.1.0",
+  "description": "A scratchpad per worktree, kept in the worktree as .berth/notes.md so its agents can read it too.",
+  "main": "dist/index.js",
+  "builtin": true
+}

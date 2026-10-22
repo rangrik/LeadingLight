@@ -21,14 +21,24 @@ See `features/blocks.feature`, `features/selection.feature`, `features/polish.fe
 - Media: image (file, paste, drop; width presets), video, audio, file card, embed (YouTube and
   other URLs). Files are stored next to the database in the app, as data URLs in the browser.
 - Block selection: handle click, shift-click range, Escape, Shift+Arrow, delete, copy, drag, group.
+- Block menu from the handle, a right-click or ⌘/: turn into, duplicate, delete.
 - Pixel precision pass on every block kind.
 
 What this milestone left out is in `DEFERRED.md`.
 
+## M1.75 — Shipyard inside (now)
+
+Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes,
+Settings, shortcuts and the menu bar, zoom, stillness, the mock agent connection.
+
+- Our own Settings container and copy; agent sections out.
+- An agents area on the conversation UI, on mock data first, then a backend.
+- Ask about a selection: a provider behind one `ask` interface (Settings › AI).
+
 ## M2 — Objects and links (built)
 
 Parity with Capacities' building blocks, on one kind of object: the page. No type is
-written into the code. Why: `DECISIONS.md` 6. Reference: https://docs.capacities.io/reference.
+written into the code. Why: `DECISIONS.md` 7. Reference: https://docs.capacities.io/reference.
 
 Every page
 - Icon: any emoji, a lucide icon in a theme colour, or an uploaded image.

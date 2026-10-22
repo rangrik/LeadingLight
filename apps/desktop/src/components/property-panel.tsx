@@ -7,14 +7,14 @@ import { Input } from "@leadinglight/ui/components/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { Select, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/ui/components/select";
-import { DeletePageDialog } from "@/components/delete-page-dialog";
-import { RowIcon } from "@/components/page-icon";
-import { defaultOptions, PropertyEditor } from "@/components/property-editor";
-import { KIND_ICONS, PageChip, PropValue } from "@/components/property-value";
-import { type Kind, KINDS, newId, type PropDef } from "@/lib/catalog";
-import type { ObjectSummary } from "@/lib/objects";
-import { openPage } from "@/lib/panes";
-import { propsOf, putProp, putType, removePage, space, typeOf, typeView } from "@/lib/space";
+import { DeletePageDialog } from "~/components/delete-page-dialog";
+import { RowIcon } from "~/components/page-icon";
+import { defaultOptions, PropertyEditor } from "~/components/property-editor";
+import { KIND_ICONS, PageChip, PropValue } from "~/components/property-value";
+import { type Kind, KINDS, newId, type PropDef } from "~/lib/catalog";
+import type { ObjectSummary } from "~/lib/objects";
+import { openPage } from "~/lib/panes";
+import { propsOf, putProp, putType, removePage, space, typeOf, typeView } from "~/lib/space";
 
 const NEW_KINDS = (Object.keys(KINDS) as Kind[]).filter((k) => k !== "created" && k !== "updated");
 

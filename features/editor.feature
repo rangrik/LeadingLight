@@ -128,9 +128,44 @@ Feature: Block editor
     When I wait 1 second and reload the browser
     Then the item is still checked
 
-  Scenario: There is always an empty block to click into at the end
-    When I type "# Title" and press nothing else
-    Then clicking in the space below the heading places the cursor in an empty paragraph
+  Scenario: Clicking blank page space opens a line, when no block is active
+    Given the body holds a heading "Plan" and a paragraph "Notes"
+    And the cursor is not in the body (I clicked the sidebar)
+    When I click the blank space below "Notes"
+    Then a new empty paragraph follows "Notes" with the cursor in it
+    When I click into the sidebar and then the blank space below again
+    Then no second paragraph is added: the cursor goes into the empty one
+    When I click the side margin beside "Plan"
+    Then the cursor is in "Plan" and no block is added
+    When the cursor is in "Notes" and I click the blank space below
+    Then the click only takes the cursor away and adds nothing
+    When I click blank space beside or above the title
+    Then the cursor is at the end of the title and nothing is added
+    When I click the gap just above the body, under the properties
+    Then the cursor is at the start of "Plan" and nothing is added
+    When I click beside a property row, or level with the backlinks or "Created this day"
+    Then nothing happens: the cursor doesn't move and nothing is added
+    When I click the side margin beside a to-do, a toggle title, a table row or a group's text
+    Then the cursor goes into the line at that height, not the next block
+    And beside a table row or columns, a left-margin click goes to the first cell's start and a
+      right-margin click to the last cell's end
+    And this holds for a click anywhere in the block's height, its top and bottom padding included
+    When the link field is open and I click blank space
+    Then the field closes, the text stays selected and nothing is added
+    And on a read-only page a blank click below the title changes nothing and holds no focus
+    # Clicks at the title's height still go to the title, which stays editable (R6-2).
+
+  Scenario: Clicking anywhere on an empty page starts its first line
+    Given a new page with an empty body and the cursor in the title
+    When I click the blank space far below the body
+    Then the cursor is in the body's first line and the body still has one block
+
+  Scenario: A new line starts without the previous line's formatting
+    When I press Meta+B, type "bold" and press Enter, then type "plain"
+    Then "bold" is bold and "plain" is not
+    When I press Meta+I, type "lean" and press Enter in a bullet item, then type "next"
+    Then "next" is not italic
+    And the same holds in to-do items and after Shift+Enter
 
   Scenario: Block handle appears on hover
     Given the body contains two paragraphs "one" and "two"
@@ -144,6 +179,52 @@ Feature: Block editor
     When I hover "one" and click "Add block"
     Then a new block is inserted between "one" and "two" with "/" typed in it
     And the slash menu is open
+
+  Scenario: Dragging with a real mouse, in the browser and in the app
+    # Synthetic drag events skip the browser's own drag start, so this needs a real pointer
+    # (Playwright's mouse). In the app, Tauri must leave drags to the page (dragDropEnabled false).
+    Given the body has paragraphs "one", "two" and "three"
+    When I press the mouse on the handle of "three", move it above "one" and release
+    Then the body reads "three", "one", "two"
+    And dropping an image file from Finder onto the page in the app inserts it
+
+  Scenario: Each list item is a block with its own handle
+    Given a to-do list "a", "b", "c" and a bullet list "x" with a nested item "y"
+    When I hover "b"
+    Then the handle sits beside "b", centred on its line, 8 px left of the list
+    When I hover "y"
+    Then the handle sits beside "y", 8 px left of the nested list
+    When I click the handle beside "b"
+    Then only "b" is selected, tinted from its checkbox to the end of the line
+    When I shift-click the handle beside "c"
+    Then "b" and "c" are selected
+    When I press Escape in "a"
+    Then only "a" is selected
+    When I press Backspace
+    Then the list reads "b", "c"
+    When I drag "c" above "b" with the handle
+    Then the list reads "c", "b"
+    When I drag "x" by its handle into the gap between two top-level blocks
+    Then "x" becomes its own one-item bullet list there, keeping its nested "y"
+    And a bullet item dropped on a numbered list (or a to-do on a bullet list) lands beside that
+      list as its own list, keeping its kind
+    And while dragging, no drop line shows where the drop would change nothing
+    When I hover a list item inside a group, a toggle or a quote
+    Then that item gets its own handle too, in the page's gutter (clear of the quote bar and the
+      group border); a list inside a quote keeps its 24 px marker indent
+    # Inside columns the columns block keeps the handle: a handle for column 2 would sit over
+    # column 1 (see docs/DEFERRED.md).
+    When "b" is selected and I press Shift+ArrowDown past the list's last item
+    Then the whole top-level block holding the list is selected; the next press adds the block after it
+    And dropping a list's first or last item at that list's own outer edge changes nothing
+    And deleting a quote's only list item removes the quote and puts the cursor at the start of
+      the next block
+    When I press Escape twice on an item that has nested items
+    Then the cursor is at the end of that item's own text
+    When I copy selected items as plain text
+    Then the text has one line per item, with no blank lines
+    When I click "Add block" beside "c"
+    Then a new empty to-do follows "c" with the cursor in it
 
   Scenario: Dragging the handle moves the block
     Given the body contains paragraphs "one", "two", "three"

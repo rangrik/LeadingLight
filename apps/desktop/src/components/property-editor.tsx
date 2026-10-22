@@ -8,9 +8,9 @@ import { Label } from "@leadinglight/ui/components/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { Switch } from "@leadinglight/ui/components/switch";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { type Kind, KINDS, newId, type PropDef, type PropOptions } from "@/lib/catalog";
-import { type Color, COLORS } from "@/lib/page-meta";
-import { putProp, putType, space } from "@/lib/space";
+import { type Kind, KINDS, newId, type PropDef, type PropOptions } from "~/lib/catalog";
+import { type Color, COLORS } from "~/lib/page-meta";
+import { putProp, putType, space } from "~/lib/space";
 
 // Fixed kinds come from the page itself and can't change.
 const EDITABLE: Kind[] = (Object.keys(KINDS) as Kind[]).filter((k) => k !== "created" && k !== "updated");

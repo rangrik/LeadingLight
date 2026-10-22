@@ -1,6 +1,9 @@
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// Must match DB_URL in src/lib/objects.ts.
+// The menu bar, built from src/lib/shortcuts.json (Shipyard's, see
+// vendor/shipyard/README.md). Each item tells the webview as berth://menu.
+mod menu;
+
 const DB_URL: &str = "sqlite:leadinglight.db";
 
 fn migrations() -> Vec<Migration> {
@@ -20,28 +23,20 @@ fn migrations() -> Vec<Migration> {
     ]
 }
 
-// The stock Quit ends the app at once, losing edits still in the 500 ms save delay. Ours
-// closes the windows, so each saves first; the app quits when the last one is gone.
+// ⌘Q closes the window instead of quitting at once, so the webview saves first
+// (App.tsx, onCloseRequested). The app menu's last item is the predefined Quit;
+// it is swapped for ours.
 #[cfg(target_os = "macos")]
-fn quit_through_close(app: &tauri::App) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem, MenuItemKind};
-    use tauri::Manager;
+fn menu_bar(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{MenuItem, MenuItemKind};
 
-    let menu = Menu::default(app.handle())?;
+    let menu = menu::build(app.handle())?;
     if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
-        // Quit is the app menu's last item.
         app_menu.remove_at(app_menu.items()?.len() - 1)?;
         let label = format!("Quit {}", app.package_info().name);
         app_menu.append(&MenuItem::with_id(app, "quit", label, true, Some("CmdOrCtrl+Q"))?)?;
     }
     app.set_menu(menu)?;
-    app.on_menu_event(|app, event| {
-        if event.id() == "quit" {
-            for window in app.webview_windows().values() {
-                let _ = window.close();
-            }
-        }
-    });
     Ok(())
 }
 
@@ -57,8 +52,18 @@ pub fn run() {
         )
         .setup(|_app| {
             #[cfg(target_os = "macos")]
-            quit_through_close(_app)?;
+            menu_bar(_app)?;
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            use tauri::Manager;
+            if event.id() == "quit" {
+                for window in app.webview_windows().values() {
+                    let _ = window.close();
+                }
+            } else {
+                menu::on_event(app, event.id().as_ref());
+            }
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

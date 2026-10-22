@@ -93,8 +93,9 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
     <NodeViewWrapper className="ll-code group/code relative" data-inside={inside || undefined}>
       <TooltipProvider delay={500}>
         <div
-          // top-4 centres the 24px buttons on the code's first line.
-          className="absolute top-4 right-2 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover/code:opacity-100 group-data-inside/code:opacity-100 has-data-popup-open:opacity-100"
+          // top-2.5 centres the 24px buttons on the code's first line (12px padding + half a line).
+          // While hidden they ignore the pointer, so clicks there reach the code.
+          className="absolute top-2.5 right-2 z-10 flex items-center gap-0.5 pointer-events-none opacity-0 transition-opacity duration-150 group-hover/code:pointer-events-auto group-hover/code:opacity-100 group-data-inside/code:pointer-events-auto group-data-inside/code:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100"
           contentEditable={false}
         >
           <Select

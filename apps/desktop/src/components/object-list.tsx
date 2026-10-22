@@ -4,15 +4,15 @@ import { Select, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@leadinglight/ui/components/table";
 import { ToggleGroup, ToggleGroupItem } from "@leadinglight/ui/components/toggle-group";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { PageCard } from "@/components/link-views";
-import { RowIcon } from "@/components/page-icon";
-import { armDrag } from "@/components/pane-drag";
-import { ValueView, visit } from "@/components/property-value";
-import type { PropDef, ViewSettings } from "@/lib/catalog";
-import { isDateValue } from "@/lib/format";
-import { pageLabel } from "@/lib/labels";
-import type { ObjectSummary } from "@/lib/objects";
-import { iconFor, pageOf } from "@/lib/space";
+import { PageCard } from "~/components/link-views";
+import { RowIcon } from "~/components/page-icon";
+import { armDrag } from "~/components/pane-drag";
+import { ValueView, visit } from "~/components/property-value";
+import type { PropDef, ViewSettings } from "~/lib/catalog";
+import { isDateValue } from "~/lib/format";
+import { pageLabel } from "~/lib/labels";
+import type { ObjectSummary } from "~/lib/objects";
+import { iconFor, pageOf } from "~/lib/space";
 
 const VIEWS = [
   ["list", "List", List],
@@ -91,13 +91,16 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
 
   // A grouped list doesn't repeat the group's value on every row.
   const shownOnRows = card.filter((c) => c.id !== groupProp?.id);
+  // A link, not a button: its relation chips are buttons.
   const row = (p: ObjectSummary) => (
-    <button
-      className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left transition-colors duration-150 hover:bg-accent"
+    <div
+      className="flex h-8 w-full min-w-0 cursor-default items-center gap-2 rounded-md px-2 text-left transition-colors duration-150 hover:bg-accent"
       key={p.id}
       onClick={(e) => visit(p.id, e)}
+      onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && visit(p.id, e as unknown as React.MouseEvent)}
       onPointerDown={(e) => armDrag(e, { page: p.id, label: pageLabel(p.title) })}
-      type="button"
+      role="link"
+      tabIndex={0}
     >
       <RowIcon icon={iconFor(p)} />
       <span className="min-w-0 flex-1 truncate">{pageLabel(p.title)}</span>
@@ -108,7 +111,7 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
           </span>
         ))}
       </span>
-    </button>
+    </div>
   );
 
   return (

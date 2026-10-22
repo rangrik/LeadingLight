@@ -3,21 +3,21 @@ import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Backlinks } from "@/components/backlinks";
-import { CreatedThisDay, DailyBar } from "@/components/daily-bar";
-import { linkHost } from "@/components/link-views";
-import { CoverBand, CoverPicker } from "@/components/page-cover";
-import { IconPicker, PageIconView } from "@/components/page-icon";
-import { PropertyPanel } from "@/components/property-panel";
-import { PagePicker } from "@/components/property-value";
-import { TagPanel } from "@/components/tag-panel";
-import { assets } from "@/lib/assets";
-import { openLink } from "@/lib/links";
-import { registerLive } from "@/lib/live";
-import type { LLObject, ObjectPatch } from "@/lib/objects";
-import { type PageCover, type PageIcon, readCover, readIcon } from "@/lib/page-meta";
-import { trackFlush } from "@/lib/saving";
-import { pageOf, patchSummary, savePage, typeOf } from "@/lib/space";
+import { Backlinks } from "~/components/backlinks";
+import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
+import { linkHost } from "~/components/link-views";
+import { CoverBand, CoverPicker } from "~/components/page-cover";
+import { IconPicker, PageIconView } from "~/components/page-icon";
+import { PropertyPanel } from "~/components/property-panel";
+import { PagePicker } from "~/components/property-value";
+import { TagPanel } from "~/components/tag-panel";
+import { assets } from "~/lib/assets";
+import { openLink } from "~/lib/links";
+import { registerLive } from "~/lib/live";
+import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
+import { trackFlush } from "~/lib/saving";
+import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -43,6 +43,7 @@ export function PageView({ page }: { page: LLObject }) {
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -121,11 +122,34 @@ export function PageView({ page }: { page: LLObject }) {
     editorRef.current?.focus("start");
   };
 
+  // Blank page space belongs to the page: with no block active (and no popup open), a click at
+  // the title's height goes to the title, from the body down into the body (see placeAt). The
+  // properties between them and the sections after the body keep their clicks.
+  const onBlankMouseDown = (e: React.MouseEvent) => {
+    const editor = editorRef.current;
+    const title = titleRef.current;
+    if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(".ProseMirror, .ll-handle, textarea, input, button, a, [role]")) return;
+    // Level with the sections after the body (backlinks, what was made that day) is theirs too.
+    const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
+      const r = s.getBoundingClientRect();
+      return e.clientY >= r.top && e.clientY <= r.bottom;
+    });
+    if (besideSection) return;
+    if (e.clientY <= title.getBoundingClientRect().bottom) {
+      e.preventDefault();
+      title.focus();
+      title.setSelectionRange(title.value.length, title.value.length);
+    } else if (e.clientY >= (bodyRef.current?.getBoundingClientRect().top ?? 0) && editor.placeAt(e.clientX, e.clientY)) e.preventDefault();
+  };
+
   return (
-    <>
+    <div className="min-h-full" onMouseDown={onBlankMouseDown}>
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes. */}
-      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-48 @xl:pe-16">
+      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
         <div className={cn("group/head", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -190,6 +214,7 @@ export function PageView({ page }: { page: LLObject }) {
             <textarea
               aria-label="Title"
               className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
+              onFocus={() => editorRef.current?.clearBlocks()}
               onChange={(e) => {
                 const value = e.currentTarget.value.replace(/\n/g, "");
                 setTitle(value);
@@ -230,7 +255,7 @@ export function PageView({ page }: { page: LLObject }) {
         <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
         {day && <DailyBar day={day} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
-        <div className="mt-3">
+        <div className="pt-3" ref={bodyRef}>
           <BlockEditor
             assets={assets}
             content={page.content}
@@ -244,6 +269,6 @@ export function PageView({ page }: { page: LLObject }) {
         {day && <CreatedThisDay day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
-    </>
+    </div>
   );
 }

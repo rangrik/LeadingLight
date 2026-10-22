@@ -1,0 +1,8 @@
+{
+  "id": "git-changes",
+  "name": "Git changes",
+  "version": "0.1.0",
+  "description": "What changed in a worktree: files, diffs, and commit or push when you're happy with it.",
+  "main": "dist/index.js",
+  "builtin": true
+}

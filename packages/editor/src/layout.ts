@@ -86,12 +86,9 @@ export const Group = Node.create({
   content: "block+",
   isolating: true,
   defining: true,
-  parseHTML: () => [{ tag: 'div[data-type="group"]' }],
-  renderHTML: ({ HTMLAttributes }) => [
-    "div",
-    mergeAttributes(HTMLAttributes, { "data-type": "group", class: "ll-group" }),
-    0,
-  ],
+  // The box is an inner element so the block's spacing sits outside its border (editor.css).
+  parseHTML: () => [{ tag: 'div[data-type="group"]', contentElement: (dom) => (dom as HTMLElement).querySelector(":scope > .ll-group") ?? dom }],
+  renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-type": "group" }), ["div", { class: "ll-group" }, 0]],
 
   addCommands() {
     return {

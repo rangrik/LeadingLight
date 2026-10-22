@@ -6,10 +6,10 @@ import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/componen
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { Toolbar, ToolbarButton, ToolbarLink } from "@leadinglight/ui/components/toolbar";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { ImageDrop } from "@/components/page-icon";
-import { openLink } from "@/lib/links";
-import { type Color, COLORS, type PageCover } from "@/lib/page-meta";
-import { type Failure, markUsed, type Photo, searchPhotos, tagged, unsplashKey } from "@/lib/unsplash";
+import { ImageDrop } from "~/components/page-icon";
+import { openLink } from "~/lib/links";
+import { type Color, COLORS, type PageCover } from "~/lib/page-meta";
+import { type Failure, markUsed, type Photo, searchPhotos, tagged, unsplashKey } from "~/lib/unsplash";
 
 // object-cover scales the image to fill the band; only the height beyond the band can move.
 const spareOf = (el: HTMLImageElement | null) => {

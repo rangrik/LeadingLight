@@ -1,0 +1,31 @@
+/* Messages from other agents (agent-message.tsx): a sender's colour (--am)
+   and its text colour (--am-fg), lighter on dark themes. */
+.am-c-violet { --am: oklch(60.6% 0.25 292.717); --am-fg: oklch(49.1% 0.27 292.581); }
+.dark .am-c-violet { --am-fg: oklch(81.1% 0.111 293.571); }
+.am-c-teal { --am: oklch(70.4% 0.14 182.503); --am-fg: oklch(51.1% 0.096 186.391); }
+.dark .am-c-teal { --am-fg: oklch(85.5% 0.138 181.071); }
+.am-c-amber { --am: oklch(76.9% 0.188 70.08); --am-fg: oklch(55.5% 0.163 48.998); }
+.dark .am-c-amber { --am-fg: oklch(87.9% 0.169 91.605); }
+.am-c-pink { --am: oklch(65.6% 0.241 354.308); --am-fg: oklch(52.5% 0.223 3.958); }
+.dark .am-c-pink { --am-fg: oklch(82.3% 0.12 346.018); }
+.am-c-sky { --am: oklch(68.5% 0.169 237.323); --am-fg: oklch(50% 0.134 242.749); }
+.dark .am-c-sky { --am-fg: oklch(82.8% 0.111 230.318); }
+.am-c-lime { --am: oklch(76.8% 0.233 130.85); --am-fg: oklch(53.2% 0.157 131.589); }
+.dark .am-c-lime { --am-fg: oklch(89.7% 0.196 126.665); }
+.am-c-orange { --am: oklch(70.5% 0.213 47.604); --am-fg: oklch(55.3% 0.195 38.402); }
+.dark .am-c-orange { --am-fg: oklch(83.7% 0.128 66.29); }
+.am-c-cyan { --am: oklch(71.5% 0.143 215.221); --am-fg: oklch(52% 0.105 223.128); }
+.dark .am-c-cyan { --am-fg: oklch(86.5% 0.127 207.078); }
+.am-c-rose { --am: oklch(64.5% 0.246 16.439); --am-fg: oklch(51.4% 0.222 16.935); }
+.dark .am-c-rose { --am-fg: oklch(81% 0.117 11.638); }
+.am-c-slate { --am: oklch(55.4% 0.046 257.417); --am-fg: oklch(37.2% 0.044 257.287); }
+.dark .am-c-slate { --am-fg: oklch(86.9% 0.022 252.894); }
+
+.am-avatar { background: color-mix(in oklab, var(--am) 18%, transparent); color: var(--am-fg); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--am) 28%, transparent); }
+.am-chip-tint { border-color: color-mix(in oklab, var(--am) 35%, transparent); background: color-mix(in oklab, var(--am) 10%, transparent); color: var(--am-fg); }
+.am-border-tint { border-color: color-mix(in oklab, var(--am) 40%, transparent); }
+.am-code { font-family: var(--font-mono); font-size: 0.92em; padding: 0.05em 0.3em; border-radius: 0.25rem; background: var(--muted); color: var(--foreground); word-break: break-all; }
+.am-report > :first-child > :first-child, .am-short > :first-child > :first-child { margin-top: 0; }
+.am-short > :last-child > :last-child { margin-bottom: 0; }
+/* A report longer than a screen reads its first screen in the chat. */
+.am-screen { max-height: min(70vh, 40rem); overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent); mask-image: linear-gradient(to bottom, black 85%, transparent); }

@@ -1,5 +1,13 @@
 import { FileText, Plus } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ShortcutsSheet } from "@/components/shortcuts-sheet";
+import { ToastProvider as ShipyardToasts } from "@/components/ui/toast";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { ZoomHud } from "@/components/zoom-hud";
+import { useBerthConnection } from "@/hooks/use-berth-connection";
+import { useApplyTheme } from "@/hooks/use-theme";
+import { watchStillness } from "@/lib/still";
+import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
 import {
   Empty,
@@ -9,54 +17,76 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@leadinglight/ui/components/breadcrumb";
-import { Separator } from "@leadinglight/ui/components/separator";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
+import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
-import { cn } from "@leadinglight/ui/lib/utils";
-import { goToDay } from "@/components/daily-bar";
-import { DeletePageDialog } from "@/components/delete-page-dialog";
-import { PageIconView, RowIcon } from "@/components/page-icon";
-import { PaneArea } from "@/components/pane-area";
-import { armDrag } from "@/components/pane-drag";
-import { AppSidebar } from "@/components/sidebar/app-sidebar";
-import { pageLabel } from "@/lib/labels";
-import { dailyFor, today } from "@/lib/daily";
-import type { ObjectSummary } from "@/lib/objects";
-import { focusedPage, openPage, panes, showOnly } from "@/lib/panes";
-import { isNative } from "@/lib/platform";
-import { flushAll } from "@/lib/saving";
-import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "@/lib/space";
-import { PAGE_TYPE } from "@/lib/store";
-import { newPage } from "@/lib/templates";
+import { goToDay } from "~/components/daily-bar";
+import { DeletePageDialog } from "~/components/delete-page-dialog";
+import { PageIconView, RowIcon } from "~/components/page-icon";
+import { PaneArea } from "~/components/pane-area";
+import { armDrag } from "~/components/pane-drag";
+import { PanelHeader } from "~/components/panel-header";
+import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { dailyFor, today } from "~/lib/daily";
+import { pageLabel } from "~/lib/labels";
+import type { ObjectSummary } from "~/lib/objects";
+import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
+import { isNative } from "~/lib/platform";
+import { flushAll } from "~/lib/saving";
+import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
+import { newPage } from "~/lib/templates";
+import { useCodeColors } from "~/lib/use-code-colors";
+import { useShortcuts } from "~/lib/use-shortcuts";
 
 // Tags and daily notes have their own places; templates show in their type's settings.
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 
-// Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
-// middle line (y 40; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
-const chrome = (native: boolean) =>
-  ({ "--traffic-top": native ? "40px" : "0px", "--traffic-left": native ? "72px" : "0px" }) as React.CSSProperties;
+// Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
+const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
 
-function useSystemTheme() {
-  useEffect(() => {
-    const mq = matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => document.documentElement.classList.toggle("dark", mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-}
+// Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
+// middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
+// The app's header is 36 px, level with the lights; a browser keeps sidebar-08's 64 px, level
+// with the sidebar's logo row.
+const chrome = (native: boolean) =>
+  ({
+    "--traffic-top": native ? "24px" : "0px",
+    "--traffic-left": native ? "72px" : "0px",
+    "--header-height": native ? "36px" : "64px",
+  }) as React.CSSProperties;
 
 export default function App() {
-  useSystemTheme();
+  // Shipyard's pieces (vendor/shipyard/README.md): the theme, its agent data
+  // (on mock fixtures for now), and animations that hold still in the background.
+  useApplyTheme();
+  useCodeColors();
+  useBerthConnection();
+  useEffect(watchStillness, []);
+  const view = useStore((s) => s.view);
+  const settings = view.kind === "settings";
+  // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
+  // gives it back to where it was (the last place focused in the shell).
+  const settingsRef = useRef<HTMLDivElement>(null);
+  const lastFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      const t = e.target instanceof HTMLElement ? e.target : null;
+      if (t && !t.closest(".ll-settings")) lastFocus.current = t;
+    };
+    document.addEventListener("focusin", onFocus);
+    return () => document.removeEventListener("focusin", onFocus);
+  }, []);
+  useEffect(() => {
+    if (settings) settingsRef.current?.focus();
+    else if (lastFocus.current?.isConnected) lastFocus.current.focus();
+  }, [settings]);
+  // Its code is fetched once the app has settled, so the first ⌘, paints at once.
+  useEffect(() => {
+    const t = window.setTimeout(() => void import("~/components/settings/settings-view"), 1500);
+    return () => window.clearTimeout(t);
+  }, []);
+
   const { pages, types } = space.use();
   const { root } = panes.use();
   const current = focusedPage();
@@ -80,24 +110,9 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey) return;
-      const key = e.key.toLowerCase();
-      if (key === "n") {
-        e.preventDefault();
-        create();
-      }
-      // Saving is automatic; ⌘S just saves now instead of opening the browser's save dialog.
-      if (key === "s") {
-        e.preventDefault();
-        void flushAll();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [create]);
+  // One sidebar state for the pages and Settings, so folding it in one holds in the other.
+  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
+  useShortcuts(useMemo(() => ({ newPage: create, toggleSidebar }), [create, toggleSidebar]));
 
   // Save pending edits whenever the app might be about to go away.
   useEffect(() => {
@@ -142,69 +157,69 @@ export default function App() {
   }));
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
-  // is a window drag area with room for the traffic lights, and the crumbs are Pages and the title.
+  // is 36 px in the app (see chrome) and a window drag area with room for the traffic lights, and
+  // the crumbs are Pages and the title.
+  // Under Settings it stays mounted, so the page's edits are kept, and goes inert; the
+  // sidebar's own ⌘\ is then the Settings shell's to handle.
+  const shell = (
+      <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
+        <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
+        <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
+          <PanelHeader
+            current={shown?.title ?? null}
+            icon={shown?.icon && <PageIconView icon={shown.icon} />}
+            root={shown?.parent ?? "Pages"}
+            sidebarOpen={sidebarOpen}
+          />
+          {root ? (
+            <PaneArea />
+          ) : (
+            <div className="min-h-0 flex-1">
+              <Empty className="h-full">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <FileText />
+                  </EmptyMedia>
+                  <EmptyTitle>No page open</EmptyTitle>
+                  <EmptyDescription>Create a page to start writing.</EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button onClick={create}>
+                    <Plus />
+                    New page
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            </div>
+          )}
+        </SidebarInset>
+        <DeletePageDialog
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={(id) => {
+            removePage(id);
+            setPendingDelete(null);
+          }}
+          page={pendingDelete}
+        />
+      </SidebarProvider>
+    );
+
   return (
     <ToastProvider>
-    <SidebarProvider className="isolate h-svh overflow-hidden" onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)}>
-      <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
-      <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-        <header className="flex h-16 shrink-0 items-center gap-2" data-tauri-drag-region>
-          <div
-            className={cn(
-              "flex min-w-0 items-center gap-2 px-4 transition-[padding] duration-200 ease-linear",
-              !sidebarOpen && "ps-[calc(var(--traffic-left)_+_1rem)]",
-            )}
-          >
-            <SidebarTrigger className="-ml-1" />
-            {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
-            <Separator className="mr-2 h-4" orientation="vertical" />
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:block">{shown?.parent ?? "Pages"}</BreadcrumbItem>
-                {shown && (
-                  <>
-                    <BreadcrumbSeparator className="hidden md:block" />
-                    <BreadcrumbItem className="min-w-0">
-                      {shown.icon && <PageIconView icon={shown.icon} />}
-                      <BreadcrumbPage className="max-w-[40ch] truncate">{shown.title}</BreadcrumbPage>
-                    </BreadcrumbItem>
-                  </>
-                )}
-              </BreadcrumbList>
-            </Breadcrumb>
-          </div>
-        </header>
-        {root ? (
-          <PaneArea />
-        ) : (
-          <div className="min-h-0 flex-1">
-            <Empty className="h-full">
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <FileText />
-                </EmptyMedia>
-                <EmptyTitle>No page open</EmptyTitle>
-                <EmptyDescription>Create a page to start writing.</EmptyDescription>
-              </EmptyHeader>
-              <EmptyContent>
-                <Button onClick={create}>
-                  <Plus />
-                  New page
-                </Button>
-              </EmptyContent>
-            </Empty>
-          </div>
-        )}
-      </SidebarInset>
-      <DeletePageDialog
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={(id) => {
-          removePage(id);
-          setPendingDelete(null);
-        }}
-        page={pendingDelete}
-      />
-    </SidebarProvider>
+      <ShipyardToasts>
+        <TooltipProvider delay={300}>
+          {shell}
+          {settings && (
+            <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
+              <Suspense fallback={null}>
+                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)} />
+              </Suspense>
+            </div>
+          )}
+          <ShortcutsSheet />
+          <ZoomHud />
+        </TooltipProvider>
+      </ShipyardToasts>
     </ToastProvider>
   );
 }
