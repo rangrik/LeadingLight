@@ -9,6 +9,8 @@
   "exports": {
     "./editor": "./src/editor.tsx",
     "./assets": "./src/assets.ts",
+    "./emoji": "./src/emoji-grid.tsx",
+    "./links": "./src/page-links.tsx",
     "./editor.css": "./src/editor.css"
   },
   "peerDependencies": {
@@ -35,8 +37,10 @@
     "@tiptap/react": "^3.32.0",
     "@tiptap/starter-kit": "^3.32.0",
     "@tiptap/suggestion": "^3.32.0",
+    "emojilib": "^4.0.3",
     "lowlight": "^3.3.0",
-    "lucide-react": "^1.61.0"
+    "lucide-react": "^1.61.0",
+    "unicode-emoji-json": "^0.9.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",

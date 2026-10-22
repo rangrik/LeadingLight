@@ -20,12 +20,14 @@ async function pageWith(page: Page, text: string) {
 }
 
 // Selects a word through the editor's dev hook, as a double-click would, in any paragraph.
+// The view is focused directly: TipTap's focus command lands a frame later, and would take
+// the keyboard back from a bar opened in between.
 async function select(page: Page, word: string) {
   await page.evaluate((w) => {
     type Node = { isText: boolean; text?: string };
     const ed = (
       window as unknown as {
-        __editor: { state: { doc: { descendants(f: (node: Node, pos: number) => boolean): void } }; chain(): { focus(): { setTextSelection(r: { from: number; to: number }): { run(): void } } } };
+        __editor: { state: { doc: { descendants(f: (node: Node, pos: number) => boolean): void } }; view: { focus(): void }; commands: { setTextSelection(r: { from: number; to: number }): boolean } };
       }
     ).__editor;
     let hit: { from: number; to: number } | undefined;
@@ -34,7 +36,8 @@ async function select(page: Page, word: string) {
       if (i >= 0 && !hit) hit = { from: pos + i, to: pos + i + w.length };
       return !hit;
     });
-    if (hit) ed.chain().focus().setTextSelection(hit).run();
+    ed.view.focus();
+    if (hit) ed.commands.setTextSelection(hit);
   }, word);
 }
 
@@ -80,8 +83,8 @@ test("The bar opens again, and follows the page as it scrolls", async ({ page })
   await expect(bar(page)).toBeVisible();
   const before = (await bar(page).boundingBox())!.y;
   await page.locator("[data-page-scroller]").evaluate((el) => el.scrollBy(0, 40));
-  await expect(bar(page)).toBeVisible();
-  expect((await bar(page).boundingBox())!.y).toBeCloseTo(before - 40, 0);
+  // The scroll event lands a frame after scrollBy, so the position is polled.
+  await expect.poll(async () => (await bar(page).boundingBox())?.y).toBeCloseTo(before - 40, 0);
   await page.locator("[data-page-scroller]").evaluate((el) => el.scrollBy(0, 2000));
   await expect(bar(page)).toBeHidden();
 });

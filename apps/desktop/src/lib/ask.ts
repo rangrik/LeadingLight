@@ -28,6 +28,7 @@ const set = (patch: Partial<State>) => {
 };
 
 export function registerPage(page: AskPage, handle: BlockEditorHandle | null) {
+  if (state.page?.id === page.id && editor === handle) return; // already in front; keep the panel
   editor = handle;
   set({ page, open: false, quote: null, bar: null, askNow: null });
 }

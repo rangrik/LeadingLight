@@ -20,15 +20,21 @@ export function AskBar() {
   const [at, setAt] = useState<{ top: number; left: number; below: boolean }>();
   const ref = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
-  const scroller = () => document.querySelector<HTMLElement>("[data-page-scroller]");
+  // A fresh range for the words each time: the editor redraws those nodes when it loses
+  // focus to the field, and a range kept from before collapses with them.
+  const range = useCallback(() => (bar ? (askEditor()?.domRange(bar.quote.from, bar.quote.to) ?? null) : null), [bar]);
+  // The pane the words scroll in; with pages side by side, each pane has its own.
+  const scroller = useCallback(() => {
+    const node = range()?.startContainer;
+    const el = node instanceof Element ? node : (node?.parentElement ?? null);
+    return el?.closest<HTMLElement>("[data-page-scroller]") ?? null;
+  }, [range]);
 
-  // Where the words are now, from a fresh range each time: the editor redraws those nodes
-  // when it loses focus to the field, and a range kept from before collapses with them.
   const place = useCallback(() => {
     const pane = ref.current?.offsetParent as HTMLElement | null;
     if (!bar || !pane || !ref.current) return;
-    const range = askEditor()?.domRange(bar.quote.from, bar.quote.to);
-    const rects = range ? [...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1) : [];
+    const r = range();
+    const rects = r ? [...r.getClientRects()].filter((x) => x.width > 1 && x.height > 1) : [];
     if (!rects.length) return closeBar(false);
     const first = rects[0];
     const last = rects[rects.length - 1];
@@ -43,7 +49,7 @@ export function AskBar() {
     const anchor = (from + Math.max(...line.map((r) => r.right))) / 2;
     const left = Math.min(Math.max(anchor - width / 2, box.left + EDGE), box.right - width - EDGE);
     setAt({ top: top - box.top, left: left - box.left, below });
-  }, [bar]);
+  }, [bar, range, scroller]);
 
   useLayoutEffect(place, [place]);
   useEffect(() => {
@@ -89,7 +95,7 @@ export function AskBar() {
       s?.removeEventListener("scroll", place);
       window.removeEventListener("resize", place);
     };
-  }, [bar, place]);
+  }, [bar, place, scroller]);
 
   if (!bar) return null;
   const send = () => {

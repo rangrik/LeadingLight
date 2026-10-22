@@ -9,12 +9,20 @@ mod menu;
 const DB_URL: &str = "sqlite:leadinglight.db";
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "objects and object types",
-        sql: include_str!("../migrations/001_objects.sql"),
-        kind: MigrationKind::Up,
-    }]
+    vec![
+        Migration {
+            version: 1,
+            description: "objects and object types",
+            sql: include_str!("../migrations/001_objects.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "property definitions and type settings",
+            sql: include_str!("../migrations/002_properties.sql"),
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 // ⌘Q closes the window instead of quitting at once, so the webview saves first

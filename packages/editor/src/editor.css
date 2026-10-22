@@ -396,3 +396,8 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+
+/* Links to pages. A selected link is outlined like selected media. */
+.ll-editor .node-mention.ProseMirror-selectednode .ll-mention { background: color-mix(in oklab, var(--info) 14%, transparent); border-radius: 4px; }
+.ll-editor .node-pageLink:is(.ll-selected, .ProseMirror-selectednode) { background: none; box-shadow: none; }
+.ll-editor .node-pageLink:is(.ll-selected, .ProseMirror-selectednode) .ll-link-surface { outline: 2px solid var(--info); outline-offset: 2px; }

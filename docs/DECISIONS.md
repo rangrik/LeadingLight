@@ -92,7 +92,24 @@ streams a fixed answer, so the panel can be tried and tested without Claude Code
 Anthropic's terms allow this for one's own login; shipping it to others would need
 their approval.
 
-## 8. Asking happens by the words; agents are Claude Code's agent files
+## 8. One kind of object; types and properties are data
+
+Capacities builds its basic types into the app and gives each custom type its own
+properties. A plain page can have none, and a single page can't have one of its own. We keep
+one kind of object, the page. A type is a bundle the user edits, and any page can add any
+property beyond its type's. Property definitions are shared by the whole space, as in
+Obsidian, so lists can sort and group across types. Tags, collections and daily notes are
+pages with a type and a relation, not special code. No saved queries.
+
+## 9. Links are ids in the body; backlinks are a search
+
+A link stores only the page's id, so it follows renames and icon changes. Backlinks are found by
+searching stored pages for that id rather than kept in a links table, so nothing can fall out of
+step. A change to another page (linking a mention, merging a tag) goes through that page's editor
+when it is open, so its pane never saves its own copy over the change. Every page's summary and
+properties stay in memory, which is what lists, cards and the link menu read.
+
+## 10. Asking happens by the words; agents are Claude Code's agent files
 
 Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
 field that sends at once, and Quote in reply for a longer question in the panel. The panel's

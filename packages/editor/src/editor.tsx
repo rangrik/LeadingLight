@@ -10,6 +10,7 @@ import { BlockHandle } from "./block-handle";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
+import type { LinkHost } from "./page-links";
 import { SelectionToolbar } from "./selection-toolbar";
 import { TableToolbar } from "./table";
 
@@ -26,6 +27,9 @@ export type Selected = { text: string; from: number; to: number };
 
 export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
+  // For changes made from outside the page (linking a mention, merging a tag).
+  getJSON: () => EditorDoc;
+  setContent: (doc: EditorDoc) => void;
   // Focus back where the caret was, for a panel giving the keyboard back.
   refocus: () => void;
   hasFocus: () => boolean;
@@ -152,13 +156,18 @@ export function BlockEditor({
   onChange,
   onExitTop,
   openLink,
+  links,
+  readOnly,
   onAsk,
   ref,
 }: {
   content: EditorDoc | null;
   assets: AssetStore;
   // Gets a reader, not the document: serialising a long page on every keystroke is slow.
-  onChange: (read: () => EditorDoc) => void;
+  onChange?: (read: () => EditorDoc) => void;
+  links?: LinkHost;
+  // An embedded page: shown, never edited or saved from here.
+  readOnly?: boolean;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
   // Given, the selection toolbar offers Ask with the selected words.
@@ -176,6 +185,7 @@ export function BlockEditor({
       createExtensions({
         assets,
         openLink: openLink ?? ((href) => void window.open(href, "_blank", "noopener")),
+        links,
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
@@ -203,7 +213,7 @@ export function BlockEditor({
   const editor = useEditor({
     extensions,
     content: start ?? undefined,
-    editable: !unreadable,
+    editable: !unreadable && !readOnly,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -223,11 +233,11 @@ export function BlockEditor({
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor }) => !unreadable && onChangeRef.current(() => editor.getJSON()),
+    onUpdate: ({ editor }) => !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
 
   // Dev-only hook so QA scripts can read editor state.
-  if (import.meta.env.DEV) (window as unknown as { __editor: unknown }).__editor = editor;
+  if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
 
   // TipTap focuses on the next frame; focusing the view too makes it immediate.
   useImperativeHandle(
@@ -237,10 +247,11 @@ export function BlockEditor({
         editor.commands.focus(position);
         editor.view.focus();
       },
-      refocus: () => {
-        editor.commands.focus();
-        editor.view.focus();
-      },
+      getJSON: () => editor.getJSON(),
+      setContent: (doc) => editor.commands.setContent(doc),
+      // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
+      // from a surface (the ask bar) opened in between.
+      refocus: () => editor.view.focus(),
       selection: () => selected(editor),
       find: (text, near) => locate(editor, text, near),
       domRange: (from, to) => {

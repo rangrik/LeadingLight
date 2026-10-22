@@ -141,8 +141,10 @@ Feature: Block editor
     Then the click only takes the cursor away and adds nothing
     When I click blank space beside or above the title
     Then the cursor is at the end of the title and nothing is added
-    When I click the gap between the title and the body
+    When I click the gap just above the body, under the properties
     Then the cursor is at the start of "Plan" and nothing is added
+    When I click beside a property row, or level with the backlinks or "Created this day"
+    Then nothing happens: the cursor doesn't move and nothing is added
     When I click the side margin beside a to-do, a toggle title, a table row or a group's text
     Then the cursor goes into the line at that height, not the next block
     And beside a table row or columns, a left-margin click goes to the first cell's start and a

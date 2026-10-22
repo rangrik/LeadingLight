@@ -1,6 +1,7 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
 // Changes: pages instead of projects, a New page action and empty text, rows select instead of
-// linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet).
+// linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet);
+// rows can be dragged beside the open page.
 import { Ellipsis, Plus, Trash } from "lucide-react";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import {
@@ -23,6 +24,7 @@ export function NavProjects({
     icon: React.ReactNode;
     isActive: boolean;
     onSelect: () => void;
+    onDrag: (e: React.PointerEvent<HTMLElement>) => void;
     onDelete: () => void;
   }[];
   onCreate: () => void;
@@ -38,7 +40,12 @@ export function NavProjects({
       <SidebarMenu>
         {projects.map((item, i) => (
           <SidebarMenuItem key={i}>
-            <SidebarMenuButton aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect}>
+            <SidebarMenuButton
+              aria-current={item.isActive ? "page" : undefined}
+              isActive={item.isActive}
+              onClick={item.onSelect}
+              onPointerDown={item.onDrag}
+            >
               {item.icon}
               <span>{item.name}</span>
             </SidebarMenuButton>

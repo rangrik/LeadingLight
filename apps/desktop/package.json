@@ -13,6 +13,7 @@
     "qa:gallery": "playwright test -c qa/playwright.config.ts --project gallery"
   },
   "dependencies": {
+    "@iconify-json/lucide": "^1.2.147",
     "@leadinglight/editor": "workspace:*",
     "@leadinglight/ui": "workspace:*",
     "@tauri-apps/api": "^2",

@@ -1,10 +1,12 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), and only NavProjects (as Pages); NavMain, NavSecondary and NavUser wait for content.
+// skips it), and NavProjects as Pages under our Types; NavMain, NavSecondary and NavUser wait for content.
 // The header is its own export, so Settings' sidebar wears the same one.
+import { CalendarDays } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarGroup,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -12,6 +14,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { NavProjects } from "./nav-projects";
+import { NavTypes } from "./nav-types";
 
 // The app mark (a t whose crossbar ends in a dot), placed as in the app icon's tile. Drawn in
 // currentColor so the tile's theme colours apply.
@@ -49,10 +52,16 @@ export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
 
 export function AppSidebar({
   pages,
+  types,
   onCreate,
+  onToday,
+  todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  onToday: () => void;
+  todayActive: boolean;
   pages: React.ComponentProps<typeof NavProjects>["projects"];
+  types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
 }) {
   const { isMobile, state } = useSidebar();
@@ -60,6 +69,19 @@ export function AppSidebar({
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
       <AppSidebarHeader subtitle="Notes" />
       <SidebarContent>
+        <SidebarGroup className="pb-0">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={onToday}>
+                <CalendarDays />
+                <span>Today</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <nav aria-label="Types">
+          <NavTypes types={types} />
+        </nav>
         <nav aria-label="Pages">
           <NavProjects onCreate={onCreate} projects={pages} />
         </nav>

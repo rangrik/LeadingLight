@@ -9,7 +9,7 @@
 - Pages: create, rename by title, switch, delete with confirm, autosave, persistence.
 - QA harness: Gherkin in `features/`, Playwright in `apps/desktop/qa`.
 
-## M1.5 — The Capacities block set (next)
+## M1.5 — The Capacities block set (built)
 
 Everything in https://docs.capacities.io/reference/blocks except math and object blocks.
 See `features/blocks.feature`, `features/selection.feature`, `features/polish.feature`.
@@ -37,12 +37,69 @@ composer that mentions agents and pages (`features/ask.feature`, `features/compo
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).
 
-## M2 — Objects (deferred, see `DEFERRED.md`)
+## M2 — Objects and links (built)
 
-- Object types with properties (text, date, number, select, relation). A type picker
-  on create. A property header above the body.
-- Inline mentions of objects (`@`), with backlinks stored in a `links` table.
-- Daily notes.
+Parity with Capacities' building blocks, on one kind of object: the page. No type is
+written into the code. Why: `DECISIONS.md` 8. Reference: https://docs.capacities.io/reference.
+
+Every page
+- Icon: any emoji, a lucide icon in a theme colour, or an uploaded image.
+- Cover: upload, paste, link, a theme colour, or an Unsplash photo with its credit. Drag to
+  reposition. Unsplash needs each person's own free key, and its photos don't show offline.
+- Description, tags, aliases, created and updated dates.
+- Any property, whatever the page's type.
+
+Properties
+- Kinds: text, number, checkbox, date (time and range optional), select (one or many),
+  relation (to any page or to one type; one or many; two-way optional), link, file.
+- Each property is defined once for the space (name, kind, options), so "Rating" means
+  the same on every page that has it.
+- Changing a property's kind keeps the old values aside until the user confirms.
+
+Types
+- A type is a bundle the user can edit: name, icon, colour, properties, page layout,
+  card, default link view and templates. Its pages follow it; one page may add more.
+- "Save as type" turns a page's shape into a new type. A page's own property can be added
+  to its type. Changing a page's type keeps every value.
+- A template is a page marked as one of its type's templates. One is the default.
+  `{date}` in a template title becomes the creation date.
+- Starter types ship as data: Person, Book, Meeting, Project, Idea and the like.
+
+Links
+- `@` and `[[` search titles and aliases and insert a link; "Create …" makes a new page.
+- A link on its own line shows as a line, a small card, a wide card, or the page itself,
+  editable in place. The type sets the default; each link can change it.
+- Links follow renames. Backlinks are found by searching stored pages for the page's id,
+  so there is no links table to keep in step.
+- Backlinks sit at the end of every page, grouped by source, each with the line around
+  it. Links from properties show the property's name. Unlinked mentions get a Link button.
+- Shift-click opens a page beside the one in view (see the side-by-side panes).
+
+Lists and cards
+- Cards show the properties their type marks "On cards".
+- A type's pages and a tag's pages show as a list, table, gallery or board, with sort and
+  group, kept per type. Relations show as chips, backlinks with their lines.
+
+Made from the same parts
+- Tag: a page of type Tag. "Add tag" above the title tags the page; `#name` in text links the
+  line. A tag's page lists everything tagged. Two tags can be merged.
+- Collection: a page whose relation lists its members.
+- Daily note: one page per day, opened from Today, the previous and next day or a calendar,
+  and linked with `@today`. It lists what was made that day.
+
+Storage: a `property_defs` table holds definitions, and types keep their settings in
+`object_types`. Values stay in each page's `properties` JSON; a page's own properties are the
+values its type doesn't list. The browser store mirrors both.
+
+Property kinds, list views, page layouts, icon and cover sources, and starter types each
+sit in one list, so each can become an extension later.
+
+Order: page header → properties and types → links and backlinks → cards and lists →
+tags, daily notes, templates, starter types.
+
+Left out of M2 (see `DEFERRED.md`): stickers (waiting on a decision),
+queries, block references, images and web links as pages, the graph, one page open twice,
+editing an embed in place, editing values inside lists.
 
 ## M3 — Everyday polish
 

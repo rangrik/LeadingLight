@@ -49,3 +49,54 @@ test("A page with unknown blocks opens read-only", async ({ page }) => {
   await body(page).hover();
   await expect(page.getByRole("button", { name: "Add block" })).toHaveCount(0);
 });
+
+// Seam: a page's properties are saved back as one map. Catches a property this version
+// doesn't know (from a later build) being dropped when the page saves.
+test("Saving a page keeps properties this version doesn't know", async ({ page }) => {
+  const properties = { icon: { kind: "emoji", emoji: "✈️" }, later: { kept: true } };
+  const old = [{ id: "p", typeId: "page", title: "Trip", content: null, properties, createdAt: 1, updatedAt: 1 }];
+  await page.addInitScript((v) => localStorage.getItem("seeded") || localStorage.setItem("leadinglight.objects", v), JSON.stringify(old));
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("seeded", "1"));
+  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Trip" })).toContainText("✈️");
+  await page.getByRole("textbox", { name: "Title" }).hover();
+  await page.getByRole("button", { name: "Add description" }).click();
+  await page.keyboard.type("Ten days");
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue("Ten days");
+  const stored = await page.evaluate(
+    () =>
+      new Promise((done) => {
+        indexedDB.open("leadinglight").onsuccess = (e) => {
+          const db = (e.target as IDBOpenDBRequest).result;
+          db.transaction("objects").objectStore("objects").get("p").onsuccess = (r) =>
+            done((r.target as IDBRequest).result.properties);
+        };
+      }),
+  );
+  expect(stored).toMatchObject({ later: { kept: true }, description: "Ten days" });
+});
+
+// Seam: the browser store's upgrade from version 1, which had pages only. Catches existing
+// pages vanishing, or the starter types missing, after the upgrade.
+test("Pages stored before types existed survive the upgrade", async ({ page }) => {
+  // Any page of the same origin that isn't the app, so the app can't upgrade the store first.
+  await page.goto("/src-tauri/icons/32x32.png");
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        const req = indexedDB.open("leadinglight", 1);
+        req.onupgradeneeded = () => {
+          const obj = { id: "v1", typeId: "page", title: "From v1", content: null, properties: {}, createdAt: 1, updatedAt: 1 };
+          req.result.createObjectStore("objects", { keyPath: "id" }).put(obj);
+        };
+        req.onsuccess = () => {
+          req.result.close();
+          done();
+        };
+      }),
+  );
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "From v1" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
+});

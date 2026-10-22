@@ -21,6 +21,7 @@ import { EmojiPrefix } from "./emoji-prefix";
 import { Column, Columns, Group } from "./layout";
 import { OrderedListStyles } from "./lists";
 import { createMedia } from "./media";
+import { type LinkHost, LinkMenus, linkMenuOpen, Mention, PageLink } from "./page-links";
 import { SlashCommands, slashMenuOpen } from "./slash-menu";
 import { Tables } from "./table";
 
@@ -39,7 +40,7 @@ const ExitTop = Extension.create<{ onExitTop: () => boolean }>({
     };
     return {
       ArrowUp: () =>
-        !slashMenuOpen(this.editor.state) && first() && this.editor.view.endOfTextblock("up") && this.options.onExitTop(),
+        !slashMenuOpen(this.editor.state) && !linkMenuOpen(this.editor.state) && first() && this.editor.view.endOfTextblock("up") && this.options.onExitTop(),
       Backspace: () => {
         const { doc, selection } = this.editor.state;
         return first() && doc.childCount === 1 && selection.$from.parent.content.size === 0 && this.options.onExitTop();
@@ -97,6 +98,8 @@ const Toggle = Details.extend({
 });
 
 const hint = (node: PMNode) => {
+  // An emoji line has its emoji where the hint would be drawn.
+  if (node.attrs.emoji) return null;
   if (node.type.name === "heading") return `Heading ${node.attrs.level}`;
   if (node.type.name === "detailsSummary") return "Toggle";
   return node.type.name === "paragraph" ? "Type '/' for commands" : null;
@@ -199,7 +202,9 @@ export function createExtensions(opts: {
   onExitTop: () => boolean;
   assets: AssetStore;
   openLink: (href: string) => void;
+  links?: LinkHost;
 }) {
+  const host = opts.links ?? null;
   return [
     StarterKit.configure({
       bold: false,
@@ -233,6 +238,10 @@ export function createExtensions(opts: {
     Group,
     EmojiPrefix,
     ...createMedia(opts.assets),
+    // Link nodes are always in the schema, so a page with links reads even without a host.
+    Mention.configure({ host }),
+    PageLink.configure({ host }),
+    LinkMenus.configure({ host }),
     Placeholder,
     BlurSelection,
     SlashCommands,

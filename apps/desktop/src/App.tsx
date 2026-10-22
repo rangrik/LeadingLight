@@ -21,17 +21,27 @@ import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sideb
 import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
+import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
-import { PageView } from "~/components/page-view";
+import { PageIconView, RowIcon } from "~/components/page-icon";
+import { PaneArea } from "~/components/pane-area";
+import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
-import { pageLabel } from "~/lib/labels";
+import { dailyFor, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
-import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "~/lib/objects";
+import { pageLabel } from "~/lib/labels";
+import type { ObjectSummary } from "~/lib/objects";
+import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
-import { flushAll, reportSaveError } from "~/lib/saving";
+import { flushAll } from "~/lib/saving";
+import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
+import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
+
+// Tags and daily notes have their own places; templates show in their type's settings.
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 
@@ -80,9 +90,9 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, []);
 
-  const [pages, setPages] = useState<ObjectSummary[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [active, setActive] = useState<LLObject | null>(null);
+  const { pages, types } = space.use();
+  const { root } = panes.use();
+  const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
   const [native, setNative] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
@@ -90,60 +100,20 @@ export default function App() {
   useEffect(() => void isNative.then(setNative), []);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
-  // The composer's @mentions of other pages read the same list.
-  useEffect(() => setAskPages(pages.map((p) => ({ id: p.id, title: p.title }))), [pages]);
+  // The composer's @mentions of other pages read the same list as the sidebar.
+  useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    objects
-      .list()
-      .then((list) => {
-        setPages(list);
-        setActiveId(list[0]?.id ?? null);
-      })
+    loadSpace()
+      .then((list) => showOnly(list.find(listed)?.id ?? null))
       .catch(console.error);
   }, []);
-
-  useEffect(() => {
-    if (!activeId) {
-      setActive(null);
-      return;
-    }
-    let stale = false;
-    objects
-      .get(activeId)
-      .then((obj) => !stale && setActive(obj))
-      .catch(console.error);
-    return () => {
-      stale = true;
-    };
-  }, [activeId]);
 
   const create = useCallback(() => {
-    objects
-      .create()
-      .then((obj) => {
-        setPages((prev) => [obj, ...prev]);
-        setActive(obj);
-        setActiveId(obj.id);
-      })
+    newPage(PAGE_TYPE)
+      .then((obj) => openPage(obj.id))
       .catch(console.error);
   }, []);
-
-  const remove = useCallback(
-    (id: string) => {
-      objects.remove(id).catch(console.error);
-      setPages((prev) => prev.filter((p) => p.id !== id));
-      if (id === activeId) setActiveId(pages.find((p) => p.id !== id)?.id ?? null);
-    },
-    [activeId, pages],
-  );
-
-  // The sidebar and the breadcrumb follow the title as it is typed; saving is debounced.
-  const rename = useCallback((id: string, title: string) => {
-    setPages((prev) => prev.map((p) => (p.id === id ? { ...p, title } : p)));
-  }, []);
-
-  const save = useCallback((id: string, patch: ObjectPatch) => objects.update(id, patch).catch(reportSaveError), []);
 
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
@@ -174,13 +144,21 @@ export default function App() {
     };
   }, []);
 
-  const title = active ? (pages.find((p) => p.id === active.id)?.title ?? active.title) : null;
-  const navPages = pages.map((p) => ({
+  const shown = current === undefined ? undefined : describe(current);
+  const navPages = pages.filter(listed).map((p) => ({
     name: pageLabel(p.title),
-    icon: <FileText />,
-    isActive: p.id === activeId,
-    onSelect: () => setActiveId(p.id),
+    icon: <RowIcon icon={iconFor(p)} />,
+    isActive: p.id === current,
+    onSelect: () => openPage(p.id),
+    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
     onDelete: () => setPendingDelete(p),
+  }));
+  const navTypes = types.map((t) => ({
+    name: t.plural,
+    icon: <RowIcon icon={t.icon} />,
+    isActive: current === typeView(t.id),
+    onSelect: () => openPage(typeView(t.id)),
+    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
   }));
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
@@ -190,13 +168,18 @@ export default function App() {
   // sidebar's own ⌘\ is then the Settings shell's to handle.
   const shell = (
       <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
-        <AppSidebar onCreate={create} pages={navPages} />
+        <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
         <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-          <PanelHeader current={title === null ? null : pageLabel(title)} root="Pages" sidebarOpen={sidebarOpen} />
-          <div className="min-h-0 flex-1 overflow-y-auto" data-page-scroller>
-            {active ? (
-              <PageView key={active.id} onRename={rename} onSave={save} page={active} />
-            ) : (
+          <PanelHeader
+            current={shown?.title ?? null}
+            icon={shown?.icon && <PageIconView icon={shown.icon} />}
+            root={shown?.parent ?? "Pages"}
+            sidebarOpen={sidebarOpen}
+          />
+          {root ? (
+            <PaneArea />
+          ) : (
+            <div className="min-h-0 flex-1">
               <Empty className="h-full">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -212,16 +195,16 @@ export default function App() {
                   </Button>
                 </EmptyContent>
               </Empty>
-            )}
-          </div>
+            </div>
+          )}
           {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
-          {active && <AskBar />}
-          {active && <AgentPanel />}
+          {root && <AskBar />}
+          {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
           onConfirm={(id) => {
-            remove(id);
+            removePage(id);
             setPendingDelete(null);
           }}
           page={pendingDelete}

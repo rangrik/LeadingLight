@@ -9,10 +9,22 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | ⌘D and ⌫ while the block menu is open | The open menu holds focus, so the shortcuts it shows only work once it closes. Small, and nobody has asked. | Someone presses a shortcut with the menu open and expects it to run. |
 | 2026-10-22 | Block menu items Notion has beyond Turn into, Duplicate and Delete: colours and highlights, copy link to block, move to another page, comments | Colours need a new block attribute and a palette that reads in light and dark. Links, moves and comments need block ids and links between pages. | Colours when asked; the rest with M2. |
 | 2026-10-22 | Math blocks | Left out of the block set on request. | When asked. |
-| 2026-10-22 | M2: object types with properties (text, date, number, select, relation), a type picker on create, a property header above the body | Put off to start using the page editor first. Needs the first two or three real types (e.g. Person, Book, Meeting) to shape the design. | When M2 starts. |
-| 2026-10-22 | M2: `@` mentions of objects, with backlinks | Builds on object types. | With M2. |
-| 2026-10-22 | M2: daily notes | Builds on object types. | With M2. |
-| 2026-10-22 | Object blocks | Need object types, which arrive in M2. | With M2. |
+| 2026-10-22 | Queries: saved, rule-based lists of pages | Left out of M2 on request. Lists of a type, a tag, a relation or backlinks, with sort and group, cover most uses. | A list someone needs can't be built without a saved rule. |
+| 2026-10-22 | Block references (`((`) and tags on single blocks | Every block needs a lasting id, and editing one block in several pages at once is the hardest part of ProseMirror. | After M2's links and backlinks ship. |
+| 2026-10-22 | Images, web links, PDFs and audio as pages | They fit the page model as pages whose main property is the file or link, but each needs its own preview, fetch or reader work. | After M2. |
+| 2026-10-22 | Graph view | Needs the links table first, and shows little until there are many links. | After M2, when asked. |
+| 2026-10-22 | Side-by-side pages kept after a reload or restart | Asked for the simplest form; a reload opens one page, as before. | Someone misses their layout after a restart. |
+| 2026-10-22 | The Ask panel with panes side by side | It docks to the page area's corner, so it can sit over the other pane, and it doesn't name the page it's about. Its top corners can cover a pane's close button and the cover's credit; at the largest text size it overlaps the cover's buttons by 6 px. The panel is still being built on main, so placing it per pane is left to that work. | The next pass on Ask or the agents area. |
+| 2026-10-22 | A minimum pane width | A split stops at 10% of its space, so panes can get narrower than any view: a tag page's list clips below about 200 px, and the cover's buttons sit over the page icon below about 340 px. A real minimum needs limits across nested splits, new splits and window resizes. | Someone works with three or more panes in a small window. |
+| 2026-10-22 | Splitting, moving or resizing panes from the keyboard or a menu, and dropping on a page's middle | Dragging covers the ask; Shipyard's swap-on-middle and split commands were left out, and dividers can't take focus. | When asked, or with the command palette. |
+| 2026-10-22 | Editing a page where it is embedded | An embed is read-only: two editors on one page need shared editing state, as below. Its title opens the page itself. | With one page open in two places. |
+| 2026-10-22 | One page open in two places at once | Two editors on one page need shared editing state. Capacities doesn't allow it either. | When asked. |
+| 2026-10-22 | Stickers as page icons and in pages | Waiting to hear what "stickers" should be; a free set like Microsoft's 3D emoji is the guess. | When that's settled. |
+| 2026-10-22 | Emoji skin tones | Not asked for; every emoji shows in its default tone. | When asked. |
+| 2026-10-22 | Editing values inside lists, and dragging cards between board columns | Lists show values; changing one opens the page. Editing in cells means a second editor for every kind. | Someone fills in many pages of a type at once. |
+| 2026-10-22 | Starting a page from a template with a slash command | "New" with its template menu covers it; the slash menu would need to create and link in one step. | When asked. |
+| 2026-10-22 | Editing a two-way relation from the other side | The other side shows the linked pages read only; adding one there would write to another page. | When asked. |
+| 2026-10-22 | Deleting a property everywhere | Removing it from a page or a type covers tidying up, and its values stay stored either way. | Someone wants unused properties gone from the "Add property" list. |
 | 2026-10-22 | Mermaid diagrams in code blocks | A large extra dependency for a niche use. | When asked. |
 | 2026-10-22 | Highlight blocks from reading integrations | There are no integrations to bring highlights in. | When an integration is built. |
 | 2026-10-22 | Width options for columns and groups | Equal widths cover the common case. | When asked. |
