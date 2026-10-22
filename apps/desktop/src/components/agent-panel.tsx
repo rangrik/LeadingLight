@@ -8,7 +8,8 @@ import { Composer, type Mention } from "~/components/composer";
 import { type AgentStatus, agentStatus, ask, cancel } from "~/lib/agent";
 import { type Agent, BUILT_IN, listAgents } from "~/lib/agents";
 import { type Corner, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
-import { type AskPage, askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
+import { askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
+import { buildPrompt, type NoteText, SYSTEM, type Seen } from "~/lib/ask-prompt";
 import { openLink } from "~/lib/links";
 import { docText, objects } from "~/lib/objects";
 
@@ -25,12 +26,14 @@ type Thread = {
   pending: Quote | null;
   quote: Quote | null;
   mentions: Mention[];
+  // What the session has been sent (lib/ask-prompt.ts); kept only once an answer lands.
+  seen: Seen;
   note?: string;
 };
 
 // Each page keeps its own thread while the app runs, outside the component: a stream
 // that lands after the person switched pages still goes to the page that asked.
-const EMPTY: Thread = { messages: [], pending: null, quote: null, mentions: [] };
+const EMPTY: Thread = { messages: [], pending: null, quote: null, mentions: [], seen: {} };
 const threads = new Map<string, Thread>();
 const listeners = new Set<() => void>();
 function patch(pageId: string, f: (t: Thread) => Thread) {
@@ -61,29 +64,14 @@ const CORNERS: { value: Corner; label: string }[] = [
 ];
 const MIN = { w: 280, h: 240 };
 
-// The system prompt: the agent's own words first when one is mentioned, then the note,
-// then any other pages mentioned.
-async function systemPrompt(page: AskPage, agent: Agent | undefined, pages: Mention[]) {
-  const others = await Promise.all(
-    pages.map(async (m) => {
+// The mentioned pages' words, read from storage: no editor is open on them.
+const mentionedPages = (mentions: Mention[]): Promise<NoteText[]> =>
+  Promise.all(
+    mentions.flatMap((m) => (m.kind === "page" ? [m] : [])).map(async (m) => {
       const obj = await objects.get(m.id).catch(() => null);
-      return obj ? `Another note the person mentioned, "${obj.title || "Untitled"}":\n${docText(obj.content).slice(0, 10_000)}` : "";
+      return { id: m.id, title: obj?.title ?? m.name, text: obj ? docText(obj.content) : "" };
     }),
   );
-  return [
-    agent?.prompt,
-    "You help someone read and write a note in LeadingLight, a notes app on their Mac.",
-    `The note is titled "${page.title() || "Untitled"}". Its text is between the dashed lines.`,
-    "When they quote a selection, answer about that selection in the context of the note.",
-    "Answer in Markdown, briefly, with no preamble and no closing offer.",
-    "-----",
-    page.text().slice(0, 20_000),
-    "-----",
-    ...others.filter(Boolean),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 // A one-paragraph answer goes in as inline text, so replacing words keeps their sentence whole.
 function toInsert(markdown: string): string {
@@ -141,7 +129,6 @@ export function AgentPanel() {
     const id = pageId;
     const askId = crypto.randomUUID();
     const agent = thread.mentions.flatMap((m) => (m.kind === "agent" ? agents.filter((a) => a.id === m.id) : []))[0];
-    const prompt = q ? `> ${q.text.replace(/\n/g, "\n> ")}\n\n${question}` : question;
     // The answer is about the words quoted with it; a follow-up without a quote is about
     // the thread, so Replace goes away until words are quoted again.
     patch(id, (t) => ({
@@ -156,20 +143,18 @@ export function AgentPanel() {
       patchLast(id, (m) => ({ ...m, done: true, error: message }));
       patch(id, (t) => ({ ...t, busy: undefined }));
     };
-    systemPrompt(
-      page,
-      agent,
-      thread.mentions.filter((m) => m.kind === "page"),
-    )
-      .then((system) =>
-        ask({ id: askId, prompt, system, model: agent?.model ?? prefs.model, effort: prefs.effort, resume: thread.sessionId }, (e) => {
+    mentionedPages(thread.mentions)
+      .then((pages) => {
+        const note = { id, title: page.title(), text: page.text() };
+        const { prompt, seen } = buildPrompt({ seen: thread.seen, note, pages, agent: agent?.prompt ?? null, quote: q?.text ?? null, question });
+        return ask({ id: askId, prompt, system: SYSTEM, model: agent?.model ?? prefs.model, effort: prefs.effort, resume: thread.sessionId }, (e) => {
           if (e.type === "delta") patchLast(id, (m) => ({ ...m, text: m.text + e.text }));
           else if (e.type === "done") {
             patchLast(id, (m) => ({ ...m, done: true }));
-            patch(id, (t) => ({ ...t, busy: undefined, sessionId: e.session_id ?? t.sessionId }));
+            patch(id, (t) => ({ ...t, busy: undefined, sessionId: e.session_id ?? t.sessionId, seen }));
           } else fail(e.message);
-        }),
-      )
+        });
+      })
       .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
   };
 
