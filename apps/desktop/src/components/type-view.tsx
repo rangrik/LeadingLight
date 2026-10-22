@@ -40,7 +40,7 @@ export function TypeView({ typeId }: { typeId: string }) {
   return (
     // A type's view isn't read like a page: it takes the pane's width in every view, so
     // switching views never moves its header.
-    <div className="mx-auto w-full max-w-[1200px] ps-16 pe-6 pt-10 pb-48 @xl:pe-16">
+    <div className="mx-auto w-full max-w-[1200px] ps-6 pe-6 pt-10 @sm:ps-16 pb-48 @xl:pe-16">
       {type.icon && (
         <div className="mb-3">
           <PageIconView icon={type.icon} large />

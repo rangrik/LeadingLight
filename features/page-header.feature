@@ -12,7 +12,8 @@ Feature: Page icon, cover and description
     the Emoji tab a searchbox "Search emoji" and one button per emoji, named by the emoji's name
   - cover: the band across the top of the pane, with buttons "Change cover" and "Reposition"
     showing while the pointer is over it
-  - cover picker: popover "Cover" with tabs "Colour", "Upload", "Link" and a "Remove" button
+  - cover picker: popover "Cover" with tabs "Colour", "Unsplash", "Upload", "Link" and a "Remove" button
+  - Unsplash: the photo site api.unsplash.com. Tests answer for it, since the test browser is offline.
   - description: textbox "Description" under the title
 
   Background:
@@ -81,6 +82,60 @@ Feature: Page icon, cover and description
     Then the image fills the cover band
     When I open "Change cover", the "Link" tab, and enter "https://example.com/not-an-image"
     Then the picker says "That link didn't load as an image" and the cover is unchanged
+
+  Scenario: Unsplash asks for a key once
+    When I click "Add cover" and open the "Unsplash" tab
+    Then it says Unsplash needs a free access key, with a "Get one" link to Unsplash's developer page
+    When I enter "test-key" in "Access key" and click "Save key"
+    Then the tab shows the searchbox "Search Unsplash", focused
+    And after a reload the "Unsplash" tab still shows the search, not the key form
+    When I click "Change key" under the empty search
+    Then the key form shows again
+    And closing the picker without saving keeps the old key
+
+  Scenario: A cover from Unsplash, with credit
+    Given an Unsplash key is saved
+    When I open the "Unsplash" tab and type "mountain"
+    Then Unsplash is asked for landscape photos of "mountain", with the key
+    And all 24 show in a grid of even 3:2 thumbnails that scrolls, each named "Photo by <photographer>"
+    When I click "Photo by Ann Lee"
+    Then the photo fills the cover band and the picker closes
+    And the photo's download link is requested with the key, as Unsplash asks
+    When I hover the cover
+    Then the cover's top right reads "Photo by Ann Lee on Unsplash"
+    And "Ann Lee" opens the photographer's Unsplash profile and "Unsplash" opens unsplash.com,
+      both ending in "utm_source=leadinglight&utm_medium=referral"
+    When I reposition the photo and reload
+    Then the photo and its credit are unchanged
+    When I pick the colour "Green" instead
+    Then the credit is gone
+
+  Scenario: A long photographer's name
+    Given the page has an Unsplash cover by "Eve Moreno-Castellanos de la Fuente" and an icon
+    When the pane is 300 px wide and I hover the cover
+    Then the name is cut short with "…", "on Unsplash" still shows, and the credit stays inside the
+      pane and clear of the page icon
+    And hovering the name shows it in full
+    When the pane is under 320 px wide
+    Then "Photo by" is left out, so the name keeps room: "Eve … on Unsplash"
+
+  Scenario: Unsplash failures
+    Given an Unsplash key is saved
+    When Unsplash refuses the key and I search
+    Then the tab says "Unsplash didn't accept that key" and shows the key form again
+    When Unsplash can't be reached and I search
+    Then the tab says "Couldn't reach Unsplash" and the cover is unchanged
+    When Unsplash answers 403 for the hourly limit and I search
+    Then the tab says "Unsplash's hourly limit is used up. Try again later."
+    When a search finds nothing
+    Then the tab says "No photos found"
+
+  Scenario: An Unsplash cover offline
+    Given the page has an Unsplash cover
+    When the photo can't load
+    Then the cover is a plain grey band with no broken-image sign, and its credit still shows on hover
+    When the network comes back, or I pick the same photo again
+    Then the photo shows
 
   Scenario: The icon sits on the cover's lower edge
     Given the page has a cover and the icon "✈️"

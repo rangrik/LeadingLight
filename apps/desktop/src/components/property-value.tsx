@@ -121,7 +121,7 @@ export function PropValue({ prop, value, page, onChange }: EditProps) {
       return (
         <input
           aria-label={prop.name}
-          className="h-8 w-full appearance-none bg-transparent outline-none placeholder:text-muted-foreground/60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="w-full appearance-none bg-transparent py-1.5 leading-5 outline-none placeholder:text-muted-foreground/60 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           inputMode="decimal"
           onChange={(e) => onChange(e.currentTarget.value === "" ? undefined : Number(e.currentTarget.value))}
           placeholder="Empty"
@@ -358,7 +358,7 @@ function LinkValue({ name, value, onChange }: { name: string; value: string; onC
     <div className="flex h-8 w-full items-center gap-1">
       <input
         aria-label={name}
-        className="h-8 min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground/60"
+        className="min-w-0 flex-1 bg-transparent py-1.5 leading-5 outline-none placeholder:text-muted-foreground/60"
         onChange={(e) => onChange(e.currentTarget.value || undefined)}
         placeholder="Empty"
         type="text"

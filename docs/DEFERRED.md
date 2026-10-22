@@ -13,11 +13,11 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Images, web links, PDFs and audio as pages | They fit the page model as pages whose main property is the file or link, but each needs its own preview, fetch or reader work. | After M2. |
 | 2026-10-22 | Graph view | Needs the links table first, and shows little until there are many links. | After M2, when asked. |
 | 2026-10-22 | Side-by-side pages kept after a reload or restart | Asked for the simplest form; a reload opens one page, as before. | Someone misses their layout after a restart. |
+| 2026-10-22 | A minimum pane width | A split stops at 10% of its space, so panes can get narrower than any view: a tag page's list clips below about 200 px, and the cover's buttons sit over the page icon below about 340 px. A real minimum needs limits across nested splits, new splits and window resizes. | Someone works with three or more panes in a small window. |
 | 2026-10-22 | Splitting, moving or resizing panes from the keyboard or a menu, and dropping on a page's middle | Dragging covers the ask; Shipyard's swap-on-middle and split commands were left out, and dividers can't take focus. | When asked, or with the command palette. |
 | 2026-10-22 | Editing a page where it is embedded | An embed is read-only: two editors on one page need shared editing state, as below. Its title opens the page itself. | With one page open in two places. |
 | 2026-10-22 | One page open in two places at once | Two editors on one page need shared editing state. Capacities doesn't allow it either. | When asked. |
 | 2026-10-22 | Stickers as page icons and in pages | Waiting to hear what "stickers" should be; a free set like Microsoft's 3D emoji is the guess. | When that's settled. |
-| 2026-10-22 | Unsplash covers | Needs an Unsplash developer key, and Unsplash photos must load from Unsplash, so they won't show offline. | When there's a key and offline covers are accepted. |
 | 2026-10-22 | Emoji skin tones | Not asked for; every emoji shows in its default tone. | When asked. |
 | 2026-10-22 | Editing values inside lists, and dragging cards between board columns | Lists show values; changing one opens the page. Editing in cells means a second editor for every kind. | Someone fills in many pages of a type at once. |
 | 2026-10-22 | Starting a page from a template with a slash command | "New" with its template menu covers it; the slash menu would need to create and link in one step. | When asked. |

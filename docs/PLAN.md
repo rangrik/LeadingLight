@@ -32,7 +32,8 @@ written into the code. Why: `DECISIONS.md` 6. Reference: https://docs.capacities
 
 Every page
 - Icon: any emoji, a lucide icon in a theme colour, or an uploaded image.
-- Cover: upload, paste, link or a theme colour. Drag to reposition.
+- Cover: upload, paste, link, a theme colour, or an Unsplash photo with its credit. Drag to
+  reposition. Unsplash needs each person's own free key, and its photos don't show offline.
 - Description, tags, aliases, created and updated dates.
 - Any property, whatever the page's type.
 
@@ -84,7 +85,7 @@ sit in one list, so each can become an extension later.
 Order: page header → properties and types → links and backlinks → cards and lists →
 tags, daily notes, templates, starter types.
 
-Left out of M2 (see `DEFERRED.md`): stickers and Unsplash covers (waiting on a decision),
+Left out of M2 (see `DEFERRED.md`): stickers (waiting on a decision),
 queries, block references, images and web links as pages, the graph, one page open twice,
 editing an embed in place, editing values inside lists.
 

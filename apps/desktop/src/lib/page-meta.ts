@@ -15,7 +15,8 @@ export const COLORS = {
 
 export type Color = keyof typeof COLORS;
 export type PageIcon = { kind: "emoji"; emoji: string } | { kind: "icon"; name: string; color: Color } | { kind: "image"; url: string };
-export type PageCover = { kind: "color"; color: Color } | { kind: "image"; url: string; y: number };
+export type Credit = { name: string; profile: string };
+export type PageCover = { kind: "color"; color: Color } | { kind: "image"; url: string; y: number; unsplash?: Credit };
 
 const isColor = (c: unknown): c is Color => typeof c === "string" && c in COLORS;
 const asRecord = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
@@ -32,6 +33,10 @@ export function readIcon(value: unknown): PageIcon | undefined {
 export function readCover(value: unknown): PageCover | undefined {
   const v = asRecord(value);
   if (v.kind === "color" && isColor(v.color)) return { kind: "color", color: v.color };
-  if (v.kind === "image" && typeof v.url === "string") return { kind: "image", url: v.url, y: typeof v.y === "number" ? v.y : 50 };
+  if (v.kind === "image" && typeof v.url === "string") {
+    const c = asRecord(v.unsplash);
+    const unsplash = typeof c.name === "string" && typeof c.profile === "string" ? { name: c.name, profile: c.profile } : undefined;
+    return { kind: "image", url: v.url, y: typeof v.y === "number" ? v.y : 50, ...(unsplash && { unsplash }) };
+  }
   return undefined;
 }
