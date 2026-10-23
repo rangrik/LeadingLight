@@ -3,6 +3,7 @@ import { keysFor } from "@/lib/shortcuts";
 import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { cn } from "@leadinglight/ui/lib/utils";
 import { type Tool, toggleTool, useBackToPage, useWritingPrefs } from "~/lib/writing";
 
 const TOOLS: { id: Tool; label: string }[] = [
@@ -14,12 +15,12 @@ const TOOLS: { id: Tool; label: string }[] = [
 ];
 
 // The writing tools at the page panel's top right, like iA Writer's Focus menu in its title bar.
-export function WritingMenu() {
+export function WritingMenu({ className }: { className?: string }) {
   const prefs = useWritingPrefs();
   const back = useBackToPage();
   return (
     <Menu>
-      <MenuTrigger onPointerDown={back.onPointerDown} render={<Button aria-label="Writing" className="size-7" size="icon" variant="ghost" />}>
+      <MenuTrigger onPointerDown={back.onPointerDown} render={<Button aria-label="Writing" className={cn("size-7", className)} size="icon" variant="ghost" />}>
         <Focus />
       </MenuTrigger>
       <MenuPopup align="end" className="w-60" finalFocus={back.finalFocus}>

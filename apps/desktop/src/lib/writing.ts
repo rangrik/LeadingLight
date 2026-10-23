@@ -45,7 +45,11 @@ export const editorWriting = (p: WritingPrefs): Writing => ({
 export function useBackToPage() {
   const writing = useRef(false);
   return {
-    onPointerDown: () => void (writing.current = Boolean(document.activeElement?.closest(".ll-editor"))),
+    // Only to a page in the same card: a menu used on another card moves there instead.
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      const editor = document.activeElement?.closest(".ll-editor");
+      writing.current = Boolean(editor && e.currentTarget.closest("[data-pane-area] > section")?.contains(editor));
+    },
     finalFocus: () => {
       if (!writing.current) return true;
       askEditor()?.refocus();

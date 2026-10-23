@@ -36,7 +36,7 @@ test("Two pages side by side each keep their own edits", async ({ page }) => {
 });
 
 // Seam: the sidebar row's click, with Shift, against the panes. Catches Shift-click replacing the
-// page in view instead of opening beside it, as Shift on a link does.
+// page in view instead of opening beside it, as Shift on a link does, and a card without its menu.
 test("Shift-clicking a sidebar row opens the page beside", async ({ page }) => {
   await page.goto("/");
   await create(page, "Left");
@@ -44,4 +44,6 @@ test("Shift-clicking a sidebar row opens the page beside", async ({ page }) => {
   await nav(page).getByRole("button", { name: "Left", exact: true }).click({ modifiers: ["Shift"] });
   await expect(page.getByRole("region", { name: "Left", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Right", exact: true })).toBeVisible();
+  // Each page's card has its own Writing menu, not only one of them.
+  await expect(page.getByRole("button", { name: "Writing" })).toHaveCount(2);
 });

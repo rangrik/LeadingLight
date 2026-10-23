@@ -7,7 +7,8 @@ Feature: Writing tools
   Counts are on to begin with; the rest are off.
 
   Names used below:
-  - the Writing menu: button "Writing" at the right of the page panel's header, a menu of
+  - the Writing menu: button "Writing" at the right of each page card's header (with pages side
+    by side, on the card in front, and on the others when pointed at, like "Close page"), a menu of
     "Focus mode" ⇧⌘F, "Syntax highlight" ⇧⌘D, "Style check" ⌥⇧⌘D, "Grammar check" ⇧⌘G,
     "Counts" ⇧⌘W and "Writing settings…"
   - Settings › Writing: the same five, plus what each one shows

@@ -24,6 +24,8 @@ type Size = { w: number; h: number };
 // A page's card: the sidebar-08 inset panel's look, one per open page.
 export const CARD = "bg-background md:rounded-xl md:shadow-sm/5";
 const GAP = 8; // between cards, as between a card and the window's edge
+// A control on a card that isn't in front: there on hover, or while it has focus or is open.
+const BACK_CARD = "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100";
 const EPS = 1e-6;
 
 // Edges rounded to whole pixels, so icons and text stay sharp at any split.
@@ -153,12 +155,12 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 root={shown.parent ?? "Pages"}
                 sidebarOpen={sidebarOpen}
               >
-                {/* One Writing menu, at the window's top right where the toolbar's end is. */}
-                {rect.x + rect.w > 1 - EPS && rect.y < EPS && <WritingMenu />}
+                {/* Every page's card, shown like Close page: on the card in front, the others on hover. */}
+                {!leaf.page.startsWith(TYPE_VIEW) && <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />}
                 {split && (
                   <Button
                     aria-label="Close page"
-                    className={cn(leaf.id !== focus && "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100")}
+                    className={cn(leaf.id !== focus && BACK_CARD)}
                     onClick={() => closePane(leaf.id)}
                     size="icon-xs"
                     variant="ghost"
