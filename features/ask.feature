@@ -59,6 +59,8 @@ Feature: Ask about this
     Given an answer has arrived
     When I type "Shorter" and press Enter
     Then the second answer comes in the same thread, under the first
+    When I edit the note and ask again
+    Then the answer sees the note as it is now, not as it was at the first question
 
   Scenario: The panel moves and resizes
     Given the agent panel is open

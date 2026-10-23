@@ -1,7 +1,7 @@
 Feature: Page icon, cover and description
   The top of every page can carry an icon, a cover and a one-line description, as in
   Capacities. All three are optional and stored with the page. The icon also shows in the
-  sidebar row, the pane header and the breadcrumb, in place of the page symbol.
+  sidebar row and the card header's breadcrumb, in place of the page symbol.
 
   Names used below:
   - header controls: buttons "Add icon", "Add cover", "Add description" just above the title.
@@ -32,7 +32,7 @@ Feature: Page icon, cover and description
     And it lists every emoji in groups, starting with "Smileys & Emotion"
     When I type "plane" and click the "airplane" emoji
     Then a 64 px "✈️" shows above the title and the picker closes
-    And the sidebar row, the pane header and the breadcrumb show "✈️" in place of the page symbol
+    And the sidebar row and the card header's breadcrumb show "✈️" in place of the page symbol
     And "Add icon" is gone from the header controls
 
   Scenario: Search matches words beyond the name
@@ -174,7 +174,7 @@ Feature: Page icon, cover and description
 
   Scenario: Side by side, each page keeps its own header
     Given a second page "Notes" with the icon "📝" is open on the right
-    Then the left pane header shows "✈️ Trip" and the right one "📝 Notes"
+    Then the left card header shows "✈️ Trip" and the right one "📝 Notes"
     And each cover spans only its own pane
 
   Scenario: The emoji block uses the same full emoji set

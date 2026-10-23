@@ -70,7 +70,9 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   const page = pageOf(view);
   // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
   const title = page?.properties.role === "essay" && !page.title.trim() ? "Essay" : pageLabel(page?.title ?? "");
-  return { title, icon: page && iconFor(page), parent: typeOf(page?.typeId ?? PAGE_TYPE).plural };
+  // A Thoughts page or an essay is crumbed under its page.
+  const owner = typeof page?.properties.parent === "string" ? pageOf(page.properties.parent) : undefined;
+  return { title, icon: page && iconFor(page), parent: owner ? pageLabel(owner.title) : typeOf(page?.typeId ?? PAGE_TYPE).plural };
 }
 
 export function savePage(id: string, patch: ObjectPatch): Promise<void> {

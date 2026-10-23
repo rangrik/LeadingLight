@@ -192,10 +192,8 @@ export function PageView({ page }: { page: LLObject }) {
     <div className="min-h-full" onFocusCapture={() => registerPage(askPage, editorRef.current)} onMouseDown={onBlankMouseDown}>
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
-          With sidenotes the column widens on the right for the margin (a 32px gutter, then 224px
-          of notes), keeping the text as wide. When the space left of the centred column can't
-          hold the contents rail (editor.css), the column moves right for it. */}
-      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 transition-[max-width,padding] duration-200 ease-out @xl:pe-16 has-[[data-notes]]:max-w-[968px] has-[[data-notes]]:pe-4 @xl:has-[[data-notes]]:pe-4 has-[[data-notes]]:*:me-[256px] @max-[880px]:has-[.ll-toc]:ps-[124px] @max-[1088px]:has-[[data-notes]_.ll-toc]:ps-[124px]">
+          Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
+      <div className="ll-page pb-8">
         <div className={cn("group/head", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>

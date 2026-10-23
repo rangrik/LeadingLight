@@ -492,19 +492,19 @@
 }
 
 /* "On this page" (toc.tsx) sits left of the handle gutter and stays in view while the page
-   scrolls. Without room for the list beside the centred text (or beside the essay), only its trail
-   shows, as a 52px rail left of the handles, and the list opens over the page on hover. The page
-   column makes room for the rail (see PageView). */
+   scrolls. Without room for the list beside the text (or beside an essay), only its trail shows,
+   as a 52px rail left of the handles, and the list opens over the page on hover. The page column
+   makes room for either (ll-page in the app), at these same widths. */
 .ll-toc { position: absolute; z-index: 15; top: 0; bottom: 0; right: calc(100% + 16px); width: 176px; pointer-events: none; }
 .ll-toc > nav { position: sticky; top: 24px; pointer-events: auto; }
-@container (width < 1160px) {
+@container (width < 960px) {
   .ll-toc { right: auto; left: -60px; width: 52px; }
   .ll-toc > nav { width: 52px; padding: 8px 8px 8px 10px; border-radius: var(--radius); transition: width 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; }
   .ll-toc > nav :is(.ll-toc-head, a) { opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }
   .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) { width: 232px; background: var(--popover); box-shadow: 0 0 0 1px var(--border), 0 10px 15px -3px rgb(0 0 0 / 0.05); }
   .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) :is(.ll-toc-head, a) { opacity: 1; pointer-events: auto; }
 }
-@container (width < 1368px) {
+@container (width < 1168px) {
   .ll-editor-root[data-notes] .ll-toc { right: auto; left: -60px; width: 52px; }
   .ll-editor-root[data-notes] .ll-toc > nav { width: 52px; padding: 8px 8px 8px 10px; border-radius: var(--radius); transition: width 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; }
   .ll-editor-root[data-notes] .ll-toc > nav :is(.ll-toc-head, a) { opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }

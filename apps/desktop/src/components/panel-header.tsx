@@ -11,34 +11,56 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import type { ReactNode } from "react";
 
 // The inset panel's top band, from sidebar-08's page.tsx: the sidebar trigger and the crumbs.
-// A window drag area, with room for the traffic lights when the sidebar is away.
-export function PanelHeader({ sidebarOpen, root, current, icon }: { sidebarOpen: boolean; root: string; current: string | null; icon?: ReactNode }) {
+// A window drag area. Each page's card has one; only the first (lead) makes room for the traffic
+// lights when the sidebar is away, and holds the sidebar button unless the window does (toggle).
+type Props = {
+  sidebarOpen: boolean;
+  root: string;
+  current: string | null;
+  icon?: ReactNode;
+  lead?: boolean;
+  toggle?: boolean;
+  muted?: boolean;
+  // Pressing the crumbs, not the bar: the bar itself drags the window in the app.
+  onGrab?: (e: React.PointerEvent<HTMLElement>) => void;
+  children?: ReactNode;
+};
+
+export function PanelHeader({ sidebarOpen, root, current, icon, lead = true, toggle = true, muted, onGrab, children }: Props) {
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2" data-tauri-drag-region>
+    <header className="flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region>
       <div
         className={cn(
-          "flex min-w-0 items-center gap-2 px-4 transition-[padding] duration-200 ease-linear",
-          !sidebarOpen && "ps-[calc(var(--traffic-left)_+_1rem)]",
+          "flex min-w-0 items-center gap-2 overflow-hidden px-4 transition-[padding] duration-200 ease-linear",
+          // Past the lights, or past the lights and the window's sidebar button (12 px after it).
+          lead && !sidebarOpen && (toggle ? "ps-[calc(var(--traffic-left)_+_1rem)]" : "ps-[calc(var(--traffic-left)_+_50px)]"),
         )}
+        onPointerDown={onGrab}
       >
-        <SidebarTrigger className="-ml-1" />
-        {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
-        <Separator className="mr-2 h-4" orientation="vertical" />
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem className="hidden md:block">{root}</BreadcrumbItem>
+        {lead && toggle && (
+          <>
+            <SidebarTrigger className="-ml-1" />
+            {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
+            <Separator className="mr-2 h-4" orientation="vertical" />
+          </>
+        )}
+        {/* One line in any card: only the page's title gives way, with an ellipsis. */}
+        <Breadcrumb className="min-w-0">
+          <BreadcrumbList className="flex-nowrap">
+            <BreadcrumbItem className="hidden shrink-0 md:block">{root}</BreadcrumbItem>
             {current !== null && (
               <>
-                <BreadcrumbSeparator className="hidden md:block" />
+                <BreadcrumbSeparator className="hidden shrink-0 md:block" />
                 <BreadcrumbItem className="min-w-0">
                   {icon}
-                  <BreadcrumbPage className="max-w-[40ch] truncate">{current}</BreadcrumbPage>
+                  <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>
                 </BreadcrumbItem>
               </>
             )}
           </BreadcrumbList>
         </Breadcrumb>
       </div>
+      {children && <div className="ms-auto flex shrink-0 items-center">{children}</div>}
     </header>
   );
 }

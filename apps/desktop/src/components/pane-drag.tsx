@@ -102,24 +102,20 @@ function hit(source: Source, x: number, y: number): Target | undefined {
   return rect && { pane: over.leaf.id, side, rect, label: `${open ? "Move" : "Open"} ${WHERE[side]}` };
 }
 
-const pct = (n: number) => `${n * 100}%`;
-
-// Drawn over the pane area while dragging: where the page will land.
-export function DropOverlay() {
+// Drawn over the pane area while dragging: a dashed card where the page will land.
+export function DropOverlay({ at }: { at: (r: Rect) => React.CSSProperties }) {
   const { source, target } = drag.use();
   if (!source || !target) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
       <div
-        className="absolute flex items-center justify-center p-1 transition-[left,top,width,height] duration-150 ease-out"
-        style={{ left: pct(target.rect.x), top: pct(target.rect.y), width: pct(target.rect.w), height: pct(target.rect.h) }}
+        className="absolute flex items-center justify-center rounded-xl border-2 border-info/60 border-dashed bg-info/10 transition-[left,top,width,height] duration-150 ease-out"
+        style={at(target.rect)}
       >
-        <div className="flex size-full items-center justify-center rounded-lg border-2 border-info/60 bg-info/10">
-          <span className="flex max-w-[calc(100%-16px)] items-center gap-1.5 rounded-md border bg-popover px-2 py-1 text-popover-foreground text-xs shadow-sm">
-            <span className="shrink-0 font-medium">{target.label}</span>
-            <span className="truncate text-muted-foreground">· {source.label}</span>
-          </span>
-        </div>
+        <span className="flex max-w-[calc(100%-16px)] items-center gap-1.5 rounded-md border bg-popover px-2 py-1 text-popover-foreground text-xs shadow-sm">
+          <span className="shrink-0 font-medium">{target.label}</span>
+          <span className="truncate text-muted-foreground">· {source.label}</span>
+        </span>
       </div>
     </div>
   );

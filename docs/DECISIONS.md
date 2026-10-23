@@ -54,8 +54,12 @@ runs to the top edge like Notes or Craft. The shell is shadcn's sidebar-08 block
 higher-order files (app-sidebar, nav-projects, the page layout) on COSS's primitives.
 Installing the block itself would replace COSS's primitives with shadcn's. Two marked edits to
 COSS's sidebar: ⌘\ toggles it (⌘B is bold in the editor), and the cookie write is
-skipped where the webview has no cookieStore. The sidebar is fixed at 256 px, like
-sidebar-08; drag-to-resize was dropped with the switch.
+skipped where the webview has no cookieStore. The sidebar starts at sidebar-08's 256 px and
+can be dragged from 200 to 400 px by its edge, the gap before the first card. In the app its
+button sits beside the traffic lights, as in the Claude app, so it never moves.
+Each open page is its own card in the inset's place, with the inset's look and its own
+header, 8 px apart, so pages side by side read as separate pages rather than one split
+panel. The page column starts at the left, not centred.
 
 Native-only behaviour (SQLite, files, traffic-light room) checks the app identifier,
 not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
@@ -117,9 +121,14 @@ field is a composer in synara's spirit: `@` mentions an agent or another page, `
 things to do with the words, and the model and effort sit in its footer. Agents are not a
 new format: they are Claude Code's agent files (name, description and model in the front
 matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
-three that ship with the app. A mentioned agent's prompt leads the system prompt and its model
-wins for that question; a mentioned page's text goes along as context. Mentions sit as chips
-above the field rather than inline, which keeps the field a plain textarea.
+three that ship with the app. A mentioned agent's model wins for that question. Mentions sit
+as chips above the field rather than inline, which keeps the field a plain textarea.
+
+Claude Code keeps a session's first system prompt and ignores a new one on `--resume`. So
+the system prompt holds only the fixed role, and everything that can change between
+questions travels in the question itself: the note's text, a mentioned page's text and a
+mentioned agent's instructions, each sent again only when it has changed since the thread
+last saw it.
 
 ## 11. Sidenotes, thoughts and essays are linked pages
 

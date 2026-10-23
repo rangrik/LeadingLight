@@ -17,7 +17,7 @@ const EDGE = 12;
 export function AskBar() {
   const { bar } = useAsk();
   const [question, setQuestion] = useState("");
-  const [at, setAt] = useState<{ top: number; left: number; below: boolean }>();
+  const [at, setAt] = useState<{ top: number; left: number; below: boolean; max: number }>();
   const ref = useRef<HTMLDivElement>(null);
   const field = useRef<HTMLInputElement>(null);
   // A fresh range for the words each time: the editor redraws those nodes when it loses
@@ -40,6 +40,8 @@ export function AskBar() {
     const last = rects[rects.length - 1];
     const box = pane.getBoundingClientRect();
     const view = scroller()?.getBoundingClientRect() ?? box;
+    // With pages side by side, the bar stays inside the card the words are in.
+    const card = scroller()?.closest("section")?.getBoundingClientRect() ?? box;
     const { width, height } = ref.current.getBoundingClientRect();
     const below = first.top - height - GAP < view.top;
     const top = below ? last.bottom + GAP : first.top - height - GAP;
@@ -47,8 +49,8 @@ export function AskBar() {
     const line = rects.filter((r) => Math.abs(r.top - (below ? last.top : first.top)) < 2);
     const from = Math.min(...line.map((r) => r.left));
     const anchor = (from + Math.max(...line.map((r) => r.right))) / 2;
-    const left = Math.min(Math.max(anchor - width / 2, box.left + EDGE), box.right - width - EDGE);
-    setAt({ top: top - box.top, left: left - box.left, below });
+    const left = Math.max(Math.min(anchor - width / 2, card.right - width - EDGE), card.left + EDGE);
+    setAt({ top: top - box.top, left: left - box.left, below, max: card.width - 2 * EDGE });
   }, [bar, range, scroller]);
 
   useLayoutEffect(place, [place]);
@@ -91,9 +93,13 @@ export function AskBar() {
     const s = scroller();
     s?.addEventListener("scroll", place, { passive: true });
     window.addEventListener("resize", place);
+    // The card resizes or moves when the sidebar slides or a gap is dragged.
+    const resized = new ResizeObserver(place);
+    if (s) resized.observe(s);
     return () => {
       s?.removeEventListener("scroll", place);
       window.removeEventListener("resize", place);
+      resized.disconnect();
     };
   }, [bar, place, scroller]);
 
@@ -121,7 +127,7 @@ export function AskBar() {
       }}
       ref={ref}
       role="toolbar"
-      style={at ? { top: at.top, left: at.left } : { top: 0, left: 0, visibility: "hidden" }}
+      style={at ? { top: at.top, left: at.left, maxWidth: at.max } : { top: 0, left: 0, visibility: "hidden" }}
     >
       <input
         aria-label="Ask Claude about this"

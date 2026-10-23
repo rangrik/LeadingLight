@@ -31,3 +31,22 @@
   --tw-ring-shadow: 0 0 #0000;
   --tw-ring-offset-shadow: 0 0 #0000;
 }
+
+/* The page column, from the pane's left: the block handle's 64px gutter, then 632px of text.
+   Sidenotes add a 256px margin on the right (sidenotes.tsx); "On this page" (editor.css) takes
+   200px more on the left where the pane has room for its list beside the text, else a 60px rail. */
+.ll-page {
+  --toc: 0px;
+  --margin: 0px;
+  --end: 64px;
+  width: 100%;
+  max-width: calc(64px + var(--toc) + 632px + var(--margin) + var(--end));
+  padding-inline: calc(64px + var(--toc)) var(--end);
+  transition: max-width 200ms ease-out, padding 200ms ease-out;
+}
+@container (width < 36rem) { .ll-page { --end: 24px; } }
+.ll-page:has([data-notes]) { --margin: 256px; --end: 16px; }
+.ll-page:has([data-notes]) > * { margin-inline-end: 256px; }
+.ll-page:has(.ll-toc) { --toc: 60px; }
+@container (width >= 960px) { .ll-page:has(.ll-toc) { --toc: 200px; } }
+@container (width < 1168px) { .ll-page:has([data-notes]):has(.ll-toc) { --toc: 60px; } }
