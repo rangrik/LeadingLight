@@ -11,6 +11,7 @@ import { IconPicker, PageIconView } from "~/components/page-icon";
 import { PropertyPanel } from "~/components/property-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
+import { setPageStats } from "~/components/page-stats";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { openLink } from "~/lib/links";
@@ -19,6 +20,7 @@ import type { LLObject, ObjectPatch } from "~/lib/objects";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
+import { editorWriting, useWritingPrefs } from "~/lib/writing";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -45,6 +47,8 @@ export function PageView({ page }: { page: LLObject }) {
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const writing = useWritingPrefs();
+  const [inBody, setInBody] = useState(false);
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -109,6 +113,7 @@ export function PageView({ page }: { page: LLObject }) {
     return () => {
       untrack();
       unlive();
+      setPageStats(page.id, null);
       void flush();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,10 +161,15 @@ export function PageView({ page }: { page: LLObject }) {
   };
 
   return (
-    <div className="min-h-full" onFocusCapture={() => registerPage(askPage, editorRef.current)} onMouseDown={onBlankMouseDown}>
+    // Focus mode fades the rest of the page too while the body is written in (styles.css).
+    <div
+      className={cn("ll-page min-h-full", writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
+      onFocusCapture={() => registerPage(askPage, editorRef.current)}
+      onMouseDown={onBlankMouseDown}
+    >
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes. */}
-      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
+      <div className="ll-page-column mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
         <div className={cn("group/head", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -265,7 +275,7 @@ export function PageView({ page }: { page: LLObject }) {
         <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
         {day && <DailyBar day={day} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
-        <div className="pt-3" ref={bodyRef}>
+        <div className="ll-page-body pt-3" ref={bodyRef}>
           <BlockEditor
             assets={assets}
             content={page.content}
@@ -273,8 +283,11 @@ export function PageView({ page }: { page: LLObject }) {
             onChange={(read) => queue({ content: read })}
             links={linkHost}
             onExitTop={() => titleRef.current?.focus()}
+            onFocusChange={setInBody}
+            onStats={writing.count ? (stats) => setPageStats(page.id, stats) : undefined}
             openLink={openLink}
             ref={editorRef}
+            writing={editorWriting(writing)}
           />
         </div>
         {day && <CreatedThisDay day={day} id={page.id} />}

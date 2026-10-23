@@ -108,3 +108,18 @@ searching stored pages for that id rather than kept in a links table, so nothing
 step. A change to another page (linking a mention, merging a tag) goes through that page's editor
 when it is open, so its pane never saves its own copy over the change. Every page's summary and
 properties stay in memory, which is what lists, cards and the link menu read.
+
+## 10. Writing tools only decorate, and run on this Mac
+
+Focus mode, Syntax highlight and Style check, after iA Writer, are ProseMirror decorations: they
+never enter the page, so nothing stored changes and turning one off leaves no trace. Parts of
+speech come from compromise (MIT, English, about 120 kB gzipped), loaded the first time Syntax is
+on; no text leaves the Mac. Two choices keep typing within a frame on long pages: edited blocks
+are checked again after a 0.4 s pause, not on every key, and Focus mode marks the one top-level
+block being written and lets CSS dim the rest, rather than dimming every other block.
+
+Grammar and spelling come from Harper (Apache-2.0), a checker that runs on the device, in a web
+worker. It adds about 20 MB to the app, chosen over a few home-made rules because those only catch
+slips. Counts beside the page's name count everything, marks shown or not, so the tagger and Harper
+load whenever Counts is on. Each block's findings are kept per block node, which an edit leaves
+alone unless it touched that block, so counting a long page only redoes what changed.

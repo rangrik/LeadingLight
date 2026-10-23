@@ -24,6 +24,7 @@ import { createMedia } from "./media";
 import { type LinkHost, LinkMenus, linkMenuOpen, Mention, PageLink } from "./page-links";
 import { SlashCommands, slashMenuOpen } from "./slash-menu";
 import { Tables } from "./table";
+import { WritingAids } from "./writing";
 
 // ArrowUp on the first line, or Backspace in a lone empty block, hands focus back to the title.
 // Low priority so menus get the keys first.
@@ -244,6 +245,7 @@ export function createExtensions(opts: {
     LinkMenus.configure({ host }),
     Placeholder,
     BlurSelection,
+    WritingAids,
     SlashCommands,
     BlockSelectionExtension,
     SelectAll,

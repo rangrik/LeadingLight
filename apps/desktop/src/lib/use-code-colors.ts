@@ -20,5 +20,9 @@ export function useCodeColors() {
     set("number", t.yellow);
     set("title", t.blue);
     set("type", t.cyan);
+    // Syntax highlight's parts of speech, in iA Writer's hues, readable on the page itself.
+    const page = theme.colors.background;
+    const parts = { noun: t.red, verb: t.blue, adjective: t.yellow, adverb: t.magenta, conjunction: t.green };
+    for (const [part, colour] of Object.entries(parts)) root.setProperty(`--syntax-${part}`, readable(colour, page));
   }, [theme]);
 }

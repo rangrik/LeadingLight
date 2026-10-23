@@ -7,6 +7,7 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { openAsk } from "~/lib/ask";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
+import { toggleTool } from "~/lib/writing";
 
 // Punctuation keys as the table's accelerators name them.
 const CODES: Record<string, string | undefined> = { Slash: "/", Backslash: "\\", Comma: ",", Period: ".", Equal: "=", Minus: "-" };
@@ -40,6 +41,12 @@ export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }
           return openAsk();
         case "shortcuts":
           return toggleShortcuts();
+        case "focus":
+        case "syntax":
+        case "style":
+        case "grammar":
+        case "count":
+          return toggleTool(id);
       }
     };
     const byAccel = new Map(SHORTCUTS.filter((s) => s.accel && s.id !== "sidebar").map((s) => [s.accel as string, s.id]));

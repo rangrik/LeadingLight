@@ -3,7 +3,7 @@ import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { NodeSelection, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
-import { type Ref, useImperativeHandle, useMemo, useRef } from "react";
+import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
@@ -13,6 +13,7 @@ import { createExtensions } from "./extensions";
 import type { LinkHost } from "./page-links";
 import { SelectionToolbar } from "./selection-toolbar";
 import { TableToolbar } from "./table";
+import { type Count, countText, OFF, onFound, type Writing, writingKey } from "./writing";
 
 export type EditorDoc = JSONContent;
 
@@ -24,6 +25,7 @@ function known(schema: Schema, node: JSONContent): JSONContent | null {
 }
 
 export type Selected = { text: string; from: number; to: number };
+export type Stats = { page: Count; selected: Count | null };
 
 export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
@@ -156,6 +158,9 @@ export function BlockEditor({
   links,
   readOnly,
   onAsk,
+  writing,
+  onStats,
+  onFocusChange,
   ref,
 }: {
   content: EditorDoc | null;
@@ -169,6 +174,12 @@ export function BlockEditor({
   openLink?: (href: string) => void;
   // Given, the selection toolbar offers Ask with the selected words.
   onAsk?: (selected: Selected) => void;
+  // Focus mode, Syntax highlight and Style check (writing.ts).
+  writing?: Writing;
+  // Given, the counts for the word count, a moment after each change.
+  onStats?: (stats: Stats) => void;
+  // Whether the page is being written in, which Focus mode dims the rest of the page for.
+  onFocusChange?: (focused: boolean) => void;
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
@@ -233,6 +244,56 @@ export function BlockEditor({
     onUpdate: ({ editor }) => !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
 
+  const aids = JSON.stringify(writing ?? OFF);
+  useLayoutEffect(() => {
+    if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(writingKey, JSON.parse(aids)));
+  }, [editor, aids]);
+
+  const onFocusRef = useRef(onFocusChange);
+  onFocusRef.current = onFocusChange;
+  useEffect(() => {
+    const on = () => onFocusRef.current?.(true);
+    const off = () => onFocusRef.current?.(false);
+    editor.on("focus", on).on("blur", off);
+    return () => void editor.off("focus", on).off("blur", off);
+  }, [editor]);
+
+  const onStatsRef = useRef(onStats);
+  onStatsRef.current = onStats;
+  const counting = Boolean(onStats);
+  useEffect(() => {
+    if (!counting) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let sent = 0;
+    const later = (ms = 150) => {
+      clearTimeout(timer);
+      timer = setTimeout(send, ms);
+    };
+    // A slice at a time on a long page, so the first count never freezes it. Each count sent
+    // redraws the header, so unfinished ones go at most once a second.
+    const send = () => {
+      const { doc, selection } = editor.state;
+      const deadline = performance.now() + 20;
+      const page = countText(doc, 0, doc.content.size, deadline);
+      const selected = selection.empty ? null : countText(doc, selection.from, selection.to, deadline);
+      const done = page.done && selected?.done !== false;
+      if (done || performance.now() - sent > 1000) {
+        sent = performance.now();
+        onStatsRef.current?.({ page: page.count, selected: selected?.count ?? null });
+      }
+      if (!done) later(0);
+    };
+    const changed = () => later();
+    send();
+    editor.on("transaction", changed);
+    const off = onFound(changed);
+    return () => {
+      clearTimeout(timer);
+      editor.off("transaction", changed);
+      off();
+    };
+  }, [editor, counting]);
+
   // Dev-only hook so QA scripts can read editor state.
   if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
 
@@ -275,7 +336,7 @@ export function BlockEditor({
   );
 
   return (
-    <div className="ll-editor-root">
+    <div className={writing?.focus ? "ll-editor-root ll-typewriter" : "ll-editor-root"}>
       {unreadable && (
         <Alert className="mb-3" variant="warning">
           <TriangleAlert />

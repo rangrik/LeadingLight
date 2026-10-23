@@ -36,6 +36,19 @@ Claude through the Claude Code sign-in on this Mac (Settings › AI, `features/a
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).
 
+## M2.5 — Writing tools, after iA Writer (built)
+
+The editor aids iA Writer's users love most (https://ia.net/writer/support/editor), from the View
+menu, the Writing menu at the panel's top right, and Settings › Writing. See
+`features/writing.feature`; why they are built this way is `DECISIONS.md` 10.
+
+- Focus mode (⇧⌘F): the line being written stays in the middle; Sentence or Paragraph dims the rest.
+- Syntax highlight (⇧⌘D): nouns, verbs, adjectives, adverbs and conjunctions in the theme's colours.
+- Style check (⌥⇧⌘D): fillers, redundancies and clichés struck through, never deleted.
+- Grammar check (⇧⌘G): Harper's grammar and spelling mistakes underlined, with its reason.
+- Counts (⇧⌘W): beside the page's name, words, reading time, parts of speech, style and grammar,
+  for the page or the selection; a click shows every number.
+
 ## M2 — Objects and links (built)
 
 Parity with Capacities' building blocks, on one kind of object: the page. No type is

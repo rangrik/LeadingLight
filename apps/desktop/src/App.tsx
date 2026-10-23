@@ -25,8 +25,10 @@ import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { PageIconView, RowIcon } from "~/components/page-icon";
 import { PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
+import { PageStats } from "~/components/page-stats";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { WritingMenu } from "~/components/writing-menu";
 import { dailyFor, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
 import type { ObjectSummary } from "~/lib/objects";
@@ -167,6 +169,8 @@ export default function App() {
         <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
         <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
           <PanelHeader
+            actions={root && <WritingMenu />}
+            after={current && <PageStats id={current} />}
             current={shown?.title ?? null}
             icon={shown?.icon && <PageIconView icon={shown.icon} />}
             root={shown?.parent ?? "Pages"}

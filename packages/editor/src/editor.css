@@ -401,3 +401,36 @@
 .ll-editor .node-mention.ProseMirror-selectednode .ll-mention { background: color-mix(in oklab, var(--info) 14%, transparent); border-radius: 4px; }
 .ll-editor .node-pageLink:is(.ll-selected, .ProseMirror-selectednode) { background: none; box-shadow: none; }
 .ll-editor .node-pageLink:is(.ll-selected, .ProseMirror-selectednode) .ll-link-surface { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* Writing tools (writing.ts). Focus mode fades what isn't being written. The fade sits in a
+   layer, so a control's own transition still wins over it. */
+@layer components {
+  .ll-editor * { transition: opacity 180ms ease-out; }
+}
+/* Only while the page is being written in: a click on the title brings it all back. */
+.ll-editor.ll-focusing.ProseMirror-focused > :not(.ll-lit),
+.ll-editor.ll-focusing.ProseMirror-focused .ll-dim,
+.ll-editor.ll-focusing.ProseMirror-focused .ll-toggle:has(> div > .ll-dim:first-child) > button { opacity: 0.3; }
+/* Room below the last line, so it too can come to the middle of the page. */
+.ll-editor-root.ll-typewriter { padding-bottom: 50vh; }
+/* Parts of speech in the theme's own colours (apps/desktop/src/lib/use-code-colors.ts). */
+.ll-editor .ll-noun { color: var(--syntax-noun); }
+.ll-editor .ll-verb { color: var(--syntax-verb); }
+.ll-editor .ll-adjective { color: var(--syntax-adjective); }
+.ll-editor .ll-adverb { color: var(--syntax-adverb); }
+.ll-editor .ll-conjunction { color: var(--syntax-conjunction); }
+/* Style check strikes words through; it never deletes them. */
+.ll-editor .ll-style {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 70%, transparent);
+}
+/* Grammar check: dotted underlines as macOS draws them, red for spelling and green for grammar. */
+.ll-editor :is(.ll-spelling, .ll-grammar) {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+.ll-editor .ll-spelling { text-decoration-color: var(--destructive); }
+.ll-editor .ll-grammar { text-decoration-color: var(--success); }

@@ -25,6 +25,14 @@
 /* While an answer streams, a caret at the end of its last line. */
 .ll-answer[data-streaming] > :last-child::after { content: "▍"; color: var(--muted-foreground); }
 
+/* Focus mode: while the body is written in, the rest of the page fades as the editor's
+   blocks do (editor.css). A class, not :has(), which restyles the whole page on every key. */
+@layer components {
+  :is(.ll-page, .ll-page-column) > * { transition: opacity 180ms ease-out; }
+}
+.ll-page-dim > :not(.ll-page-column),
+.ll-page-dim > .ll-page-column > :not(.ll-page-body) { opacity: 0.3; }
+
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
   outline: none;

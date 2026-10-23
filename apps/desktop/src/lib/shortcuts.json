@@ -7,6 +7,11 @@
     { "id": "zoom-in", "group": "View", "label": "Zoom in", "keys": "⌘+", "accel": "CmdOrCtrl+=", "sep": true },
     { "id": "zoom-out", "group": "View", "label": "Zoom out", "keys": "⌘−", "accel": "CmdOrCtrl+-" },
     { "id": "zoom-reset", "group": "View", "label": "Actual size", "keys": "⌘0", "accel": "CmdOrCtrl+0" },
+    { "id": "focus", "group": "View", "label": "Focus mode", "keys": "⇧⌘F", "accel": "CmdOrCtrl+Shift+F", "sep": true },
+    { "id": "syntax", "group": "View", "label": "Syntax highlight", "keys": "⇧⌘D", "accel": "CmdOrCtrl+Shift+D" },
+    { "id": "style", "group": "View", "label": "Style check", "keys": "⌥⇧⌘D", "accel": "CmdOrCtrl+Alt+Shift+D" },
+    { "id": "grammar", "group": "View", "label": "Grammar check", "keys": "⇧⌘G", "accel": "CmdOrCtrl+Shift+G" },
+    { "id": "count", "group": "View", "label": "Counts", "keys": "⇧⌘W", "accel": "CmdOrCtrl+Shift+W" },
     { "id": "ask", "group": "Go", "label": "Ask about this…", "keys": "⌘J", "accel": "CmdOrCtrl+J", "what": "Ask Claude about the selected words, or the page" },
     { "id": "settings", "group": "Go", "label": "Settings…", "keys": "⌘,", "accel": "CmdOrCtrl+,", "sep": true },
     { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘⌥/", "accel": "CmdOrCtrl+Alt+/", "what": "The editor's block menu has ⌘/" }
