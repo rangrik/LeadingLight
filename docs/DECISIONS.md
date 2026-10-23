@@ -54,8 +54,12 @@ runs to the top edge like Notes or Craft. The shell is shadcn's sidebar-08 block
 higher-order files (app-sidebar, nav-projects, the page layout) on COSS's primitives.
 Installing the block itself would replace COSS's primitives with shadcn's. Two marked edits to
 COSS's sidebar: ⌘\ toggles it (⌘B is bold in the editor), and the cookie write is
-skipped where the webview has no cookieStore. The sidebar is fixed at 256 px, like
-sidebar-08; drag-to-resize was dropped with the switch.
+skipped where the webview has no cookieStore. The sidebar starts at sidebar-08's 256 px and
+can be dragged from 200 to 400 px by its edge, the gap before the first card. In the app its
+button sits beside the traffic lights, as in the Claude app, so it never moves.
+Each open page is its own card in the inset's place, with the inset's look and its own
+header, 8 px apart, so pages side by side read as separate pages rather than one split
+panel. The page column starts at the left, not centred.
 
 Native-only behaviour (SQLite, files, traffic-light room) checks the app identifier,
 not just for Tauri, because Shipyard's preview pane is also a Tauri webview.
@@ -109,7 +113,34 @@ step. A change to another page (linking a mention, merging a tag) goes through t
 when it is open, so its pane never saves its own copy over the change. Every page's summary and
 properties stay in memory, which is what lists, cards and the link menu read.
 
-## 10. Writing tools only decorate, and run on this Mac
+## 10. Asking happens by the words; agents are Claude Code's agent files
+
+Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
+field that sends at once, and Quote in reply for a longer question in the panel. The panel's
+field is a composer in synara's spirit: `@` mentions an agent or another page, `/` offers
+things to do with the words, and the model and effort sit in its footer. Agents are not a
+new format: they are Claude Code's agent files (name, description and model in the front
+matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
+three that ship with the app. A mentioned agent's model wins for that question. Mentions sit
+as chips above the field rather than inline, which keeps the field a plain textarea.
+
+Claude Code keeps a session's first system prompt and ignores a new one on `--resume`. So
+the system prompt holds only the fixed role, and everything that can change between
+questions travels in the question itself: the note's text, a mentioned page's text and a
+mentioned agent's instructions, each sent again only when it has changed since the thread
+last saw it.
+
+## 11. Sidenotes, thoughts and essays are linked pages
+
+A sidenote's anchor is a `note` mark in the page; its text is a `thought` block in the page's
+Thoughts page, so all raw thoughts on a page can be read in one place. An essay is a page too.
+The links live in `properties`: the source keeps `thoughts` and `essay` ids, and each child keeps
+`parent` and `role`. Text quoted into an essay gets a `cited` mark, and the essay a `cite` chip;
+both point at each other with `ll:<page id>#<anchor id>` hrefs, which the app opens itself.
+As with links (9), what can't fall out of step is derived: quoted words show as quoted only
+while the essay holds their quote, and noted words as noted only while their thought exists.
+
+## 12. Writing tools only decorate, and run on this Mac
 
 Focus mode, Syntax highlight and Style check, after iA Writer, are ProseMirror decorations: they
 never enter the page, so nothing stored changes and turning one off leaves no trace. Parts of

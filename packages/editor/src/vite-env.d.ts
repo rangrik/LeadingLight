@@ -5,3 +5,7 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+declare module "*.mp3" {
+  const url: string;
+  export default url;
+}

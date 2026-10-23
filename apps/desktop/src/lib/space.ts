@@ -2,6 +2,7 @@ import type { PropDef, TypeDef } from "./catalog";
 import { pageLabel } from "./labels";
 import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "./objects";
 import { type PageIcon, readIcon } from "./page-meta";
+import { editPage } from "./live";
 import { reportSaveError } from "./saving";
 import { closePane, leaves, panes, showOnly } from "./panes";
 import { createStore } from "./state";
@@ -67,7 +68,11 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
     return { title: type.plural, icon: type.icon, parent: "Types" };
   }
   const page = pageOf(view);
-  return { title: pageLabel(page?.title ?? ""), icon: page && iconFor(page), parent: typeOf(page?.typeId ?? PAGE_TYPE).plural };
+  // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
+  const title = page?.properties.role === "essay" && !page.title.trim() ? "Essay" : pageLabel(page?.title ?? "");
+  // A Thoughts page or an essay is crumbed under its page.
+  const owner = typeof page?.properties.parent === "string" ? pageOf(page.properties.parent) : undefined;
+  return { title, icon: page && iconFor(page), parent: owner ? pageLabel(owner.title) : typeOf(page?.typeId ?? PAGE_TYPE).plural };
 }
 
 export function savePage(id: string, patch: ObjectPatch): Promise<void> {
@@ -95,8 +100,11 @@ export function forgetPage(id: string) {
 // templates show in their type's settings.
 export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
 
-// A deleted page's pane closes; when it was the only one, the next page takes its place.
+// A deleted page's pane closes; when it was the only one, the next page takes its place. A deleted
+// Thoughts page or essay is unlinked from its page, which can then make a new one (DECISIONS.md, 11).
 export function removePage(id: string) {
+  const { parent, role } = pageOf(id)?.properties ?? {};
+  if (typeof parent === "string" && typeof role === "string") void editPage(parent, { properties: ({ [role]: _, ...rest }) => rest });
   objects.remove(id).catch(console.error);
   forgetPage(id);
   // A deleted default template is no longer the default.

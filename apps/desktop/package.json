@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts",
     "qa": "playwright test -c qa/playwright.config.ts --project qa",
     "qa:gallery": "playwright test -c qa/playwright.config.ts --project gallery"
   },
@@ -21,6 +22,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.6.0",
     "lucide-react": "^1.61.0",
+    "motion": "^14.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

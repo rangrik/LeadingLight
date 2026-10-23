@@ -135,6 +135,8 @@ export function BlockHandle({ editor }: { editor: Editor }) {
     let raf = 0;
     let hide = 0;
     const onMove = (e: MouseEvent) => {
+      // A margin note or the contents list isn't a block's place.
+      if ((e.target as HTMLElement).closest(".ll-note, .ll-toc")) return onLeave();
       window.clearTimeout(hide);
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => setTarget(findBlock(editor, root, e.clientY)));

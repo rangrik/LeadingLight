@@ -85,7 +85,7 @@ export function PageStats({ id }: { id: string }) {
         aria-label="Counts"
         onPointerDown={back.onPointerDown}
         title={all}
-        className="flex h-6 min-w-0 flex-wrap items-center gap-x-1.5 overflow-hidden text-muted-foreground text-xs tabular-nums transition-colors duration-150 ease-out hover:text-foreground data-popup-open:text-foreground"
+        className="flex h-6 min-w-0 shrink-[100] flex-wrap items-center gap-x-1.5 overflow-hidden text-muted-foreground text-xs tabular-nums transition-colors duration-150 ease-out hover:text-foreground data-popup-open:text-foreground"
       >
         {items.map((item, i) => (
           <span className="flex h-6 items-center gap-1.5 whitespace-nowrap" key={item.key}>

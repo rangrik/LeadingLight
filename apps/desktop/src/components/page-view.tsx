@@ -1,4 +1,4 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget } from "@leadinglight/editor/editor";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
@@ -14,12 +14,15 @@ import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
-import { openLink } from "~/lib/links";
-import { registerLive } from "~/lib/live";
+import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
+import { pageStyle } from "~/lib/labels";
+import { childOf, parentOf, roleOf } from "~/lib/linked";
+import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
+import { useThoughts } from "~/lib/thoughts";
 import { editorWriting, useWritingPrefs } from "~/lib/writing";
 
 // The body is read only when a save runs, not on every keystroke.
@@ -99,6 +102,20 @@ export function PageView({ page }: { page: LLObject }) {
   // Types with a Tags property show it as a row already.
   const canTag = !typeOf(typeId).props.includes("tags") && tags.length === 0;
 
+  // Sidenotes keep their text in the page's Thoughts page; a Thoughts page or an essay takes none
+  // of its own. A page with an essay quotes into it and follows its quotes (DECISIONS.md, 11).
+  const role = roleOf(page);
+  const parent = parentOf(page);
+  const current = { ...page, properties: props };
+  const notes = useThoughts(current, (thoughts) => {
+    if (thoughts) setProp("thoughts", thoughts.id);
+    makeRoom();
+  });
+  const essay = childOf(current, "essay");
+  const quotes = useQuotes(page.id, essay);
+  const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
+  const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
+
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
   useEffect(() => {
@@ -109,6 +126,8 @@ export function PageView({ page }: { page: LLObject }) {
       setContent: (doc) => editorRef.current?.setContent(doc),
       properties: () => latest.current,
       setProperties: replaceProps,
+      insertQuote: (quote) => editorRef.current?.insertQuote(quote),
+      reveal: (anchor) => editorRef.current?.reveal(anchor),
     });
     return () => {
       untrack();
@@ -130,6 +149,20 @@ export function PageView({ page }: { page: LLObject }) {
 
   useLayoutEffect(() => fit(titleRef.current), [title]);
   useLayoutEffect(() => fit(descriptionRef.current), [description]);
+  // They wrap again when the pane changes width.
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    let width = el.offsetWidth;
+    const ro = new ResizeObserver(() => {
+      if (el.offsetWidth === width) return;
+      width = el.offsetWidth;
+      fit(el);
+      fit(descriptionRef.current);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const toBody = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter" && e.key !== "ArrowDown") return;
@@ -146,7 +179,7 @@ export function PageView({ page }: { page: LLObject }) {
     if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".ProseMirror, .ll-handle, textarea, input, button, a, [role]")) return;
+    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
     // Level with the sections after the body (backlinks, what was made that day) is theirs too.
     const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
       const r = s.getBoundingClientRect();
@@ -163,13 +196,14 @@ export function PageView({ page }: { page: LLObject }) {
   return (
     // Focus mode fades the rest of the page too while the body is written in (styles.css).
     <div
-      className={cn("ll-page min-h-full", writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
+      className={cn("ll-page-root min-h-full", writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
       onFocusCapture={() => registerPage(askPage, editorRef.current)}
       onMouseDown={onBlankMouseDown}
     >
       {cover && <CoverBand cover={cover} onChange={setCover} />}
-      {/* The left padding is the block handle's gutter; the right one gives way in narrow panes. */}
-      <div className="ll-page-column mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 @xl:pe-16">
+      {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
+          Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
+      <div className="ll-page pb-8">
         <div className={cn("group/head", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -242,7 +276,7 @@ export function PageView({ page }: { page: LLObject }) {
                 queue({ title: value });
               }}
               onKeyDown={toBody}
-              placeholder="Untitled"
+              placeholder={role === "essay" ? "Essay title" : "Untitled"}
               ref={titleRef}
               rows={1}
               value={title}
@@ -280,13 +314,21 @@ export function PageView({ page }: { page: LLObject }) {
             assets={assets}
             content={page.content}
             onAsk={openAsk}
-            onChange={(read) => queue({ content: read })}
+            onChange={(read) => {
+              queue({ content: read });
+              touchLive(page.id);
+            }}
             links={linkHost}
+            notes={role ? undefined : notes}
+            onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
             onFocusChange={setInBody}
             onStats={writing.count ? (stats) => setPageStats(page.id, stats) : undefined}
-            openLink={openLink}
+            openLink={openHref}
+            quoteTo={quoteTo}
+            quotes={quotes}
             ref={editorRef}
+            style={pageStyle(props)}
             writing={editorWriting(writing)}
           />
         </div>

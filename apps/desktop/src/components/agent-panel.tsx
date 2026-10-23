@@ -1,14 +1,17 @@
-import { Check, Copy, Move, SendHorizontal, Sparkles, Square, X } from "lucide-react";
+import { Check, Copy, Move, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
-import { Textarea } from "@leadinglight/ui/components/textarea";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { Composer, type Mention } from "~/components/composer";
 import { type AgentStatus, agentStatus, ask, cancel } from "~/lib/agent";
+import { type Agent, BUILT_IN, listAgents } from "~/lib/agents";
 import { type Corner, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
-import { type AskPage, askEditor, closeAsk, type Quote, useAsk } from "~/lib/ask";
+import { askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
+import { buildPrompt, type NoteText, SYSTEM, type Seen } from "~/lib/ask-prompt";
 import { openLink } from "~/lib/links";
+import { docText, objects } from "~/lib/objects";
 
 // The agent panel: a card inside the note's panel, docked to a corner, where a question
 // about the selected words (or the page) is asked and Claude's answer streams in.
@@ -22,12 +25,15 @@ type Thread = {
   // The words the next question is about, and the words Insert and Replace act on.
   pending: Quote | null;
   quote: Quote | null;
+  mentions: Mention[];
+  // What the session has been sent (lib/ask-prompt.ts); kept only once an answer lands.
+  seen: Seen;
   note?: string;
 };
 
 // Each page keeps its own thread while the app runs, outside the component: a stream
 // that lands after the person switched pages still goes to the page that asked.
-const EMPTY: Thread = { messages: [], pending: null, quote: null };
+const EMPTY: Thread = { messages: [], pending: null, quote: null, mentions: [], seen: {} };
 const threads = new Map<string, Thread>();
 const listeners = new Set<() => void>();
 function patch(pageId: string, f: (t: Thread) => Thread) {
@@ -42,12 +48,13 @@ const useThread = (pageId: string | undefined) =>
 
 const CORNER: Record<Corner, string> = { br: "right-3 bottom-3", bl: "left-3 bottom-3", tr: "right-3 top-3", tl: "left-3 top-3" };
 // The resize handle sits on the corner that faces the page, and drags away from the dock:
-// a small corner mark, inside the panel's edge.
+// a corner mark that is always there, and fills in when the pointer is over it. It is the
+// header's padding wide, so it never covers the header's first or last button.
 const HANDLE: Record<Corner, string> = {
-  br: "top-0 left-0 cursor-nwse-resize rounded-tl-xl border-t border-l",
-  bl: "top-0 right-0 cursor-nesw-resize rounded-tr-xl border-t border-r",
-  tr: "bottom-0 left-0 cursor-nesw-resize rounded-bl-xl border-b border-l",
-  tl: "bottom-0 right-0 cursor-nwse-resize rounded-br-xl border-b border-r",
+  br: "top-0 left-0 cursor-nwse-resize rounded-tl-xl border-t-2 border-l-2",
+  bl: "top-0 right-0 cursor-nesw-resize rounded-tr-xl border-t-2 border-r-2",
+  tr: "bottom-0 left-0 cursor-nesw-resize rounded-bl-xl border-b-2 border-l-2",
+  tl: "bottom-0 right-0 cursor-nwse-resize rounded-br-xl border-b-2 border-r-2",
 };
 const CORNERS: { value: Corner; label: string }[] = [
   { value: "tl", label: "Top left" },
@@ -57,17 +64,14 @@ const CORNERS: { value: Corner; label: string }[] = [
 ];
 const MIN = { w: 280, h: 240 };
 
-function systemPrompt(page: AskPage) {
-  return [
-    "You help someone read and write a note in LeadingLight, a notes app on their Mac.",
-    `The note is titled "${page.title() || "Untitled"}". Its text is between the dashed lines.`,
-    "When they quote a selection, answer about that selection in the context of the note.",
-    "Answer in Markdown, briefly, with no preamble and no closing offer.",
-    "-----",
-    page.text().slice(0, 20_000),
-    "-----",
-  ].join("\n");
-}
+// The mentioned pages' words, read from storage: no editor is open on them.
+const mentionedPages = (mentions: Mention[]): Promise<NoteText[]> =>
+  Promise.all(
+    mentions.flatMap((m) => (m.kind === "page" ? [m] : [])).map(async (m) => {
+      const obj = await objects.get(m.id).catch(() => null);
+      return { id: m.id, title: obj?.title ?? m.name, text: obj ? docText(obj.content) : "" };
+    }),
+  );
 
 // A one-paragraph answer goes in as inline text, so replacing words keeps their sentence whole.
 function toInsert(markdown: string): string {
@@ -77,12 +81,12 @@ function toInsert(markdown: string): string {
 }
 
 export function AgentPanel() {
-  const { open, quote, page } = useAsk();
+  const { open, quote, page, pages, askNow } = useAsk();
   const prefs = useAiPrefs();
   const pageId = page?.id;
   const thread = useThread(pageId);
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [draft, setDraft] = useState("");
+  const [agents, setAgents] = useState<Agent[]>(BUILT_IN);
   const [copied, setCopied] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -100,17 +104,17 @@ export function AgentPanel() {
     void agentStatus().then(setStatus);
   };
   useEffect(() => {
-    if (open) check();
+    if (!open) return;
+    check();
+    void listAgents().then(setAgents);
   }, [open]);
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [thread.messages, thread.pending]);
 
-  if (!open || !page || !pageId) return null;
-  const id = pageId;
   const ready = !!status?.installed && !!status.logged_in;
 
-  const patchLast = (f: (m: BotMsg) => BotMsg) =>
+  const patchLast = (id: string, f: (m: BotMsg) => BotMsg) =>
     patch(id, (t) => {
       const messages = [...t.messages];
       const last = messages[messages.length - 1];
@@ -118,13 +122,13 @@ export function AgentPanel() {
       return { ...t, messages };
     });
 
-  const send = () => {
-    const question = draft.trim();
-    if (!question || thread.busy || !ready) return;
+  // The words the question is about come from the thread, or straight from the ask bar:
+  // its question can arrive in the same render that sets them, before the thread has them.
+  const send = (question: string, q: Quote | null = thread.pending) => {
+    if (!page || !pageId || thread.busy || !ready) return;
+    const id = pageId;
     const askId = crypto.randomUUID();
-    const q = thread.pending;
-    const prompt = q ? `> ${q.text.replace(/\n/g, "\n> ")}\n\n${question}` : question;
-    setDraft("");
+    const agent = thread.mentions.flatMap((m) => (m.kind === "agent" ? agents.filter((a) => a.id === m.id) : []))[0];
     // The answer is about the words quoted with it; a follow-up without a quote is about
     // the thread, so Replace goes away until words are quoted again.
     patch(id, (t) => ({
@@ -136,22 +140,38 @@ export function AgentPanel() {
       messages: [...t.messages, { role: "user", quote: q, text: question }, { role: "assistant", text: "", done: false }],
     }));
     const fail = (message: string) => {
-      patchLast((m) => ({ ...m, done: true, error: message }));
+      patchLast(id, (m) => ({ ...m, done: true, error: message }));
       patch(id, (t) => ({ ...t, busy: undefined }));
     };
-    ask({ id: askId, prompt, system: systemPrompt(page), model: prefs.model, effort: prefs.effort, resume: thread.sessionId }, (e) => {
-      if (e.type === "delta") patchLast((m) => ({ ...m, text: m.text + e.text }));
-      else if (e.type === "done") {
-        patchLast((m) => ({ ...m, done: true }));
-        patch(id, (t) => ({ ...t, busy: undefined, sessionId: e.session_id ?? t.sessionId }));
-      } else fail(e.message);
-    }).catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
+    mentionedPages(thread.mentions)
+      .then((pages) => {
+        const note = { id, title: page.title(), text: page.text() };
+        const { prompt, seen } = buildPrompt({ seen: thread.seen, note, pages, agent: agent?.prompt ?? null, quote: q?.text ?? null, question });
+        return ask({ id: askId, prompt, system: SYSTEM, model: agent?.model ?? prefs.model, effort: prefs.effort, resume: thread.sessionId }, (e) => {
+          if (e.type === "delta") patchLast(id, (m) => ({ ...m, text: m.text + e.text }));
+          else if (e.type === "done") {
+            patchLast(id, (m) => ({ ...m, done: true }));
+            patch(id, (t) => ({ ...t, busy: undefined, sessionId: e.session_id ?? t.sessionId, seen }));
+          } else fail(e.message);
+        });
+      })
+      .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
   };
+
+  // A question the ask bar sent goes as soon as Claude Code is ready and the thread is free.
+  useEffect(() => {
+    if (!open || !ready || !askNow || thread.busy) return;
+    const now = takeAskNow();
+    if (now) send(now.question, quote);
+  }, [open, ready, askNow, thread.busy]);
+
+  if (!open || !page || !pageId) return null;
+  const id = pageId;
 
   const stop = () => {
     if (!thread.busy) return;
     void cancel(thread.busy);
-    patchLast((m) => ({ ...m, done: true }));
+    patchLast(id, (m) => ({ ...m, done: true }));
     patch(id, (t) => ({ ...t, busy: undefined }));
     field.current?.focus();
   };
@@ -237,10 +257,15 @@ export function AgentPanel() {
       style={{ width: prefs.panelW, height: prefs.panelH }}
     >
       <div
-        aria-hidden
-        className={cn("absolute z-10 size-3 touch-none border-muted-foreground/40 transition-colors hover:border-foreground", HANDLE[prefs.corner])}
+        aria-label="Drag to resize"
+        className={cn(
+          "absolute z-10 size-3 touch-none border-muted-foreground/50 transition-colors duration-150 hover:border-foreground hover:bg-accent",
+          HANDLE[prefs.corner],
+        )}
         data-testid="agent-panel-resize"
         onPointerDown={startResize}
+        role="separator"
+        title="Drag to resize"
       />
       <header className="flex h-9 shrink-0 items-center gap-1 border-b px-3">
         <Sparkles className="size-4 text-muted-foreground" />
@@ -317,39 +342,18 @@ export function AgentPanel() {
         )}
       </div>
 
-      <form
-        className="flex shrink-0 items-end gap-1 border-t p-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-      >
-        <Textarea
-          aria-label="Question"
-          // COSS puts the class on a wrapper; the field itself gets one row that grows with its text.
-          className="flex-1 [&_textarea]:max-h-32 [&_textarea]:min-h-8 [&_textarea]:resize-none"
-          onChange={(e) => setDraft(e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder={thread.pending ? "Ask about the selection…" : "Ask about this page…"}
-          ref={field}
-          rows={1}
-          value={draft}
-        />
-        {thread.busy ? (
-          <Button aria-label="Stop" onClick={stop} size="icon-sm" type="button" variant="outline">
-            <Square />
-          </Button>
-        ) : (
-          <Button aria-label="Send" disabled={!ready || !draft.trim()} size="icon-sm" type="submit">
-            <SendHorizontal />
-          </Button>
-        )}
-      </form>
+      <Composer
+        agents={agents}
+        busy={!!thread.busy}
+        fieldRef={field}
+        mentions={thread.mentions}
+        onMentions={(mentions) => patch(id, (t) => ({ ...t, mentions }))}
+        onSend={send}
+        onStop={stop}
+        pages={pages.filter((p) => p.id !== id)}
+        placeholder={thread.pending ? "Ask about the selection…" : "Ask about this page…"}
+        ready={ready}
+      />
     </section>
   );
 }

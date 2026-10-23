@@ -30,8 +30,9 @@ What this milestone left out is in `DEFERRED.md`.
 
 Shipyard's app is vendored (`vendor/shipyard`, `docs/SHIPYARD.md`). Done: themes (ours
 in `packages/themes`), Settings in our shell, shortcuts and the menu bar, zoom,
-stillness, the mock agent connection, and Ask about this: a panel in the note that asks
-Claude through the Claude Code sign-in on this Mac (Settings › AI, `features/ask.feature`).
+stillness, the mock agent connection, and Ask about this: a bar beside the selected words
+and a panel in the note that ask Claude through the Claude Code sign-in on this Mac, with a
+composer that mentions agents and pages (`features/ask.feature`, `features/composer.feature`).
 
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).
@@ -40,7 +41,7 @@ Claude through the Claude Code sign-in on this Mac (Settings › AI, `features/a
 
 The editor aids iA Writer's users love most (https://ia.net/writer/support/editor), from the View
 menu, the Writing menu at the panel's top right, and Settings › Writing. See
-`features/writing.feature`; why they are built this way is `DECISIONS.md` 10.
+`features/writing.feature`; why they are built this way is `DECISIONS.md` 12.
 
 - Focus mode (⇧⌘F): the line being written stays in the middle; Sentence or Paragraph dims the rest.
 - Syntax highlight (⇧⌘D): nouns, verbs, adjectives, adverbs and conjunctions in the theme's colours.

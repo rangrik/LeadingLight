@@ -4,7 +4,17 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Field, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
+import {
+  Menu,
+  MenuGroup,
+  MenuGroupLabel,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { Select, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/ui/components/select";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
@@ -13,7 +23,10 @@ import { defaultOptions, PropertyEditor } from "~/components/property-editor";
 import { KIND_ICONS, PageChip, PropValue } from "~/components/property-value";
 import { type Kind, KINDS, newId, type PropDef } from "~/lib/catalog";
 import type { ObjectSummary } from "~/lib/objects";
-import { openPage } from "~/lib/panes";
+import { openEssay } from "~/lib/essay";
+import { pageStyle } from "~/lib/labels";
+import { childOf, roleOf } from "~/lib/linked";
+import { leaves, openPage, panes } from "~/lib/panes";
 import { propsOf, putProp, putType, removePage, space, typeOf, typeView } from "~/lib/space";
 
 const NEW_KINDS = (Object.keys(KINDS) as Kind[]).filter((k) => k !== "created" && k !== "updated");
@@ -127,6 +140,10 @@ export function PropertyPanel({ page, typeId, values, setProp, setType }: PanelP
     .map((p) => ({ prop: p, from: pages.filter((x) => asIds(x.properties[p.id]).includes(page.id)) }))
     .filter((r) => r.from.length > 0);
   const choosable = types.filter((t) => t.id !== "daily");
+  // A page's essay opens beside it (DECISIONS.md, 11); a Thoughts page or an essay has none.
+  const { root } = panes.use();
+  const essay = childOf({ ...page, properties: values }, "essay");
+  const essayOpen = Boolean(essay && root && leaves(root).some((l) => l.page === essay));
 
   const row = (prop: PropDef, isOwn: boolean) => {
     const Icon = KIND_ICONS[prop.kind];
@@ -194,6 +211,26 @@ export function PropertyPanel({ page, typeId, values, setProp, setType }: PanelP
             <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>
             <MenuItem onClick={() => openPage(typeView(typeId))}>Open {type.plural}</MenuItem>
             <MenuItem onClick={() => setDeleting(true)}>Delete page…</MenuItem>
+            {!roleOf(page) && (
+              <>
+                <MenuSeparator />
+                <MenuItem disabled={essayOpen} onClick={() => void openEssay(page.id)}>
+                  {essay ? "Open essay" : "Write essay"}
+                </MenuItem>
+              </>
+            )}
+            <MenuSeparator />
+            <MenuGroup>
+              <MenuGroupLabel>Style</MenuGroupLabel>
+              <MenuRadioGroup onValueChange={(style) => setProp("style", style)} value={pageStyle(values)}>
+                <MenuRadioItem closeOnClick value="plain">
+                  Plain
+                </MenuRadioItem>
+                <MenuRadioItem closeOnClick value="playful">
+                  Playful
+                </MenuRadioItem>
+              </MenuRadioGroup>
+            </MenuGroup>
           </MenuPopup>
         </Menu>
       </div>

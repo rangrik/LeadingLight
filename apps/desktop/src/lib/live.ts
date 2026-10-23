@@ -9,12 +9,37 @@ type Live = {
   setContent: (doc: EditorDoc) => void;
   properties: () => Record<string, unknown>;
   setProperties: (props: Record<string, unknown>) => void;
+  // Quotes into an essay, and scrolls to an anchor (DECISIONS.md, 11).
+  insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
+  reveal: (anchor: string) => void;
 };
 const live = new Map<string, Live>();
+const waiting = new Map<string, ((page: Live) => void)[]>();
 
 export function registerLive(id: string, page: Live) {
   live.set(id, page);
+  for (const fn of waiting.get(id)?.splice(0) ?? []) fn(page);
   return () => void (live.get(id) === page && live.delete(id));
+}
+
+export const isLive = (id: string) => live.has(id);
+
+// Hears every edit to an open page, so another page showing part of it can follow.
+const watchers = new Map<string, Set<() => void>>();
+export function watchLive(id: string, fn: () => void) {
+  const set = watchers.get(id) ?? new Set();
+  watchers.set(id, set.add(fn));
+  return () => void set.delete(fn);
+}
+export const touchLive = (id: string) => watchers.get(id)?.forEach((fn) => fn());
+// What an open page holds right now, edits not yet saved included.
+export const liveContent = (id: string) => live.get(id)?.content();
+
+// Runs fn with the page's editor now if it is open, else as soon as it opens.
+export function whenLive(id: string, fn: (page: Live) => void) {
+  const open = live.get(id);
+  if (open) return fn(open);
+  waiting.set(id, [...(waiting.get(id) ?? []), fn]);
 }
 
 type Change = { content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };

@@ -93,3 +93,15 @@ Feature: Pages
     Given I have created a page
     When I type "   " into the title field
     Then the sidebar row reads "Untitled"
+
+  Scenario: Thoughts and essays sit under their page
+    Given page "Article" has a Thoughts page and an essay titled "On small teams"
+    Then the sidebar lists "Article" but not its Thoughts page or essay at the top level
+    When I open "Article"
+    Then "Thoughts" and "On small teams" show under it on a small tree, after xevrion's sidebar submenu
+    When I open "Thoughts"
+    Then the branch from "Article" down to "Thoughts" is drawn in the primary colour
+    When I open another page
+    Then the tree under "Article" folds away
+    When I delete "Article"
+    Then its Thoughts page and essay stay, listed at the top level

@@ -17,33 +17,36 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
-import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
+import { AskBar } from "~/components/ask-bar";
 import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
-import { PageIconView, RowIcon } from "~/components/page-icon";
-import { PaneArea } from "~/components/pane-area";
+import { RowIcon } from "~/components/page-icon";
+import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
-import { PageStats } from "~/components/page-stats";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
-import { WritingMenu } from "~/components/writing-menu";
+import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { dailyFor, today } from "~/lib/daily";
+import { setPages as setAskPages } from "~/lib/ask";
+import { openEssay } from "~/lib/essay";
 import { pageLabel } from "~/lib/labels";
+import { parentOf, roleOf } from "~/lib/linked";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { describe, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 
-// Tags and daily notes have their own places; templates show in their type's settings.
-
 const SIDEBAR_KEY = "ll.sidebar.open";
+const WIDTH_KEY = "ll.sidebar.width";
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
@@ -51,12 +54,13 @@ const SettingsView = lazy(() => import("~/components/settings/settings-view").th
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
 // middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
 // The app's header is 36 px, level with the lights; a browser keeps sidebar-08's 64 px, level
-// with the sidebar's logo row.
-const chrome = (native: boolean) =>
+// with the sidebar's logo row. "?mac" lays a browser out as the app, for checking.
+const chrome = (native: boolean, sidebarWidth: number) =>
   ({
     "--traffic-top": native ? "24px" : "0px",
     "--traffic-left": native ? "72px" : "0px",
     "--header-height": native ? "36px" : "64px",
+    "--sidebar-width": `${sidebarWidth}px`,
   }) as React.CSSProperties;
 
 export default function App() {
@@ -95,11 +99,17 @@ export default function App() {
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
   const [native, setNative] = useState(false);
+  const mac = native || new URLSearchParams(location.search).has("mac");
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
+  const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
 
   useEffect(() => void isNative.then(setNative), []);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
+  // The composer's @mentions of other pages read the same list as the sidebar.
+  useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
     loadSpace()
@@ -142,15 +152,40 @@ export default function App() {
     };
   }, []);
 
-  const shown = current === undefined ? undefined : describe(current);
-  const navPages = pages.filter(listed).map((p) => ({
-    name: pageLabel(p.title),
-    icon: <RowIcon icon={iconFor(p)} />,
-    isActive: p.id === current,
-    onSelect: () => openPage(p.id),
-    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
-    onDelete: () => setPendingDelete(p),
-  }));
+  // Adding a sidenote or opening an essay asks for room (lib/essay.ts).
+  useEffect(() => {
+    const fold = () => setSidebarOpen(false);
+    window.addEventListener("ll:make-room", fold);
+    return () => window.removeEventListener("ll:make-room", fold);
+  }, []);
+
+  // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
+  const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
+  const navPages = pages
+    .filter((p) => listed(p) && !isChild(p))
+    .map((p) => {
+      const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
+      return {
+        name: roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title),
+        icon: <RowIcon icon={iconFor(p)} />,
+        isActive: p.id === current,
+        onSelect: () => openPage(p.id),
+        onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
+        onDelete: () => setPendingDelete(p),
+        open: p.id === current || kids.some((c) => c.id === current),
+        children: kids.map((c) => {
+          const name = roleOf(c) === "thoughts" ? "Thoughts" : c.title.trim() || "Essay";
+          return {
+            name,
+            isActive: c.id === current,
+            // An essay opens beside its page.
+            onSelect: () => (roleOf(c) === "essay" ? void openEssay(p.id) : openPage(c.id)),
+            onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: c.id, label: name }),
+            onDelete: () => setPendingDelete(c),
+          };
+        }),
+      };
+    });
   const navTypes = types.map((t) => ({
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,
@@ -159,28 +194,32 @@ export default function App() {
     onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
   }));
 
-  // Layout from shadcn's sidebar-08 page.tsx. Changes: the panel scrolls inside itself, the header
-  // is 36 px in the app (see chrome) and a window drag area with room for the traffic lights, and
-  // the crumbs are Pages and the title.
+  // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
+  // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
+  // chrome) and a window drag area with room for the traffic lights.
   // Under Settings it stays mounted, so the page's edits are kept, and goes inert; the
   // sidebar's own ⌘\ is then the Settings shell's to handle.
   const shell = (
-      <SidebarProvider inert={settings || undefined} className="isolate h-svh overflow-hidden" onOpenChange={(open) => !settings && setSidebarOpen(open)} open={sidebarOpen} style={chrome(native)}>
+      <SidebarProvider
+        // Nothing slides while the sidebar's edge is dragged, so the sidebar keeps up with the pointer.
+        className="isolate h-svh overflow-hidden data-resizing:**:transition-none"
+        data-resizing={resizing || undefined}
+        inert={settings || undefined}
+        onOpenChange={(open) => !settings && setSidebarOpen(open)}
+        open={sidebarOpen}
+        style={chrome(mac, sidebarWidth)}
+      >
+        {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
+        {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+        <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
         <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
-        <SidebarInset className="relative h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
-          <PanelHeader
-            actions={root && <WritingMenu />}
-            after={current && <PageStats id={current} />}
-            current={shown?.title ?? null}
-            icon={shown?.icon && <PageIconView icon={shown.icon} />}
-            root={shown?.parent ?? "Pages"}
-            sidebarOpen={sidebarOpen}
-          />
+        <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {root ? (
-            <PaneArea />
+            <PaneArea windowToggle={mac} />
           ) : (
-            <div className="min-h-0 flex-1">
-              <Empty className="h-full">
+            <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
+              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} toggle={!mac} />
+              <Empty className="min-h-0 flex-1">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <FileText />
@@ -197,7 +236,8 @@ export default function App() {
               </Empty>
             </div>
           )}
-          {/* The agent panel docks inside the page panel (lib/ask.ts opens it). */}
+          {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
+          {root && <AskBar />}
           {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
@@ -219,7 +259,7 @@ export default function App() {
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
-                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(native)} />
+                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
               </Suspense>
             </div>
           )}

@@ -22,7 +22,7 @@
    shape. Each block keeps its visible edge 5 px in, so visible edges sit 10 px apart. :where
    keeps this rule weak, so a block kind can set its own padding. */
 .ll-editor > *,
-.ll-editor :where(.ll-column, .ll-group, [data-type="detailsContent"]) > * {
+.ll-editor :where(.ll-column, .ll-group, [data-type="detailsContent"], .ll-thought-body) > * {
   margin: 0;
   padding: 5px 0;
 }
@@ -61,10 +61,10 @@
 .ll-editor li::marker { color: var(--muted-foreground); }
 
 /* To-do list. The item's node view carries data-checked, the list carries data-type.
-   The checkbox is TipTap's native input drawn like COSS's Checkbox (16px, 4px radius, primary when checked). */
+   The box is TipTap's native input in COSS's Checkbox shape (16px, 4px radius). */
 .ll-editor ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-.ll-editor ul[data-type="taskList"] > li { display: flex; gap: calc(var(--ll-inset) - 16px); align-items: flex-start; }
-.ll-editor ul[data-type="taskList"] > li > label { flex: none; display: flex; height: 1.6em; align-items: center; }
+.ll-editor ul[data-type="taskList"] > li { position: relative; display: flex; gap: calc(var(--ll-inset) - 16px); align-items: flex-start; }
+.ll-editor ul[data-type="taskList"] > li > label { position: relative; flex: none; display: flex; height: 1.6em; align-items: center; }
 .ll-editor ul[data-type="taskList"] > li > div { flex: 1; min-width: 0; }
 .ll-editor ul[data-type="taskList"] input[type="checkbox"] {
   appearance: none;
@@ -79,24 +79,57 @@
   place-content: center;
   cursor: pointer;
 }
-.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"]:not(:checked) {
+.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"] {
   background: color-mix(in srgb, var(--input) 32%, transparent);
 }
-.ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked {
+/* Only the item's own words mute; a nested to-do keeps its own state. */
+.ll-editor ul[data-type="taskList"] > li[data-checked="true"] > div > p:first-child { color: var(--muted-foreground); }
+
+/* Plain: COSS's checked box (primary, with its check) and a straight strike. */
+[data-style="plain"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked {
   background: var(--primary);
   border-color: var(--primary);
   box-shadow: none;
 }
-.ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked::before {
+[data-style="plain"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:checked::before {
   content: "";
   width: 12px;
   height: 12px;
   background: var(--primary-foreground);
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.252 12.7 10.2 18.63 18.748 5.37'/%3E%3C/svg%3E") center / contain no-repeat;
 }
-.ll-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
-  color: var(--muted-foreground);
-  text-decoration: line-through;
+[data-style="plain"] .ll-editor ul[data-type="taskList"] > li[data-checked="true"] > div > p:first-child { text-decoration: line-through; }
+[data-style="plain"] .ll-editor .ll-scribble { display: none; }
+
+/* Playful: the box stays empty and todo.ts draws pen marks on it. A check draws with a pen's
+   ease, each path timed by todo.ts. An uncheck never un-draws: the ink fades, then rewinds out of
+   sight. The check sits on the box as in the original, scaled from its 20px box to our 16px one. */
+[data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"] { transition: border-color 150ms ease-out, scale 150ms ease-out; }
+[data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:hover { border-color: color-mix(in srgb, var(--foreground) 25%, transparent); }
+[data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:active { scale: 0.96; }
+[data-style="playful"] .ll-editor ul[data-type="taskList"] > li > div > p:first-child { transition: color 200ms ease-out; }
+.ll-editor .ll-scribble { position: absolute; overflow: visible; pointer-events: none; fill: none; }
+.ll-editor .ll-check { left: -0.8px; top: calc(50% - 13.6px); width: 19.2px; height: 19.2px; color: var(--foreground); }
+.ll-editor .ll-strike { left: 0; top: 0; width: 100%; height: 100%; color: color-mix(in srgb, var(--foreground) 70%, transparent); }
+.ll-editor .ll-scribble path {
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* Just past 1, so an undrawn stroke's round cap leaves no dot. */
+  stroke-dasharray: 1 2;
+  stroke-dashoffset: 1.04;
+  opacity: 0;
+  transition: opacity 180ms ease-out, stroke-dashoffset 0ms linear 180ms;
+}
+.ll-editor li[data-checked="true"] > label > .ll-check path,
+.ll-editor li[data-checked="true"] > .ll-strike path {
+  stroke-dashoffset: 0;
+  opacity: 1;
+  transition: stroke-dashoffset var(--ll-draw) cubic-bezier(0.65, 0, 0.35, 1) var(--ll-delay);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ll-editor li[data-checked="true"] > label > .ll-check path,
+  .ll-editor li[data-checked="true"] > .ll-strike path { transition: opacity 180ms ease-out; }
 }
 
 /* Quote: the bar is the visible edge, 5 px in like every block's; the text sits at the inset
@@ -335,10 +368,23 @@
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
+  /* Each line of a wrapped highlight gets its own ends. */
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 .dark .ll-editor mark {
   background: color-mix(in srgb, var(--color-yellow-400) 35%, transparent);
 }
+/* Playful: a marker stroke, with ragged ends, a slight slant and more ink at the edges. The
+   margin takes back the extra padding, so the words don't move. */
+[data-style="playful"] .ll-editor mark {
+  --ll-ink: var(--color-yellow-300);
+  background: linear-gradient(100deg, transparent 1%, color-mix(in srgb, var(--ll-ink) 60%, transparent) 3%, color-mix(in srgb, var(--ll-ink) 45%, transparent) 50%, color-mix(in srgb, var(--ll-ink) 65%, transparent) 96%, transparent 99%);
+  border-radius: 0.8em 0.3em;
+  padding: 0 0.2em;
+  margin: 0 calc(1px - 0.2em);
+}
+.dark [data-style="playful"] .ll-editor mark { --ll-ink: color-mix(in srgb, var(--color-yellow-400) 60%, transparent); }
 .ll-editor s { color: var(--muted-foreground); }
 /* The selected text while focus is in the link field. */
 /* The system's selection colour, as tall as the line like a real selection (an inline background
@@ -348,6 +394,122 @@
   padding-block: calc((1lh - 1.2em) / 2);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* Sidenote anchors: a dotted underline under the words and a numbered chip after them. Chips are
+   inline pills lifted like footnote marks; they fit inside the line, so the line keeps its height,
+   and anchors.ts joins each to the word before it. */
+.ll-editor .ll-noted {
+  text-decoration: underline dotted color-mix(in srgb, var(--foreground) 40%, transparent) 1.5px;
+  text-underline-offset: 4px;
+}
+.ll-editor .ll-chip { white-space: nowrap; }
+.ll-editor :is(.ll-note-chip, .ll-cited-chip) {
+  position: relative;
+  top: -0.4em;
+  margin: 0 1px 0 2px;
+  padding: 1.5px 5px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 150ms ease-out;
+}
+.ll-editor :is(.ll-note-chip, .ll-cited-chip):hover { background: color-mix(in srgb, var(--foreground) 15%, transparent); }
+/* Words quoted into an essay: a quiet underline and a quote mark after them. */
+.ll-editor .ll-cited {
+  text-decoration: underline solid color-mix(in srgb, var(--info) 45%, transparent) 1.5px;
+  text-underline-offset: 4px;
+}
+/* After quoted words the chip is just a closing quote mark, which already reads as "quoted". */
+.ll-editor .ll-cited-chip { top: 0.1em; padding: 0 1px; font-size: 1.25em; font-weight: 700; line-height: 0; color: var(--muted-foreground); background: none; }
+.ll-editor .ll-cited-chip:hover { color: var(--foreground); background: none; }
+/* The reference that ends a quote in an essay. */
+.ll-editor .ll-cite {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 0.8125em;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: color 150ms ease-out;
+}
+.ll-editor .ll-cite::before { content: "— "; }
+.ll-editor .ll-cite:hover { color: var(--foreground); }
+/* A thought in a Thoughts page: the words it was written against, then the thought. */
+.ll-editor .ll-thought-quote {
+  margin-bottom: 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  font-size: 0.875em;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+.ll-editor .ll-thought-quote:hover { color: var(--foreground); }
+
+/* Sidenotes (sidenotes.tsx): 224px notes right of the text, each level with its words. Notes are
+   quiet until the pointer or the cursor is in one. */
+.ll-note {
+  position: absolute;
+  width: 224px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 6px;
+  align-items: start;
+}
+.ll-note .ll-editor { font-size: 13px; line-height: 1.5; color: var(--muted-foreground); transition: color 150ms ease-out; }
+.ll-note .ll-editor > :first-child { padding-top: 0; }
+.ll-note .ll-editor > :last-child { padding-bottom: 0; }
+.ll-note:is([data-active], :focus-within) .ll-editor { color: var(--foreground); }
+.ll-note-num { font-size: 13px; line-height: 1.5; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ll-note-remove { margin-top: -2px; opacity: 0; transition: opacity 150ms ease-out; }
+.ll-note:is(:hover, :focus-within) .ll-note-remove { opacity: 1; }
+.ll-note[data-new] { animation: ll-note-in 240ms cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes ll-note-in {
+  from { opacity: 0; translate: -8px 0; filter: blur(4px); }
+}
+.ll-note-line {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  stroke: color-mix(in srgb, var(--foreground) 35%, transparent);
+  stroke-linecap: round;
+}
+
+/* "On this page" (toc.tsx) sits left of the handle gutter and stays in view while the page
+   scrolls. Without room for the list beside the text (or beside an essay), only its trail shows,
+   as a 52px rail left of the handles, and the list opens over the page on hover. The page column
+   makes room for either (ll-page in the app), at these same widths. */
+.ll-toc { position: absolute; z-index: 15; top: 0; bottom: 0; right: calc(100% + 16px); width: 176px; pointer-events: none; }
+.ll-toc > nav { position: sticky; top: 24px; pointer-events: auto; }
+@container (width < 960px) {
+  .ll-toc { right: auto; left: -60px; width: 52px; }
+  .ll-toc > nav { width: 52px; padding: 8px 8px 8px 10px; border-radius: var(--radius); transition: width 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; }
+  .ll-toc > nav :is(.ll-toc-head, a) { opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }
+  .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) { width: 232px; background: var(--popover); box-shadow: 0 0 0 1px var(--border), 0 10px 15px -3px rgb(0 0 0 / 0.05); }
+  .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) :is(.ll-toc-head, a) { opacity: 1; pointer-events: auto; }
+}
+@container (width < 1168px) {
+  .ll-editor-root[data-notes] .ll-toc { right: auto; left: -60px; width: 52px; }
+  .ll-editor-root[data-notes] .ll-toc > nav { width: 52px; padding: 8px 8px 8px 10px; border-radius: var(--radius); transition: width 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; }
+  .ll-editor-root[data-notes] .ll-toc > nav :is(.ll-toc-head, a) { opacity: 0; pointer-events: none; transition: opacity 150ms ease-out; }
+  .ll-editor-root[data-notes] .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) { width: 232px; background: var(--popover); box-shadow: 0 0 0 1px var(--border), 0 10px 15px -3px rgb(0 0 0 / 0.05); }
+  .ll-editor-root[data-notes] .ll-toc > nav:is(:hover, :focus-within):not([data-shut]) :is(.ll-toc-head, a) { opacity: 1; pointer-events: auto; }
 }
 
 /* Placeholder, set by the Placeholder extension on the block under the cursor. */

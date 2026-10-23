@@ -1,7 +1,7 @@
 import { type Editor, isTextSelection } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { Bold, Code, Highlighter, Italic, Link, Sparkles, Strikethrough, Underline, Unlink } from "lucide-react";
+import { Bold, Code, Highlighter, Italic, Link, MessageSquarePlus, Sparkles, Strikethrough, TextQuote, Underline, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Input } from "@leadinglight/ui/components/input";
 import { Toolbar, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
@@ -57,8 +57,19 @@ function LinkEditor({
   );
 }
 
-// onAsk, when given, adds Ask at the end: the app opens its agent panel on the selection.
-export function SelectionToolbar({ editor, onAsk }: { editor: Editor; onAsk?: () => void }) {
+// `note` offers "Add sidenote"; `quote` offers "Add to essay" once the page has one. onAsk, when
+// given, adds Ask at the end: the app opens its agent panel on the selection.
+export function SelectionToolbar({
+  editor,
+  note,
+  quote,
+  onAsk,
+}: {
+  editor: Editor;
+  note?: boolean;
+  quote?: { label: string; run: () => void };
+  onAsk?: () => void;
+}) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const s = useEditorState({
@@ -154,6 +165,17 @@ export function SelectionToolbar({ editor, onAsk }: { editor: Editor; onAsk?: ()
               <ToolButton label="Link" onClick={openLink} pressed={s.link}>
                 <Link />
               </ToolButton>
+              {(note || quote) && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}
+              {note && (
+                <ToolButton label="Add sidenote" onClick={() => editor.commands.addSidenote()} shortcut="⌘⇧M">
+                  <MessageSquarePlus />
+                </ToolButton>
+              )}
+              {quote && (
+                <ToolButton label={quote.label} onClick={quote.run}>
+                  <TextQuote />
+                </ToolButton>
+              )}
               {onAsk && (
                 <>
                   <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
