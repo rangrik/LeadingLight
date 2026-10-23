@@ -1,0 +1,1099 @@
+{
+ "$schema": "berth.visualdiff/v1",
+ "title": "Visual changes: search-perf vs main",
+ "created": "2026-10-07T17:07:13.313281Z",
+ "base": {
+  "kind": "main",
+  "label": "main",
+  "url": "http://shop.devl.localhost:1377",
+  "commit": "3a7b95d"
+ },
+ "head": {
+  "kind": "worktree",
+  "label": "search-perf",
+  "url": "http://search-perf.shop.devl.localhost:1377",
+  "commit": "e60622c"
+ },
+ "settings": {
+  "sizes": [
+   375,
+   768,
+   1280
+  ],
+  "scale": 1,
+  "threshold": 0.03,
+  "unchanged_below": 0.02,
+  "max_height": 4000,
+  "color_scheme": "light",
+  "color_schemes": [
+   "light"
+  ],
+  "reduced_motion": true,
+  "mask": [
+   "time",
+   ".avatar"
+  ],
+  "chromium": "chromium_headless_shell-1243"
+ },
+ "summary": {
+  "shots": 18,
+  "changed": 6,
+  "unchanged": 9,
+  "new": 3,
+  "removed": 0,
+  "errors": 0,
+  "regions": 23,
+  "layout": 0,
+  "max_pct": 48.127,
+  "text": "2 of 6 pages changed · most: /search at 768 (48%) · 3 new shots"
+ },
+ "pages": [
+  {
+   "path": "/deals",
+   "title": "Deals · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "new",
+     "why": "404 before",
+     "before": {
+      "img": "9a57bc0b006de118.png",
+      "w": 375,
+      "h": 812,
+      "status": 404,
+      "ms": 683
+     },
+     "after": {
+      "img": "55a1f3aeb8fe0a03.png",
+      "w": 375,
+      "h": 1340,
+      "status": 200,
+      "ms": 735
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 0
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "new",
+     "why": "404 before",
+     "before": {
+      "img": "504c902646601a8e.png",
+      "w": 768,
+      "h": 1024,
+      "status": 404,
+      "ms": 694
+     },
+     "after": {
+      "img": "ad635bbadb873e65.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 720
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 0
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "new",
+     "why": "404 before",
+     "before": {
+      "img": "c1ac3b021ac23f52.png",
+      "w": 1280,
+      "h": 800,
+      "status": 404,
+      "ms": 723
+     },
+     "after": {
+      "img": "b53bb3c7c302ea2b.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 695
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 0
+    }
+   ],
+   "max_pct": 500
+  },
+  {
+   "path": "/search",
+   "title": "Search · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "a5f1a7f445b6a2b4.png",
+      "w": 375,
+      "h": 2325,
+      "status": 200,
+      "ms": 754
+     },
+     "after": {
+      "img": "af57301744a34532.png",
+      "w": 375,
+      "h": 2469,
+      "status": 200,
+      "ms": 814
+     },
+     "heat": "0ed0d11c8cae680c.png",
+     "changed_px": 47467,
+     "changed_pct": 5.127,
+     "aa_px": 3438,
+     "regions": [
+      {
+       "x": 16,
+       "y": 216,
+       "w": 344,
+       "h": 128,
+       "px": 38995,
+       "el": "aside.filters in div.layout"
+      },
+      {
+       "x": 264,
+       "y": 1032,
+       "w": 80,
+       "h": 32,
+       "px": 1209,
+       "el": "span.badge.out in div.row"
+      },
+      {
+       "x": 264,
+       "y": 1768,
+       "w": 80,
+       "h": 24,
+       "px": 1146,
+       "el": "span.badge.out in div.row"
+      },
+      {
+       "x": 280,
+       "y": 544,
+       "w": 64,
+       "h": 32,
+       "px": 968,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 280,
+       "y": 1520,
+       "w": 64,
+       "h": 32,
+       "px": 968,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 280,
+       "y": 2008,
+       "w": 64,
+       "h": 24,
+       "px": 968,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 280,
+       "y": 792,
+       "w": 64,
+       "h": 24,
+       "px": 912,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 280,
+       "y": 1280,
+       "w": 64,
+       "h": 24,
+       "px": 912,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 280,
+       "y": 2248,
+       "w": 64,
+       "h": 32,
+       "px": 912,
+       "el": "span.badge in div.row"
+      },
+      {
+       "x": 248,
+       "y": 160,
+       "w": 112,
+       "h": 24,
+       "px": 477,
+       "el": "div.results-head in section.wrap"
+      }
+     ],
+     "regions_total": 10,
+     "crops": [
+      "1e1ed7203842a521.png",
+      "4cdcecb3cb61d67f.png",
+      "7a78501ba14733ac.png"
+     ],
+     "shift": {
+      "y": 1788,
+      "h": 223,
+      "dy": 144
+     },
+     "diff_ms": 24
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "c08241a449cf60c2.png",
+      "w": 768,
+      "h": 1053,
+      "status": 200,
+      "ms": 759
+     },
+     "after": {
+      "img": "402b067de75aa415.png",
+      "w": 768,
+      "h": 1296,
+      "status": 200,
+      "ms": 757
+     },
+     "heat": "0e04e14f2e27689d.png",
+     "changed_px": 479020,
+     "changed_pct": 48.127,
+     "aa_px": 15988,
+     "extra_px": 168192,
+     "regions": [
+      {
+       "x": 0,
+       "y": 704,
+       "w": 768,
+       "h": 568,
+       "px": 265383,
+       "el": "around div.grid in div.layout"
+      },
+      {
+       "x": 16,
+       "y": 216,
+       "w": 736,
+       "h": 472,
+       "px": 213160,
+       "el": "div.layout in section.wrap"
+      },
+      {
+       "x": 640,
+       "y": 160,
+       "w": 112,
+       "h": 24,
+       "px": 477,
+       "el": "div.results-head in section.wrap"
+      }
+     ],
+     "regions_total": 3,
+     "crops": [
+      "5945f083ae0ecbb2.png",
+      "9995bb99db649220.png",
+      "2200e0e81c0e62ee.png"
+     ],
+     "shift": {
+      "y": 1272,
+      "h": 24,
+      "dy": 243
+     },
+     "diff_ms": 53
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "a05c323ce28f9939.png",
+      "w": 1280,
+      "h": 809,
+      "status": 200,
+      "ms": 784
+     },
+     "after": {
+      "img": "9834ef92a71c2950.png",
+      "w": 1280,
+      "h": 1053,
+      "status": 200,
+      "ms": 786
+     },
+     "heat": "35094a95f0e2c6b0.png",
+     "changed_px": 560052,
+     "changed_pct": 41.552,
+     "aa_px": 15694,
+     "extra_px": 281600,
+     "regions": [
+      {
+       "x": 0,
+       "y": 704,
+       "w": 1280,
+       "h": 328,
+       "px": 310876,
+       "el": "around div.grid in div.layout"
+      },
+      {
+       "x": 96,
+       "y": 216,
+       "w": 1088,
+       "h": 472,
+       "px": 248699,
+       "el": "div.layout in section.wrap"
+      },
+      {
+       "x": 1072,
+       "y": 160,
+       "w": 112,
+       "h": 24,
+       "px": 477,
+       "el": "div.results-head in section.wrap"
+      }
+     ],
+     "regions_total": 3,
+     "crops": [
+      "9f6a95477f577691.png",
+      "189477d9ddd3cee4.png",
+      "f729688ce145f057.png"
+     ],
+     "shift": {
+      "y": 1029,
+      "h": 24,
+      "dy": 244
+     },
+     "diff_ms": 67
+    }
+   ],
+   "max_pct": 48.127
+  },
+  {
+   "path": "/",
+   "title": "Everyday goods · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "cd3ccc7231aab4e8.png",
+      "w": 375,
+      "h": 1811,
+      "status": 200,
+      "ms": 840
+     },
+     "after": {
+      "img": "7d85165597115dbe.png",
+      "w": 375,
+      "h": 1823,
+      "status": 200,
+      "ms": 834
+     },
+     "heat": "462bb4a8cb996bf5.png",
+     "changed_px": 11541,
+     "changed_pct": 1.688,
+     "aa_px": 1563,
+     "regions": [
+      {
+       "x": 16,
+       "y": 296,
+       "w": 344,
+       "h": 64,
+       "px": 11541,
+       "el": "form.hero-search in section.wrap.hero"
+      }
+     ],
+     "regions_total": 1,
+     "crops": [
+      "e21921ddbb89a549.png"
+     ],
+     "shift": {
+      "y": 1277,
+      "h": 450,
+      "dy": 12
+     },
+     "diff_ms": 11
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "1123983dc0829173.png",
+      "w": 768,
+      "h": 1099,
+      "status": 200,
+      "ms": 826
+     },
+     "after": {
+      "img": "35bfd7144a05ec26.png",
+      "w": 768,
+      "h": 1099,
+      "status": 200,
+      "ms": 794
+     },
+     "heat": "47614eccb74e26e0.png",
+     "changed_px": 21404,
+     "changed_pct": 2.536,
+     "aa_px": 10124,
+     "regions": [
+      {
+       "x": 16,
+       "y": 248,
+       "w": 384,
+       "h": 168,
+       "px": 16392,
+       "el": "section.wrap.hero in main"
+      },
+      {
+       "x": 16,
+       "y": 128,
+       "w": 296,
+       "h": 104,
+       "px": 5012,
+       "el": "section.wrap.hero in main"
+      }
+     ],
+     "regions_total": 2,
+     "crops": [
+      "7740f8d5ebe4300c.png",
+      "12ea931f57422eeb.png"
+     ],
+     "diff_ms": 22
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "changed",
+     "before": {
+      "img": "9b26aaef3d7b371c.png",
+      "w": 1280,
+      "h": 855,
+      "status": 200,
+      "ms": 794
+     },
+     "after": {
+      "img": "fe3422b474be78da.png",
+      "w": 1280,
+      "h": 855,
+      "status": 200,
+      "ms": 772
+     },
+     "heat": "defef0327c2d5b5f.png",
+     "changed_px": 24835,
+     "changed_pct": 2.269,
+     "aa_px": 11035,
+     "regions": [
+      {
+       "x": 96,
+       "y": 344,
+       "w": 448,
+       "h": 64,
+       "px": 13061,
+       "el": "form.hero-search in section.wrap.hero"
+      },
+      {
+       "x": 96,
+       "y": 128,
+       "w": 384,
+       "h": 128,
+       "px": 6520,
+       "el": "section.wrap.hero in main"
+      },
+      {
+       "x": 96,
+       "y": 272,
+       "w": 568,
+       "h": 56,
+       "px": 3779,
+       "el": "p.lead in section.wrap.hero"
+      },
+      {
+       "x": 496,
+       "y": 152,
+       "w": 128,
+       "h": 56,
+       "px": 1475,
+       "el": "h1 \"Everyday goods, made to last.\" in section.wrap.hero"
+      }
+     ],
+     "regions_total": 4,
+     "crops": [
+      "a616b4c4013299d8.png",
+      "8a5ec2a1b49f4aaf.png",
+      "910e71afb431ab34.png"
+     ],
+     "diff_ms": 22
+    }
+   ],
+   "max_pct": 2.536
+  },
+  {
+   "path": "/about",
+   "title": "About · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "5e2f7f2aa95f3fdd.png",
+      "w": 375,
+      "h": 1127,
+      "status": 200,
+      "ms": 751
+     },
+     "after": {
+      "img": "f2993ae96e4ed548.png",
+      "w": 375,
+      "h": 1127,
+      "status": 200,
+      "ms": 750
+     },
+     "changed_px": 12,
+     "changed_pct": 0.003,
+     "aa_px": 58,
+     "masks": [
+      [
+       156,
+       236,
+       53,
+       19
+      ],
+      [
+       19,
+       403,
+       44,
+       44
+      ],
+      [
+       19,
+       501,
+       44,
+       44
+      ],
+      [
+       19,
+       599,
+       44,
+       44
+      ],
+      [
+       19,
+       697,
+       44,
+       44
+      ],
+      [
+       19,
+       795,
+       44,
+       44
+      ],
+      [
+       19,
+       893,
+       44,
+       44
+      ],
+      [
+       156,
+       236,
+       53,
+       19
+      ],
+      [
+       19,
+       403,
+       44,
+       44
+      ],
+      [
+       19,
+       501,
+       44,
+       44
+      ],
+      [
+       19,
+       599,
+       44,
+       44
+      ],
+      [
+       19,
+       697,
+       44,
+       44
+      ],
+      [
+       19,
+       795,
+       44,
+       44
+      ],
+      [
+       19,
+       893,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 7
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "ba51e3a20cf2e687.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 733
+     },
+     "after": {
+      "img": "1c48a4573666e879.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 727
+     },
+     "changed_px": 11,
+     "changed_pct": 0.001,
+     "aa_px": 57,
+     "masks": [
+      [
+       520,
+       190,
+       53,
+       19
+      ],
+      [
+       19,
+       357,
+       44,
+       44
+      ],
+      [
+       280,
+       357,
+       44,
+       44
+      ],
+      [
+       541,
+       357,
+       44,
+       44
+      ],
+      [
+       19,
+       455,
+       44,
+       44
+      ],
+      [
+       280,
+       455,
+       44,
+       44
+      ],
+      [
+       541,
+       455,
+       44,
+       44
+      ],
+      [
+       520,
+       190,
+       53,
+       19
+      ],
+      [
+       19,
+       357,
+       44,
+       44
+      ],
+      [
+       280,
+       357,
+       44,
+       44
+      ],
+      [
+       541,
+       357,
+       44,
+       44
+      ],
+      [
+       19,
+       455,
+       44,
+       44
+      ],
+      [
+       280,
+       455,
+       44,
+       44
+      ],
+      [
+       541,
+       455,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 14
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "387855f609fe708f.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 740
+     },
+     "after": {
+      "img": "07a043d476999e9c.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 743
+     },
+     "changed_px": 14,
+     "changed_pct": 0.001,
+     "aa_px": 78,
+     "masks": [
+      [
+       600,
+       203,
+       53,
+       19
+      ],
+      [
+       99,
+       370,
+       44,
+       44
+      ],
+      [
+       326,
+       370,
+       44,
+       44
+      ],
+      [
+       553,
+       370,
+       44,
+       44
+      ],
+      [
+       780,
+       370,
+       44,
+       44
+      ],
+      [
+       1007,
+       370,
+       44,
+       44
+      ],
+      [
+       99,
+       468,
+       44,
+       44
+      ],
+      [
+       600,
+       203,
+       53,
+       19
+      ],
+      [
+       99,
+       370,
+       44,
+       44
+      ],
+      [
+       326,
+       370,
+       44,
+       44
+      ],
+      [
+       553,
+       370,
+       44,
+       44
+      ],
+      [
+       780,
+       370,
+       44,
+       44
+      ],
+      [
+       1007,
+       370,
+       44,
+       44
+      ],
+      [
+       99,
+       468,
+       44,
+       44
+      ]
+     ],
+     "diff_ms": 16
+    }
+   ],
+   "max_pct": 0.003
+  },
+  {
+   "path": "/login",
+   "title": "Sign in · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "84aa7bb825188dca.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 732
+     },
+     "after": {
+      "img": "84aa7bb825188dca.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 677
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 4
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "51e6780afb725a84.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 683
+     },
+     "after": {
+      "img": "51e6780afb725a84.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 718
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 12
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "00cb3bad12435940.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 717
+     },
+     "after": {
+      "img": "00cb3bad12435940.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 721
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 14
+    }
+   ],
+   "max_pct": 0
+  },
+  {
+   "path": "/account",
+   "title": "Your account · acme",
+   "shots": [
+    {
+     "size": 375,
+     "scheme": "light",
+     "viewport": [
+      375,
+      812
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "79b25d1a08c09fc9.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 677
+     },
+     "after": {
+      "img": "79b25d1a08c09fc9.png",
+      "w": 375,
+      "h": 812,
+      "status": 200,
+      "ms": 680
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 4
+    },
+    {
+     "size": 768,
+     "scheme": "light",
+     "viewport": [
+      768,
+      1024
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "9574e6d96284ce40.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 740
+     },
+     "after": {
+      "img": "9574e6d96284ce40.png",
+      "w": 768,
+      "h": 1024,
+      "status": 200,
+      "ms": 718
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 13
+    },
+    {
+     "size": 1280,
+     "scheme": "light",
+     "viewport": [
+      1280,
+      800
+     ],
+     "verdict": "unchanged",
+     "before": {
+      "img": "7050e22ec934e5cf.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 688
+     },
+     "after": {
+      "img": "7050e22ec934e5cf.png",
+      "w": 1280,
+      "h": 800,
+      "status": 200,
+      "ms": 716
+     },
+     "changed_px": 0,
+     "changed_pct": 0,
+     "diff_ms": 16
+    }
+   ],
+   "max_pct": 0
+  }
+ ],
+ "timing": {
+  "total_ms": 5177,
+  "browser_start_ms": 70,
+  "shoot_ms": 4540,
+  "diff_ms": 177,
+  "write_ms": 42,
+  "bytes": 534935,
+  "all_bytes": 3140195
+ },
+ "note": "filters collapse on phones; account fixed"
+}

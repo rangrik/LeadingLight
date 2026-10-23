@@ -4,8 +4,8 @@ Feature: Page styles
   like a marker stroke.
 
   Names used below:
-  - "Page options" button at the right end of the page header, opening a menu with a "Style"
-    group holding "Plain" and "Playful" as radio items
+  - "Page options": the menu in the page's property bar (properties.feature), whose "Style"
+    group holds "Plain" and "Playful" as radio items
 
   Background:
     Given the app is open in a browser with one page open
@@ -31,7 +31,3 @@ Feature: Page styles
     Given page "A" is Playful and page "B" is Plain
     When I switch between them, and when I reload
     Then "A" is still Playful and "B" still Plain, and "Page options" shows each page's own style
-
-  Scenario: No page open
-    Given there are no pages
-    Then the header shows no "Page options" button

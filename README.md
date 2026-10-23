@@ -29,13 +29,15 @@ Notes live in a local SQLite file (`leadinglight.db` in the app data dir) via
 
 Everything is an **object** of a **type**, in the spirit of Capacities:
 
-- `object_types`: id, name, icon, and a JSON `properties` schema. V1 seeds one type, `page`.
-- `objects`: type, title, `content` (the editor document as JSON), `properties` (JSON values),
-  and a `deleted_at` for trash.
+- `objects`: type, title, `content` (the editor document as JSON), `properties` (JSON values,
+  keyed by property id, plus the page's icon, cover and description), and a `deleted_at` for trash.
+- `object_types`: name, plural, icon, the ordered property ids in `properties`, and `settings`
+  (colour, card, link view, default template, list view). Starter types are seeded as data.
+- `property_defs`: each property once for the whole space: name, kind and options.
 
-Adding richer kinds later (Person, Book, Meeting, daily notes) means new rows in
-`object_types` plus UI, not new tables. Links between objects (mentions, embeds,
-backlinks) will be a `links` table filled from the editor content on save.
+A page's own properties are the values its type doesn't list. Backlinks are found by searching
+stored pages for a page's id, so there is no links table. In a plain browser the same data lives
+in IndexedDB.
 
 ## Adding COSS UI components
 

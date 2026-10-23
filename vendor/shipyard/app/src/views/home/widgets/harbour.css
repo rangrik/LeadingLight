@@ -1,0 +1,83 @@
+/* The living harbour's motion: boats bob a pixel or so, the lamp breathes,
+   and its beam sweeps while an agent needs you. Transforms and opacity only. */
+
+.bh-bob {
+  animation: bh-bob 4.2s ease-in-out infinite;
+  transform-origin: 50% 85%;
+}
+@keyframes bh-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1.2deg);
+  }
+  50% {
+    transform: translateY(1.5px) rotate(1.2deg);
+  }
+}
+
+.bh-wake {
+  display: block;
+  height: 2px;
+  margin: -2px auto 0;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.75) 30%, rgb(255 255 255 / 0.75) 70%, transparent);
+  opacity: 0.8;
+}
+
+.bh-lamp {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--warning);
+  box-shadow: 0 0 10px 4px color-mix(in oklab, var(--warning) 60%, transparent);
+  animation: bh-lamp 2.4s ease-in-out infinite;
+}
+@keyframes bh-lamp {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.bh-beam {
+  position: absolute;
+  left: 0;
+  top: -26px;
+  width: 340px;
+  height: 52px;
+  transform-origin: 0 50%;
+  clip-path: polygon(0 46%, 100% 0, 100% 100%, 0 54%);
+  background: linear-gradient(90deg, color-mix(in oklab, var(--warning) 70%, transparent), transparent 85%);
+  opacity: 0.55;
+  animation: bh-sweep 7s ease-in-out infinite;
+}
+.bh-beam[data-night] {
+  opacity: 0.75;
+}
+@keyframes bh-sweep {
+  0%,
+  100% {
+    transform: rotate(-7deg) scaleX(0.92);
+  }
+  50% {
+    transform: rotate(4deg) scaleX(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bh-bob,
+  .bh-lamp,
+  .bh-beam {
+    animation: none;
+  }
+}
+:root[data-berth-hidden] :is(.bh-bob, .bh-lamp, .bh-beam),
+.bh-still :is(.bh-bob, .bh-lamp, .bh-beam) {
+  animation-play-state: paused;
+}

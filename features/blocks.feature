@@ -14,7 +14,7 @@ Feature: Block kinds
   - media insert: button "Choose file" inside the placeholder block for Image, Video, Audio, File
   - embed: textbox "Embed URL" and button "Embed" inside the placeholder block
   - emoji prefix: button "Change emoji" in front of the block; it opens a popover with
-    searchbox "Search emoji", one button per emoji and a "Remove emoji" button
+    searchbox "Search emoji", one button per emoji (the full set, in groups) and a "Remove emoji" button
   All controls are COSS UI components (Toolbar, Toggle, Select, Popover, Input, Button, Tooltip).
 
   Background:

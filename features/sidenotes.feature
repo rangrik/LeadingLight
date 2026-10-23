@@ -9,7 +9,8 @@ Feature: Sidenotes, thoughts and essays
   - margin: the column right of the text where notes sit, each level with its sentence
   - note number: the small numbered chip after a noted sentence
   - "Remove sidenote": a button on a note, shown while the pointer is over it
-  - "Write essay" / "Open essay" in "Page options"; "Close essay" in the essay pane's header
+  - "Write essay" / "Open essay" in "Page options"; the essay opens as a pane (panes.feature)
+    right of its page, closed with "Close page" in that pane's header
   - "Add to essay" in the selection toolbar, shown once the page has an essay
 
   Background:
@@ -64,7 +65,7 @@ Feature: Sidenotes, thoughts and essays
     Then an essay page opens on the right with the cursor in its title
     And "Article" stays on the left with its notes in the margin
     And the essay appears nested under "Article" in the sidebar, and the sidebar collapses
-    When I click "Close essay"
+    When I click "Close page" in the essay's pane
     Then "Article" fills the panel again, and "Page options" offers "Open essay"
     When I click the essay in the sidebar
     Then "Article" opens with the essay beside it

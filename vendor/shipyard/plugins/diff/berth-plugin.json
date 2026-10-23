@@ -1,0 +1,8 @@
+{
+  "id": "diff",
+  "name": "Diff",
+  "version": "0.1.0",
+  "description": "The current branch's whole diff in one view, split or unified, against the default branch or what isn't committed yet.",
+  "main": "dist/index.js",
+  "builtin": true
+}

@@ -8,8 +8,8 @@ import {
   AlertDialogTitle,
 } from "@leadinglight/ui/components/alert-dialog";
 import { Button } from "@leadinglight/ui/components/button";
-import { pageLabel } from "@/lib/labels";
-import type { ObjectSummary } from "@/lib/objects";
+import { pageLabel } from "~/lib/labels";
+import type { ObjectSummary } from "~/lib/objects";
 
 export function DeletePageDialog({
   page,
@@ -25,7 +25,10 @@ export function DeletePageDialog({
       <AlertDialogPopup className="max-w-sm">
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{page ? pageLabel(page.title) : ""}”?</AlertDialogTitle>
-          <AlertDialogDescription>The page and everything in it will be removed.</AlertDialogDescription>
+          <AlertDialogDescription>
+            The page and everything in it will be removed.
+            {page?.properties.role === "thoughts" && " Its notes leave their page too."}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>

@@ -1,65 +1,65 @@
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget } from "@leadinglight/editor/editor";
-import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { assets } from "@/lib/assets";
-import { pageStyle } from "@/lib/labels";
-import { roleOf } from "@/lib/linked";
-import type { LLObject, ObjectPatch } from "@/lib/objects";
-import { trackFlush } from "@/lib/saving";
-import { useThoughts } from "@/lib/thoughts";
+import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Button } from "@leadinglight/ui/components/button";
+import { cn } from "@leadinglight/ui/lib/utils";
+import { Backlinks } from "~/components/backlinks";
+import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
+import { linkHost } from "~/components/link-views";
+import { CoverBand, CoverPicker } from "~/components/page-cover";
+import { IconPicker, PageIconView } from "~/components/page-icon";
+import { PropertyPanel } from "~/components/property-panel";
+import { PagePicker } from "~/components/property-value";
+import { TagPanel } from "~/components/tag-panel";
+import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
+import { assets } from "~/lib/assets";
+import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
+import { pageStyle } from "~/lib/labels";
+import { childOf, parentOf, roleOf } from "~/lib/linked";
+import { registerLive, touchLive } from "~/lib/live";
+import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
+import { trackFlush } from "~/lib/saving";
+import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
+import { useThoughts } from "~/lib/thoughts";
 
 // The body is read only when a save runs, not on every keystroke.
-type Pending = { title?: string; content?: () => EditorDoc };
+type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
 
 const SAVE_DELAY_MS = 500;
 
-export type PageHandle = Pick<BlockEditorHandle, "insertQuote" | "reveal">;
+// Narrow panes show the header controls as icons only.
+const Label = ({ children }: { children: string }) => <span className="hidden @md:inline">{children}</span>;
 
-export function PageView({
-  page,
-  onRename,
-  onSave,
-  onOpen,
-  onNote,
-  quoteTo,
-  quotes,
-  onCites,
-  reveal,
-  ref,
-}: {
-  page: LLObject;
-  onRename: (id: string, title: string) => void;
-  onSave: (id: string, patch: ObjectPatch) => Promise<void>;
-  // Opens a link: in-app ones (ll:) in the app, the rest outside.
-  onOpen: (href: string) => void;
-  // A sidenote was added; `thoughts` is the page's Thoughts page when this note made it.
-  onNote: (thoughts?: LLObject) => void;
-  quoteTo?: QuoteTarget;
-  // See BlockEditor: which of this page's quotes its essay still holds, and the quotes it holds.
-  quotes?: string[] | null;
-  onCites?: (ids: string[]) => void;
-  // An anchor to scroll to once the page is shown.
-  reveal?: string;
-  ref?: Ref<PageHandle>;
-}) {
+// A textarea that grows with its text instead of scrolling.
+const fit = (el: HTMLTextAreaElement | null) => {
+  if (!el) return;
+  el.style.height = "0px";
+  el.style.height = `${el.scrollHeight}px`;
+};
+
+export function PageView({ page }: { page: LLObject }) {
   const [title, setTitle] = useState(page.title);
+  const [typeId, setTypeId] = useState(page.typeId);
+  const [props, setProps] = useState(page.properties);
+  const latest = useRef(page.properties);
+  const [adding, setAdding] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
-  // A Thoughts page or an essay takes no sidenotes of its own.
-  const child = Boolean(roleOf(page));
-  const notes = useThoughts(page, onNote);
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const flush = async () => {
     clearTimeout(timer.current);
-    const { title, content } = pending.current;
+    const { content, ...rest } = pending.current;
     pending.current = {};
-    if (title === undefined && !content) return;
-    const patch: ObjectPatch = {};
-    if (title !== undefined) patch.title = title;
+    if (!content && Object.keys(rest).length === 0) return;
+    const patch: ObjectPatch = { ...rest };
     if (content) patch.content = content();
-    await onSave(page.id, patch);
+    await savePage(page.id, patch);
   };
 
   const queue = (patch: Pending) => {
@@ -68,105 +68,261 @@ export function PageView({
     timer.current = setTimeout(flush, SAVE_DELAY_MS);
   };
 
+  // Every other stored property, including ones this version doesn't know, is kept as it was.
+  const replaceProps = (next: Record<string, unknown>) => {
+    latest.current = next;
+    setProps(next);
+    patchSummary(page.id, { properties: next });
+    queue({ properties: next });
+  };
+  const setProp = (key: string, value: unknown) => {
+    const next = { ...latest.current };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    replaceProps(next);
+  };
+  const setType = (next: string) => {
+    setTypeId(next);
+    patchSummary(page.id, { typeId: next });
+    queue({ typeId: next });
+  };
+  const setIcon = (icon?: PageIcon) => setProp("icon", icon);
+  const setCover = (cover?: PageCover) => setProp("cover", cover);
+
+  const icon = readIcon(props.icon);
+  const cover = readCover(props.cover);
+  const description = typeof props.description === "string" ? props.description : undefined;
+  const templateOf = typeof props.templateOf === "string" ? props.templateOf : undefined;
+  const day = typeId === "daily" && typeof props.day === "string" ? props.day : undefined;
+  const tags = Array.isArray(props.tags) ? (props.tags as string[]) : [];
+  // Types with a Tags property show it as a row already.
+  const canTag = !typeOf(typeId).props.includes("tags") && tags.length === 0;
+
+  // Sidenotes keep their text in the page's Thoughts page; a Thoughts page or an essay takes none
+  // of its own. A page with an essay quotes into it and follows its quotes (DECISIONS.md, 11).
+  const role = roleOf(page);
+  const parent = parentOf(page);
+  const current = { ...page, properties: props };
+  const notes = useThoughts(current, (thoughts) => {
+    if (thoughts) setProp("thoughts", thoughts.id);
+    makeRoom();
+  });
+  const essay = childOf(current, "essay");
+  const quotes = useQuotes(page.id, essay);
+  const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
+  const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
+
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
   useEffect(() => {
     if (!page.title && !page.content) titleRef.current?.focus();
     const untrack = trackFlush(flush);
+    const unlive = registerLive(page.id, {
+      content: () => editorRef.current?.getJSON() ?? page.content ?? { type: "doc", content: [] },
+      setContent: (doc) => editorRef.current?.setContent(doc),
+      properties: () => latest.current,
+      setProperties: replaceProps,
+      insertQuote: (quote) => editorRef.current?.insertQuote(quote),
+      reveal: (anchor) => editorRef.current?.reveal(anchor),
+    });
     return () => {
       untrack();
+      unlive();
       void flush();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    insertQuote: (quote) => editorRef.current?.insertQuote(quote),
-    reveal: (id) => editorRef.current?.reveal(id),
-  }));
-
-  // Notes load after the text, so wait for them before scrolling to an anchor.
+  // The agent panel asks about this page while it is in front (lib/ask.ts); with panes side
+  // by side, that is the page last worked in.
+  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => editorRef.current?.text() ?? "" };
   useEffect(() => {
-    if (!reveal || (!notes && !child)) return;
-    const frame = requestAnimationFrame(() => editorRef.current?.reveal(reveal));
-    return () => cancelAnimationFrame(frame);
-  }, [reveal, notes, child]);
+    registerPage(askPage, editorRef.current);
+    return () => unregisterPage(page.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page.id]);
 
-  // The title wraps like a heading instead of clipping, also when its pane changes width.
+  useLayoutEffect(() => fit(titleRef.current), [title]);
+  useLayoutEffect(() => fit(descriptionRef.current), [description]);
+  // They wrap again when the pane changes width.
   useLayoutEffect(() => {
     const el = titleRef.current;
     if (!el) return;
-    let width = -1;
-    const fit = () => {
+    let width = el.offsetWidth;
+    const ro = new ResizeObserver(() => {
       if (el.offsetWidth === width) return;
       width = el.offsetWidth;
-      el.style.height = "0px";
-      el.style.height = `${el.scrollHeight}px`;
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
+      fit(el);
+      fit(descriptionRef.current);
+    });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [title]);
+  }, []);
+
+  const toBody = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    editorRef.current?.focus("start");
+  };
 
   // Blank page space belongs to the page: with no block active (and no popup open), a click at
-  // the title's height goes to the title, below it into the body (see placeAt). The title,
-  // blocks and controls handle their own clicks.
+  // the title's height goes to the title, from the body down into the body (see placeAt). The
+  // properties between them and the sections after the body keep their clicks.
   const onBlankMouseDown = (e: React.MouseEvent) => {
     const editor = editorRef.current;
     const title = titleRef.current;
     if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
-    if ((e.target as HTMLElement).closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
+    const target = e.target as HTMLElement;
+    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
+    // Level with the sections after the body (backlinks, what was made that day) is theirs too.
+    const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
+      const r = s.getBoundingClientRect();
+      return e.clientY >= r.top && e.clientY <= r.bottom;
+    });
+    if (besideSection) return;
     if (e.clientY <= title.getBoundingClientRect().bottom) {
       e.preventDefault();
       title.focus();
       title.setSelectionRange(title.value.length, title.value.length);
-    } else if (editor.placeAt(e.clientX, e.clientY)) e.preventDefault();
+    } else if (e.clientY >= (bodyRef.current?.getBoundingClientRect().top ?? 0) && editor.placeAt(e.clientX, e.clientY)) e.preventDefault();
   };
 
-  // With sidenotes the column widens on the right for the margin (a 32px gutter, then 224px of
-  // notes), keeping the text 632px wide, and the whole stays centred. When the space left of the
-  // centred column can't hold the contents rail (editor.css), the column moves right for it.
   return (
-    <div className="@container min-h-full" onMouseDown={onBlankMouseDown}>
-      <div className="mx-auto w-full max-w-[760px] px-16 pt-10 pb-8 transition-[max-width,padding] duration-200 ease-out has-[[data-notes]]:max-w-[968px] has-[[data-notes]]:pr-4 has-[[data-notes]]:*:mr-[256px] @max-[880px]:has-[.ll-toc]:pl-[124px] @max-[1088px]:has-[[data-notes]_.ll-toc]:pl-[124px]">
-        <textarea
-          aria-label="Title"
-          className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
-          onFocus={() => editorRef.current?.clearBlocks()}
-          onChange={(e) => {
-            const value = e.currentTarget.value.replace(/\n/g, "");
-            setTitle(value);
-            onRename(page.id, value);
-            queue({ title: value });
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === "ArrowDown") {
-              e.preventDefault();
-              editorRef.current?.focus("start");
-            }
-          }}
-          placeholder={roleOf(page) === "essay" ? "Essay title" : "Untitled"}
-          ref={titleRef}
-          rows={1}
-          value={title}
-        />
-        <div className="mt-3">
+    <div className="min-h-full" onFocusCapture={() => registerPage(askPage, editorRef.current)} onMouseDown={onBlankMouseDown}>
+      {cover && <CoverBand cover={cover} onChange={setCover} />}
+      {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
+          With sidenotes the column widens on the right for the margin (a 32px gutter, then 224px
+          of notes), keeping the text as wide. When the space left of the centred column can't
+          hold the contents rail (editor.css), the column moves right for it. */}
+      <div className="mx-auto w-full max-w-[760px] ps-16 pe-6 pb-8 transition-[max-width,padding] duration-200 ease-out @xl:pe-16 has-[[data-notes]]:max-w-[968px] has-[[data-notes]]:pe-4 @xl:has-[[data-notes]]:pe-4 has-[[data-notes]]:*:me-[256px] @max-[880px]:has-[.ll-toc]:ps-[124px] @max-[1088px]:has-[[data-notes]_.ll-toc]:ps-[124px]">
+        <div className={cn("group/head", !(cover && icon) && "pt-10")}>
+          {icon && (
+            <IconPicker icon={icon} onChange={setIcon}>
+              <button
+                aria-label="Change icon"
+                className={cn("relative mb-9 flex rounded-lg transition-colors duration-150 hover:bg-accent", cover && "-mt-8")}
+                type="button"
+              >
+                <PageIconView icon={icon} large />
+              </button>
+            </IconPicker>
+          )}
+          <div className="relative">
+            {/* Shown on hover, sitting in the space above the title so nothing moves. */}
+            <div className="absolute bottom-full -ms-2 mb-1 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/head:opacity-100 has-data-popup-open:opacity-100">
+              {!icon && (
+                <IconPicker onChange={setIcon}>
+                  <Button aria-label="Add icon" className="text-muted-foreground" size="sm" variant="ghost">
+                    <Smile />
+                    <Label>Add icon</Label>
+                  </Button>
+                </IconPicker>
+              )}
+              {!cover && (
+                <CoverPicker onChange={setCover}>
+                  <Button aria-label="Add cover" className="text-muted-foreground" size="sm" variant="ghost">
+                    <ImageIcon />
+                    <Label>Add cover</Label>
+                  </Button>
+                </CoverPicker>
+              )}
+              {canTag && (
+                <PagePicker
+                  exclude={tags}
+                  label="Add tag"
+                  onPick={(id) => setProp("tags", [...tags, id])}
+                  trigger={
+                    <Button aria-label="Add tag" className="text-muted-foreground" size="sm" variant="ghost">
+                      <Hash />
+                      <Label>Add tag</Label>
+                    </Button>
+                  }
+                  typeId="tag"
+                />
+              )}
+              {description === undefined && (
+                <Button
+                  aria-label="Add description"
+                  className="text-muted-foreground"
+                  onClick={() => {
+                    setAdding(true);
+                    setProp("description", "");
+                  }}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <AlignLeft />
+                  <Label>Add description</Label>
+                </Button>
+              )}
+            </div>
+            <textarea
+              aria-label="Title"
+              className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
+              onFocus={() => editorRef.current?.clearBlocks()}
+              onChange={(e) => {
+                const value = e.currentTarget.value.replace(/\n/g, "");
+                setTitle(value);
+                patchSummary(page.id, { title: value });
+                queue({ title: value });
+              }}
+              onKeyDown={toBody}
+              placeholder={role === "essay" ? "Essay title" : "Untitled"}
+              ref={titleRef}
+              rows={1}
+              value={title}
+            />
+          </div>
+          {description !== undefined && (
+            <textarea
+              aria-label="Description"
+              autoFocus={adding}
+              className="mt-1 block w-full resize-none overflow-hidden bg-transparent text-base text-muted-foreground leading-normal outline-none placeholder:text-muted-foreground/60"
+              onBlur={() => {
+                setAdding(false);
+                if (!description.trim()) setProp("description", undefined);
+              }}
+              onChange={(e) => setProp("description", e.currentTarget.value.replace(/\n/g, ""))}
+              onKeyDown={toBody}
+              placeholder="Add a description"
+              ref={descriptionRef}
+              rows={1}
+              value={description}
+            />
+          )}
+        </div>
+        {templateOf && (
+          <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">
+            <LayoutTemplate className="size-4" />
+            Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
+          </p>
+        )}
+        <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
+        {day && <DailyBar day={day} />}
+        {typeId === "tag" && <TagPanel id={page.id} />}
+        <div className="pt-3" ref={bodyRef}>
           <BlockEditor
             assets={assets}
             content={page.content}
-            notes={child ? undefined : notes}
-            onChange={(read) => queue({ content: read })}
-            onExitTop={() => titleRef.current?.focus()}
-            openLink={onOpen}
+            onAsk={openAsk}
+            onChange={(read) => {
+              queue({ content: read });
+              touchLive(page.id);
+            }}
+            links={linkHost}
+            notes={role ? undefined : notes}
             onCites={onCites}
+            onExitTop={() => titleRef.current?.focus()}
+            openLink={openHref}
             quoteTo={quoteTo}
             quotes={quotes}
             ref={editorRef}
-            style={pageStyle(page)}
+            style={pageStyle(props)}
           />
         </div>
+        {day && <CreatedThisDay day={day} id={page.id} />}
+        <Backlinks id={page.id} title={title} />
       </div>
     </div>
   );

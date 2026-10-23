@@ -40,7 +40,7 @@ function useActiveHeading(editor: Editor, count: number) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    const scroller = editor.view.dom.closest<HTMLElement>("[data-scroller]");
+    const scroller = editor.view.dom.closest<HTMLElement>("[data-page-scroller]");
     if (!scroller || !count) return;
     let frame = 0;
     const compute = () => {
@@ -67,11 +67,15 @@ function useActiveHeading(editor: Editor, count: number) {
     };
     scroller.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
+    // A pane unfolding or resizing moves the headings without a scroll.
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(scroller);
     editor.on("update", onScroll);
     frame = requestAnimationFrame(compute);
     return () => {
       scroller.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
+      ro.disconnect();
       editor.off("update", onScroll);
       cancelAnimationFrame(frame);
       clearTimeout(timer.current);
@@ -209,7 +213,7 @@ export function TableOfContents({ editor }: { editor: Editor }) {
 
   const select = (i: number) => {
     const el = headingEls(editor)[i];
-    const scroller = editor.view.dom.closest<HTMLElement>("[data-scroller]");
+    const scroller = editor.view.dom.closest<HTMLElement>("[data-page-scroller]");
     if (!el || !scroller) return;
     jump(i);
     const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;

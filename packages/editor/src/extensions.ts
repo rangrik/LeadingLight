@@ -21,6 +21,7 @@ import { EmojiPrefix } from "./emoji-prefix";
 import { Column, Columns, Group } from "./layout";
 import { OrderedListStyles } from "./lists";
 import { createMedia } from "./media";
+import { type LinkHost, LinkMenus, linkMenuOpen, Mention, PageLink } from "./page-links";
 import { SlashCommands, slashMenuOpen } from "./slash-menu";
 import { Tables } from "./table";
 import { Todo } from "./todo";
@@ -40,7 +41,7 @@ const ExitTop = Extension.create<{ onExitTop: () => boolean }>({
     };
     return {
       ArrowUp: () =>
-        !slashMenuOpen(this.editor.state) && first() && this.editor.view.endOfTextblock("up") && this.options.onExitTop(),
+        !slashMenuOpen(this.editor.state) && !linkMenuOpen(this.editor.state) && first() && this.editor.view.endOfTextblock("up") && this.options.onExitTop(),
       Backspace: () => {
         const { doc, selection } = this.editor.state;
         return first() && doc.childCount === 1 && selection.$from.parent.content.size === 0 && this.options.onExitTop();
@@ -49,8 +50,34 @@ const ExitTop = Extension.create<{ onExitTop: () => boolean }>({
   },
 });
 
-// Enter in an open toggle's title moves into its empty first line instead of adding another.
+// Toggles take their first line as the title (TipTap's setDetails leaves it empty), and Enter in an
+// open toggle's title moves into its empty first line instead of adding another.
 const Toggle = Details.extend({
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setDetails:
+        () =>
+        ({ state, tr, dispatch }) => {
+          const range = state.selection.$from.blockRange(state.selection.$to);
+          const lines = range && state.doc.slice(range.start, range.end).content;
+          const title = lines?.firstChild;
+          if (!range || !lines || !title?.isTextblock) return false;
+          const { detailsSummary, detailsContent, paragraph } = state.schema.nodes;
+          const body = lines.cut(title.nodeSize);
+          const toggle = this.type.create(null, [
+            detailsSummary.create(null, title.content),
+            detailsContent.create(null, body.size ? body : paragraph.create()),
+          ]);
+          if (dispatch) {
+            tr.replaceWith(range.start, range.end, toggle);
+            tr.setSelection(TextSelection.create(tr.doc, range.start + 2 + title.content.size));
+          }
+          return true;
+        },
+    };
+  },
+
   addKeyboardShortcuts() {
     const parent = (this.parent?.() ?? {}) as Record<string, KeyboardShortcutCommand>;
     return {
@@ -72,6 +99,8 @@ const Toggle = Details.extend({
 });
 
 const hint = (node: PMNode, paragraph: string) => {
+  // An emoji line has its emoji where the hint would be drawn.
+  if (node.attrs.emoji) return null;
   if (node.type.name === "heading") return `Heading ${node.attrs.level}`;
   if (node.type.name === "detailsSummary") return "Toggle";
   return node.type.name === "paragraph" ? paragraph : null;
@@ -191,9 +220,11 @@ export function createExtensions(opts: {
   onExitTop: () => boolean;
   assets: AssetStore;
   openLink: (href: string) => void;
-  onNote?: (id: string, quote: string) => boolean;
+  links?: LinkHost;
+  onNote?: (id: string, quote: string, existing?: boolean) => boolean;
   placeholder?: string;
 }) {
+  const host = opts.links ?? null;
   return [
     StarterKit.configure({
       bold: false,
@@ -227,6 +258,10 @@ export function createExtensions(opts: {
     Group,
     EmojiPrefix,
     ...createMedia(opts.assets),
+    // Link nodes are always in the schema, so a page with links reads even without a host.
+    Mention.configure({ host }),
+    PageLink.configure({ host }),
+    LinkMenus.configure({ host }),
     Note.configure({ onAdd: opts.onNote ?? null }),
     Cited,
     Thought,

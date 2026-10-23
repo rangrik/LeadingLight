@@ -1,31 +1,29 @@
-@import "@leadinglight/ui/globals.css";
+/* Shipyard's stylesheet is the Tailwind root: the COSS tokens, the type scale,
+   the layout grid, density and themes (vendor/shipyard/README.md). */
+@import "../../../vendor/shipyard/app/src/index.css";
 @import "@leadinglight/editor/editor.css";
+@source "../../../packages/ui/src";
 @source "../../../packages/editor/src";
+@source "../../../vendor/shipyard/app/src";
 
-html {
-  color-scheme: light;
-}
-html.dark {
-  color-scheme: dark;
-}
-
-html,
-body,
-#root {
-  height: 100%;
+/* The system font first (docs/DECISIONS.md, 2); Shipyard's Inter is the fallback. */
+@theme inline {
+  --font-heading: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Inter Variable', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono Variable', monospace;
 }
 
-/* Desktop feel: chrome is not selectable, only text you can edit. */
-body {
-  -webkit-font-smoothing: antialiased;
-  overscroll-behavior: none;
-  user-select: none;
-}
-input,
-textarea,
-[contenteditable] {
-  user-select: text;
-}
+/* Answers in the agent panel: Markdown from micromark, kept quiet. */
+.ll-answer > * + * { margin-top: 0.5rem; }
+.ll-answer ul { list-style: disc; padding-left: 1.25rem; }
+.ll-answer ol { list-style: decimal; padding-left: 1.25rem; }
+.ll-answer h1, .ll-answer h2, .ll-answer h3 { font-weight: 600; }
+.ll-answer a { text-decoration: underline; }
+.ll-answer code { font-family: var(--font-mono); font-size: 0.875em; background: var(--muted); border-radius: 4px; padding: 0.1em 0.3em; }
+.ll-answer pre { background: var(--muted); border-radius: var(--radius); padding: 0.5rem 0.75rem; overflow-x: auto; }
+.ll-answer pre code { background: none; padding: 0; }
+/* While an answer streams, a caret at the end of its last line. */
+.ll-answer[data-streaming] > :last-child::after { content: "▍"; color: var(--muted-foreground); }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {

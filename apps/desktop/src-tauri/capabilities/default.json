@@ -13,6 +13,10 @@
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "$APPDATA/assets/**" }]
     },
+    {
+      "identifier": "opener:allow-reveal-item-in-dir",
+      "allow": [{ "path": "$APPDATA/agents" }, { "path": "$APPDATA/agents/**" }]
+    },
     "sql:default",
     "sql:allow-execute",
     "fs:default",

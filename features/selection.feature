@@ -14,9 +14,10 @@ Feature: Selecting blocks
     When I hover "two" and click "Drag to move"
     Then the block "two" is selected and no other block is
     And the block has the selected tint
+    And the block menu is open (features/block-menu.feature)
 
   Scenario: Shift-clicking another handle selects the range
-    When I hover "two" and click "Drag to move"
+    When I hover "two", click "Drag to move" and press Escape to close the block menu
     And I hover "four" and shift-click "Drag to move"
     Then the blocks "two", "three" and "four" are selected
 

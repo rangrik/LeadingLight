@@ -1,0 +1,24 @@
+{
+  "repo": "https://github.com/cosscom/shipyard.git",
+  "commit": "ea121592dc8bd6823e9fbcbff2bdf45d95b1b269",
+  "version": "0.3.30",
+  "paths": [
+    "app/src",
+    "app/scripts",
+    "app/perf",
+    "app/tsconfig.json",
+    "app/tsconfig.node.json",
+    "app/vite.config.ts",
+    "plugins",
+    "packages/plugin-sdk/src",
+    "packages/plugin-sdk/package.json",
+    "packages/plugin-sdk/README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "THIRD_PARTY_THEMES.md"
+  ],
+  "moved": {
+    "app/src-tauri/src/menu.rs": "apps/desktop/src-tauri/src/menu.rs",
+    "app/public/berth-mark.svg": "apps/desktop/public/berth-mark.svg"
+  }
+}

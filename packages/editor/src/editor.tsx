@@ -12,6 +12,7 @@ import { BlockHandle } from "./block-handle";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
+import type { LinkHost } from "./page-links";
 import { SelectionToolbar } from "./selection-toolbar";
 import { type NotesStore, Sidenotes } from "./sidenotes";
 import { TableToolbar } from "./table";
@@ -32,19 +33,73 @@ function known(schema: Schema, node: JSONContent): JSONContent | null {
   return { ...node, marks: node.marks?.filter((m) => schema.marks[m.type]), content };
 }
 
+export type Selected = { text: string; from: number; to: number };
+
 export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
+  // For changes made from outside the page (linking a mention, merging a tag).
+  getJSON: () => EditorDoc;
+  setContent: (doc: EditorDoc) => void;
+  // Focus back where the caret was, for a panel giving the keyboard back.
+  refocus: () => void;
   hasFocus: () => boolean;
   placeAt: (x: number, y: number) => boolean;
   clearBlocks: () => void;
-  // Quotes words from another page, with a reference back to them (see DECISIONS.md, 6).
+  // Quotes words from another page, with a reference back to them (see DECISIONS.md, 11).
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   // Scrolls to an anchor (a note, quoted words, or a reference) and lights it for a moment.
   reveal: (id: string) => void;
+  selection: () => Selected;
+  find: (text: string, near: number) => Selected | null;
+  // A fresh DOM range for a span of the page, made each time a surface places itself by the
+  // words: a Range kept from before collapses once the editor redraws those nodes.
+  domRange: (from: number, to: number) => Range | null;
+  // The page as plain text, for an assistant's context.
+  text: () => string;
+  // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
+  // takes focus: the panel that inserts keeps the keyboard.
+  insertAfter: (pos: number, html: string) => void;
+  replaceRange: (from: number, to: number, html: string) => void;
 };
 
 // Where "Add to essay" sends selected words.
 export type QuoteTarget = { essay: string; add: (text: string, id: string) => void };
+
+const selected = (editor: Editor): Selected => {
+  const { from, to } = editor.state.selection;
+  return { text: editor.state.doc.textBetween(from, to, "\n"), from, to };
+};
+
+// Where text (as selection() wrote it, "\n" between blocks) now is, nearest to where it was:
+// an answer's Insert or Replace must not trust positions from before the page was edited.
+function locate(editor: Editor, text: string, near: number): Selected | null {
+  if (!text) return null;
+  let s = "";
+  const at: number[] = [];
+  let first = true;
+  editor.state.doc.descendants((node, pos) => {
+    if (node.isTextblock) {
+      if (!first) {
+        s += "\n";
+        at.push(-1);
+      }
+      first = false;
+    }
+    if (node.isText && node.text) {
+      for (let i = 0; i < node.text.length; i++) at.push(pos + i);
+      s += node.text;
+    }
+    return true;
+  });
+  let best: Selected | null = null;
+  for (let i = s.indexOf(text); i >= 0; i = s.indexOf(text, i + 1)) {
+    const from = at[i];
+    const last = at[i + text.length - 1];
+    if (from < 0 || last < 0) continue;
+    if (!best || Math.abs(from - near) < Math.abs(best.from - near)) best = { text, from, to: last + 1 };
+  }
+  return best;
+}
 
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
 
@@ -118,6 +173,9 @@ export function BlockEditor({
   onChange,
   onExitTop,
   openLink: open = (href) => void window.open(href, "_blank", "noopener"),
+  links,
+  readOnly,
+  onAsk,
   style = "plain",
   notes,
   quoteTo,
@@ -128,9 +186,14 @@ export function BlockEditor({
   content: EditorDoc | null;
   assets: AssetStore;
   // Gets a reader, not the document: serialising a long page on every keystroke is slow.
-  onChange: (read: () => EditorDoc) => void;
+  onChange?: (read: () => EditorDoc) => void;
+  links?: LinkHost;
+  // An embedded page: shown, never edited or saved from here.
+  readOnly?: boolean;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
+  // Given, the selection toolbar offers Ask with the selected words.
+  onAsk?: (selected: Selected) => void;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
   notes?: NotesStore;
@@ -159,12 +222,18 @@ export function BlockEditor({
       createExtensions({
         assets,
         openLink: (href) => openRef.current(href),
+        links,
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
         },
-        onNote: (id, quote) => {
+        onNote: (id, quote, existing) => {
           if (!notesRef.current) return false;
+          if (existing) {
+            const root = editor.view.dom.closest(".ll-editor-root");
+            root?.querySelector<HTMLElement>(`.ll-note[data-note-id="${CSS.escape(id)}"] .ProseMirror`)?.focus();
+            return true;
+          }
           notesRef.current.add(id, quote);
           setNewNote(id);
           return true;
@@ -192,7 +261,7 @@ export function BlockEditor({
   const editor = useEditor({
     extensions,
     content: start ?? undefined,
-    editable: !unreadable,
+    editable: !unreadable && !readOnly,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -212,24 +281,24 @@ export function BlockEditor({
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor }) => !unreadable && onChangeRef.current(() => editor.getJSON()),
+    onUpdate: ({ editor }) => !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
 
   // Dev-only hook so QA scripts can read editor state.
-  if (import.meta.env.DEV) (window as unknown as { __editor: unknown }).__editor = editor;
+  if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
 
   // Words whose thought is gone (its Thoughts page or block was deleted) stop being noted, each
   // time the notes (re)load.
   useEffect(() => {
-    if (!notes || unreadable) return;
+    if (!notes || unreadable || readOnly) return;
     const tr = editor.state.tr;
     for (const a of anchors(tr.doc, "note")) if (!notes.read(a.id)) tr.removeMark(a.from, a.to, editor.schema.marks.note.create({ id: a.id }));
     if (tr.docChanged) editor.view.dispatch(tr.setMeta("addToHistory", false));
-  }, [editor, notes, unreadable]);
+  }, [editor, notes, unreadable, readOnly]);
 
   const pruned = useRef(false);
   useEffect(() => {
-    if (!quotes || unreadable) return;
+    if (!quotes || unreadable || readOnly) return;
     const tr = setLiveQuotes(editor.state.tr, quotes);
     if (!pruned.current) {
       pruned.current = true;
@@ -238,7 +307,7 @@ export function BlockEditor({
       tr.setMeta("addToHistory", false);
     }
     editor.view.dispatch(tr);
-  }, [editor, quotes, unreadable]);
+  }, [editor, quotes, unreadable, readOnly]);
 
   const onCitesRef = useRef(onCites);
   onCitesRef.current = onCites;
@@ -273,6 +342,36 @@ export function BlockEditor({
       focus: (position = "start") => {
         editor.commands.focus(position);
         editor.view.focus();
+      },
+      getJSON: () => editor.getJSON(),
+      setContent: (doc) => editor.commands.setContent(doc),
+      // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
+      // from a surface (the ask bar) opened in between.
+      refocus: () => editor.view.focus(),
+      selection: () => selected(editor),
+      find: (text, near) => locate(editor, text, near),
+      domRange: (from, to) => {
+        if (from >= to || from < 0 || to > editor.state.doc.content.size) return null;
+        try {
+          const a = editor.view.domAtPos(from);
+          const b = editor.view.domAtPos(to);
+          const range = document.createRange();
+          range.setStart(a.node, a.offset);
+          range.setEnd(b.node, b.offset);
+          return range;
+        } catch {
+          return null;
+        }
+      },
+      text: () => editor.getText(),
+      insertAfter: (pos, html) => {
+        const doc = editor.state.doc;
+        const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
+        editor.commands.insertContentAt($pos.depth ? $pos.after(1) : $pos.pos, html);
+      },
+      replaceRange: (from, to, html) => {
+        const size = editor.state.doc.content.size;
+        editor.commands.insertContentAt({ from: Math.min(from, size), to: Math.min(to, size) }, html);
       },
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),
@@ -347,11 +446,11 @@ export function BlockEditor({
         </Alert>
       )}
       {/* Before the text, so Tab from the title reaches it (the text keeps Tab for itself). */}
-      <TableOfContents editor={editor} />
+      {!readOnly && <TableOfContents editor={editor} />}
       <EditorContent editor={editor} />
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       <BlockHandle editor={editor} />
-      <SelectionToolbar editor={editor} note={Boolean(notes)} quote={quote} />
+      <SelectionToolbar editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} quote={quote} />
       <TableToolbar editor={editor} />
       <EmojiPicker editor={editor} />
     </div>

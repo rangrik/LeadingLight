@@ -109,8 +109,9 @@ declare module "@tiptap/core" {
 
 // The words a sidenote was written against. Notes may overlap, so a note never replaces another.
 // With no selection, a new note takes the whole line holding the cursor.
-// onAdd returns false when the page can't keep notes.
-export const Note = Mark.create<{ onAdd: ((id: string, quote: string) => boolean) | null }>({
+// onAdd returns false when the page can't keep notes; `existing` asks for the note those exact
+// words already have, rather than a second one.
+export const Note = Mark.create<{ onAdd: ((id: string, quote: string, existing?: boolean) => boolean) | null }>({
   name: "note",
   inclusive: false,
   excludes: "",
@@ -132,6 +133,8 @@ export const Note = Mark.create<{ onAdd: ((id: string, quote: string) => boolean
           const quote = state.doc.textBetween(from, to, " ").trim();
           if (!quote) return false;
           if (dispatch) {
+            const same = anchors(state.doc, "note").find((a) => a.from === from && a.to === to);
+            if (same) return onAdd(same.id, quote, true);
             const id = newId();
             if (!onAdd(id, quote)) return false;
             // The selection is done with: the note takes the cursor, and no toolbar lingers.

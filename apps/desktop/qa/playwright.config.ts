@@ -1,4 +1,9 @@
+import process from "node:process";
 import { defineConfig } from "@playwright/test";
+
+// QA_PORT picks another port when 1420 belongs to another checkout's dev server
+// (a Berth worktree has its own in BERTH_PORT).
+const port = process.env.QA_PORT ?? "1420";
 
 // Headless only. QA must never open a window on the user's screen.
 export default defineConfig({
@@ -13,15 +18,15 @@ export default defineConfig({
     { name: "gallery", grep: /@gallery/ },
   ],
   use: {
-    baseURL: "http://127.0.0.1:1420",
+    baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1280, height: 800 },
     headless: true,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "pnpm dev",
-    url: "http://127.0.0.1:1420",
+    command: `pnpm exec vite --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
     reuseExistingServer: true,
     timeout: 60_000,
   },

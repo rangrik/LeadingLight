@@ -64,11 +64,69 @@ The traffic lights are centred on the page panel's header line, 26 pt down as in
 with the header 36 px tall (sidebar-08's 64 px left too much empty bar above the lights).
 AppKit puts a light's centre 2 px above `trafficLightPosition.y`, measured offscreen, so y is 28.
 
-## 6. Sidenotes, thoughts and essays are linked pages
+## 6. Shipyard is vendored, verbatim, and synced from upstream
+
+Shipyard (cosscom/shipyard, MIT) is the same stack as ours (Tauri 2, React 19, COSS UI)
+and has themes, Settings, a type scale and grid, a shortcuts table with a Mac menu bar,
+and an agent conversation UI we want. Rewriting them would cost months and lose the
+fixes upstream keeps shipping. So its `app/src`, scripts, perf and plugin sources live
+under `vendor/shipyard` unchanged, mirroring upstream's paths; `UPSTREAM.json` records
+the commit and `scripts/sync-shipyard.sh` applies upstream's diff with a 3-way merge.
+Nothing in there is edited: our code imports it (`@/` is the vendored tree's alias, `~/`
+is ours) and overrides by alias (the shortcuts table, the theme palettes in
+`packages/themes`) or CSS. Its `index.css` is the
+Tailwind root, with the system font put back after it. The agent code runs on its mock
+fixtures (`__BERTH_DEMO__`) until LeadingLight has an agent backend. What was chosen to
+wire in, and what was left out, is in `docs/SHIPYARD.md`.
+
+## 7. Claude through the Claude Code on this Mac, driven as a subprocess
+
+The AI answers through the Claude Code the person installed and signed into, so the
+app holds no key and the subscription pays. Rust spawns that binary as `claude -p`
+speaking stream-json, with no tools, our own system prompt and an empty settings
+list, and drops any API key from the child's environment so the sign-in wins (synara
+does the same through the Agent SDK). The SDK is a typed wrapper over this very
+protocol; using it in a Tauri app would mean shipping a JavaScript runtime as a
+sidecar, so the protocol is spoken directly. The browser build has a stand-in that
+streams a fixed answer, so the panel can be tried and tested without Claude Code.
+Anthropic's terms allow this for one's own login; shipping it to others would need
+their approval.
+
+## 8. One kind of object; types and properties are data
+
+Capacities builds its basic types into the app and gives each custom type its own
+properties. A plain page can have none, and a single page can't have one of its own. We keep
+one kind of object, the page. A type is a bundle the user edits, and any page can add any
+property beyond its type's. Property definitions are shared by the whole space, as in
+Obsidian, so lists can sort and group across types. Tags, collections and daily notes are
+pages with a type and a relation, not special code. No saved queries.
+
+## 9. Links are ids in the body; backlinks are a search
+
+A link stores only the page's id, so it follows renames and icon changes. Backlinks are found by
+searching stored pages for that id rather than kept in a links table, so nothing can fall out of
+step. A change to another page (linking a mention, merging a tag) goes through that page's editor
+when it is open, so its pane never saves its own copy over the change. Every page's summary and
+properties stay in memory, which is what lists, cards and the link menu read.
+
+## 10. Asking happens by the words; agents are Claude Code's agent files
+
+Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
+field that sends at once, and Quote in reply for a longer question in the panel. The panel's
+field is a composer in synara's spirit: `@` mentions an agent or another page, `/` offers
+things to do with the words, and the model and effort sit in its footer. Agents are not a
+new format: they are Claude Code's agent files (name, description and model in the front
+matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
+three that ship with the app. A mentioned agent's prompt leads the system prompt and its model
+wins for that question; a mentioned page's text goes along as context. Mentions sit as chips
+above the field rather than inline, which keeps the field a plain textarea.
+
+## 11. Sidenotes, thoughts and essays are linked pages
 
 A sidenote's anchor is a `note` mark in the page; its text is a `thought` block in the page's
 Thoughts page, so all raw thoughts on a page can be read in one place. An essay is a page too.
 The links live in `properties`: the source keeps `thoughts` and `essay` ids, and each child keeps
 `parent` and `role`. Text quoted into an essay gets a `cited` mark, and the essay a `cite` chip;
 both point at each other with `ll:<page id>#<anchor id>` hrefs, which the app opens itself.
-This is ahead of M2's `links` table on purpose: when that lands, these move into it.
+As with links (9), what can't fall out of step is derived: quoted words show as quoted only
+while the essay holds their quote, and noted words as noted only while their thought exists.

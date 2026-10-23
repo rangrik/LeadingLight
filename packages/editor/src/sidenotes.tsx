@@ -60,6 +60,7 @@ function NoteEditor({
   assets,
   openLink,
   autoFocus,
+  onAutoFocus,
   quote,
 }: {
   id: string;
@@ -68,6 +69,7 @@ function NoteEditor({
   assets: AssetStore;
   openLink: (href: string) => void;
   autoFocus: boolean;
+  onAutoFocus: () => void;
   // The words the note is written against, now.
   quote: () => string;
 }) {
@@ -91,9 +93,27 @@ function NoteEditor({
     },
   });
   useEffect(() => {
-    if (autoFocus) editor.commands.focus("end");
+    if (!autoFocus) return;
+    editor.commands.focus("end");
+    onAutoFocus();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // The thought changed elsewhere (its Thoughts page, open in a pane): show it. While this note is
+  // being typed in it waits, and catches up on focus and on blur, so the next keystroke here never
+  // writes an older copy over it.
+  useEffect(() => {
+    const sync = () => {
+      const body = store.current.read(id) ?? [{ type: "paragraph" }];
+      if (JSON.stringify(body) !== JSON.stringify(editor.getJSON().content)) editor.commands.setContent({ type: "doc", content: body }, { emitUpdate: false });
+    };
+    if (!editor.isFocused) sync();
+    editor.on("focus", sync);
+    editor.on("blur", sync);
+    return () => {
+      editor.off("focus", sync);
+      editor.off("blur", sync);
+    };
+  }, [editor, notes, id]);
   return <EditorContent editor={editor} />;
 }
 
@@ -114,10 +134,14 @@ export function Sidenotes({
   const ids = useMemo(() => (key ? key.split(" ") : []), [key]);
   const cards = useRef(new Map<string, HTMLElement>());
   const [spots, setSpots] = useState<Record<string, Spot>>({});
+  const spotsRef = useRef(spots);
+  spotsRef.current = spots;
   const [tops, setTops] = useState<Record<string, number>>({});
   const [edge, setEdge] = useState(0);
   const [hovered, setHovered] = useState<string | null>(null);
   const [focused, setFocused] = useState<string | null>(null);
+  // A new note takes the cursor once; a card remounting later must not take it back.
+  const autoFocused = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const active = hovered ?? focused;
 
@@ -136,7 +160,11 @@ export function Sidenotes({
         const span = editor.view.dom.querySelector(`[data-note="${CSS.escape(id)}"]`);
         const words = span?.getClientRects()[0];
         const chip = editor.view.dom.querySelector(`[data-note-chip="${CSS.escape(id)}"]`)?.getBoundingClientRect();
-        if (!span || !words || !chip) continue;
+        // Not measurable for a moment (its pane re-laying out): keep where it was.
+        if (!span || !words || !chip) {
+          if (spotsRef.current[id]) next[id] = spotsRef.current[id];
+          continue;
+        }
         // The note's first baseline on its words' first baseline.
         next[id] = { top: words.top - box.top + baselineOffset(getComputedStyle(span)) - note, line: chip.top - box.top + chip.height / 2 };
       }
@@ -239,6 +267,7 @@ export function Sidenotes({
             className="ll-note"
             data-active={active === id || undefined}
             data-new={focusId === id || undefined}
+            data-note-id={id}
             key={id}
             onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setFocused(null)}
             onFocus={() => setFocused(id)}
@@ -258,10 +287,11 @@ export function Sidenotes({
             <span className="ll-note-num">{i + 1}</span>
             <NoteEditor
               assets={assets}
-              autoFocus={focusId === id}
+              autoFocus={focusId === id && autoFocused.current !== id}
               id={id}
               label={`Sidenote ${i + 1}`}
               notes={notes}
+              onAutoFocus={() => (autoFocused.current = id)}
               openLink={openLink}
               quote={() => {
                 const a = anchors(editor.state.doc, "note").find((x) => x.id === id);

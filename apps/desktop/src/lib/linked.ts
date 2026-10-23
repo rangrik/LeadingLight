@@ -1,6 +1,8 @@
-import { type LLObject, type ObjectSummary, objects } from "./objects";
+import type { LLObject, ObjectSummary } from "./objects";
+import { createPage } from "./space";
 
-// A page's Thoughts page and essay hang off it; the links live in `properties` (DECISIONS.md, 6).
+// A page's Thoughts page and essay hang off it; the links live in `properties` (DECISIONS.md, 11).
+// Their keys have no property definitions, so they're kept but never shown as properties.
 export type Role = "thoughts" | "essay";
 
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -9,12 +11,8 @@ export const roleOf = (p: ObjectSummary) => str(p.properties.role) as Role | und
 export const childOf = (p: ObjectSummary, role: Role) => str(p.properties[role]);
 
 // Makes the child page; the caller links the parent to it.
-export async function createChild(parent: ObjectSummary, role: Role): Promise<LLObject> {
-  const obj = await objects.create();
-  const patch = { title: role === "thoughts" ? "Thoughts" : "", properties: { parent: parent.id, role } };
-  await objects.update(obj.id, patch);
-  return { ...obj, ...patch };
-}
+export const createChild = (parent: string, role: Role): Promise<LLObject> =>
+  createPage({ title: role === "thoughts" ? "Thoughts" : "", properties: { parent, role } });
 
 // In-app links: `ll:<page id>#<anchor id>`.
 export function parseHref(href: string) {

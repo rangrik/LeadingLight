@@ -1,7 +1,8 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
 // Changes: pages instead of projects, a New page action and empty text, rows select instead of
 // linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet);
-// a page's Thoughts page and essay hang under it on a tree (see Children).
+// rows can be dragged beside the open page; a page's Thoughts page and essay hang under it on a
+// tree (see Children).
 import { Ellipsis, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect } from "react";
@@ -21,7 +22,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 
-type Child = { name: string; isActive: boolean; onSelect: () => void; onDelete: () => void };
+type Child = { name: string; isActive: boolean; onSelect: () => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void; onDelete: () => void };
 
 // The tree after xevrion's sidebar submenu (MIT, github.com/xevrion/ui-lab): a trunk from the page
 // with a curved branch to each child, and the branch to the open child drawn in the primary colour,
@@ -69,7 +70,14 @@ function Children({ items }: { items: Child[] }) {
         </svg>
         {items.map((c) => (
           <SidebarMenuSubItem key={c.name}>
-            <SidebarMenuSubButton aria-current={c.isActive ? "page" : undefined} className="pe-8" isActive={c.isActive} onClick={c.onSelect} render={<button type="button" />}>
+            <SidebarMenuSubButton
+              aria-current={c.isActive ? "page" : undefined}
+              className="pe-8"
+              isActive={c.isActive}
+              onClick={c.onSelect}
+              onPointerDown={c.onDrag}
+              render={<button type="button" />}
+            >
               <span>{c.name}</span>
             </SidebarMenuSubButton>
             <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" onDelete={c.onDelete} />
@@ -113,6 +121,7 @@ export function NavProjects({
     icon: React.ReactNode;
     isActive: boolean;
     onSelect: () => void;
+    onDrag: (e: React.PointerEvent<HTMLElement>) => void;
     onDelete: () => void;
     open: boolean;
     children: Child[];
@@ -129,7 +138,12 @@ export function NavProjects({
       <SidebarMenu>
         {projects.map((item, i) => (
           <SidebarMenuItem key={i}>
-            <SidebarMenuButton aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect}>
+            <SidebarMenuButton
+              aria-current={item.isActive ? "page" : undefined}
+              isActive={item.isActive}
+              onClick={item.onSelect}
+              onPointerDown={item.onDrag}
+            >
               {item.icon}
               <span>{item.name}</span>
             </SidebarMenuButton>
