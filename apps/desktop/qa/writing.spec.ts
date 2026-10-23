@@ -35,11 +35,44 @@ test("Focus mode keeps the line being written in the middle", async ({ page }) =
   expect(Math.abs(off)).toBeLessThan(4);
 });
 
-// Seam: Harper's wasm and worker load through the bundler and report back to the editor and header.
-// Catches a build where grammar never arrives, so nothing is underlined or counted.
-test("Grammar check underlines and counts a misspelling", async ({ page }) => {
+// Seam: Harper's wasm and worker load through the bundler and report back to the editor and header,
+// and the reason reaches COSS's tooltip. Catches grammar that never arrives, or the slow native tip.
+test("Grammar check underlines, explains and counts a misspelling", async ({ page }) => {
   await open(page, {});
   await page.keyboard.type("I recieved it.");
-  await expect(page.getByRole("textbox", { name: "Page body" }).locator(".ll-spelling")).toHaveText("recieved", { timeout: 15000 });
+  const word = page.getByRole("textbox", { name: "Page body" }).locator(".ll-spelling");
+  await expect(word).toHaveText("recieved", { timeout: 15000 });
   await expect(page.getByRole("button", { name: "Counts" })).toContainText("1 misspelling");
+  await word.hover();
+  await expect(page.locator("[data-slot=tooltip-popup]")).toContainText("recieved", { timeout: 1000 });
+});
+
+// Seam: the counts share a card header with the page's title. Catches the title cut to "L…"
+// while counts still show, or a count cut in half, in narrow cards side by side.
+test("Narrow cards keep the title whole and show only whole counts", async ({ page }) => {
+  await open(page, {});
+  await page.keyboard.type("One two three. I recieved teh note basically.");
+  await page.getByRole("textbox", { name: "Title" }).fill("Left");
+  const nav = page.getByRole("navigation", { name: "Pages" });
+  for (const title of ["Middle", "Right"]) {
+    const rows = await nav.getByRole("listitem").count();
+    await nav.getByRole("button", { name: "New page" }).click();
+    await expect(nav.getByRole("listitem")).toHaveCount(rows + 1);
+    await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
+    await page.getByRole("textbox", { name: "Title" }).fill(title);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Some words to count here.");
+  }
+  await nav.getByRole("button", { name: "Left", exact: true }).click();
+  await nav.getByRole("button", { name: "Middle", exact: true }).click({ modifiers: ["Shift"] });
+  await nav.getByRole("button", { name: "Right", exact: true }).click({ modifiers: ["Shift"] });
+  const headers = page.locator("[data-pane-area] section header");
+  await expect(headers).toHaveCount(3);
+  for (const header of await headers.all()) {
+    const title = header.locator("li").last().locator("span").last();
+    expect(await title.evaluate((t) => t.scrollWidth <= t.clientWidth)).toBe(true);
+    const edge = await header.locator("[aria-label=Counts]").evaluate((b) => b.parentElement!.getBoundingClientRect().right + 0.5);
+    for (const count of await header.locator("[data-count]").all())
+      if (await count.isVisible()) expect((await count.boundingBox())!.x + (await count.boundingBox())!.width).toBeLessThanOrEqual(edge);
+  }
 });

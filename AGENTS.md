@@ -78,6 +78,26 @@ pnpm install:app                           # build the Mac app and put it in /Ap
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
 
+## Traps
+
+Each of these passed every check here and still failed for the user, or cost hours.
+
+- Test the way the user will. QA once opened two panes by calling `openBeside()`, and the user
+  was then told to Shift-click a sidebar row, which did not open a pane. Do every step you give
+  the user yourself, the same way, first. The Berth browser can't send modifier clicks or drags;
+  use Playwright for those (`click({ modifiers: ["Shift"] })`, `page.mouse`).
+- Headless QA can't see the browser's own UI: `title` tooltips, spellcheck underlines, native
+  menus. A `title` tooltip also waits 2–4 s on macOS. Never use `title` for UI; use COSS's
+  Tooltip (`packages/editor/src/mark-tip.tsx` anchors one to words in the editor).
+- After merging main, run all of the change's scenarios again. Main once gave every page its own
+  card and header; the counts merged without a conflict and were still wrong in a split.
+- Test a long page: 2000 paragraphs (`__editor.commands.setContent`), timing keys against 16 ms.
+  Three things made typing slow there: a `:has()` rule on a page-wide container (Chromium
+  restyles the whole page on every key), thousands of ProseMirror node decorations (rebuilding
+  the set is quadratic), and redrawing inline decorations around the cursor on every key.
+- An ellipsis cuts text on a fraction of a pixel. Whatever shares a row with truncating text
+  should take only the room left (`flex: 1 1 0; min-width: 0`), not shrink beside it.
+
 ## Rules for any developer (human or agent)
 
 - Comments and docstrings: under 2 lines, simple words, only the "why".

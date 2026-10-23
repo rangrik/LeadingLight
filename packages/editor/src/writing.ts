@@ -127,10 +127,10 @@ function checkBlock(block: PMNode, pos: number, writing: Writing): Decoration[] 
   if (writing.syntax.length)
     for (const { from, to, part } of tagsOf(a) ?? []) if (writing.syntax.includes(part)) decos.push(Decoration.inline(at + from, at + to, { class: `ll-${part}` }));
   for (const { from, to, check } of a.style)
-    if (writing.style.includes(check)) decos.push(Decoration.inline(at + from, at + to, { class: "ll-style", title: LABEL[check] }));
+    if (writing.style.includes(check)) decos.push(Decoration.inline(at + from, at + to, { class: "ll-style", "data-tip": LABEL[check] }));
   if (writing.grammar)
     for (const m of mistakesOf(a) ?? [])
-      decos.push(Decoration.inline(at + m.from, at + m.to, { class: isSpelling(m.kind) ? "ll-spelling" : "ll-grammar", title: m.message }));
+      decos.push(Decoration.inline(at + m.from, at + m.to, { class: isSpelling(m.kind) ? "ll-spelling" : "ll-grammar", "data-tip": m.message }));
   return decos;
 }
 

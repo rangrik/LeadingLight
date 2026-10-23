@@ -59,7 +59,9 @@ async function check(text: string) {
       text,
       lints.map((lint) => {
         const span = lint.span();
-        const mistake = { from: span.start, to: span.end, kind: lint.lint_kind(), message: lint.message() };
+        // Harper writes words in backticks, as Markdown; the tooltip shows plain text.
+        const message = lint.message().replace(/`([^`]+)`/g, "“$1”");
+        const mistake = { from: span.start, to: span.end, kind: lint.lint_kind(), message };
         span.free();
         lint.free();
         return mistake;

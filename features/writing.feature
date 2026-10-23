@@ -74,7 +74,7 @@ Feature: Writing tools
 
   Scenario: Style check strikes through fillers, redundancies and clichés
     When I press Alt+Shift+Meta+D
-    Then "Basically" is struck through, and hovering it says "Filler"
+    Then "Basically" is struck through, and pointing at it says "Filler" in the app's tooltip
     When I type "We must plan ahead at the end of the day."
     Then "plan ahead" says "Redundancy" and "at the end of the day" says "Cliché"
     And the words are still there: copying the page copies them as typed
@@ -87,7 +87,10 @@ Feature: Writing tools
     Given the body also reads "This is a apple. I recieved teh letter."
     Then within a few seconds "recieved" and "teh" have a red dotted underline (spelling)
     And "a" before "apple" has a green dotted underline (grammar)
-    And pointing at one shows Harper's reason, such as "Incorrect indefinite article."
+    And pointing at one shows Harper's reason, such as "Incorrect indefinite article.", in the
+      app's tooltip after 0.3 s, not the browser's slow one, with words quoted “like this”
+    And moving to the next marked word, straight or across plain text, moves it at once
+    And on a mark that wraps onto two lines it points at the line under the pointer
     And the browser's own spelling underline is off, so no word has two
     And code blocks, inline code and links to pages are never checked, and underlines land on the
       right letters after emoji
@@ -103,8 +106,10 @@ Feature: Writing tools
       and its Syntax highlight colour, and the parts' names only where the panel is wide
     And parts of speech, fillers and grammar are counted whether or not their marks are shown
     And kinds with none are left out of the line
-    And the counts sit on the crumbs' text baseline, and a narrow panel shows as many as fit, in
-      that order, never wrapping; pointing at a dot names it, and anywhere else lists every number
+    And the counts sit on the crumbs' text baseline and take only the room the title leaves: the
+      title is never cut while a count shows, a narrow card shows only the counts that fit whole,
+      in that order, and one too narrow for the first shows none and no divider
+    And pointing at a dot names it in the app's tooltip
     When I select "the quick fox"
     Then they count the selection: "3 of 14 words" and the selection's own parts and issues
     When I type, the counts follow within a moment
@@ -114,10 +119,11 @@ Feature: Writing tools
     When I press Shift+Meta+W
     Then the counts are gone, and come back with it again
 
-  Scenario: Side by side, the header counts the page being written in
-    Given two pages are open side by side and Focus mode and Counts are on
-    Then the counts are those of the pane last worked in, and change when I click into the other
-    And only the pane being written in dims; the other shows its page as usual
+  Scenario: Side by side, each card counts its own page
+    Given "Left" is open, and I Shift-click "Right" in the sidebar, or drag it beside "Left"
+    And Focus mode and Counts are on
+    Then each card's header counts its own page
+    And only the card being written in dims; the other shows its page as usual
 
   Scenario: A long page stays quick
     Given a page of 2000 paragraphs with the tools as they start (Grammar check and Counts on)

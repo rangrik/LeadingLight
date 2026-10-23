@@ -34,3 +34,14 @@ test("Two pages side by side each keep their own edits", async ({ page }) => {
   await nav(page).getByRole("button", { name: "Right", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("east");
 });
+
+// Seam: the sidebar row's click, with Shift, against the panes. Catches Shift-click replacing the
+// page in view instead of opening beside it, as Shift on a link does.
+test("Shift-clicking a sidebar row opens the page beside", async ({ page }) => {
+  await page.goto("/");
+  await create(page, "Left");
+  await create(page, "Right");
+  await nav(page).getByRole("button", { name: "Left", exact: true }).click({ modifiers: ["Shift"] });
+  await expect(page.getByRole("region", { name: "Left", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Right", exact: true })).toBeVisible();
+});

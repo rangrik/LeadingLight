@@ -8,7 +8,7 @@ export function NavTypes({
     name: string;
     icon: React.ReactNode;
     isActive: boolean;
-    onSelect: () => void;
+    onSelect: (e: React.MouseEvent) => void;
     onDrag: (e: React.PointerEvent<HTMLElement>) => void;
   }[];
 }) {

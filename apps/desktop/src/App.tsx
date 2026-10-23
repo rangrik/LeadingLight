@@ -22,7 +22,6 @@ import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
-import { goToDay } from "~/components/daily-bar";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
@@ -30,13 +29,13 @@ import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
-import { dailyFor, today } from "~/lib/daily";
+import { dailyFor, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
 import { pageLabel } from "~/lib/labels";
 import { parentOf, roleOf } from "~/lib/linked";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, openPage, panes, showOnly } from "~/lib/panes";
+import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
@@ -159,6 +158,9 @@ export default function App() {
     return () => window.removeEventListener("ll:make-room", fold);
   }, []);
 
+  // A row opens its page; Shift opens it beside the one in front, as Shift on a link does.
+  const opener = (id: string) => (e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
+
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   const navPages = pages
@@ -169,7 +171,7 @@ export default function App() {
         name: roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title),
         icon: <RowIcon icon={iconFor(p)} />,
         isActive: p.id === current,
-        onSelect: () => openPage(p.id),
+        onSelect: opener(p.id),
         onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
         onDelete: () => setPendingDelete(p),
         open: p.id === current || kids.some((c) => c.id === current),
@@ -179,7 +181,7 @@ export default function App() {
             name,
             isActive: c.id === current,
             // An essay opens beside its page.
-            onSelect: () => (roleOf(c) === "essay" ? void openEssay(p.id) : openPage(c.id)),
+            onSelect: (e: React.MouseEvent) => (roleOf(c) === "essay" ? void openEssay(p.id) : opener(c.id)(e)),
             onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: c.id, label: name }),
             onDelete: () => setPendingDelete(c),
           };
@@ -190,7 +192,7 @@ export default function App() {
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,
     isActive: current === typeView(t.id),
-    onSelect: () => openPage(typeView(t.id)),
+    onSelect: opener(typeView(t.id)),
     onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
   }));
 
@@ -212,7 +214,7 @@ export default function App() {
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
-        <AppSidebar onCreate={create} onToday={() => void goToDay(today())} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
+        <AppSidebar onCreate={create} onToday={(e) => void ensureDaily(today()).then((id) => opener(id)(e))} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {root ? (
             <PaneArea windowToggle={mac} />
