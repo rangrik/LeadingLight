@@ -7,7 +7,7 @@ import type { Quote } from "~/lib/ask";
 
 export type Status = "running" | "done" | "failed" | "declined";
 export type Item =
-  | { kind: "user"; text: string; quote?: string }
+  | { kind: "user"; text: string; quote?: string; files?: string[] }
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string; start: number; end?: number }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: Status; output?: string }

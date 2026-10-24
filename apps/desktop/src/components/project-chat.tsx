@@ -3,13 +3,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { toastManager } from "@leadinglight/ui/components/toast";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
-import { type ChatSettings, Composer } from "~/components/composer";
+import { type ChatSettings, type Command, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
-import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, stop, watch } from "~/lib/project-runtime/chat";
+import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask } from "~/lib/project-runtime/transport";
@@ -49,7 +50,11 @@ function turnsOf(chat: Chat): Shown[] {
   const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [] }));
   const last = () => out[out.length - 1] ?? (out.push({ items: [], files: [] }), out[0]);
   for (const t of chat.window.items as TranscriptItem[]) {
-    if (t.kind === "user") out.push({ items: [{ kind: "user", text: t.text ?? "" }], files: [] });
+    if (t.kind === "user") {
+      // Files sent with it show by name; the runtime keeps them under a stamped name.
+      const { said, files } = splitAttached(t.text ?? "");
+      out.push({ items: [{ kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) }], files: [] });
+    }
     // How a turn ended is said by a notice: stopped, or an error.
     else if (t.kind === "notice" && t.notice === "interrupted") last().stopped = true;
     else if (t.kind === "notice" && t.level === "error") last().error = t.text;
@@ -84,6 +89,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [list, setList] = useState<Conversation[]>([]);
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
   const [file, setFile] = useState<string | null>(null);
+  const [attached, setAttached] = useState<File[]>([]);
+  const [commands, setCommands] = useState<Command[]>([]);
   // A new chat's settings start as Settings › AI's and stay this chat's own.
   const [fresh, setFresh] = useState(() => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan }));
   const key = current ?? `new:${pageId}`;
@@ -104,6 +111,17 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const conv = list.find((c) => c.id === current) ?? null;
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);
+  // The agent's own skills and commands, those that work in a chat (not the ones needing its terminal).
+  const live = chat.session && !chat.session.exited ? chat.session.name : null;
+  useEffect(() => {
+    setCommands([]);
+    if (!live) return;
+    type Listed = { name: string; description?: string; kind?: string; local?: boolean; screen?: boolean };
+    void ask<{ commands: Listed[] }>("GET", `/v1/sessions/${live}/commands`).then(
+      (r) => setCommands(r.commands.filter((c) => c.kind !== "builtin" || (!c.local && !c.screen)).map((c) => ({ id: c.name, label: c.name, question: `${c.name} `, send: false, description: c.description }))),
+      () => {},
+    );
+  }, [live]);
   const waitingOn = sending(chat);
   useEffect(() => void (stuck.current && log.current?.scrollTo({ top: log.current.scrollHeight })));
   // The request in front: what the agent waits on now, oldest first (features/agent-interactions.feature).
@@ -132,14 +150,21 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         ...accessOf(started.mode, agent),
         model: started.model ?? "",
         effort: started.effort ?? "",
-        locked: true,
+        // It changes between turns, while its agent runs.
+        locked: !live || busy,
+        models: agent === "codex" ? "gpt" : "claude",
         accessChoices: ACCESS_IN_FOLDER[agent],
-        onChange: (p) => void setMode(key, modeFor({ ...accessOf(started.mode, agent), ...p }, agent)).catch(() => {}),
+        onChange: (p) =>
+          void (p.model || p.effort ? setModel(key, p.model ?? started.model ?? "", p.effort ?? started.effort ?? "") : setMode(key, modeFor({ ...accessOf(started.mode, agent), ...p }, agent))).catch(
+            (err) => toastManager.add({ type: "error", title: String(err.message ?? err) }),
+          ),
       }
     : { ...mine, accessChoices: ACCESS_IN_FOLDER[agent], onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
   const go = (text: string) => {
     stuck.current = true;
-    void send(key, location, text, settings).then((c) => {
+    const files = attached;
+    void send(key, location, text, settings, files).then((c) => {
+      setAttached((a) => a.filter((f) => !files.includes(f)));
       if (!current) {
         adopt(key, c.id);
         setCurrent(c.id);
@@ -248,7 +273,28 @@ export function ProjectChat({ pageId }: { pageId: string }) {
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
         {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
-        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder={`Ask ${NAME[agent]} to work in the folder…`} ready restore={chat.restore} settings={settings} />
+        <Composer
+          agents={[]}
+          busy={busy}
+          commands={commands}
+          fieldRef={field}
+          files={{
+            names: attached.map((f) => f.name),
+            add: (fs) => {
+              // The runtime takes files up to 20 MB.
+              for (const f of fs.filter((f) => f.size > 20 << 20)) toastManager.add({ type: "error", title: `${f.name} is ${Math.round(f.size / (1 << 20))} MB; files can be up to 20 MB.` });
+              setAttached((a) => [...a, ...fs.filter((f) => f.size <= 20 << 20)]);
+            },
+            remove: (i) => setAttached((a) => a.filter((_, k) => k !== i)),
+          }}
+          onSend={(q) => go(q)}
+          onStop={() => void stop(key)}
+          pages={[]}
+          placeholder={`Ask ${NAME[agent]} to work in the folder…`}
+          ready
+          restore={chat.restore}
+          settings={settings}
+        />
       </div>
       <FilePreview file={file} location={location} onClose={() => setFile(null)} />
     </div>

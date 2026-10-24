@@ -54,7 +54,6 @@ Feature: A project's chat
     Then it asks first, and the menu still says Ask for approval
     When I turn Plan mode on from +
     Then its agent plans and changes nothing
-    And the model and effort show what the chat started with, and can't be changed in it
 
   Scenario: A new chat's settings are its own
     When I start a new chat in Full access with Sonnet
@@ -109,7 +108,7 @@ Feature: A project's chat
 
   Scenario: A started chat keeps its agent
     Given a Codex chat and a Claude chat in "Research"
-    Then each shows its own model, which can't be changed in it
+    Then each one's model menu offers only its own agent's models
     And choosing one from the chat menu shows its turns and continues with its agent
 
   Scenario: Codex chats come back
@@ -119,4 +118,35 @@ Feature: A project's chat
   Scenario: No Codex
     Given Codex is not installed, or not signed in
     Then the model menu says so where the GPT models would be, and a new chat stays with Claude
+
+  # Model, effort, files and the agent's own skills and tools (slice 5b)
+
+  Scenario: Change the model and effort of a started chat
+    Given a Claude chat that has answered once with Sonnet
+    When I pick Haiku and Medium effort in its model menu and send "Which model are you?"
+    Then the agent answers as Haiku, and the menu and the runtime's conversation say Haiku, Medium
+    And a Codex chat changed the same way runs its next turn with the new model and effort
+    And while a turn runs the model menu waits until it ends
+
+  Scenario: Attach files to a message
+    When I choose + › Add files… and pick notes.png and a 3 MB report.pdf
+    Then both show as chips above the field, each with a way to take it off
+    When I send "What is in these files?"
+    Then my message shows the two file names, and the agent describes both
+    And nothing was written into "~/LL QA/My Project" (the files are kept with the chat)
+    And a file over 20 MB is refused with its size, and nothing is sent
+
+  Scenario: The agent's own skills
+    Given a chat that has started
+    When I type "/"
+    Then the menu lists the agent's skills and commands that work in a chat, with their descriptions
+    And not the ones that need its terminal
+    When I pick one and send
+    Then the agent runs it
+
+  Scenario: The agent's own MCP tools
+    Given an MCP server configured in my Claude Code settings
+    When I ask a Claude chat to use one of its tools
+    Then the tool runs (asking first in Ask for approval) and its result shows in the answer
+    And my Claude Code and Codex settings, and my MCP servers, are as they were
 

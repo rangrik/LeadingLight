@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
+import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
 import { memo, type Ref, useEffect, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
@@ -91,6 +91,17 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
           <div className="max-w-[85%] rounded-2xl bg-muted px-3 py-2 dark:bg-foreground/10">
             {user.quote && <blockquote className="mb-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground">{user.quote}</blockquote>}
             <p className="whitespace-pre-wrap break-words">{user.text}</p>
+            {/* A project chat's message names the files sent with it. */}
+            {user.files && user.files.length > 0 && (
+              <p className="mt-1 flex flex-wrap gap-x-2 text-muted-foreground text-xs">
+                {user.files.map((f) => (
+                  <span className="inline-flex items-center gap-1" key={f}>
+                    <Paperclip className="size-3" />
+                    {f}
+                  </span>
+                ))}
+              </p>
+            )}
           </div>
         </div>
       )}

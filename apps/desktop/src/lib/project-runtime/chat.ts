@@ -62,6 +62,21 @@ export const accessOf = (mode: string | undefined, agent: Agent) => ({
   plan: mode === "plan",
 });
 
+// A message's files go with it as their paths, which is how agents take them; the runtime keeps
+// them with the conversation, out of the folder.
+const ATTACHED = "\n\nAttached:\n";
+export const splitAttached = (text: string) => {
+  const [said, list] = text.split(ATTACHED);
+  return { said, files: list ? list.split("\n").filter(Boolean) : [] };
+};
+const base64 = async (f: File) => {
+  const b = new Uint8Array(await f.arrayBuffer());
+  let s = "";
+  for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+const upload = (session: string, files: File[]) => Promise.all(files.map(async (f) => (await ask<{ path: string }>("POST", `/v1/sessions/${session}/attachments`, { name: f.name, data: await base64(f) })).path));
+
 // Answers being written are kept on this Mac by conversation, so a reload keeps them.
 const answersKey = (conv: string) => `ll.answers.${conv}`;
 const loadAnswers = (conv: string): Record<string, AnswerDraft> => {
@@ -85,7 +100,7 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
   const window = page && page.source !== "none" ? merge(w, page) : w;
   // A sent message is sending until the record has it.
-  const added = window.items.filter((i) => i.kind === "user" && !w.items.some((o) => o.id === i.id)).map((i) => i.text?.trim());
+  const added = window.items.filter((i) => i.kind === "user" && !w.items.some((o) => o.id === i.id)).map((i) => splitAttached(i.text ?? "").said.trim());
   const seen = Object.entries(before.texts).filter(([, text]) => added.includes(text.trim())).map(([id]) => id);
   const now = chatOf(key).get();
   // A session gone or ended can't take what its agent asked; the runtime would refuse it too.
@@ -153,7 +168,7 @@ export function watch(key: string, conv: Conversation): () => void {
 
 // Sends text: a new chat starts its agent in the folder; an ended one is resumed first. Each
 // message carries a key of its own, so a send repeated after a lost answer is one message.
-export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan">): Promise<Conversation> {
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan">, files: File[] = []): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
@@ -162,12 +177,15 @@ export async function send(key: string, location: string, text: string, prefs: P
     await refreshFolders();
     if ([...folders.get().values()].some((f) => f.folder.location === location && f.missing)) throw new Error("The folder isn't there any more.");
     let conv = chatOf(key).get().conv;
+    const full = async (session: string) => (files.length ? `${text}${ATTACHED}${(await upload(session, files)).join("\n")}` : text);
     if (!conv) {
       const name = `chat-${crypto.randomUUID().slice(0, 8)}`;
       const agent = agentOf(prefs.model);
-      await ask("POST", "/v1/sessions", { name, location, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, prompt: text, title: text.split("\n")[0] });
+      // With files the agent starts without a prompt, so they are there before the message naming them.
+      await ask("POST", "/v1/sessions", { name, location, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, title: text.split("\n")[0], ...(!files.length && { prompt: text }) });
       conv = (await listChats(location)).find((c) => c.session === name) ?? null;
       if (!conv) throw new Error("The runtime didn't keep the chat.");
+      if (files.length) await ask("POST", `/v1/sessions/${name}/send`, { text: await full(name), when: "now", idem_key: id });
     } else {
       // The list can be behind: a session gone or ended since is resumed too.
       const s0 = chatOf(key).get().session;
@@ -175,7 +193,7 @@ export async function send(key: string, location: string, text: string, prefs: P
         const s = await ask<Session>("POST", `/v1/conversations/${conv.id}/resume`, {});
         conv = { ...conv, session: s.name, live: true };
       }
-      await ask("POST", `/v1/sessions/${conv.session}/send`, { text, when: "now", idem_key: id });
+      await ask("POST", `/v1/sessions/${conv.session}/send`, { text: await full(conv.session ?? ""), when: "now", idem_key: id });
     }
     patch(key, { conv, submissions: acceptMessageSubmission(chatOf(key).get().submissions, id) });
     if (watching.has(key)) watching.set(key, { key, conv });
@@ -223,15 +241,18 @@ async function deliver(key: string, r: RuntimeRequest, again: boolean) {
   settleAnswers(key);
 }
 
-// Access and Plan mode, changed in a started chat: its agent takes them from its next step.
-export async function setMode(key: string, mode: string): Promise<void> {
+// Access, Plan mode, model and effort, changed in a started chat: its agent takes them from its
+// next step, and the chat keeps them.
+async function change(key: string, route: "mode" | "model", next: Partial<Conversation>): Promise<void> {
   const c = chatOf(key).get();
   if (!c.conv?.session || !c.session || c.session.exited) return;
-  await ask("POST", `/v1/sessions/${c.conv.session}/mode`, { mode });
-  const conv = { ...c.conv, mode };
+  await ask("POST", `/v1/sessions/${c.conv.session}/${route}`, next);
+  const conv = { ...c.conv, ...next };
   if (watching.has(key)) watching.set(key, { key, conv });
   patch(key, { conv });
 }
+export const setMode = (key: string, mode: string) => change(key, "mode", { mode });
+export const setModel = (key: string, model: string, effort: string) => change(key, "model", { model, effort });
 
 export async function stop(key: string): Promise<void> {
   const name = chatOf(key).get().conv?.session;

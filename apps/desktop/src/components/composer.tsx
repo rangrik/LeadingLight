@@ -1,5 +1,5 @@
-import { ArrowUp, AtSign, Bot, Check, ChevronDown, FileText, Gauge, Hand, ListChecks, Plus, ShieldAlert, ShieldCheck, Slash, Square, X } from "lucide-react";
-import { type RefObject, useEffect, useState } from "react";
+import { ArrowUp, AtSign, Bot, Check, ChevronDown, FileText, Gauge, Hand, ListChecks, Paperclip, Plus, ShieldAlert, ShieldCheck, Slash, Square, X } from "lucide-react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import {
   Composer as Frame,
@@ -36,13 +36,15 @@ export type Mention = { kind: "agent" | "page"; id: string; name: string };
 // What a chat runs with. Without it the composer edits Settings › AI; a project chat keeps its own.
 export type ChatSettings = Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & {
   onChange: (p: Partial<Pick<AiPrefs, "model" | "effort" | "access" | "plan">>) => void;
-  // Set when the chat started, so not offered (a started project chat's model).
+  // Not offered now (a project chat's model while its turn runs, or with no agent running).
   locked?: boolean;
+  // Only one agent's models: a started project chat keeps its agent.
+  models?: "claude" | "gpt";
   // The access a chat's agent has, in its words; others aren't offered.
   accessChoices?: { value: Access; description: string }[];
 };
 
-export type Command = { id: string; label: string; question: string; send: boolean };
+export type Command = { id: string; label: string; question: string; send: boolean; description?: string };
 export const COMMANDS: Command[] = [
   { id: "explain", label: "Explain", question: "Explain this", send: true },
   { id: "summarize", label: "Summarize", question: "Summarize this", send: true },
@@ -76,6 +78,7 @@ export function Composer({
   commands = COMMANDS,
   restore,
   settings,
+  files,
 }: {
   ready: boolean;
   busy: boolean;
@@ -90,6 +93,8 @@ export function Composer({
   // Words given back: a message not sent, or an answer that can't go now.
   restore?: { text: string; at: number } | null;
   settings?: ChatSettings;
+  // Files to go with the next message (a project chat's), and taking one off or adding more.
+  files?: { names: string[]; add: (f: File[]) => void; remove: (i: number) => void };
 }) {
   const prefs = useAiPrefs();
   const s = settings ?? { ...prefs, onChange: setAiPrefs };
@@ -103,7 +108,7 @@ export function Composer({
         ...pages.map((p) => ({ id: `page:${p.id}`, label: p.title || "Untitled", description: "Page", kind: "page", icon: <FileText /> })),
       ],
     },
-    { character: "/", items: commands.map((c) => ({ id: c.id, label: c.label, description: c.question.trim(), type: "action" as const, icon: <Slash /> })) },
+    { character: "/", items: commands.map((c) => ({ id: c.id, label: c.label, description: c.description ?? c.question.trim(), type: "action" as const, icon: <Slash /> })) },
   ];
   const send = (draft: ComposerValue) => {
     const question = getComposerText(draft).trim();
@@ -129,6 +134,17 @@ export function Composer({
       triggers={triggers}
       value={value}
     >
+      {files && files.names.length > 0 && (
+        <div className="flex flex-wrap gap-1 px-[calc(var(--composer-padding)+1px)] pt-2" {...own}>
+          {files.names.map((name, i) => (
+            <Button aria-label={`Take off ${name}`} key={`${name}:${i}`} onClick={() => files.remove(i)} size="xs" variant="outline">
+              <FileText />
+              <span className="max-w-40 truncate">{name}</span>
+              <X className="opacity-60" />
+            </Button>
+          ))}
+        </div>
+      )}
       <ComposerInput
         aria-label="Question"
         placeholder={placeholder}
@@ -148,7 +164,7 @@ export function Composer({
       </ComposerPopup>
       <ComposerActions>
         <ComposerActionGroup className="flex-nowrap">
-          <AddMenu back={fieldRef} mentions={agents.length + pages.length > 0} commands={commands.length > 0} s={s} />
+          <AddMenu back={fieldRef} commands={commands.length > 0} files={files?.add} mentions={agents.length + pages.length > 0} s={s} />
           <AccessMenu back={fieldRef} s={s} />
         </ComposerActionGroup>
         <ComposerActionGroup align="end" className="min-w-0 flex-nowrap">
@@ -175,8 +191,9 @@ export function Composer({
 // "+": mention something, run a command, or plan first. Plan mode shows as a chip beside it.
 type Back = { back: RefObject<HTMLDivElement | null>; s: ChatSettings };
 
-function AddMenu({ back, s, mentions, commands }: Back & { mentions: boolean; commands: boolean }) {
+function AddMenu({ back, s, mentions, commands, files }: Back & { mentions: boolean; commands: boolean; files?: (f: File[]) => void }) {
   const { insertTrigger } = useComposerContext();
+  const picker = useRef<HTMLInputElement>(null);
   return (
     <>
       <Menu>
@@ -184,11 +201,17 @@ function AddMenu({ back, s, mentions, commands }: Back & { mentions: boolean; co
           <Plus />
         </MenuTrigger>
         <MenuPopup align="start" className="w-64" finalFocus={back} side="top" {...own}>
-          {/* Only what there is to add: a project chat has no pages, agents or commands of its own. */}
-          {(mentions || commands) && (
+          {/* Only what there is to add: a project chat has no pages or agents, and takes files. */}
+          {(mentions || commands || files) && (
             <>
               <MenuGroup>
                 <MenuGroupLabel>Add</MenuGroupLabel>
+                {files && (
+                  <MenuItem onClick={() => picker.current?.click()}>
+                    <Paperclip />
+                    Files…
+                  </MenuItem>
+                )}
                 {mentions && (
                   <MenuItem onClick={() => insertTrigger("@")}>
                     <AtSign />
@@ -213,6 +236,19 @@ function AddMenu({ back, s, mentions, commands }: Back & { mentions: boolean; co
           </MenuCheckboxItem>
         </MenuPopup>
       </Menu>
+      {/* The system's own file panel, opened from Files…; never shown itself. */}
+      {files && (
+        <input
+          className="hidden"
+          multiple
+          onChange={(e) => {
+            files(Array.from(e.currentTarget.files ?? []));
+            e.currentTarget.value = "";
+          }}
+          ref={picker}
+          type="file"
+        />
+      )}
       {s.plan && (
         <Button aria-label="Turn Plan mode off" className="h-7 gap-1 rounded-full px-2 text-info-foreground sm:h-7" onClick={() => s.onChange({ plan: false })} size="sm" variant="ghost">
           <ListChecks />
@@ -274,7 +310,7 @@ function ModelPicker({ back, s }: Back) {
   const cx = codex.use();
   useEffect(() => void loadCodex(), []);
   const gpt = cx.models.map((m) => ({ value: m.id, label: m.name }));
-  const all = [...MODELS, ...gpt];
+  const all = [...(s.models === "gpt" ? [] : MODELS), ...(s.models === "claude" ? [] : gpt)];
   const claude = isClaude(s.model);
   const efforts = effortsFor(s.model);
   const effort = effortFor(s.model, s.effort);
@@ -318,11 +354,11 @@ function ModelPicker({ back, s }: Back) {
         side="top"
       >
         <div aria-label="Model" role="radiogroup">
-          {label("Claude")}
-          {MODELS.map(row)}
-          {label("GPT")}
-          {gpt.map((m, i) => row(m, MODELS.length + i))}
-          {cx.state !== "ready" && (
+          {s.models !== "gpt" && label("Claude")}
+          {s.models !== "gpt" && MODELS.map(row)}
+          {s.models !== "claude" && label("GPT")}
+          {s.models !== "claude" && gpt.map((m, i) => row(m, (s.models === "gpt" ? 0 : MODELS.length) + i))}
+          {s.models !== "claude" && cx.state !== "ready" && (
             <p className="px-2 pb-1.5 text-muted-foreground text-xs">
               {cx.state === "checking" ? (
                 "Looking for Codex…"
