@@ -5,6 +5,7 @@ The plan is [PROJECT-1.md](PROJECT-1.md). One row per slice, updated as each mer
 | Slice | State | Evidence |
 |---|---|---|
 | 0a Pin, ownership, structured-session probe | Built, QA'd | `pnpm runtime:build` (reproducible, checksummed), `pnpm runtime:probe` 9/9 on 2026-10-24 against Claude Code 2.1.310 and Codex 0.164.0; independent QA 9/9, its findings fixed; DECISIONS 18 |
+| 0b Browser probe, plain-folder extension | Built | `pnpm runtime:probe browser`: an agent in a non-Git folder drives its page through the runtime's browser, an observer sees that tab's frames, the folder is left as it was; DECISIONS 18 |
 
 ## Runtime pin
 

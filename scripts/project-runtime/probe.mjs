@@ -1,6 +1,7 @@
 // Drives the built runtime against real Claude Code and Codex: launch, send,
-// answer, approve, restart, resume. Run after every runtime update.
-//   node scripts/project-runtime/probe.mjs [claude|codex]
+// answer, approve, restart, resume, and an agent's browser in a plain folder.
+// Run after every runtime update.
+//   node scripts/project-runtime/probe.mjs [claude|codex|browser]
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -39,7 +40,7 @@ function tmuxList(name) {
 let daemon;
 function start() {
   const env = { HOME: homedir(), USER: process.env.USER, SHELL: "/bin/zsh", LANG: "en_US.UTF-8", TMPDIR: process.env.TMPDIR, PATH: loginPath,
-    BERTH_HOME: state, BERTH_USER_DIR: join(root, "user"), BERTH_TMUX_SOCKET: tmux, BERTH_EMBEDDED: "1" };
+    BERTH_HOME: state, BERTH_USER_DIR: join(root, "user"), BERTH_TMUX_SOCKET: tmux, BERTH_EMBEDDED: "1", BERTH_PORT_BASE: "47500" };
   daemon = spawn(bin, ["serve", "--listen", "127.0.0.1:0"], { env, stdio: ["ignore", "ignore", "pipe"] });
   daemon.stderr.on("data", (d) => writeFileSync(join(root, "berthd.log"), d, { flag: "a" }));
   return until("berthd answers", () => api("GET", "/v1/info").then((r) => r.status === 200), 15_000);
@@ -157,7 +158,8 @@ async function codex() {
     seeOurs();
     const n = (await items(s)).length;
     await pick(s, "1");
-    await replyAfter(s, n, "200");
+    // Any status line: the command ran with the network the approval gave it.
+    await replyAfter(s, n, "HTTP/");
     // Codex itself says the request is resolved, not only that the answer was written.
     const log = readFileSync(join(state, "box", "conversations", await convOf(s), "events.jsonl"), "utf8");
     if (!log.includes('"serverRequest/resolved"')) throw new Error("Codex never said the approval was resolved");
@@ -185,11 +187,63 @@ async function codex() {
   });
 }
 
+// A plain folder's own page, driven by an agent through its browser while an observer
+// watches that tab, with nothing written into the folder.
+async function browser() {
+  const site = join(root, "site folder");
+  mkdirSync(site);
+  writeFileSync(join(site, "index.html"), '<!doctype html><title>Probe page</title><h1 id="h">Not pressed</h1><button onclick="h.textContent=\'Pressed\'">Press me</button>');
+  const loc = (await api("POST", "/v1/locations", { name: "site", path: site })).json;
+  const ws = loc.worktrees?.[0];
+  await check("browser: a plain folder is its own workspace, with ports of the runtime's own", async () => {
+    if (loc.repo || ws?.path !== loc.path || !(ws.port >= 47500)) throw new Error(JSON.stringify(loc));
+    return ws;
+  });
+  const server = spawn("python3", ["-I", "-m", "http.server", String(ws.port), "--bind", "127.0.0.1"], { cwd: site, stdio: "ignore" });
+  try {
+    const s = "probe-browser";
+    let frames = 0;
+    let seen = "";
+    await check("browser: the agent drives the folder's page and an observer sees that tab", async () => {
+      await api("POST", "/v1/sessions", { name: s, location: "site", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low",
+        prompt: "Using only shell commands, in order: `command -v berthd`; `berthd browser open /`; `berthd browser snapshot`; click the button named Press me with `berthd browser click @REF`; `berthd browser snapshot`. Then reply with the heading you see and what command -v printed." });
+      const tab = `/v1/worktrees/site/site/browser`;
+      await until("its browser", async () => (await api("GET", `${tab}/status`)).json?.running);
+      // The observer: the tab's frames, as the app's live view reads them, until the agent is done.
+      await new Promise((ok) => {
+        const req = request({ socketPath: sock, path: `${tab}/screencast` }, (res) => {
+          let rest = "";
+          res.on("data", (d) => {
+            const lines = (rest + d).split("\n");
+            rest = lines.pop();
+            for (const l of lines.filter(Boolean)) (frames++, (seen = JSON.parse(l).url));
+          });
+        });
+        req.end();
+        until("the agent done", async () => (await session(s))?.agent_state === "finished", 180_000).finally(() => (req.destroy(), ok()));
+      });
+      const reply = (await items(s)).filter((i) => i.kind === "text").at(-1)?.text ?? "";
+      const page = (await api("POST", `${tab}/snapshot`, {})).json.text;
+      if (!reply.includes("Pressed") || !page.includes('heading "Pressed"')) throw new Error(`agent said ${reply}; the tab shows ${page}`);
+      if (!reply.includes(join(state, "box", "bin", "berthd"))) throw new Error(`the agent's berthd is not the runtime's: ${reply}`);
+      if (!frames || !seen.startsWith("http://site.")) throw new Error(`observer saw ${frames} frames of ${seen}`);
+      return { frames, seen };
+    });
+    await check("browser: the folder holds only what it held", async () => {
+      const left = execFileSync("find", [site, "-mindepth", "1"]).toString().trim().split("\n");
+      if (left.join() !== join(site, "index.html")) throw new Error(`folder now holds ${left}`);
+    });
+  } finally {
+    server.kill();
+  }
+}
+
 try {
   await start();
   await api("POST", "/v1/locations", { name: "plain", path: folder });
-  if (only !== "codex") await claude();
-  if (only !== "claude") await codex();
+  if (!only || only === "claude") await claude();
+  if (!only || only === "codex") await codex();
+  if (!only || only === "browser") await browser();
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
     seeOurs();

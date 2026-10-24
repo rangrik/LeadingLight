@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 04:18:25 -0700
+Subject: [PATCH] Embedded: its own ports, PATH and scratch files
+
+BERTH_PORT_BASE starts an embedded berthd's port blocks clear of the
+person's berthd, and a block whose first port is in use is passed over.
+An embedded berthd links itself as berthd in its state's bin folder and
+puts that first on its sessions' PATH, so an agent's berthd browser and
+tools reach it, not another install. Browser downloads and long snapshots
+go to its state, one folder per workspace, not .berth/ in the person's
+folder.
+---
+ cmd/berthd/main.go          |  7 +++++++
+ internal/box/agentpaths.go  |  4 ++++
+ internal/box/browser.go     |  2 +-
+ internal/box/browsertabs.go |  2 +-
+ internal/box/repoconfig.go  | 24 ++++++++++++++++++++++--
+ internal/box/sessions.go    | 19 +++++++++++++++++++
+ 6 files changed, 54 insertions(+), 4 deletions(-)
+
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index 4526f73..1da4372 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -419,6 +419,13 @@ func serve(b boxHome, args []string) error {
+ 	// them before its agent starts.
+ 	if !box.Embedded {
+ 		bx.Sessions.Prepare = bx.PrepareAccounts
++	} else if dir := filepath.Join(b.dir, "bin"); os.MkdirAll(dir, 0o700) == nil {
++		link := filepath.Join(dir, "berthd")
++		os.Remove(link)
++		if os.Symlink(exe, link) == nil {
++			box.EmbeddedBin = dir
++		}
++		box.EmbeddedFiles = filepath.Join(b.dir, "browser", "files")
+ 	}
+ 	bx.Artifacts = &box.ArtifactStore{Dir: filepath.Join(b.dir, "artifacts"), Events: bus, Box: hostname}
+ 	go bx.Artifacts.Run(ctx)
+diff --git a/internal/box/agentpaths.go b/internal/box/agentpaths.go
+index a8a6ea2..8527780 100644
+--- a/internal/box/agentpaths.go
++++ b/internal/box/agentpaths.go
+@@ -5,6 +5,7 @@ import (
+ 	"net/http"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"time"
+ 
+ 	"github.com/cosscom/shipyard/internal/agentpath"
+@@ -75,6 +76,9 @@ func launchPATH(command, agent string) string {
+ // withPATH puts dirs before the session's own PATH, then runs what follows,
+ // in shell's syntax.
+ func withPATH(shell, dirs, then string) string {
++	if EmbeddedBin != "" {
++		dirs = strings.TrimSuffix(EmbeddedBin+string(filepath.ListSeparator)+dirs, string(filepath.ListSeparator))
++	}
+ 	if dirs == "" {
+ 		return then
+ 	}
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index 04e9eec..fd09a96 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -925,7 +925,7 @@ func (br *browser) capLines(lines []string, limit int) (string, string) {
+ 	var b strings.Builder
+ 	for i, l := range lines {
+ 		if b.Len()+len(l)+1 > limit {
+-			dir := filepath.Join(br.path, ".berth", "browser")
++			dir := browserFiles(br.path)
+ 			os.MkdirAll(dir, 0o755)
+ 			file := filepath.Join(dir, fmt.Sprintf("snapshot-%d.txt", time.Now().UnixMilli()))
+ 			os.WriteFile(file, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index ede5dfa..26aa471 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -390,7 +390,7 @@ func (c *chromium) attachTab(ctx context.Context, name, target, bctx string, v V
+ 	}
+ 	// Downloads land in the worktree, where the agent can read them.
+ 	if c.path != "" {
+-		dl := filepath.Join(c.path, ".berth", "browser")
++		dl := browserFiles(c.path)
+ 		os.MkdirAll(dl, 0o755)
+ 		p := map[string]any{"behavior": "allow", "downloadPath": dl}
+ 		if bctx != "" {
+diff --git a/internal/box/repoconfig.go b/internal/box/repoconfig.go
+index c6bc241..bfdddab 100644
+--- a/internal/box/repoconfig.go
++++ b/internal/box/repoconfig.go
+@@ -4,6 +4,7 @@ import (
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
++	"net"
+ 	"net/http"
+ 	"os"
+ 	"path/filepath"
+@@ -245,8 +246,16 @@ func (l *Locations) SetLocalConfig(name string, c RepoConfig) error {
+ // Ports: each worktree gets a stable block of ports of its own, so two
+ // worktrees of one app never fight over 3000.
+ 
++// portBase is where blocks start; BERTH_PORT_BASE moves an embedded berthd's
++// blocks clear of the person's own berthd, which starts at 41000.
++var portBase = func() int {
++	if n, err := strconv.Atoi(os.Getenv("BERTH_PORT_BASE")); err == nil && n >= 1024 && n < portLimit {
++		return n
++	}
++	return 41000
++}()
++
+ const (
+-	portBase            = 41000
+ 	portLimit           = 48999
+ 	portBlock           = 10
+ 	maxPortsPerWorktree = portBlock
+@@ -287,7 +296,7 @@ func (p *PortAlloc) For(dir string) (int, error) {
+ 		used[port] = true
+ 	}
+ 	for port := portBase; port+portBlock-1 <= portLimit; port += portBlock {
+-		if !used[port] {
++		if !used[port] && portFree(port) {
+ 			m[dir] = port
+ 			b, _ := json.MarshalIndent(m, "", "  ")
+ 			return port, statefile.Write(p.Path, b)
+@@ -296,6 +305,17 @@ func (p *PortAlloc) For(dir string) (int, error) {
+ 	return 0, fmt.Errorf("every port block from %d to %d is taken", portBase, portLimit)
+ }
+ 
++// portFree says nothing listens on port now: another berthd's block, or
++// anything else, is passed over.
++func portFree(port int) bool {
++	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
++	if err != nil {
++		return false
++	}
++	ln.Close()
++	return true
++}
++
+ // Release frees dir's block.
+ func (p *PortAlloc) Release(dir string) {
+ 	if p == nil {
+diff --git a/internal/box/sessions.go b/internal/box/sessions.go
+index 05be49c..6a44b99 100644
+--- a/internal/box/sessions.go
++++ b/internal/box/sessions.go
+@@ -3,7 +3,9 @@ package box
+ import (
+ 	"bytes"
+ 	"context"
++	"crypto/sha256"
+ 	"encoding/base64"
++	"encoding/hex"
+ 	"errors"
+ 	"fmt"
+ 	"maps"
+@@ -181,6 +183,23 @@ var tmuxSocket = firstNonEmpty(os.Getenv("BERTH_TMUX_SOCKET"), "berth")
+ // leaves the person's agent configuration alone.
+ var Embedded = os.Getenv("BERTH_EMBEDDED") == "1"
+ 
++// EmbeddedBin is a folder holding this berthd as `berthd`, first on an
++// embedded berthd's sessions' PATH, so its agents reach it and no other.
++var EmbeddedBin string
++
++// EmbeddedFiles, when set, holds each workspace's browser downloads and long
++// snapshots, so an embedded berthd writes nothing into the person's folders.
++var EmbeddedFiles string
++
++// browserFiles is where a workspace's browser downloads and long snapshots go.
++func browserFiles(workspace string) string {
++	if EmbeddedFiles == "" {
++		return filepath.Join(workspace, ".berth", "browser")
++	}
++	sum := sha256.Sum256([]byte(workspace))
++	return filepath.Join(EmbeddedFiles, hex.EncodeToString(sum[:6])+"-"+filepath.Base(workspace))
++}
++
+ // TmuxSocket is the name of berth's tmux server.
+ func TmuxSocket() string { return tmuxSocket }
+ 

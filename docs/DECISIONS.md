@@ -268,3 +268,8 @@ unfollowed, meet "Not initialized", lose its model, or meet its old host still c
 was a few lines (about 90 in all), so Shipyard stays the owner
 and Paseo's daemon, the fallback, is not needed. Answers are still not keyed by request or
 lifecycle and a second click is refused rather than given its receipt; that is slice 4a.
+
+A plain folder is its own one workspace in the runtime (a patch), so its sessions, ports and
+browser work as a checkout's do, without git init. The runtime takes ports from a range of its
+own, puts its own berthd first on its agents' PATH, and keeps the browser's downloads and long
+snapshots in its state, never in the person's folder.

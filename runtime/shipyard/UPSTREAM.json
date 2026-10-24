@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
-  "version": "0.3.30-ll.2",
+  "version": "0.3.30-ll.3",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -15,6 +15,8 @@
   "patches": [
     "0001-embedded-mode.patch",
     "0002-codex-approvals-and-plan-mode.patch",
-    "0003-resume.patch"
+    "0003-resume.patch",
+    "0004-plain-folder-workspace.patch",
+    "0005-embedded-ports-path-files.patch"
   ]
 }

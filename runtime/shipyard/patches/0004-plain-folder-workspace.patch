@@ -1,0 +1,52 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 04:17:45 -0700
+Subject: [PATCH] A folder that isn't a repository is its own one workspace
+
+Its location lists the folder as its one, main worktree, named as the
+location is, so sessions there get its environment and ports, and its
+services and browser work as a checkout's do, without git init. What only
+git can do still checks Repo, and the folder can't be removed as a
+worktree.
+---
+ internal/box/locations.go      | 4 ++++
+ internal/box/locations_test.go | 9 ++++++++-
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/internal/box/locations.go b/internal/box/locations.go
+index c936712..e8158ed 100644
+--- a/internal/box/locations.go
++++ b/internal/box/locations.go
+@@ -438,6 +438,10 @@ func describe(ctx context.Context, s savedLocation) Location {
+ 	loc.RepoTrust = trust.State
+ 	out, err := git(ctx, "-C", s.Path, "worktree", "list", "--porcelain")
+ 	if err != nil {
++		// A folder that isn't a repository is its own one workspace, so its
++		// sessions, ports, services and browser work as a checkout's do.
++		// What only git can do still checks Repo.
++		loc.Worktrees = []Worktree{{Name: s.Name, Path: s.Path, Main: true, Title: s.Titles[s.Path]}}
+ 		return loc
+ 	}
+ 	loc.Repo = true
+diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
+index 5898dee..b48226f 100644
+--- a/internal/box/locations_test.go
++++ b/internal/box/locations_test.go
+@@ -112,9 +112,16 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	if loc.Repo || len(loc.Worktrees) != 0 {
++	if loc.Repo {
+ 		t.Fatalf("plain directory reported as a repo: %+v", loc)
+ 	}
++	// It is its own one workspace, which can't be removed.
++	if len(loc.Worktrees) != 1 || loc.Worktrees[0].Path != loc.Path || loc.Worktrees[0].Name != "scratch" || !loc.Worktrees[0].Main {
++		t.Fatalf("plain directory's workspace: %+v", loc.Worktrees)
++	}
++	if err := l.RemoveWorktree(context.Background(), "scratch", "scratch", true); err == nil {
++		t.Fatal("removed a plain directory's workspace")
++	}
+ 	if _, err := l.CreateWorktree(context.Background(), "scratch", "x", "", ""); err == nil {
+ 		t.Fatal("created a worktree in a non-repository")
+ 	}
