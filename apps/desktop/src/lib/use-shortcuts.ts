@@ -5,19 +5,15 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { openAsk } from "~/lib/ask";
+import { accelOf, sendKeys } from "~/lib/keymap";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { toggleTool } from "~/lib/writing";
 
-// Punctuation keys as the table's accelerators name them.
-const CODES: Record<string, string | undefined> = { Slash: "/", Backslash: "\\", Comma: ",", Period: ".", Equal: "=", Minus: "-" };
-
-// The keys in lib/shortcuts.json, by id. In the Mac app the menu bar takes
-// each key first and says which one (menu.rs emits berth://menu); in a
-// browser the page reads the keys itself. The sidebar's ⌘\ is the sidebar's
-// own in a browser (packages/ui sidebar.tsx), so only the menu's event
-// toggles it here. ⌃⌥I is the Mac app's global shortcut (capture.rs), which takes the key
-// before the menu sees it; the menu item and a browser's key come through here.
+// The keys in lib/shortcuts.json, by id, as changed in Settings (lib/keymap.ts). In the Mac app
+// the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
+// browser the page reads the keys itself. ⌃⌥I is the Mac app's global shortcut (capture.rs),
+// which takes the key before the menu sees it; the menu item and a browser's key come through here.
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void }) {
   useEffect(() => {
     const run = (id: string) => {
@@ -52,16 +48,14 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return toggleTool(id);
       }
     };
-    const byAccel = new Map(SHORTCUTS.filter((s) => s.accel && s.id !== "sidebar").map((s) => [s.accel as string, s.id]));
     const onKey = (e: KeyboardEvent) => {
-      // The editor's own keys (⌘B, ⌘/ for the block menu) are handled before this.
-      if (e.defaultPrevented || !(e.metaKey || e.ctrlKey)) return;
-      // By physical key, so Option and Shift (which change e.key) still match the table.
-      const key = e.code.startsWith("Key") ? e.code.slice(3) : e.code.startsWith("Digit") ? e.code.slice(5) : CODES[e.code];
-      if (!key) return;
-      const rest = `${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${key}`;
+      // The editor's own keys (⌘B, ⌘/ for the block menu) are handled before this. A held key
+      // runs once: its repeats would make page after page, or run keys just recorded in Settings.
+      const accel = e.defaultPrevented || e.repeat ? undefined : accelOf(e);
+      if (!accel) return;
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
-      const id = (e.ctrlKey && !e.metaKey && byAccel.get(`Ctrl+${rest}`)) || byAccel.get(`CmdOrCtrl+${rest}`);
+      const find = (a: string) => SHORTCUTS.find((s) => s.accel === a)?.id;
+      const id = find(accel) ?? (e.ctrlKey && !e.metaKey ? find(accel.replace("Ctrl", "CmdOrCtrl")) : undefined);
       if (!id) return;
       e.preventDefault();
       run(id);
@@ -71,6 +65,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     let gone = false;
     void isNative.then(async (native) => {
       if (!native || gone) return;
+      sendKeys();
       const { listen } = await import("@tauri-apps/api/event");
       unlisten = await listen<string>("berth://menu", (e) => run(e.payload));
       if (gone) unlisten();

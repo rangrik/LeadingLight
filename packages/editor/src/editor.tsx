@@ -189,6 +189,7 @@ export function BlockEditor({
   links,
   readOnly,
   onAsk,
+  askKeys,
   style = "plain",
   notes,
   quoteTo,
@@ -215,6 +216,7 @@ export function BlockEditor({
   openLink?: (href: string) => void;
   // Given, the selection toolbar offers Ask with the selected words.
   onAsk?: (selected: Selected) => void;
+  askKeys?: string;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
   notes?: NotesStore;
@@ -535,7 +537,7 @@ export function BlockEditor({
       <EditorContent editor={editor} />
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       <BlockHandle editor={editor} />
-      <SelectionToolbar editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} quote={quote} />
+      <SelectionToolbar editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote} />
       <TableToolbar editor={editor} />
       <MarkTip editor={editor} />
       <EmojiPicker editor={editor} />

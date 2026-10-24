@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::menu::MenuItemKind;
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 // Claude through the installed Claude Code (agent.rs), the menu bar, built from
@@ -38,7 +40,7 @@ fn migrations() -> Vec<Migration> {
 // it is swapped for ours.
 #[cfg(target_os = "macos")]
 fn menu_bar(app: &tauri::App) -> tauri::Result<()> {
-    use tauri::menu::{MenuItem, MenuItemKind};
+    use tauri::menu::MenuItem;
 
     let menu = menu::build(app.handle())?;
     if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
@@ -48,6 +50,23 @@ fn menu_bar(app: &tauri::App) -> tauri::Result<()> {
     }
     app.set_menu(menu)?;
     Ok(())
+}
+
+// Settings › Shortcuts (lib/keymap.ts): each menu item gets its keys, or none while Settings
+// records new ones. New idea's are also the capture box's global keys.
+#[tauri::command]
+fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Result<(), String> {
+    if let Some(menu) = app.menu() {
+        for item in menu.items().map_err(|e| e.to_string())? {
+            let MenuItemKind::Submenu(sub) = item else { continue };
+            for (id, accel) in &keys {
+                if let Some(MenuItemKind::MenuItem(i)) = sub.get(id.as_str()) {
+                    i.set_accelerator(accel.as_deref()).map_err(|e| e.to_string())?;
+                }
+            }
+        }
+    }
+    capture::set_key(&app, keys.get("new-idea").and_then(|a| a.as_deref()))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -78,7 +97,8 @@ pub fn run() {
             clis::codex_status,
             capture::capture_show,
             capture::capture_hide,
-            capture::capture_open
+            capture::capture_open,
+            shortcuts_set
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]

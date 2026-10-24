@@ -15,6 +15,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { UsageButton } from "~/components/usage-button";
+import { useKeysFor } from "~/lib/keymap";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -69,6 +70,7 @@ export function AppSidebar({
   onCreate: () => void;
 }) {
   const { isMobile, state } = useSidebar();
+  const keysFor = useKeysFor();
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
       <AppSidebarHeader subtitle="Notes" />
@@ -86,7 +88,7 @@ export function AppSidebar({
               <SidebarMenuButton onClick={onNewIdea}>
                 <Lightbulb />
                 <span>New idea</span>
-                <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">⌃⌥I</Kbd>
+                <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">{keysFor("new-idea")}</Kbd>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

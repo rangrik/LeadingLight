@@ -203,3 +203,15 @@ pages its link menu makes (a new page, a day's note) are made by the main window
 so there is still one writer and nothing is made twice. Every captured idea is tagged
 `in-the-middle`, a tag page made the first time, so a list of what came in on the fly is one
 click away.
+
+## 15. Changed shortcuts are written into the table, kept on this Mac
+
+Settings › Shortcuts can change any key in `lib/shortcuts.json`. Only the changed ones are kept
+(localStorage, `ll.shortcuts`), so a new default in the table still reaches the rest. At load
+they are written into the table's own objects, which Shipyard's sheet and `keysFor` read, so
+its files stay as they are. The key handler, the Mac menu bar (each item's accelerator, set by
+`shortcuts_set` in `lib.rs`; `menu.rs` is still Shipyard's) and the global New idea key all
+follow. In the Mac app a menu key wins over the editor's, so a key macOS or the editor uses is
+refused by name, as is one another shortcut has. While a key is being recorded the menu bar and
+the global key are emptied, or ⌘N would make a page instead of being recorded. The sidebar's
+own ⌘\ listener in `packages/ui` is gone; the table's handler toggles it like any other key.
