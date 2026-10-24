@@ -1,8 +1,10 @@
 import { ArrowDownWideNarrow, ArrowUpNarrowWide, Columns3, LayoutGrid, List, Table as TableIcon } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Select, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/ui/components/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@leadinglight/ui/components/table";
 import { ToggleGroup, ToggleGroupItem } from "@leadinglight/ui/components/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { PageCard } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
@@ -14,16 +16,30 @@ import { pageLabel } from "~/lib/labels";
 import type { ObjectSummary } from "~/lib/objects";
 import { iconFor, pageOf } from "~/lib/space";
 
+// Board is drawn on its own: it can be off.
 const VIEWS = [
   ["list", "List", List],
   ["table", "Table", TableIcon],
   ["gallery", "Gallery", LayoutGrid],
-  ["board", "Board", Columns3],
 ] as const;
 
 const NONE = "none";
 const BUILT_IN: Record<string, string> = { title: "Title", created: "Created", updated: "Updated" };
 const DAY: Record<string, string> = { day: "Day" }; // daily notes sort by their day
+
+// Dates sort newest first when picked; everything else A to Z.
+const newestFirst = (by: string, props: PropDef[]) =>
+  by === "created" || by === "updated" || by === "day" || props.some((p) => p.id === by && (p.kind === "date" || p.kind === "created" || p.kind === "updated"));
+
+// Grouping and the board need a select or checkbox; without one they show why they're off.
+function Off({ children }: { children: React.ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex" />}>{children}</TooltipTrigger>
+      <TooltipPopup>Needs a select or checkbox property</TooltipPopup>
+    </Tooltip>
+  );
+}
 
 const ids = (v: unknown) => (Array.isArray(v) ? (v as string[]) : []);
 
@@ -78,23 +94,28 @@ function grouped(items: ObjectSummary[], prop?: PropDef): { key: string; label: 
   ];
 }
 
-type Props = { items: ObjectSummary[]; props: PropDef[]; card: PropDef[]; settings: ViewSettings; onSettings: (s: ViewSettings) => void; empty: string };
+type Props = { items: ObjectSummary[]; props: PropDef[]; card: PropDef[]; settings: ViewSettings; onSettings: (s: ViewSettings) => void; empty: ReactNode };
 
 // A set of pages as a list, table, gallery or board, sorted and grouped.
 export function ObjectList({ items, props, card, settings, onSettings, empty }: Props) {
   const groupable = props.filter((p) => p.kind === "select" || p.kind === "checkbox");
-  const groupProp = groupable.find((p) => p.id === settings.group) ?? (settings.kind === "board" ? groupable[0] : undefined);
-  const groups = grouped(sorted(items, settings, props), groupProp).filter((g) => settings.kind === "board" || g.items.length > 0);
+  // A board kept from when there was something to group by shows as a list, not one column.
+  const kind = settings.kind === "board" && !groupable.length ? "list" : settings.kind;
+  const groupProp = groupable.find((p) => p.id === settings.group) ?? (kind === "board" ? groupable[0] : undefined);
+  const groups = grouped(sorted(items, settings, props), groupProp).filter((g) => kind === "board" || g.items.length > 0);
   const set = (patch: Partial<ViewSettings>) => onSettings({ ...settings, ...patch });
-  const sortItems = { ...BUILT_IN, ...(items.some((p) => p.properties.day) ? DAY : {}), ...Object.fromEntries(props.filter((p) => p.kind !== "file").map((p) => [p.id, p.name])) };
+  const sortItems = { ...BUILT_IN, ...(settings.sort.by === "day" || items.some((p) => p.properties.day) ? DAY : {}), ...Object.fromEntries(props.filter((p) => p.kind !== "file").map((p) => [p.id, p.name])) };
   const groupItems = { [NONE]: "No grouping", ...Object.fromEntries(groupable.map((p) => [p.id, p.name])) };
 
   // A grouped list doesn't repeat the group's value on every row.
   const shownOnRows = card.filter((c) => c.id !== groupProp?.id);
+  // Each value has a column, so the same property lines up down the list. Titles give way first,
+  // down to 6rem; then long values are cut too, so nothing leaves the pane.
+  const columns = { gridTemplateColumns: ["auto", "minmax(6rem,1fr)", ...shownOnRows.map(() => "minmax(0,max-content)")].join(" ") };
   // A link, not a button: its relation chips are buttons.
   const row = (p: ObjectSummary) => (
     <div
-      className="flex h-8 w-full min-w-0 cursor-default items-center gap-2 rounded-md px-2 text-left transition-colors duration-150 hover:bg-accent"
+      className="col-span-full grid h-8 cursor-default grid-cols-subgrid items-center rounded-md px-2 text-left transition-colors duration-150 hover:bg-accent"
       key={p.id}
       onClick={(e) => visit(p.id, e)}
       onKeyDown={(e) => e.key === "Enter" && e.target === e.currentTarget && visit(p.id, e as unknown as React.MouseEvent)}
@@ -103,29 +124,47 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
       tabIndex={0}
     >
       <RowIcon icon={iconFor(p)} />
-      <span className="min-w-0 flex-1 truncate">{pageLabel(p.title)}</span>
-      <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs">
-        {shownOnRows.map((c) => (
-          <span className="flex items-center gap-1" key={c.id}>
-            {ValueView({ prop: c, value: p.properties[c.id], page: p })}
-          </span>
-        ))}
-      </span>
+      <span className="truncate">{pageLabel(p.title)}</span>
+      {shownOnRows.map((c) => (
+        <span className="flex min-w-0 items-center gap-1 overflow-hidden text-muted-foreground text-xs" key={c.id}>
+          {ValueView({ prop: c, value: p.properties[c.id], page: p })}
+        </span>
+      ))}
     </div>
+  );
+  const board = (
+    <ToggleGroupItem aria-label="Board" disabled={!groupable.length} value="board">
+      <Columns3 />
+    </ToggleGroupItem>
+  );
+  const group = (
+    <Select disabled={!groupable.length} items={groupItems} onValueChange={(v) => set({ group: v === NONE ? undefined : (v as string) })} value={groupProp?.id ?? NONE}>
+      <SelectPrimitive.Trigger aria-label="Group by" render={<Button className="text-muted-foreground" size="sm" variant="ghost" />}>
+        {groupProp ? `Group: ${groupProp.name}` : "Group"}
+      </SelectPrimitive.Trigger>
+      <SelectPopup alignItemWithTrigger={false}>
+        {Object.entries(groupItems).map(([id, name]) => (
+          <SelectItem key={id} value={id}>
+            {name}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
   );
 
   return (
     <div className="text-sm">
       {/* Controls and rows reach past the body's edge by their padding, so their text lines up with it. */}
       <div className="-ms-1.5 flex flex-wrap items-center gap-1">
-        <ToggleGroup aria-label="View" onValueChange={(v) => v[0] && set({ kind: v[0] as ViewSettings["kind"] })} size="sm" value={[settings.kind]}>
-          {VIEWS.map(([kind, label, Icon]) => (
-            <ToggleGroupItem aria-label={label} key={kind} value={kind}>
+        <ToggleGroup aria-label="View" onValueChange={(v) => v[0] && set({ kind: v[0] as ViewSettings["kind"] })} size="sm" value={[kind]}>
+          {VIEWS.map(([view, label, Icon]) => (
+            <ToggleGroupItem aria-label={label} key={view} value={view}>
               <Icon />
             </ToggleGroupItem>
           ))}
+          {groupable.length ? board : <Off>{board}</Off>}
         </ToggleGroup>
-        <Select items={sortItems} onValueChange={(v) => set({ sort: { ...settings.sort, by: v as string } })} value={settings.sort.by}>
+        <Select items={sortItems} onValueChange={(v) => set({ sort: { by: v as string, desc: newestFirst(v as string, props) } })} value={settings.sort.by}>
           <SelectPrimitive.Trigger aria-label="Sort by" render={<Button className="text-muted-foreground" size="sm" variant="ghost" />}>
             Sort: {sortItems[settings.sort.by] ?? "Title"}
           </SelectPrimitive.Trigger>
@@ -146,24 +185,11 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
         >
           {settings.sort.desc ? <ArrowDownWideNarrow /> : <ArrowUpNarrowWide />}
         </Button>
-        {groupable.length > 0 && (
-          <Select items={groupItems} onValueChange={(v) => set({ group: v === NONE ? undefined : (v as string) })} value={groupProp?.id ?? NONE}>
-            <SelectPrimitive.Trigger aria-label="Group by" render={<Button className="text-muted-foreground" size="sm" variant="ghost" />}>
-              {groupProp ? `Group: ${groupProp.name}` : "Group"}
-            </SelectPrimitive.Trigger>
-            <SelectPopup alignItemWithTrigger={false}>
-              {Object.entries(groupItems).map(([id, name]) => (
-                <SelectItem key={id} value={id}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        )}
+        {groupable.length ? group : <Off>{group}</Off>}
       </div>
 
-      {items.length === 0 && <p className="mt-3 text-muted-foreground">{empty}</p>}
-      {items.length > 0 && settings.kind === "board" && (
+      {items.length === 0 && (typeof empty === "string" ? <p className="mt-3 text-muted-foreground">{empty}</p> : empty)}
+      {items.length > 0 && kind === "board" && (
         <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
           {groups.map((g) => (
             <div aria-label={g.label || "All"} className="flex min-w-48 flex-1 basis-0 flex-col gap-2" key={g.key} role="group">
@@ -177,20 +203,30 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
           ))}
         </div>
       )}
+      {/* One grid for every group, so columns line up across groups too. */}
+      {items.length > 0 && kind === "list" && (
+        <div className="-mx-2 mt-3 grid gap-x-2" style={columns}>
+          {groups.map((g) => (
+            <Fragment key={g.key}>
+              {g.label && <h3 className="col-span-full mx-2 mt-3 mb-1 font-medium text-muted-foreground text-xs first:mt-0">{g.label}</h3>}
+              {g.items.map(row)}
+            </Fragment>
+          ))}
+        </div>
+      )}
       {items.length > 0 &&
-        settings.kind !== "board" &&
+        (kind === "gallery" || kind === "table") &&
         groups.map((g) => (
           <div className="mt-3" key={g.key}>
             {g.label && <h3 className="mb-1 font-medium text-muted-foreground text-xs">{g.label}</h3>}
-            {settings.kind === "list" && <div className="-mx-2 flex flex-col">{g.items.map(row)}</div>}
-            {settings.kind === "gallery" && (
+            {kind === "gallery" && (
               <div className="grid grid-cols-1 gap-3 @lg:grid-cols-2 @5xl:grid-cols-3">
                 {g.items.map((p) => (
-                  <PageCard className="w-full" key={p.id} page={p} />
+                  <PageCard className="w-full" key={p.id} page={p} snippet />
                 ))}
               </div>
             )}
-            {settings.kind === "table" && (
+            {kind === "table" && (
               // Outside the table's own scroller, so the cells' padding isn't clipped.
               <div className="-mx-2.5">
               <Table>

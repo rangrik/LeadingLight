@@ -4,7 +4,7 @@ import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Backlinks } from "~/components/backlinks";
+import { Backlinks, Linked } from "~/components/backlinks";
 import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
 import { linkHost } from "~/components/link-views";
 import { CoverBand, CoverPicker } from "~/components/page-cover";
@@ -16,11 +16,13 @@ import { setPageStats } from "~/components/page-stats";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
+import { useKeysFor } from "~/lib/keymap";
 import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
+import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
@@ -45,6 +47,7 @@ const fit = (el: HTMLTextAreaElement | null) => {
 export function PageView({ page }: { page: LLObject }) {
   const [title, setTitle] = useState(page.title);
   const [typeId, setTypeId] = useState(page.typeId);
+  const keysFor = useKeysFor();
   const [props, setProps] = useState(page.properties);
   const latest = useRef(page.properties);
   const [adding, setAdding] = useState(false);
@@ -98,8 +101,17 @@ export function PageView({ page }: { page: LLObject }) {
     patchSummary(page.id, { typeId: next });
     queue({ typeId: next });
   };
+  const rename = (value: string) => {
+    setTitle(value);
+    patchSummary(page.id, { title: value });
+    queue({ title: value });
+  };
   const setIcon = (icon?: PageIcon) => setProp("icon", icon);
   const setCover = (cover?: PageCover) => setProp("cover", cover);
+  const addDescription = () => {
+    setAdding(true);
+    setProp("description", "");
+  };
 
   const icon = readIcon(props.icon);
   const cover = readCover(props.cover);
@@ -135,6 +147,7 @@ export function PageView({ page }: { page: LLObject }) {
       setContent: (doc) => editorRef.current?.setContent(doc),
       properties: () => latest.current,
       setProperties: replaceProps,
+      setTitle: rename,
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
       focus: () => editorRef.current?.focus("end"),
@@ -153,7 +166,12 @@ export function PageView({ page }: { page: LLObject }) {
   const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
   useEffect(() => {
     registerPage(askPage, editorRef.current);
-    return () => unregisterPage(page.id);
+    // Its pane can come to the front with no focus in it: its sidebar row, or the pane beside closed.
+    const off = panes.subscribe(() => void (focusedPage() === page.id && registerPage(askPage, editorRef.current)));
+    return () => {
+      off();
+      unregisterPage(page.id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.id]);
 
@@ -272,16 +290,7 @@ export function PageView({ page }: { page: LLObject }) {
                 />
               )}
               {description === undefined && (
-                <Button
-                  aria-label="Add description"
-                  className="text-muted-foreground"
-                  onClick={() => {
-                    setAdding(true);
-                    setProp("description", "");
-                  }}
-                  size="sm"
-                  variant="ghost"
-                >
+                <Button aria-label="Add description" className="text-muted-foreground" onClick={addDescription} size="sm" variant="ghost">
                   <AlignLeft />
                   <Label>Add description</Label>
                 </Button>
@@ -291,12 +300,7 @@ export function PageView({ page }: { page: LLObject }) {
               aria-label="Title"
               className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
               onFocus={() => editorRef.current?.clearBlocks()}
-              onChange={(e) => {
-                const value = e.currentTarget.value.replace(/\n/g, "");
-                setTitle(value);
-                patchSummary(page.id, { title: value });
-                queue({ title: value });
-              }}
+              onChange={(e) => rename(e.currentTarget.value.replace(/\n/g, ""))}
               onKeyDown={toBody}
               onPaste={pasteTitle}
               placeholder={role === "essay" ? "Essay title" : "Untitled"}
@@ -329,7 +333,14 @@ export function PageView({ page }: { page: LLObject }) {
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
+        <PropertyPanel
+          onDescription={description === undefined ? addDescription : undefined}
+          page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
+          setProp={setProp}
+          setType={setType}
+          typeId={typeId}
+          values={props}
+        />
         {day && <DailyBar day={day} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
@@ -337,6 +348,7 @@ export function PageView({ page }: { page: LLObject }) {
             assets={assets}
             content={page.content}
             onAsk={openAsk}
+            askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });
               touchLive(page.id);
@@ -355,6 +367,7 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        <Linked id={page.id} />
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>

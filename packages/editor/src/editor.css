@@ -79,7 +79,11 @@
   place-content: center;
   cursor: pointer;
 }
-.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"] {
+/* Dark themes draw --input close to the page, so the box's edge comes from muted text: 3:1 on the
+   page (pnpm check:themes). A task line's box (the app's link-views.tsx) is the same box. */
+.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"],
+.dark .ll-editor .ll-page-link [data-slot="checkbox"]:not([data-checked]) {
+  border-color: color-mix(in srgb, var(--muted-foreground) 70%, var(--background));
   background: color-mix(in srgb, var(--input) 32%, transparent);
 }
 /* Only the item's own words mute; a nested to-do keeps its own state. */
@@ -106,6 +110,7 @@
    sight. The check sits on the box as in the original, scaled from its 20px box to our 16px one. */
 [data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"] { transition: border-color 150ms ease-out, scale 150ms ease-out; }
 [data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:hover { border-color: color-mix(in srgb, var(--foreground) 25%, transparent); }
+.dark [data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:hover { border-color: var(--muted-foreground); }
 [data-style="playful"] .ll-editor ul[data-type="taskList"] input[type="checkbox"]:active { scale: 0.96; }
 [data-style="playful"] .ll-editor ul[data-type="taskList"] > li > div > p:first-child { transition: color 200ms ease-out; }
 .ll-editor .ll-scribble { position: absolute; overflow: visible; pointer-events: none; fill: none; }
@@ -531,6 +536,8 @@
   box-shadow: -4px 0 0 0 var(--ll-tint), 4px 0 0 0 var(--ll-tint);
   border-radius: 6px;
 }
+/* On a dark page 10% is fainter than a hovered row; 20% stands clear (pnpm check:themes). */
+.dark .ll-editor :is(.ll-selected, .ProseMirror-selectednode) { --ll-tint: color-mix(in srgb, var(--info) 20%, transparent); }
 /* A selected bullet or numbered item tints its marker too, which sits left of the item's box. */
 .ll-editor :is(ul:not([data-type="taskList"]), ol) > li.ll-selected {
   box-shadow: calc(-1 * var(--ll-inset) - 4px) 0 0 0 var(--ll-tint), 4px 0 0 0 var(--ll-tint);

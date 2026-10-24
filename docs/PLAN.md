@@ -123,14 +123,27 @@ editing an embed in place, editing values inside lists.
 
 ## M2.75 — Idea capture (built)
 
-- ⌃⌥I from any app opens a small box; what is typed is an Idea page, linked in Today under
-  "Ideas". A non-activating panel in the Mac app, the same box inside the window in a browser
+- ⌃⌥I from any app opens a small box; what is typed is an Idea page, shown in Today by the
+  day it was made. A non-activating panel in the Mac app, the same box inside the window in a browser
   (features/capture.feature, DECISIONS.md 14).
+
+## M2.8 — Types in Settings, tasks, new pages from "/" (building)
+
+- Settings › Types and Settings › Properties list every one, edit it, and make new ones
+  (features/settings-types-properties.feature).
+- Tasks: a starter type whose line links have a checkbox (features/tasks.feature, DECISIONS.md 17).
+- The slash menu's "New" section makes a page of any type where the cursor is and links it
+  (features/new-objects.feature).
+- The capture box: the theme, a header bar with a project picker, ⌘↩ saves, ⇧⌘↩ opens beside,
+  and ideas show in their day by date instead of a list in the note (features/capture.feature).
+- Backlinks in tabs by type (features/links.feature).
 
 ## M3 — Everyday polish
 
 - Search (⌘K), trash view with restore, images and files, remember window state.
-- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do.
+- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do. Any key in the shortcuts
+  table can be changed in Settings (built: features/shortcuts.feature, DECISIONS.md 15); a new
+  editor key goes in `lib/keymap.ts`'s taken list, so no shortcut can claim it.
 
 ## Planned — external linked projects
 

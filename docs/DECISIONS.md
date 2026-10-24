@@ -139,6 +139,13 @@ questions travels in the question itself: the note's text, a mentioned page's te
 mentioned agent's instructions, each sent again only when it has changed since the thread
 last saw it.
 
+The panel is pinned beside the pages by default, a card of their kind, so it never sits on the
+words. Unpinned, it floats and snaps to a corner rather than going anywhere, so the page under it
+knows where it is and moves its words aside; a top corner starts under the header band.
+Pinned, it takes only what the pages beside it don't need (520 px each, 832 with sidenotes);
+with less than its 280 px left it floats until there is room, still pinned in the settings,
+rather than folding the sidebar for it.
+
 ## 11. Sidenotes, thoughts and essays are linked pages
 
 A sidenote's anchor is a `note` mark in the page; its text is a `thought` block in the page's
@@ -195,11 +202,48 @@ and `editPage` live, so a daily note open in a pane gets its new line through it
 (see 9) and every list already knows the new page. In a browser the same box sits inside the
 window and calls the same code directly. For that the main window must exist, so closing it
 hides it and the Dock icon brings it back; only Quit ends the app. Transparent windows need
-Tauri's `macos-private-api`, which the panel's shadow and rounded corners rely on.
+Tauri's `macos-private-api`, which the box's rounded corners rely on. macOS's own window shadow
+rings a transparent window with a dark line, so the panel has none and the box draws its own,
+in a window a little larger than the box.
 
 The box's body is the block editor itself, not a plain field. In the panel the editor draws
 "@" from the panel's own copy of the space, read from the store each time the box shows; the
-pages its link menu makes (a new page, a day's note) are made by the main window on its behalf,
-so there is still one writer and nothing is made twice. Every captured idea is tagged
+pages its link menu and project picker make are made by the main window on its behalf, so
+there is still one writer and nothing is made twice. Every captured idea is tagged
 `in-the-middle`, a tag page made the first time, so a list of what came in on the fly is one
 click away.
+
+An idea is not written into the day's note. It shows there because it was made that day
+("Created this day"), like any page, so a busy day's note stays the person's own writing.
+Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
+the page in view, never in its place.
+
+## 15. Changed shortcuts are written into the table, kept on this Mac
+
+Settings › Shortcuts can change any key in `lib/shortcuts.json`. Only the changed ones are kept
+(localStorage, `ll.shortcuts`), so a new default in the table still reaches the rest. At load
+they are written into the table's own objects, which Shipyard's sheet and `keysFor` read, so
+its files stay as they are. The key handler, the Mac menu bar (each item's accelerator, set by
+`shortcuts_set` in `lib.rs`; `menu.rs` is still Shipyard's) and the global New idea key all
+follow. In the Mac app a menu key wins over the editor's, so a key macOS or the editor uses is
+refused by name, as is one another shortcut has. While a key is being recorded the menu bar and
+the global key are emptied, or ⌘N would make a page instead of being recorded. The sidebar's
+own ⌘\ listener in `packages/ui` is gone; the table's handler toggles it like any other key.
+
+## 16. A day not yet written in is a draft
+
+Opening a day (Today, the arrows, the calendar) shows a page that lives only in memory, under
+the id it will keep. Its first save stores it (`storeDraft` in `lib/space.ts`), so browsing never
+leaves empty notes in Daily notes, and the open editor carries on with nothing remounted. Linking
+a day (the "@" menu) stores it at once, its open draft included, so a day is never stored twice.
+
+## 17. Tasks are a type; the checkbox comes from the Done property
+
+A task is a page of the starter type Task, not a tag, because it carries a state, a due date
+and a project, which a tag can't. A line link gets a checkbox when its page's type has the
+`done` property, rather than when the type is Task, so no type is written into the code (8)
+and any type can be ticked off. Ticking writes the page through its open editor (9).
+
+Starter additions reach spaces made before them once: each brings a property of its own, and
+a space without that property hasn't had it. Properties can't be deleted, so a type the
+person deleted doesn't come back.

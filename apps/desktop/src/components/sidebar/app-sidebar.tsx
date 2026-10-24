@@ -1,6 +1,7 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), NavProjects as Pages under our Types, and the plans' usage as the footer (NavUser's place).
+// skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
+// usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
 import { CalendarDays, Lightbulb } from "lucide-react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -15,6 +16,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 import { UsageButton } from "~/components/usage-button";
+import { useKeysFor } from "~/lib/keymap";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -53,6 +55,7 @@ export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
 }
 
 export function AppSidebar({
+  pinned,
   pages,
   types,
   onCreate,
@@ -64,11 +67,13 @@ export function AppSidebar({
   onToday: (e: React.MouseEvent) => void;
   onNewIdea: () => void;
   todayActive: boolean;
+  pinned: React.ComponentProps<typeof NavProjects>["projects"];
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
 }) {
   const { isMobile, state } = useSidebar();
+  const keysFor = useKeysFor();
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
       <AppSidebarHeader subtitle="Notes" />
@@ -86,7 +91,7 @@ export function AppSidebar({
               <SidebarMenuButton onClick={onNewIdea}>
                 <Lightbulb />
                 <span>New idea</span>
-                <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">⌃⌥I</Kbd>
+                <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">{keysFor("new-idea")}</Kbd>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -94,8 +99,13 @@ export function AppSidebar({
         <nav aria-label="Types">
           <NavTypes types={types} />
         </nav>
-        <nav aria-label="Pages">
-          <NavProjects onCreate={onCreate} projects={pages} />
+        {pinned.length > 0 && (
+          <nav aria-label="Pinned">
+            <NavProjects label="Pinned" projects={pinned} />
+          </nav>
+        )}
+        <nav aria-label="Recent">
+          <NavProjects label="Recent" onCreate={onCreate} projects={pages} sortable />
         </nav>
       </SidebarContent>
       <UsageButton />

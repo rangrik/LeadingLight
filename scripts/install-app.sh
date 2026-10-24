@@ -10,7 +10,8 @@ APP=LeadingLight
 # Cargo's target directory is the repository's (/target in .gitignore).
 BUNDLE="target/release/bundle/macos/$APP.app"
 
-if pgrep -x "$APP" >/dev/null; then
+# By path: the process is named leadinglight-desktop, not after the app.
+if pgrep -f "/Applications/$APP.app/" >/dev/null; then
   echo "$APP is running: quit it, then run this again. Nothing was changed."
   exit 1
 fi

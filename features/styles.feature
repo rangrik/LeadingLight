@@ -4,8 +4,9 @@ Feature: Page styles
   like a marker stroke.
 
   Names used below:
-  - "Page options": the menu in the page's property bar (properties.feature), whose "Style"
-    group holds "Plain" and "Playful" as radio items
+  - "Page options": the menu in the page's property bar (properties.feature), whose
+    "To-do and highlight style" group holds "Plain" and "Playful" as radio items, so the menu
+    says what a style changes. A page with no to-dos or highlights looks the same in both.
 
   Background:
     Given the app is open in a browser with one page open

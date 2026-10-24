@@ -1,10 +1,11 @@
 import { localPrefs } from "~/lib/local-prefs";
 
-// Settings › AI and the agent panel's corner, kept on this Mac. A model is one of Claude Code's
+// Settings › AI and the agent panel's place, kept on this Mac. A model is one of Claude Code's
 // aliases, which follow the newest of each, or a GPT model Codex offers (lib/codex.ts).
 export type Corner = "br" | "bl" | "tr" | "tl";
+export type Side = "left" | "right";
 export type Access = "ask" | "auto" | "full";
-export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; corner: Corner; panelW: number; panelH: number };
+export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; pinned: Side | null; corner: Corner; panelW: number; panelH: number };
 
 export const MODELS: { value: string; label: string }[] = [
   { value: "fable", label: "Fable" },
@@ -35,7 +36,16 @@ export const GPT_ACCESS: Record<Access, string> = {
 export const labelOf = (list: { value: string; label: string }[], value: string) => list.find((x) => x.value === value)?.label ?? value;
 export const isClaude = (model: string) => MODELS.some((m) => m.value === model);
 
-const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, corner: "br", panelW: 400, panelH: 540 });
+const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, pinned: "right", corner: "br", panelW: 400, panelH: 540 });
+
+// The floating panel's box in the page area, as agent-panel.tsx places it (12 px in, top corners
+// under the header band), so the pages under it can make room (pane-area.tsx).
+const EDGE = 12;
+export function floatBox(p: AiPrefs, area: { w: number; h: number }, header: number) {
+  const width = Math.min(p.panelW, area.w - 2 * EDGE);
+  const height = Math.min(p.panelH, area.h - header - EDGE);
+  return { left: p.corner.endsWith("l") ? EDGE : area.w - EDGE - width, top: p.corner.startsWith("t") ? header : area.h - EDGE - height, width, height };
+}
 
 export const aiPrefs = prefs.get;
 export const setAiPrefs = prefs.set;

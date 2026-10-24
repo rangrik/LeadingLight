@@ -1,5 +1,6 @@
 import type { BlockEditorHandle } from "@leadinglight/editor/editor";
 import { useSyncExternalStore } from "react";
+import { aiPrefs } from "~/lib/ai-prefs";
 
 // What asking is about: the page in front, the words selected when Ask was pressed, and
 // which surface has them. Words selected get the ask bar beside them (Shipyard's pattern);
@@ -17,9 +18,11 @@ type State = {
   askNow: { id: string; question: string } | null;
   // Every page, for @mentions in the composer.
   pages: PageRef[];
+  // Counts each ask, so the panel takes the keyboard then, not when the page in front changes.
+  asked: number;
 };
 
-let state: State = { open: false, quote: null, page: null, bar: null, askNow: null, pages: [] };
+let state: State = { open: false, quote: null, page: null, bar: null, askNow: null, pages: [], asked: 0 };
 let editor: BlockEditorHandle | null = null;
 const listeners = new Set<() => void>();
 const set = (patch: Partial<State>) => {
@@ -27,16 +30,19 @@ const set = (patch: Partial<State>) => {
   listeners.forEach((l) => l());
 };
 
+// Pinned, the panel is the pages' sidebar: it stays open as the page in front changes.
+const stays = () => state.open && !!aiPrefs().pinned;
+
 export function registerPage(page: AskPage, handle: BlockEditorHandle | null) {
   if (state.page?.id === page.id && editor === handle) return; // already in front; keep the panel
   editor = handle;
-  set({ page, open: false, quote: null, bar: null, askNow: null });
+  set({ page, open: stays(), quote: null, bar: null, askNow: null });
 }
 
 export function unregisterPage(id: string) {
   if (state.page?.id !== id) return;
   editor = null;
-  set({ page: null, open: false, quote: null, bar: null, askNow: null });
+  set({ page: null, open: stays(), quote: null, bar: null, askNow: null });
 }
 
 export const setPages = (pages: PageRef[]) => set({ pages });
@@ -49,13 +55,7 @@ export function openAsk(quote?: Quote | null) {
   if (state.open && quote === undefined && document.activeElement?.closest("[data-testid=agent-panel]")) return closeAsk();
   const q = quote === undefined ? (editor?.selection() ?? null) : quote;
   if (q && q.text.trim()) set({ bar: { quote: q } });
-  else set({ open: true, quote: null, bar: null });
-}
-
-// The Ask button: the panel for the page in front, or away.
-export function toggleAsk() {
-  if (state.open) closeAsk();
-  else if (state.page) set({ open: true, quote: null, bar: null });
+  else set({ open: true, quote: null, bar: null, asked: state.asked + 1 });
 }
 
 export function closeBar(back = true) {
@@ -67,13 +67,13 @@ export function closeBar(back = true) {
 export function askFromBar(question: string) {
   const bar = state.bar;
   if (!bar) return;
-  set({ bar: null, open: true, quote: bar.quote, askNow: { id: crypto.randomUUID(), question } });
+  set({ bar: null, open: true, quote: bar.quote, askNow: { id: crypto.randomUUID(), question }, asked: state.asked + 1 });
 }
 
 export function quoteInReply() {
   const bar = state.bar;
   if (!bar) return;
-  set({ bar: null, open: true, quote: bar.quote });
+  set({ bar: null, open: true, quote: bar.quote, asked: state.asked + 1 });
 }
 
 export function takeAskNow() {

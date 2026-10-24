@@ -10,7 +10,7 @@ const question = (page: Page) => page.getByRole("textbox", { name: "Question" })
 
 async function pageWith(page: Page, text: string, url = "/") {
   await page.goto(url);
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   const title = page.getByRole("textbox", { name: "Title" });
   await expect(title).toBeFocused();
   await title.fill("Cells");
@@ -70,11 +70,11 @@ test("A thread stays with its page while an answer streams", async ({ page }) =>
   await page.keyboard.press("Meta+J");
   await question(page).fill("Hello?");
   await page.keyboard.press("Enter");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
   await page.getByRole("textbox", { name: "Title" }).fill("Second");
   await page.waitForTimeout(2500);
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Cells", exact: true }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Cells", exact: true }).click();
   await page.keyboard.press("Meta+J");
   await expect(panel(page)).toContainText("Hello?");
   await expect(panel(page)).toContainText("A stand-in answer");
@@ -109,8 +109,10 @@ test("The Ask button opens and closes the panel; Meta+J in the panel closes it",
 
 // Seam: a card's Ask button against the page asked about. Catches it asking about the other pane's page.
 test("With pages side by side, each card's Ask button asks about its own page", async ({ page }) => {
+  // Wide enough that both cards keep their Ask button beside the pinned panel.
+  await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto("/");
-  const nav = page.getByRole("navigation", { name: "Pages" });
+  const nav = page.getByRole("navigation", { name: "Recent" });
   for (const title of ["Left", "Right"]) {
     await nav.getByRole("button", { name: "New page" }).click();
     await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
@@ -121,6 +123,33 @@ test("With pages side by side, each card's Ask button asks about its own page", 
     await page.getByRole("region", { name: side, exact: true }).getByRole("button", { name: "Ask Claude" }).click();
     await expect(panel(page)).toContainText(`What should we do with “${side}”?`);
   }
+  // Pinned, it follows a page brought to the front from the sidebar, so Claude never reads the other.
+  await nav.getByRole("button", { name: "Right", exact: true }).click();
+  await expect(panel(page)).toContainText("What should we do with “Right”?");
+});
+
+// Seam: where the panel is drawn (agent-panel.tsx) against the room the page makes for it
+// (floatBox). Catches the page's words sitting under the panel, pinned or floating.
+test("The page's words never sit under the panel, pinned or dragged to another corner", async ({ page }) => {
+  await pageWith(page, "The mitochondria is the powerhouse of the cell.");
+  await page.keyboard.press("Meta+J");
+  const clear = () =>
+    expect
+      .poll(async () => {
+        const p = await panel(page).boundingBox();
+        const words = await body(page).boundingBox();
+        return !!p && !!words && (words.x + words.width <= p.x || words.x >= p.x + p.width);
+      })
+      .toBe(true);
+  await clear();
+  await panel(page).getByRole("button", { name: "Unpin" }).click();
+  const head = (await panel(page).locator("header").boundingBox())!;
+  await page.mouse.move(head.x + head.width / 2, head.y + head.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(head.x - 400, head.y - 200, { steps: 5 });
+  await page.mouse.up();
+  await expect(panel(page)).toHaveAttribute("data-corner", "tl");
+  await clear();
 });
 
 // The page changes only through an allowed step, and a declined one leaves it as it was.
@@ -175,7 +204,7 @@ test("Threads are kept across a reload, and a new one starts empty", async ({ pa
   await page.keyboard.press("Enter");
   await expect(panel(page)).toContainText("Worked for");
   await page.reload();
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Cells", exact: true }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Cells", exact: true }).click();
   await page.keyboard.press("Meta+J");
   await expect(panel(page)).toContainText("A stand-in answer");
   await panel(page).getByRole("button", { name: "Threads" }).click();

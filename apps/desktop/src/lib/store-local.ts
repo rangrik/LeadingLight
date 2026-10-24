@@ -77,7 +77,7 @@ export const localStore: ObjectStore = {
   async update(id, patch) {
     const obj = known.get(id) ?? (await localStore.get(id));
     if (!obj) return;
-    const next = { ...obj, ...patch, updatedAt: Date.now() };
+    const next = { ...obj, ...patch, updatedAt: patch.updatedAt ?? Date.now() };
     known.set(id, next);
     await tx(OBJECTS, "readwrite", (s) => s.put(next));
   },

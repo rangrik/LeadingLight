@@ -13,16 +13,19 @@ import { PageStats } from "~/components/page-stats";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
 import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
+import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
+import { floatBox, type Side, useAiPrefs } from "~/lib/ai-prefs";
+import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
-import { describe, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { describe, draftOf, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
-type Size = { w: number; h: number };
+type Size = { w: number; h: number; header: number };
 
 // A page's card: the sidebar-08 inset panel's look, one per open page.
 export const CARD = "bg-background md:rounded-xl md:shadow-sm/5";
@@ -53,7 +56,7 @@ const place = (r: Rect, s: Size) => {
 // titles, so notes are never squeezed; a click on a strip opens it. Folded pages stay mounted.
 // Plain pages side by side never fold.
 const STRIP = 44;
-const widthNeeded = (n: PaneNode): number =>
+export const widthNeeded = (n: PaneNode): number =>
   n.kind === "leaf" ? paneNeed(n.page) : n.dir === "row" ? widthNeeded(n.a) + widthNeeded(n.b) : Math.max(widthNeeded(n.a), widthNeeded(n.b));
 const hasNotes = (n: PaneNode): boolean => (n.kind === "leaf" ? paneNeed(n.page) > PLAIN_NEED : hasNotes(n.a) || hasNotes(n.b));
 const splitById = (n: PaneNode, id: string): PaneNode | undefined =>
@@ -81,23 +84,27 @@ function balance(n: PaneNode) {
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
 // splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
+export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: Side | null }) {
   const area = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<Size>({ w: 0, h: 0 });
+  const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
   const { open: sidebarOpen } = useSidebar();
   space.use(); // titles and icons follow edits
   const writing = useWritingPrefs();
+  const ai = useAiPrefs();
+  // Pinned, the panel keeps its card with no page in front; floating, it shows only with one.
+  const ask = useAsk();
+  const asking = ask.open && (!!ask.page || !!dock);
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
-    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight, header: parseFloat(getComputedStyle(el).getPropertyValue("--header-height")) || 0 });
     measure();
     // Drawn before the frame paints, so cards keep up with the sidebar as it slides.
     const observer = new ResizeObserver(() => flushSync(measure));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [windowToggle]);
   // With a page with notes open, any pane left narrower than it needs (by a new pane beside it)
   // while there is room for every pane: share the room out by need. Plain pages keep their splits.
   useEffect(() => {
@@ -119,14 +126,28 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
     const left = i * (STRIP + GAP) + (i > at ? wide - STRIP : 0);
     return { left, top: 0, width: i === at ? wide : STRIP, height: size.h };
   };
+  // A floating agent panel pushes aside the words of the pages under it, from the side it is on,
+  // but leaves each page 360 px, so a narrow pane stays readable.
+  const float = asking && !dock && size.w ? floatBox(ai, size, size.header) : null;
+  const room = (b: ReturnType<typeof place>) => {
+    if (!float) return 0;
+    const across = Math.min(b.left + b.width, float.left + float.width) - Math.max(b.left, float.left);
+    const down = Math.min(b.top + b.height, float.top + float.height) - Math.max(b.top + size.header, float.top);
+    if (across <= 0 || down <= 0) return 0;
+    return Math.max(0, Math.min(b.width - 360, ai.corner.endsWith("l") ? float.left + float.width - b.left : b.left + b.width - float.left));
+  };
+  // In the app, a panel pinned left holds the window's left edge, and the room for the traffic lights.
+  const edge = !(windowToggle && asking && dock === "left");
   return (
     // The stage's colour, so the gaps show where narrow windows drop the cards' corners.
-    <div className="relative min-h-0 flex-1 bg-sidebar" data-pane-area ref={area}>
+    <div className="relative min-h-0 min-w-0 flex-1 bg-sidebar" data-pane-area ref={area}>
       {[...leaves]
         .sort((a, b) => (a.leaf.id < b.leaf.id ? -1 : 1))
         .map(({ leaf, rect }) => {
           const shown = describe(leaf.page);
           const folded = folding && order.indexOf(leaf.id) !== at;
+          const b = box(leaf.id, rect);
+          const aside = room(b);
           return (
             <section
               aria-label={shown.title}
@@ -136,7 +157,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
               key={leaf.id}
               onFocusCapture={() => focusPane(leaf.id)}
               onPointerDownCapture={() => focusPane(leaf.id)}
-              style={box(leaf.id, rect)}
+              style={b}
             >
               {folded && (
                 <button
@@ -152,11 +173,12 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 after={<PageStats id={leaf.page} />}
                 current={shown.title}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
-                lead={rect.x < EPS && rect.y < EPS}
+                lead={edge && rect.x < EPS && rect.y < EPS}
                 toggle={!windowToggle}
                 muted={split && leaf.id !== focus}
                 onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
-                root={shown.parent ?? "Pages"}
+                onRoot={(e) => shown.parent && visit(shown.parent.view, e)}
+                root={shown.parent?.title}
                 sidebarOpen={sidebarOpen}
               >
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
@@ -180,7 +202,12 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
               </PanelHeader>
               )}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
-              <div className={cn("@container min-h-0 flex-1 overflow-y-auto", folded && "hidden")} data-page-scroller key={leaf.page}>
+              <div
+                className={cn("@container min-h-0 flex-1 overflow-y-auto transition-[padding] duration-200 ease-out", folded && "hidden")}
+                data-page-scroller
+                key={leaf.page}
+                style={ai.corner.endsWith("l") ? { paddingLeft: aside } : { paddingRight: aside }}
+              >
                 {leaf.page.startsWith(TYPE_VIEW) ? <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} /> : <PagePane id={leaf.page} />}
               </div>
             </section>
@@ -199,7 +226,7 @@ function PagePane({ id }: { id: string }) {
     let stale = false;
     objects
       .get(id)
-      .then((obj) => !stale && setPage(obj))
+      .then((obj) => !stale && setPage(obj ?? draftOf(id) ?? null))
       .catch(console.error);
     return () => {
       stale = true;

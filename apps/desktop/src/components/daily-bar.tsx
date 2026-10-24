@@ -7,7 +7,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/componen
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
 import { visit } from "~/components/property-value";
-import { ensureDaily, shiftDay, today } from "~/lib/daily";
+import { dayPage, shiftDay, today } from "~/lib/daily";
 import { hasBlockLink, linesMentioning } from "~/lib/doc-links";
 import { fromIso, isoDay } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
@@ -16,7 +16,7 @@ import type { ObjectSummary } from "~/lib/objects";
 import { openPage } from "~/lib/panes";
 import { iconFor, listed, space } from "~/lib/space";
 
-export const goToDay = async (day: string) => openPage(await ensureDaily(day));
+export const goToDay = async (day: string) => openPage(await dayPage(day));
 
 // Under a daily note's title: step a day, jump to today, or pick any day.
 export function DailyBar({ day }: { day: string }) {
@@ -53,7 +53,7 @@ export function DailyBar({ day }: { day: string }) {
 }
 
 // At the end of a daily note: the pages made that day (tags and daily notes have their own
-// places), except what its body links already (ideas captured that day), so nothing shows twice.
+// places), except those its body links already, so nothing shows twice.
 export function CreatedThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
   const { pages } = space.use();
   const doc = liveContent(id) ?? content;

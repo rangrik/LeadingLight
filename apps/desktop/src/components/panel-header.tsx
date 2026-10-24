@@ -1,6 +1,7 @@
 import {
   Breadcrumb,
   BreadcrumbItem,
+  BreadcrumbLink,
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
@@ -16,7 +17,8 @@ import type { ReactNode } from "react";
 // after sits beside the crumbs (the page's counts), children at the far end.
 type Props = {
   sidebarOpen: boolean;
-  root: string;
+  root?: string;
+  onRoot?: (e: React.MouseEvent) => void;
   current: string | null;
   icon?: ReactNode;
   lead?: boolean;
@@ -28,7 +30,7 @@ type Props = {
   children?: ReactNode;
 };
 
-export function PanelHeader({ sidebarOpen, root, current, icon, lead = true, toggle = true, muted, onGrab, after, children }: Props) {
+export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children }: Props) {
   return (
     <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region>
       <div
@@ -51,10 +53,14 @@ export function PanelHeader({ sidebarOpen, root, current, icon, lead = true, tog
         <div className="flex min-w-0 flex-1 items-baseline">
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
-              <BreadcrumbItem className="hidden shrink-0 md:block">{root}</BreadcrumbItem>
+              {root && (
+                <BreadcrumbItem className="hidden shrink-0 md:block">
+                  {onRoot ? <BreadcrumbLink render={<button onClick={onRoot} type="button" />}>{root}</BreadcrumbLink> : root}
+                </BreadcrumbItem>
+              )}
               {current !== null && (
                 <>
-                  <BreadcrumbSeparator className="hidden shrink-0 md:block" />
+                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:block" />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
                     <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>

@@ -1,5 +1,5 @@
 import { FileText, Plus } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
 import { ToastProvider as ShipyardToasts } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,31 +18,34 @@ import {
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
-import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { ToastProvider, toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
 import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
 import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
-import { linkHost } from "~/components/link-views";
+import { makeLinkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
-import { CARD, PaneArea } from "~/components/pane-area";
+import { CARD, PaneArea, widthNeeded } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
-import { dailyFor, ensureDaily, today } from "~/lib/daily";
+import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
 import { pageLabel } from "~/lib/labels";
 import { parentOf, roleOf } from "~/lib/linked";
+import { copyPageLink } from "~/lib/links";
+import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -75,7 +78,7 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const view = useStore((s) => s.view);
-  const { corner } = useAiPrefs();
+  const { corner, pinned } = useAiPrefs();
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
@@ -111,6 +114,30 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
+  // Pinned, the panel takes what the pages beside it don't need (pane-area.tsx), up to half the
+  // row they share; with less than its 280 px left it floats until there is room again.
+  const row = useRef<HTMLDivElement>(null);
+  const [rowW, setRowW] = useState(0);
+  // Measured once the sidebar has slid, so the panel isn't placed for a width on the way.
+  const sliding = useRef(false);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    setRowW(el.clientWidth);
+    const observer = new ResizeObserver(() => !sliding.current && setRowW(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [!!root]);
+  useEffect(() => {
+    sliding.current = true;
+    const t = window.setTimeout(() => {
+      sliding.current = false;
+      if (row.current) setRowW(row.current.clientWidth);
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [sidebarOpen]);
+  const fit = root && rowW ? Math.min(rowW / 2, rowW - 8 - widthNeeded(root)) : Infinity;
+  const dock = pinned && fit >= 280 ? pinned : null;
 
   useEffect(() => void isNative.then(setNative), []);
 
@@ -121,7 +148,11 @@ export default function App() {
 
   useEffect(() => {
     loadSpace()
-      .then((list) => showOnly(list.find(listed)?.id ?? null))
+      .then(async (list) => {
+        await foldDescriptions().catch(console.error);
+        // The top of Recent (which leaves tasks out), in the order chosen.
+        showOnly(list.filter((p) => listed(p) && p.typeId !== "task").sort(byRecent)[0]?.id ?? null);
+      })
       .catch(console.error);
   }, []);
 
@@ -154,7 +185,8 @@ export default function App() {
         openIdea(id);
       },
       close: closeCapture,
-      links: linkHost,
+      // Not the main host: the page in view is another page here, so "@" must offer it.
+      links: makeLinkHost({ create: async (title, typeId) => (await createPage({ title, typeId })).id, day: ensureDaily }),
     }),
     [closeCapture],
   );
@@ -214,18 +246,37 @@ export default function App() {
   // A row opens its page; Shift opens it beside the one in front, as Shift on a link does.
   const opener = (id: string) => (e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
 
+  // Nothing on screen shows a copied link, so a toast says so.
+  const copyLink = (id: string, name: string) => () =>
+    void copyPageLink(id, name).then(
+      () => toastManager.add({ type: "success", title: "Link copied", timeout: 2000 }),
+      () => toastManager.add({ type: "error", title: "Couldn't copy the link" }),
+    );
+  const isPinned = (p: ObjectSummary) => p.properties.pinned === true;
+
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
+  recentOrder.use(); // the list follows a change of order
   const navPages = pages
-    .filter((p) => listed(p) && !isChild(p))
+    // Tasks live in their type's view; there are too many for this list.
+    .filter((p) => listed(p) && p.typeId !== "task" && !isChild(p))
+    .sort(byRecent)
     .map((p) => {
       const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
+      const name = roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title);
       return {
-        name: roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title),
+        id: p.id,
+        name,
+        title: p.title,
         icon: <RowIcon icon={iconFor(p)} />,
         isActive: p.id === current,
         onSelect: opener(p.id),
         onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
+        // Both go through the page's editor when it is open, so its own next save keeps them.
+        onRename: (title: string) => void editPage(p.id, { title }),
+        pinned: isPinned(p),
+        onPin: () => void editPage(p.id, { properties: ({ pinned: _, ...rest }) => (isPinned(p) ? rest : { ...rest, pinned: true }) }),
+        onCopyLink: copyLink(p.id, name),
         onDelete: () => setPendingDelete(p),
         open: p.id === current || kids.some((c) => c.id === current),
         children: kids.map((c) => {
@@ -236,12 +287,14 @@ export default function App() {
             // An essay opens beside its page.
             onSelect: (e: React.MouseEvent) => (roleOf(c) === "essay" ? void openEssay(p.id) : opener(c.id)(e)),
             onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: c.id, label: name }),
+            onCopyLink: copyLink(c.id, name),
             onDelete: () => setPendingDelete(c),
           };
         }),
       };
     });
   const navTypes = types.map((t) => ({
+    id: t.id,
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,
     isActive: current === typeView(t.id),
@@ -270,17 +323,22 @@ export default function App() {
         <AppSidebar
           onCreate={create}
           onNewIdea={toggleCapture}
-          onToday={(e) => void ensureDaily(today()).then((id) => opener(id)(e))}
-          pages={navPages}
-          todayActive={current !== undefined && current === dailyFor(today())?.id}
+          onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
+          pages={navPages.filter((p) => !p.pinned)}
+          pinned={navPages.filter((p) => p.pinned)}
+          todayActive={current !== undefined && current === dayShown(today())}
           types={navTypes}
         />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
+          {/* A pinned agent panel is a card beside the pages; a floating one sits over them. */}
           {root ? (
-            <PaneArea windowToggle={mac} />
+            <div className="flex min-h-0 flex-1" ref={row}>
+              <PaneArea dock={dock} windowToggle={mac} />
+              <AgentPanel dock={dock} fit={fit} windowToggle={mac} />
+            </div>
           ) : (
             <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
-              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} toggle={!mac} />
+              <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
               <Empty className="min-h-0 flex-1">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
@@ -298,9 +356,8 @@ export default function App() {
               </Empty>
             </div>
           )}
-          {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
+          {/* The ask bar sits by the selected words. */}
           {root && <AskBar />}
-          {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
@@ -314,8 +371,8 @@ export default function App() {
     );
 
   return (
-    // Toasts sit on the edge away from the Ask panel's corner, so they never cover it.
-    <ToastProvider position={corner.startsWith("b") ? "top-center" : "bottom-center"}>
+    // Toasts sit in the bottom corner across from the Ask panel, so they never cover it.
+    <ToastProvider position={(dock ?? (corner.endsWith("l") ? "left" : "right")) === "left" ? "bottom-right" : "bottom-left"}>
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
@@ -326,9 +383,10 @@ export default function App() {
               </Suspense>
             </div>
           )}
+          {/* The row only places the box; a click beside it reaches the page under it. */}
           {capture && (
-            <div className="fixed inset-x-0 top-[15vh] z-50 flex justify-center">
-              <CaptureBox className="h-80 w-[640px] shadow-2xl" host={captureHost} />
+            <div className="pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center">
+              <CaptureBox className="pointer-events-auto h-80 w-[640px] shadow-2xl" host={captureHost} />
             </div>
           )}
           <ShortcutsSheet />

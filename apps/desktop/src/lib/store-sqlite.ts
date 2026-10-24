@@ -83,7 +83,7 @@ export const sqliteStore: ObjectStore = {
         patch.content ? JSON.stringify(patch.content) : null,
         patch.properties ? JSON.stringify(patch.properties) : null,
         patch.typeId ?? null,
-        Date.now(),
+        patch.updatedAt ?? Date.now(),
         id,
       ],
     );
