@@ -1,0 +1,94 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 07:33:20 -0700
+Subject: [PATCH] Embedded worktrees stay in the runtime's state
+
+An embedded berthd makes its worktrees under its own folder, not beside the person's repository.
+---
+ cmd/berthd/main.go             |  1 +
+ internal/box/locations.go      |  8 ++++++++
+ internal/box/locations_test.go | 18 ++++++++++++++++++
+ internal/box/sessions.go       |  3 +++
+ 4 files changed, 30 insertions(+)
+
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index 1da4372..a624161 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -426,6 +426,7 @@ func serve(b boxHome, args []string) error {
+ 			box.EmbeddedBin = dir
+ 		}
+ 		box.EmbeddedFiles = filepath.Join(b.dir, "browser", "files")
++		box.EmbeddedWorktrees = filepath.Join(b.dir, "worktrees")
+ 	}
+ 	bx.Artifacts = &box.ArtifactStore{Dir: filepath.Join(b.dir, "artifacts"), Events: bus, Box: hostname}
+ 	go bx.Artifacts.Run(ctx)
+diff --git a/internal/box/locations.go b/internal/box/locations.go
+index e2d690d..9ee1e16 100644
+--- a/internal/box/locations.go
++++ b/internal/box/locations.go
+@@ -6,6 +6,8 @@ import (
+ 	"bufio"
+ 	"bytes"
+ 	"context"
++	"crypto/sha256"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"errors"
+ 	"fmt"
+@@ -303,6 +305,12 @@ func (l *Locations) CreateWorktreeFrom(ctx context.Context, location string, req
+ 		branch = name
+ 	}
+ 	path := filepath.Join(filepath.Dir(loc.Path), filepath.Base(loc.Path)+"-"+name)
++	if EmbeddedWorktrees != "" {
++		// An embedded berthd makes no folders beside the person's: its worktrees are its own.
++		sum := sha256.Sum256([]byte(loc.Path))
++		// A folder per repository keeps the <repo>-<name> a worktree's name is read from.
++		path = filepath.Join(EmbeddedWorktrees, hex.EncodeToString(sum[:4]), filepath.Base(loc.Path)+"-"+name)
++	}
+ 	if !branchExists(ctx, loc.Path, "refs/heads/"+branch) && (req.PR > 0 || req.Ref != "" || branchExists(ctx, loc.Path, "refs/remotes/origin/"+branch)) {
+ 		// Bring origin's branch up to date; a PR's own branch may live there.
+ 		git(ctx, "-C", loc.Path, "fetch", "--quiet", "origin", branch)
+diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
+index 167140b..ee93052 100644
+--- a/internal/box/locations_test.go
++++ b/internal/box/locations_test.go
+@@ -278,3 +278,21 @@ func TestAFailedAddLeavesNothingBehind(t *testing.T) {
+ 		t.Fatalf("creating again after a failed add: %v", err)
+ 	}
+ }
++
++// An embedded berthd's worktrees are its own: nothing appears beside the person's repository.
++func TestEmbeddedWorktreesStayInItsState(t *testing.T) {
++	repo := gitRepo(t)
++	EmbeddedWorktrees = t.TempDir()
++	defer func() { EmbeddedWorktrees = "" }()
++	l := NewLocations(filepath.Join(t.TempDir(), "locations.json"))
++	if _, err := l.Add(context.Background(), "cal", repo); err != nil {
++		t.Fatal(err)
++	}
++	wt, err := l.CreateWorktree(context.Background(), "cal", "chat-1", "ll/chat-1", "")
++	if err != nil || !strings.HasPrefix(wt.Path, EmbeddedWorktrees) || wt.Name != "chat-1" {
++		t.Fatalf("worktree at %q: %v", wt.Path, err)
++	}
++	if beside, _ := filepath.Glob(filepath.Join(filepath.Dir(repo), "cal-*")); len(beside) != 0 {
++		t.Fatalf("made beside the repository: %v", beside)
++	}
++}
+diff --git a/internal/box/sessions.go b/internal/box/sessions.go
+index 6a44b99..1e5dacc 100644
+--- a/internal/box/sessions.go
++++ b/internal/box/sessions.go
+@@ -187,6 +187,9 @@ var Embedded = os.Getenv("BERTH_EMBEDDED") == "1"
+ // embedded berthd's sessions' PATH, so its agents reach it and no other.
+ var EmbeddedBin string
+ 
++// EmbeddedWorktrees, when set, is where an embedded berthd makes worktrees.
++var EmbeddedWorktrees string
++
+ // EmbeddedFiles, when set, holds each workspace's browser downloads and long
+ // snapshots, so an embedded berthd writes nothing into the person's folders.
+ var EmbeddedFiles string
+-- 
+2.51.2
+
