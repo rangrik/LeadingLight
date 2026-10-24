@@ -73,3 +73,45 @@ Feature: The project runtime
     Given Codex's session is stopped
     When its conversation is resumed and a message is sent straight away
     Then the message is taken, not refused with "Not initialized", and Codex answers "Pear"
+
+  # In the app: the runtime the app starts and keeps (src-tauri/src/runtime.rs). In a browser the
+  # dev server starts the same runtime for its checkout and reaches it at /__runtime.
+
+  Scenario: Settings shows the runtime, and starts it
+    Given the runtime isn't running
+    When I open Settings › AI
+    Then "Projects › Runtime" says "Starts when a project chat first needs it.", with Start
+    When I press Start
+    Then it says "Running, v0.3.30-ll.3+…" and where its state is, with Restart
+
+  Scenario: A runtime that isn't built says how to build it
+    Given the browser build has no runtime built
+    When I press Start in Settings › AI › Projects
+    Then it says "Not running: No runtime built yet: run pnpm runtime:build."
+
+  Scenario: Restarting keeps the agents working
+    Given an agent in the runtime is in the middle of a turn
+    When I press Restart in Settings › AI › Projects
+    Then it says Running again
+    And the agent's turn carries on and finishes
+
+  Scenario: The installed app needs nothing installed
+    Given the Mac app, built with pnpm install:dev-app
+    When its runtime starts
+    Then berthd and tmux run from the app's own copy in its data folder, not Homebrew's
+    And its tmux server and port range are its own, not the person's Shipyard's
+
+  Scenario: Agents keep working with the app closed
+    Given an agent in the Mac app's runtime is in the middle of a turn
+    When I quit the app
+    Then the agent's turn carries on
+    When I open the app again
+    Then it uses the same runtime, and the turn's end is there
+
+  Scenario: A newer app takes over from an older runtime
+    Given the Mac app's runtime is running an older build
+    When a newer app starts
+    Then the older runtime stops, its state files are copied to runtime/backups first, and the
+      newer one runs
+    And agents that were running carry on under the newer one
+    And the older build's berthd and tmux are kept beside it for rolling back

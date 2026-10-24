@@ -16,6 +16,8 @@ if pgrep -f "/Applications/$APP.app/" >/dev/null; then
   exit 1
 fi
 if [ "${1:-}" != "--no-build" ]; then
+  scripts/project-runtime/build.sh
+  scripts/project-runtime/build-tmux.sh
   pnpm --filter @leadinglight/desktop tauri build --bundles app
 fi
 [ -d "$BUNDLE" ] || { echo "no bundle at $BUNDLE"; exit 1; }

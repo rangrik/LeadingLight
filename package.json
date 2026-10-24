@@ -11,7 +11,7 @@
     "sync:shipyard": "scripts/sync-shipyard.sh",
     "install:app": "scripts/install-app.sh",
     "install:dev-app": "scripts/install-dev-app.sh",
-    "runtime:build": "scripts/project-runtime/build.sh",
+    "runtime:build": "scripts/project-runtime/build.sh && scripts/project-runtime/build-tmux.sh",
     "runtime:probe": "node scripts/project-runtime/probe.mjs"
   }
 }

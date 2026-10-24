@@ -7,11 +7,13 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 // Claude through the installed Claude Code (agent.rs), the menu bar, built from
 // src/lib/shortcuts.json (Shipyard's, see vendor/shipyard/README.md); each item tells
-// the webview as berth://menu, and the idea capture box (capture.rs).
+// the webview as berth://menu, the idea capture box (capture.rs), and the project runtime
+// that project chats run in (runtime.rs).
 mod agent;
 mod capture;
 mod clis;
 mod menu;
+mod runtime;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
@@ -83,6 +85,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(agent::Agents::default())
+        .manage(runtime::Runtime::default())
         .invoke_handler(tauri::generate_handler![
             agent::agent_status,
             agent::agent_ask,
@@ -98,12 +101,17 @@ pub fn run() {
             capture::capture_show,
             capture::capture_hide,
             capture::capture_open,
+            runtime::runtime_status,
+            runtime::runtime_call,
+            runtime::runtime_events,
+            runtime::runtime_events_stop,
             shortcuts_set
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             menu_bar(app)?;
             capture::setup(app.handle())?;
+            runtime::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {

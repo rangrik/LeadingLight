@@ -63,6 +63,10 @@
     ],
     "macOS": {
       "signingIdentity": "-"
-    }
+    },
+    "externalBin": [
+      "binaries/berthd",
+      "binaries/tmux"
+    ]
   }
 }

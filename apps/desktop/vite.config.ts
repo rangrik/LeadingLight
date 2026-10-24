@@ -5,6 +5,7 @@ import process from "node:process";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { projectRuntime } from "./runtime-dev";
 
 const host = process.env.TAURI_DEV_HOST;
 const here = import.meta.dirname;
@@ -35,7 +36,7 @@ function noShikiWasm(): Plugin {
 
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss(), noShikiWasm()],
+  plugins: [react(), tailwindcss(), noShikiWasm(), projectRuntime()],
   worker: { format: "es" as const, plugins: () => [noShikiWasm()] },
   // Two pages: the app, and the capture box's panel (src-tauri/src/capture.rs).
   build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html") } } },

@@ -26,6 +26,9 @@ dist-ssr
 # Rust
 /target/
 
+# The Berth agent browser's scratch files
+.berth/browser/
+
 # QA artifacts
 apps/desktop/qa/.results
 apps/desktop/qa/report/*

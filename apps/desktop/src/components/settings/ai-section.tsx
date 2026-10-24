@@ -16,6 +16,7 @@ import { closeUpdateToast } from "~/components/cli-updates";
 import { behind, cliPrefs, commandOf, INSTALL, loadTools, SOURCE, type Tool, tools, updateTool } from "~/lib/clis";
 import { openLink } from "~/lib/links";
 import { isNative } from "~/lib/platform";
+import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transport";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
@@ -48,6 +49,7 @@ export function AiSection() {
         </SettingsRow>
       </SettingsGroup>
       <CliTools />
+      <RuntimeGroup />
       <SettingsGroup title="Answers">
         <SettingsRow label="Model" description="Claude's through Claude Code; GPT's through Codex.">
           <ModelSelect />
@@ -119,6 +121,50 @@ function Account({ status }: { status: AgentStatus | "checking" }) {
 }
 
 // The Claude Code and Codex on this Mac, each with its version, where it came from, and Update.
+// The project runtime project chats run in (DECISIONS.md, 18): whether it runs, and a restart,
+// which its agents outlive.
+function RuntimeGroup() {
+  const [status, setStatus] = useState<RuntimeStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => void runtimeStatus().then(setStatus), []);
+  const start = () => {
+    setBusy(true);
+    void runtimeStatus({ start: true, restart: status?.state === "ready" })
+      .then(setStatus)
+      .finally(() => setBusy(false));
+  };
+  const what = !status
+    ? "Checking…"
+    : status.state === "ready"
+      ? `Running, ${status.version}. Agents in project chats keep working while the app is closed.`
+      : status.state === "failed"
+        ? `Not running: ${status.error}`
+        : "Starts when a project chat first needs it.";
+  return (
+    <SettingsGroup title="Projects">
+      <SettingsRow
+        label="Runtime"
+        description={
+          <>
+            {what}
+            {status?.home && (
+              <>
+                {" "}
+                Its state is in <Code>{status.home}</Code>.
+              </>
+            )}
+          </>
+        }
+      >
+        <Button disabled={busy || !status} onClick={start} size="sm" variant="outline">
+          {busy && <Spinner />}
+          {status?.state === "ready" ? "Restart" : "Start"}
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
 function CliTools() {
   const list = tools.use();
   const prefs = cliPrefs.use();

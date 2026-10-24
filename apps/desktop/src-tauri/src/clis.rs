@@ -56,7 +56,7 @@ fn run(mut c: Command, secs: u64) -> Result<(bool, String), String> {
 
 // The PATH a login shell has: a Mac app starts with a short one, without Homebrew, nvm or fnm.
 // An fnm or nvm shell's own folder is a link that goes away; its target stays.
-fn shell_path() -> &'static [PathBuf] {
+pub fn shell_path() -> &'static [PathBuf] {
     static PATH: OnceLock<Vec<PathBuf>> = OnceLock::new();
     PATH.get_or_init(|| {
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());

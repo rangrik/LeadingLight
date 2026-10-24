@@ -1,0 +1,9 @@
+{
+  "why": "berthd runs every agent under tmux; the app carries its own so it needs nothing installed",
+  "macos": "13.0",
+  "sources": [
+    { "name": "libevent", "license": "BSD-3-Clause", "url": "https://github.com/libevent/libevent/releases/download/release-2.1.13-stable/libevent-2.1.13-stable.tar.gz", "sha256": "f7e9383b8c0baa81b687e5b5eecc01beefaf1b19b64151d95ed61647fe7a315c" },
+    { "name": "utf8proc", "license": "MIT", "url": "https://github.com/JuliaStrings/utf8proc/archive/refs/tags/v2.11.3.tar.gz", "sha256": "abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78" },
+    { "name": "tmux", "license": "ISC", "url": "https://github.com/tmux/tmux/releases/download/3.6a/tmux-3.6a.tar.gz", "sha256": "b6d8d9c76585db8ef5fa00d4931902fa4b8cbe8166f528f44fc403961a3f3759" }
+  ]
+}
