@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:18:03 -0700
+Subject: [PATCH] Embedded: each agent its own browser tab; refused hosts
+ reported
+
+An embedded berthd gives each session BERTH_BROWSER_TAB, its own name, so agents sharing a workspace never share a page's refs or cookies. A browser's status lists the last hosts it refused, so a public one can be allowed.
+---
+ internal/box/browsertabs.go | 4 +++-
+ internal/box/sessions.go    | 4 ++++
+ internal/box/switch.go      | 3 +++
+ 3 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index 26aa471..cbfdf96 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -594,6 +594,8 @@ type BrowserStatus struct {
+ 	LastUsed time.Time `json:"last_used"`
+ 	Watchers int       `json:"watchers"`
+ 	Refused  int       `json:"refused,omitempty"`
++	// RefusedHosts are the last hosts it refused: public ones may be allowed.
++	RefusedHosts []string `json:"refused_hosts,omitempty"`
+ 	// Viewport is the page's size, and Size it as text (1920×1080).
+ 	Viewport Viewport `json:"viewport"`
+ 	Size     string   `json:"size"`
+@@ -663,7 +665,7 @@ func (c *chromium) status() BrowserStatus {
+ 		st.RSS = treeRSS(st.PID)
+ 	}
+ 	if px, err := c.m.b.BrowserProxies.For(c.m.b, c.path); err == nil {
+-		st.Refused, _ = px.Refused()
++		st.Refused, st.RefusedHosts = px.Refused()
+ 	}
+ 	return st
+ }
+diff --git a/internal/box/sessions.go b/internal/box/sessions.go
+index 1e5dacc..5de6942 100644
+--- a/internal/box/sessions.go
++++ b/internal/box/sessions.go
+@@ -416,6 +416,10 @@ func (s *Sessions) create(ctx context.Context, name, location, dir, command, age
+ 	}
+ 	args := []string{"new-session", "-d", "-s", name, "-c", dir, "-x", "200", "-y", "50"}
+ 	env = append(withAgentBrowserIdle(append([]string(nil), env...)), "BERTH_SESSION="+name)
++	if Embedded && CheckTabName(name) == nil {
++		// Each agent its own tab: two in one workspace never share a page's refs or cookies.
++		env = append(env, "BERTH_BROWSER_TAB="+name)
++	}
+ 	if agent != "" {
+ 		env = append(env, "BERTH_AGENT="+agent)
+ 	}
+diff --git a/internal/box/switch.go b/internal/box/switch.go
+index e1ee840..423a562 100644
+--- a/internal/box/switch.go
++++ b/internal/box/switch.go
+@@ -289,6 +289,9 @@ func (b *Box) respawnAgent(ctx context.Context, sess Session, command string, en
+ 	argv := []string{shell, "-lc", withPATH(shell, launchPATH(command, agent), sourceCommand(shell, file))}
+ 	target := "=" + sess.Name + ":"
+ 	args := []string{"respawn-pane", "-k", "-t", target, "-c", sess.Dir}
++	if Embedded && CheckTabName(sess.Name) == nil {
++		extra = append(extra, "BERTH_BROWSER_TAB="+sess.Name)
++	}
+ 	for _, kv := range append(append(withAgentBrowserIdle(extra), "BERTH_SESSION="+sess.Name, "BERTH_AGENT="+agent), env...) {
+ 		args = append(args, "-e", kv)
+ 	}
+-- 
+2.51.2
+

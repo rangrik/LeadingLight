@@ -342,10 +342,12 @@ async function browser() {
       await api("POST", "/v1/sessions", { name: s, location: "site", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low",
         prompt: "Using only shell commands, in order: `command -v berthd`; `berthd browser open /`; `berthd browser snapshot`; click the button named Press me with `berthd browser click @REF`; `berthd browser snapshot`. Then reply with the heading you see and what command -v printed." });
       const tab = `/v1/worktrees/site/site/browser`;
-      await until("its browser", async () => (await api("GET", `${tab}/status`)).json?.running);
+      // Its tab is its own, named after its session.
+      const own = `?tab=${s}`;
+      await until("its browser", async () => (await api("GET", `${tab}/tabs`)).json?.tabs?.some((t) => t.name === s));
       // The observer: the tab's frames, as the app's live view reads them, until the agent is done.
       await new Promise((ok) => {
-        const req = request({ socketPath: sock, path: `${tab}/screencast` }, (res) => {
+        const req = request({ socketPath: sock, path: `${tab}/screencast${own}` }, (res) => {
           let rest = "";
           res.on("data", (d) => {
             const lines = (rest + d).split("\n");
@@ -362,16 +364,28 @@ async function browser() {
         until("the agent done", async () => (await session(s))?.agent_state === "finished", 180_000).finally(() => (req.destroy(), ok()));
       });
       const reply = (await items(s)).filter((i) => i.kind === "text").at(-1)?.text ?? "";
-      const page = (await api("POST", `${tab}/snapshot`, {})).json.text;
+      const page = (await api("POST", `${tab}/snapshot${own}`, {})).json.text;
       if (!reply.includes("Pressed") || !page.includes('heading "Pressed"')) throw new Error(`agent said ${reply}; the tab shows ${page}`);
       if (!reply.includes(join(state, "box", "bin", "berthd"))) throw new Error(`the agent's berthd is not the runtime's: ${reply}`);
       if (frames < 2 || shown.size < 2 || !seen.startsWith("http://site.")) throw new Error(`observer saw ${frames} frames (${shown.size} different) of ${seen}`);
       // A watcher's look at the console leaves the agent's unread messages unread.
-      const peek = (await api("GET", `${tab}/console?peek=1`)).json.text;
-      await api("POST", `${tab}/eval`, { js: 'console.error("probe-later")' });
-      const agents = (await api("GET", `${tab}/console`)).json.text;
+      const peek = (await api("GET", `${tab}/console?peek=1&tab=${s}`)).json.text;
+      await api("POST", `${tab}/eval${own}`, { js: 'console.error("probe-later")' });
+      const agents = (await api("GET", `${tab}/console${own}`)).json.text;
       if (!peek.includes("probe-console") || !agents.includes("probe-later")) throw new Error(`peek ${peek}; agent then read ${agents}`);
       return { frames, different: shown.size, seen };
+    });
+    await check("browser: two agents in one workspace each have their own tab and cookies", async () => {
+      const tab = `/v1/worktrees/site/site/browser`;
+      const ask = (who) => `Using only shell commands, in order: \`berthd browser open /\`; \`berthd browser eval 'document.cookie="who=${who}"'\`; wait 5 seconds; \`berthd browser eval 'document.cookie'\`. Then reply with exactly what the last command printed.`;
+      for (const who of ["A", "B"]) await api("POST", "/v1/sessions", { name: `probe-tab-${who}`, location: "site", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low", prompt: ask(who) });
+      for (const who of ["A", "B"]) await until(`${who} done`, async () => (await session(`probe-tab-${who}`))?.agent_state === "finished", 180_000);
+      const said = {};
+      for (const who of ["A", "B"]) said[who] = (await items(`probe-tab-${who}`)).filter((i) => i.kind === "text").at(-1)?.text ?? "";
+      const tabs = (await api("GET", `${tab}/tabs`)).json.tabs.map((t) => t.name);
+      if (!said.A.includes("who=A") || said.A.includes("who=B") || !said.B.includes("who=B") || said.B.includes("who=A")) throw new Error(`A saw ${said.A}; B saw ${said.B}`);
+      if (!tabs.includes("probe-tab-A") || !tabs.includes("probe-tab-B")) throw new Error(`tabs ${tabs}`);
+      return { tabs };
     });
     await check("browser: the folder holds only what it held", async () => {
       const left = execFileSync("find", [site, "-mindepth", "1"]).toString().trim().split("\n");
