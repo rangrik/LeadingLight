@@ -215,7 +215,7 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
                   <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
                 ) : leaf.page.startsWith(BROWSER_VIEW) ? (
-                  <BrowserPane pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} worktree={leaf.page.split("/")[1] || undefined} />
+                  <BrowserPane pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} session={leaf.page.split("/")[2] || undefined} worktree={leaf.page.split("/")[1] || undefined} />
                 ) : (
                   <PagePane id={leaf.page} />
                 )}

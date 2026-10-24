@@ -1,4 +1,5 @@
 import { Globe } from "lucide-react";
+import { Button } from "@leadinglight/ui/components/button";
 import { useEffect, useState } from "react";
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
 import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
@@ -51,14 +52,21 @@ const path = (url?: string) => {
   }
 };
 
-export function BrowserPane({ pageId, worktree }: { pageId: string; worktree?: string }) {
+export function BrowserPane({ pageId, worktree, session }: { pageId: string; worktree?: string; session?: string }) {
   const ws = useWorkspace(pageId, worktree);
   const tabs = useBrowserTabs(ws?.location, ws?.worktree);
+  // Each agent has a tab of its own, named after its session: the chat's is shown first.
   const [tab, setTab] = useState("");
+  const [refused, setRefused] = useState<string[]>([]);
+  // Allowed here: the runtime's list of refusals still names them for a while.
+  const [allowed, setAllowed] = useState<string[]>([]);
+  // Open, then gone: said plainly, not left as a frozen picture.
+  const [closed, setClosed] = useState(false);
   const [view, setView] = useState<"page" | "console">("page");
   const [frame, setFrame] = useState<{ data: string; url?: string } | null>(null);
   const [console, setConsole] = useState("");
-  const shown = tab || tabs[0]?.name || "";
+  const shown = tab || tabs.find((t) => t.name === session)?.name || tabs[0]?.name || "";
+  useEffect(() => void (tabs.length ? setClosed(false) : frame && setClosed(true)), [tabs.length]);
   const base = ws?.worktree ? `/v1/worktrees/${ws.location}/${ws.worktree}/browser` : null;
   useEffect(() => {
     setFrame(null);
@@ -72,6 +80,15 @@ export function BrowserPane({ pageId, worktree }: { pageId: string; worktree?: s
       }
     }, () => {});
   }, [base, shown, tabs.length]);
+  // Public sites the browser was kept from, which the person may allow for agents' browsers.
+  useEffect(() => {
+    if (!base || !tabs.length) return;
+    const read = () => void ask<{ status?: { refused_hosts?: string[] } }>("GET", `${base}/status`).then((s) => setRefused((s.status?.refused_hosts ?? []).filter((h) => !/(^|\.)localhost$|^127\.|^\[?::1/.test(h))), () => {});
+    read();
+    const every = window.setInterval(read, 3000);
+    return () => window.clearInterval(every);
+  }, [base, tabs.length]);
+  const allow = (host: string) => void ask("POST", "/v1/browser/allow", { origin: host }).then(() => setAllowed((a) => [...a, host]), () => {});
   // The console as the tab has it, read without using up what its agent hasn't read yet.
   useEffect(() => {
     if (view !== "console" || !base) return;
@@ -85,7 +102,7 @@ export function BrowserPane({ pageId, worktree }: { pageId: string; worktree?: s
     return (
       <div className="m-auto flex flex-col items-center gap-2 p-6 text-center text-muted-foreground text-sm">
         <Globe className="size-6" />
-        No browser is open in this workspace. It opens when the agent opens a page.
+        {closed ? "The browser closed. It opens again when the agent next opens a page." : "No browser is open in this workspace. It opens when the agent opens a page."}
       </div>
     );
   return (
@@ -113,6 +130,16 @@ export function BrowserPane({ pageId, worktree }: { pageId: string; worktree?: s
           </Select>
         )}
       </div>
+      {[...new Set(refused)].filter((h) => !allowed.includes(h)).map((host) => (
+        <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-xs" key={host}>
+          <span className="min-w-0 flex-1 truncate">
+            The agent's browser was kept from <span className="font-medium">{host}</span>, a site outside the folder.
+          </span>
+          <Button onClick={() => allow(host)} size="xs" variant="outline">
+            Allow
+          </Button>
+        </div>
+      ))}
       {view === "page" ? (
         <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-muted/40 p-3">
           {frame ? <img alt={`The agent's tab at ${frame.url ?? ""}`} className="max-w-full rounded-md border shadow-xs/5" src={`data:image/jpeg;base64,${frame.data}`} /> : <p className="m-auto text-muted-foreground">Waiting for the tab…</p>}

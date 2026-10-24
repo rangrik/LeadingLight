@@ -50,7 +50,25 @@ Feature: An agent's browser
     Given the agent opened a second tab
     Then the view lets me choose which tab to watch, and shows the one I choose
 
+  # Public pages, several agents, a lost browser (slice 8b)
+
+  Scenario: Each agent its own tab
+    Given two chats in "Research" both open the folder's page
+    Then each has a tab of its own, with its own page, refs and cookies
+    And each chat's Browser view opens on its own agent's tab
+
+  Scenario: A public page, once allowed
+    When the agent's browser is kept from opening "example.com"
+    Then the view says so, with Allow
+    When I press Allow
+    Then the agent can open https://example.com, and the page loads in its tab
+
+  Scenario: The browser goes away
+    Given the view shows the agent's tab
+    When the browser closes (it was idle, or it crashed)
+    Then the view says the browser closed, not a frozen picture
+    And when the agent opens a page again, the view shows it again
+
   Scenario: No browser
     Given the agent hasn't opened a browser in this workspace
     Then the header shows no Browser button
-

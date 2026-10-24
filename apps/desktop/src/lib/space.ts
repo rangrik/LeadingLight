@@ -84,9 +84,10 @@ export const typeView = (id: string) => `${TYPE_VIEW}${id}`;
 // A page's project chat (features/project-chat.feature), crumbed under its page.
 export const CHAT_VIEW = "chat:";
 export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
-// Its agent's browser, live (features/agent-browser.feature): page id, then the chat's own worktree if any.
+// Its agent's browser, live (features/agent-browser.feature): page id, the chat's own worktree if
+// any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
-export const browserView = (pageId: string, worktree = "") => `${BROWSER_VIEW}${pageId}/${worktree}`;
+export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
 export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {

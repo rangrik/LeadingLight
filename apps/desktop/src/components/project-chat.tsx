@@ -243,7 +243,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           </MenuPopup>
         </Menu>
         {tabs.length > 0 && (
-          <Button className="ms-auto h-7 gap-1.5 px-1.5 sm:h-7" onClick={() => openBeside(browserView(pageId, own))} size="sm" variant="ghost">
+          <Button className="ms-auto h-7 gap-1.5 px-1.5 sm:h-7" onClick={() => openBeside(browserView(pageId, own, live ?? ""))} size="sm" variant="ghost">
             <Globe className="size-4" />
             Browser
           </Button>
