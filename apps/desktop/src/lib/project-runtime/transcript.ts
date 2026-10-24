@@ -20,6 +20,8 @@ export type TranscriptItem = {
   error?: boolean;
   questions?: Question[];
   answers?: string[];
+  // A worker's outcome, told to the agent that started it.
+  report?: { kind?: string; session?: string; status?: string; duration?: string; summary?: string; answer?: string; error?: string };
   // A slash command the person sent, as the record keeps it.
   command?: string;
   args?: string;

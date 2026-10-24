@@ -13,7 +13,7 @@ import { createStore } from "~/lib/state";
 // a chat keeps up while another page is in front.
 
 export type Conversation = { id: string; agent: string; location?: string; dir: string; session?: string; live?: boolean; mode?: string; model?: string; effort?: string; title?: string; created: string; updated?: string };
-export type Session = { name: string; agent_state?: string; exited?: boolean; driver?: string };
+export type Session = { name: string; agent_state?: string; exited?: boolean; driver?: string; agent?: string };
 export type Turn = { n: number; state: string; started?: string; ended?: string; origin?: string };
 // A file an agent wrote, kept by the runtime as that write left it (slice 7).
 export type Output = { id: string; path: string; tool: string; at: number; size: number; kept: boolean; missing?: boolean };
@@ -30,6 +30,9 @@ export type Chat = {
   texts: Record<string, string>;
   requests: RuntimeRequest[];
   outputs: Output[];
+  // Workers its agent started and still waits on, and every session's state (theirs among them).
+  workers: string[];
+  sessions: Session[];
   answers: Record<string, AnswerDraft>;
   deliveries: Record<string, { delivery: Delivery; error?: string }>;
   // Read from the runtime at least once since it opened.
@@ -39,7 +42,7 @@ export type Chat = {
   error: string | null;
 };
 
-const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], answers: {}, deliveries: {}, restore: null, error: null });
+const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], workers: [], sessions: [], answers: {}, deliveries: {}, restore: null, error: null });
 const chats = new Map<string, ReturnType<typeof createStore<Chat>>>();
 export const chatOf = (key: string) => {
   let s = chats.get(key);
@@ -103,6 +106,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const page = name ? await ask<TranscriptPage>("GET", `/v1/sessions/${name}/transcript?since=${w.next}${w.gen ? `&gen=${w.gen}` : ""}`).catch(() => null) : null;
   const turns = session ? await ask<Turn[]>("GET", `/v1/sessions/${name}/turns`).catch(() => []) : [];
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
+  // The workers its agent started and hasn't heard back from yet.
+  const watches = name ? await ask<{ parent: string; session?: string }[]>("GET", "/v1/notify").catch(() => null) : null;
   // What its agents wrote, kept with the conversation; there with no session too.
   const outputs = await ask<Output[]>("GET", `/v1/conversations/${conv.id}/outputs`).catch(() => null);
   // The session's own mode: approving a plan changes it without the conversation's record.
@@ -127,7 +132,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // A mode set while this read was out is newer than both the conversation and the session's.
   const changed = watching.get(key)?.conv.id === conv.id && watching.get(key)!.conv !== conv;
   const latest = changed ? watching.get(key)!.conv : { ...conv, mode: controls?.mode ?? conv.mode };
-  patch(key, { synced: true, outputs: outputs ?? chatOf(key).get().outputs, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  const workers = [...new Set((watches ?? []).filter((x) => x.parent === name && x.session).map((x) => x.session as string))];
+  patch(key, { synced: true, sessions, workers, outputs: outputs ?? chatOf(key).get().outputs, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
 
@@ -164,7 +170,8 @@ let unlisten: (() => void) | null = null;
 const heard = (e: RuntimeEvent) => {
   const name = (e.data?.session ?? e.data?.name) as string | undefined;
   for (const { key, conv } of watching.values())
-    if (e.type === "runtime.connected" || (name && name === conv.session)) void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
+    // Its own session's news, or a worker's it waits on.
+    if (e.type === "runtime.connected" || (name && (name === conv.session || chatOf(key).get().workers.includes(name)))) void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
 };
 
 // Follows a chat while it is on screen: its changes, and the reply being written.

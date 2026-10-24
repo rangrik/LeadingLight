@@ -9,6 +9,7 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { useBrowserTabs, useWorkspace } from "~/components/agent-browser";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
+import { WorkerCard, type WorkerRow } from "~/components/worker-card";
 import { type ChatSettings, type Command, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
@@ -51,19 +52,22 @@ const NAME: Record<Agent, string> = { claude: "Claude", codex: "Codex" };
 // The record's items as the note chat's turns: one per prompt, its steps, its words, its end.
 // A file a turn wrote: its name, the call that wrote it, and the version the runtime kept.
 type Written = { name: string; tool?: string; output?: Output };
-type Shown = { items: Item[]; files: Written[]; stopped?: boolean; error?: string };
+type Report = NonNullable<TranscriptItem["report"]>;
+type Shown = { items: Item[]; files: Written[]; reports: Report[]; stopped?: boolean; error?: string };
 function turnsOf(chat: Chat): Shown[] {
   const out: Shown[] = [];
-  const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [] }));
-  const last = () => out[out.length - 1] ?? (out.push({ items: [], files: [] }), out[0]);
+  const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [], reports: [] }));
+  const last = () => out[out.length - 1] ?? (out.push({ items: [], files: [], reports: [] }), out[0]);
   for (const t of chat.window.items as TranscriptItem[]) {
     if (saidIn(t) !== null) {
       // Files sent with it show by name; the runtime keeps them under a stamped name.
       const { said, files } = splitAttached(saidIn(t) ?? "");
-      out.push({ items: [{ kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) }], files: [] });
+      out.push({ items: [{ kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) }], files: [], reports: [] });
     }
     // How a turn ended is said by a notice: stopped, or an error.
     else if (t.kind === "notice" && t.notice === "interrupted") last().stopped = true;
+    // A worker's outcome, told to this agent: it shows on that worker's row (features/agent-coordination.feature).
+    else if (t.kind === "report" && t.report?.session) last().reports.push(t.report);
     else if (t.kind === "notice" && t.level === "error") last().error = t.text;
     else if (t.kind === "text" || t.kind === "notice" || t.kind === "shell") add({ kind: "text", text: t.text ?? "" });
     else if (t.kind === "tools") for (const c of t.items ?? []) add({ kind: "tool", id: c.id ?? `${t.id}:${c.target}`, name: c.verb, input: { target: c.target }, status: t.done ? "done" : "running" });
@@ -204,6 +208,11 @@ export function ProjectChat({ pageId }: { pageId: string }) {
     }, () => {});
   };
   const now = chat.turns.at(-1);
+  // A worker's own chat, when the runtime lists it among the folder's.
+  const openWorker = (s: string) => void listChats(location).then((l) => {
+    const c = l.find((x) => x.session === s);
+    if (c) (setList(l), setCurrent(c.id));
+  }, () => {});
 
   return (
     <div className="@container/panel flex h-full flex-col text-sm" data-testid="project-chat">
@@ -291,6 +300,16 @@ export function ProjectChat({ pageId }: { pageId: string }) {
                 ))}
               </div>
             )}
+            {(() => {
+              // Workers still out show under the latest turn; each one's outcome under the turn it came in.
+              const out = k === turns.length - 1 ? chat.workers.filter((w) => !t.reports.some((r) => r.session === w)) : [];
+              const state = (s: string) => chat.sessions.find((x) => x.name === s);
+              const rows: WorkerRow[] = [
+                ...t.reports.map((r) => ({ session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: r.status, duration: r.duration, answer: r.answer, error: r.error })),
+                ...out.map((s) => ({ session: s, agent: state(s)?.agent, live: state(s)?.agent_state === "waiting" ? ("waiting" as const) : ("working" as const) })),
+              ];
+              return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={(s) => void ask("POST", `/v1/sessions/${s}/interrupt`).catch(() => {})} rows={rows} />;
+            })()}
           </div>
         ))}
         {waitingOn.map((text, k) => (
