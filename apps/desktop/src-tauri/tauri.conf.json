@@ -67,6 +67,11 @@
     "externalBin": [
       "binaries/berthd",
       "binaries/tmux"
-    ]
+    ],
+    "resources": {
+      "../../../runtime/tmux/licenses/": "licenses/tmux/",
+      "../../../vendor/shipyard/LICENSE": "licenses/shipyard/LICENSE",
+      "../../../vendor/shipyard/THIRD_PARTY_NOTICES.md": "licenses/shipyard/THIRD_PARTY_NOTICES.md"
+    }
   }
 }
