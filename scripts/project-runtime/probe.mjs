@@ -294,8 +294,9 @@ async function workers() {
     await until("its report, with the lead", async () => (await items(lead)).some((i) => i.kind === "report" && i.report?.session === "probe-oneshot"), 240_000);
   });
   await check("workers: a worker a person stops is reported stopped", async () => {
-    execFileSync(bin, ["session", "new", "plain", "--name", "probe-stopped", "--agent", "claude", "--prompt", "Run the shell command: sleep 120. Then reply DONE."], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } });
-    await until("it running", async () => (await session("probe-stopped"))?.agent_state === "running", 120_000);
+    // Stopped in the middle of a command (this Mac's own hooks may refuse a bare sleep).
+    execFileSync(bin, ["session", "new", "plain", "--name", "probe-stopped", "--agent", "claude", "--prompt", "Run this shell command in the foreground and wait for it to end: ping -c 90 127.0.0.1. Then reply DONE."], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } });
+    await until("its command running", async () => (await items("probe-stopped")).some((i) => i.items?.some((c) => c.target?.includes("ping"))), 120_000);
     await api("POST", "/v1/sessions/probe-stopped/interrupt");
     const said = await until("its report, with the lead", async () => (await items(lead)).find((i) => i.kind === "report" && i.report?.session === "probe-stopped")?.report, 120_000);
     if (said.status !== "interrupted") throw new Error(`reported ${said.status}`);
