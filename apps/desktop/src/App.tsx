@@ -1,5 +1,5 @@
 import { FileText, Plus } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
 import { ToastProvider as ShipyardToasts } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,7 +27,7 @@ import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { linkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
-import { CARD, PaneArea } from "~/components/pane-area";
+import { CARD, PaneArea, widthNeeded } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
@@ -113,6 +113,30 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
+  // Pinned, the panel takes what the pages beside it don't need (pane-area.tsx), up to half the
+  // row they share; with less than its 280 px left it floats until there is room again.
+  const row = useRef<HTMLDivElement>(null);
+  const [rowW, setRowW] = useState(0);
+  // Measured once the sidebar has slid, so the panel isn't placed for a width on the way.
+  const sliding = useRef(false);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    setRowW(el.clientWidth);
+    const observer = new ResizeObserver(() => !sliding.current && setRowW(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [!!root]);
+  useEffect(() => {
+    sliding.current = true;
+    const t = window.setTimeout(() => {
+      sliding.current = false;
+      if (row.current) setRowW(row.current.clientWidth);
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [sidebarOpen]);
+  const fit = root && rowW ? Math.min(rowW / 2, rowW - 8 - widthNeeded(root)) : Infinity;
+  const dock = pinned && fit >= 280 ? pinned : null;
 
   useEffect(() => void isNative.then(setNative), []);
 
@@ -298,9 +322,9 @@ export default function App() {
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {/* A pinned agent panel is a card beside the pages; a floating one sits over them. */}
           {root ? (
-            <div className="flex min-h-0 flex-1">
-              <PaneArea windowToggle={mac} />
-              <AgentPanel windowToggle={mac} />
+            <div className="flex min-h-0 flex-1" ref={row}>
+              <PaneArea dock={dock} windowToggle={mac} />
+              <AgentPanel dock={dock} fit={fit} windowToggle={mac} />
             </div>
           ) : (
             <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
@@ -338,7 +362,7 @@ export default function App() {
 
   return (
     // Toasts sit in the bottom corner across from the Ask panel, so they never cover it.
-    <ToastProvider position={(pinned ?? (corner.endsWith("l") ? "left" : "right")) === "left" ? "bottom-right" : "bottom-left"}>
+    <ToastProvider position={(dock ?? (corner.endsWith("l") ? "left" : "right")) === "left" ? "bottom-right" : "bottom-left"}>
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}

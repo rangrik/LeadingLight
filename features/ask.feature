@@ -188,9 +188,10 @@ Feature: Ask Claude, an agent on every page
     And the panel's header is as tall as the page's, its title on the crumbs' line, with no
       line under it
     And its header has "Unpin" (a pin-off icon) and "Close", each with a tooltip
-    When I drag the gap between the two cards to the left by 100 px
-    Then the panel is 500 px wide and the page narrower by as much
-    And it is never narrower than 280 px, nor wider than half the room right of the sidebar
+    When I drag the gap between the two cards to the left by 60 px
+    Then the panel is 460 px wide and the page narrower by as much
+    And it is never narrower than 280 px, nor wider than half the room right of the sidebar, nor so
+      wide that the page gets less than the 520 px it needs (832 with sidenotes): it narrows first
     When I close and reopen the panel
     Then it is pinned at the same width
     When I open another page from the sidebar, or make a new one
@@ -201,6 +202,23 @@ Feature: Ask Claude, an agent on every page
     Then the panel keeps its place, its card reading "Open a page to ask Claude about it." after a
       moment, and shows the page's thread again when I open a page
     And switching pages never makes the page card jump wider and back while the next page loads
+
+  Scenario: No room to pin
+    Given the panel is pinned on the right, at 1280x800 with the sidebar open
+    When I open a second page beside the first
+    Then the panel floats in the bottom-right corner instead, and the two pages share the width,
+      as pinned, even at 280 px, it would leave them less than the 520 px each needs
+    And its button still reads "Unpin", its tooltip saying it floats while the pages need the room
+    When I close the second page
+    Then it is pinned on the right again
+    And a window too narrow for one page beside it (under about 1070 px with the sidebar open) floats
+      it too, and folding the sidebar there pins it once the sidebar has slid away, not on the way
+    And resizing the pinned panel never unpins it, and resizing the floating one never pins it
+    When it floats for room and I drag it to the top-left corner, then close the second page
+    Then it pins on the left
+    When I open the second page again and click "Unpin" while the panel floats for room
+    Then it stays where it is, now unpinned, and the button reads "Pin to the left"
+    And clicking it then pins it, its tooltip saying it waits for the pages to have room
 
   Scenario: Unpinned, it floats and the page makes room
     Given the panel is pinned on the right

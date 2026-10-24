@@ -11,7 +11,7 @@ import { CARD } from "~/components/pane-area";
 import { ApprovalCard, Turn } from "~/components/thread-view";
 import { type AgentStatus, agentStatus } from "~/lib/agent";
 import { type Agent, BUILT_IN, listAgents } from "~/lib/agents";
-import { type Corner, isClaude, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { type Corner, isClaude, type Side, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
 import { INSTALL } from "~/lib/clis";
 import { codex, gptModel, loadCodex } from "~/lib/codex";
@@ -59,7 +59,8 @@ const when = (t: number) => {
 // Each turn's items, from its question to the next.
 const turnsOf = (items: Item[]) => items.reduce<Item[][]>((turns, i) => (i.kind === "user" || !turns.length ? [...turns, [i]] : (turns[turns.length - 1].push(i), turns)), []);
 
-export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
+// dock: the side it shows pinned on, while there is room for it; fit: the most it may take then (App.tsx).
+export function AgentPanel({ windowToggle, dock, fit }: { windowToggle: boolean; dock: Side | null; fit: number }) {
   const { open, quote, page, pages, askNow, asked } = useAsk();
   const prefs = useAiPrefs();
   const { open: sidebarOpen } = useSidebar();
@@ -148,15 +149,15 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
     if (now) send(now.question, [], quote);
   }, [open, ready, askNow, thread?.busy]);
 
-  const side = prefs.pinned;
-  // Pinned, only the width changes, up to half the page area.
+  const side = dock;
+  // Pinned, only the width changes, up to what the pages beside it spare.
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     const handle = e.currentTarget;
     // From the size on screen, not the saved one: a saved size bigger than the window is clamped.
     const rect = box.current?.getBoundingClientRect();
     const start = { x: e.clientX, y: e.clientY, w: rect?.width ?? prefs.panelW, h: rect?.height ?? prefs.panelH };
-    const max = side ? (box.current?.parentElement?.clientWidth ?? 0) / 2 : Infinity;
+    const max = side ? fit : Infinity;
     const sx = (side ? side === "right" : prefs.corner.endsWith("r")) ? -1 : 1;
     const sy = prefs.corner.includes("b") ? -1 : 1;
     const move = (ev: PointerEvent) => {
@@ -173,9 +174,11 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
     handle.addEventListener("pointercancel", up, { once: true });
   };
 
-  const pinLabel = side ? "Unpin" : `Pin to the ${prefs.corner.endsWith("l") ? "left" : "right"}`;
-  // Unpinned, it floats on the side it was pinned to; pinned, it goes to the side it floats on.
-  const pin = () => setAiPrefs(side ? { pinned: null, corner: `${prefs.corner[0]}${side[0]}` as Corner } : { pinned: prefs.corner.endsWith("l") ? "left" : "right" });
+  const pinLabel = prefs.pinned ? "Unpin" : `Pin to the ${prefs.corner.endsWith("l") ? "left" : "right"}`;
+  // Unpinned, it floats on the side it was pinned to (or stays where it floats for room); pinned,
+  // it goes to the side it floats on.
+  const pin = () =>
+    setAiPrefs(prefs.pinned ? { pinned: null, ...(side && { corner: `${prefs.corner[0]}${side[0]}` as Corner }) } : { pinned: prefs.corner.endsWith("l") ? "left" : "right" });
   // Pinned, the gap between it and the pages resizes it, as the gap between two pages does.
   const gap = side && (
     <div
@@ -188,7 +191,7 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
       <span className="h-8 w-1 rounded-full bg-muted-foreground/40 opacity-0 transition-opacity duration-150 group-hover/edge:opacity-100" />
     </div>
   );
-  const dock = cn("relative max-w-1/2 shrink-0", CARD, side === "left" ? "-order-2" : "order-2");
+  const beside = cn("relative shrink-0", CARD, side === "left" ? "-order-2" : "order-2");
   // Pinned, it is the pages' kind of header: as tall, a window drag area, past the traffic lights
   // when it is at the window's left edge (panel-header.tsx).
   const head = cn(
@@ -200,9 +203,13 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
     <>
       <Tooltip>
         <TooltipTrigger render={<Button aria-label={pinLabel} className="size-7 sm:size-7" onClick={pin} size="icon-sm" variant="ghost" />}>
-          {side ? <PinOff /> : <Pin />}
+          {prefs.pinned ? <PinOff /> : <Pin />}
         </TooltipTrigger>
-        <TooltipPopup>{pinLabel}</TooltipPopup>
+        <TooltipPopup>
+          {pinLabel}
+          {prefs.pinned && !side && <span className="block text-muted-foreground">Floating while the pages need the room</span>}
+          {!prefs.pinned && fit < MIN.w && <span className="block text-muted-foreground">Pins when the pages have room</span>}
+        </TooltipPopup>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger render={<Button aria-label="Close" className="size-7 sm:size-7" onClick={() => closeAsk()} size="icon-sm" variant="ghost" />}>
@@ -220,7 +227,7 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
     return side ? (
       <>
         {gap}
-        <section aria-label="Agent" className={cn("flex flex-col", dock)} ref={box} style={{ width: prefs.panelW }}>
+        <section aria-label="Agent" className={cn("flex flex-col", beside)} ref={box} style={{ width: Math.min(prefs.panelW, fit) }}>
           <header className={head} data-tauri-drag-region>
             <span className="h-full flex-1" data-tauri-drag-region />
             {ends}
@@ -301,7 +308,8 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
       const head = parseFloat(getComputedStyle(el).getPropertyValue("--header-height")) || 0;
       const corner = `${r.top + r.height / 2 < area.top + (head + area.height - 12) / 2 ? "t" : "b"}${r.left + r.width / 2 < area.left + area.width / 2 ? "l" : "r"}` as Corner;
       if (corner === prefs.corner) settle();
-      else setAiPrefs({ corner });
+      // Floating for room, where it is put is also the side it pins to again.
+      else setAiPrefs({ corner, ...(prefs.pinned && { pinned: corner.endsWith("l") ? ("left" as const) : ("right" as const) }) });
     };
     header.setPointerCapture(e.pointerId);
     document.body.classList.add("select-none");
@@ -318,7 +326,7 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
         className={cn(
           "@container/panel flex flex-col overflow-hidden",
           side
-            ? dock
+            ? beside
             : cn("absolute z-30 max-h-[calc(100%-var(--header-height)-0.75rem)] max-w-[calc(100%-1.5rem)] rounded-xl border bg-popover text-popover-foreground shadow-lg", CORNER[prefs.corner]),
         )}
         data-corner={side ? undefined : prefs.corner}
@@ -332,7 +340,7 @@ export function AgentPanel({ windowToggle }: { windowToggle: boolean }) {
             closeAsk();
           }
         }}
-        style={{ width: prefs.panelW, height: side ? undefined : prefs.panelH }}
+        style={side ? { width: Math.min(prefs.panelW, fit) } : { width: prefs.panelW, height: prefs.panelH }}
       >
         {!side && (
           <div

@@ -142,6 +142,9 @@ last saw it.
 The panel is pinned beside the pages by default, a card of their kind, so it never sits on the
 words. Unpinned, it floats and snaps to a corner rather than going anywhere, so the page under it
 knows where it is and moves its words aside; a top corner starts under the header band.
+Pinned, it takes only what the pages beside it don't need (520 px each, 832 with sidenotes);
+with less than its 280 px left it floats until there is room, still pinned in the settings,
+rather than folding the sidebar for it.
 
 ## 11. Sidenotes, thoughts and essays are linked pages
 

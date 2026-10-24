@@ -15,7 +15,7 @@ import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
-import { floatBox, useAiPrefs } from "~/lib/ai-prefs";
+import { floatBox, type Side, useAiPrefs } from "~/lib/ai-prefs";
 import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
@@ -55,7 +55,7 @@ const place = (r: Rect, s: Size) => {
 // titles, so notes are never squeezed; a click on a strip opens it. Folded pages stay mounted.
 // Plain pages side by side never fold.
 const STRIP = 44;
-const widthNeeded = (n: PaneNode): number =>
+export const widthNeeded = (n: PaneNode): number =>
   n.kind === "leaf" ? paneNeed(n.page) : n.dir === "row" ? widthNeeded(n.a) + widthNeeded(n.b) : Math.max(widthNeeded(n.a), widthNeeded(n.b));
 const hasNotes = (n: PaneNode): boolean => (n.kind === "leaf" ? paneNeed(n.page) > PLAIN_NEED : hasNotes(n.a) || hasNotes(n.b));
 const splitById = (n: PaneNode, id: string): PaneNode | undefined =>
@@ -83,7 +83,7 @@ function balance(n: PaneNode) {
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
 // splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
+export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: Side | null }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
@@ -93,7 +93,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
   const ai = useAiPrefs();
   // Pinned, the panel keeps its card with no page in front; floating, it shows only with one.
   const ask = useAsk();
-  const asking = ask.open && (!!ask.page || !!ai.pinned);
+  const asking = ask.open && (!!ask.page || !!dock);
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -127,7 +127,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
   };
   // A floating agent panel pushes aside the words of the pages under it, from the side it is on,
   // but leaves each page 360 px, so a narrow pane stays readable.
-  const float = asking && !ai.pinned && size.w ? floatBox(ai, size, size.header) : null;
+  const float = asking && !dock && size.w ? floatBox(ai, size, size.header) : null;
   const room = (b: ReturnType<typeof place>) => {
     if (!float) return 0;
     const across = Math.min(b.left + b.width, float.left + float.width) - Math.max(b.left, float.left);
@@ -136,7 +136,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
     return Math.max(0, Math.min(b.width - 360, ai.corner.endsWith("l") ? float.left + float.width - b.left : b.left + b.width - float.left));
   };
   // In the app, a panel pinned left holds the window's left edge, and the room for the traffic lights.
-  const edge = !(windowToggle && asking && ai.pinned === "left");
+  const edge = !(windowToggle && asking && dock === "left");
   return (
     // The stage's colour, so the gaps show where narrow windows drop the cards' corners.
     <div className="relative min-h-0 min-w-0 flex-1 bg-sidebar" data-pane-area ref={area}>
