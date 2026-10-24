@@ -1,18 +1,38 @@
-import { AtSign, Bot, ChevronDown, FileText, SendHorizontal, Slash, Square, X } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { ArrowUp, AtSign, Bot, Check, ChevronDown, FileText, Gauge, Hand, ListChecks, Plus, ShieldAlert, ShieldCheck, Slash, Square, X } from "lucide-react";
+import { type RefObject, useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Menu, MenuGroup, MenuGroupLabel, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
-import { Textarea } from "@leadinglight/ui/components/textarea";
+import {
+  Composer as Frame,
+  ComposerActionGroup,
+  ComposerActions,
+  ComposerInput,
+  ComposerItem,
+  ComposerList,
+  ComposerPopup,
+  ComposerSubmit,
+  ComposerToken,
+  type ComposerTrigger,
+  type ComposerValue,
+  getComposerText,
+  useComposerContext,
+} from "@leadinglight/ui/components/composer";
+import { Kbd } from "@leadinglight/ui/components/kbd";
+import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
+import { Slider } from "@leadinglight/ui/components/slider";
 import { cn } from "@leadinglight/ui/lib/utils";
 import type { Agent } from "~/lib/agents";
-import { type AiPrefs, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { ACCESS, type Access, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { INSTALL } from "~/lib/clis";
+import { codex, effortFor, effortsFor, loadCodex } from "~/lib/codex";
+import { openLink } from "~/lib/links";
 import type { PageRef } from "~/lib/ask";
 
-// The panel's composer, in synara's spirit: "@" mentions an agent or another page (kept as
-// chips above the field), "/" offers things to do with the words, and the footer holds the
-// model and effort beside Send. Enter sends, Shift+Enter breaks the line.
+// The panel's composer: COSS's, laid out after synara's. "@" mentions an agent or another page
+// as a token in the text, "/" offers things to do with the words; under the field are + and the
+// access menu, then the model and effort and a round Send. Enter sends, Shift+Enter breaks the line.
 
-export type Mention = { kind: "agent"; id: string; name: string } | { kind: "page"; id: string; name: string };
+export type Mention = { kind: "agent" | "page"; id: string; name: string };
 
 export type Command = { id: string; label: string; question: string; send: boolean };
 export const COMMANDS: Command[] = [
@@ -25,30 +45,16 @@ export const COMMANDS: Command[] = [
   { id: "translate", label: "Translate", question: "Translate this into ", send: false },
 ];
 
-type Row = { id: string; title: string; secondary?: string | null; icon: React.ReactNode; pick(): void };
-type Trigger = { kind: "mention" | "command"; query: string; start: number; end: number };
+const ACCESS_ICON: Record<Access, typeof Hand> = { ask: Hand, auto: ShieldCheck, full: ShieldAlert };
+const round = "size-7 rounded-full sm:size-7";
+// The footer's popups render outside the field's card but bubble through it in React, where
+// its click-to-focus-the-field would take the keyboard from them.
+const own = { onMouseDown: (e: React.SyntheticEvent) => e.stopPropagation(), onClick: (e: React.SyntheticEvent) => e.stopPropagation() };
+// Words that give way first when the panel is narrow.
+const wide = "hidden @[22rem]/panel:inline";
 
-// The trigger under the caret: "@" after a space or the start, "/" at the start only.
-function triggerAt(text: string, caret: number): Trigger | null {
-  const before = text.slice(0, caret);
-  const m = /(?:^|\s)@([^\s@]*)$/.exec(before);
-  if (m) return { kind: "mention", query: m[1], start: caret - m[1].length - 1, end: caret };
-  const c = /^\/([^\s/]*)$/.exec(before);
-  if (c) return { kind: "command", query: c[1], start: 0, end: caret };
-  return null;
-}
-
-const MODELS: { value: AiPrefs["model"]; label: string }[] = [
-  { value: "opus", label: "Opus" },
-  { value: "sonnet", label: "Sonnet" },
-  { value: "haiku", label: "Haiku" },
-];
-const EFFORTS: { value: AiPrefs["effort"]; label: string }[] = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-];
-const label = (list: { value: string; label: string }[], value: string) => list.find((x) => x.value === value)?.label ?? value;
+const mentionsIn = (value: ComposerValue): Mention[] =>
+  value.flatMap((p) => (p.type === "mention" && (p.kind === "agent" || p.kind === "page") ? [{ kind: p.kind, id: p.id.slice(p.kind.length + 1), name: p.label }] : []));
 
 export function Composer({
   ready,
@@ -56,8 +62,6 @@ export function Composer({
   placeholder,
   agents,
   pages,
-  mentions,
-  onMentions,
   onSend,
   onStop,
   fieldRef,
@@ -67,214 +71,268 @@ export function Composer({
   placeholder: string;
   agents: Agent[];
   pages: PageRef[];
-  mentions: Mention[];
-  onMentions: (m: Mention[]) => void;
-  onSend: (question: string) => void;
+  onSend: (question: string, mentions: Mention[]) => void;
   onStop: () => void;
-  fieldRef: RefObject<HTMLTextAreaElement | null>;
+  fieldRef: RefObject<HTMLDivElement | null>;
 }) {
-  const prefs = useAiPrefs();
-  const [draft, setDraft] = useState("");
-  const [trigger, setTrigger] = useState<Trigger | null>(null);
-  const [active, setActive] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  const field = () => fieldRef.current;
-  const read = () => {
-    const el = field();
-    if (!el) return;
-    setTrigger(triggerAt(el.value, el.selectionStart ?? el.value.length));
-    setActive(0);
-  };
-
-  const add = (m: Mention) => {
-    if (!mentions.some((x) => x.kind === m.kind && x.id === m.id)) onMentions([...mentions, m]);
-  };
-  const strip = () => {
-    if (!trigger) return;
-    setDraft((d) => (d.slice(0, trigger.start) + d.slice(trigger.end)).replace(/^\s+/, ""));
-    setTrigger(null);
-    requestAnimationFrame(() => field()?.focus());
-  };
-
-  const q = trigger?.query.toLowerCase() ?? "";
-  const rows: Row[] =
-    trigger?.kind === "mention"
-      ? [
-          ...agents
-            .filter((a) => a.name.toLowerCase().includes(q))
-            .map((a) => ({ id: `agent:${a.id}`, title: a.name, secondary: a.description, icon: <Bot />, pick: () => (add({ kind: "agent", id: a.id, name: a.name }), strip()) })),
-          ...pages
-            .filter((p) => p.title.toLowerCase().includes(q))
-            .slice(0, 8)
-            .map((p) => ({ id: `page:${p.id}`, title: p.title || "Untitled", secondary: "Page", icon: <FileText />, pick: () => (add({ kind: "page", id: p.id, name: p.title || "Untitled" }), strip()) })),
-        ]
-      : trigger?.kind === "command"
-        ? COMMANDS.filter((c) => c.label.toLowerCase().includes(q)).map((c) => ({
-            id: c.id,
-            title: c.label,
-            secondary: c.question.trim(),
-            icon: <Slash />,
-            pick: () => {
-              setTrigger(null);
-              if (c.send) {
-                setDraft("");
-                onSend(c.question);
-              } else {
-                setDraft(c.question);
-                requestAnimationFrame(() => {
-                  const el = field();
-                  el?.focus();
-                  el?.setSelectionRange(c.question.length, c.question.length);
-                });
-              }
-            },
-          }))
-        : [];
-
-  useEffect(() => {
-    listRef.current?.querySelector<HTMLElement>("[data-active]")?.scrollIntoView({ block: "nearest" });
-  }, [active]);
-
-  const send = () => {
-    const question = draft.trim();
+  const [value, setValue] = useState<ComposerValue>([]);
+  const triggers: ComposerTrigger[] = [
+    {
+      character: "@",
+      items: [
+        ...agents.map((a) => ({ id: `agent:${a.id}`, label: a.name, description: a.description ?? undefined, kind: "agent", icon: <Bot /> })),
+        ...pages.map((p) => ({ id: `page:${p.id}`, label: p.title || "Untitled", description: "Page", kind: "page", icon: <FileText /> })),
+      ],
+    },
+    { character: "/", items: COMMANDS.map((c) => ({ id: c.id, label: c.label, description: c.question.trim(), type: "action" as const, icon: <Slash /> })) },
+  ];
+  const send = (draft: ComposerValue) => {
+    const question = getComposerText(draft).trim();
     if (!question || busy || !ready) return;
-    setDraft("");
-    setTrigger(null);
-    onSend(question);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (trigger && rows.length) {
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault();
-        setActive((i) => (i + (e.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length);
-        return;
-      }
-      if (e.key === "Enter" || e.key === "Tab") {
-        e.preventDefault();
-        rows[active]?.pick();
-        return;
-      }
-    }
-    if (e.key === "Escape" && trigger) {
-      e.stopPropagation();
-      setTrigger(null);
-      return;
-    }
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      send();
-    }
+    setValue([]);
+    onSend(question, mentionsIn(draft));
   };
 
   return (
-    <div className="relative shrink-0 border-t">
-      {trigger && (
-        <div
-          className="absolute right-2 bottom-full left-2 z-10 mb-1 max-h-56 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg"
-          data-testid="composer-menu"
-          ref={listRef}
-          role="listbox"
-        >
-          {rows.length === 0 && <p className="px-2 py-1.5 text-sm text-muted-foreground">{trigger.kind === "mention" ? "No agent or page by that name." : "No such command."}</p>}
-          {rows.map((r, i) => (
-            <div
-              aria-selected={i === active}
-              className={cn("flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm", i === active && "bg-accent text-accent-foreground")}
-              data-active={i === active ? "" : undefined}
-              key={r.id}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                r.pick();
-              }}
-              onMouseEnter={() => setActive(i)}
-              role="option"
-            >
-              <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-3.5">{r.icon}</span>
-              <span className="truncate">{r.title}</span>
-              {r.secondary && <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{r.secondary}</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {mentions.length > 0 && (
-        <div className="flex flex-wrap gap-1 px-2 pt-2">
-          {mentions.map((m) => (
-            <span className="flex h-6 items-center gap-1 rounded-md bg-accent pr-1 pl-1.5 text-xs text-accent-foreground" data-testid="composer-chip" key={`${m.kind}:${m.id}`}>
-              {m.kind === "agent" ? <Bot className="size-3" /> : <FileText className="size-3" />}@{m.name}
-              <button aria-label={`Remove ${m.name}`} className="rounded p-0.5 hover:bg-background/60" onClick={() => onMentions(mentions.filter((x) => x !== m))} type="button">
-                <X className="size-3" />
-              </button>
+    <Frame
+      className="mx-2 mb-2 [--composer-max-rows:6]"
+      onAction={(item) => {
+        const c = COMMANDS.find((x) => x.id === item.id);
+        if (!c) return;
+        if (c.send) {
+          setValue([]);
+          if (ready && !busy) onSend(c.question, mentionsIn(value));
+        } else setValue([{ type: "text", text: c.question }]);
+      }}
+      onSubmit={send}
+      onValueChange={setValue}
+      submitDisabled={!ready || busy}
+      triggers={triggers}
+      value={value}
+    >
+      <ComposerInput
+        aria-label="Question"
+        placeholder={placeholder}
+        ref={fieldRef}
+        renderToken={(t) => <ComposerToken icon={t.kind === "agent" ? <Bot /> : <FileText />} token={t} variant="chip" />}
+      />
+      <ComposerPopup data-testid="composer-menu">
+        <ComposerList>
+          {(item) => (
+            <ComposerItem key={item.id} value={item}>
+              <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">{item.icon}</span>
+              <span className="shrink-0 truncate">{item.label}</span>
+              {item.description && <span className="min-w-0 flex-1 truncate text-muted-foreground text-xs">{item.description}</span>}
+            </ComposerItem>
+          )}
+        </ComposerList>
+      </ComposerPopup>
+      <ComposerActions>
+        <ComposerActionGroup className="flex-nowrap">
+          <AddMenu back={fieldRef} />
+          <AccessMenu back={fieldRef} />
+        </ComposerActionGroup>
+        <ComposerActionGroup align="end" className="min-w-0 flex-nowrap">
+          <ModelPicker back={fieldRef} />
+          {busy ? (
+            <Button aria-label="Stop" className={round} onClick={onStop} size="icon-sm" variant="outline">
+              <Square className="size-2.5 fill-current" />
+            </Button>
+          ) : (
+            <ComposerSubmit
+              render={
+                <Button aria-label="Send" className={round} size="icon-sm">
+                  <ArrowUp />
+                </Button>
+              }
+            />
+          )}
+        </ComposerActionGroup>
+      </ComposerActions>
+    </Frame>
+  );
+}
+
+// "+": mention something, run a command, or plan first. Plan mode shows as a chip beside it.
+type Back = { back: RefObject<HTMLDivElement | null> };
+
+function AddMenu({ back }: Back) {
+  const prefs = useAiPrefs();
+  const { insertTrigger } = useComposerContext();
+  return (
+    <>
+      <Menu>
+        <MenuTrigger render={<Button aria-label="Add" className={round} size="icon-sm" variant="ghost" />}>
+          <Plus />
+        </MenuTrigger>
+        <MenuPopup align="start" className="w-64" finalFocus={back} side="top" {...own}>
+          <MenuGroup>
+            <MenuGroupLabel>Add</MenuGroupLabel>
+            <MenuItem onClick={() => insertTrigger("@")}>
+              <AtSign />
+              Page or agent
+            </MenuItem>
+            <MenuItem onClick={() => insertTrigger("/")}>
+              <Slash />
+              Command
+            </MenuItem>
+          </MenuGroup>
+          <MenuSeparator />
+          <MenuCheckboxItem checked={prefs.plan} onCheckedChange={(plan) => setAiPrefs({ plan })} variant="switch">
+            <span className="flex flex-col">
+              Plan mode
+              <span className="text-muted-foreground text-xs">Claude plans first and changes nothing</span>
             </span>
-          ))}
-        </div>
+          </MenuCheckboxItem>
+        </MenuPopup>
+      </Menu>
+      {prefs.plan && (
+        <Button aria-label="Turn Plan mode off" className="h-7 gap-1 rounded-full px-2 text-info-foreground sm:h-7" onClick={() => setAiPrefs({ plan: false })} size="sm" variant="ghost">
+          <ListChecks />
+          <span className={wide}>Plan</span>
+          <X className={cn("size-3.5 opacity-60", wide)} />
+        </Button>
       )}
-      <form
-        className="flex items-end gap-1 p-2 pb-1"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
+    </>
+  );
+}
+
+function AccessMenu({ back }: Back) {
+  const prefs = useAiPrefs();
+  const Icon = ACCESS_ICON[prefs.access];
+  return (
+    <Menu>
+      <MenuTrigger
+        render={
+          <Button
+            aria-label={`Access: ${labelOf(ACCESS, prefs.access)}`}
+            className={cn("h-7 min-w-0 gap-1 rounded-full px-2 sm:h-7", prefs.access === "full" ? "text-warning-foreground" : "text-muted-foreground")}
+            size="sm"
+            variant="ghost"
+          />
+        }
       >
-        <Textarea
-          aria-label="Question"
-          className="flex-1 [&_textarea]:max-h-32 [&_textarea]:min-h-8 [&_textarea]:resize-none"
-          onChange={(e) => {
-            setDraft(e.currentTarget.value);
-            read();
-          }}
-          onClick={read}
-          onKeyDown={onKeyDown}
-          onKeyUp={(e) => (e.key === "ArrowLeft" || e.key === "ArrowRight" ? read() : undefined)}
-          placeholder={placeholder}
-          ref={fieldRef}
-          rows={1}
-          value={draft}
-        />
-        {busy ? (
-          <Button aria-label="Stop" onClick={onStop} size="icon-sm" type="button" variant="outline">
-            <Square />
-          </Button>
-        ) : (
-          <Button aria-label="Send" disabled={!ready || !draft.trim()} size="icon-sm" type="submit">
-            <SendHorizontal />
-          </Button>
+        <Icon />
+        {/* With Plan on, the chip beside it needs the room. */}
+        <span className={cn("truncate", prefs.plan ? "hidden" : wide)}>{labelOf(ACCESS, prefs.access)}</span>
+        <ChevronDown className="size-3.5 opacity-60" />
+      </MenuTrigger>
+      <MenuPopup align="start" className="w-80" finalFocus={back} side="top" {...own}>
+        <MenuRadioGroup onValueChange={(v) => setAiPrefs({ access: v as Access })} value={prefs.access}>
+          {ACCESS.map((a) => {
+            const I = ACCESS_ICON[a.value];
+            const description = isClaude(prefs.model) ? a.description : GPT_ACCESS[a.value];
+            return (
+              <MenuRadioItem className={cn("py-2", a.value === "full" && "text-warning-foreground")} closeOnClick key={a.value} value={a.value}>
+                <span className="flex items-start gap-2">
+                  <I className="mt-0.5" />
+                  <span className="flex flex-col">
+                    {a.label}
+                    <span className={cn("text-xs", a.value === "full" ? "text-warning-foreground/80" : "text-muted-foreground")}>{description}</span>
+                  </span>
+                </span>
+              </MenuRadioItem>
+            );
+          })}
+        </MenuRadioGroup>
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+// The model, Claude's and the GPT ones Codex offers, with ⌘1… while open, and the effort as a
+// slider of that model's stops (synara's).
+function ModelPicker({ back }: Back) {
+  const prefs = useAiPrefs();
+  const cx = codex.use();
+  useEffect(() => void loadCodex(), []);
+  const gpt = cx.models.map((m) => ({ value: m.id, label: m.name }));
+  const all = [...MODELS, ...gpt];
+  const claude = isClaude(prefs.model);
+  const efforts = effortsFor(prefs.model);
+  const effort = effortFor(prefs.model, prefs.effort);
+  const step = Math.max(0, efforts.indexOf(effort));
+  const pick = (model: string) => setAiPrefs({ model, effort: effortFor(model, prefs.effort) });
+  const row = (m: { value: string; label: string }, i: number) => (
+    <Button
+      aria-checked={prefs.model === m.value}
+      className="w-full justify-start gap-2 px-2 font-normal"
+      key={m.value}
+      onClick={() => pick(m.value)}
+      role="radio"
+      size="sm"
+      variant="ghost"
+    >
+      <Check className={cn(prefs.model !== m.value && "invisible")} />
+      {m.label}
+      {i < 9 && <Kbd className="ms-auto">⌘{i + 1}</Kbd>}
+    </Button>
+  );
+  const label = (text: string) => <p className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">{text}</p>;
+  return (
+    <Popover>
+      <PopoverTrigger render={<Button aria-label="Model and effort" className="h-7 min-w-0 shrink gap-1 rounded-full px-2 sm:h-7" size="sm" variant="ghost" />}>
+        <span className="truncate">{labelOf(all, prefs.model)}</span>
+        {/* GPT's names are long, so its effort shows only when the panel is wide. */}
+        <span className={cn("text-muted-foreground", claude ? wide : "hidden @[28rem]/panel:inline")}>{labelOf(EFFORTS, effort)}</span>
+        <ChevronDown className="size-3.5 opacity-60" />
+      </PopoverTrigger>
+      <PopoverPopup
+        align="end"
+        className="w-64 [&_[data-slot=popover-viewport]]:p-1"
+        finalFocus={back}
+        {...own}
+        onKeyDown={(e) => {
+          const i = Number(e.key) - 1;
+          if (!e.metaKey || !all[i]) return;
+          e.preventDefault();
+          pick(all[i].value);
+        }}
+        side="top"
+      >
+        <div aria-label="Model" role="radiogroup">
+          {label("Claude")}
+          {MODELS.map(row)}
+          {label("GPT")}
+          {gpt.map((m, i) => row(m, MODELS.length + i))}
+          {cx.state !== "ready" && (
+            <p className="px-2 pb-1.5 text-muted-foreground text-xs">
+              {cx.state === "checking" ? (
+                "Looking for Codex…"
+              ) : cx.state === "missing" ? (
+                <>
+                  Install{" "}
+                  <button className="underline" onClick={() => openLink(INSTALL.codex)} type="button">
+                    Codex
+                  </button>{" "}
+                  to use GPT models.
+                </>
+              ) : (
+                <>
+                  Run <code className="rounded bg-muted px-1 font-mono">codex login</code> in Terminal to use GPT models.
+                </>
+              )}
+            </p>
+          )}
+        </div>
+        {efforts.length > 1 && (
+          <div className="mt-1 border-t px-2 pt-2 pb-1">
+            <div className="mb-2 flex items-center gap-2 text-sm">
+              <Gauge className="size-4 text-muted-foreground" />
+              <span className="flex-1 text-center font-medium">{labelOf(EFFORTS, effort)}</span>
+              <span className="size-4" />
+            </div>
+            <Slider
+              getAriaLabel={() => "Effort"}
+              max={efforts.length - 1}
+              min={0}
+              onValueChange={(v) => setAiPrefs({ effort: efforts[Array.isArray(v) ? v[0] : v] })}
+              step={1}
+              value={step}
+            />
+          </div>
         )}
-      </form>
-      <div className="flex items-center gap-1 px-2 pb-1.5">
-        <Menu>
-          <MenuTrigger render={<Button aria-label="Model and effort" className="h-6 shrink-0 gap-1 px-1.5 text-xs text-muted-foreground" size="sm" variant="ghost" />}>
-            {label(MODELS, prefs.model)} · {label(EFFORTS, prefs.effort)}
-            <ChevronDown className="size-3" />
-          </MenuTrigger>
-          <MenuPopup align="start" side="top">
-            <MenuGroup>
-              <MenuGroupLabel>Model</MenuGroupLabel>
-              <MenuRadioGroup onValueChange={(v) => setAiPrefs({ model: v as AiPrefs["model"] })} value={prefs.model}>
-                {MODELS.map((m) => (
-                  <MenuRadioItem closeOnClick={false} key={m.value} value={m.value}>
-                    {m.label}
-                  </MenuRadioItem>
-                ))}
-              </MenuRadioGroup>
-            </MenuGroup>
-            <MenuGroup>
-              <MenuGroupLabel>Effort</MenuGroupLabel>
-              <MenuRadioGroup onValueChange={(v) => setAiPrefs({ effort: v as AiPrefs["effort"] })} value={prefs.effort}>
-                {EFFORTS.map((m) => (
-                  <MenuRadioItem closeOnClick={false} key={m.value} value={m.value}>
-                    {m.label}
-                  </MenuRadioItem>
-                ))}
-              </MenuRadioGroup>
-            </MenuGroup>
-          </MenuPopup>
-        </Menu>
-        <span className="min-w-0 truncate text-xs text-muted-foreground">
-          <AtSign className="inline size-3" /> agent or page · / commands
-        </span>
-      </div>
-    </div>
+      </PopoverPopup>
+    </Popover>
   );
 }

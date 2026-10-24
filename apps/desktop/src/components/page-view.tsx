@@ -19,11 +19,12 @@ import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { docMarkdown } from "~/lib/page-markdown";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
 import { useThoughts } from "~/lib/thoughts";
-import { editorWriting, useWritingPrefs } from "~/lib/writing";
+import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -52,6 +53,12 @@ export function PageView({ page }: { page: LLObject }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const writing = useWritingPrefs();
   const [inBody, setInBody] = useState(false);
+  // The writing tools follow the page's type (Settings › Writing › Use on).
+  const tools = toolsOn(writing, typeId);
+  const counting = tools && writing.count;
+  useEffect(() => {
+    if (!counting) setPageStats(page.id, null);
+  }, [counting, page.id]);
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -122,6 +129,7 @@ export function PageView({ page }: { page: LLObject }) {
     if (!page.title && !page.content) titleRef.current?.focus();
     const untrack = trackFlush(flush);
     const unlive = registerLive(page.id, {
+      editor: () => editorRef.current,
       content: () => editorRef.current?.getJSON() ?? page.content ?? { type: "doc", content: [] },
       setContent: (doc) => editorRef.current?.setContent(doc),
       properties: () => latest.current,
@@ -141,7 +149,7 @@ export function PageView({ page }: { page: LLObject }) {
 
   // The agent panel asks about this page while it is in front (lib/ask.ts); with panes side
   // by side, that is the page last worked in.
-  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => editorRef.current?.text() ?? "" };
+  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
   useEffect(() => {
     registerPage(askPage, editorRef.current);
     return () => unregisterPage(page.id);
@@ -197,7 +205,7 @@ export function PageView({ page }: { page: LLObject }) {
   return (
     // Focus mode fades the rest of the page too while the body is written in (styles.css).
     <div
-      className={cn("ll-page-root min-h-full", writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
+      className={cn("ll-page-root min-h-full", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
       onFocusCapture={() => registerPage(askPage, editorRef.current)}
       onMouseDown={onBlankMouseDown}
     >
@@ -324,13 +332,13 @@ export function PageView({ page }: { page: LLObject }) {
             onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
             onFocusChange={setInBody}
-            onStats={writing.count ? (stats) => setPageStats(page.id, stats) : undefined}
+            onStats={counting ? (stats) => setPageStats(page.id, stats) : undefined}
             openLink={openHref}
             quoteTo={quoteTo}
             quotes={quotes}
             ref={editorRef}
             style={pageStyle(props)}
-            writing={editorWriting(writing)}
+            writing={editorWriting(writing, typeId)}
           />
         </div>
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}

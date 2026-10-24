@@ -12,7 +12,7 @@ import { newPage } from "./templates";
 
 // Idea capture (features/capture.feature): what the box holds becomes an Idea page, tagged
 // in-the-middle and linked from today's daily note under an "Ideas" heading. This runs in the
-// main window; the box is a view that asks it to save (docs/DECISIONS.md, 13).
+// main window; the box is a view that asks it to save (docs/DECISIONS.md, 14).
 
 export const IDEA = "idea";
 export const TAG = "in-the-middle";

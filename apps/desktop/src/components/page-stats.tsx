@@ -1,7 +1,8 @@
 import type { Stats } from "@leadinglight/editor/editor";
 import { type Count, isSpelling, type Part, PARTS } from "@leadinglight/editor/writing";
-import { Fragment, type ReactNode, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow, Table as UITable } from "@leadinglight/ui/components/table";
 import { Separator } from "@leadinglight/ui/components/separator";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -112,7 +113,7 @@ export function PageStats({ id }: { id: string }) {
           ))}
         </PopoverTrigger>
       </div>
-      <PopoverPopup align="start" className="max-h-(--available-height) w-64" finalFocus={back.finalFocus}>
+      <PopoverPopup align="start" className="max-h-(--available-height) w-72" finalFocus={back.finalFocus}>
         <Table page={stats.page} sel={sel} />
       </PopoverPopup>
     </Popover>
@@ -148,26 +149,42 @@ function Table({ page, sel }: { page: Count; sel: Count | null }) {
     ],
   ];
   const upper = (s: string) => s[0].toUpperCase() + s.slice(1);
+  // COSS's Table, its rows made shorter to fit a popover.
   return (
-    <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-4 gap-y-1 text-sm tabular-nums">
-      {sections.map(([title, rows], i) => (
-        <Fragment key={title}>
-          <span className={`font-medium text-muted-foreground text-xs ${i ? "mt-2" : ""}`}>{title}</span>
-          <span className={`text-right text-muted-foreground text-xs ${i ? "mt-2" : ""}`}>{i === 0 && sel && "Selected"}</span>
-          <span className={`text-right text-muted-foreground text-xs ${i ? "mt-2" : ""}`}>{i === 0 && "Page"}</span>
-          {rows.map((r) => (
-            <Fragment key={r.label}>
-              <span className="flex items-center gap-2">
-                {r.mark}
-                {upper(r.label)}
-              </span>
-              <span className="whitespace-nowrap text-right">{sel && r.value(sel)}</span>
-              <span className="whitespace-nowrap text-right">{r.value(page)}</span>
-            </Fragment>
-          ))}
-        </Fragment>
-      ))}
-      {!page.grammar && <span className="col-span-3 text-muted-foreground">Checking…</span>}
-    </div>
+    <>
+      <UITable className="tabular-nums [&_td]:py-1.5 [&_th]:h-8">
+        <TableHeader>
+          <TableRow>
+            <TableHead />
+            {sel && <TableHead className="text-right">Selected</TableHead>}
+            <TableHead className="text-right">Page</TableHead>
+          </TableRow>
+        </TableHeader>
+        {sections.map(([title, rows], i) => (
+          <TableBody key={title}>
+            <TableRow>
+              {/* Air above each section after the first, so it reads as a new one. */}
+              <TableHead className={cn(i > 0 && "h-10 align-bottom")} colSpan={sel ? 3 : 2}>
+                {title}
+              </TableHead>
+            </TableRow>
+            {rows.map((r) => (
+              <TableRow key={r.label}>
+                <TableCell>
+                  <span className="flex items-center gap-2">
+                    {r.mark}
+                    {upper(r.label)}
+                  </span>
+                </TableCell>
+                {sel && <TableCell className="text-right">{r.value(sel)}</TableCell>}
+                <TableCell className="text-right">{r.value(page)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        ))}
+      </UITable>
+      {!page.grammar && <p className="mt-2 text-muted-foreground text-xs">Checking grammar…</p>}
+    </>
   );
 }
+

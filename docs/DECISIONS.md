@@ -86,15 +86,24 @@ wire in, and what was left out, is in `docs/SHIPYARD.md`.
 ## 7. Claude through the Claude Code on this Mac, driven as a subprocess
 
 The AI answers through the Claude Code the person installed and signed into, so the
-app holds no key and the subscription pays. Rust spawns that binary as `claude -p`
-speaking stream-json, with no tools, our own system prompt and an empty settings
-list, and drops any API key from the child's environment so the sign-in wins (synara
-does the same through the Agent SDK). The SDK is a typed wrapper over this very
-protocol; using it in a Tauri app would mean shipping a JavaScript runtime as a
-sidecar, so the protocol is spoken directly. The browser build has a stand-in that
-streams a fixed answer, so the panel can be tried and tested without Claude Code.
-Anthropic's terms allow this for one's own login; shipping it to others would need
-their approval.
+app holds no key and the subscription pays. Each turn, Rust spawns that binary as `claude -p`
+speaking stream-json both ways, resumed for follow-ups, with our system prompt and an empty
+settings list, and drops any API key from the child's environment so the sign-in wins (as
+synara does). The page tools (read, search, edit, insert, rewrite, create) are an MCP server
+the webview answers over Claude Code's control protocol, the way the Agent SDK serves
+in-process tools; approvals come back the same way. So Rust only pipes lines, and every change
+goes through the page's open editor. A process per turn rather than synara's long-lived one
+keeps nothing to leak or fall out of step. Access maps to Claude Code's permission modes:
+Ask for approval is `default`, Approve for me is `auto`, Full access is `bypassPermissions`,
+Plan mode is `plan`. Reading never asks. The browser build has a stand-in that plays the same
+protocol, so the panel and the tools can be tried and tested without Claude Code.
+Anthropic's terms allow this for one's own login; shipping it to others would need their approval.
+
+GPT models go through Codex the same way: each turn is one `codex app-server`, resuming its
+thread, with the page tools passed as the app server's dynamic tools, which Codex asks the app
+to run. So the app gates GPT's page changes itself. The person's Codex MCP servers, hooks,
+plugins and shell are switched off for these threads, which keeps them quick and on the notes.
+A thread keeps a session for each provider, so switching models and back continues both.
 
 ## 8. One kind of object; types and properties are data
 
@@ -117,12 +126,12 @@ properties stay in memory, which is what lists, cards and the link menu read.
 
 Selected words get a small bar beside them, after Shipyard's selection actions: a one-line
 field that sends at once, and Quote in reply for a longer question in the panel. The panel's
-field is a composer in synara's spirit: `@` mentions an agent or another page, `/` offers
-things to do with the words, and the model and effort sit in its footer. Agents are not a
+field is COSS's composer laid out after synara's: `@` mentions an agent or another page, `/`
+offers things to do with the words, and access, model and effort sit in its footer. Agents are not a
 new format: they are Claude Code's agent files (name, description and model in the front
 matter, the prompt below), read from `~/.claude/agents` and the app's own agents folder, plus
 three that ship with the app. A mentioned agent's model wins for that question. Mentions sit
-as chips above the field rather than inline, which keeps the field a plain textarea.
+inline as tokens, as in synara; COSS's composer does that without our own rich-text field.
 
 Claude Code keeps a session's first system prompt and ignores a new one on `--resume`. So
 the system prompt holds only the fixed role, and everything that can change between
@@ -155,7 +164,20 @@ slips. Counts beside the page's name count everything, marks shown or not, so th
 load whenever Counts is on. Each block's findings are kept per block node, which an edit leaves
 alone unless it touched that block, so counting a long page only redoes what changed.
 
-## 13. Idea capture: a non-activating panel; the box is a view, saving runs in the main window
+## 13. The command-line tools are asked, not their secrets read
+
+Claude Code and Codex are found as the person's Terminal finds them: the login shell's PATH,
+read once, before the usual install places, so the app updates the copy they actually use. How
+each was installed is read from where its file really is, and decides the update command, after
+synara: `claude update` for Claude's own installer, npm pinned to that install's prefix, or
+`brew upgrade`. Newer versions are looked up where that install updates from (npm, Homebrew);
+Claude's own installer updates itself, so it gets a button but never a prompt.
+How much of each plan is left comes from the tools themselves: Claude Code's `get_usage` control
+request and Codex's app server (`account/rateLimits/read`). synara reads the OAuth tokens from
+the Keychain and `~/.codex/auth.json` and calls the usage endpoints; asking the tools means the
+app never touches a sign-in secret or refreshes one, for about a second of process start per check.
+
+## 14. Idea capture: a non-activating panel; the box is a view, saving runs in the main window
 
 ⌃⌥I must open a box over whatever app is in front without pulling LeadingLight forward, and
 closing it must give the keyboard back. A second Tauri window can't do that: showing or

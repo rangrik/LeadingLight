@@ -1,4 +1,4 @@
-import { type Editor, type FocusPosition, getSchema, type JSONContent } from "@tiptap/core";
+import { type Editor, type Extensions, type FocusPosition, generateJSON, getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -24,6 +24,13 @@ export type { NotesStore } from "./sidenotes";
 export { citesIn } from "./anchors";
 
 export type EditorDoc = JSONContent;
+
+// A page body from HTML, for a page no editor has open (one an assistant makes).
+let parsing: Extensions | null = null;
+export function htmlDoc(html: string): EditorDoc {
+  parsing ??= createExtensions({ onExitTop: () => false, openLink: () => {}, assets: { put: () => Promise.reject(new Error("No files here")), open: () => {} } });
+  return generateJSON(html, parsing);
+}
 
 // How a page looks: Plain is the calm default, Playful adds hand-made touches (see editor.css).
 export type PageStyle = "plain" | "playful";

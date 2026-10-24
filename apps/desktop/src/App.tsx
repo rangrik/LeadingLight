@@ -23,6 +23,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
 import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
+import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { linkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
@@ -44,6 +45,7 @@ import { flushAll } from "~/lib/saving";
 import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
+import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 
@@ -73,6 +75,7 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const view = useStore((s) => s.view);
+  const { corner } = useAiPrefs();
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
@@ -311,7 +314,8 @@ export default function App() {
     );
 
   return (
-    <ToastProvider>
+    // Toasts sit on the edge away from the Ask panel's corner, so they never cover it.
+    <ToastProvider position={corner.startsWith("b") ? "top-center" : "bottom-center"}>
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
@@ -328,6 +332,7 @@ export default function App() {
             </div>
           )}
           <ShortcutsSheet />
+          <CliUpdates />
           <ZoomHud />
         </TooltipProvider>
       </ShipyardToasts>

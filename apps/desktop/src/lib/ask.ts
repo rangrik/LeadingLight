@@ -43,11 +43,19 @@ export const setPages = (pages: PageRef[]) => set({ pages });
 export const askEditor = () => editor;
 
 // Ask on the words given, or the editor's own selection: words get the bar; none, the panel.
+// ⌘J from inside the open panel closes it, as the Ask button does.
 export function openAsk(quote?: Quote | null) {
   if (!state.page) return;
+  if (state.open && quote === undefined && document.activeElement?.closest("[data-testid=agent-panel]")) return closeAsk();
   const q = quote === undefined ? (editor?.selection() ?? null) : quote;
   if (q && q.text.trim()) set({ bar: { quote: q } });
   else set({ open: true, quote: null, bar: null });
+}
+
+// The Ask button: the panel for the page in front, or away.
+export function toggleAsk() {
+  if (state.open) closeAsk();
+  else if (state.page) set({ open: true, quote: null, bar: null });
 }
 
 export function closeBar(back = true) {

@@ -2,7 +2,7 @@
 // NSPanel that never activates this app (tauri-nspanel), so the app the person was in keeps
 // its menu bar and its windows in front, and gets the keyboard back when the box closes.
 // The box itself is the capture.html webview; saving runs in the main window
-// (lib/capture.ts). See docs/DECISIONS.md, 13.
+// (lib/capture.ts). See docs/DECISIONS.md, 14.
 
 use std::error::Error;
 
