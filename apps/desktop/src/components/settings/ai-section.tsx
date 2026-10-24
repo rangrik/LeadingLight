@@ -120,7 +120,6 @@ function Account({ status }: { status: AgentStatus | "checking" }) {
   );
 }
 
-// The Claude Code and Codex on this Mac, each with its version, where it came from, and Update.
 // The project runtime project chats run in (DECISIONS.md, 18): whether it runs, and a restart,
 // which its agents outlive.
 function RuntimeGroup() {
@@ -133,7 +132,9 @@ function RuntimeGroup() {
       .then(setStatus)
       .finally(() => setBusy(false));
   };
-  const what = !status
+  const what = busy && status?.state === "ready"
+    ? "Restarting…"
+    : !status
     ? "Checking…"
     : status.state === "ready"
       ? `Running, ${status.version}. Agents in project chats keep working while the app is closed.`
@@ -150,7 +151,7 @@ function RuntimeGroup() {
             {status?.home && (
               <>
                 {" "}
-                Its state is in <Code>{status.home}</Code>.
+                Its state is in <Code>{status.home}</Code>
               </>
             )}
           </>
@@ -165,6 +166,7 @@ function RuntimeGroup() {
   );
 }
 
+// The Claude Code and Codex on this Mac, each with its version, where it came from, and Update.
 function CliTools() {
   const list = tools.use();
   const prefs = cliPrefs.use();

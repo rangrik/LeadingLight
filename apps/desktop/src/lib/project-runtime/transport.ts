@@ -66,6 +66,8 @@ export function events(since: number | null, on: (e: RuntimeEvent) => void, ende
     }
     const abort = new AbortController();
     stop = () => abort.abort();
+    // berthd says something at least every 25 s; silence past that is a lost stream.
+    let quiet = window.setTimeout(() => abort.abort(), 40_000);
     try {
       const res = await fetch(`/__runtime/v1/events${since === null ? "" : `?since=${since}`}`, { signal: abort.signal });
       const reader = res.body?.getReader();
@@ -74,6 +76,8 @@ export function events(since: number | null, on: (e: RuntimeEvent) => void, ende
       for (;;) {
         const chunk = await reader?.read();
         if (!chunk || chunk.done) break;
+        window.clearTimeout(quiet);
+        quiet = window.setTimeout(() => abort.abort(), 40_000);
         const lines = (rest + text.decode(chunk.value, { stream: true })).split("\n");
         rest = lines.pop() ?? "";
         lines.forEach(read);
@@ -81,6 +85,7 @@ export function events(since: number | null, on: (e: RuntimeEvent) => void, ende
     } catch {
       // Stopped, or the dev server went away.
     }
+    window.clearTimeout(quiet);
     end();
   });
   return () => {

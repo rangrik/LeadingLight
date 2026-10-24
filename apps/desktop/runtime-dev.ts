@@ -83,8 +83,10 @@ const handler: Connect.NextHandleFunction = (req, res) => {
   const up = request({ socketPath: sock, method: req.method, path: url.pathname + url.search, headers: { "content-type": "application/json" } }, (r) => {
     res.writeHead(r.statusCode ?? 502, { "content-type": r.headers["content-type"] ?? "application/json" });
     r.pipe(res);
+    // berthd gone mid-answer (a restart): the answer ends, so a stream's reader opens it again.
+    r.on("close", () => res.end());
   });
-  up.on("error", (e) => res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ code: "runtime_down", error: e.message })));
+  up.on("error", (e) => (res.headersSent ? res.destroy() : res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ code: "runtime_down", error: e.message }))));
   res.on("close", () => up.destroy());
   req.pipe(up);
 };
