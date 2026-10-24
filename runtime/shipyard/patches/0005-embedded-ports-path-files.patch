@@ -15,9 +15,9 @@ folder.
  internal/box/agentpaths.go  |  4 ++++
  internal/box/browser.go     |  2 +-
  internal/box/browsertabs.go |  2 +-
- internal/box/repoconfig.go  | 24 ++++++++++++++++++++++--
+ internal/box/repoconfig.go  | 36 ++++++++++++++++++++++++++++++++++--
  internal/box/sessions.go    | 19 +++++++++++++++++++
- 6 files changed, 54 insertions(+), 4 deletions(-)
+ 6 files changed, 66 insertions(+), 4 deletions(-)
 
 diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
 index 4526f73..1da4372 100644
@@ -86,7 +86,7 @@ index ede5dfa..26aa471 100644
  		p := map[string]any{"behavior": "allow", "downloadPath": dl}
  		if bctx != "" {
 diff --git a/internal/box/repoconfig.go b/internal/box/repoconfig.go
-index c6bc241..bfdddab 100644
+index c6bc241..377a0e2 100644
 --- a/internal/box/repoconfig.go
 +++ b/internal/box/repoconfig.go
 @@ -4,6 +4,7 @@ import (
@@ -97,15 +97,19 @@ index c6bc241..bfdddab 100644
  	"net/http"
  	"os"
  	"path/filepath"
-@@ -245,8 +246,16 @@ func (l *Locations) SetLocalConfig(name string, c RepoConfig) error {
+@@ -245,8 +246,20 @@ func (l *Locations) SetLocalConfig(name string, c RepoConfig) error {
  // Ports: each worktree gets a stable block of ports of its own, so two
  // worktrees of one app never fight over 3000.
  
 +// portBase is where blocks start; BERTH_PORT_BASE moves an embedded berthd's
-+// blocks clear of the person's own berthd, which starts at 41000.
++// blocks clear of the person's own berthd, which starts at 41000. An embedded
++// one without a good base never falls back into that range.
 +var portBase = func() int {
-+	if n, err := strconv.Atoi(os.Getenv("BERTH_PORT_BASE")); err == nil && n >= 1024 && n < portLimit {
++	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("BERTH_PORT_BASE"))); err == nil && n >= 1024 && n+portBlock-1 <= portLimit {
 +		return n
++	}
++	if os.Getenv("BERTH_EMBEDDED") == "1" {
++		return 46000
 +	}
 +	return 41000
 +}()
@@ -115,7 +119,7 @@ index c6bc241..bfdddab 100644
  	portLimit           = 48999
  	portBlock           = 10
  	maxPortsPerWorktree = portBlock
-@@ -287,7 +296,7 @@ func (p *PortAlloc) For(dir string) (int, error) {
+@@ -287,7 +300,7 @@ func (p *PortAlloc) For(dir string) (int, error) {
  		used[port] = true
  	}
  	for port := portBase; port+portBlock-1 <= portLimit; port += portBlock {
@@ -124,18 +128,26 @@ index c6bc241..bfdddab 100644
  			m[dir] = port
  			b, _ := json.MarshalIndent(m, "", "  ")
  			return port, statefile.Write(p.Path, b)
-@@ -296,6 +305,17 @@ func (p *PortAlloc) For(dir string) (int, error) {
+@@ -296,6 +309,25 @@ func (p *PortAlloc) For(dir string) (int, error) {
  	return 0, fmt.Errorf("every port block from %d to %d is taken", portBase, portLimit)
  }
  
-+// portFree says nothing listens on port now: another berthd's block, or
-+// anything else, is passed over.
++// portFree says nothing listens on any port of the block now, over IPv4 or
++// IPv6: another berthd's block, or anything else, is passed over.
 +func portFree(port int) bool {
-+	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
-+	if err != nil {
-+		return false
++	for p := port; p < port+portBlock; p++ {
++		for _, host := range []string{"127.0.0.1", "[::1]"} {
++			ln, err := net.Listen("tcp", host+":"+strconv.Itoa(p))
++			if err != nil {
++				// A Mac without IPv6 on loopback says so; that is no listener.
++				if host == "[::1]" && strings.Contains(err.Error(), "assign requested address") {
++					continue
++				}
++				return false
++			}
++			ln.Close()
++		}
 +	}
-+	ln.Close()
 +	return true
 +}
 +

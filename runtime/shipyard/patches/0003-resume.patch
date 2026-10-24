@@ -81,10 +81,10 @@ index 32218b7..a7d0607 100644
  func (c *claudeConv) signal() {
  	close(c.changed)
 diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
-index 57ed152..519dd18 100644
+index 056788b..514afda 100644
 --- a/internal/box/codexdriver.go
 +++ b/internal/box/codexdriver.go
-@@ -222,11 +222,19 @@ func (c *codexConv) follow() {
+@@ -223,11 +223,19 @@ func (c *codexConv) follow() {
  	var noHost time.Time
  	for {
  		c.mu.Lock()
@@ -107,7 +107,7 @@ index 57ed152..519dd18 100644
  			return
  		}
  		err := agenthost.Attach(context.Background(), c.sock, from, func(e agenthost.Entry) error {
-@@ -314,11 +322,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+@@ -315,11 +323,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
  		switch e.Event {
  		case "started":
  			c.busy, c.pending, c.since, c.exited, c.initialized, c.turnID = false, nil, time.Time{}, false, false, ""

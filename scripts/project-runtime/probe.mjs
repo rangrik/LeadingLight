@@ -9,6 +9,10 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 const bin = resolve("apps/desktop/src-tauri/binaries/berthd-aarch64-apple-darwin");
+if (!existsSync(bin)) {
+  console.error(`No runtime at ${bin}: run pnpm runtime:build first.`);
+  process.exit(1);
+}
 const only = process.argv[2];
 const root = mkdtempSync("/tmp/ll-probe-");
 const tmux = `ll-probe-${root.slice(-6)}`;
@@ -135,12 +139,16 @@ async function claude() {
     if (!(await session(s))) throw new Error("session gone after restart");
     const q = await until("its conversation", async () => (await items(s)).find((i) => i.kind === "question"));
     if (q.answers?.join() !== "Blue") throw new Error("its conversation is gone");
+    // The same agent, still running, answers under the new runtime.
+    const n = (await items(s)).length;
+    await send(s, "Reply with the single word STILL.", "claude-restart");
+    await replyAfter(s, n, "STILL");
   });
   await check("claude: resumes with its model and context; a repeated send is one turn", async () => {
     const conv = await convOf(s);
     await api("DELETE", `/v1/sessions/${s}`);
     const r = await resume(conv);
-    if (!r.command.includes("--model sonnet")) throw new Error("resumed without its model");
+    if (!r.command.includes("--model sonnet") || !r.command.includes("--effort low")) throw new Error(`resumed without its model or effort: ${r.command}`);
     const n = (await items(r.name)).length;
     const [a, b] = [await send(r.name, "What colour did I pick? One word.", "claude-1"), await send(r.name, "What colour did I pick? One word.", "claude-1")];
     if (a.status !== 200 || !b.json.duplicate || a.json.turn !== b.json.turn) throw new Error(`sends ${JSON.stringify([a.json, b.json])}`);
@@ -204,6 +212,7 @@ async function browser() {
     const s = "probe-browser";
     let frames = 0;
     let seen = "";
+    const shown = new Set();
     await check("browser: the agent drives the folder's page and an observer sees that tab", async () => {
       await api("POST", "/v1/sessions", { name: s, location: "site", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low",
         prompt: "Using only shell commands, in order: `command -v berthd`; `berthd browser open /`; `berthd browser snapshot`; click the button named Press me with `berthd browser click @REF`; `berthd browser snapshot`. Then reply with the heading you see and what command -v printed." });
@@ -216,7 +225,12 @@ async function browser() {
           res.on("data", (d) => {
             const lines = (rest + d).split("\n");
             rest = lines.pop();
-            for (const l of lines.filter(Boolean)) (frames++, (seen = JSON.parse(l).url));
+            for (const l of lines.filter(Boolean)) {
+              const f = JSON.parse(l);
+              // A real picture of the tab: JPEG data, and more than one look as the page changes.
+              if (Buffer.from(f.data ?? "", "base64").subarray(0, 2).toString("hex") === "ffd8") (frames++, shown.add(f.data));
+              seen = f.url;
+            }
           });
         });
         req.end();
@@ -226,8 +240,8 @@ async function browser() {
       const page = (await api("POST", `${tab}/snapshot`, {})).json.text;
       if (!reply.includes("Pressed") || !page.includes('heading "Pressed"')) throw new Error(`agent said ${reply}; the tab shows ${page}`);
       if (!reply.includes(join(state, "box", "bin", "berthd"))) throw new Error(`the agent's berthd is not the runtime's: ${reply}`);
-      if (!frames || !seen.startsWith("http://site.")) throw new Error(`observer saw ${frames} frames of ${seen}`);
-      return { frames, seen };
+      if (frames < 2 || shown.size < 2 || !seen.startsWith("http://site.")) throw new Error(`observer saw ${frames} frames (${shown.size} different) of ${seen}`);
+      return { frames, different: shown.size, seen };
     });
     await check("browser: the folder holds only what it held", async () => {
       const left = execFileSync("find", [site, "-mindepth", "1"]).toString().trim().split("\n");
@@ -249,9 +263,11 @@ try {
     seeOurs();
     if (!ours.size) throw new Error("the probe's agents were never in its own tmux server");
     if (theirs() !== theirsBefore) throw new Error("the person's tmux server changed");
-    // Only the drivers' own turns: none from the person's berth hooks firing inside the agents.
-    const turns = readFileSync(join(state, "box", "turns.json"), "utf8");
-    if (turns.includes('"origin": "terminal"') || turns.includes('"origin":"terminal"')) throw new Error("a hook's turn was recorded");
+    // Only the drivers' own turns, in the ledger and its archive: none from the person's berth hooks
+    // firing inside the agents, nor a resumed conversation told twice.
+    const archive = join(state, "box", "turns-archive.jsonl");
+    const turns = readFileSync(join(state, "box", "turns.json"), "utf8") + (existsSync(archive) ? readFileSync(archive, "utf8") : "");
+    if (/"origin":\s*"terminal"/.test(turns)) throw new Error("a turn no send started was recorded");
     return { ownServer: [...ours] };
   });
 } finally {

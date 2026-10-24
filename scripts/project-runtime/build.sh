@@ -24,7 +24,7 @@ mkdir -p "$CACHE" "$OUT"
 GO="$CACHE/go$GO_VERSION"
 if [ "$(cat "$GO/.sha256" 2>/dev/null)" != "$GO_SHA" ] || [ ! -x "$GO/bin/go" ]; then
   curl -fsSL -o "$CACHE/go.tar.gz" "$GO_URL"
-  echo "$GO_SHA  $CACHE/go.tar.gz" | shasum -a 256 -c -
+  echo "$GO_SHA  $CACHE/go.tar.gz" | shasum -a 256 -c - || { rm -f "$CACHE/go.tar.gz"; exit 1; }
   rm -rf "$GO" && mkdir -p "$GO"
   tar -xzf "$CACHE/go.tar.gz" -C "$GO" --strip-components=1
   rm "$CACHE/go.tar.gz"

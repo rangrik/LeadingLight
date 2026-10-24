@@ -16,7 +16,7 @@ Feature: The project runtime
     Then the Go download matches its checksum
     And Shipyard's LICENSE and THIRD_PARTY_NOTICES.md at that commit match vendor/shipyard's
     And every patch applies
-    And apps/desktop/src-tauri/binaries/berthd-aarch64-apple-darwin says "berthd v0.3.30-ll.2+" and a
+    And apps/desktop/src-tauri/binaries/berthd-aarch64-apple-darwin says "berthd v0.3.30-ll.N+" and a
       hash of the patch set, so two patch sets never share a version
     And building again gives a file with the same checksum
 
