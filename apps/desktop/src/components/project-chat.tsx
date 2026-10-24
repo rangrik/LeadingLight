@@ -1,4 +1,4 @@
-import { ChevronDown, FileText, FileX, GitBranch, MessagesSquare, Plus } from "lucide-react";
+import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -7,6 +7,7 @@ import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components
 import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { useBrowserTabs, useWorkspace } from "~/components/agent-browser";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { type ChatSettings, type Command, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
@@ -17,7 +18,8 @@ import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversat
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { said as saidIn, type TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask, call } from "~/lib/project-runtime/transport";
-import { pageOf } from "~/lib/space";
+import { openBeside } from "~/lib/panes";
+import { browserView, pageOf } from "~/lib/space";
 import type { Item } from "~/lib/threads";
 
 // A project's chat (features/project-chat.feature): an agent working in the page's folder, in a
@@ -114,6 +116,10 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   // Files and words in the composer are this chat's: another chat starts without them.
   useEffect(() => setAttached([]), [key]);
   const cx = codex.use();
+  // The workspace's browser, while the agent has one open there (features/agent-browser.feature).
+  const own = (chat.conv ?? list.find((c) => c.id === current))?.location?.split("/")[1];
+  const ws = useWorkspace(pageId, own);
+  const tabs = useBrowserTabs(ws?.location, ws?.worktree);
   const field = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -236,9 +242,15 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
           </MenuPopup>
         </Menu>
+        {tabs.length > 0 && (
+          <Button className="ms-auto h-7 gap-1.5 px-1.5 sm:h-7" onClick={() => openBeside(browserView(pageId, own))} size="sm" variant="ghost">
+            <Globe className="size-4" />
+            Browser
+          </Button>
+        )}
         {/* A chat on its own branch says which; its worktree is the runtime's (slice 6). */}
         {started?.location?.includes("/") && (
-          <span className="ms-auto flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs">
+          <span className={cn("flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs", !tabs.length && "ms-auto")}>
             <GitBranch className="size-4 shrink-0" />
             <span className="truncate">ll/{started.location.split("/")[1]}</span>
           </span>

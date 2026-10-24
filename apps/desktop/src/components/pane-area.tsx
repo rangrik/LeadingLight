@@ -21,8 +21,9 @@ import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
+import { BrowserPane } from "~/components/agent-browser";
 import { ProjectChat } from "~/components/project-chat";
-import { CHAT_VIEW, describe, draftOf, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -213,6 +214,8 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
                   <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
+                ) : leaf.page.startsWith(BROWSER_VIEW) ? (
+                  <BrowserPane pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} worktree={leaf.page.split("/")[1] || undefined} />
                 ) : (
                   <PagePane id={leaf.page} />
                 )}

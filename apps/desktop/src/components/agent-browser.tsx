@@ -1,0 +1,125 @@
+import { Globe } from "lucide-react";
+import { useEffect, useState } from "react";
+import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
+import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
+import { useFolder } from "~/components/project-folder";
+import { onRuntimeEvent } from "~/lib/project-runtime/live";
+import { ask, stream } from "~/lib/project-runtime/transport";
+
+// An agent's browser, live (features/agent-browser.feature): the frames the runtime casts of a
+// workspace's tab, its address, its tabs and its console. The agent drives it; this only watches.
+
+type Tab = { name: string; url?: string; title?: string };
+type Loc = { name: string; worktrees?: { name: string; main?: boolean; port?: number }[] };
+
+// The workspace a chat works in: its own branch's worktree, else the folder's main one.
+export function useWorkspace(pageId: string, worktree?: string) {
+  const state = useFolder(pageId);
+  const location = state?.folder.location;
+  const [found, setFound] = useState<{ name: string; port?: number } | null>(null);
+  useEffect(() => {
+    if (!location) return;
+    void ask<Loc[]>("GET", "/v1/locations").then((all) => {
+      const wts = all.find((l) => l.name === location)?.worktrees ?? [];
+      const w = wts.find((x) => (worktree ? x.name === worktree : x.main));
+      setFound({ name: w?.name ?? worktree ?? location, port: w?.port });
+    }, () => {});
+  }, [location, worktree]);
+  // port: the first of the block the runtime gave this workspace.
+  return location ? { location, worktree: found?.name ?? worktree ?? null, port: found?.port } : null;
+}
+
+// A workspace's open tabs, as the runtime says when its browser opens or closes them; none, none open.
+export function useBrowserTabs(location?: string, worktree?: string | null) {
+  const [tabs, setTabs] = useState<Tab[]>([]);
+  useEffect(() => {
+    if (!location || !worktree) return;
+    const read = () => void ask<{ tabs: Tab[] | null }>("GET", `/v1/worktrees/${location}/${worktree}/browser/tabs`).then((r) => setTabs(r.tabs ?? []), () => setTabs([]));
+    read();
+    return onRuntimeEvent((e) => e.type.startsWith("browser.") && read());
+  }, [location, worktree]);
+  return tabs;
+}
+
+const path = (url?: string) => {
+  try {
+    const u = new URL(url ?? "");
+    return u.pathname + u.search;
+  } catch {
+    return url ?? "";
+  }
+};
+
+export function BrowserPane({ pageId, worktree }: { pageId: string; worktree?: string }) {
+  const ws = useWorkspace(pageId, worktree);
+  const tabs = useBrowserTabs(ws?.location, ws?.worktree);
+  const [tab, setTab] = useState("");
+  const [view, setView] = useState<"page" | "console">("page");
+  const [frame, setFrame] = useState<{ data: string; url?: string } | null>(null);
+  const [console, setConsole] = useState("");
+  const shown = tab || tabs[0]?.name || "";
+  const base = ws?.worktree ? `/v1/worktrees/${ws.location}/${ws.worktree}/browser` : null;
+  useEffect(() => {
+    setFrame(null);
+    if (!base || !tabs.length) return;
+    return stream("GET", `${base}/screencast${shown ? `?tab=${encodeURIComponent(shown)}` : ""}`, undefined, 60, (line) => {
+      try {
+        const f = JSON.parse(line) as { data?: string; url?: string };
+        if (f.data) setFrame({ data: f.data, url: f.url });
+      } catch {
+        // Not a frame.
+      }
+    }, () => {});
+  }, [base, shown, tabs.length]);
+  // The console as the tab has it, read without using up what its agent hasn't read yet.
+  useEffect(() => {
+    if (view !== "console" || !base) return;
+    const read = () => void ask<{ text: string }>("GET", `${base}/console?peek=1${shown ? `&tab=${encodeURIComponent(shown)}` : ""}`).then((r) => setConsole(r.text), () => setConsole(""));
+    read();
+    const every = window.setInterval(read, 2000);
+    return () => window.clearInterval(every);
+  }, [view, base, shown]);
+
+  if (!tabs.length)
+    return (
+      <div className="m-auto flex flex-col items-center gap-2 p-6 text-center text-muted-foreground text-sm">
+        <Globe className="size-6" />
+        No browser is open in this workspace. It opens when the agent opens a page.
+      </div>
+    );
+  return (
+    <div className="flex h-full flex-col text-sm" data-testid="agent-browser">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+        <SegmentedControl aria-label="Show" render={<RadioGroupPrimitive onValueChange={(v) => setView(v as "page" | "console")} value={view} />} size="sm">
+          <SegmentedControlItem render={<RadioPrimitive.Root value="page" />}>Page</SegmentedControlItem>
+          <SegmentedControlItem render={<RadioPrimitive.Root value="console" />}>Console</SegmentedControlItem>
+        </SegmentedControl>
+        {/* The page's path, and the workspace's own port that serves it (the runtime routes its address there). */}
+        <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">{path(frame?.url ?? tabs.find((t) => t.name === shown)?.url)}</span>
+        {ws?.port && <span className="shrink-0 text-muted-foreground text-xs">Port {ws.port}</span>}
+        {tabs.length > 1 && (
+          <Select onValueChange={(v) => setTab(v as string)} value={shown}>
+            <SelectTrigger aria-label="Tab" className="w-36" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              {tabs.map((t) => (
+                <SelectItem key={t.name} value={t.name}>
+                  {t.title || t.name}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        )}
+      </div>
+      {view === "page" ? (
+        <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-muted/40 p-3">
+          {frame ? <img alt={`The agent's tab at ${frame.url ?? ""}`} className="max-w-full rounded-md border shadow-xs/5" src={`data:image/jpeg;base64,${frame.data}`} /> : <p className="m-auto text-muted-foreground">Waiting for the tab…</p>}
+        </div>
+      ) : (
+        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs">{console || "Nothing in the console yet."}</pre>
+      )}
+    </div>
+  );
+}

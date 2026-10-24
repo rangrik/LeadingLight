@@ -34,6 +34,6 @@ notices are vendor/shipyard's, checked equal at build time.
   events), and TestRepoHooksRunOnlyForTheirRepoInTheWorktree depends on the port base;
   TestAttachPassesShiftEnter fails on unpatched source too, and TestReviewRoutesOverTheWire fails
   about one run in three on its temp folder's cleanup, with or without our patches.
-- For slice 8a: the runtime's workspace addresses (BERTH_URL, the browser's base) use port 1377,
-  which is the person's Shipyard app's proxy; only the runtime's own browser proxy should see
-  them. Services() doesn't credit a plain folder's ports to it yet.
+- The runtime's workspace addresses (BERTH_URL) name port 1377, routed by its own browser proxy to
+  the workspace's port; the Browser view shows the path and that port. Services() doesn't credit a
+  plain folder's ports to it yet. Images don't preview in a turn's file view.
