@@ -80,8 +80,16 @@ export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.pr
 // What a pane shows: a page by its id, or a type's list of pages.
 export const TYPE_VIEW = "type:";
 export const typeView = (id: string) => `${TYPE_VIEW}${id}`;
+// A page's project chat (features/project-chat.feature), crumbed under its page.
+export const CHAT_VIEW = "chat:";
+export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
+export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
+  if (view.startsWith(CHAT_VIEW)) {
+    const id = view.slice(CHAT_VIEW.length);
+    return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
+  }
   if (view.startsWith(TYPE_VIEW)) {
     const type = typeOf(view.slice(TYPE_VIEW.length));
     return { title: type.plural, icon: type.icon };

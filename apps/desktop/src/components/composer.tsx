@@ -65,6 +65,7 @@ export function Composer({
   onSend,
   onStop,
   fieldRef,
+  commands = COMMANDS,
 }: {
   ready: boolean;
   busy: boolean;
@@ -74,6 +75,8 @@ export function Composer({
   onSend: (question: string, mentions: Mention[]) => void;
   onStop: () => void;
   fieldRef: RefObject<HTMLDivElement | null>;
+  // A project chat has none of the page's own (they ask about the note in view).
+  commands?: Command[];
 }) {
   const [value, setValue] = useState<ComposerValue>([]);
   const triggers: ComposerTrigger[] = [
@@ -84,7 +87,7 @@ export function Composer({
         ...pages.map((p) => ({ id: `page:${p.id}`, label: p.title || "Untitled", description: "Page", kind: "page", icon: <FileText /> })),
       ],
     },
-    { character: "/", items: COMMANDS.map((c) => ({ id: c.id, label: c.label, description: c.question.trim(), type: "action" as const, icon: <Slash /> })) },
+    { character: "/", items: commands.map((c) => ({ id: c.id, label: c.label, description: c.question.trim(), type: "action" as const, icon: <Slash /> })) },
   ];
   const send = (draft: ComposerValue) => {
     const question = getComposerText(draft).trim();
@@ -97,7 +100,7 @@ export function Composer({
     <Frame
       className="mx-2 mb-2 [--composer-max-rows:6]"
       onAction={(item) => {
-        const c = COMMANDS.find((x) => x.id === item.id);
+        const c = commands.find((x) => x.id === item.id);
         if (!c) return;
         if (c.send) {
           setValue([]);

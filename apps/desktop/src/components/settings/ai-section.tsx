@@ -87,7 +87,7 @@ export function AiSection() {
         ))}
       </SettingsGroup>
       <SettingsGroup title="Privacy">
-        <SettingsRow label="What leaves this Mac" description="Notes stay here. Only your question, the page you ask from, and pages the model reads or you mention leave this Mac, and only when you ask: to Anthropic for Claude, to OpenAI for GPT." />
+        <SettingsRow label="What leaves this Mac" description="Notes stay here. Only your question, the page you ask from, and pages the model reads or you mention leave this Mac, and only when you ask: to Anthropic for Claude, to OpenAI for GPT. In a project chat, the agent also reads files in the folder you linked as it works, and what it reads goes to them too." />
       </SettingsGroup>
     </SettingsPage>
   );

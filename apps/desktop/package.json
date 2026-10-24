@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test src/lib/*.test.ts",
+    "test": "node --experimental-strip-types --test src/lib/*.test.ts src/lib/project-runtime/*.test.ts",
     "qa": "playwright test -c qa/playwright.config.ts --project qa",
     "qa:gallery": "playwright test -c qa/playwright.config.ts --project gallery"
   },

@@ -77,7 +77,9 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
   const work = body.slice(0, last + 1);
   const answer = body.slice(last + 1).flatMap((i) => (i.kind === "text" ? [i] : []));
   const how = end?.how ?? (live ? "working" : "stopped");
-  const line = waiting ? "Waiting for you" : live ? `Working for ${secs(now - (started ?? now))}` : `${{ done: "Worked", stopped: "Stopped after", failed: "Failed after" }[how as "done"]}${how === "done" ? " for" : ""} ${secs(end?.ms ?? 0)}`;
+  // A turn whose length isn't known (a project chat's older turns) says only how it ended.
+  const length = end?.ms ? `${how === "done" ? " for" : ""} ${secs(end.ms)}` : "";
+  const line = waiting ? "Waiting for you" : live ? `Working for ${secs(now - (started ?? now))}` : `${{ done: "Worked", stopped: end?.ms ? "Stopped after" : "Stopped", failed: end?.ms ? "Failed after" : "Failed" }[how as "done"]}${length}`;
   const shown = live || open;
   return (
     <div className="mt-4 first:mt-0">

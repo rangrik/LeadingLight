@@ -1,4 +1,4 @@
-import { Ellipsis, FolderOpen, FolderPlus, FolderX } from "lucide-react";
+import { Ellipsis, FolderOpen, FolderPlus, FolderX, MessagesSquare } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -8,12 +8,12 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@leadinglight/ui/c
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { pageLabel } from "~/lib/labels";
-import { openPage } from "~/lib/panes";
+import { openBeside, openPage } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { folders, linkFolder, loadFolders, unlinkFolder } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { ask } from "~/lib/project-runtime/transport";
-import { pageOf } from "~/lib/space";
+import { chatView, pageOf } from "~/lib/space";
 
 // A page's linked folder (features/external-projects.feature): the Link folder button above the
 // title, the dialog it opens, and the row under the title. The dialog is synara's
@@ -175,9 +175,15 @@ export function FolderRow({ pageId }: { pageId: string }) {
           <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">{shown}</span>
         </span>
       )}
-      {state.missing && (
+      {state.missing ? (
         <Button onClick={() => setOpen(true)} size="xs" variant="outline">
           Relink…
+        </Button>
+      ) : (
+        // The project's chat, beside the page (features/project-chat.feature).
+        <Button onClick={() => openBeside(chatView(pageId))} size="xs" variant="outline">
+          <MessagesSquare />
+          Chat
         </Button>
       )}
       <Menu>

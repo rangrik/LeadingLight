@@ -21,7 +21,8 @@ import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
-import { describe, draftOf, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { ProjectChat } from "~/components/project-chat";
+import { CHAT_VIEW, describe, draftOf, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -184,8 +185,8 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
-                {!leaf.page.startsWith(TYPE_VIEW) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
-                {!leaf.page.startsWith(TYPE_VIEW) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
+                {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
                   <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
                 {split && (
@@ -208,7 +209,13 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                 key={leaf.page}
                 style={ai.corner.endsWith("l") ? { paddingLeft: aside } : { paddingRight: aside }}
               >
-                {leaf.page.startsWith(TYPE_VIEW) ? <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} /> : <PagePane id={leaf.page} />}
+                {leaf.page.startsWith(TYPE_VIEW) ? (
+                  <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
+                ) : leaf.page.startsWith(CHAT_VIEW) ? (
+                  <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
+                ) : (
+                  <PagePane id={leaf.page} />
+                )}
               </div>
             </section>
           );
