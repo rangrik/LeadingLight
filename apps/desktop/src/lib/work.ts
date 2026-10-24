@@ -1,6 +1,6 @@
 import type { Evidence } from "~/lib/evidence";
 import type { ObjectSummary } from "~/lib/objects";
-import { createPage, pageOf, space } from "~/lib/space";
+import { createPage, pageOf, propOf, space } from "~/lib/space";
 import { summarize } from "~/lib/store";
 
 // What a project's agents leave in LeadingLight (DECISIONS.md, 20). An Agent page is one agent at
@@ -17,6 +17,9 @@ export type Source = { page: string; quote?: string; excerpt?: string };
 export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; evidence?: Evidence[]; corrects?: string; ready?: boolean };
 
 export const runOf = (p?: ObjectSummary) => p?.properties.run as Run | undefined;
+// The pages a page's relation properties hold.
+export const relationsOf = (p: ObjectSummary) =>
+  Object.entries(p.properties).flatMap(([k, v]) => (propOf(k)?.kind === "relation" ? (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? [v] : []) : []));
 export const reportOf = (p?: ObjectSummary) => p?.properties.report as ReportMeta | undefined;
 export const isReport = (id: string) => !!reportOf(pageOf(id));
 
@@ -25,11 +28,15 @@ export const reportsOn = (pageId: string, pages = space.get().pages) => pages.fi
 
 export type Caller = { session: string; conversation?: string; location?: string; agent?: string; by?: string };
 
-// The Agent page of a conversation, made the first time it is needed. Writes come one at a time
+// The Agent page of a caller: by its conversation, or by its session until an assignment has
+// recorded the conversation.
+export const agentOf = (c: Caller) =>
+  space.get().pages.find((p) => runOf(p) && ((c.conversation && runOf(p)!.conversation === c.conversation) || (!runOf(p)!.conversation && runOf(p)!.session === c.session)));
+
+// The Agent page of a caller, made the first time it is needed. Writes come one at a time
 // (lib/project-runtime/bridge.ts), so it is made once.
 export async function agentFor(c: Caller): Promise<ObjectSummary> {
-  const key = c.conversation || c.session;
-  const found = space.get().pages.find((p) => p.typeId === AGENT && (runOf(p)?.conversation || runOf(p)?.session) === key);
+  const found = agentOf(c);
   if (found) return found;
   const run: Run = { conversation: c.conversation ?? "", session: c.session, location: c.location ?? "", agent: c.agent ?? "claude", ...(c.by && { by: c.by }) };
   const name = run.agent === "codex" ? "Codex" : "Claude";

@@ -323,3 +323,13 @@ agent's folder or its kept outputs, so a shell command's output counts) when the
 the app stores it as any page's image or file, inside the report. Its content's hash names the
 version reviewed; the folder changing or being cleaned up later leaves it as published. A file that
 can't be kept refuses the publish at once, so a report never shows a hole.
+
+## 21. Assigning work starts one agent, named after its Agent page
+
+Assign is the only way work starts: a mention never does. Assigning a task makes its Agent page and
+links the task to it before the runtime is asked for anything, and the runtime session is named after
+that page. So a second press, a reload or a restart in between finds the conversation by that name
+and records it, rather than starting another; one never made is started then. A page that isn't a
+task is assigned through a task made for it once, linked to the page and its project. A task is any
+type with Done, so a space's own task types work unchanged; assigning adds only a link on the task.
+The brief the agent gets is the task as written when it starts.

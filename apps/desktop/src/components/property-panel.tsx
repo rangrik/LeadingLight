@@ -1,3 +1,4 @@
+import { AssignButton } from "~/components/assign";
 import { AlignLeft, ChevronsUpDown, Ellipsis, Plus } from "lucide-react";
 import { type ReactElement, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
@@ -236,6 +237,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
             <span className="hidden @md:inline">Add property</span>
           </Button>
         </AddProperty>
+        <AssignButton pageId={page.id} />
         <Menu>
           <MenuTrigger render={<Button aria-label="Page options" className="text-muted-foreground" size="icon-sm" variant="ghost" />}>
             <Ellipsis />

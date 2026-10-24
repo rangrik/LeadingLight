@@ -152,6 +152,15 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   };
   useEffect(refresh, [location]);
   useEffect(() => void (current ? localStorage.setItem(CHOSEN(pageId), current) : localStorage.removeItem(CHOSEN(pageId))), [current]);
+  // A task's Chat button asks for its agent's conversation (components/assign.tsx).
+  useEffect(() => {
+    const on = (e: Event) => {
+      const { page, conversation } = (e as CustomEvent<{ page: string; conversation: string }>).detail;
+      if (page === pageId) (refresh(), setCurrent(conversation));
+    };
+    window.addEventListener("ll:chat", on);
+    return () => window.removeEventListener("ll:chat", on);
+  }, [location]);
   const conv = list.find((c) => c.id === current) ?? null;
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);

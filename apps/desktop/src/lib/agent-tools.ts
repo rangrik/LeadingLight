@@ -11,7 +11,7 @@ import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { agentFor, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/work";
+import { agentFor, agentOf, relationsOf, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/work";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
 // answered here when the runtime passes a call on. Who calls comes from the runtime, never from
@@ -51,11 +51,10 @@ function linksIn(doc: EditorDoc | null, out = new Set<string>()): Set<string> {
   for (const c of doc.content ?? []) linksIn(c, out);
   return out;
 }
-const relations = (p: ObjectSummary) => Object.entries(p.properties).flatMap(([k, v]) => (propOf(k)?.kind === "relation" ? ids(v) : []));
 
 const graph: Graph = {
-  out: async (id) => [...linksIn(await bodyOf(id)), ...relations(pageOf(id) ?? ({ properties: {} } as ObjectSummary))],
-  back: (id) => space.get().pages.filter((p) => p.properties.parent === id || relations(p).includes(id)).map((p) => p.id),
+  out: async (id) => [...linksIn(await bodyOf(id)), ...relationsOf(pageOf(id) ?? ({ properties: {} } as ObjectSummary))],
+  back: (id) => space.get().pages.filter((p) => p.properties.parent === id || relationsOf(p).includes(id)).map((p) => p.id),
   mentions: async (id) => (await objects.containing(id)).map((o) => o.id),
   hub: (id) => ["tag", "daily"].includes(pageOf(id)?.typeId ?? ""),
   exists: (id) => !!pageOf(id) && !pageOf(id)?.properties.templateOf,
@@ -203,7 +202,15 @@ async function attachment(c: Caller, a: Args) {
 async function project(c: Caller) {
   const folder = projectOf(c);
   if (!folder) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
-  return { project: named(folder.pageId), folder: folder.path, how: "read and search cover the project's pages; the folder's files are yours to read as usual." };
+  const you = agentOf(c);
+  const task = ids(you?.properties["agent-task"]).find((id) => pageOf(id));
+  return {
+    project: named(folder.pageId),
+    folder: folder.path,
+    ...(you && { you: named(you.id) }),
+    ...(task && { task: { ...named(task), brief: part(await bodyOf(task), 0).text, done: pageOf(task)!.properties.done === true } }),
+    how: "read and search cover the project's pages; the folder's files are yours to read as usual. publish adds a report beside your task, or the page you name.",
+  };
 }
 
 const plain = (s: string) => s.replace(/\s+/g, " ").trim();
