@@ -64,11 +64,13 @@ export function SelectionToolbar({
   note,
   quote,
   onAsk,
+  askKeys,
 }: {
   editor: Editor;
   note?: boolean;
   quote?: { label: string; run: () => void };
   onAsk?: () => void;
+  askKeys?: string;
 }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -186,7 +188,7 @@ export function SelectionToolbar({
                       // The panel takes over; the toolbar would otherwise stay over the text.
                       editor.view.dispatch(editor.state.tr.setMeta("selectionToolbar", "hide"));
                     }}
-                    shortcut="⌘J"
+                    shortcut={askKeys}
                   >
                     <Sparkles />
                   </ToolButton>

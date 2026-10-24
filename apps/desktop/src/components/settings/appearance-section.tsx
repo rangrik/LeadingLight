@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { SYSTEM_THEME, useActiveTheme, useThemes } from "@/hooks/use-theme";
 import type { Theme } from "@/lib/api";
 import { setPrefs, usePrefs } from "@/lib/prefs";
+import { keysFor } from "@/lib/shortcuts";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { berthThemes } from "@/themes/builtin";
@@ -103,7 +104,7 @@ export function AppearanceSection() {
       </section>
 
       <SettingsGroup title="Interface">
-        <SettingsRow label="Text size" description="⌘+ and ⌘− step it from 11 to 20 px.">
+        <SettingsRow label="Text size" description={`${keysFor("zoom-in")} and ${keysFor("zoom-out")} step it from 11 to 20 px.`}>
           <Segmented
             value={String(uiFontSize)}
             options={[

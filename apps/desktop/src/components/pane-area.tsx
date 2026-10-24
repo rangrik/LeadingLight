@@ -20,7 +20,7 @@ import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
-import { describe, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { describe, draftOf, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -224,7 +224,7 @@ function PagePane({ id }: { id: string }) {
     let stale = false;
     objects
       .get(id)
-      .then((obj) => !stale && setPage(obj))
+      .then((obj) => !stale && setPage(obj ?? draftOf(id) ?? null))
       .catch(console.error);
     return () => {
       stale = true;

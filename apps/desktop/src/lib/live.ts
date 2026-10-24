@@ -10,6 +10,7 @@ type Live = {
   setContent: (doc: EditorDoc) => void;
   properties: () => Record<string, unknown>;
   setProperties: (props: Record<string, unknown>) => void;
+  setTitle: (title: string) => void;
   // Quotes into an essay, and scrolls to an anchor (DECISIONS.md, 11).
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
@@ -46,11 +47,13 @@ export function whenLive(id: string, fn: (page: Live) => void) {
   waiting.set(id, [...(waiting.get(id) ?? []), fn]);
 }
 
-type Change = { content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };
+type Change = { title?: string; content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };
 
 export async function editPage(id: string, change: Change) {
+  const { title } = change;
   const open = live.get(id);
   if (open) {
+    if (title !== undefined) open.setTitle(title);
     if (change.content) open.setContent(change.content(open.content()));
     if (change.properties) open.setProperties(change.properties(open.properties()));
     return;
@@ -60,7 +63,7 @@ export async function editPage(id: string, change: Change) {
   // A page never written in has no body yet; the change starts one.
   const content = change.content?.(obj.content ?? { type: "doc", content: [] });
   const properties = change.properties?.(obj.properties);
-  await objects.update(id, { ...(content && { content }), ...(properties && { properties }) });
-  if (properties) patchSummary(id, { properties });
+  await objects.update(id, { ...(title !== undefined && { title }), ...(content && { content }), ...(properties && { properties }) });
+  patchSummary(id, { ...(title !== undefined && { title }), ...(properties && { properties }) });
   markSaved();
 }

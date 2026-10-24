@@ -5,7 +5,9 @@ Feature: Pages
   Names used below are accessible names (aria-label or visible text):
   - sidebar: navigation "Pages"; one button per page, named by its title ("Untitled" when empty)
   - "New page" button at the right of the "Pages" label in the sidebar
-  - "More" button on each row (the sidebar-08 "…", shown on hover), opening a menu with "Delete"
+  - "More" button on each row (the sidebar-08 "…", shown on hover), opening a menu with "Rename",
+    "Pin" ("Unpin" on a pinned page), "Copy link", a line, then "Delete" in the destructive colour
+  - "Pinned": a second sidebar group (navigation "Pinned") above "Pages", there only while a page is pinned
   - title field: textbox "Title"
   - body: textbox "Page body"
 
@@ -83,6 +85,49 @@ Feature: Pages
     When I delete the page "Only" and confirm
     Then the sidebar shows "No pages yet"
     And the main area shows "No page open"
+
+  Scenario: A row's menu
+    Given I have created a page titled "Draft"
+    When I hover the sidebar row "Draft" and click "More"
+    Then the menu reads "Rename", "Pin", "Copy link", a line, "Delete", each with a 16 px icon
+    And "Delete" and its icon are in the destructive colour, in light and dark mode
+    And on "Thoughts" or an essay under its page the menu reads "Copy link", a line, "Delete"
+    And the page's own "Page options" menu ends with a line and "Delete page…" in the destructive colour
+    And in Type settings "Delete type" is in the destructive colour, and so is the button confirming it
+
+  Scenario: Renaming a page from the sidebar
+    Given I have created pages titled "Draft" and "Other", and "Draft" is open
+    When I choose "Rename" in the menu of "Draft"
+    Then a field opens under the row holding "Draft", all of it selected
+    When I type "Plan" and press Enter
+    Then the field closes, the row reads "Plan", and the open page's title reads "Plan" at once
+    And after a reload it still reads "Plan"
+    When I rename "Other" to "Later" and click elsewhere instead of pressing Enter
+    Then "Other" is renamed "Later"
+    When I rename "Later", type "Nope" and press Escape
+    Then it keeps the name "Later"
+    When I rename "Later", clear the field and press Enter
+    Then it keeps the name "Later"
+
+  Scenario: Pinning a page
+    Given I have created pages titled "Old" and "New"
+    When I choose "Pin" in the menu of "Old"
+    Then a "Pinned" group shows above "Pages" holding "Old", and "Pages" lists only "New"
+    And the menu of "Old" now reads "Unpin"
+    And after a reload "Old" is still pinned
+    When I choose "Unpin" in its menu
+    Then "Pinned" is gone and "Pages" lists "New", "Old" again
+    # Failure case: the open page saves its own properties, which must not undo the pin.
+    When "Old" is open, I type "more" in its body and pin it at once, then reload
+    Then "Old" is pinned and its body holds "more"
+
+  Scenario: Copying a page's link
+    Given I have created pages titled "Dune" and "Notes"
+    When I choose "Copy link" in the menu of "Dune"
+    Then a toast reads "Link copied"
+    When I open "Notes", click into its body and paste
+    Then the body holds a link to "Dune" (an @ mention), which opens "Dune" when clicked
+    And renaming "Dune" to "Dune Messiah" changes the link's text
 
   Scenario: Long titles are truncated in the sidebar, not wrapped
     Given I have created a page titled "A very long title that goes on and on and on and on"

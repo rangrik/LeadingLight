@@ -8,7 +8,7 @@ use std::error::Error;
 
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager, WebviewWindow};
 use tauri_nspanel::{tauri_panel, CollectionBehavior, ManagerExt, PanelLevel, StyleMask, WebviewWindowExt};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 pub const LABEL: &str = "capture";
 pub const MAIN: &str = "main";
@@ -43,13 +43,24 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn Error>> {
         }
     });
     panel.set_event_handler(Some(events.as_ref()));
-    let key = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyI);
-    app.global_shortcut().on_shortcut(key, |app, _, event| {
+    // Another app (or a second LeadingLight) may hold the keys; the app still starts without them.
+    if let Err(e) = set_key(app, Some("Ctrl+Alt+I")) {
+        eprintln!("capture: no global key: {e}");
+    }
+    Ok(())
+}
+
+// The box's global key, as Settings sets it (lib/keymap.ts); none while Settings records keys.
+pub fn set_key(app: &AppHandle, accel: Option<&str>) -> Result<(), String> {
+    let keys = app.global_shortcut();
+    keys.unregister_all().map_err(|e| e.to_string())?;
+    let Some(accel) = accel else { return Ok(()) };
+    keys.on_shortcut(accel, |app, _, event| {
         if event.state == ShortcutState::Pressed {
             toggle(app);
         }
-    })?;
-    Ok(())
+    })
+    .map_err(|e| e.to_string())
 }
 
 // Panels are AppKit objects: touched on the main thread only.
