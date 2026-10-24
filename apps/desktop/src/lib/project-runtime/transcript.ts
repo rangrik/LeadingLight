@@ -20,8 +20,14 @@ export type TranscriptItem = {
   error?: boolean;
   questions?: Question[];
   answers?: string[];
+  // A slash command the person sent, as the record keeps it.
+  command?: string;
+  args?: string;
   off?: number;
 };
+
+// What the person said in an item: their words, or a slash command and its words.
+export const said = (i: TranscriptItem) => (i.kind === "command" ? `${i.command ?? ""} ${i.args ?? ""}` : i.kind === "user" ? (i.text ?? "") : null);
 // items is null when nothing came since the last read (the runtime's empty list).
 export type TranscriptPage = { items: TranscriptItem[] | null; next: number; gen?: string; reset?: boolean; start?: number; source?: string; reason?: string };
 export type Window = { items: TranscriptItem[]; next: number; gen?: string };

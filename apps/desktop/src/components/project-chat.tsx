@@ -15,7 +15,7 @@ import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
 import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
-import type { TranscriptItem } from "~/lib/project-runtime/transcript";
+import { said as saidIn, type TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask, call } from "~/lib/project-runtime/transport";
 import { pageOf } from "~/lib/space";
 import type { Item } from "~/lib/threads";
@@ -55,15 +55,15 @@ function turnsOf(chat: Chat): Shown[] {
   const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [] }));
   const last = () => out[out.length - 1] ?? (out.push({ items: [], files: [] }), out[0]);
   for (const t of chat.window.items as TranscriptItem[]) {
-    if (t.kind === "user") {
+    if (saidIn(t) !== null) {
       // Files sent with it show by name; the runtime keeps them under a stamped name.
-      const { said, files } = splitAttached(t.text ?? "");
+      const { said, files } = splitAttached(saidIn(t) ?? "");
       out.push({ items: [{ kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) }], files: [] });
     }
     // How a turn ended is said by a notice: stopped, or an error.
     else if (t.kind === "notice" && t.notice === "interrupted") last().stopped = true;
     else if (t.kind === "notice" && t.level === "error") last().error = t.text;
-    else if (t.kind === "text" || t.kind === "notice" || t.kind === "command" || t.kind === "shell") add({ kind: "text", text: t.text ?? "" });
+    else if (t.kind === "text" || t.kind === "notice" || t.kind === "shell") add({ kind: "text", text: t.text ?? "" });
     else if (t.kind === "tools") for (const c of t.items ?? []) add({ kind: "tool", id: c.id ?? `${t.id}:${c.target}`, name: c.verb, input: { target: c.target }, status: t.done ? "done" : "running" });
     else if (t.kind === "edit" && t.file) {
       // A refused edit changed nothing, so its file isn't listed. One the person was asked about was declined.
@@ -86,8 +86,10 @@ function turnsOf(chat: Chat): Shown[] {
     if (!(isLast && live)) turn.items = turn.items.map((i) => (i.kind === "tool" && i.status === "running" ? { ...i, status: "stopped" } : i));
     // The reply being written shows until the record has its words.
     if (isLast && (live || chat.draft)) return chat.draft && !inRecord(chat.window, chat.draft) && turn.items.push({ kind: "text", text: chat.draft });
-    // Only turns started by a message line up with them: the agent can start one itself.
-    const ledger = sent[sent.length - (out.length - k)];
+    // Only turns started by a message line up with them: the agent can start one itself. A turn
+    // just sent isn't in the list yet while its last one has ended.
+    const lag = live && sent.at(-1)?.ended ? 1 : 0;
+    const ledger = sent[sent.length - (out.length - k) + lag];
     const ms = ledger?.started && ledger.ended ? Date.parse(ledger.ended) - Date.parse(ledger.started) : 0;
     turn.items.push({ kind: "end", ms, how: turn.error ? "failed" : turn.stopped ? "stopped" : "done", error: turn.error });
   });
@@ -109,6 +111,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [fresh, setFresh] = useState(defaults);
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
+  // Files and words in the composer are this chat's: another chat starts without them.
+  useEffect(() => setAttached([]), [key]);
   const cx = codex.use();
   const field = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -132,7 +136,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
     if (!live) return;
     type Listed = { name: string; description?: string; kind?: string; local?: boolean; screen?: boolean };
     void ask<{ commands: Listed[] }>("GET", `/v1/sessions/${live}/commands`).then(
-      (r) => setCommands(r.commands.filter((c) => c.kind !== "builtin" || (!c.local && !c.screen)).map((c) => ({ id: c.name, label: c.name, question: `${c.name} `, send: false, description: c.description }))),
+      // A name with a space can't be typed as a command.
+      (r) => setCommands(r.commands.filter((c) => (c.kind !== "builtin" || (!c.local && !c.screen)) && !/\s/.test(c.name)).map((c) => ({ id: c.name, label: c.name, question: `${c.name} `, send: false, description: c.description }))),
       () => {},
     );
   }, [live]);
@@ -267,7 +272,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
               <div className="mt-2 flex flex-wrap gap-1">
                 {t.files.map((f) => (
                   <Button key={f.name} onClick={() => setFile(f)} size="xs" variant="outline">
-                    {f.output?.missing ? <FileX /> : <FileText />}
+                    {f.output?.missing ? <FileX className="size-4" /> : <FileText className="size-4" />}
                     {/* Deleted by that turn: it still opens as it last was, if kept. */}
                     <span className={cn(f.output?.missing && "text-muted-foreground line-through")}>{f.name}</span>
                   </Button>
@@ -306,6 +311,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
         <Composer
           agents={[]}
+          key={key}
           busy={busy}
           commands={commands}
           fieldRef={field}
@@ -313,7 +319,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             names: attached.map((f) => f.name),
             add: (fs) => {
               // The runtime takes files up to 20 MB.
-              for (const f of fs.filter((f) => f.size > 20 << 20)) toastManager.add({ type: "error", title: `${f.name} is ${Math.round(f.size / (1 << 20))} MB; files can be up to 20 MB.` });
+              for (const f of fs.filter((f) => f.size > 20 << 20)) toastManager.add({ type: "error", title: `${f.name} is ${(f.size / (1 << 20)).toFixed(1)} MB; files can be up to 20 MB.` });
               setAttached((a) => [...a, ...fs.filter((f) => f.size <= 20 << 20)]);
             },
             remove: (i) => setAttached((a) => a.filter((_, k) => k !== i)),

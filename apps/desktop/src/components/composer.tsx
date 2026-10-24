@@ -140,7 +140,7 @@ export function Composer({
         <div className="flex flex-wrap gap-1 px-[calc(var(--composer-padding)+1px)] pt-2" {...own}>
           {files.names.map((name, i) => (
             <Button aria-label={`Take off ${name}`} key={`${name}:${i}`} onClick={() => files.remove(i)} size="xs" variant="outline">
-              <FileText />
+              <FileText className="size-4" />
               <span className="max-w-40 truncate">{name}</span>
               <X className="opacity-60" />
             </Button>

@@ -3,7 +3,7 @@ import { folders, refresh as refreshFolders } from "~/lib/project-runtime/folder
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
 import { type Answer, type Delivery, type Draft, mergeRequests, reconcile, restoreDraft, type RuntimeRequest, sendAnswer } from "~/lib/project-runtime/requests";
 import { acceptMessageSubmission, beginMessageSubmission, getActiveMessageSubmissions, type MessageSubmissionRecord, observeMessageSubmissionCanonical, rejectMessageSubmission } from "~/lib/project-runtime/submission";
-import { emptyWindow, merge, type TranscriptPage, type Window } from "~/lib/project-runtime/transcript";
+import { emptyWindow, merge, said, type TranscriptPage, type Window } from "~/lib/project-runtime/transcript";
 import { ask, call, type RuntimeEvent } from "~/lib/project-runtime/transport";
 import { createStore } from "~/lib/state";
 
@@ -109,8 +109,9 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const controls = session && !session.exited ? await ask<{ mode?: string }>("GET", `/v1/sessions/${name}/controls`).catch(() => null) : null;
   const window = page && page.source !== "none" ? merge(w, page) : w;
   // A sent message is sending until the record has it.
-  const added = window.items.filter((i) => i.kind === "user" && !w.items.some((o) => o.id === i.id)).map((i) => splitAttached(i.text ?? "").said.trim());
-  const seen = Object.entries(before.texts).filter(([, text]) => added.includes(text.trim())).map(([id]) => id);
+  const plain = (s: string) => s.replace(/\s+/g, " ").trim();
+  const added = window.items.filter((i) => said(i) !== null && !w.items.some((o) => o.id === i.id)).map((i) => plain(splitAttached(said(i) ?? "").said));
+  const seen = Object.entries(before.texts).filter(([, text]) => added.includes(plain(text))).map(([id]) => id);
   const now = chatOf(key).get();
   // A session gone or ended can't take what its agent asked; the runtime would refuse it too.
   const ended = !session || session.exited;
@@ -154,7 +155,7 @@ function settleAnswers(key: string) {
 const kept = new Map<string, number>();
 // The record has the words being written once its last turn has a text starting as they do.
 export const inRecord = (w: Window, draft: string) =>
-  w.items.slice(w.items.map((i) => i.kind).lastIndexOf("user") + 1).some((i) => i.kind === "text" && (i.text ?? "").trim().startsWith(draft.trim().slice(0, 60)));
+  w.items.slice(w.items.map((i) => said(i) !== null).lastIndexOf(true) + 1).some((i) => i.kind === "text" && (i.text ?? "").trim().startsWith(draft.trim().slice(0, 60)));
 
 // The runtime says what changed; the chat on screen reads it again. Followed only while a chat
 // is on screen.

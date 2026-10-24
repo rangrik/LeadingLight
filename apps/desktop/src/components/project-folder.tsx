@@ -195,7 +195,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
               {other && (
                 <FieldError match>
                   That folder is already linked to {otherTitle}.{" "}
-                  <Button className="h-auto p-0 text-xs sm:h-auto sm:text-xs" onClick={() => (onOpenChange(false), openPage(other))} variant="link">
+                  <Button className="h-auto p-0 text-xs underline sm:h-auto sm:text-xs" onClick={() => (onOpenChange(false), openPage(other))} variant="link">
                     Open {otherTitle}
                   </Button>
                 </FieldError>
