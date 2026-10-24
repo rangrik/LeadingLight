@@ -10,7 +10,7 @@ import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
-import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
+import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask } from "~/lib/project-runtime/transport";
@@ -72,10 +72,13 @@ function turnsOf(chat: Chat): Shown[] {
   }
   // Ended turns end; the ledger knows how the session's own last ones went.
   const live = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
+  const sent = chat.turns.filter((t) => t.origin !== "terminal");
   out.forEach((turn, k) => {
     const isLast = k === out.length - 1;
-    if (isLast && live) return chat.draft && turn.items.push({ kind: "text", text: chat.draft });
-    const ledger = chat.turns[chat.turns.length - (out.length - k)];
+    // The reply being written shows until the record has its words.
+    if (isLast && (live || chat.draft)) return chat.draft && !inRecord(chat.window, chat.draft) && turn.items.push({ kind: "text", text: chat.draft });
+    // Only turns started by a message line up with them: the agent can start one itself.
+    const ledger = sent[sent.length - (out.length - k)];
     const ms = ledger?.started && ledger.ended ? Date.parse(ledger.ended) - Date.parse(ledger.started) : 0;
     turn.items.push({ kind: "end", ms, how: turn.error ? "failed" : turn.stopped ? "stopped" : "done", error: turn.error });
   });
@@ -92,7 +95,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [attached, setAttached] = useState<File[]>([]);
   const [commands, setCommands] = useState<Command[]>([]);
   // A new chat's settings start as Settings › AI's and stay this chat's own.
-  const [fresh, setFresh] = useState(() => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan }));
+  const defaults = () => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan });
+  const [fresh, setFresh] = useState(defaults);
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
   const cx = codex.use();
@@ -124,6 +128,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   }, [live]);
   const waitingOn = sending(chat);
   useEffect(() => void (stuck.current && log.current?.scrollTo({ top: log.current.scrollHeight })));
+  // Relinked: what said the folder was gone no longer holds.
+  useEffect(() => void (state && !state.missing && chatOf(key).get().error && chatOf(key).set({ ...chatOf(key).get(), error: null })), [state?.missing]);
   // The request in front: what the agent waits on now, oldest first (features/agent-interactions.feature).
   const open = chat.requests.find((r) => r.blocking && (r.state === "pending" || r.state === "recorded"));
   // A question the agent isn't waiting on sits above the composer, which stays.
@@ -136,7 +142,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
 
   if (!state || !location) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">Link a folder to this page to chat in it.</p>;
   if (state.missing) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">The folder isn't there any more. Relink it from the page's folder row.</p>;
-  const busy = chat.session?.agent_state === "running" || waitingOn.length > 0;
+  const busy = chat.session?.agent_state === "running" || waitingOn.length > 0 || !!chat.draft;
   const draft = front ? chat.answers[front.id] : undefined;
   const sent = front ? chat.deliveries[front.id] : undefined;
   const delivery = front ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(front, draft, false, false)) : "pending";
@@ -184,7 +190,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             <ChevronDown className="size-3.5 opacity-60" />
           </MenuTrigger>
           <MenuPopup align="start" className="w-72" finalFocus={field}>
-            <MenuItem onClick={() => setCurrent(null)}>
+            <MenuItem onClick={() => (setCurrent(null), setFresh(defaults()))}>
               <Plus />
               New chat
             </MenuItem>

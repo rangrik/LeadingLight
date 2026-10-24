@@ -14,7 +14,7 @@ import { createStore } from "~/lib/state";
 
 export type Conversation = { id: string; agent: string; location?: string; dir: string; session?: string; live?: boolean; mode?: string; model?: string; effort?: string; title?: string; created: string; updated?: string };
 export type Session = { name: string; agent_state?: string; exited?: boolean; driver?: string };
-export type Turn = { n: number; state: string; started?: string; ended?: string };
+export type Turn = { n: number; state: string; started?: string; ended?: string; origin?: string };
 // An answer being written, and how far it has got (features/agent-interactions.feature).
 export type AnswerDraft = Draft & { index: number; sent?: boolean };
 export type Chat = {
@@ -98,6 +98,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const page = name ? await ask<TranscriptPage>("GET", `/v1/sessions/${name}/transcript?since=${w.next}${w.gen ? `&gen=${w.gen}` : ""}`).catch(() => null) : null;
   const turns = session ? await ask<Turn[]>("GET", `/v1/sessions/${name}/turns`).catch(() => []) : [];
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
+  // The session's own mode: approving a plan changes it without the conversation's record.
+  const controls = session && !session.exited ? await ask<{ mode?: string }>("GET", `/v1/sessions/${name}/controls`).catch(() => null) : null;
   const window = page && page.source !== "none" ? merge(w, page) : w;
   // A sent message is sending until the record has it.
   const added = window.items.filter((i) => i.kind === "user" && !w.items.some((o) => o.id === i.id)).map((i) => splitAttached(i.text ?? "").said.trim());
@@ -106,10 +108,17 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // A session gone or ended can't take what its agent asked; the runtime would refuse it too.
   const ended = !session || session.exited;
   const requests = mergeRequests(now.requests, fresh ?? []).map((r) => (ended && (r.state === "pending" || r.state === "recorded") ? { ...r, state: "expired" as const } : r));
-  // The reply being written goes with the read that brings its words, so it never blinks out.
-  const draft = session?.agent_state === "running" ? now.draft : "";
-  // A mode set while this read was out is newer than the conversation it began with.
-  const latest = watching.get(key)?.conv.id === conv.id ? watching.get(key)!.conv : conv;
+  // The reply being written stays until a read brings its words (the record can lag the turn's
+  // end), at most a few seconds, so it never blinks out.
+  const running = session?.agent_state === "running";
+  const keep = !!now.draft && !inRecord(window, now.draft) && (running || Date.now() - (kept.get(key) ?? Date.now()) < 3000);
+  if (keep && !running && !kept.has(key)) kept.set(key, Date.now());
+  if (!keep || running) kept.delete(key);
+  if (keep && !running) setTimeout(() => void sync(key, conv).catch(() => {}), 400);
+  const draft = keep ? now.draft : "";
+  // A mode set while this read was out is newer than both the conversation and the session's.
+  const changed = watching.get(key)?.conv.id === conv.id && watching.get(key)!.conv !== conv;
+  const latest = changed ? watching.get(key)!.conv : { ...conv, mode: controls?.mode ?? conv.mode };
   patch(key, { conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
@@ -135,6 +144,11 @@ function settleAnswers(key: string) {
   patch(key, { answers, restore });
 }
 
+const kept = new Map<string, number>();
+// The record has the words being written once its last turn has a text starting as they do.
+export const inRecord = (w: Window, draft: string) =>
+  w.items.slice(w.items.map((i) => i.kind).lastIndexOf("user") + 1).some((i) => i.kind === "text" && (i.text ?? "").trim().startsWith(draft.trim().slice(0, 60)));
+
 // The runtime says what changed; the chat on screen reads it again. Followed only while a chat
 // is on screen.
 const watching = new Map<string, { key: string; conv: Conversation }>();
@@ -154,7 +168,8 @@ export function watch(key: string, conv: Conversation): () => void {
     const c = chatOf(key).get();
     if (c.session?.agent_state !== "running" || !c.conv?.session) return;
     const d = await ask<{ text?: string }>("GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
-    if (d && (d.text ?? "") !== c.draft) patch(key, { draft: d.text ?? "" });
+    // An agent clears its draft as a message ends, before the record has it: the words stay till then.
+    if (d?.text && d.text !== c.draft) patch(key, { draft: d.text });
   }, 250);
   return () => {
     watching.delete(key);

@@ -189,7 +189,9 @@ function detail(r: RuntimeRequest): string {
   if (changes.length) return changes.map((c) => `${s(c.path).split("/").at(-1)}${how(c)}\n${s(c.diff)}`.trim()).join("\n\n");
   // Codex's other fields are only ids.
   const rest = "threadId" in input ? "" : Object.keys(input).length ? JSON.stringify(input, null, 2) : "";
-  return s(actions[0]?.command) || s(input.command) || s(input.file_path) || s(input.plan) || rest;
+  // A plan shows in the turn above its card, so it isn't repeated here.
+  if (r.kind === "plan") return "";
+  return s(actions[0]?.command) || s(input.command) || s(input.file_path) || rest;
 }
 
 export function ApprovalCard({ request, busy, onChoose, children, ref }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement> }) {

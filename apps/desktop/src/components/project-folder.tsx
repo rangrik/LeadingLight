@@ -117,7 +117,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
               {other && (
                 <FieldError match>
                   That folder is already linked to {otherTitle}.{" "}
-                  <Button className="h-auto p-0 text-xs sm:h-auto" onClick={() => (onOpenChange(false), openPage(other))} variant="link">
+                  <Button className="h-auto p-0 text-xs sm:h-auto sm:text-xs" onClick={() => (onOpenChange(false), openPage(other))} variant="link">
                     Open {otherTitle}
                   </Button>
                 </FieldError>
@@ -185,7 +185,7 @@ export function FolderRow({ pageId }: { pageId: string }) {
       ) : (
         // The project's chat, beside the page (features/project-chat.feature).
         <Button onClick={() => openBeside(chatView(pageId))} size="xs" variant="outline">
-          <MessagesSquare />
+          <MessagesSquare className="size-4" />
           Chat
         </Button>
       )}

@@ -16,10 +16,8 @@ notices are vendor/shipyard's, checked equal at build time.
 
 - A chat whose session was removed outside the app (the API's DELETE) shows only "Send a message to
   pick this chat up again" until then; the runtime reads a conversation's record only through a session.
-- A started chat's model and effort are fixed: the runtime can't change them in a running session yet
-  (slice 5b).
 - After a relink to a moved folder, older chats can't resume: their conversations keep the old path
-  (slice 11). The app checks the folder before each send; the runtime doesn't refuse a session in a
+  (slice 11). One still running there keeps working in the old path, and a write can make it again. The app checks the folder before each send; the runtime doesn't refuse a session in a
   missing location yet (next runtime bump).
 - A question card hides the composer, so Stop is out of reach until it's answered.
 - In the browser build the GPT models are this Mac's Codex's once project chats are on (the dev
