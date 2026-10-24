@@ -202,10 +202,7 @@ export function ApprovalCard({ request, busy, onChoose, children, ref }: { reque
       role="group"
       tabIndex={-1}
     >
-      <p className="font-medium leading-snug">
-        {PROMPT[request.tool ?? ""] ?? `The agent wants to use ${request.tool}`}
-        {request.tool && !PROMPT[request.tool] ? null : <span className="ms-1.5 font-normal text-muted-foreground text-xs">{request.tool}</span>}
-      </p>
+      <p className="font-medium leading-snug">{PROMPT[request.tool ?? ""] ?? `The agent wants to use ${request.tool}`}</p>
       {text && <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-xs">{text}</pre>}
       <div className="mt-2 space-y-0.5">
         {actions.map((a, k) => (

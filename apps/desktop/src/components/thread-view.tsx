@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, PencilLine, Search, Wrench } from "lucide-react";
+import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
 import { memo, type Ref, useEffect, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
@@ -44,6 +44,9 @@ export function describe(name: string, input: Record<string, unknown>, page: str
       return { icon: Link, done: `Read ${host}`, ask: `Open ${host}?` };
     }
   }
+  // A project chat's steps, as the runtime names them: what was done to what.
+  const step = { Run: [SquareTerminal, "Ran"], Read: [FileText, "Read"], Search: [Search, "Searched"], Edited: [PencilLine, "Edited"], Skill: [Wrench, "Used skill"] }[name] as [typeof Wrench, string] | undefined;
+  if (step && str(input.target)) return { icon: step[0], done: `${step[1]} ${cut(str(input.target))}`, ask: "" };
   return { icon: Wrench, done: `Used ${name}`, ask: `Use ${name}?` };
 }
 
@@ -130,7 +133,9 @@ function StepRow({ item, page }: { item: Step; page: string }) {
   const Icon = tool?.icon ?? Brain;
   const label = item.kind === "tool" ? (tool?.done ?? "") : item.end ? `Thought for ${secs(item.end - item.start)}` : "Thinking";
   const running = item.kind === "tool" ? item.status === "running" : !item.end;
-  const details = item.kind === "tool" ? [Object.keys(item.input).length ? JSON.stringify(item.input, null, 2) : "", item.output ?? ""].filter(Boolean).join("\n\n") : item.text;
+  // A project chat's step has only its target, shown as it is.
+  const input = item.kind === "tool" && Object.keys(item.input).join() === "target" ? str(item.input.target) : item.kind === "tool" && Object.keys(item.input).length ? JSON.stringify(item.input, null, 2) : "";
+  const details = item.kind === "tool" ? [input, item.output ?? ""].filter(Boolean).join("\n\n") : item.text;
   const created = item.kind === "tool" && item.name.endsWith("create_page") && item.status === "done" ? /\(id: ([^)]+)\)/.exec(item.output ?? "")?.[1] : undefined;
   return (
     <div>

@@ -14,8 +14,13 @@ notices are vendor/shipyard's, checked equal at build time.
 
 ## Open gaps carried forward
 
-- A chat whose session was removed outside the app (the API's DELETE) shows empty until its next
-  message resumes it; the runtime reads a conversation's record only through a session.
+- A chat whose session was removed outside the app (the API's DELETE) shows only "Send a message to
+  pick this chat up again" until then; the runtime reads a conversation's record only through a session.
+- A started chat's model and effort are fixed: the runtime can't change them in a running session yet
+  (slice 5b).
+- After a relink to a moved folder, older chats can't resume: their conversations keep the old path
+  (slice 11). The app checks the folder before each send; the runtime doesn't refuse a session in a
+  missing location yet (next runtime bump).
 - A question card hides the composer, so Stop is out of reach until it's answered.
 - tmux is the person's Homebrew copy; the installed app must provision it (slice 2).
 - An earlier agent's probes (03:14–03:35, under `/tmp/ll-p1-*` and four `/tmp/ll-probe-*`) left

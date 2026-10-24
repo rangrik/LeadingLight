@@ -24,7 +24,8 @@ Feature: A project's chat
     When I send "Run pwd, then read notes.txt and tell me what it says"
     Then my message shows on the right at once
     And the reply's words appear as they are written, under "Working for …"
-    And the steps show it ran pwd and read notes.txt
+    And the steps say "Ran pwd" and "Read notes.txt", and the timer counts the seconds
+    And the newest words stay in view while I'm at the bottom of the chat
     And the answer says the folder is "~/LL QA/My Project" and notes.txt says "hello"
     And the turn ends with "Worked for …"
 
@@ -43,10 +44,22 @@ Feature: A project's chat
   Scenario: An approval in Ask for approval
     Given access is Ask for approval
     When I send "Create hello.txt containing hi"
-    Then a card asks to use Write, showing the file, with Yes, "Yes, and don't ask again this session"
-      and No
-    When I press Yes
-    Then hello.txt holds "hi" and the turn ends
+    Then a card asks to write the file (features/agent-interactions.feature), and no hello.txt is listed yet
+    When I press Allow once
+    Then hello.txt holds "hi", the turn lists it, and the turn ends
+
+  Scenario: Access and Plan mode apply to a chat already started
+    Given a chat started in Full access
+    When I choose Ask for approval in its access menu and ask it to write a file
+    Then it asks first, and the menu still says Ask for approval
+    When I turn Plan mode on from +
+    Then its agent plans and changes nothing
+    And the model and effort show what the chat started with, and can't be changed in it
+
+  Scenario: A new chat's settings are its own
+    When I start a new chat in Full access with Sonnet
+    Then the note chat's Ask button and access are as they were
+    And the + menu offers only Plan mode, since a project chat has no pages or commands to add
 
   Scenario: The chat comes back after closing it and after a reload
     Given a chat in "Research" with two turns
@@ -57,14 +70,20 @@ Feature: A project's chat
 
   Scenario: Several chats in one project
     Given a chat in "Research"
-    When I choose New chat from the chat menu and send a message
-    Then the chat menu lists both chats under "In “Research”", newest first
+    When I choose New chat from the chat menu and send a message, and do it once more
+    Then each new chat sends and answers
+    And the chat menu lists them under "In “Research”", newest first, long titles cut short
     And choosing the first shows its turns
 
   Scenario: An error says what happened
     Given the folder linked to "Research" is gone
     When I open the chat
     Then it says the folder isn't there, and the folder row offers Relink…
+
+  Scenario: The folder goes while the chat is open
+    Given the chat is open and the folder is renamed on disk
+    When I send a message
+    Then no agent starts anywhere, and the chat says the folder isn't there
 
   Scenario: Note chats are unchanged
     When I press Ask on "Research" and send a question about the page

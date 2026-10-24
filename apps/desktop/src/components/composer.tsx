@@ -22,7 +22,7 @@ import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/componen
 import { Slider } from "@leadinglight/ui/components/slider";
 import { cn } from "@leadinglight/ui/lib/utils";
 import type { Agent } from "~/lib/agents";
-import { ACCESS, type Access, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { ACCESS, type Access, type AiPrefs, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { INSTALL } from "~/lib/clis";
 import { codex, effortFor, effortsFor, loadCodex } from "~/lib/codex";
 import { openLink } from "~/lib/links";
@@ -33,6 +33,15 @@ import type { PageRef } from "~/lib/ask";
 // access menu, then the model and effort and a round Send. Enter sends, Shift+Enter breaks the line.
 
 export type Mention = { kind: "agent" | "page"; id: string; name: string };
+// What a chat runs with. Without it the composer edits Settings › AI; a project chat keeps its own.
+export type ChatSettings = Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & {
+  onChange: (p: Partial<Pick<AiPrefs, "model" | "effort" | "access" | "plan">>) => void;
+  // Set when the chat started, so not offered (a started project chat's model).
+  locked?: boolean;
+  claudeOnly?: boolean;
+  // The access a chat's agent has, in its words; others aren't offered.
+  accessChoices?: { value: Access; description: string }[];
+};
 
 export type Command = { id: string; label: string; question: string; send: boolean };
 export const COMMANDS: Command[] = [
@@ -67,6 +76,7 @@ export function Composer({
   fieldRef,
   commands = COMMANDS,
   restore,
+  settings,
 }: {
   ready: boolean;
   busy: boolean;
@@ -80,7 +90,10 @@ export function Composer({
   commands?: Command[];
   // Words given back: a message not sent, or an answer that can't go now.
   restore?: { text: string; at: number } | null;
+  settings?: ChatSettings;
 }) {
+  const prefs = useAiPrefs();
+  const s = settings ?? { ...prefs, onChange: setAiPrefs };
   const [value, setValue] = useState<ComposerValue>([]);
   useEffect(() => void (restore && setValue([{ type: "text", text: restore.text }])), [restore?.at]);
   const triggers: ComposerTrigger[] = [
@@ -136,11 +149,11 @@ export function Composer({
       </ComposerPopup>
       <ComposerActions>
         <ComposerActionGroup className="flex-nowrap">
-          <AddMenu back={fieldRef} />
-          <AccessMenu back={fieldRef} />
+          <AddMenu back={fieldRef} mentions={agents.length + pages.length > 0} commands={commands.length > 0} s={s} />
+          <AccessMenu back={fieldRef} s={s} />
         </ComposerActionGroup>
         <ComposerActionGroup align="end" className="min-w-0 flex-nowrap">
-          <ModelPicker back={fieldRef} />
+          <ModelPicker back={fieldRef} s={s} />
           {busy ? (
             <Button aria-label="Stop" className={round} onClick={onStop} size="icon-sm" variant="outline">
               <Square className="size-2.5 fill-current" />
@@ -161,10 +174,9 @@ export function Composer({
 }
 
 // "+": mention something, run a command, or plan first. Plan mode shows as a chip beside it.
-type Back = { back: RefObject<HTMLDivElement | null> };
+type Back = { back: RefObject<HTMLDivElement | null>; s: ChatSettings };
 
-function AddMenu({ back }: Back) {
-  const prefs = useAiPrefs();
+function AddMenu({ back, s, mentions, commands }: Back & { mentions: boolean; commands: boolean }) {
   const { insertTrigger } = useComposerContext();
   return (
     <>
@@ -173,19 +185,28 @@ function AddMenu({ back }: Back) {
           <Plus />
         </MenuTrigger>
         <MenuPopup align="start" className="w-64" finalFocus={back} side="top" {...own}>
-          <MenuGroup>
-            <MenuGroupLabel>Add</MenuGroupLabel>
-            <MenuItem onClick={() => insertTrigger("@")}>
-              <AtSign />
-              Page or agent
-            </MenuItem>
-            <MenuItem onClick={() => insertTrigger("/")}>
-              <Slash />
-              Command
-            </MenuItem>
-          </MenuGroup>
-          <MenuSeparator />
-          <MenuCheckboxItem checked={prefs.plan} onCheckedChange={(plan) => setAiPrefs({ plan })} variant="switch">
+          {/* Only what there is to add: a project chat has no pages, agents or commands of its own. */}
+          {(mentions || commands) && (
+            <>
+              <MenuGroup>
+                <MenuGroupLabel>Add</MenuGroupLabel>
+                {mentions && (
+                  <MenuItem onClick={() => insertTrigger("@")}>
+                    <AtSign />
+                    Page or agent
+                  </MenuItem>
+                )}
+                {commands && (
+                  <MenuItem onClick={() => insertTrigger("/")}>
+                    <Slash />
+                    Command
+                  </MenuItem>
+                )}
+              </MenuGroup>
+              <MenuSeparator />
+            </>
+          )}
+          <MenuCheckboxItem checked={s.plan} onCheckedChange={(plan) => s.onChange({ plan })} variant="switch">
             <span className="flex flex-col">
               Plan mode
               <span className="text-muted-foreground text-xs">Claude plans first and changes nothing</span>
@@ -193,8 +214,8 @@ function AddMenu({ back }: Back) {
           </MenuCheckboxItem>
         </MenuPopup>
       </Menu>
-      {prefs.plan && (
-        <Button aria-label="Turn Plan mode off" className="h-7 gap-1 rounded-full px-2 text-info-foreground sm:h-7" onClick={() => setAiPrefs({ plan: false })} size="sm" variant="ghost">
+      {s.plan && (
+        <Button aria-label="Turn Plan mode off" className="h-7 gap-1 rounded-full px-2 text-info-foreground sm:h-7" onClick={() => s.onChange({ plan: false })} size="sm" variant="ghost">
           <ListChecks />
           <span className={wide}>Plan</span>
           <X className={cn("size-3.5 opacity-60", wide)} />
@@ -204,16 +225,15 @@ function AddMenu({ back }: Back) {
   );
 }
 
-function AccessMenu({ back }: Back) {
-  const prefs = useAiPrefs();
-  const Icon = ACCESS_ICON[prefs.access];
+function AccessMenu({ back, s }: Back) {
+  const Icon = ACCESS_ICON[s.access];
   return (
     <Menu>
       <MenuTrigger
         render={
           <Button
-            aria-label={`Access: ${labelOf(ACCESS, prefs.access)}`}
-            className={cn("h-7 min-w-0 gap-1 rounded-full px-2 sm:h-7", prefs.access === "full" ? "text-warning-foreground" : "text-muted-foreground")}
+            aria-label={`Access: ${labelOf(ACCESS, s.access)}`}
+            className={cn("h-7 min-w-0 gap-1 rounded-full px-2 sm:h-7", s.access === "full" ? "text-warning-foreground" : "text-muted-foreground")}
             size="sm"
             variant="ghost"
           />
@@ -221,14 +241,16 @@ function AccessMenu({ back }: Back) {
       >
         <Icon />
         {/* With Plan on, the chip beside it needs the room. */}
-        <span className={cn("truncate", prefs.plan ? "hidden" : wide)}>{labelOf(ACCESS, prefs.access)}</span>
+        <span className={cn("truncate", s.plan ? "hidden" : wide)}>{labelOf(ACCESS, s.access)}</span>
         <ChevronDown className="size-3.5 opacity-60" />
       </MenuTrigger>
       <MenuPopup align="start" className="w-80" finalFocus={back} side="top" {...own}>
-        <MenuRadioGroup onValueChange={(v) => setAiPrefs({ access: v as Access })} value={prefs.access}>
-          {ACCESS.map((a) => {
+        <MenuRadioGroup onValueChange={(v) => s.onChange({ access: v as Access })} value={s.access}>
+          {ACCESS.flatMap((a) => {
+            const own = s.accessChoices ? s.accessChoices.find((x) => x.value === a.value) : { description: isClaude(s.model) ? a.description : GPT_ACCESS[a.value] };
+            if (!own) return [];
             const I = ACCESS_ICON[a.value];
-            const description = isClaude(prefs.model) ? a.description : GPT_ACCESS[a.value];
+            const description = own.description;
             return (
               <MenuRadioItem className={cn("py-2", a.value === "full" && "text-warning-foreground")} closeOnClick key={a.value} value={a.value}>
                 <span className="flex items-start gap-2">
@@ -249,20 +271,19 @@ function AccessMenu({ back }: Back) {
 
 // The model, Claude's and the GPT ones Codex offers, with ⌘1… while open, and the effort as a
 // slider of that model's stops (synara's).
-function ModelPicker({ back }: Back) {
-  const prefs = useAiPrefs();
+function ModelPicker({ back, s }: Back) {
   const cx = codex.use();
   useEffect(() => void loadCodex(), []);
   const gpt = cx.models.map((m) => ({ value: m.id, label: m.name }));
-  const all = [...MODELS, ...gpt];
-  const claude = isClaude(prefs.model);
-  const efforts = effortsFor(prefs.model);
-  const effort = effortFor(prefs.model, prefs.effort);
+  const all = s.claudeOnly ? MODELS : [...MODELS, ...gpt];
+  const claude = isClaude(s.model);
+  const efforts = effortsFor(s.model);
+  const effort = effortFor(s.model, s.effort);
   const step = Math.max(0, efforts.indexOf(effort));
-  const pick = (model: string) => setAiPrefs({ model, effort: effortFor(model, prefs.effort) });
+  const pick = (model: string) => s.onChange({ model, effort: effortFor(model, s.effort) });
   const row = (m: { value: string; label: string }, i: number) => (
     <Button
-      aria-checked={prefs.model === m.value}
+      aria-checked={s.model === m.value}
       className="w-full justify-start gap-2 px-2 font-normal"
       key={m.value}
       onClick={() => pick(m.value)}
@@ -270,7 +291,7 @@ function ModelPicker({ back }: Back) {
       size="sm"
       variant="ghost"
     >
-      <Check className={cn(prefs.model !== m.value && "invisible")} />
+      <Check className={cn(s.model !== m.value && "invisible")} />
       {m.label}
       {i < 9 && <Kbd className="ms-auto">⌘{i + 1}</Kbd>}
     </Button>
@@ -278,8 +299,8 @@ function ModelPicker({ back }: Back) {
   const label = (text: string) => <p className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">{text}</p>;
   return (
     <Popover>
-      <PopoverTrigger render={<Button aria-label="Model and effort" className="h-7 min-w-0 shrink gap-1 rounded-full px-2 sm:h-7" size="sm" variant="ghost" />}>
-        <span className="truncate">{labelOf(all, prefs.model)}</span>
+      <PopoverTrigger disabled={s.locked} render={<Button aria-label="Model and effort" className="h-7 min-w-0 shrink gap-1 rounded-full px-2 sm:h-7" size="sm" variant="ghost" />}>
+        <span className="truncate">{labelOf(all, s.model)}</span>
         {/* GPT's names are long, so its effort shows only when the panel is wide. */}
         <span className={cn("text-muted-foreground", claude ? wide : "hidden @[28rem]/panel:inline")}>{labelOf(EFFORTS, effort)}</span>
         <ChevronDown className="size-3.5 opacity-60" />
@@ -300,9 +321,9 @@ function ModelPicker({ back }: Back) {
         <div aria-label="Model" role="radiogroup">
           {label("Claude")}
           {MODELS.map(row)}
-          {label("GPT")}
-          {gpt.map((m, i) => row(m, MODELS.length + i))}
-          {cx.state !== "ready" && (
+          {!s.claudeOnly && label("GPT")}
+          {!s.claudeOnly && gpt.map((m, i) => row(m, MODELS.length + i))}
+          {!s.claudeOnly && cx.state !== "ready" && (
             <p className="px-2 pb-1.5 text-muted-foreground text-xs">
               {cx.state === "checking" ? (
                 "Looking for Codex…"
@@ -333,7 +354,7 @@ function ModelPicker({ back }: Back) {
               getAriaLabel={() => "Effort"}
               max={efforts.length - 1}
               min={0}
-              onValueChange={(v) => setAiPrefs({ effort: efforts[Array.isArray(v) ? v[0] : v] })}
+              onValueChange={(v) => s.onChange({ effort: efforts[Array.isArray(v) ? v[0] : v] })}
               step={1}
               value={step}
             />

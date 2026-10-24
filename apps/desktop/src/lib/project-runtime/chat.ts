@@ -1,4 +1,5 @@
 import { type AiPrefs, isClaude } from "~/lib/ai-prefs";
+import { folders, refresh as refreshFolders } from "~/lib/project-runtime/folders";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
 import { type Answer, type Delivery, type Draft, mergeRequests, reconcile, restoreDraft, type RuntimeRequest, sendAnswer } from "~/lib/project-runtime/requests";
 import { acceptMessageSubmission, beginMessageSubmission, getActiveMessageSubmissions, type MessageSubmissionRecord, observeMessageSubmissionCanonical, rejectMessageSubmission } from "~/lib/project-runtime/submission";
@@ -41,6 +42,11 @@ export const chatOf = (key: string) => {
   return s;
 };
 const patch = (key: string, p: Partial<Chat>) => chatOf(key).set({ ...chatOf(key).get(), ...p });
+// A new chat takes its own key once the runtime names it; the new-chat key starts afresh.
+export function adopt(from: string, to: string) {
+  chatOf(to).set(chatOf(from).get());
+  chatOf(from).set(blank());
+}
 
 export const listChats = (location: string) => ask<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(location)}&limit=200`);
 
@@ -76,7 +82,11 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // A session gone or ended can't take what its agent asked; the runtime would refuse it too.
   const ended = !session || session.exited;
   const requests = mergeRequests(now.requests, fresh ?? []).map((r) => (ended && (r.state === "pending" || r.state === "recorded") ? { ...r, state: "expired" as const } : r));
-  patch(key, { conv, session, window, turns, requests, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  // The reply being written goes with the read that brings its words, so it never blinks out.
+  const draft = session?.agent_state === "running" ? now.draft : "";
+  // A mode set while this read was out is newer than the conversation it began with.
+  const latest = watching.get(key)?.conv.id === conv.id ? watching.get(key)!.conv : conv;
+  patch(key, { conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
 
@@ -118,7 +128,7 @@ export function watch(key: string, conv: Conversation): () => void {
   void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
   const poll = window.setInterval(async () => {
     const c = chatOf(key).get();
-    if (c.session?.agent_state !== "running" || !c.conv?.session) return c.draft && patch(key, { draft: "" });
+    if (c.session?.agent_state !== "running" || !c.conv?.session) return;
     const d = await ask<{ text?: string }>("GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
     if (d && (d.text ?? "") !== c.draft) patch(key, { draft: d.text ?? "" });
   }, 250);
@@ -134,11 +144,14 @@ export function watch(key: string, conv: Conversation): () => void {
 
 // Sends text: a new chat starts its agent in the folder; an ended one is resumed first. Each
 // message carries a key of its own, so a send repeated after a lost answer is one message.
-export async function send(key: string, location: string, text: string, prefs: AiPrefs): Promise<Conversation> {
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan">): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
   try {
+    // A folder gone since the page opened: no agent starts, in its place or anywhere else.
+    await refreshFolders();
+    if ([...folders.get().values()].some((f) => f.folder.location === location && f.missing)) throw new Error("The folder isn't there any more.");
     let conv = chatOf(key).get().conv;
     if (!conv) {
       const name = `chat-${crypto.randomUUID().slice(0, 8)}`;
@@ -199,6 +212,16 @@ async function deliver(key: string, r: RuntimeRequest, again: boolean) {
     patch(key, { answers });
   } else if (outcome.delivery === "sending") window.setTimeout(() => (set("pending"), void deliver(key, r, true)), 1500);
   settleAnswers(key);
+}
+
+// Access and Plan mode, changed in a started chat: its agent takes them from its next step.
+export async function setMode(key: string, mode: string): Promise<void> {
+  const c = chatOf(key).get();
+  if (!c.conv?.session || !c.session || c.session.exited) return;
+  await ask("POST", `/v1/sessions/${c.conv.session}/mode`, { mode });
+  const conv = { ...c.conv, mode };
+  if (watching.has(key)) watching.set(key, { key, conv });
+  patch(key, { conv });
 }
 
 export async function stop(key: string): Promise<void> {

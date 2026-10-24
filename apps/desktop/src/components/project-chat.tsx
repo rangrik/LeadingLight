@@ -4,11 +4,11 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
-import { Composer } from "~/components/composer";
+import { type ChatSettings, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
-import { useAiPrefs } from "~/lib/ai-prefs";
-import { answer, type Chat, type Conversation, chatOf, listChats, send, sending, stop, watch } from "~/lib/project-runtime/chat";
+import { type Access, useAiPrefs } from "~/lib/ai-prefs";
+import { adopt, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask } from "~/lib/project-runtime/transport";
@@ -25,6 +25,15 @@ const when = (iso?: string) => {
   const m = Math.round(((iso ? Date.parse(iso) : Date.now()) - Date.now()) / 60000);
   return Math.abs(m) < 60 ? ago.format(m, "minute") : Math.abs(m) < 1440 ? ago.format(Math.round(m / 60), "hour") : ago.format(Math.round(m / 1440), "day");
 };
+
+// What the agent may do in the folder, as the access menu says it here.
+const ACCESS_IN_FOLDER: { value: Access; description: string }[] = [
+  { value: "ask", description: "Claude asks before changing files or running commands" },
+  { value: "auto", description: "Claude Code's auto mode: a classifier approves or blocks each action and asks you when unsure" },
+  { value: "full", description: "Claude changes files and runs commands without asking" },
+];
+// A session's permission mode as the access menu shows it.
+const fromMode = (mode?: string) => ({ access: (mode === "bypassPermissions" ? "full" : mode === "auto" ? "auto" : "ask") as Access, plan: mode === "plan" });
 
 // The record's items as the note chat's turns: one per prompt, its steps, its words, its end.
 type Shown = { items: Item[]; files: string[]; stopped?: boolean; error?: string };
@@ -43,8 +52,10 @@ function turnsOf(chat: Chat): Shown[] {
       // A refused edit changed nothing, so its file isn't listed. One the person was asked about was declined.
       const how = !t.error ? "done" : chat.requests.some((r) => r.tool_use === t.tool) ? "declined" : "failed";
       add({ kind: "tool", id: t.id, name: "Edited", input: { target: t.file }, status: how, output: t.error ? undefined : `+${t.added ?? 0} −${t.removed ?? 0}` });
+      // Nor is one still waiting for the person's yes.
+      const asking = chat.requests.some((r) => r.tool_use === t.tool && (r.state === "pending" || r.state === "recorded"));
       const files = out[out.length - 1]?.files;
-      if (files && !t.error && !files.includes(t.file)) files.push(t.file);
+      if (files && !t.error && !asking && !files.includes(t.file)) files.push(t.file);
     } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
   }
   // Ended turns end; the ledger knows how the session's own last ones went.
@@ -66,11 +77,15 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [list, setList] = useState<Conversation[]>([]);
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
   const [file, setFile] = useState<string | null>(null);
+  // A new chat's settings start as Settings › AI's and stay this chat's own.
+  const [fresh, setFresh] = useState(() => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan }));
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
   const field = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
+  // Follows the newest words while the person is at the bottom, not while they read back.
+  const stuck = useRef(true);
   const title = pageOf(pageId)?.title.trim() || "this project";
 
   const refresh = () => {
@@ -82,7 +97,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);
   const waitingOn = sending(chat);
-  useEffect(() => void log.current?.scrollTo({ top: log.current.scrollHeight }), [turns.length, chat.draft, waitingOn.length]);
+  useEffect(() => void (stuck.current && log.current?.scrollTo({ top: log.current.scrollHeight })));
   // The request in front: what the agent waits on now, oldest first (features/agent-interactions.feature).
   const open = chat.requests.find((r) => r.blocking && (r.state === "pending" || r.state === "recorded"));
   // It takes the keyboard from the composer it hides, never from the page.
@@ -97,19 +112,32 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const draft = open ? chat.answers[open.id] : undefined;
   const sent = open ? chat.deliveries[open.id] : undefined;
   const delivery = open ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(open, draft, false, false)) : "pending";
-  const go = (text: string) =>
-    void send(key, location, text, prefs).then((c) => {
+  const started = chat.conv ?? conv;
+  const settings: ChatSettings = started
+    ? {
+        ...fromMode(started.mode),
+        model: started.model ?? "",
+        effort: started.effort ?? "",
+        locked: true,
+        claudeOnly: true,
+        accessChoices: ACCESS_IN_FOLDER,
+        onChange: (p) => void setMode(key, modeFor({ ...fromMode(started.mode), ...p })).catch(() => {}),
+      }
+    : { ...fresh, claudeOnly: true, accessChoices: ACCESS_IN_FOLDER, onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
+  const go = (text: string) => {
+    stuck.current = true;
+    void send(key, location, text, settings).then((c) => {
       if (!current) {
-        // The new chat takes its own key from here on, keeping what it holds.
-        chatOf(c.id).set(chatOf(key).get());
-        chatOf(key).set({ ...chatOf(key).get(), conv: null, window: { items: [], next: 0 }, submissions: [], texts: {}, requests: [], answers: {}, deliveries: {}, restore: null });
+        adopt(key, c.id);
         setCurrent(c.id);
       }
       refresh();
     }, () => {});
+  };
+  const now = chat.turns.at(-1);
 
   return (
-    <div className="flex h-full flex-col text-sm" data-testid="project-chat">
+    <div className="@container/panel flex h-full flex-col text-sm" data-testid="project-chat">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b px-3">
         <Menu>
           <MenuTrigger render={<Button aria-label="Chats" className="h-7 min-w-0 gap-1.5 px-1.5 font-medium sm:h-7" size="sm" variant="ghost" />}>
@@ -129,7 +157,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
                   <MenuGroupLabel>In “{title}”</MenuGroupLabel>
                   <MenuRadioGroup onValueChange={(v) => setCurrent(v as string)} value={current ?? ""}>
                     {list.map((c) => (
-                      <MenuRadioItem closeOnClick key={c.id} value={c.id}>
+                      <MenuRadioItem className="grid-cols-[.75rem_minmax(0,1fr)]" closeOnClick key={c.id} value={c.id}>
                         <span className="flex min-w-0 items-baseline gap-3">
                           <span className="min-w-0 flex-1 truncate">{c.title || "Untitled chat"}</span>
                           <span className="shrink-0 text-muted-foreground text-xs">{when(c.updated ?? c.created)}</span>
@@ -143,8 +171,14 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           </MenuPopup>
         </Menu>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" ref={log}>
-        {turns.length === 0 && waitingOn.length === 0 && (
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+        onScroll={(e) => (stuck.current = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 48)}
+        ref={log}
+      >
+        {/* A chat whose agent session was removed reads its record again once it is picked up. */}
+        {turns.length === 0 && waitingOn.length === 0 && started && !started.session && <p className="m-auto p-6 text-center text-muted-foreground">Send a message to pick this chat up again; its earlier turns come back with it.</p>}
+        {turns.length === 0 && waitingOn.length === 0 && !started && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />
             <p className="text-balance text-lg">What should we do in {state.folder.path.split("/").at(-1)}?</p>
@@ -153,7 +187,14 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         )}
         {turns.map((t, k) => (
           <div className="mt-4 first:mt-0" key={k}>
-            <Turn items={t.items} live={busy && k === turns.length - 1 && waitingOn.length === 0} onGoAhead={() => go("Go ahead with the plan.")} page={title} waiting={!!open && k === turns.length - 1} />
+            <Turn
+              items={t.items}
+              live={busy && k === turns.length - 1 && waitingOn.length === 0}
+              onGoAhead={() => go("Go ahead with the plan.")}
+              page={title}
+              started={now?.started && !now.ended ? Date.parse(now.started) : undefined}
+              waiting={!!open && k === turns.length - 1}
+            />
             {t.files.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {t.files.map((f) => (
@@ -194,7 +235,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
         {chat.restore?.why && <p className="mx-3 mb-1 text-muted-foreground text-xs">{chat.restore.why}</p>}
-        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready restore={chat.restore} />
+        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready restore={chat.restore} settings={settings} />
       </div>
       <FilePreview file={file} location={location} onClose={() => setFile(null)} />
     </div>
