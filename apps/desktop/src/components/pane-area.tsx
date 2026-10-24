@@ -20,10 +20,11 @@ import { floatBox, type Side, useAiPrefs } from "~/lib/ai-prefs";
 import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
-import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
+import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { FeedView } from "~/components/feed";
 import { BrowserPane } from "~/components/agent-browser";
 import { ProjectChat } from "~/components/project-chat";
-import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -86,7 +87,7 @@ function balance(n: PaneNode) {
 
 // Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
 // splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: Side | null }) {
+export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: boolean; dock: Side | null; lead?: boolean }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
@@ -139,14 +140,15 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
     return Math.max(0, Math.min(b.width - 360, ai.corner.endsWith("l") ? float.left + float.width - b.left : b.left + b.width - float.left));
   };
   // In the app, a panel pinned left holds the window's left edge, and the room for the traffic lights.
-  const edge = !(windowToggle && asking && dock === "left");
+  const edge = lead && !(windowToggle && asking && dock === "left");
   return (
     // The stage's colour, so the gaps show where narrow windows drop the cards' corners.
     <div className="relative min-h-0 min-w-0 flex-1 bg-sidebar" data-pane-area ref={area}>
       {[...leaves]
         .sort((a, b) => (a.leaf.id < b.leaf.id ? -1 : 1))
         .map(({ leaf, rect }) => {
-          const shown = describe(leaf.page);
+          // Opened from the Feed in its place (a narrow window): its crumb goes back there.
+          const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
           const folded = folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
           const aside = room(b);
@@ -179,7 +181,7 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                 toggle={!windowToggle}
                 muted={split && leaf.id !== focus}
                 onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
-                onRoot={(e) => shown.parent && visit(shown.parent.view, e)}
+                onRoot={(e) => shown.parent && (leaf.back ? showIn(leaf.id, leaf.back) : visit(shown.parent.view, e))}
                 root={shown.parent?.title}
                 sidebarOpen={sidebarOpen}
               >
@@ -210,7 +212,9 @@ export function PaneArea({ windowToggle, dock }: { windowToggle: boolean; dock: 
                 key={leaf.page}
                 style={ai.corner.endsWith("l") ? { paddingLeft: aside } : { paddingRight: aside }}
               >
-                {leaf.page.startsWith(TYPE_VIEW) ? (
+                {leaf.page === FEED_VIEW ? (
+                  <FeedView paneId={leaf.id} />
+                ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
                   <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />

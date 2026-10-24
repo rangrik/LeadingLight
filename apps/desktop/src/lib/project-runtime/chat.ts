@@ -177,21 +177,29 @@ const heard = (e: RuntimeEvent) => {
     if (e.type === "runtime.connected" || (name && (name === conv.session || chatOf(key).get().workers.includes(name)))) void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
 };
 
-// Follows a chat while it is on screen: its changes, and the reply being written.
-export function watch(key: string, conv: Conversation): () => void {
-  watching.set(key, { key, conv });
+// Follows a chat while it is on screen: its changes, and the reply being written. The Feed follows
+// every agent's chat too, without the reply (reply: false); a chat stays followed while either does.
+const followers = new Map<string, number>();
+export function watch(key: string, conv: Conversation, { reply = true } = {}): () => void {
+  if (watching.get(key)?.conv.id !== conv.id || !followers.get(key)) watching.set(key, { key, conv });
+  followers.set(key, (followers.get(key) ?? 0) + 1);
   unlisten ??= onRuntimeEvent(heard);
   void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
-  const poll = window.setInterval(async () => {
-    const c = chatOf(key).get();
-    if (c.session?.agent_state !== "running" || !c.conv?.session) return;
-    const d = await ask<{ text?: string }>("GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
-    // An agent clears its draft as a message ends, before the record has it: the words stay till then.
-    if (d?.text && d.text !== c.draft) patch(key, { draft: d.text });
-  }, 250);
+  const poll = reply
+    ? window.setInterval(async () => {
+        const c = chatOf(key).get();
+        if (c.session?.agent_state !== "running" || !c.conv?.session) return;
+        const d = await ask<{ text?: string }>("GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
+        // An agent clears its draft as a message ends, before the record has it: the words stay till then.
+        if (d?.text && d.text !== c.draft) patch(key, { draft: d.text });
+      }, 250)
+    : 0;
   return () => {
-    watching.delete(key);
     window.clearInterval(poll);
+    const left = (followers.get(key) ?? 1) - 1;
+    if (left > 0) return void followers.set(key, left);
+    followers.delete(key);
+    watching.delete(key);
     if (!watching.size) {
       unlisten?.();
       unlisten = null;

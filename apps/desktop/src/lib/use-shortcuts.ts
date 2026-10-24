@@ -14,7 +14,7 @@ import { toggleTool } from "~/lib/writing";
 // the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
 // browser the page reads the keys itself. ⌃⌥I is the Mac app's global shortcut (capture.rs),
 // which takes the key before the menu sees it; the menu item and a browser's key come through here.
-export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void }) {
+export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleFeed(): void }) {
   useEffect(() => {
     const run = (id: string) => {
       switch (id) {
@@ -38,6 +38,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return openSettings();
         case "ask":
           return openAsk();
+        case "feed":
+          return actions.toggleFeed();
         case "shortcuts":
           return toggleShortcuts();
         case "focus":

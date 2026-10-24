@@ -42,13 +42,15 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
+import { closePane, focusedPage, leaves, openBeside, openPage, panes, showOnly } from "~/lib/panes";
+import { feedPrefs } from "~/lib/feed";
+import { FEED_W, FeedLane } from "~/components/feed";
 import { isNative } from "~/lib/platform";
 import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
-import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { createPage, FEED_VIEW, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -139,12 +141,25 @@ export default function App() {
     }, 220);
     return () => window.clearTimeout(t);
   }, [sidebarOpen]);
-  const fit = root && rowW ? Math.min(rowW / 2, rowW - 8 - widthNeeded(root)) : Infinity;
+  const { enabled: projectsOn } = projectPrefs.use();
+  // The Feed's lane (features/feed.feature) while there is room for it beside a page; in a narrower
+  // window the Feed is a pane, as any page is.
+  const feed = feedPrefs.use();
+  const lane = projectsOn && feed.open && rowW >= FEED_W + 8 + 480;
+  const paneW = rowW - (lane ? FEED_W + 8 : 0);
+  const fit = root && rowW ? Math.min(paneW / 2, paneW - 8 - widthNeeded(root)) : Infinity;
+  const toggleFeed = useCallback(() => {
+    if (!projectPrefs.get().enabled) return;
+    const narrow = (row.current?.clientWidth ?? 0) < FEED_W + 8 + 480;
+    const open = panes.get().root && leaves(panes.get().root!).find((l) => l.page === FEED_VIEW);
+    if (!narrow) return feedPrefs.set({ open: !feedPrefs.get().open });
+    if (open) closePane(open.id);
+    else openBeside(FEED_VIEW);
+  }, []);
   const dock = pinned && fit >= 280 ? pinned : null;
 
   useEffect(() => void isNative.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
-  const { enabled: projectsOn } = projectPrefs.use();
   const linkedFolders = folders.use().size > 0;
   useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
   const [loaded, setLoaded] = useState(false);
@@ -219,7 +234,7 @@ export default function App() {
 
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
-  useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar }), [create, toggleCapture, toggleSidebar]));
+  useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleFeed }), [create, toggleCapture, toggleSidebar, toggleFeed]));
 
   // Save pending edits whenever the app might be about to go away.
   useEffect(() => {
@@ -333,6 +348,7 @@ export default function App() {
         <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
         <AppSidebar
           onCreate={create}
+          feed={projectsOn ? { open: lane || !!(root && leaves(root).some((l) => l.page === FEED_VIEW)), toggle: toggleFeed } : undefined}
           onNewIdea={toggleCapture}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
@@ -344,7 +360,8 @@ export default function App() {
           {/* A pinned agent panel is a card beside the pages; a floating one sits over them. */}
           {root ? (
             <div className="flex min-h-0 flex-1" ref={row}>
-              <PaneArea dock={dock} windowToggle={mac} />
+              {lane && <FeedLane sidebarOpen={sidebarOpen} windowToggle={mac} />}
+              <PaneArea dock={dock} lead={!lane} windowToggle={mac} />
               <AgentPanel dock={dock} fit={fit} windowToggle={mac} />
             </div>
           ) : (

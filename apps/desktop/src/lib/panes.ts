@@ -3,7 +3,8 @@
 // a small store holds the tree instead of zustand.
 import { createStore } from "./state";
 
-export type Leaf = { kind: "leaf"; id: string; page: string };
+// back: the view it was opened from in its place (the Feed, in a narrow window), which its crumb opens.
+export type Leaf = { kind: "leaf"; id: string; page: string; back?: string };
 export type PaneNode = Leaf | { kind: "split"; id: string; dir: "row" | "col"; ratio: number; a: PaneNode; b: PaneNode };
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = "left" | "right" | "top" | "bottom";
@@ -121,7 +122,7 @@ export function openPage(page: string) {
   const { root, focus } = panes.get();
   const open = openLeaf(page);
   if (open) panes.set({ root, focus: open.id });
-  else if (root) panes.set({ root: mapLeaf(root, focus, (l) => ({ ...l, page })), focus });
+  else if (root) panes.set({ root: mapLeaf(root, focus, (l) => ({ kind: "leaf", id: l.id, page })), focus });
   else showOnly(page);
 }
 
@@ -143,9 +144,9 @@ export function closePane(id: string) {
 }
 
 // Shows another page in a given pane.
-export function showIn(id: string, page: string) {
+export function showIn(id: string, page: string, back?: string) {
   const { root, focus } = panes.get();
-  if (root) panes.set({ root: mapLeaf(root, id, (l) => ({ ...l, page })), focus });
+  if (root) panes.set({ root: mapLeaf(root, id, (l) => ({ kind: "leaf", id: l.id, page, ...(back && { back }) })), focus });
 }
 
 export function focusPane(id: string) {

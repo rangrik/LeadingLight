@@ -15,6 +15,11 @@ export const REPORT = "report";
 export type Run = { conversation: string; session: string; location: string; agent: string; by?: string };
 // What a report rests on: a page and the words it quotes, kept as they were then.
 export type Source = { page: string; quote?: string; excerpt?: string };
+// What something is about, to open beside it: a page and its words, or a report's block (its
+// evidence) and, for a video, the second.
+export type Target = { page: string; quote?: string; excerpt?: string; block?: number; at?: number };
+// A question an agent said it would ask, and what it is about (the context tool).
+export type Ask = { question: string; about: Target[]; at: number };
 export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; evidence?: Evidence[]; corrects?: string; ready?: boolean };
 
 export const runOf = (p?: ObjectSummary) => p?.properties.run as Run | undefined;

@@ -3,7 +3,7 @@
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
 // usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Lightbulb } from "lucide-react";
+import { CalendarDays, Inbox, Lightbulb } from "lucide-react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
@@ -11,10 +11,12 @@ import {
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { useFeed } from "~/components/feed";
 import { UsageButton } from "~/components/usage-button";
 import { useKeysFor } from "~/lib/keymap";
 import { NavProjects } from "./nav-projects";
@@ -62,6 +64,7 @@ export function AppSidebar({
   onToday,
   onNewIdea,
   todayActive,
+  feed,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   onToday: (e: React.MouseEvent) => void;
@@ -71,6 +74,8 @@ export function AppSidebar({
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
+  // While projects are on: the Feed (features/feed.feature).
+  feed?: { open: boolean; toggle: () => void };
 }) {
   const { isMobile, state } = useSidebar();
   const keysFor = useKeysFor();
@@ -94,6 +99,7 @@ export function AppSidebar({
                 <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">{keysFor("new-idea")}</Kbd>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {feed && <FeedButton feed={feed} />}
           </SidebarMenu>
         </SidebarGroup>
         <nav aria-label="Types">
@@ -110,5 +116,20 @@ export function AppSidebar({
       </SidebarContent>
       <UsageButton />
     </Sidebar>
+  );
+}
+
+// How many things need the person, beside the Feed's row; also what keeps the Feed following
+// every agent while its lane is closed.
+function FeedButton({ feed }: { feed: { open: boolean; toggle: () => void } }) {
+  const n = useFeed().length;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton aria-pressed={feed.open} isActive={feed.open} onClick={feed.toggle}>
+        <Inbox />
+        <span>Feed</span>
+      </SidebarMenuButton>
+      {n > 0 && <SidebarMenuBadge>{n}</SidebarMenuBadge>}
+    </SidebarMenuItem>
   );
 }

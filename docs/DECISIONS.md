@@ -347,3 +347,15 @@ count shows only for steps it listed, never a percentage. Workers become Agent p
 that started them, so they stay listed after the runtime forgets them. The panel under the title
 opens its checklist only on a click, and where the browser doesn't anchor scrolling the panel makes
 up for its own growth, so updates never move the words being read.
+
+## 23. The Feed is made from the records, not stored
+
+The Feed keeps no items of its own. It follows every Agent page's conversation as an open chat does
+(without reading replies as they are written), and lists that conversation's pending requests, tasks
+whose agent says they are ready, and agents that stopped short. So an item is one per request or
+report, the same after any reconnect, and goes when its record settles. A question is answered
+through the chat's own answer path, by the runtime's request id and a command id, so answering it in
+the Feed settles the chat's card and the same answer can't be given twice. What a question is about
+comes from the agent's context tool, kept on its Agent page and matched by the question's words;
+without it, the task stands in and the item says so. Opening it reuses one pane beside the page being
+read, so that page stays where it was; a narrow window shows the Feed as a pane instead of a lane.

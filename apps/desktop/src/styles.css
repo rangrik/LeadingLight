@@ -38,6 +38,9 @@
 .ll-page-dim > :not(.ll-page),
 .ll-page-dim > .ll-page > :not(.ll-page-body) { opacity: 0.3; }
 
+/* What a Feed item is about, lit for a moment where it sits (lib/feed.ts). */
+::highlight(ll-target) { background-color: color-mix(in srgb, var(--info) 24%, transparent); }
+
 /* A report in its page's stream reads to its end: no room below for drops (reports.tsx). */
 [data-report] .ll-editor-root { padding-bottom: 0; }
 

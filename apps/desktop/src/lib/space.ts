@@ -88,9 +88,12 @@ export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
 // any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
 export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
-export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW);
+// The Feed in a pane, when the window is too narrow for its lane (features/feed.feature).
+export const FEED_VIEW = "feed:";
+export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && view !== FEED_VIEW;
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
+  if (view === FEED_VIEW) return { title: "Feed" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };

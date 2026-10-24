@@ -11,7 +11,7 @@ import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { agentFor, agentOf, relationsOf, REPORT, reportOf, type ReportMeta, type Source, taskOfAgent, type Work, workersOf } from "~/lib/work";
+import { agentFor, agentOf, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
 import { editPage } from "~/lib/live";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
@@ -326,7 +326,38 @@ async function status(c: Caller, a: Args) {
   return { shown: "on your task, in place of what you said before" };
 }
 
-const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment, publish, task, status };
+// What a question the agent is about to ask concerns, checked like a report's sources, kept on its
+// Agent page for the Feed to show beside the question (features/feed.feature).
+async function context(c: Caller, a: Args) {
+  const question = plain(str(a.question));
+  if (!question) throw new Refusal("Give the question exactly as you will ask it.");
+  const about: Target[] = [];
+  const wrong: string[] = [];
+  for (const [i, x] of (Array.isArray(a.about) ? a.about : []).entries()) {
+    const t = (x ?? {}) as Args;
+    try {
+      const href = parseHref(str(t.evidence));
+      if (href) {
+        const { id } = await pageIn(c, href.page);
+        const block = Number(href.anchor?.replace(/^b/, "")) || undefined;
+        about.push({ page: id, ...(block && { block }), ...(typeof t.at === "number" && { at: t.at }) });
+      } else {
+        const [s] = await sourcesOf(c, [{ page: t.page, quote: t.quote }]);
+        about.push({ page: s.page, ...(s.quote && { quote: s.quote, excerpt: s.excerpt }) });
+      }
+    } catch (e) {
+      wrong.push(`About ${i + 1}: ${e instanceof Error ? e.message.replace(/^Nothing was published\. Source 1: /, "") : String(e)}`);
+    }
+  }
+  if (wrong.length) throw new Refusal(`Not kept. ${wrong.join(" ")}`);
+  if (!about.length) throw new Refusal("Say what the question is about: a page with the words it concerns, or a report's evidence.");
+  const agent = await agentFor(c);
+  const asks = [...((agent.properties.asks as Ask[] | undefined) ?? []), { question, about, at: Date.now() }].slice(-20);
+  await editPage(agent.id, { properties: (p) => ({ ...p, asks }) });
+  return { kept: "It shows beside your question in LeadingLight. Now ask it with your question tool, in the same words." };
+}
+
+const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment, publish, task, status, context };
 const WRITES = new Set(["publish", "task", "status", "context"]);
 
 export async function runAgentTool(call: AgentCall): Promise<unknown> {
