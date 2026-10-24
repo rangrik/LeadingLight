@@ -3,11 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { useAiPrefs } from "~/lib/ai-prefs";
-import { type Chat, type Conversation, chatOf, listChats, pick, send, stop, watch } from "~/lib/project-runtime/chat";
+import { answer, type Chat, type Conversation, chatOf, listChats, send, sending, stop, watch } from "~/lib/project-runtime/chat";
+import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask } from "~/lib/project-runtime/transport";
 import { pageOf } from "~/lib/space";
@@ -41,7 +43,7 @@ function turnsOf(chat: Chat): Shown[] {
       add({ kind: "tool", id: t.id, name: "Edited", input: { target: t.file }, status: "done", output: `+${t.added ?? 0} −${t.removed ?? 0}` });
       const files = out[out.length - 1]?.files;
       if (files && !files.includes(t.file)) files.push(t.file);
-    } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q) => q.question).join("\n") });
+    } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
   }
   // Ended turns end; the ledger knows how the session's own last ones went.
   const live = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
@@ -65,6 +67,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
   const field = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const title = pageOf(pageId)?.title.trim() || "this project";
 
@@ -76,18 +79,28 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const conv = list.find((c) => c.id === current) ?? null;
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);
-  useEffect(() => void log.current?.scrollTo({ top: log.current.scrollHeight }), [turns.length, chat.draft, chat.pending]);
+  const waitingOn = sending(chat);
+  useEffect(() => void log.current?.scrollTo({ top: log.current.scrollHeight }), [turns.length, chat.draft, waitingOn.length]);
+  // The request in front: what the agent waits on now, oldest first (features/agent-interactions.feature).
+  const open = chat.requests.find((r) => r.blocking && (r.state === "pending" || r.state === "recorded"));
+  // It takes the keyboard from the composer it hides, never from the page.
+  useEffect(() => {
+    const here = document.activeElement === document.body || !!field.current?.closest("[data-testid=project-chat]")?.contains(document.activeElement);
+    if (open && here) card.current?.focus();
+  }, [open?.id]);
 
   if (!state || !location) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">Link a folder to this page to chat in it.</p>;
   if (state.missing) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">The folder isn't there any more. Relink it from the page's folder row.</p>;
-  const busy = chat.session?.agent_state === "running" || chat.pending !== null;
-  const waiting = chat.session?.agent_state === "waiting" ? chat.session.ask : undefined;
+  const busy = chat.session?.agent_state === "running" || waitingOn.length > 0;
+  const draft = open ? chat.answers[open.id] : undefined;
+  const sent = open ? chat.deliveries[open.id] : undefined;
+  const delivery = open ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(open, draft, false, false)) : "pending";
   const go = (text: string) =>
     void send(key, location, text, prefs).then((c) => {
       if (!current) {
         // The new chat takes its own key from here on, keeping what it holds.
         chatOf(c.id).set(chatOf(key).get());
-        chatOf(key).set({ ...chatOf(key).get(), conv: null, window: { items: [], next: 0 }, pending: null });
+        chatOf(key).set({ ...chatOf(key).get(), conv: null, window: { items: [], next: 0 }, submissions: [], texts: {}, requests: [], answers: {}, deliveries: {}, restore: null });
         setCurrent(c.id);
       }
       refresh();
@@ -129,7 +142,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         </Menu>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" ref={log}>
-        {turns.length === 0 && chat.pending === null && (
+        {turns.length === 0 && waitingOn.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />
             <p className="text-balance text-lg">What should we do in {state.folder.path.split("/").at(-1)}?</p>
@@ -138,7 +151,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         )}
         {turns.map((t, k) => (
           <div className="mt-4 first:mt-0" key={k}>
-            <Turn items={t.items} live={busy && k === turns.length - 1 && chat.pending === null} onGoAhead={() => go("Go ahead with the plan.")} page={title} waiting={!!waiting && k === turns.length - 1} />
+            <Turn items={t.items} live={busy && k === turns.length - 1 && waitingOn.length === 0} onGoAhead={() => go("Go ahead with the plan.")} page={title} waiting={!!open && k === turns.length - 1} />
             {t.files.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {t.files.map((f) => (
@@ -151,29 +164,35 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
           </div>
         ))}
-        {chat.pending !== null && (
-          <div className="mt-4 first:mt-0">
-            <Turn items={[{ kind: "user", text: chat.pending }]} live onGoAhead={() => {}} page={title} />
+        {waitingOn.map((text, k) => (
+          <div className="mt-4 first:mt-0" key={`sending:${k}`}>
+            <Turn items={[{ kind: "user", text }]} live onGoAhead={() => {}} page={title} />
           </div>
-        )}
+        ))}
         {chat.error && <p className="mt-2 text-destructive-foreground">{chat.error}</p>}
       </div>
-      {waiting && (
-        <div aria-label="Approval" className="mx-2 mb-2 rounded-xl border bg-background p-3 shadow-xs/5" role="group">
-          <p className="font-medium">{waiting.message ?? `Claude wants to use ${waiting.tool}`}</p>
-          {waiting.input && <p className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2 py-1.5 font-mono text-xs">{waiting.input}</p>}
-          {waiting.why && <p className="mt-1 text-muted-foreground text-xs">{waiting.why}</p>}
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {(waiting.choices ?? []).map((c, i) => (
-              <Button key={c.key} onClick={() => void pick(key, c.key)} size="sm" variant={i === 0 ? "default" : i === (waiting.choices?.length ?? 0) - 1 ? "ghost" : "outline"}>
-                {c.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className={waiting ? "hidden" : "shrink-0"}>
-        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready />
+      {open &&
+        (open.kind === "question" ? (
+          <QuestionCard
+            answer={draft?.answer ?? {}}
+            busy={delivery !== "pending" && delivery !== "failed"}
+            index={draft?.index ?? 0}
+            key={open.id}
+            onAnswer={(a, index, submit) => answer(key, open, a, index, submit)}
+            ref={card}
+            request={open}
+          >
+            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, open, draft.answer, draft.index, true)} />
+          </QuestionCard>
+        ) : (
+          <ApprovalCard busy={delivery !== "pending" && delivery !== "failed"} key={open.id} onChoose={(choice) => answer(key, open, { choice }, 0, true)} ref={card} request={open}>
+            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, open, draft.answer, 0, true)} />
+          </ApprovalCard>
+        ))}
+      {/* Kept mounted under a request, so a message being written survives it. */}
+      <div className={open ? "hidden" : "shrink-0"}>
+        {chat.restore?.why && <p className="mx-3 mb-1 text-muted-foreground text-xs">{chat.restore.why}</p>}
+        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready restore={chat.restore} />
       </div>
       <FilePreview file={file} location={location} onClose={() => setFile(null)} />
     </div>

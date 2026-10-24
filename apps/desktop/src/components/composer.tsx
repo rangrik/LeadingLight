@@ -66,6 +66,7 @@ export function Composer({
   onStop,
   fieldRef,
   commands = COMMANDS,
+  restore,
 }: {
   ready: boolean;
   busy: boolean;
@@ -77,8 +78,11 @@ export function Composer({
   fieldRef: RefObject<HTMLDivElement | null>;
   // A project chat has none of the page's own (they ask about the note in view).
   commands?: Command[];
+  // Words given back: a message not sent, or an answer that can't go now.
+  restore?: { text: string; at: number } | null;
 }) {
   const [value, setValue] = useState<ComposerValue>([]);
+  useEffect(() => void (restore && setValue([{ type: "text", text: restore.text }])), [restore?.at]);
   const triggers: ComposerTrigger[] = [
     {
       character: "@",

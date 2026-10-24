@@ -14,8 +14,11 @@ notices are vendor/shipyard's, checked equal at build time.
 
 ## Open gaps carried forward
 
-- Answers and approvals are not yet keyed by request ID and lifecycle; a second click gets a 409,
-  not its receipt; an approval answers the oldest pending request (slice 4a).
+- A Write or Edit that the person declined still lists its file under the turn: the runtime's
+  Claude record doesn't mark a refused edit as failed (Codex's does). Next runtime bump.
+- A chat whose session was removed outside the app (the API's DELETE) shows empty until its next
+  message resumes it; the runtime reads a conversation's record only through a session.
+- A question card hides the composer, so Stop is out of reach until it's answered.
 - tmux is the person's Homebrew copy; the installed app must provision it (slice 2).
 - An earlier agent's probes (03:14–03:35, under `/tmp/ll-p1-*` and four `/tmp/ll-probe-*`) left
   idle tmux servers on their own private sockets, not in the person's `berth` server. Not ours to
