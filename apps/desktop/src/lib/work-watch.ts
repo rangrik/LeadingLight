@@ -47,5 +47,7 @@ export function stateOf(task: ObjectSummary, agent: ObjectSummary, live: Map<str
   // Its own last report, not a worker's, says whether it is ready.
   if (reportOf(reportsOn(task.id).filter((r) => reportOf(r)?.by === agent.id).at(-1))?.ready) return "review";
   const own = live.get(run.session);
-  return !own || own.exited ? "stopped" : "idle";
+  // Just started: the runtime's list may not have it yet.
+  if (!own) return Date.now() - agent.createdAt < 60_000 ? "starting" : "stopped";
+  return own.exited ? "stopped" : "idle";
 }

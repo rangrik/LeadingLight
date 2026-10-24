@@ -104,7 +104,8 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
   const meta = [item.task ? title(item.task) : title(item.agent), title(item.project), formatAgo(item.at)].filter(Boolean).join(" · ");
   return (
     <li className={cn("rounded-lg transition-colors duration-150", open ? "bg-accent/60" : "hover:bg-accent/40")} data-feed-item={item.id}>
-      <button aria-expanded={open} className="flex w-full items-start gap-2.5 px-2.5 py-2 text-left" onClick={onSelect} type="button">
+      {/* The item with the keyboard is tinted, as one under the pointer is; no ring. */}
+      <button aria-expanded={open} className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left focus-visible:bg-accent/60" onClick={onSelect} type="button">
         <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
           <span className={cn("block text-sm leading-snug", !open && "line-clamp-2")}>{item.reason}</span>
