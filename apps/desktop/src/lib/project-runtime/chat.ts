@@ -1,4 +1,4 @@
-import { type AiPrefs, isClaude } from "~/lib/ai-prefs";
+import { type Access, type AiPrefs, isClaude } from "~/lib/ai-prefs";
 import { folders, refresh as refreshFolders } from "~/lib/project-runtime/folders";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
 import { type Answer, type Delivery, type Draft, mergeRequests, reconcile, restoreDraft, type RuntimeRequest, sendAnswer } from "~/lib/project-runtime/requests";
@@ -50,8 +50,17 @@ export function adopt(from: string, to: string) {
 
 export const listChats = (location: string) => ask<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(location)}&limit=200`);
 
-// What the person picked in Settings › AI, as a Claude Code permission mode.
-export const modeFor = (p: Pick<AiPrefs, "access" | "plan">) => (p.plan ? "plan" : { ask: "default", auto: "auto", full: "bypassPermissions" }[p.access]);
+// A chat runs Claude Code, or Codex for a GPT model.
+export type Agent = "claude" | "codex";
+export const agentOf = (model: string): Agent => (isClaude(model) ? "claude" : "codex");
+// Access as each agent's permission mode. Codex's untrusted asks before each command; its default
+// works freely inside the folder and asks before leaving it.
+const MODES: Record<Agent, Record<Access, string>> = { claude: { ask: "default", auto: "auto", full: "bypassPermissions" }, codex: { ask: "untrusted", auto: "default", full: "bypassPermissions" } };
+export const modeFor = (p: Pick<AiPrefs, "access" | "plan">, agent: Agent) => (p.plan ? "plan" : MODES[agent][p.access]);
+export const accessOf = (mode: string | undefined, agent: Agent) => ({
+  access: ((Object.keys(MODES[agent]) as Access[]).find((a) => MODES[agent][a] === mode) ?? "ask") as Access,
+  plan: mode === "plan",
+});
 
 // Answers being written are kept on this Mac by conversation, so a reload keeps them.
 const answersKey = (conv: string) => `ll.answers.${conv}`;
@@ -155,8 +164,8 @@ export async function send(key: string, location: string, text: string, prefs: P
     let conv = chatOf(key).get().conv;
     if (!conv) {
       const name = `chat-${crypto.randomUUID().slice(0, 8)}`;
-      const model = isClaude(prefs.model) ? prefs.model : "opus";
-      await ask("POST", "/v1/sessions", { name, location, agent: "claude", driver: "claude", mode: modeFor(prefs), model, effort: prefs.effort, prompt: text, title: text.split("\n")[0] });
+      const agent = agentOf(prefs.model);
+      await ask("POST", "/v1/sessions", { name, location, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, prompt: text, title: text.split("\n")[0] });
       conv = (await listChats(location)).find((c) => c.session === name) ?? null;
       if (!conv) throw new Error("The runtime didn't keep the chat.");
     } else {

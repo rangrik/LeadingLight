@@ -38,7 +38,6 @@ export type ChatSettings = Pick<AiPrefs, "model" | "effort" | "access" | "plan">
   onChange: (p: Partial<Pick<AiPrefs, "model" | "effort" | "access" | "plan">>) => void;
   // Set when the chat started, so not offered (a started project chat's model).
   locked?: boolean;
-  claudeOnly?: boolean;
   // The access a chat's agent has, in its words; others aren't offered.
   accessChoices?: { value: Access; description: string }[];
 };
@@ -275,7 +274,7 @@ function ModelPicker({ back, s }: Back) {
   const cx = codex.use();
   useEffect(() => void loadCodex(), []);
   const gpt = cx.models.map((m) => ({ value: m.id, label: m.name }));
-  const all = s.claudeOnly ? MODELS : [...MODELS, ...gpt];
+  const all = [...MODELS, ...gpt];
   const claude = isClaude(s.model);
   const efforts = effortsFor(s.model);
   const effort = effortFor(s.model, s.effort);
@@ -321,9 +320,9 @@ function ModelPicker({ back, s }: Back) {
         <div aria-label="Model" role="radiogroup">
           {label("Claude")}
           {MODELS.map(row)}
-          {!s.claudeOnly && label("GPT")}
-          {!s.claudeOnly && gpt.map((m, i) => row(m, MODELS.length + i))}
-          {!s.claudeOnly && cx.state !== "ready" && (
+          {label("GPT")}
+          {gpt.map((m, i) => row(m, MODELS.length + i))}
+          {cx.state !== "ready" && (
             <p className="px-2 pb-1.5 text-muted-foreground text-xs">
               {cx.state === "checking" ? (
                 "Looking for Codex…"

@@ -80,3 +80,35 @@ Feature: An agent's questions and approvals
     Given a card with two questions in front
     When I answer the first and press Next
     Then the number keys pick on the second question without clicking it first
+
+  # Codex (slice 5a)
+
+  Scenario: A Codex command approval
+    Given a Codex chat in Ask for approval
+    When I send "Create done.txt with echo"
+    Then a card says Codex wants to run "echo … > done.txt" (its own command, not a shell wrapper)
+      with Allow once, Always allow in this chat and Decline
+    When I press Allow once
+    Then done.txt is written
+    When it asks again and I press Decline
+    Then nothing more runs, and Codex says it was refused
+
+  Scenario: A Codex edit approval shows the change
+    Given a Codex chat in Ask for approval
+    When it edits notes.txt with its patch tool
+    Then the card names notes.txt and shows the lines it changes
+    When I press Allow once
+    Then notes.txt is changed
+
+  Scenario: A Codex question in Plan mode
+    Given a Codex chat with Plan mode on
+    When I ask it to ask me which fruit I prefer, Apple or Pear, before planning
+    Then a card shows its question with Apple and Pear, numbered
+    When I press 2
+    Then Codex gets "Pear" once and goes on
+
+  Scenario: A question Codex doesn't wait for
+    When Codex asks a question it isn't waiting on
+    Then its card shows above the composer, which stays usable
+    And answering it sends the answer to that question, once
+

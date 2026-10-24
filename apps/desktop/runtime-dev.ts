@@ -41,6 +41,37 @@ const buildOf = () => {
   }
 };
 let loginPath: string | undefined;
+const shellPath = () => (loginPath ??= execFileSync(process.env.SHELL ?? "/bin/zsh", ["-ilc", "printenv PATH"]).toString().trim().split("\n").pop());
+
+// This Mac's Codex, its account and models, read as the app reads them (src-tauri/src/clis.rs):
+// project chats run it for real, so the browser build offers its real models.
+function codexStatus(): Promise<{ status: number; body: unknown }> {
+  return new Promise((done) => {
+    const p = spawn("codex", ["app-server"], { env: { ...process.env, PATH: shellPath() }, stdio: ["pipe", "pipe", "ignore"] });
+    const got: Record<number, unknown> = {};
+    let buf = "";
+    const end = (status: number, body: unknown) => (p.kill(), done({ status, body }));
+    const timer = setTimeout(() => end(504, { error: "Codex didn't answer" }), 15000);
+    p.on("error", () => (clearTimeout(timer), end(500, { error: "Codex is not installed" })));
+    p.stdout.on("data", (d: Buffer) => {
+      buf += d;
+      for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 1);
+        let m: { id?: number };
+        try {
+          m = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (m.id === 0) for (const x of [{ method: "initialized" }, { method: "account/read", id: 1, params: {} }, { method: "model/list", id: 2, params: {} }]) p.stdin.write(`${JSON.stringify(x)}\n`);
+        if (m.id === 1 || m.id === 2) got[m.id] = m;
+        if (got[1] && got[2]) (clearTimeout(timer), end(200, { account: got[1], models: got[2] }));
+      }
+    });
+    p.stdin.write(`${JSON.stringify({ method: "initialize", id: 0, params: { clientInfo: { name: "leadinglight", version: "dev" }, capabilities: { experimentalApi: true } } })}\n`);
+  });
+}
 
 let starting: Promise<Status> | null = null;
 async function ensure(restart: boolean): Promise<Status> {
@@ -53,12 +84,11 @@ async function ensure(restart: boolean): Promise<Status> {
     if (pid) process.kill(pid, "SIGTERM");
     for (let i = 0; i < 100 && (await info()); i++) await new Promise((r) => setTimeout(r, 100));
   }
-  loginPath ??= execFileSync(process.env.SHELL ?? "/bin/zsh", ["-ilc", "printenv PATH"]).toString().trim().split("\n").pop();
   fs.mkdirSync(path.join(home, "user"), { recursive: true });
   const log = fs.openSync(path.join(home, "berthd.log"), "a");
   const env = {
     HOME: os.homedir(), USER: process.env.USER, LOGNAME: process.env.LOGNAME, SHELL: process.env.SHELL, TMPDIR: process.env.TMPDIR,
-    LANG: "en_US.UTF-8", PATH: loginPath, BERTH_HOME: home, BERTH_USER_DIR: path.join(home, "user"), BERTH_EMBEDDED: "1",
+    LANG: "en_US.UTF-8", PATH: shellPath(), BERTH_HOME: home, BERTH_USER_DIR: path.join(home, "user"), BERTH_EMBEDDED: "1",
     BERTH_TMUX_SOCKET: `leadinglight-dev-${hash}`, BERTH_PORT_BASE: String(48000 + (parseInt(hash, 16) % 9) * 100),
   };
   // Detached, as the app starts it: stopping the dev server leaves agents and runs going.
@@ -76,6 +106,10 @@ async function ensure(restart: boolean): Promise<Status> {
 
 const handler: Connect.NextHandleFunction = (req, res) => {
   const url = new URL(req.url ?? "/", "http://box");
+  if (url.pathname === "/codex") {
+    void codexStatus().then(({ status, body }) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body)));
+    return;
+  }
   if (url.pathname === "/status") {
     const start = url.searchParams.has("start") || url.searchParams.has("restart");
     const status = start ? (starting ??= ensure(url.searchParams.has("restart")).finally(() => (starting = null))) : info().then<Status>((i) => (i ? { state: "ready", version: i.version, home } : { state: "stopped", home }));

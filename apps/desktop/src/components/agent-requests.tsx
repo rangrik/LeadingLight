@@ -178,16 +178,24 @@ const ACTIONS: Record<"approval" | "plan", { choice: string; label: string; desc
   ],
 };
 
-// What the agent wants to do, in its own words where it gave them.
+// What the agent wants to do, in its own words where it gave them. Codex sends its own command beside
+// the shell that runs it, and a file change's edits beside its approval (runtime 0.3.30-ll.8).
+const s = (v: unknown) => (typeof v === "string" ? v : "");
 function detail(r: RuntimeRequest): string {
   const input = (r.input ?? {}) as Record<string, unknown>;
-  const s = (v: unknown) => (typeof v === "string" ? v : "");
-  return s(input.command) || s(input.file_path) || s(input.plan) || s(input.reason) || (Object.keys(input).length ? JSON.stringify(input, null, 2) : "");
+  const actions = (Array.isArray(input.commandActions) ? input.commandActions : []) as { command?: string }[];
+  const changes = (Array.isArray(input.changes) ? input.changes : []) as { path?: string; diff?: string; kind?: { type?: string } }[];
+  const how = (c: (typeof changes)[number]) => ({ add: " (new file)", delete: " (deleted)" })[c.kind?.type ?? ""] ?? "";
+  if (changes.length) return changes.map((c) => `${s(c.path).split("/").at(-1)}${how(c)}\n${s(c.diff)}`.trim()).join("\n\n");
+  // Codex's other fields are only ids.
+  const rest = "threadId" in input ? "" : Object.keys(input).length ? JSON.stringify(input, null, 2) : "";
+  return s(actions[0]?.command) || s(input.command) || s(input.file_path) || s(input.plan) || rest;
 }
 
 export function ApprovalCard({ request, busy, onChoose, children, ref }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement> }) {
   const actions = ACTIONS[request.kind === "plan" ? "plan" : "approval"].map((a) => (request.kind === "plan" && a.choice === "deny" ? { ...a, choice: "keep_planning" } : a));
   const text = detail(request);
+  const why = s((request.input as Record<string, unknown> | undefined)?.reason);
   return (
     <div
       aria-label="Approval"
@@ -203,6 +211,7 @@ export function ApprovalCard({ request, busy, onChoose, children, ref }: { reque
       tabIndex={-1}
     >
       <p className="font-medium leading-snug">{PROMPT[request.tool ?? ""] ?? `The agent wants to use ${request.tool}`}</p>
+      {why && <p className="mt-1 text-muted-foreground text-xs">{why}</p>}
       {text && <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-xs">{text}</pre>}
       <div className="mt-2 space-y-0.5">
         {actions.map((a, k) => (

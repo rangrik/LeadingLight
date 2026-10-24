@@ -22,6 +22,8 @@ notices are vendor/shipyard's, checked equal at build time.
   (slice 11). The app checks the folder before each send; the runtime doesn't refuse a session in a
   missing location yet (next runtime bump).
 - A question card hides the composer, so Stop is out of reach until it's answered.
+- In the browser build the GPT models are this Mac's Codex's once project chats are on (the dev
+  server asks it); otherwise the stand-in's, which the Ask regression spec expects.
 - tmux is the person's Homebrew copy; the installed app must provision it (slice 2).
 - An earlier agent's probes (03:14–03:35, under `/tmp/ll-p1-*` and four `/tmp/ll-probe-*`) left
   idle tmux servers on their own private sockets, not in the person's `berth` server. Not ours to
@@ -32,7 +34,8 @@ notices are vendor/shipyard's, checked equal at build time.
 - With BERTH_EMBEDDED=1 set, upstream's TestEmittedEventsReachTheStream and
   TestAPermissionRequestIsKeptOnTheWaitAndNeverPublished fail by design (embedded drops hook
   events), and TestRepoHooksRunOnlyForTheirRepoInTheWorktree depends on the port base;
-  TestAttachPassesShiftEnter fails on unpatched source too. All pass in a default environment.
+  TestAttachPassesShiftEnter fails on unpatched source too, and TestReviewRoutesOverTheWire fails
+  about one run in three on its temp folder's cleanup, with or without our patches.
 - For slice 8a: the runtime's workspace addresses (BERTH_URL, the browser's base) use port 1377,
   which is the person's Shipyard app's proxy; only the runtime's own browser proxy should see
   them. Services() doesn't credit a plain folder's ports to it yet.

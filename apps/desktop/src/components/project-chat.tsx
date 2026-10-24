@@ -7,8 +7,9 @@ import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-req
 import { type ChatSettings, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
-import { type Access, useAiPrefs } from "~/lib/ai-prefs";
-import { adopt, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, stop, watch } from "~/lib/project-runtime/chat";
+import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
+import { codex } from "~/lib/codex";
+import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, listChats, modeFor, send, sending, setMode, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask } from "~/lib/project-runtime/transport";
@@ -27,13 +28,19 @@ const when = (iso?: string) => {
 };
 
 // What the agent may do in the folder, as the access menu says it here.
-const ACCESS_IN_FOLDER: { value: Access; description: string }[] = [
-  { value: "ask", description: "Claude asks before changing files or running commands" },
-  { value: "auto", description: "Claude Code's auto mode: a classifier approves or blocks each action and asks you when unsure" },
-  { value: "full", description: "Claude changes files and runs commands without asking" },
-];
-// A session's permission mode as the access menu shows it.
-const fromMode = (mode?: string) => ({ access: (mode === "bypassPermissions" ? "full" : mode === "auto" ? "auto" : "ask") as Access, plan: mode === "plan" });
+const ACCESS_IN_FOLDER: Record<Agent, { value: Access; description: string }[]> = {
+  claude: [
+    { value: "ask", description: "Claude asks before changing files or running commands" },
+    { value: "auto", description: "Claude Code's auto mode: a classifier approves or blocks each action and asks you when unsure" },
+    { value: "full", description: "Claude changes files and runs commands without asking" },
+  ],
+  codex: [
+    { value: "ask", description: "Codex asks before each command and change" },
+    { value: "auto", description: "Codex works freely inside the folder and asks before going outside it or using the network" },
+    { value: "full", description: "Codex runs anything without asking, outside the folder too" },
+  ],
+};
+const NAME: Record<Agent, string> = { claude: "Claude", codex: "Codex" };
 
 // The record's items as the note chat's turns: one per prompt, its steps, its words, its end.
 type Shown = { items: Item[]; files: string[]; stopped?: boolean; error?: string };
@@ -81,6 +88,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [fresh, setFresh] = useState(() => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan }));
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
+  const cx = codex.use();
   const field = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
@@ -100,6 +108,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   useEffect(() => void (stuck.current && log.current?.scrollTo({ top: log.current.scrollHeight })));
   // The request in front: what the agent waits on now, oldest first (features/agent-interactions.feature).
   const open = chat.requests.find((r) => r.blocking && (r.state === "pending" || r.state === "recorded"));
+  // A question the agent isn't waiting on sits above the composer, which stays.
+  const front = open ?? chat.requests.find((r) => !r.blocking && r.kind === "question" && (r.state === "pending" || r.state === "recorded"));
   // It takes the keyboard from the composer it hides, never from the page.
   useEffect(() => {
     const here = document.activeElement === document.body || !!field.current?.closest("[data-testid=project-chat]")?.contains(document.activeElement);
@@ -109,21 +119,24 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   if (!state || !location) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">Link a folder to this page to chat in it.</p>;
   if (state.missing) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">The folder isn't there any more. Relink it from the page's folder row.</p>;
   const busy = chat.session?.agent_state === "running" || waitingOn.length > 0;
-  const draft = open ? chat.answers[open.id] : undefined;
-  const sent = open ? chat.deliveries[open.id] : undefined;
-  const delivery = open ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(open, draft, false, false)) : "pending";
+  const draft = front ? chat.answers[front.id] : undefined;
+  const sent = front ? chat.deliveries[front.id] : undefined;
+  const delivery = front ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(front, draft, false, false)) : "pending";
   const started = chat.conv ?? conv;
+  // A new chat stays with Claude while Codex isn't on this Mac or signed in.
+  const mine = isClaude(fresh.model) || cx.state === "ready" ? fresh : { ...fresh, model: "opus" };
+  // A started chat keeps its agent and model; a new one runs whichever the model menu picks.
+  const agent: Agent = started ? (started.agent === "codex" ? "codex" : "claude") : agentOf(mine.model);
   const settings: ChatSettings = started
     ? {
-        ...fromMode(started.mode),
+        ...accessOf(started.mode, agent),
         model: started.model ?? "",
         effort: started.effort ?? "",
         locked: true,
-        claudeOnly: true,
-        accessChoices: ACCESS_IN_FOLDER,
-        onChange: (p) => void setMode(key, modeFor({ ...fromMode(started.mode), ...p })).catch(() => {}),
+        accessChoices: ACCESS_IN_FOLDER[agent],
+        onChange: (p) => void setMode(key, modeFor({ ...accessOf(started.mode, agent), ...p }, agent)).catch(() => {}),
       }
-    : { ...fresh, claudeOnly: true, accessChoices: ACCESS_IN_FOLDER, onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
+    : { ...mine, accessChoices: ACCESS_IN_FOLDER[agent], onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
   const go = (text: string) => {
     stuck.current = true;
     void send(key, location, text, settings).then((c) => {
@@ -182,7 +195,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />
             <p className="text-balance text-lg">What should we do in {state.folder.path.split("/").at(-1)}?</p>
-            <p className="text-balance text-muted-foreground text-xs">Claude works in this folder: it reads and changes its files and runs commands there.</p>
+            <p className="text-balance text-muted-foreground text-xs">{NAME[agent]} works in this folder: it reads and changes its files and runs commands there.</p>
           </div>
         )}
         {turns.map((t, k) => (
@@ -214,28 +227,28 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         ))}
         {chat.error && <p className="mt-2 text-destructive-foreground">{chat.error}</p>}
       </div>
-      {open &&
-        (open.kind === "question" ? (
+      {front &&
+        (front.kind === "question" ? (
           <QuestionCard
             answer={draft?.answer ?? {}}
             busy={delivery !== "pending" && delivery !== "failed"}
             index={draft?.index ?? 0}
-            key={open.id}
-            onAnswer={(a, index, submit) => answer(key, open, a, index, submit)}
+            key={front.id}
+            onAnswer={(a, index, submit) => answer(key, front, a, index, submit)}
             ref={card}
-            request={open}
+            request={front}
           >
-            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, open, draft.answer, draft.index, true)} />
+            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, draft.index, true)} />
           </QuestionCard>
         ) : (
-          <ApprovalCard busy={delivery !== "pending" && delivery !== "failed"} key={open.id} onChoose={(choice) => answer(key, open, { choice }, 0, true)} ref={card} request={open}>
-            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, open, draft.answer, 0, true)} />
+          <ApprovalCard busy={delivery !== "pending" && delivery !== "failed"} key={front.id} onChoose={(choice) => answer(key, front, { choice }, 0, true)} ref={card} request={front}>
+            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, 0, true)} />
           </ApprovalCard>
         ))}
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
         {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
-        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready restore={chat.restore} settings={settings} />
+        <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder={`Ask ${NAME[agent]} to work in the folder…`} ready restore={chat.restore} settings={settings} />
       </div>
       <FilePreview file={file} location={location} onClose={() => setFile(null)} />
     </div>

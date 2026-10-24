@@ -267,9 +267,16 @@ approved requests unseen, and Codex's questions needed its plan mode; a resumed 
 unfollowed, meet "Not initialized", lose its model, or meet its old host still closing. Each fix
 was a few lines (about 90 in all), so Shipyard stays the owner
 and Paseo's daemon, the fallback, is not needed. Answers are still not keyed by request or
-lifecycle and a second click is refused rather than given its receipt; that is slice 4a.
+lifecycle and a second click is refused rather than given its receipt; that is slice 4a (done:
+each request is named by its process and the agent's id, and answered by command id once).
 
 A plain folder is its own one workspace in the runtime (a patch), so its sessions, ports and
 browser work as a checkout's do, without git init. The runtime takes ports from a range of its
 own, puts its own berthd first on its agents' PATH, and keeps the browser's downloads and long
 snapshots in its state, never in the person's folder.
+
+A project chat runs Claude Code, or Codex for a GPT model, and keeps that agent and model once
+started (the runtime can't change a running session's model yet). Access maps to each agent's own
+modes: Claude's default, auto and bypassPermissions; Codex's untrusted (asks before each command),
+default (works freely inside the folder, asks before leaving it) and bypassPermissions. Access and
+Plan mode change a started chat's session; a new chat's choices are its own, not Settings › AI's.

@@ -88,3 +88,35 @@ Feature: A project's chat
   Scenario: Note chats are unchanged
     When I press Ask on "Research" and send a question about the page
     Then the agent panel answers about the page, as before, not in the folder
+
+  # Codex (slice 5a): the same chat, with a GPT model
+
+  Scenario: A chat with Codex
+    Given Codex is installed and signed in
+    When I start a new chat, pick a GPT model and low effort, and send "Run pwd, then read notes.txt"
+    Then Codex answers in "~/LL QA/My Project", with the steps and the answer as Claude's show
+    And the conversation runs Codex with that model and effort (the runtime's conversations)
+    And the composer says "Ask Codex to work in the folder…"
+
+  Scenario: Codex's access, in its own words
+    Given a new chat with a GPT model
+    Then the access menu offers Ask for approval (Codex asks before each command and change),
+      Approve for me (Codex works freely inside the folder and asks before going outside it) and
+      Full access
+    When the chat has started in one of them and I choose another
+    Then the session's mode follows (Ask is untrusted, Approve for me is default, Full is
+      bypassPermissions) and Codex works that way from its next step
+
+  Scenario: A started chat keeps its agent
+    Given a Codex chat and a Claude chat in "Research"
+    Then each shows its own model, which can't be changed in it
+    And choosing one from the chat menu shows its turns and continues with its agent
+
+  Scenario: Codex chats come back
+    When I stop a Codex chat's turn, reload the app, and send again
+    Then it resumes in the same folder and answers with what was said before
+
+  Scenario: No Codex
+    Given Codex is not installed, or not signed in
+    Then the model menu says so where the GPT models would be, and a new chat stays with Claude
+

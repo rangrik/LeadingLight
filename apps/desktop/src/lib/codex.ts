@@ -1,10 +1,12 @@
 import { CLAUDE_EFFORTS, isClaude } from "~/lib/ai-prefs";
 import { isNative } from "~/lib/platform";
+import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { createStore } from "~/lib/state";
 
 // Codex, for GPT models (src-tauri/src/clis.rs): whether it is on this Mac and signed in, and
 // the models it offers, read from its app server. In a browser build a stand-in answers;
-// ?codex=missing and ?codex=signed-out show those states.
+// ?codex=missing and ?codex=signed-out show those states. With project chats on, which run
+// this Mac's Codex for real, the browser build asks it through the dev server instead.
 
 export type GptModel = { id: string; name: string; efforts: string[]; effort: string; description: string };
 export type CodexState = { state: "checking" | "missing" | "signed-out" | "ready"; email?: string; plan?: string; models: GptModel[]; error?: string };
@@ -39,6 +41,10 @@ export function loadCodex(fresh = false): Promise<void> {
       if (await isNative) {
         const { invoke } = await import("@tauri-apps/api/core");
         r = await invoke("codex_status");
+      } else if (projectPrefs.get().enabled && !new URLSearchParams(location.search).has("codex")) {
+        const res = await fetch("/__runtime/codex");
+        r = await res.json();
+        if (!res.ok) throw new Error(r.error);
       } else r = standIn();
     } catch (e) {
       const error = String(e);
