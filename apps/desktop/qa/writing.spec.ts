@@ -76,3 +76,21 @@ test("Narrow cards keep the title whole and show only whole counts", async ({ pa
       if (await count.isVisible()) expect((await count.boundingBox())!.x + (await count.boundingBox())!.width).toBeLessThanOrEqual(edge);
   }
 });
+
+// Seam: a page's type against Settings › Writing › Use on. Catches the tools on records (a person)
+// by default, or a ticked type that never reaches its open pages.
+test("The writing tools follow the page's type", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "People" }).first().click();
+  await page.getByRole("button", { name: "New person" }).click();
+  await page.getByRole("textbox", { name: "Title" }).fill("Ada");
+  const card = page.getByRole("region", { name: "Ada", exact: true });
+  await expect(card.getByRole("button", { name: "Counts" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Writing" })).toHaveCount(0);
+  await page.keyboard.press("Meta+Comma");
+  await page.getByTestId("settings-nav-writing").click();
+  await page.getByRole("checkbox", { name: "People" }).click();
+  await page.keyboard.press("Escape");
+  await expect(card.getByRole("button", { name: "Writing" })).toHaveCount(1);
+  await expect(card.getByRole("button", { name: "Counts" })).toHaveCount(1);
+});

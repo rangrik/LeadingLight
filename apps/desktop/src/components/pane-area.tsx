@@ -17,7 +17,9 @@ import { WritingMenu } from "~/components/writing-menu";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
-import { describe, space, TYPE_VIEW } from "~/lib/space";
+import { describe, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
+import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
 type Size = { w: number; h: number };
 
@@ -84,6 +86,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
   const { root, focus } = panes.use();
   const { open: sidebarOpen } = useSidebar();
   space.use(); // titles and icons follow edits
+  const writing = useWritingPrefs();
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -155,8 +158,11 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 root={shown.parent ?? "Pages"}
                 sidebarOpen={sidebarOpen}
               >
-                {/* Every page's card, shown like Close page: on the card in front, the others on hover. */}
-                {!leaf.page.startsWith(TYPE_VIEW) && <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />}
+                {/* Every page's card whose type uses the tools, shown like Close page: on the card in
+                    front, the others on hover. */}
+                {!leaf.page.startsWith(TYPE_VIEW) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
+                  <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />
+                )}
                 {split && (
                   <Button
                     aria-label="Close page"

@@ -11,7 +11,10 @@ Feature: Writing tools
     by side, on the card in front, and on the others when pointed at, like "Close page"), a menu of
     "Focus mode" ⇧⌘F, "Syntax highlight" ⇧⌘D, "Style check" ⌥⇧⌘D, "Grammar check" ⇧⌘G,
     "Counts" ⇧⌘W and "Writing settings…"
-  - Settings › Writing: the same five, plus what each one shows
+  - Settings › Writing: a switch for each of the five with its shortcut beside it; under Focus
+    mode, Syntax highlight and Style check, indented with their dividers, the choice of what each
+    does, greyed while its switch is off (checkboxes where any of several can be on, read down
+    each column); and "Use the tools on": a checkbox for each type of page
   - the counts: button "Counts" right after the breadcrumbs, past a thin divider
   - dimmed: drawn at low opacity, 150–200 ms ease-out to change
 
@@ -129,6 +132,18 @@ Feature: Writing tools
   Scenario: A long page stays quick
     Given a page of 2000 paragraphs with the tools as they start (Grammar check and Counts on)
     Then a key takes under 16 ms in the Mac app's engine, and counting never freezes the page
+
+  Scenario: The tools follow the page's type
+    Given the suggested types: on for Pages, Daily notes, Meetings, Projects, Ideas and any type I
+      make; off for People, Books, Tags and Collections
+    When I open a person's page
+    Then its card has no Writing menu and no counts, and nothing is underlined or dimmed
+    When I tick People under "Use the tools on" in Settings › Writing
+    Then the person's page gets the Writing menu, the counts and the marks, and "Use suggestions"
+      shows after the suggestion's text
+    When I press "Use suggestions"
+    Then People is off again and "Use suggestions" goes away
+    And a type I untick keeps its pages' text and properties exactly as they were
 
   Scenario: The Writing menu shows what is on
     When I open the Writing menu
