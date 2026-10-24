@@ -28,6 +28,10 @@ Feature: An agent hands work to other agents
     Then a Workers card under the turn lists both, each with its agent and what it's doing
     And when each finishes, its row says so, with how long it took and its answer, and the agent goes on
 
+  Scenario: Rows stay in the order the workers started
+    Given two workers, the second of which finishes first
+    Then the rows keep their order as each finishes
+
   Scenario: A worker's answer stays with its worker
     Given two workers, one of which fails
     Then the failure shows on that worker's row, and the other's answer on its own row
@@ -40,6 +44,7 @@ Feature: An agent hands work to other agents
     Given a worker is running a long command
     When I press Stop on its row
     Then that worker stops, its row says Stopped, and the other workers go on
+    And after a reload its row still says Stopped, and its lead was told it was stopped
 
   Scenario: Open a worker's own chat
     When I press a worker's row
@@ -55,6 +60,7 @@ Feature: An agent hands work to other agents
   Scenario: Runs show with the workers
     Given the agent started a checked loop
     Then the Workers card shows the run while it goes, with Stop, and how it ended once done
+    And a run stopped from its row says Stopped at once, beside a worker still going
 
   Scenario: The agent's own helpers are told apart from workers
     When Claude asks one of its own subagents to look at something

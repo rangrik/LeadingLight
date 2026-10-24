@@ -1,0 +1,102 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Sat, 24 Oct 2026 10:57:30 -0700
+Subject: [PATCH] A conversation says who started it, when an agent or a run
+ did
+
+An app listing a folder's conversations couldn't tell a person's chats
+from the workers their agents started, and showed them all as chats.
+A session an agent starts (it names itself as the caller) or a run
+starts keeps By: the agent's session, or run:<id>.
+---
+ internal/box/api.go           |  3 +++
+ internal/box/conversations.go |  5 ++++-
+ internal/box/notify.go        | 22 ++++++++++++++++------
+ internal/box/runhost.go       |  1 +
+ 4 files changed, 24 insertions(+), 7 deletions(-)
+
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 6d76724..937acd2 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -910,6 +910,9 @@ func (b *Box) startStructuredSession(r *http.Request, name, location, dir, prese
+ 	data["agent"], data["driver"] = agentFor(sess), sess.Driver
+ 	b.publish(r, "session.started", data)
+ 	noteStarted(l, location, dir, sess.Name, prompt)
++	if by := b.agentCaller(r); by != "" && by != sess.Name {
++		noteConversation(l.labels[labelConv], func(c *Conversation) { c.By = by })
++	}
+ 	b.setUpOnFirstOpen(origin(r), dir)
+ 	sess = b.enrich(r.Context(), []Session{sess})[0]
+ 	b.startStructured(origin(r), gateOrigin(r), sess, prompt)
+diff --git a/internal/box/conversations.go b/internal/box/conversations.go
+index b511e9e..7b37369 100644
+--- a/internal/box/conversations.go
++++ b/internal/box/conversations.go
+@@ -42,7 +42,10 @@ type Conversation struct {
+ 	Model  string `json:"model,omitempty"`
+ 	Effort string `json:"effort,omitempty"`
+ 	// Title is its first prompt's first line.
+-	Title   string    `json:"title,omitempty"`
++	Title string `json:"title,omitempty"`
++	// By is who started it, when not a person: the agent session it works
++	// for, or "run:<id>".
++	By      string    `json:"by,omitempty"`
+ 	Created time.Time `json:"created"`
+ 	Updated time.Time `json:"updated,omitzero"`
+ }
+diff --git a/internal/box/notify.go b/internal/box/notify.go
+index 0b34094..879261a 100644
+--- a/internal/box/notify.go
++++ b/internal/box/notify.go
+@@ -851,12 +851,8 @@ func askText(a Ask) string {
+ // watchCaller records a watch for the session that made a request, when it
+ // named itself (CallerHeader) on the box's own socket and runs an agent.
+ func (b *Box) watchCaller(r *http.Request, w Watch) {
+-	caller := strings.TrimSpace(r.Header.Get(CallerHeader))
+-	if caller == "" || b.Reports == nil || !wire.IsLocal(r.Context()) || !sessionName.MatchString(caller) {
+-		return
+-	}
+-	sess, err := b.Sessions.Get(r.Context(), caller)
+-	if err != nil || sess.Exited || agentFor(sess) == "" {
++	caller := b.agentCaller(r)
++	if caller == "" || b.Reports == nil {
+ 		return
+ 	}
+ 	w.Parent = caller
+@@ -870,6 +866,20 @@ func (b *Box) watchCaller(r *http.Request, w Watch) {
+ 	}
+ }
+ 
++// agentCaller is the running agent session that named itself as asking
++// (CallerHeader) on the box's own socket, or "".
++func (b *Box) agentCaller(r *http.Request) string {
++	caller := strings.TrimSpace(r.Header.Get(CallerHeader))
++	if caller == "" || !wire.IsLocal(r.Context()) || !sessionName.MatchString(caller) {
++		return ""
++	}
++	sess, err := b.Sessions.Get(r.Context(), caller)
++	if err != nil || sess.Exited || agentFor(sess) == "" {
++		return ""
++	}
++	return caller
++}
++
+ // The notify API: GET /v1/notify lists the watches; DELETE
+ // /v1/notify/{id} drops the caller's watch on a turn, run or session, and
+ // what was about to be said about it.
+diff --git a/internal/box/runhost.go b/internal/box/runhost.go
+index abd4a08..8d5755d 100644
+--- a/internal/box/runhost.go
++++ b/internal/box/runhost.go
+@@ -475,6 +475,7 @@ func (h *runHost) startStructuredAgent(ctx context.Context, x *runs.StepCtx, st
+ 	}
+ 	b.Events.Publish(events.Event{Type: "session.started", Box: b.Name, Origin: origOf(x), Data: map[string]any{"name": sess.Name, "location": st.where, "path": st.dir, "command": l.command, "agent": agentFor(sess), "driver": sess.Driver, "run": x.Run.ID}})
+ 	noteStarted(l, st.where, st.dir, sess.Name, st.prompt)
++	noteConversation(l.labels[labelConv], func(c *Conversation) { c.By = "run:" + x.Run.ID })
+ 	sess = b.enrich(ctx, []Session{sess})[0]
+ 	awaitHost(sess.sock, 30*time.Second)
+ 	b.follow(sess)
+-- 
+2.51.2
+

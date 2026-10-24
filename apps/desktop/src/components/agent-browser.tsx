@@ -13,7 +13,9 @@ import { ask, stream } from "~/lib/project-runtime/transport";
 // workspace's tab, its address, its tabs and its console. The agent drives it; this only watches.
 
 type Tab = { name: string; url?: string; title?: string };
+// Allowed sites, remembered here for every pane: the runtime's refusals still name them for a while.
 const ALLOWED = "ll.browser.allowed";
+const allowed = (): string[] => JSON.parse(localStorage.getItem(ALLOWED) ?? "[]");
 type Loc = { name: string; worktrees?: { name: string; main?: boolean; port?: number }[] };
 
 // The workspace a chat works in: its own branch's worktree, else the folder's main one.
@@ -61,8 +63,6 @@ export function BrowserPane({ pageId, worktree, session }: { pageId: string; wor
   // Each agent has a tab of its own, named after its session: the chat's is shown first.
   const [tab, setTab] = useState("");
   const [refused, setRefused] = useState<string[]>([]);
-  // Allowed sites, remembered here: the runtime's list of refusals still names them for a while.
-  const [allowed, setAllowed] = useState<string[]>(() => JSON.parse(localStorage.getItem(ALLOWED) ?? "[]"));
   // The page fitted to the view, or at its own size to read.
   const [fit, setFit] = useState(true);
   // Open, then gone: said plainly, not left as a frozen picture.
@@ -72,34 +72,46 @@ export function BrowserPane({ pageId, worktree, session }: { pageId: string; wor
   const [console, setConsole] = useState("");
   // The chat's own agent's tab, unless another is picked; never another's without asking.
   const shown = (tab && tabs.some((t) => t.name === tab) ? tab : "") || (session ? (tabs.find((t) => t.name === session)?.name ?? "") : (tabs[0]?.name ?? ""));
-  const label = (t: Tab) => (t.name === session ? "This chat's agent" : t.name);
+  // Another agent's tab goes by its session's title, as its chat does.
+  const [titles, setTitles] = useState<Record<string, string>>({});
+  useEffect(() => void (tabs.length > 1 && ask<{ name: string; title?: string }[]>("GET", "/v1/sessions").then((all) => setTitles(Object.fromEntries(all.map((s) => [s.name, s.title ?? ""]))), () => {})), [tabs.length]);
+  const label = (t: Tab) => (t.name === session ? "This chat's agent" : titles[t.name] || "Another agent");
   useEffect(() => void (tabs.length ? setClosed(false) : frame && setClosed(true)), [tabs.length]);
   const base = ws?.worktree ? `/v1/worktrees/${ws.location}/${ws.worktree}/browser` : null;
   useEffect(() => {
     setFrame(null);
     if (!base || !shown) return;
-    return stream("GET", `${base}/screencast?tab=${encodeURIComponent(shown)}`, undefined, 60, (line) => {
-      try {
-        const f = JSON.parse(line) as { data?: string; url?: string };
-        if (f.data) setFrame({ data: f.data, url: f.url });
-      } catch {
-        // Not a frame.
-      }
-    }, () => {});
+    // A still page sends nothing and a quiet stream ends; opened again, it starts with the page as it is.
+    let on = true;
+    let stop = () => {};
+    const watch = () => {
+      stop = stream("GET", `${base}/screencast?tab=${encodeURIComponent(shown)}`, undefined, 60, (line) => {
+        try {
+          const f = JSON.parse(line) as { data?: string; url?: string };
+          if (f.data) setFrame({ data: f.data, url: f.url });
+        } catch {
+          // Not a frame.
+        }
+      }, () => void (on && window.setTimeout(() => on && watch(), 1000)));
+    };
+    watch();
+    return () => {
+      on = false;
+      stop();
+    };
   }, [base, shown]);
   // Public sites the browser was kept from, which the person may allow for agents' browsers.
   useEffect(() => {
     if (!base || !tabs.length) return;
-    const read = () => void ask<{ status?: { refused_hosts?: string[] } }>("GET", `${base}/status`).then((s) => setRefused((s.status?.refused_hosts ?? []).filter((h) => !/(^|\.)localhost$|^127\.|^\[?::1/.test(h))), () => {});
+    const read = () => void ask<{ status?: { refused_hosts?: string[] } }>("GET", `${base}/status`).then((s) => setRefused((s.status?.refused_hosts ?? []).filter((h) => !/(^|\.)localhost$|^127\.|^\[?::1/.test(h) && !allowed().includes(h))), () => {});
     read();
     const every = window.setInterval(read, 3000);
     return () => window.clearInterval(every);
   }, [base, tabs.length]);
   const allow = (host: string) =>
     void ask("POST", "/v1/browser/allow", { origin: host }).then(() => {
-      const next = [...allowed, host];
-      localStorage.setItem(ALLOWED, JSON.stringify(next));
-      setAllowed(next);
+      localStorage.setItem(ALLOWED, JSON.stringify([...allowed(), host]));
+      setRefused((r) => r.filter((h) => h !== host));
     }, () => {});
   // The console as the tab has it, read without using up what its agent hasn't read yet.
   useEffect(() => {
@@ -119,7 +131,7 @@ export function BrowserPane({ pageId, worktree, session }: { pageId: string; wor
     );
   return (
     <div className="flex h-full flex-col text-sm" data-testid="agent-browser">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-1.5">
         <SegmentedControl aria-label="Show" render={<RadioGroupPrimitive onValueChange={(v) => setView(v as "page" | "console")} value={view} />} size="sm">
           <SegmentedControlItem render={<RadioPrimitive.Root value="page" />}>Page</SegmentedControlItem>
           <SegmentedControlItem render={<RadioPrimitive.Root value="console" />}>Console</SegmentedControlItem>
@@ -142,20 +154,20 @@ export function BrowserPane({ pageId, worktree, session }: { pageId: string; wor
           </Select>
         )}
       </div>
-      {[...new Set(refused)].filter((h) => !allowed.includes(h)).map((host) => (
+      {[...new Set(refused)].map((host) => (
         <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-xs" key={host}>
-          <span className="min-w-0 flex-1 truncate">
+          <span className="min-w-0 flex-1">
             The agent's browser was kept from <span className="font-medium">{host}</span>, a site outside the folder.
           </span>
-          <Button onClick={() => allow(host)} size="xs" variant="outline">
+          <Button className="shrink-0" onClick={() => allow(host)} size="xs" variant="outline">
             Allow
           </Button>
         </div>
       ))}
       {view === "page" ? (
-        <div className="flex min-h-0 flex-1 items-start justify-center overflow-auto bg-muted/40 p-3">
+        <div className="flex min-h-0 flex-1 items-start overflow-auto bg-muted/40 p-3">
           {frame ? (
-            <button aria-label={fit ? "Show the page at its own size" : "Fit the page to the view"} className={cn("shrink-0", fit ? "max-w-full cursor-zoom-in" : "cursor-zoom-out")} onClick={() => setFit((f) => !f)} type="button">
+            <button aria-label={fit ? "Show the page at its own size" : "Fit the page to the view"} className={cn("mx-auto shrink-0", fit ? "max-w-full cursor-zoom-in" : "cursor-zoom-out")} onClick={() => setFit((f) => !f)} type="button">
               <img alt={`The agent's tab at ${frame.url ?? ""}`} className={cn("rounded-md border shadow-xs/5", fit ? "max-w-full" : "max-w-none")} src={`data:image/jpeg;base64,${frame.data}`} />
             </button>
           ) : (

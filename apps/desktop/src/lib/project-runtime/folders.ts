@@ -78,6 +78,11 @@ export async function linkFolder(pageId: string, path: string, force = false): P
   if (mine && mine.folderId !== found.folder_id && !force) return { ok: false, differs: true, path: found.path };
   const location = locationOf(pageId);
   const loc = await ask<Location>("POST", "/v1/locations", { name: location, path: found.path });
+  // Moved: an agent still running where it was can't work there. Stopped, its chat resumes here.
+  if (mine && mine.folderId === found.folder_id && mine.path !== loc.path) {
+    const old = (d: string) => d === mine.path || d.startsWith(`${mine.path}/`);
+    for (const s of await ask<{ name: string; dir: string }[]>("GET", "/v1/sessions").catch(() => [])) if (old(s.dir)) await ask("DELETE", `/v1/sessions/${s.name}`).catch(() => {});
+  }
   const now = Date.now();
   const folder: ProjectFolder = { pageId, path: loc.path, folderId: loc.folder_id ?? found.folder_id ?? "", location, createdAt: mine?.createdAt ?? now, updatedAt: now };
   await objects.putFolder(folder);

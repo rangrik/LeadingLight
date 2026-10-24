@@ -1,0 +1,79 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Sat, 24 Oct 2026 10:43:36 -0700
+Subject: [PATCH] A turn a person stopped is reported as stopped
+
+The ledger kept a turn's status only for an error, so a worker stopped
+by its Stop button ended "finished" and its lead was told it finished.
+The ledger now keeps "interrupted" and the report says so.
+---
+ internal/box/notify.go      | 3 +++
+ internal/box/notify_test.go | 5 ++++-
+ internal/box/turns.go       | 6 ++++--
+ 3 files changed, 11 insertions(+), 3 deletions(-)
+
+diff --git a/internal/box/notify.go b/internal/box/notify.go
+index 4fb9ace..0b34094 100644
+--- a/internal/box/notify.go
++++ b/internal/box/notify.go
+@@ -786,6 +786,9 @@ func checkSession(h notifyHost, w *Watch, live map[string]liveSession, waitingOn
+ 		if tr.Status == "error" {
+ 			base.Status = "failed"
+ 		}
++		if tr.Status == "interrupted" && tr.State == "finished" {
++			base.Status = "interrupted"
++		}
+ 		if tr.State == "lost" && tr.Status != "" {
+ 			base.Error = tr.Status
+ 		}
+diff --git a/internal/box/notify_test.go b/internal/box/notify_test.go
+index 9f9afc0..ec68adf 100644
+--- a/internal/box/notify_test.go
++++ b/internal/box/notify_test.go
+@@ -177,7 +177,7 @@ func TestSeveralChildrenFinishingGoAsOneMessage(t *testing.T) {
+ 	h.busy["lead"] = true
+ 	ctx := context.Background()
+ 	for _, s := range []string{"a", "b"} {
+-		h.setTurn(Turn{ID: s + "#1", Session: s, N: 1, State: "finished", Ended: c.t})
++		h.setTurn(Turn{ID: s + "#1", Session: s, N: 1, State: "finished", Status: map[string]string{"b": "interrupted"}[s], Ended: c.t})
+ 		c.advance(10 * time.Second)
+ 		n.Step(ctx)
+ 	}
+@@ -197,6 +197,9 @@ func TestSeveralChildrenFinishingGoAsOneMessage(t *testing.T) {
+ 	if !strings.Contains(got[0], `session="c"`) || !strings.Contains(got[0], `status="failed"`) {
+ 		t.Fatalf("the failed turn is not said: %s", got[0])
+ 	}
++	if !strings.Contains(got[0], `branch="b" status="interrupted"`) {
++		t.Fatalf("the stopped turn is not said: %s", got[0])
++	}
+ }
+ 
+ func TestWaitingForAPersonIsSaidOncePerWait(t *testing.T) {
+diff --git a/internal/box/turns.go b/internal/box/turns.go
+index 7a3b2b6..5bfba76 100644
+--- a/internal/box/turns.go
++++ b/internal/box/turns.go
+@@ -51,7 +51,8 @@ type Turn struct {
+ 	// partial (it started when sent, as the agent cannot say) or screen.
+ 	Fidelity string `json:"fidelity,omitempty"`
+ 	IdemKey  string `json:"idem_key,omitempty"`
+-	// Status is "error" for a turn the agent ended on a failure.
++	// Status is "error" for a turn the agent ended on a failure, "interrupted"
++	// for one a person stopped.
+ 	Status string `json:"status,omitempty"`
+ }
+ 
+@@ -818,8 +819,9 @@ func (t *Turns) agentEvent(e events.Event) {
+ 				cur.Fidelity = "screen" // its end was read off the screen
+ 			}
+ 			s.end(cur, "finished", e)
++			// An error, or a person stopping it; else it just ended.
+ 			cur.Status = str(e.Data, "status")
+-			if cur.Status != "error" {
++			if cur.Status != "error" && cur.Status != "interrupted" {
+ 				cur.Status = ""
+ 			}
+ 		}
+-- 
+2.51.2
+

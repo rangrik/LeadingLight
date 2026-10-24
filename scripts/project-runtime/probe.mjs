@@ -282,14 +282,23 @@ async function workers() {
     const worker = all.filter((x) => x.name !== lead && x.agent === "codex" && x.location?.startsWith("plain") && Date.parse(x.created) > since).at(-1);
     if (!reply || !worker) throw new Error(`sessions ${JSON.stringify(all.map((x) => [x.name, x.agent]))}`);
     // Started by a lead with full access, it has it too: nobody else is there to answer its asks.
-    const mode = (await api("GET", "/v1/conversations")).json.find((c) => c.session === worker.name)?.mode;
+    const { mode, by } = (await api("GET", "/v1/conversations")).json.find((c) => c.session === worker.name) ?? {};
     if (mode !== "bypassPermissions") throw new Error(`the worker's mode is ${mode}`);
-    return { worker: worker.name, mode };
+    // Marked as the lead's, so the app shows it on the lead's card and not as a chat of its own.
+    if (by !== lead) throw new Error(`the worker's conversation says it was started by ${by}`);
+    return { worker: worker.name, mode, by };
   });
   await check("workers: a worker started with its task in one step reports back too", async () => {
     // As an agent may: berthd session new --prompt, from its own session.
     execFileSync(bin, ["session", "new", "plain", "--name", "probe-oneshot", "--agent", "claude", "--prompt", "Reply with the single word FIG."], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } });
     await until("its report, with the lead", async () => (await items(lead)).some((i) => i.kind === "report" && i.report?.session === "probe-oneshot"), 240_000);
+  });
+  await check("workers: a worker a person stops is reported stopped", async () => {
+    execFileSync(bin, ["session", "new", "plain", "--name", "probe-stopped", "--agent", "claude", "--prompt", "Run the shell command: sleep 120. Then reply DONE."], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } });
+    await until("it running", async () => (await session("probe-stopped"))?.agent_state === "running", 120_000);
+    await api("POST", "/v1/sessions/probe-stopped/interrupt");
+    const said = await until("its report, with the lead", async () => (await items(lead)).find((i) => i.kind === "report" && i.report?.session === "probe-stopped")?.report, 120_000);
+    if (said.status !== "interrupted") throw new Error(`reported ${said.status}`);
   });
   await check("workers: a checked loop repairs within its bound", async () => {
     // A task the first try won't meet, and a check that says why: the loop feeds that back.

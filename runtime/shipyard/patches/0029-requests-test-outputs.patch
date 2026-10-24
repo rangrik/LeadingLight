@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Sat, 24 Oct 2026 10:57:31 -0700
+Subject: [PATCH] The requests test builds its conversation with its outputs
+
+Since outputs were kept, a tool's result marks its write done, and the
+test's conversation had none: it panicked and stopped the package's
+other tests.
+---
+ internal/box/requests_test.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/internal/box/requests_test.go b/internal/box/requests_test.go
+index cb36a36..868dd52 100644
+--- a/internal/box/requests_test.go
++++ b/internal/box/requests_test.go
+@@ -12,7 +12,7 @@ import (
+ // agent process has ended, rebuilt the same from the log after berthd restarts.
+ func TestRequestsAnswerOnceAndExpire(t *testing.T) {
+ 	dir := t.TempDir()
+-	c := &claudeConv{reqs: newRequestLedger(dir), changed: make(chan struct{}), replies: map[string]chan json.RawMessage{}}
++	c := &claudeConv{reqs: newRequestLedger(dir), outs: newOutputs(dir), changed: make(chan struct{}), replies: map[string]chan json.RawMessage{}}
+ 	line := func(seq int64, dir, data string) agenthost.Entry {
+ 		return agenthost.Entry{Seq: seq, At: seq, Dir: dir, Data: json.RawMessage(data)}
+ 	}
+-- 
+2.51.2
+

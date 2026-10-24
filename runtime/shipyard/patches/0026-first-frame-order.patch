@@ -1,0 +1,61 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Sat, 24 Oct 2026 10:39:22 -0700
+Subject: [PATCH] A watcher's first frame never follows a newer one
+
+firstFrame captured the page, then sent it if nothing was queued. A cast
+frame that came while it was taken and was already read left the queue
+empty, so the older capture went out after it and the view showed the
+page as it was before the change.
+---
+ internal/box/browser.go | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index efd22a6..06dde9e 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -132,6 +132,7 @@ type browser struct {
+ 	loaded      chan struct{}
+ 	watchers    map[chan frame]struct{}
+ 	casting     bool
++	castSeq     int // frames cast: a first frame taken before one is older than it
+ 	refusedSeen int
+ 	viewport    Viewport
+ 	recapturing bool // a sharp frame is being taken
+@@ -591,6 +592,7 @@ func (br *browser) onEvent(method string, params json.RawMessage) {
+ 		json.Unmarshal(params, &p)
+ 		go br.cdp.call(context.Background(), br.session, "Page.screencastFrameAck", map[string]any{"sessionId": p.SessionID}, nil)
+ 		br.mu.Lock()
++		br.castSeq++
+ 		if br.viewport.scale() != 1 {
+ 			// Chromium casts at the window's own scale, 1, whatever the
+ 			// page's: a frame says the page changed, and a capture at
+@@ -1424,18 +1426,21 @@ func (br *browser) Watch(ctx context.Context) (chan frame, func()) {
+ 	return ch, stop
+ }
+ 
+-// firstFrame sends a watcher the page as it is, unless a cast frame got
+-// there first.
++// firstFrame sends a watcher the page as it is, unless a cast frame came
++// while it was taken: sent after that one, it would show the page as it was.
+ func (br *browser) firstFrame(ctx context.Context, ch chan frame) {
+ 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+ 	defer cancel()
++	br.mu.Lock()
++	seq := br.castSeq
++	br.mu.Unlock()
+ 	f, err := br.captureFrame(ctx)
+ 	if err != nil {
+ 		return
+ 	}
+ 	br.mu.Lock()
+ 	defer br.mu.Unlock()
+-	if _, ok := br.watchers[ch]; ok && len(ch) == 0 {
++	if _, ok := br.watchers[ch]; ok && len(ch) == 0 && br.castSeq == seq {
+ 		select {
+ 		case ch <- f:
+ 		default:
+-- 
+2.51.2
+

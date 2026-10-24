@@ -123,6 +123,14 @@ Feature: The project runtime
     When the chat is sent a message
     Then it resumes in the folder's new place and remembers what was said
 
+  Scenario: A chat still running when its folder moved
+    Given a chat whose agent is still running when its folder is moved
+    When the page is relinked to the folder's new place
+    Then that agent is stopped, as it can't work where the folder was
+    And the chat says to send a message to pick it up again
+    When I send it a message
+    Then it resumes in the new place, runs commands there, and remembers what was said
+
   Scenario: Interrupted between a send and its repeat
     When a message is sent, the runtime restarts, and the same message is sent again
     Then the agent has one turn for it

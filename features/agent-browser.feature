@@ -42,6 +42,17 @@ Feature: An agent's browser
       turning to "Pressed" as the agent clicks
     And its address is on the workspace's own port, the one the runtime gave this folder
 
+  Scenario: The view stays live on a still page
+    Given the view shows the agent's tab, and the page hasn't changed for two minutes
+    When the agent presses "Press me"
+    Then the view shows "Pressed" within a few seconds
+    And a second view of the same tab, opened and closed, leaves this one live
+
+  Scenario: A wide page at its own size
+    Given the view is narrower than the page
+    When I press the page to see it at its own size
+    Then it starts at its left edge, and I can scroll across the rest
+
   Scenario: What the agent saw is what the view shows
     Given the agent took a screenshot and read the console of its tab
     Then the view shows the same tab, and its Console lists the same messages
@@ -62,6 +73,8 @@ Feature: An agent's browser
     Then the view says so, with Allow
     When I press Allow
     Then the agent can open https://example.com, and the page loads in its tab
+    And no view of this workspace still offers Allow for it
+    And the notice reads in full in a narrow view, and the bar above wraps rather than cutting off
 
   Scenario: The browser goes away
     Given the view shows the agent's tab

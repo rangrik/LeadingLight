@@ -36,6 +36,18 @@ Feature: A project's chat
     When I press "summary.md"
     Then a dialog shows summary.md as it is in the folder now
 
+  Scenario: Links in an answer
+    Given the agent's answer links to done.txt in the folder, and to https://example.com
+    When I press the done.txt link
+    Then a dialog shows done.txt as it is in the folder now, and the chat stays where it was
+    When I press the example.com link
+    Then it opens in my browser, and the app stays where it was
+    And a link to a file outside the folder says so, and opens nothing
+
+  Scenario: An answer keeps its lines and tables
+    When I ask for a four-line poem, and a table of the files and their sizes
+    Then the poem shows on four lines, and the table in rows and columns
+
   Scenario: Stop
     When I send "Run sleep 60, then say done"
     And I press Stop while it runs
@@ -58,7 +70,7 @@ Feature: A project's chat
   Scenario: A new chat's settings are its own
     When I start a new chat in Full access with Sonnet
     Then the note chat's Ask button and access are as they were
-    And the + menu offers only Plan mode, since a project chat has no pages or commands to add
+    And the + menu offers Files…, the agent's commands and Plan mode, and no pages to mention
 
   Scenario: The chat comes back after closing it and after a reload
     Given a chat in "Research" with two turns
@@ -66,6 +78,11 @@ Feature: A project's chat
     Then the same chat shows both turns
     When I reload the app
     Then the chat shows both turns, and a new message continues it with what was said before
+
+  Scenario: The chat menu lists my chats, not workers
+    Given the agent started a worker and a checked loop in this folder
+    Then the chat menu lists the chats I started, and neither the worker nor the loop
+    And pressing the worker's row on its card opens its chat all the same
 
   Scenario: Several chats in one project
     Given a chat in "Research"

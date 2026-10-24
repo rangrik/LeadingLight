@@ -1,9 +1,10 @@
 import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
-import { memo, type Ref, useEffect, useState } from "react";
+import { memo, type MouseEvent, type Ref, useEffect, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { openLink } from "~/lib/links";
 import { openPage } from "~/lib/panes";
 import { pageOf } from "~/lib/space";
 import type { Approval, Item } from "~/lib/threads";
@@ -61,15 +62,23 @@ function useNow(on: boolean) {
   return now;
 }
 
-const Markdown = ({ text, streaming }: { text: string; streaming?: boolean }) => (
+// A link never takes the app's window: a web link opens in the browser, any other goes to onFile.
+const follow = (e: MouseEvent, onFile?: (href: string) => void) => {
+  const href = (e.target as Element).closest("a")?.getAttribute("href");
+  if (href == null) return;
+  e.preventDefault();
+  if (/^(https?|mailto):/i.test(href)) openLink(href);
+  else onFile?.(href);
+};
+const Markdown = ({ text, streaming, onFile }: { text: string; streaming?: boolean; onFile?: (href: string) => void }) => (
   // micromark escapes any HTML in the answer, so this is the answer's own Markdown only.
-  <div className="ll-answer" dangerouslySetInnerHTML={{ __html: markdownHtml(text || "​").html }} data-streaming={streaming ? "" : undefined} />
+  <div className="ll-answer" dangerouslySetInnerHTML={{ __html: markdownHtml(text || "​").html }} data-streaming={streaming ? "" : undefined} onClick={(e) => follow(e, onFile)} />
 );
 
-type TurnProps = { items: Item[]; live: boolean; started?: number; waiting?: boolean; page: string; onGoAhead: () => void };
+type TurnProps = { items: Item[]; live: boolean; started?: number; waiting?: boolean; page: string; onGoAhead: () => void; onFile?: (href: string) => void };
 // Only the turn being worked on redraws as words stream in; finished ones keep their Markdown.
-const same = (a: TurnProps, b: TurnProps) => a.live === b.live && a.started === b.started && a.waiting === b.waiting && a.page === b.page && a.items.length === b.items.length && a.items.every((x, i) => x === b.items[i]);
-export const Turn = memo(function Turn({ items, live, started, waiting, page, onGoAhead }: TurnProps) {
+const same = (a: TurnProps, b: TurnProps) => a.live === b.live && a.started === b.started && a.waiting === b.waiting && a.page === b.page && a.onFile === b.onFile && a.items.length === b.items.length && a.items.every((x, i) => x === b.items[i]);
+export const Turn = memo(function Turn({ items, live, started, waiting, page, onGoAhead, onFile }: TurnProps) {
   const [open, setOpen] = useState(false);
   const now = useNow(live && !waiting);
   // Until the runtime lists the turn, it began when it was first shown.
@@ -122,12 +131,12 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
       )}
       {shown && work.length > 0 && (
         <div className="mt-1 flex flex-col">
-          {work.map((i, k) => (i.kind === "text" ? <div className="my-1 text-muted-foreground" key={k}><Markdown text={i.text} /></div> : <StepRow item={i} key={k} page={page} />))}
+          {work.map((i, k) => (i.kind === "text" ? <div className="my-1 text-muted-foreground" key={k}><Markdown onFile={onFile} text={i.text} /></div> : <StepRow item={i} key={k} page={page} />))}
         </div>
       )}
       {answer.map((t, k) => (
         <div className="mt-2" key={k}>
-          <Markdown streaming={live && k === answer.length - 1} text={t.text} />
+          <Markdown onFile={onFile} streaming={live && k === answer.length - 1} text={t.text} />
         </div>
       ))}
       {end?.error && <p className="mt-2 text-destructive-foreground">{end.error}</p>}

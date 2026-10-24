@@ -116,6 +116,15 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [list, setList] = useState<Conversation[]>([]);
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
   const [file, setFile] = useState<Written | null>(null);
+  // A file an answer links to opens as it is now. One handler, so finished turns don't redraw.
+  const roots = useRef<string[]>([]);
+  const [openFile] = useState(() => (href: string) => {
+    const path = decodeURIComponent(href.replace(/^file:\/\//, "").replace(/[?#].*$/, ""));
+    const root = roots.current.flatMap((r) => [r, r.replace(/^\/private\//, "/"), `/private${r}`]).find((r) => path.startsWith(`${r}/`));
+    const name = root ? path.slice(root.length + 1) : !path.startsWith("/") && path.replace(/^\.\//, "");
+    if (name) setFile({ name });
+    else toastManager.add({ type: "info", title: "That file is outside the folder." });
+  });
   const [attached, setAttached] = useState<File[]>([]);
   const [branch, setBranch] = useState(false);
   const [commands, setCommands] = useState<Command[]>([]);
@@ -146,9 +155,12 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const conv = list.find((c) => c.id === current) ?? null;
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);
-  // Workers once seen out, so a row stays until its report lands; workers stopped from their row.
-  const seen = useRef(new Set<string>());
-  for (const w of chat.workers) seen.current.add(w);
+  // Workers and runs once seen out, so a row stays until its report lands; this chat's only.
+  const seen = useRef({ key, workers: new Set<string>(), runs: new Set<string>() });
+  if (seen.current.key !== key) seen.current = { key, workers: new Set(), runs: new Set() };
+  for (const w of chat.workers) seen.current.workers.add(w);
+  for (const r of chat.runs) seen.current.runs.add(r);
+  // Workers and runs stopped from their row.
   const [stopped, setStopped] = useState<string[]>([]);
   const reported = new Set(turns.flatMap((t) => t.reports.map((r) => r.session ?? r.run ?? "")));
   // The agent's own skills and commands, those that work in a chat (not the ones needing its terminal).
@@ -188,6 +200,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const sent = front ? chat.deliveries[front.id] : undefined;
   const delivery = front ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(front, draft, false, false)) : "pending";
   const started = chat.conv ?? conv;
+  roots.current = [started?.dir, state.folder.path].filter((r): r is string => !!r);
   // A new chat stays with Claude while Codex isn't on this Mac or signed in.
   const mine = isClaude(fresh.model) || cx.state === "ready" ? fresh : { ...fresh, model: "opus" };
   // A started chat keeps its agent and model; a new one runs whichever the model menu picks.
@@ -232,6 +245,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
       )}
     </div>
   );
+  // The person's chats; a worker's (one an agent or a run started) only while it is open.
+  const chats = list.filter((c) => !c.by || c.id === current);
   // A worker's own chat, when the runtime lists it among the folder's.
   const openWorker = (s: string) => void listChats(location).then((l) => {
     const c = l.find((x) => x.session === s);
@@ -252,13 +267,13 @@ export function ProjectChat({ pageId }: { pageId: string }) {
               <Plus />
               New chat
             </MenuItem>
-            {list.length > 0 && (
+            {chats.length > 0 && (
               <>
                 <MenuSeparator />
                 <MenuGroup>
                   <MenuGroupLabel>In “{title}”</MenuGroupLabel>
                   <MenuRadioGroup onValueChange={(v) => setCurrent(v as string)} value={current ?? ""}>
-                    {list.map((c) => (
+                    {chats.map((c) => (
                       <MenuRadioItem className="grid-cols-[.75rem_minmax(0,1fr)]" closeOnClick key={c.id} value={c.id}>
                         <span className="flex min-w-0 items-baseline gap-3">
                           <span className="min-w-0 flex-1 truncate">{c.title || "Untitled chat"}</span>
@@ -308,6 +323,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             <Turn
               items={t.items}
               live={busy && k === turns.length - 1 && waitingOn.length === 0}
+              onFile={openFile}
               onGoAhead={() => go("Go ahead with the plan.")}
               page={title}
               started={now?.started && !now.ended ? Date.parse(now.started) : undefined}
@@ -328,8 +344,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
               // Workers still out show under the latest turn, and stay there until their report comes,
               // which waits for the agent's next idle; each one's outcome under the turn it came in.
               const last = k === turns.length - 1;
-              const out = last ? [...new Set([...chat.workers, ...seen.current])].filter((w) => !reported.has(w)) : [];
-              const going = last ? chat.runs.filter((id) => !reported.has(id)) : [];
+              const out = last ? [...seen.current.workers].filter((w) => !reported.has(w)) : [];
+              const going = last ? [...seen.current.runs].filter((id) => !reported.has(id)) : [];
               const state = (s: string) => chat.sessions.find((x) => x.name === s);
               // A worker can be told of twice (its task and its turn): its last word counts.
               const told = [...new Map(t.reports.map((r) => [r.session ?? r.run ?? "", r])).values()];
@@ -347,8 +363,11 @@ export function ProjectChat({ pageId }: { pageId: string }) {
                     ? { session: s, agent: state(s)?.agent, live: st === "waiting" ? ("waiting" as const) : ("working" as const) }
                     : { session: s, agent: state(s)?.agent, status: how(s, "finished") };
                 }),
-                ...going.map((id) => ({ session: id, run: true, label: "Checked loop", live: "working" as const })),
+                // A run gone from the list says how it ended only in its report: until then, Working.
+                ...going.map((id) => ({ session: id, run: true, label: "Checked loop", ...(stopped.includes(id) && !chat.runs.includes(id) ? { status: "cancelled" } : { live: "working" as const }) })),
               ];
+              // In the order they started, so a row stays put when its worker finishes; runs after.
+              rows.sort((a, b) => (state(a.session)?.created ?? "~").localeCompare(state(b.session)?.created ?? "~"));
               // A run stops by its own route, and the worker it drives with it; a worker by interrupting its turn.
               const stopRow = (s: string) => {
                 setStopped((x) => [...x, s]);

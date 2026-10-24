@@ -3,7 +3,7 @@
 // the runtime's workers (sessions a lead started, its reports) instead of Synara's threads; one
 // row per worker with its agent, live state or outcome and answer; Stop and Open on the row; no
 // nesting, backgrounding or folding.
-import { Check, CircleAlert, Square } from "lucide-react";
+import { Check, CircleAlert, CircleStop, Square } from "lucide-react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -29,6 +29,7 @@ export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: Worker
       </p>
       {rows.map((r) => {
         const failed = !r.live && (r.status === "error" || r.status === "failed");
+        const stopped = !r.live && (r.status === "interrupted" || r.status === "cancelled");
         return (
           <div className="group flex min-w-0 items-center gap-1 rounded-lg px-1.5 py-0.5 transition-colors duration-150 ease-out hover:bg-accent" key={r.session}>
             <button aria-label={`Open ${name(r)}`} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default" disabled={!onOpen || r.run} onClick={() => onOpen?.(r.session)} type="button">
@@ -37,7 +38,7 @@ export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: Worker
               {r.run && <span className="shrink-0 text-muted-foreground text-xs">Run</span>}
               {r.agent && <span className="shrink-0 text-muted-foreground text-xs">{NAME[r.agent] ?? r.agent}</span>}
               <span className={cn("flex min-w-0 flex-1 items-center gap-1.5 text-xs", failed ? "text-destructive-foreground" : "text-muted-foreground")}>
-                {r.live ? <Spinner className="size-3 shrink-0" /> : failed ? <CircleAlert className="size-3 shrink-0" /> : <Check className="size-3 shrink-0" />}
+                {r.live ? <Spinner className="size-3 shrink-0" /> : failed ? <CircleAlert className="size-3 shrink-0" /> : stopped ? <CircleStop className="size-3 shrink-0" /> : <Check className="size-3 shrink-0" />}
                 <span className="shrink-0">{r.live === "waiting" ? "Waiting for you" : r.live ? "Working" : (ENDED[r.status ?? ""] ?? r.status)}</span>
                 {r.duration && <span className="shrink-0 tabular-nums">· {r.duration}</span>}
                 {(r.error || r.answer) && <span className="min-w-0 truncate">→ {r.error || r.answer}</span>}
