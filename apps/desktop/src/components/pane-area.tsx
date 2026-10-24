@@ -7,6 +7,7 @@ import { flushSync } from "react-dom";
 import { Button } from "@leadinglight/ui/components/button";
 import { useSidebar } from "@leadinglight/ui/components/sidebar";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { AskButton } from "~/components/ask-button";
 import { PageIconView } from "~/components/page-icon";
 import { PageStats } from "~/components/page-stats";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
@@ -153,8 +154,13 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 root={shown.parent ?? "Pages"}
                 sidebarOpen={sidebarOpen}
               >
-                {/* One Writing menu, at the window's top right where the toolbar's end is. */}
-                {rect.x + rect.w > 1 - EPS && rect.y < EPS && <WritingMenu />}
+                {/* One Ask button and Writing menu, at the window's top right where the toolbar's end is. */}
+                {rect.x + rect.w > 1 - EPS && rect.y < EPS && (
+                  <>
+                    <AskButton />
+                    <WritingMenu />
+                  </>
+                )}
                 {split && (
                   <Button
                     aria-label="Close page"

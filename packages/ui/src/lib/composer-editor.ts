@@ -21,10 +21,10 @@ import {
   useRef,
   useState,
 } from "react";
+// LeadingLight: dropped an unused ComposerQuery import, which the app's noUnusedLocals rejects.
 import {
   type ComposerEditorController,
   type ComposerItemValue,
-  type ComposerQuery,
   type ComposerValue,
   type UseComposerEditorOptions,
   useComposerEditor,

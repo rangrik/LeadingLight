@@ -4,6 +4,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 // src/lib/shortcuts.json (Shipyard's, see vendor/shipyard/README.md); each item tells
 // the webview as berth://menu.
 mod agent;
+mod clis;
 mod menu;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
@@ -53,7 +54,7 @@ pub fn run() {
                 .build(),
         )
         .manage(agent::Agents::default())
-        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_cancel, agent::agent_list, agent::agent_folder])
+        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_reply, agent::agent_usage, agent::agent_cancel, agent::agent_list, agent::agent_folder, clis::cli_info, clis::cli_update, clis::codex_usage, clis::codex_status])
         .setup(|_app| {
             #[cfg(target_os = "macos")]
             menu_bar(_app)?;

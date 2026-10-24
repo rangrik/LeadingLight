@@ -1,10 +1,11 @@
-import type { EditorDoc } from "@leadinglight/editor/editor";
+import type { BlockEditorHandle, EditorDoc } from "@leadinglight/editor/editor";
 import { objects } from "./objects";
 import { markSaved, patchSummary } from "./space";
 
 // Pages open in a pane. A change to one of them from elsewhere (linking a mention, merging a
-// tag) must go through its editor, or the pane would save its own copy over the change.
+// tag, Claude's edits) must go through its editor, or the pane would save its own copy over it.
 type Live = {
+  editor: () => BlockEditorHandle | null;
   content: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
   properties: () => Record<string, unknown>;
@@ -32,8 +33,9 @@ export function watchLive(id: string, fn: () => void) {
   return () => void set.delete(fn);
 }
 export const touchLive = (id: string) => watchers.get(id)?.forEach((fn) => fn());
-// What an open page holds right now, edits not yet saved included.
+// What an open page holds right now, edits not yet saved included, and its editor.
 export const liveContent = (id: string) => live.get(id)?.content();
+export const liveEditor = (id: string) => live.get(id)?.editor() ?? null;
 
 // Runs fn with the page's editor now if it is open, else as soon as it opens.
 export function whenLive(id: string, fn: (page: Live) => void) {

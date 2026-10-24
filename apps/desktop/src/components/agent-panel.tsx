@@ -1,50 +1,28 @@
-import { Check, Copy, Move, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Check, ChevronDown, Copy, Move, Plus, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
-import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Composer, type Mention } from "~/components/composer";
-import { type AgentStatus, agentStatus, ask, cancel } from "~/lib/agent";
+import { ApprovalCard, Turn } from "~/components/thread-view";
+import { type AgentStatus, agentStatus } from "~/lib/agent";
 import { type Agent, BUILT_IN, listAgents } from "~/lib/agents";
-import { type Corner, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { type Corner, isClaude, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
-import { buildPrompt, type NoteText, SYSTEM, type Seen } from "~/lib/ask-prompt";
+import { INSTALL } from "~/lib/clis";
+import { codex, gptModel, loadCodex } from "~/lib/codex";
+import type { NoteText } from "~/lib/ask-prompt";
 import { openLink } from "~/lib/links";
-import { docText, objects } from "~/lib/objects";
+import { objects } from "~/lib/objects";
+import { inlineHtml } from "~/lib/note-tools";
+import { docMarkdown } from "~/lib/page-markdown";
+import { pageOf } from "~/lib/space";
+import { type Item, newThread, patchThread, pickThread, setPending, usePageThreads } from "~/lib/threads";
+import { answer, sendTurn, stopTurn } from "~/lib/turn";
 
-// The agent panel: a card inside the note's panel, docked to a corner, where a question
-// about the selected words (or the page) is asked and Claude's answer streams in.
-
-type UserMsg = { role: "user"; quote: Quote | null; text: string };
-type BotMsg = { role: "assistant"; text: string; done: boolean; error?: string };
-type Thread = {
-  messages: (UserMsg | BotMsg)[];
-  sessionId?: string;
-  busy?: string;
-  // The words the next question is about, and the words Insert and Replace act on.
-  pending: Quote | null;
-  quote: Quote | null;
-  mentions: Mention[];
-  // What the session has been sent (lib/ask-prompt.ts); kept only once an answer lands.
-  seen: Seen;
-  note?: string;
-};
-
-// Each page keeps its own thread while the app runs, outside the component: a stream
-// that lands after the person switched pages still goes to the page that asked.
-const EMPTY: Thread = { messages: [], pending: null, quote: null, mentions: [], seen: {} };
-const threads = new Map<string, Thread>();
-const listeners = new Set<() => void>();
-function patch(pageId: string, f: (t: Thread) => Thread) {
-  threads.set(pageId, f(threads.get(pageId) ?? EMPTY));
-  listeners.forEach((l) => l());
-}
-const useThread = (pageId: string | undefined) =>
-  useSyncExternalStore(
-    (l) => (listeners.add(l), () => void listeners.delete(l)),
-    () => (pageId ? threads.get(pageId) : undefined) ?? EMPTY,
-  );
+// The agent panel: a card inside the note's panel, docked to a corner, where Claude answers
+// about the page and works on it. Each page keeps its threads (lib/threads.ts).
 
 const CORNER: Record<Corner, string> = { br: "right-3 bottom-3", bl: "left-3 bottom-3", tr: "right-3 top-3", tl: "left-3 top-3" };
 // The resize handle sits on the corner that faces the page, and drags away from the dock:
@@ -64,44 +42,64 @@ const CORNERS: { value: Corner; label: string }[] = [
 ];
 const MIN = { w: 280, h: 240 };
 
+const titleOf = (id: string) => pageOf(id)?.title ?? "";
 // The mentioned pages' words, read from storage: no editor is open on them.
 const mentionedPages = (mentions: Mention[]): Promise<NoteText[]> =>
   Promise.all(
     mentions.flatMap((m) => (m.kind === "page" ? [m] : [])).map(async (m) => {
       const obj = await objects.get(m.id).catch(() => null);
-      return { id: m.id, title: obj?.title ?? m.name, text: obj ? docText(obj.content) : "" };
+      return { id: m.id, title: obj?.title ?? m.name, text: obj ? docMarkdown(obj.content, titleOf) : "" };
     }),
   );
 
-// A one-paragraph answer goes in as inline text, so replacing words keeps their sentence whole.
-function toInsert(markdown: string): string {
-  const html = markdownHtml(markdown.trim()).html.trim();
-  const one = /^<p>([\s\S]*)<\/p>$/.exec(html);
-  return one ? one[1] : html;
-}
+const ago = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+const when = (t: number) => {
+  const m = Math.round((t - Date.now()) / 60000);
+  return Math.abs(m) < 60 ? ago.format(m, "minute") : Math.abs(m) < 1440 ? ago.format(Math.round(m / 60), "hour") : ago.format(Math.round(m / 1440), "day");
+};
+
+// Each turn's items, from its question to the next.
+const turnsOf = (items: Item[]) => items.reduce<Item[][]>((turns, i) => (i.kind === "user" || !turns.length ? [...turns, [i]] : (turns[turns.length - 1].push(i), turns)), []);
 
 export function AgentPanel() {
   const { open, quote, page, pages, askNow } = useAsk();
   const prefs = useAiPrefs();
   const pageId = page?.id;
-  const thread = useThread(pageId);
+  const threads = usePageThreads(pageId);
+  const thread = threads?.thread;
   const [status, setStatus] = useState<AgentStatus | null>(null);
   const [agents, setAgents] = useState<Agent[]>(BUILT_IN);
   const [copied, setCopied] = useState(false);
-  const field = useRef<HTMLTextAreaElement>(null);
+  const field = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLElement>(null);
   const log = useRef<HTMLDivElement>(null);
+  // The log follows new words only while it is scrolled to its end, so reading back stays put.
+  const pinned = useRef(true);
+  // Finished turns don't redraw (thread-view.tsx), so their button calls through this.
+  const goAheadNow = useRef(() => {});
 
   // A new Ask makes its words the next question's subject, and the field takes the
   // keyboard at once, so nothing typed reaches the page underneath.
   useEffect(() => {
     if (!open || !pageId) return;
-    patch(pageId, (t) => ({ ...t, pending: quote, note: undefined }));
-    const frame = requestAnimationFrame(() => field.current?.focus());
+    setPending(pageId, quote);
+    const frame = requestAnimationFrame(() => (card.current ?? field.current)?.focus());
     return () => cancelAnimationFrame(frame);
   }, [open, quote, pageId]);
+  // A change waiting takes the keyboard from the field it hides, and gives it back once answered;
+  // never from the page, where the person may be typing.
+  const waiting = thread?.approval?.requestId;
+  useEffect(() => {
+    const here = document.activeElement === document.body || !!box.current?.contains(document.activeElement);
+    if (here) (waiting ? card.current : field.current)?.focus();
+  }, [waiting]);
+  const cx = codex.use();
+  const gpt = !isClaude(prefs.model);
   const check = () => {
     setStatus(null);
     void agentStatus().then(setStatus);
+    void loadCodex(true);
   };
   useEffect(() => {
     if (!open) return;
@@ -109,99 +107,60 @@ export function AgentPanel() {
     void listAgents().then(setAgents);
   }, [open]);
   useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight });
-  }, [thread.messages, thread.pending]);
+    if (pinned.current) log.current?.scrollTo({ top: log.current.scrollHeight });
+  }, [thread?.items, threads?.pending, thread?.approval]);
+  useEffect(() => {
+    pinned.current = true;
+  }, [thread?.id, thread?.busy]);
 
-  const ready = !!status?.installed && !!status.logged_in;
+  // Ready when the provider the chosen model needs is there and signed in.
+  const ready = gpt ? cx.state === "ready" && !!gptModel(prefs.model) : !!status?.installed && !!status.logged_in;
 
-  const patchLast = (id: string, f: (m: BotMsg) => BotMsg) =>
-    patch(id, (t) => {
-      const messages = [...t.messages];
-      const last = messages[messages.length - 1];
-      if (last?.role === "assistant") messages[messages.length - 1] = f(last);
-      return { ...t, messages };
-    });
-
-  // The words the question is about come from the thread, or straight from the ask bar:
-  // its question can arrive in the same render that sets them, before the thread has them.
-  const send = (question: string, q: Quote | null = thread.pending) => {
-    if (!page || !pageId || thread.busy || !ready) return;
-    const id = pageId;
-    const askId = crypto.randomUUID();
-    const agent = thread.mentions.flatMap((m) => (m.kind === "agent" ? agents.filter((a) => a.id === m.id) : []))[0];
-    // The answer is about the words quoted with it; a follow-up without a quote is about
-    // the thread, so Replace goes away until words are quoted again.
-    patch(id, (t) => ({
-      ...t,
-      busy: askId,
-      pending: null,
-      quote: q,
-      note: undefined,
-      messages: [...t.messages, { role: "user", quote: q, text: question }, { role: "assistant", text: "", done: false }],
-    }));
-    const fail = (message: string) => {
-      patchLast(id, (m) => ({ ...m, done: true, error: message }));
-      patch(id, (t) => ({ ...t, busy: undefined }));
-    };
-    mentionedPages(thread.mentions)
-      .then((pages) => {
-        const note = { id, title: page.title(), text: page.text() };
-        const { prompt, seen } = buildPrompt({ seen: thread.seen, note, pages, agent: agent?.prompt ?? null, quote: q?.text ?? null, question });
-        return ask({ id: askId, prompt, system: SYSTEM, model: agent?.model ?? prefs.model, effort: prefs.effort, resume: thread.sessionId }, (e) => {
-          if (e.type === "delta") patchLast(id, (m) => ({ ...m, text: m.text + e.text }));
-          else if (e.type === "done") {
-            patchLast(id, (m) => ({ ...m, done: true }));
-            patch(id, (t) => ({ ...t, busy: undefined, sessionId: e.session_id ?? t.sessionId, seen }));
-          } else fail(e.message);
-        });
-      })
-      .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
+  // The words come from the panel, or straight from the ask bar: its question can arrive in
+  // the same render that sets them, before the panel has them.
+  const send = (question: string, mentions: Mention[] = [], q: Quote | null = threads?.pending ?? null) => {
+    if (!page || !thread || thread.busy || !ready) return;
+    setPending(page.id, null);
+    const agent = mentions.flatMap((m) => (m.kind === "agent" ? agents.filter((a) => a.id === m.id) : []))[0];
+    void sendTurn({ page, threadId: thread.id, question, quote: q, pages: mentionedPages(mentions), agent });
   };
 
   // A question the ask bar sent goes as soon as Claude Code is ready and the thread is free.
   useEffect(() => {
-    if (!open || !ready || !askNow || thread.busy) return;
+    if (!open || !ready || !askNow || thread?.busy) return;
     const now = takeAskNow();
-    if (now) send(now.question, quote);
-  }, [open, ready, askNow, thread.busy]);
+    if (now) send(now.question, [], quote);
+  }, [open, ready, askNow, thread?.busy]);
 
-  if (!open || !page || !pageId) return null;
+  if (!open || !page || !pageId || !threads || !thread) return null;
   const id = pageId;
+  const title = page.title().trim();
+  const items = thread.items;
+  const lastTurn = turnsOf(items).at(-1) ?? [];
+  // The last turn's answer, which Insert, Replace and Copy act on; a plan is not one.
+  const final = !thread.busy && lastTurn.some((i) => i.kind === "end" && i.how === "done" && !i.plan) ? lastTurn.filter((i) => i.kind === "text").at(-1) : undefined;
 
-  const stop = () => {
-    if (!thread.busy) return;
-    void cancel(thread.busy);
-    patchLast(id, (m) => ({ ...m, done: true }));
-    patch(id, (t) => ({ ...t, busy: undefined }));
-    field.current?.focus();
-  };
-
-  const last = [...thread.messages].reverse().find((m): m is BotMsg => m.role === "assistant" && m.done && !m.error && m.text.trim().length > 0);
   const target = () => {
     const editor = askEditor();
     return editor && thread.quote ? editor.find(thread.quote.text, thread.quote.from) : null;
   };
   const insert = () => {
     const editor = askEditor();
-    if (!editor || !last) return;
-    editor.insertAfter(target()?.to ?? editor.selection().to, markdownHtml(last.text).html);
+    if (editor && final) editor.insertAfter(target()?.to ?? editor.selection().to, markdownHtml(final.text).html);
   };
   const replace = () => {
     const editor = askEditor();
-    if (!editor || !last) return;
+    if (!editor || !final) return;
     const hit = target();
-    if (!hit) {
-      patch(id, (t) => ({ ...t, note: "Those words have changed since, so nothing was replaced." }));
-      return;
-    }
-    editor.replaceRange(hit.from, hit.to, toInsert(last.text));
+    if (!hit) return patchThread(id, thread.id, (t) => ({ ...t, note: "Those words have changed since, so nothing was replaced." }));
+    editor.replaceRange(hit.from, hit.to, inlineHtml(final.text));
     // Replaced once: the words are gone, so the next insert goes below instead.
-    patch(id, (t) => ({ ...t, quote: null }));
+    patchThread(id, thread.id, (t) => ({ ...t, quote: null }));
   };
   const copy = () => {
-    if (!last) return;
+    if (!final) return;
     navigator.clipboard
-      .writeText(last.text)
+      .writeText(final.text)
       .then(() => {
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
@@ -209,6 +168,11 @@ export function AgentPanel() {
       .catch(() => {
         // A browser without clipboard access: nothing to show.
       });
+  };
+  goAheadNow.current = () => {
+    setAiPrefs({ plan: false });
+    send("Go ahead with the plan.", [], null);
+    field.current?.focus();
   };
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -238,18 +202,21 @@ export function AgentPanel() {
       claude.com/code
     </button>
   );
+  const earlier = threads.list.filter((t) => t.items.length);
 
   return (
     <section
       aria-label="Agent"
       className={cn(
-        "absolute z-30 flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg",
+        "@container/panel absolute z-30 flex max-h-[calc(100%-1.5rem)] max-w-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg",
         CORNER[prefs.corner],
       )}
       data-corner={prefs.corner}
       data-testid="agent-panel"
+      ref={box}
       onKeyDown={(e) => {
-        if (e.key === "Escape") {
+        // Keys from its menus, which sit outside it, are theirs.
+        if (e.key === "Escape" && e.currentTarget.contains(e.target as Node)) {
           e.stopPropagation();
           closeAsk();
         }
@@ -267,11 +234,41 @@ export function AgentPanel() {
         role="separator"
         title="Drag to resize"
       />
-      <header className="flex h-9 shrink-0 items-center gap-1 border-b px-3">
-        <Sparkles className="size-4 text-muted-foreground" />
-        <span className="flex-1 text-sm font-medium">Ask</span>
+      <header className="flex h-10 shrink-0 items-center gap-1 border-b ps-3 pe-1.5">
         <Menu>
-          <MenuTrigger render={<Button aria-label="Move the panel" size="icon-sm" variant="ghost" />}>
+          <MenuTrigger render={<Button aria-label="Threads" className="h-7 min-w-0 gap-1.5 px-1.5 font-medium sm:h-7" size="sm" variant="ghost" />}>
+            <Sparkles className="text-muted-foreground" />
+            <span className="truncate">{thread.title || "New thread"}</span>
+            <ChevronDown className="size-3.5 opacity-60" />
+          </MenuTrigger>
+          <MenuPopup align="start" className="w-72" finalFocus={field}>
+            <MenuItem onClick={() => newThread(id)}>
+              <Plus />
+              New thread
+            </MenuItem>
+            {earlier.length > 0 && (
+              <>
+                <MenuSeparator />
+                <MenuGroup>
+                  <MenuGroupLabel>On {title ? `“${title}”` : "this page"}</MenuGroupLabel>
+                  <MenuRadioGroup onValueChange={(v) => pickThread(id, v as string)} value={thread.id}>
+                    {earlier.map((t) => (
+                      <MenuRadioItem closeOnClick key={t.id} value={t.id}>
+                        <span className="flex min-w-0 items-baseline gap-3">
+                          <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                          <span className="shrink-0 text-muted-foreground text-xs">{when(t.updated)}</span>
+                        </span>
+                      </MenuRadioItem>
+                    ))}
+                  </MenuRadioGroup>
+                </MenuGroup>
+              </>
+            )}
+          </MenuPopup>
+        </Menu>
+        <span className="flex-1" />
+        <Menu>
+          <MenuTrigger render={<Button aria-label="Move the panel" className="size-7 sm:size-7" size="icon-sm" variant="ghost" />}>
             <Move />
           </MenuTrigger>
           <MenuPopup align="end">
@@ -284,20 +281,51 @@ export function AgentPanel() {
             </MenuRadioGroup>
           </MenuPopup>
         </Menu>
-        <Button aria-label="Close" onClick={() => closeAsk()} size="icon-sm" variant="ghost">
+        <Button aria-label="Close" className="size-7 sm:size-7" onClick={() => closeAsk()} size="icon-sm" variant="ghost">
           <X />
         </Button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2 text-sm" ref={log}>
-        {!status && <p className="text-muted-foreground">Checking Claude Code…</p>}
-        {status && !ready && (
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-sm"
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+        }}
+        ref={log}
+      >
+        {gpt && !ready && (
+          <div className="space-y-2 text-muted-foreground">
+            {cx.state === "checking" ? (
+              <p>Checking Codex…</p>
+            ) : cx.state === "missing" ? (
+              <p>
+                Codex is not installed. Get it from{" "}
+                <button className="underline" onClick={() => openLink(INSTALL.codex)} type="button">
+                  OpenAI
+                </button>
+                , sign in with {code("codex login")}, then check again.
+              </p>
+            ) : cx.state === "signed-out" ? (
+              <p>Codex is installed but not signed in. Run {code("codex login")} in Terminal, then check again.</p>
+            ) : (
+              <p>Your Codex doesn't offer this model. Pick another in the model menu below.</p>
+            )}
+            {cx.state !== "checking" && (
+              <Button onClick={check} size="sm" variant="outline">
+                Check again
+              </Button>
+            )}
+          </div>
+        )}
+        {!gpt && !status && <p className="text-muted-foreground">Checking Claude Code…</p>}
+        {!gpt && status && !ready && (
           <div className="space-y-2 text-muted-foreground">
             {status.installed ? (
               <p>Claude Code is installed but not signed in. Run {code("claude auth login")} in Terminal, then check again.</p>
             ) : (
               <p>
-                Claude Code is not installed. Get it from {install}, sign in with {code("claude auth login")}, then check again.
+                Claude Code is not installed. Get it from <span className="whitespace-nowrap">{install},</span> sign in with {code("claude auth login")}, then check again.
               </p>
             )}
             {status.error && <p className="text-xs">{status.error}</p>}
@@ -306,22 +334,25 @@ export function AgentPanel() {
             </Button>
           </div>
         )}
-        {ready && thread.messages.length === 0 && !thread.pending && <p className="text-muted-foreground">Ask about this page.</p>}
-        {thread.messages.map((m, i) =>
-          m.role === "user" ? (
-            <div className="mt-2 first:mt-0" key={i}>
-              {m.quote && <blockquote className="mb-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground">{m.quote.text}</blockquote>}
-              <p className="font-medium">{m.text}</p>
-            </div>
-          ) : (
-            <div className="mt-2" key={i}>
-              {/* micromark escapes any HTML in the answer, so this is the answer's own Markdown only. */}
-              <div className="ll-answer" dangerouslySetInnerHTML={{ __html: markdownHtml(m.text || (m.done ? "" : "​")).html }} data-streaming={m.done ? undefined : ""} />
-              {m.error && <p className="mt-1 text-destructive-foreground">{m.error}</p>}
-            </div>
-          ),
+        {ready && items.length === 0 && (
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
+            <Sparkles className="size-6 text-muted-foreground" />
+            <p className="text-balance text-lg">What should we do with {title ? `“${title}”` : "this page"}?</p>
+            <p className="text-balance text-muted-foreground text-xs">{gpt ? "GPT" : "Claude"} can read and change this page, find your other pages, and look things up.</p>
+          </div>
         )}
-        {last && !thread.busy && (
+        {turnsOf(items).map((t, k, all) => (
+          <Turn
+            items={t}
+            key={`${thread.id}:${k}`}
+            live={!!thread.busy && k === all.length - 1}
+            onGoAhead={() => goAheadNow.current()}
+            page={title || "Untitled"}
+            started={thread.started}
+            waiting={!!thread.approval && k === all.length - 1}
+          />
+        ))}
+        {final && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
             <Button onClick={insert} size="sm" variant="outline">
               Insert below
@@ -336,24 +367,39 @@ export function AgentPanel() {
             </Button>
           </div>
         )}
-        {thread.note && <p className="mt-1 text-xs text-muted-foreground">{thread.note}</p>}
-        {thread.pending && (
-          <blockquote className="mt-2 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground">{thread.pending.text}</blockquote>
-        )}
+        {thread.note && <p className="mt-1 text-muted-foreground text-xs">{thread.note}</p>}
       </div>
 
-      <Composer
-        agents={agents}
-        busy={!!thread.busy}
-        fieldRef={field}
-        mentions={thread.mentions}
-        onMentions={(mentions) => patch(id, (t) => ({ ...t, mentions }))}
-        onSend={send}
-        onStop={stop}
-        pages={pages.filter((p) => p.id !== id)}
-        placeholder={thread.pending ? "Ask about the selection…" : "Ask about this page…"}
-        ready={ready}
-      />
+      {thread.approval && <ApprovalCard approval={thread.approval} onAnswer={(c) => answer(id, thread.id, c)} page={title || "Untitled"} ref={card} />}
+      {/* Kept mounted under an approval, so a draft being written survives it. */}
+      <div className={cn("shrink-0", thread.approval && "hidden")}>
+        {threads.pending && (
+          <div className="mx-2 mb-1.5 flex items-start gap-1 text-muted-foreground">
+            <blockquote className="line-clamp-3 min-w-0 flex-1 border-l-2 border-muted-foreground/40 pl-2 text-sm">{threads.pending.text}</blockquote>
+            <Button
+              aria-label="Remove the quote"
+              onClick={() => {
+                setPending(id, null);
+                field.current?.focus();
+              }}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <X />
+            </Button>
+          </div>
+        )}
+        <Composer
+          agents={agents}
+          busy={!!thread.busy}
+          fieldRef={field}
+          onSend={(q, m) => send(q, m)}
+          onStop={() => stopTurn(id, thread.id)}
+          pages={pages.filter((p) => p.id !== id)}
+          placeholder={threads.pending ? "Ask about the selection…" : "Ask about this page…"}
+          ready={ready}
+        />
+      </div>
     </section>
   );
 }

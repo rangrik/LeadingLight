@@ -1,10 +1,41 @@
 import { localPrefs } from "~/lib/local-prefs";
 
-// Settings › AI and the agent panel's corner, kept on this Mac.
+// Settings › AI and the agent panel's corner, kept on this Mac. A model is one of Claude Code's
+// aliases, which follow the newest of each, or a GPT model Codex offers (lib/codex.ts).
 export type Corner = "br" | "bl" | "tr" | "tl";
-export type AiPrefs = { model: "opus" | "sonnet" | "haiku"; effort: "low" | "medium" | "high"; corner: Corner; panelW: number; panelH: number };
+export type Access = "ask" | "auto" | "full";
+export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; corner: Corner; panelW: number; panelH: number };
 
-const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", corner: "br", panelW: 380, panelH: 460 });
+export const MODELS: { value: string; label: string }[] = [
+  { value: "fable", label: "Fable" },
+  { value: "opus", label: "Opus" },
+  { value: "sonnet", label: "Sonnet" },
+  { value: "haiku", label: "Haiku" },
+];
+export const EFFORTS: { value: string; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "Extra High" },
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
+];
+export const CLAUDE_EFFORTS = EFFORTS.slice(0, 5);
+export const ACCESS: { value: Access; label: string; description: string }[] = [
+  { value: "ask", label: "Ask for approval", description: "Claude asks before changing a page or using the web" },
+  { value: "auto", label: "Approve for me", description: "Claude Code's auto mode: a classifier approves or blocks each action and asks you when unsure" },
+  { value: "full", label: "Full access", description: "Claude changes pages and uses the web without asking" },
+];
+// With GPT the app runs the page tools itself, and Codex searches the web on its side.
+export const GPT_ACCESS: Record<Access, string> = {
+  ask: "GPT asks before changing a page; Codex searches the web without asking",
+  auto: "Codex has no classifier for the app's tools, so GPT asks, as with Ask for approval",
+  full: "GPT changes pages without asking",
+};
+export const labelOf = (list: { value: string; label: string }[], value: string) => list.find((x) => x.value === value)?.label ?? value;
+export const isClaude = (model: string) => MODELS.some((m) => m.value === model);
+
+const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, corner: "br", panelW: 400, panelH: 540 });
 
 export const aiPrefs = prefs.get;
 export const setAiPrefs = prefs.set;

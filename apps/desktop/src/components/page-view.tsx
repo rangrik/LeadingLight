@@ -19,6 +19,7 @@ import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { docMarkdown } from "~/lib/page-markdown";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
@@ -122,6 +123,7 @@ export function PageView({ page }: { page: LLObject }) {
     if (!page.title && !page.content) titleRef.current?.focus();
     const untrack = trackFlush(flush);
     const unlive = registerLive(page.id, {
+      editor: () => editorRef.current,
       content: () => editorRef.current?.getJSON() ?? page.content ?? { type: "doc", content: [] },
       setContent: (doc) => editorRef.current?.setContent(doc),
       properties: () => latest.current,
@@ -140,7 +142,7 @@ export function PageView({ page }: { page: LLObject }) {
 
   // The agent panel asks about this page while it is in front (lib/ask.ts); with panes side
   // by side, that is the page last worked in.
-  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => editorRef.current?.text() ?? "" };
+  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
   useEffect(() => {
     registerPage(askPage, editorRef.current);
     return () => unregisterPage(page.id);

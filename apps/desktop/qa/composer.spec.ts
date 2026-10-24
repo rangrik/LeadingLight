@@ -89,23 +89,21 @@ test("The bar opens again, and follows the page as it scrolls", async ({ page })
   await expect(bar(page)).toBeHidden();
 });
 
-test("@ mentions an agent or a page, as chips", async ({ page }) => {
+test("@ mentions an agent or a page, as tokens in the text", async ({ page }) => {
   await pageWith(page, "Glossary of terms.");
   await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
   await page.getByRole("textbox", { name: "Title" }).fill("Notes");
   await page.keyboard.press("Meta+J");
-  await question(page).fill("@");
+  await question(page).pressSequentially("@");
   const menu = page.getByTestId("composer-menu");
   await expect(menu).toContainText("Editor");
   await expect(menu).toContainText("Critic");
   await menu.getByRole("option", { name: /Editor/ }).click();
-  await expect(page.getByTestId("composer-chip")).toHaveText(/@Editor/);
-  await question(page).fill("@Cel");
+  await question(page).pressSequentially(" @Cel");
   await expect(menu).toContainText("Cells");
   await page.keyboard.press("Enter");
-  await expect(page.getByTestId("composer-chip")).toHaveCount(2);
-  await expect(question(page)).toHaveValue("");
+  await expect(question(page).locator("[data-slot=composer-token]")).toHaveText(["Editor", "Cells"]);
 });
 
 test("/ offers things to do with the words, and Shorten sends at once", async ({ page }) => {
@@ -126,12 +124,12 @@ test("Model and effort sit in the footer and are kept", async ({ page }) => {
   await pageWith(page, "A line.");
   await page.keyboard.press("Meta+J");
   const picker = panel(page).getByRole("button", { name: "Model and effort" });
-  await expect(picker).toHaveText(/Opus · Medium/);
+  await expect(picker).toHaveText(/Opus\s*Medium/);
   await picker.click();
-  await page.getByRole("menuitemradio", { name: "Sonnet" }).click();
-  await page.getByRole("menuitemradio", { name: "High" }).click();
+  await page.getByRole("radio", { name: /Sonnet/ }).click();
+  await page.getByRole("slider", { name: "Effort" }).press("ArrowRight");
   await page.keyboard.press("Escape");
-  await expect(picker).toHaveText(/Sonnet · High/);
+  await expect(picker).toHaveText(/Sonnet\s*High/);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("ll.ai") ?? "{}"))).toMatchObject({ model: "sonnet", effort: "high" });
 });
 

@@ -34,6 +34,11 @@ stillness, the mock agent connection, and Ask about this: a bar beside the selec
 and a panel in the note that ask Claude through the Claude Code sign-in on this Mac, with a
 composer that mentions agents and pages (`features/ask.feature`, `features/composer.feature`).
 
+- Claude on every page (built, `features/ask.feature`): the Ask button and ⌘J, threads kept per
+  page, page tools behind Ask for approval, Approve for me or Full access, Plan mode, and the
+  model and effort picker, after synara. Claude through Claude Code, GPT through Codex.
+- Keeping Claude Code and Codex up to date from the app, and how much of each plan is left at
+  the bottom of the sidebar (`features/cli-updates.feature`, `features/usage.feature`).
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).
 
