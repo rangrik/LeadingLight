@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components
 import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
+import { pasteText } from "./markdown";
 import { MarkTip } from "./mark-tip";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
@@ -63,6 +64,8 @@ export type BlockEditorHandle = {
   // takes focus: the panel that inserts keeps the keyboard.
   insertAfter: (pos: number, html: string) => void;
   replaceRange: (from: number, to: number, html: string) => void;
+  // Pastes at the top of the page, as its own blocks (a page pasted into the title).
+  paste: (text: string, html?: string) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -434,6 +437,13 @@ export function BlockEditor({
       replaceRange: (from, to, html) => {
         const size = editor.state.doc.content.size;
         editor.commands.insertContentAt({ from: Math.min(from, size), to: Math.min(to, size) }, html);
+      },
+      paste: (text, html) => {
+        if (!editor.isEditable) return;
+        if (!isEmptyLine(editor.state.doc.firstChild)) editor.commands.insertContentAt(0, { type: "paragraph" });
+        editor.commands.setTextSelection(1);
+        editor.view.focus();
+        pasteText(editor.view, text, html);
       },
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),

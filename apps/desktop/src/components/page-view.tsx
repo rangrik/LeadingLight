@@ -1,4 +1,5 @@
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget } from "@leadinglight/editor/editor";
+import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
@@ -170,6 +171,18 @@ export function PageView({ page }: { page: LLObject }) {
     editorRef.current?.focus("start");
   };
 
+  // A whole page pasted into the title: a heading on its first line names the page, and the
+  // rest (all of it, with no heading) goes into the body.
+  const pasteTitle = (e: React.ClipboardEvent) => {
+    const html = e.clipboardData.getData("text/html");
+    const { title, body } = splitTitle(e.clipboardData.getData("text/plain").trim(), html);
+    if (title === undefined && !body.includes("\n")) return;
+    e.preventDefault();
+    // As typing does, so the title's own undo takes it back.
+    if (title !== undefined) document.execCommand("insertText", false, title);
+    if (body) editorRef.current?.paste(body, title === undefined ? html : "");
+  };
+
   // Blank page space belongs to the page: with no block active (and no popup open), a click at
   // the title's height goes to the title, from the body down into the body (see placeAt). The
   // properties between them and the sections after the body keep their clicks.
@@ -276,6 +289,7 @@ export function PageView({ page }: { page: LLObject }) {
                 queue({ title: value });
               }}
               onKeyDown={toBody}
+              onPaste={pasteTitle}
               placeholder={role === "essay" ? "Essay title" : "Untitled"}
               ref={titleRef}
               rows={1}

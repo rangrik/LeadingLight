@@ -1,4 +1,4 @@
-import { Extension, type KeyboardShortcutCommand } from "@tiptap/core";
+import { Extension, type KeyboardShortcutCommand, markInputRule, markPasteRule } from "@tiptap/core";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import Bold from "@tiptap/extension-bold";
@@ -9,7 +9,7 @@ import Strike from "@tiptap/extension-strike";
 import Underline from "@tiptap/extension-underline";
 import TaskList from "@tiptap/extension-task-list";
 import Typography from "@tiptap/extension-typography";
-import type { Node as PMNode } from "@tiptap/pm/model";
+import type { MarkType, Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
 import { Cite, Cited, Note, Thought } from "./anchors";
@@ -19,6 +19,7 @@ import { CodeBlock } from "./code-block";
 import { BlockDrop } from "./drop";
 import { EmojiPrefix } from "./emoji-prefix";
 import { Column, Columns, Group } from "./layout";
+import { MarkdownPaste } from "./markdown";
 import { OrderedListStyles } from "./lists";
 import { createMedia } from "./media";
 import { type LinkHost, LinkMenus, linkMenuOpen, Mention, PageLink } from "./page-links";
@@ -217,6 +218,22 @@ const OpenLinks = Extension.create<{ open: (href: string) => void }>({
 // A new line starts plain instead of carrying bold, italic and the rest on, as in Notion.
 const plain = { keepOnSplit: false };
 
+// Emphasis as Markdown has it: the marked words can't start or end with a space, so "2 * 3 * 4"
+// stays as written. TipTap's own rules make " 3 " italic, typed or pasted.
+const marked = (marker: string, flags = "") => {
+  const m = marker.replace(/\*/g, "\\*");
+  return new RegExp(`(?:^|\\s)(${m}(?!\\s)([^${marker[0]}]*[^${marker[0]}\\s])${m})${flags ? "" : "$"}`, flags);
+};
+const emphasis = (...markers: string[]) => ({
+  ...plain,
+  addInputRules(this: { type: MarkType }) {
+    return markers.map((m) => markInputRule({ find: marked(m), type: this.type }));
+  },
+  addPasteRules(this: { type: MarkType }) {
+    return markers.map((m) => markPasteRule({ find: marked(m, "g"), type: this.type }));
+  },
+});
+
 export function createExtensions(opts: {
   onExitTop: () => boolean;
   assets: AssetStore;
@@ -239,16 +256,16 @@ export function createExtensions(opts: {
       link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
       dropcursor: { color: "var(--info)", width: 2 },
     }),
-    Bold.extend(plain),
-    Italic.extend(plain),
+    Bold.extend(emphasis("**", "__")),
+    Italic.extend(emphasis("*", "_")),
     Underline.extend(plain),
-    Strike.extend(plain),
+    Strike.extend(emphasis("~~")),
     Code.extend(plain),
     CodeBlock,
     TaskList,
     Todo.configure({ nested: true }),
     OrderedListStyles,
-    Highlight.extend(plain),
+    Highlight.extend(emphasis("==")),
     Typography,
     Toggle.configure({ persist: true, HTMLAttributes: { class: "ll-toggle" } }),
     DetailsSummary,
@@ -259,6 +276,7 @@ export function createExtensions(opts: {
     Group,
     EmojiPrefix,
     ...createMedia(opts.assets),
+    MarkdownPaste,
     // Link nodes are always in the schema, so a page with links reads even without a host.
     Mention.configure({ host }),
     PageLink.configure({ host }),

@@ -48,3 +48,18 @@ test("Dragging the handle with a real mouse moves the block", async ({ page }) =
   await page.mouse.up();
   await expect(paragraphs).toHaveText(["three", "one", "two"]);
 });
+
+// Seam: the title's paste handing a page to the body, through the real clipboard.
+// Catches a pasted page landing in the title as one line of Markdown, as it once did.
+test("New page, paste Markdown: the heading names it, the rest is formatted", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.evaluate(() => navigator.clipboard.writeText("# Trip plan\n\n## Packing\n\n- **passport**\n- charger\n"));
+  await page.keyboard.press("ControlOrMeta+V");
+  await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Trip plan");
+  const body = page.getByRole("textbox", { name: "Page body" });
+  await expect(body.locator("h2")).toHaveText("Packing");
+  await expect(body.locator("li")).toHaveText(["passport", "charger"]);
+  await expect(body.locator("li strong")).toHaveText("passport");
+});

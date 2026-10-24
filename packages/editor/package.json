@@ -11,6 +11,7 @@
     "./assets": "./src/assets.ts",
     "./emoji": "./src/emoji-grid.tsx",
     "./links": "./src/page-links.tsx",
+    "./markdown": "./src/markdown.ts",
     "./editor.css": "./src/editor.css",
     "./writing": "./src/writing.ts"
   },
@@ -43,6 +44,8 @@
     "harper.js": "^2.13.0",
     "lowlight": "^3.3.0",
     "lucide-react": "^1.61.0",
+    "micromark": "^4.0.3",
+    "micromark-extension-gfm": "^3.0.0",
     "motion": "^14.6.0",
     "unicode-emoji-json": "^0.9.0"
   },
