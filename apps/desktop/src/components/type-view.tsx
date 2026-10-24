@@ -1,9 +1,12 @@
 import { ArrowDown, ArrowUp, ChevronDown, Plus, Settings2, Star, X } from "lucide-react";
 import { useState } from "react";
+import { useStore } from "@/lib/store";
+import { closeSettings } from "@/views/settings/open";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { Field, FieldLabel } from "@leadinglight/ui/components/field";
+import { Field, FieldError, FieldLabel } from "@leadinglight/ui/components/field";
+import { Form } from "@leadinglight/ui/components/form";
 import { Input } from "@leadinglight/ui/components/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
@@ -12,8 +15,8 @@ import { ObjectList } from "~/components/object-list";
 import { IconPicker, PageIconView, RowIcon } from "~/components/page-icon";
 import { AddProperty } from "~/components/property-panel";
 import { KIND_ICONS } from "~/components/property-value";
-import type { LinkView, TypeDef, ViewSettings } from "~/lib/catalog";
-import { pageLabel } from "~/lib/labels";
+import { type LinkView, newId, type TypeDef, type ViewSettings } from "~/lib/catalog";
+import { pageLabel, pluralOf } from "~/lib/labels";
 import { type Color, COLORS } from "~/lib/page-meta";
 import { openPage } from "~/lib/panes";
 import { deleteType, propOf, putType, space, typeOf, typeView } from "~/lib/space";
@@ -81,13 +84,14 @@ export function TypeView({ typeId }: { typeId: string }) {
           settings={view}
         />
       </div>
-      {editing && <TypeSettings onClose={() => setEditing(false)} type={type} />}
+      {editing && <TypeSettings onClose={() => setEditing(false)} onDelete={() => openPage(typeView(PAGE_TYPE))} type={type} />}
     </div>
   );
 }
 
-function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void }) {
-  const [draft, setDraft] = useState(type);
+// No type makes a new one.
+export function TypeSettings({ type, onClose, onDelete }: { type?: TypeDef; onClose: () => void; onDelete?: () => void }) {
+  const [draft, setDraft] = useState<TypeDef>(() => type ?? { id: newId("t_"), name: "", plural: "", props: [], card: [], linkView: "line", createdAt: Date.now() });
   const [confirming, setConfirming] = useState(false);
   const set = (patch: Partial<TypeDef>) => setDraft({ ...draft, ...patch });
   const move = (i: number, by: number) => {
@@ -95,36 +99,55 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
     [props[i], props[i + by]] = [props[i + by], props[i]];
     set({ props });
   };
+  const plural = draft.name.trim() && pluralOf(draft.name.trim());
   const save = async () => {
-    await putType({ ...draft, name: draft.name.trim() || type.name, plural: draft.plural.trim() || type.plural });
+    await putType({ ...draft, name: draft.name.trim(), plural: draft.plural.trim() || plural });
     onClose();
   };
   const remove = async () => {
-    await deleteType(type.id);
-    openPage(typeView(PAGE_TYPE));
+    await deleteType(draft.id);
+    onDelete?.();
     onClose();
+  };
+  // From Settings, a template would open unseen behind it.
+  const show = (page: string) => {
+    onClose();
+    openPage(page);
+    if (useStore.getState().view.kind === "settings") closeSettings();
   };
 
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
       <DialogPopup className="max-w-lg">
+        <Form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
         <DialogHeader>
-          <DialogTitle>Type settings</DialogTitle>
+          <DialogTitle>{type ? "Type settings" : "New type"}</DialogTitle>
         </DialogHeader>
         <DialogPanel className="flex flex-col gap-4">
-          <div className="flex items-end gap-3">
-            <IconPicker icon={draft.icon} onChange={(icon) => set({ icon })}>
-              <Button aria-label="Type icon" className="size-9" size="icon" variant="outline">
-                <RowIcon icon={draft.icon} />
-              </Button>
-            </IconPicker>
-            <Field className="flex-1">
+          {/* Labelled, so the icon stays level with the fields when Name shows an error. */}
+          <div className="flex items-start gap-3">
+            <Field>
+              <FieldLabel>Icon</FieldLabel>
+              <IconPicker icon={draft.icon} onChange={(icon) => set({ icon })}>
+                <Button aria-label="Type icon" className="size-9" size="icon" variant="outline">
+                  <RowIcon icon={draft.icon} />
+                </Button>
+              </IconPicker>
+            </Field>
+            <Field className="flex-1" validate={() => (draft.name.trim() ? null : "Give the type a name")}>
               <FieldLabel>Name</FieldLabel>
-              <Input onChange={(e) => set({ name: e.currentTarget.value })} value={draft.name} />
+              <Input autoFocus={!type} onChange={(e) => set({ name: e.currentTarget.value })} value={draft.name} />
+              <FieldError />
             </Field>
             <Field className="flex-1">
               <FieldLabel>Plural</FieldLabel>
-              <Input onChange={(e) => set({ plural: e.currentTarget.value })} value={draft.plural} />
+              <Input onChange={(e) => set({ plural: e.currentTarget.value })} placeholder={plural} value={draft.plural} />
             </Field>
           </div>
           <div className="flex gap-3">
@@ -204,19 +227,13 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
               </AddProperty>
             </div>
           </div>
+          {type && (
           <div className="flex flex-col gap-2">
             <p className="font-medium text-sm">Templates</p>
             <div className="flex w-full flex-col">
               {templatesOf(type.id).map((t) => (
                 <div className="flex h-9 items-center gap-2 text-sm" key={t.id}>
-                  <button
-                    className="min-w-0 flex-1 truncate text-left hover:underline"
-                    onClick={() => {
-                      onClose();
-                      openPage(t.id);
-                    }}
-                    type="button"
-                  >
+                  <button className="min-w-0 flex-1 truncate text-left hover:underline" onClick={() => show(t.id)} type="button">
                     {pageLabel(t.title)}
                   </button>
                   <Button
@@ -232,11 +249,7 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
               ))}
               <Button
                 className="mt-1 self-start text-muted-foreground"
-                onClick={async () => {
-                  const t = await newTemplate(type.id);
-                  onClose();
-                  openPage(t.id);
-                }}
+                onClick={async () => show((await newTemplate(type.id)).id)}
                 size="sm"
                 variant="ghost"
               >
@@ -245,9 +258,10 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
               </Button>
             </div>
           </div>
+          )}
         </DialogPanel>
         <DialogFooter>
-          {!type.system &&
+          {type && !type.system &&
             (confirming ? (
               <span className="me-auto flex items-center gap-2 text-sm">
                 Its pages become plain pages.
@@ -263,8 +277,9 @@ function TypeSettings({ type, onClose }: { type: TypeDef; onClose: () => void })
           <Button onClick={onClose} variant="ghost">
             Cancel
           </Button>
-          <Button onClick={() => void save()}>Save</Button>
+          <Button type="submit">{type ? "Save" : "Create"}</Button>
         </DialogFooter>
+        </Form>
       </DialogPopup>
     </Dialog>
   );

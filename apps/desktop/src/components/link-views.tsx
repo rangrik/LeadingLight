@@ -4,6 +4,7 @@ import { CalendarDays, LayoutPanelTop, Plus } from "lucide-react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Card } from "@leadinglight/ui/components/card";
+import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { PageIconView, RowIcon } from "~/components/page-icon";
@@ -14,6 +15,7 @@ import type { LinkView } from "~/lib/catalog";
 import { dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
 import { openLink } from "~/lib/links";
+import { editPage } from "~/lib/live";
 import { type LLObject, type ObjectSummary, objects } from "~/lib/objects";
 import { COLORS, readCover } from "~/lib/page-meta";
 import { focusedPage } from "~/lib/panes";
@@ -29,11 +31,14 @@ const aliasesOf = (p: ObjectSummary) =>
 // How a link menu makes pages: the main window does it itself; the capture panel asks it to.
 export type LinkActions = { here?: () => string | undefined; create: (title: string, typeId: string) => Promise<string>; day: (day: string) => Promise<string> };
 
-// What "@", "[[" and "#" offer: matching pages (by title or alias), days, and a new page.
-function search(query: string, tag: boolean, actions: LinkActions): LinkItem[] {
+// What "@", "[[" and "#" offer: matching pages (by title or alias), days, and a new page. Kept to
+// a type (the slash menu's "New"), a new page of it comes first, once a name is typed.
+function search(query: string, tag: boolean, actions: LinkActions, typeId?: string): LinkItem[] {
   const q = query.trim().toLowerCase();
+  const name = query.trim();
+  if (typeId && !name) return [];
   const here = actions.here?.();
-  const pool = space.get().pages.filter((p) => p.id !== here && !p.properties.templateOf && (p.typeId === "tag") === tag);
+  const pool = space.get().pages.filter((p) => p.id !== here && !p.properties.templateOf && (typeId ? p.typeId === typeId : (p.typeId === "tag") === tag));
   const alias = (p: ObjectSummary) => aliasesOf(p).find((a) => a.toLowerCase().includes(q));
   const found = pool
     .filter((p) => !q || pageLabel(p.title).toLowerCase().includes(q) || alias(p))
@@ -46,6 +51,8 @@ function search(query: string, tag: boolean, actions: LinkActions): LinkItem[] {
     hint: q && alias(p) && !pageLabel(p.title).toLowerCase().includes(q) ? alias(p) : typeOf(p.typeId).name,
     link: async () => p.id,
   }));
+  const plus = <Plus className="size-4 shrink-0 text-muted-foreground" />;
+  if (typeId) return [{ key: "new", title: `New ${typeOf(typeId).name.toLowerCase()} “${name}”`, icon: plus, link: () => actions.create(name, typeId) }, ...items];
   if (!tag) {
     const days: [string, string][] = [
       ["Today", today()],
@@ -60,12 +67,11 @@ function search(query: string, tag: boolean, actions: LinkActions): LinkItem[] {
       items.push({ key: `day-${day}`, title: label, hint: dailyTitle(day), icon: <CalendarDays className="size-4 shrink-0 text-muted-foreground" />, link: () => actions.day(day) });
     }
   }
-  const name = query.trim();
   if (name && !pool.some((p) => pageLabel(p.title).toLowerCase() === q)) {
     items.push({
       key: "new",
       title: `Create ${tag ? "#" : ""}“${name}”`,
-      icon: <Plus className="size-4 shrink-0 text-muted-foreground" />,
+      icon: plus,
       link: () => actions.create(name, tag ? "tag" : PAGE_TYPE),
     });
   }
@@ -96,11 +102,12 @@ function MentionChip({ id, tag }: { id: string; tag: boolean }) {
   );
 }
 
-// A page as a card: its cover, icon, title and the properties its type shows on cards.
-export function PageCard({ page, wide, className }: { page: ObjectSummary; wide?: boolean; className?: string }) {
+// A page as a card: its cover, icon, title and the properties its type shows on cards, or those
+// asked for.
+export function PageCard({ page, wide, className, show }: { page: ObjectSummary; wide?: boolean; className?: string; show?: string[] }) {
   const type = typeOf(page.typeId);
   const cover = readCover(page.properties.cover);
-  const shown = type.card
+  const shown = (show ?? type.card)
     .map(propOf)
     .filter((p) => p !== undefined)
     .filter((p) => page.properties[p.id] !== undefined && page.properties[p.id] !== null);
@@ -164,19 +171,39 @@ function EmbeddedPage({ page }: { page: ObjectSummary }) {
   );
 }
 
+// Through the task's own editor when it is open in a pane, so the pane never saves over it.
+const tick = (id: string, on: boolean) =>
+  void editPage(id, { properties: ({ done: _, ...rest }) => (on ? { ...rest, done: true } : rest) });
+
 function LinkBlock({ id, view, setView }: { id: string; view: string | null; setView: (view: string) => void }) {
   space.use();
   const page = pageOf(id);
   if (!page) return <p className="py-1 text-muted-foreground line-through">Deleted page</p>;
   const shown = (view && view in LINK_VIEWS ? view : typeOf(page.typeId).linkView) as LinkView;
+  const task = typeOf(page.typeId).props.includes("done");
+  const done = task && page.properties.done === true;
+  const title = (
+    <span className={cn("truncate underline decoration-muted-foreground/40 underline-offset-2", done && "text-muted-foreground line-through decoration-current")}>
+      {pageLabel(page.title)}
+    </span>
+  );
   return (
     <div className={cn("group/link relative py-1", (shown === "line" || shown === "card") && "w-fit max-w-full pe-10")}>
-      {shown === "line" && (
-        <button className="ll-link-surface ll-row -ms-1 flex h-8 max-w-[calc(100%+0.25rem)] items-center gap-2 rounded-md px-1 text-left font-medium hover:bg-accent" onClick={(e) => visit(id, e)} type="button">
-          <RowIcon icon={iconFor(page)} />
-          <span className="truncate underline decoration-muted-foreground/40 underline-offset-2">{pageLabel(page.title)}</span>
-        </button>
-      )}
+      {shown === "line" &&
+        (task ? (
+          // A task line: the box ticks the task off where it is linked, and only the title opens it.
+          <div className="ll-link-surface ll-row -ms-1 flex h-8 max-w-[calc(100%+0.25rem)] items-center gap-1 rounded-md ps-1">
+            <Checkbox aria-label="Done" checked={done} onCheckedChange={(on) => tick(id, on)} />
+            <button className="flex h-8 min-w-0 items-center rounded-md px-1 text-left font-medium hover:bg-accent" onClick={(e) => visit(id, e)} type="button">
+              {title}
+            </button>
+          </div>
+        ) : (
+          <button className="ll-link-surface ll-row -ms-1 flex h-8 max-w-[calc(100%+0.25rem)] items-center gap-2 rounded-md px-1 text-left font-medium hover:bg-accent" onClick={(e) => visit(id, e)} type="button">
+            <RowIcon icon={iconFor(page)} />
+            {title}
+          </button>
+        ))}
       {(shown === "card" || shown === "wide") && <PageCard page={page} wide={shown === "wide"} />}
       {shown === "page" && <EmbeddedPage page={page} />}
       <div className="absolute end-1 top-2 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/link:opacity-100 has-data-popup-open:opacity-100">
@@ -200,7 +227,13 @@ function LinkBlock({ id, view, setView }: { id: string; view: string | null; set
 }
 
 export const makeLinkHost = (actions: LinkActions): LinkHost => ({
-  search: (query, tag) => search(query, tag, actions),
+  search: (query, tag, typeId) => search(query, tag, actions, typeId),
+  // Daily notes have "@today". A tag links as "#name", inline.
+  types: () =>
+    space
+      .get()
+      .types.filter((t) => t.id !== "daily")
+      .map((t) => ({ id: t.id, name: t.name, icon: <RowIcon icon={t.icon} />, tag: t.id === "tag" })),
   title: (id) => pageLabel(pageOf(id)?.title ?? ""),
   Mention: MentionChip,
   Block: LinkBlock,

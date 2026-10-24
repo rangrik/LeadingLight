@@ -15,7 +15,6 @@ import {
   Landmark,
   List,
   ListOrdered,
-  type LucideIcon,
   Minus,
   Paperclip,
   Quote,
@@ -26,7 +25,9 @@ import {
   Table,
   Type,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import { DEFAULT_EMOJI } from "./emoji-prefix";
+import { type LinkType, nameNew } from "./page-links";
 
 export type SlashItem = {
   id: string;
@@ -34,7 +35,7 @@ export type SlashItem = {
   section: string;
   keywords: string;
   hint?: string;
-  icon: LucideIcon;
+  icon: ComponentType;
   run: (editor: Editor, range: Range) => void;
   // Set on kinds a block can be turned into (block menu): the commands that reshape a plain line.
   turn?: (chain: ChainedCommands) => ChainedCommands;
@@ -47,7 +48,7 @@ const item = (
   title: string,
   section: string,
   keywords: string,
-  icon: LucideIcon,
+  icon: SlashItem["icon"],
   run: SlashItem["run"],
   hint?: string,
 ): SlashItem => ({ id, title, section, keywords, icon, run, hint });
@@ -56,7 +57,7 @@ const kind = (
   title: string,
   section: string,
   keywords: string,
-  icon: LucideIcon,
+  icon: SlashItem["icon"],
   turn: NonNullable<SlashItem["turn"]>,
   hint?: string,
 ): SlashItem => ({ ...item(id, title, section, keywords, icon, (e, r) => turn(start(e, r)).run(), hint), turn });
@@ -118,10 +119,15 @@ export const SLASH_ITEMS: SlashItem[] = [
   ),
 ];
 
+// Last, one item per type: it asks for a name in the "@" menu and links the new page there.
+const newItem = (type: LinkType): SlashItem =>
+  item(`new-${type.id}`, type.name, "New", "new", () => type.icon, (e, r) => nameNew(e, r, type));
+
 // Name matches come before keyword matches, so "/columns" finds Columns before Table.
-export function filterSlashItems(query: string): SlashItem[] {
+export function filterSlashItems(query: string, types: LinkType[] = []): SlashItem[] {
+  const all = [...SLASH_ITEMS, ...types.map(newItem)];
   const q = query.trim().toLowerCase();
-  if (!q) return SLASH_ITEMS;
-  const byTitle = SLASH_ITEMS.filter((i) => i.title.toLowerCase().includes(q));
-  return [...byTitle, ...SLASH_ITEMS.filter((i) => !byTitle.includes(i) && i.keywords.includes(q))];
+  if (!q) return all;
+  const byTitle = all.filter((i) => i.title.toLowerCase().includes(q));
+  return [...byTitle, ...all.filter((i) => !byTitle.includes(i) && i.keywords.includes(q))];
 }

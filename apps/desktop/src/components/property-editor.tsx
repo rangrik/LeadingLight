@@ -2,7 +2,8 @@ import { Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { Field, FieldLabel } from "@leadinglight/ui/components/field";
+import { Field, FieldError, FieldLabel } from "@leadinglight/ui/components/field";
+import { Form } from "@leadinglight/ui/components/form";
 import { Input } from "@leadinglight/ui/components/input";
 import { Label } from "@leadinglight/ui/components/label";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
@@ -29,19 +30,22 @@ async function changeKind(prop: PropDef, name: string, kind: Kind, options: Prop
   return fresh;
 }
 
-// onReplaced: a kind change made a fresh property; a page holding the old one as its own adds it.
-export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; onClose: () => void; onReplaced?: (fresh: PropDef) => void }) {
-  const [name, setName] = useState(prop.name);
-  const [kind, setKind] = useState<Kind>(prop.kind);
-  const [options, setOptions] = useState<PropOptions>(prop.options);
+// No prop makes a new one. onReplaced: a kind change made a fresh property; a page holding the
+// old one as its own adds it.
+export function PropertyEditor({ prop, onClose, onReplaced }: { prop?: PropDef; onClose: () => void; onReplaced?: (fresh: PropDef) => void }) {
+  const [name, setName] = useState(prop?.name ?? "");
+  const [kind, setKind] = useState<Kind>(prop?.kind ?? "text");
+  const [options, setOptions] = useState<PropOptions>(prop?.options ?? {});
   const { types } = space.use();
   const set = (patch: PropOptions) => setOptions({ ...options, ...patch });
   const choices = options.choices ?? [];
   const setChoice = (i: number, patch: Partial<(typeof choices)[number]>) => set({ choices: choices.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
 
   const save = async () => {
-    const clean = name.trim() || prop.name;
-    if (kind === prop.kind) await putProp({ ...prop, name: clean, options: { ...options, choices: options.choices?.filter((c) => c.name.trim()) } });
+    const clean = name.trim();
+    const kept = { ...options, choices: options.choices?.filter((c) => c.name.trim()) };
+    if (!prop) await putProp({ id: newId("p_"), name: clean, kind, options: kept, createdAt: Date.now() });
+    else if (kind === prop.kind) await putProp({ ...prop, name: clean, options: kept });
     else onReplaced?.(await changeKind(prop, clean, kind, { ...defaultOptions(kind), many: options.many }));
     onClose();
   };
@@ -49,7 +53,7 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
       <DialogPopup className="max-w-md">
-        <form
+        <Form
           className="contents"
           onSubmit={(e) => {
             e.preventDefault();
@@ -57,16 +61,26 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
           }}
         >
         <DialogHeader>
-          <DialogTitle>Edit property</DialogTitle>
+          <DialogTitle>{prop ? "Edit property" : "New property"}</DialogTitle>
         </DialogHeader>
         <DialogPanel className="flex flex-col gap-4">
-          <Field>
+          <Field validate={() => (name.trim() ? null : "Give the property a name")}>
             <FieldLabel>Name</FieldLabel>
-            <Input onChange={(e) => setName(e.currentTarget.value)} value={name} />
+            <Input autoFocus={!prop} onChange={(e) => setName(e.currentTarget.value)} value={name} />
+            <FieldError />
           </Field>
           <Field>
             <FieldLabel>Kind</FieldLabel>
-            <Select disabled={!EDITABLE.includes(prop.kind)} items={KINDS} onValueChange={(v) => setKind(v as Kind)} value={kind}>
+            {/* A new property starts each kind on its defaults. */}
+            <Select
+              disabled={prop && !EDITABLE.includes(prop.kind)}
+              items={KINDS}
+              onValueChange={(v) => {
+                setKind(v as Kind);
+                if (!prop) setOptions(defaultOptions(v as Kind));
+              }}
+              value={kind}
+            >
               <SelectTrigger aria-label="Kind">
                 <SelectValue />
               </SelectTrigger>
@@ -78,7 +92,7 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
                 ))}
               </SelectPopup>
             </Select>
-            {kind !== prop.kind && (
+            {prop && kind !== prop.kind && (
               <p className="text-muted-foreground text-sm">Values already set stay in “{prop.name} (old)”.</p>
             )}
           </Field>
@@ -128,7 +142,7 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
               </Field>
             </>
           )}
-          {kind === "select" && prop.kind === "select" && (
+          {kind === "select" && (!prop || prop.kind === "select") && (
             <div className="flex flex-col gap-2">
               <p className="font-medium text-sm">Options</p>
               <div className="flex w-full flex-col gap-1.5">
@@ -173,9 +187,9 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
           <Button onClick={onClose} type="button" variant="ghost">
             Cancel
           </Button>
-          <Button type="submit">Save</Button>
+          <Button type="submit">{prop ? "Save" : "Create"}</Button>
         </DialogFooter>
-        </form>
+        </Form>
       </DialogPopup>
     </Dialog>
   );

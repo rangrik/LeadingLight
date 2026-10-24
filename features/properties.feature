@@ -27,7 +27,7 @@ Feature: Properties and types
 
   Scenario: Starter types are there from the start
     Then the "Types" section lists Pages, Tags, Daily notes, People, Books, Meetings, Projects,
-      Ideas and Collections
+      Tasks, Ideas and Collections
 
   Scenario: Changing a page's type shows that type's properties
     When I pick "Book" in the "Type" picker
@@ -90,7 +90,8 @@ Feature: Properties and types
   Scenario: Many-valued relation and the other side
     Given "Dune" is a Book whose "Author" is "Frank Herbert"
     When I open "Frank Herbert"
-    Then it shows a row "Books" listing "Dune", read-only, from the Author property's other side
+    Then "Linked books · 1" at its end shows a small card for "Dune", from the Author property's
+      other side, and there is no "Books" row among its properties
 
   Scenario: Save a page's shape as a new type
     Given "Dune" has its own properties "Pages" and "Publisher"

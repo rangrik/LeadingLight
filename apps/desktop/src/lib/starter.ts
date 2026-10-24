@@ -27,6 +27,10 @@ const PROPS: Seed<PropDef>[] = [
   { id: "project-status", name: "Status", kind: "select", options: { choices: choices(["Planned", "gray"], ["Active", "blue"], ["Done", "green"]) } },
   { id: "due", name: "Due", kind: "date", options: {} },
   { id: "items", name: "Items", kind: "relation", options: { many: true } },
+  // Added later; spaces made before get them through later().
+  { id: "done", name: "Done", kind: "checkbox", options: {} },
+  { id: "task-project", name: "Project", kind: "relation", options: { type: "project", reverse: "Tasks" } },
+  { id: "idea-project", name: "Project", kind: "relation", options: { type: "project", reverse: "Ideas" } },
 ];
 
 const type = (id: string, name: string, plural: string, icon: string | undefined, color: Color, props: string[], card: string[] = []): Seed<TypeDef> => ({
@@ -40,6 +44,9 @@ const type = (id: string, name: string, plural: string, icon: string | undefined
   linkView: "line",
 });
 
+// An idea shows when it was made: that is how it shows in the day's note (capture.feature).
+const IDEA_PROPS = ["idea-project", "tags", "created", "updated"];
+
 const TYPES: Seed<TypeDef>[] = [
   { ...type("page", "Page", "Pages", undefined, "gray", []), system: true },
   { ...type("tag", "Tag", "Tags", "hash", "gray", []), system: true },
@@ -48,17 +55,38 @@ const TYPES: Seed<TypeDef>[] = [
   type("book", "Book", "Books", "book-open", "orange", ["author", "rating", "book-status", "finished", "tags"], ["author", "book-status"]),
   type("meeting", "Meeting", "Meetings", "users", "green", ["when", "attendees", "project", "tags"], ["when"]),
   type("project", "Project", "Projects", "folder-kanban", "purple", ["project-status", "due", "tags"], ["project-status", "due"]),
-  type("idea", "Idea", "Ideas", "lightbulb", "yellow", ["tags"]),
+  type("task", "Task", "Tasks", "circle-check", "green", ["done", "due", "task-project", "tags"], ["due", "task-project"]),
+  type("idea", "Idea", "Ideas", "lightbulb", "yellow", IDEA_PROPS, ["idea-project"]),
   type("collection", "Collection", "Collections", "library", "teal", ["items", "tags"]),
 ];
 
 // Everything to add to a space that hasn't been given the starter set yet.
 export function starter(catalog: Catalog): Catalog {
-  if (catalog.types.some((t) => t.id === "tag")) return { types: [], props: [] };
   const now = Date.now();
+  if (catalog.types.some((t) => t.id === "tag")) return later(catalog, now);
   return {
     props: PROPS.map((p, i) => ({ ...p, createdAt: now + i })),
     // The page type may exist already (SQLite seeds it); it keeps its place first.
     types: TYPES.map((t, i) => ({ ...t, createdAt: catalog.types.find((c) => c.id === t.id)?.createdAt ?? now + i })),
   };
+}
+
+// A space made before an addition gets it once. Each addition brings a new property, and
+// properties can't be deleted, so a space that has it was given it already.
+function later(catalog: Catalog, now: number): Catalog {
+  const added: Catalog = { types: [], props: [] };
+  const missing = (id: string) => !catalog.props.some((p) => p.id === id);
+  const prop = (id: string) => added.props.push({ ...PROPS.find((p) => p.id === id)!, createdAt: now + added.props.length });
+  if (missing("done")) {
+    prop("done");
+    prop("task-project");
+    // A space that made its own Task type keeps it, rather than getting a second.
+    if (!catalog.types.some((t) => t.id === "task" || t.name.toLowerCase() === "task")) added.types.push({ ...TYPES.find((t) => t.id === "task")!, createdAt: now });
+  }
+  if (missing("idea-project")) {
+    prop("idea-project");
+    const idea = catalog.types.find((t) => t.id === "idea");
+    if (idea) added.types.push({ ...idea, props: [...new Set([...IDEA_PROPS, ...idea.props])], card: ["idea-project", ...idea.card] });
+  }
+  return added;
 }

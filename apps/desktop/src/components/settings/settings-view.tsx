@@ -1,4 +1,4 @@
-import { ArrowLeft, Info, Keyboard, Lightbulb, Palette, PenLine, Sparkles } from "lucide-react";
+import { ArrowLeft, Info, Keyboard, Lightbulb, Palette, PenLine, Shapes, SlidersHorizontal, Sparkles } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { closeSettings } from "@/views/settings/open";
@@ -22,17 +22,21 @@ import { AboutSection } from "~/components/settings/about-section";
 import { AiSection } from "~/components/settings/ai-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
 import { CaptureSection } from "~/components/settings/capture-section";
+import { PropertiesSection } from "~/components/settings/properties-section";
+import { TypesSection } from "~/components/settings/types-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. Appearance, Writing, Capture, AI and About are ours; Shortcuts is Shipyard's (vendor/shipyard);
-// the ones about agents, machines and Shipyard's own General stay out until there is ours.
-export type SectionId = "appearance" | "writing" | "capture" | "ai" | "shortcuts" | "about";
+// one. Shortcuts is Shipyard's (vendor/shipyard), the rest are ours; the ones about agents,
+// machines and Shipyard's own General stay out until there is ours.
+export type SectionId = "appearance" | "writing" | "types" | "properties" | "capture" | "ai" | "shortcuts" | "about";
 
 const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
   { id: "writing", title: "Writing", icon: PenLine, Component: WritingSection },
+  { id: "types", title: "Types", icon: Shapes, Component: TypesSection },
+  { id: "properties", title: "Properties", icon: SlidersHorizontal, Component: PropertiesSection },
   { id: "capture", title: "Capture", icon: Lightbulb, Component: CaptureSection },
   { id: "ai", title: "AI", icon: Sparkles, Component: AiSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
@@ -68,8 +72,9 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
       <SettingsSidebar current={id} />
       <SidebarInset className="h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
         <PanelHeader current={current.title} root="Settings" sidebarOpen={open} toggle={!windowToggle} />
-        <div className="min-h-0 flex-1 overflow-y-auto" data-testid={`settings-${id}`}>
-          <current.Component key={id} />
+        {/* Keyed here, so each section opens at its top. */}
+        <div className="min-h-0 flex-1 overflow-y-auto" data-testid={`settings-${id}`} key={id}>
+          <current.Component />
         </div>
       </SidebarInset>
     </SidebarProvider>

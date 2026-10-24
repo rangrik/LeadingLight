@@ -1,4 +1,4 @@
-import { type Editor, Extension, mergeAttributes, Node } from "@tiptap/core";
+import { type Editor, Extension, mergeAttributes, Node, type Range } from "@tiptap/core";
 import { type EditorState, PluginKey } from "@tiptap/pm/state";
 import { type NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, ReactRenderer } from "@tiptap/react";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
@@ -10,8 +10,12 @@ import { keepFocus, surface } from "./ui";
 // and how a link looks, so titles and icons always show their current state.
 
 export type LinkItem = { key: string; title: string; icon: ReactNode; hint?: string; link: () => Promise<string> };
+export type LinkType = { id: string; name: string; icon: ReactNode; tag?: boolean };
 export type LinkHost = {
-  search: (query: string, tag: boolean) => LinkItem[];
+  // Given a type, only its pages, after a new one of it.
+  search: (query: string, tag: boolean, typeId?: string) => LinkItem[];
+  // What the slash menu's "New" section offers.
+  types: () => LinkType[];
   title: (id: string) => string; // for copying as plain text
   Mention: ComponentType<{ id: string; tag: boolean }>;
   Block: ComponentType<{ id: string; view: string | null; setView: (view: string) => void; selected: boolean }>;
@@ -67,7 +71,7 @@ export const PageLink = Node.create<{ host: LinkHost | null }>({
         </NodeViewWrapper>
       ),
       // Clicks and keys inside a card belong to the card's own controls.
-      { stopEvent: ({ event }) => (event.target as Element | null)?.closest?.("button, a, input, [role=menu]") != null },
+      { stopEvent: ({ event }) => (event.target as Element | null)?.closest?.("button, a, input, [role=menu], [role=checkbox]") != null },
     );
   },
 });
@@ -110,22 +114,37 @@ function LinkMenu({ items, index, empty, onPick, onHover }: MenuProps) {
   );
 }
 
+// The type an "@" (or a "#", for a tag) was typed for by the slash menu's "New" section, until
+// its menu closes.
+const naming = new WeakMap<Editor, LinkType>();
+
+// "/task": an "@" whose menu names a new task, or links one there is.
+export function nameNew(editor: Editor, range: Range, type: LinkType) {
+  naming.set(editor, type);
+  editor.chain().focus().deleteRange(range).insertContent(type.tag ? "#" : "@").run();
+}
+
 function linkSuggestion(editor: Editor, host: LinkHost, char: keyof typeof keys, tag: boolean) {
   let busy = false; // one pick at a time: a double click must not make two pages
+  const scope = () => {
+    const type = naming.get(editor);
+    return type && char !== "[[" && Boolean(type.tag) === tag ? type : undefined;
+  };
   return Suggestion<LinkItem, LinkItem>({
     pluginKey: keys[char],
     editor,
     char,
-    // "[[" runs to the end of a title, spaces and all; "@" keeps going past a space while a page matches.
+    // "[[" runs to the end of a title, spaces and all; "@" keeps going past a space while a page
+    // matches, or while it names a new page.
     allowSpaces: !tag,
     allow: ({ state, range }) => {
       if (state.doc.resolve(range.from).parent.type.spec.code) return false;
       const query = state.doc.textBetween(range.from, range.to).slice(char.length);
-      // "#" alone starts a heading; the menu waits for the first letter.
-      if (tag) return query.length > 0;
-      return char === "[[" || !query.includes(" ") || host.search(query, false).some((i) => i.key !== "new");
+      // "#" alone starts a heading; the menu waits for the first letter, unless "/tag" typed it.
+      if (tag) return query.length > 0 || Boolean(scope());
+      return char === "[[" || Boolean(scope()) || !query.includes(" ") || host.search(query, false).some((i) => i.key !== "new");
     },
-    items: ({ query }) => host.search(query, tag),
+    items: ({ query }) => host.search(query, tag, scope()?.id),
     command: ({ editor, range, props }) => {
       if (busy) return;
       busy = true;
@@ -162,7 +181,7 @@ function linkSuggestion(editor: Editor, host: LinkHost, char: keyof typeof keys,
       const props = (): MenuProps => ({
         items: current.items,
         index,
-        empty: tag ? "No tags" : "No pages",
+        empty: scope() ? `Type a name for the new ${scope()!.name.toLowerCase()}` : tag ? "No tags" : "No pages",
         onPick: (item) => current.command(item),
         onHover: (i) => {
           index = i;
@@ -193,11 +212,13 @@ function linkSuggestion(editor: Editor, host: LinkHost, char: keyof typeof keys,
           if (event.key === "Enter") {
             const item = current.items[index];
             if (item) current.command(item);
-            return Boolean(item);
+            // Still asking for a name: Enter must not split the line.
+            return Boolean(item || scope());
           }
           return false;
         },
         onExit: () => {
+          if (scope()) naming.delete(editor);
           unmount?.();
           menu?.destroy();
           menu = undefined;
