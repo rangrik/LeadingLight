@@ -1,0 +1,332 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 07:52:33 -0700
+Subject: [PATCH] Outputs: each file an agent wrote, kept as the write left it
+
+Claude's Write and Edit calls that went through, and Codex's completed file changes, keep the file's content (up to 5 MB) with the conversation. GET /v1/conversations/{id}/outputs lists them; .../outputs/{id} is one as it was, after the file changes or its worktree is gone.
+---
+ internal/box/claudedriver.go  |   9 +-
+ internal/box/codexdriver.go   |  15 ++-
+ internal/box/conversations.go |   2 +
+ internal/box/outputs.go       | 174 ++++++++++++++++++++++++++++++++++
+ internal/box/outputs_test.go  |  27 ++++++
+ 5 files changed, 225 insertions(+), 2 deletions(-)
+ create mode 100644 internal/box/outputs.go
+ create mode 100644 internal/box/outputs_test.go
+
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index a814617..613ea70 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -240,6 +240,7 @@ type claudeConv struct {
+ 	gone  bool
+ 	// reqs is what Claude asked, by request (requests.go).
+ 	reqs *requestLedger
++	outs *outputs
+ }
+ 
+ // claudeDriver holds the structured sessions berthd follows.
+@@ -297,7 +298,7 @@ func (d *claudeDriver) conv(sess Session) (*claudeConv, error) {
+ 	if c == nil || c.conv != sess.conv {
+ 		c = &claudeConv{b: d.b, name: sess.Name, cwd: sess.Dir, conv: sess.conv, sock: sess.sock,
+ 			log: filepath.Join(sess.conv, agenthost.LogName), replies: map[string]chan json.RawMessage{}, changed: make(chan struct{}), caught: make(chan struct{}),
+-			kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv)}
++			kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv), outs: newOutputs(sess.conv)}
+ 		go c.speak()
+ 		d.convs[sess.Name] = c
+ 	}
+@@ -511,12 +512,18 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 		if !helper {
+ 			c.draft.Reset()
+ 		}
++		for call, path := range claudeWrites(l.Message) {
++			c.outs.asked(call, path)
++		}
+ 		say = append(say, c.changedConversation)
+ 	case "user":
+ 		// A tool's result: the permission or question behind it is settled.
+ 		for _, id := range toolResults(l.Message) {
+ 			c.reqs.resolveToolUse(id, e.At)
+ 		}
++		for call, failed := range claudeFailed(l.Message) {
++			say = append(say, c.outs.done(call, live && !failed, e.At))
++		}
+ 		if !helper && l.IsReplay {
+ 			if text, ok := promptText(l.Message); ok && !c.busy {
+ 				c.busy, c.since = true, time.UnixMilli(e.At)
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index 130646b..08255fc 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -126,6 +126,7 @@ type codexConv struct {
+ 	draft       strings.Builder
+ 	pending     []codexRequest
+ 	changes     map[string]json.RawMessage // a file change's edits, by item, until it completes
++	outs        *outputs
+ 	replies     map[string]chan json.RawMessage
+ 	sent        map[string]string // our request ids → their methods
+ 	next        int
+@@ -179,7 +180,7 @@ func (d *codexDriver) conv(sess Session) (*codexConv, error) {
+ 	if c == nil || c.conv != sess.conv {
+ 		c = &codexConv{b: d.b, name: sess.Name, cwd: sess.Dir, conv: sess.conv, sock: sess.sock,
+ 			log: filepath.Join(sess.conv, agenthost.LogName), replies: map[string]chan json.RawMessage{}, sent: map[string]string{},
+-			changed: make(chan struct{}), caught: make(chan struct{}), kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv)}
++			changed: make(chan struct{}), caught: make(chan struct{}), kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv), outs: newOutputs(sess.conv)}
+ 		if meta, ok := readConversation(sess.conv); ok {
+ 			c.mode, c.model, c.effort = meta.Mode, meta.Model, meta.Effort
+ 		}
+@@ -451,6 +452,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		Item struct {
+ 			Type    string          `json:"type"`
+ 			ID      string          `json:"id"`
++			Status  string          `json:"status"`
+ 			Changes json.RawMessage `json:"changes"`
+ 			Content []struct {
+ 				Text string `json:"text"`
+@@ -497,6 +499,17 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 			c.draft.Reset()
+ 		}
+ 		delete(c.changes, p.Item.ID)
++		// A file change made is kept as it left each file.
++		if p.Item.Type == "fileChange" && p.Item.Status == "completed" && live {
++			var changes []struct {
++				Path string `json:"path"`
++			}
++			json.Unmarshal(p.Item.Changes, &changes)
++			for _, ch := range changes {
++				call, path, at := p.Item.ID, ch.Path, e.At
++				say = append(say, func() { c.outs.keep(call, path, at) })
++			}
++		}
+ 		say = append(say, c.changedConversation)
+ 	case "serverRequest/resolved":
+ 		c.reqs.mark(string(p.RequestID), ReqResolved, e.At)
+diff --git a/internal/box/conversations.go b/internal/box/conversations.go
+index 3071615..700339d 100644
+--- a/internal/box/conversations.go
++++ b/internal/box/conversations.go
+@@ -54,6 +54,8 @@ func (b *Box) mountConversations(route func(string, func(http.ResponseWriter, *h
+ 	route("POST /v1/conversations/{id}/resume", b.resumeConversation)
+ 	route("POST /v1/sessions/{name}/resume", b.resumeSession)
+ 	route("GET /v1/sessions/{name}/past", b.listPast)
++	route("GET /v1/conversations/{id}/outputs", b.conversationOutputs)
++	route("GET /v1/conversations/{id}/outputs/{output}", b.outputContent)
+ }
+ 
+ // readConversation reads a conversation's meta.json.
+diff --git a/internal/box/outputs.go b/internal/box/outputs.go
+new file mode 100644
+index 0000000..1d863aa
+--- /dev/null
++++ b/internal/box/outputs.go
+@@ -0,0 +1,174 @@
++package box
++
++import (
++	"bufio"
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"net/http"
++	"os"
++	"path/filepath"
++	"regexp"
++)
++
++// Outputs are the files an agent wrote, each kept as that write left it,
++// with its conversation (outputs/ beside its log): a turn's file opens as it
++// was then, after the file changes again or its worktree is gone. A write
++// that failed or was refused is none; one read again from an old log (a
++// restart) is not kept, since the file may have changed since.
++
++// Output is one write: where, by which call, and whether its content is kept.
++type Output struct {
++	ID      string `json:"id"`
++	Path    string `json:"path"`
++	Tool    string `json:"tool"`
++	At      int64  `json:"at"`
++	Size    int64  `json:"size"`
++	Kept    bool   `json:"kept"`
++	Missing bool   `json:"missing,omitempty"`
++}
++
++// maxOutput is the largest file whose content is kept.
++const maxOutput = 5 << 20
++
++type outputs struct {
++	dir    string
++	writes map[string]string // a write waiting for its result: call → path
++}
++
++func newOutputs(conv string) *outputs {
++	return &outputs{dir: filepath.Join(conv, "outputs"), writes: map[string]string{}}
++}
++
++func (o *outputs) asked(call, path string) {
++	if path != "" {
++		o.writes[call] = path
++	}
++}
++
++// done is a write's result: what it left is kept, unless it failed or is
++// only read again.
++func (o *outputs) done(call string, keep bool, at int64) func() {
++	path, ok := o.writes[call]
++	delete(o.writes, call)
++	if !ok || !keep {
++		return func() {}
++	}
++	return func() { o.keep(call, path, at) }
++}
++
++func (o *outputs) keep(call, path string, at int64) {
++	sum := sha256.Sum256([]byte(call + "\x00" + path))
++	out := Output{ID: hex.EncodeToString(sum[:6]), Path: path, Tool: call, At: at}
++	if os.MkdirAll(o.dir, 0o700) != nil {
++		return
++	}
++	if st, err := os.Stat(path); err != nil || st.IsDir() {
++		out.Missing = true
++	} else if out.Size = st.Size(); out.Size <= maxOutput {
++		if data, err := os.ReadFile(path); err == nil && os.WriteFile(filepath.Join(o.dir, out.ID), data, 0o600) == nil {
++			out.Kept = true
++		}
++	}
++	line, _ := json.Marshal(out)
++	if f, err := os.OpenFile(filepath.Join(o.dir, "index.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
++		f.Write(append(line, '\n'))
++		f.Close()
++	}
++}
++
++func readOutputs(conv string) []Output {
++	out := []Output{}
++	f, err := os.Open(filepath.Join(conv, "outputs", "index.jsonl"))
++	if err != nil {
++		return out
++	}
++	defer f.Close()
++	sc := bufio.NewScanner(f)
++	for sc.Scan() {
++		var o Output
++		if json.Unmarshal(sc.Bytes(), &o) == nil {
++			out = append(out, o)
++		}
++	}
++	return out
++}
++
++// claudeWrites are the files an assistant message's calls write, by call.
++func claudeWrites(raw json.RawMessage) map[string]string {
++	var m struct {
++		Content []struct {
++			Type  string `json:"type"`
++			ID    string `json:"id"`
++			Name  string `json:"name"`
++			Input struct {
++				FilePath     string `json:"file_path"`
++				NotebookPath string `json:"notebook_path"`
++			} `json:"input"`
++		} `json:"content"`
++	}
++	out := map[string]string{}
++	if json.Unmarshal(raw, &m) != nil {
++		return out
++	}
++	for _, b := range m.Content {
++		switch b.Name {
++		case "Write", "Edit", "MultiEdit", "NotebookEdit":
++			if b.Type == "tool_use" {
++				out[b.ID] = firstNonEmpty(b.Input.FilePath, b.Input.NotebookPath)
++			}
++		}
++	}
++	return out
++}
++
++// claudeFailed says, by call, whether each tool result a user message carries failed.
++func claudeFailed(raw json.RawMessage) map[string]bool {
++	var m struct {
++		Content []struct {
++			Type      string `json:"type"`
++			ToolUseID string `json:"tool_use_id"`
++			IsError   bool   `json:"is_error"`
++		} `json:"content"`
++	}
++	out := map[string]bool{}
++	if json.Unmarshal(raw, &m) == nil {
++		for _, b := range m.Content {
++			if b.Type == "tool_result" {
++				out[b.ToolUseID] = b.IsError
++			}
++		}
++	}
++	return out
++}
++
++var outputID = regexp.MustCompile(`^[0-9a-f]{12}$`)
++
++// GET /v1/conversations/{id}/outputs: what its agents wrote, oldest first.
++func (b *Box) conversationOutputs(w http.ResponseWriter, r *http.Request) error {
++	dir, err := b.conversationDir(r.PathValue("id"))
++	if err != nil {
++		return err
++	}
++	writeJSON(w, readOutputs(dir))
++	return nil
++}
++
++// GET /v1/conversations/{id}/outputs/{output}: one as its write left it.
++func (b *Box) outputContent(w http.ResponseWriter, r *http.Request) error {
++	dir, err := b.conversationDir(r.PathValue("id"))
++	if err != nil {
++		return err
++	}
++	id := r.PathValue("output")
++	if !outputID.MatchString(id) {
++		return httpError{http.StatusNotFound, "no such output"}
++	}
++	data, err := os.ReadFile(filepath.Join(dir, "outputs", id))
++	if err != nil {
++		return httpError{http.StatusNotFound, "that output's content isn't kept"}
++	}
++	w.Header().Set("Content-Type", "application/octet-stream")
++	w.Write(data)
++	return nil
++}
+diff --git a/internal/box/outputs_test.go b/internal/box/outputs_test.go
+new file mode 100644
+index 0000000..3b44c9a
+--- /dev/null
++++ b/internal/box/outputs_test.go
+@@ -0,0 +1,27 @@
++package box
++
++import (
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++// A write is kept as it left the file; a failed one is none; later changes don't touch it.
++func TestOutputsKeepEachWriteAsItLeftTheFile(t *testing.T) {
++	conv, work := t.TempDir(), t.TempDir()
++	file := filepath.Join(work, "a.txt")
++	o := newOutputs(conv)
++	os.WriteFile(file, []byte("first"), 0o644)
++	o.asked("c1", file)
++	o.done("c1", true, 1)()
++	o.asked("c2", file)
++	o.done("c2", false, 2)()
++	os.WriteFile(file, []byte("second"), 0o644)
++	outs := readOutputs(conv)
++	if len(outs) != 1 || !outs[0].Kept || outs[0].Tool != "c1" {
++		t.Fatalf("outputs: %+v", outs)
++	}
++	if kept, _ := os.ReadFile(filepath.Join(conv, "outputs", outs[0].ID)); string(kept) != "first" {
++		t.Fatalf("kept %q", kept)
++	}
++}
+-- 
+2.51.2
+

@@ -63,7 +63,9 @@ function api(method, path, body) {
     const req = request({ socketPath: sock, method, path, headers: { "content-type": "application/json" } }, (res) => {
       let text = "";
       res.on("data", (d) => (text += d));
-      res.on("end", () => ok({ status: res.statusCode, json: text ? JSON.parse(text) : null }));
+      // A file's content comes as it is, not as JSON.
+      const parse = () => { try { return JSON.parse(text); } catch { return text; } };
+      res.on("end", () => ok({ status: res.statusCode, json: text ? parse() : null }));
     });
     req.on("error", fail);
     req.end(body === undefined ? undefined : JSON.stringify(body));
@@ -234,6 +236,8 @@ async function codex() {
     if (!change?.path?.endsWith("edit.txt") || !change.diff?.includes("hello codex")) throw new Error(JSON.stringify(edit.input));
     await api("POST", `/v1/sessions/${s}/requests/${encodeURIComponent(edit.id)}/respond`, { command: "probe-e1", choice: "allow" });
     await until("edit.txt", async () => readFileSync(join(folder, "edit.txt"), "utf8").includes("hello codex"));
+    const kept = await until("its output", async () => (await api("GET", `/v1/conversations/${await convOf(s)}/outputs`)).json?.find((o) => o.path.endsWith("edit.txt") && o.kept));
+    if (!kept) throw new Error("Codex's file change wasn't kept");
     return { path: change.path.split("/").at(-1) };
   });
   await check("codex: a model and effort set while it runs reach its next turn", async () => {
@@ -293,6 +297,12 @@ async function requests() {
     const r = await respond(approval.id, { command: "probe-a1", choice: "allow" });
     if (r.status !== 200) throw new Error(JSON.stringify(r.json));
     await until("season.txt", async () => readFileSync(join(folder, "season.txt"), "utf8").includes("Winter"));
+    // The file as Claude's write left it is kept, and stays so when the file changes.
+    const id = (await api("GET", "/v1/conversations")).json.find((c) => c.session === s).id;
+    const out = await until("its output", async () => (await api("GET", `/v1/conversations/${id}/outputs`)).json?.find((o) => o.path.endsWith("season.txt") && o.kept));
+    writeFileSync(join(folder, "season.txt"), "changed since");
+    const kept = await api("GET", `/v1/conversations/${id}/outputs/${out.id}`);
+    if (!String(kept.json).includes("Winter")) throw new Error(`kept ${JSON.stringify(kept.json)}`);
     await until("idle", async () => (await session(s))?.agent_state === "finished");
     // A new question, then the agent's process ends before it's answered.
     await send(s, "Use AskUserQuestion to ask me which drink I prefer, options Tea and Coffee.", "probe-r2");
