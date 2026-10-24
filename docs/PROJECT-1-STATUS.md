@@ -20,6 +20,9 @@ notices are vendor/shipyard's, checked equal at build time.
   (slice 11). One still running there keeps working in the old path, and a write can make it again. The app checks the folder before each send; the runtime doesn't refuse a session in a
   missing location yet (next runtime bump).
 - A question card hides the composer, so Stop is out of reach until it's answered.
+- With its session gone, a turn's file view has no Change (the runtime reads a call's detail through
+  a session), and the composer shows the mode the chat list last read.
+- A file deleted by a shell command (rm) isn't seen as deleted; only Codex's own deletes are.
 - In the browser build the GPT models are this Mac's Codex's once project chats are on (the dev
   server asks it); otherwise the stand-in's, which the Ask regression spec expects.
 - tmux is the person's Homebrew copy; the installed app must provision it (slice 2).

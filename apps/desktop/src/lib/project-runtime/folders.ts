@@ -1,6 +1,6 @@
 import { objects, type ProjectFolder } from "~/lib/objects";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
-import { ask, stream } from "~/lib/project-runtime/transport";
+import { ask, runtimeStatus, stream } from "~/lib/project-runtime/transport";
 import { createStore } from "~/lib/state";
 
 // Pages linked to folders (features/external-projects.feature). LeadingLight keeps which page
@@ -92,17 +92,25 @@ const repoUrl = (s: string) => (/^[\w.-]+\/[\w.-]+$/.test(s) ? `https://github.c
 // The runtime removes a clone that fails or is stopped. Resolves to where it landed.
 export function cloneRepo(repo: string, parent: string, progress: (line: string) => void) {
   let stop = () => {};
+  let stopped = false;
   const done = new Promise<{ name: string; path: string }>((ok, fail) => {
     let last: { location?: Location; error?: string } = {};
-    stop = stream("POST", "/v1/locations/clone", { url: repoUrl(repo), parent }, 600, (line) => {
+    // Stopped here: settled at once, as the stream says nothing more once stopped.
+    stop = () => ((stopped = true), fail(new Error("The clone stopped.")));
+    // The first thing a person does may be this clone: the runtime starts first, as a call would.
+    void runtimeStatus({ start: true }).then(() => {
+      if (stopped) return;
+      const end = stream("POST", "/v1/locations/clone", { url: repoUrl(repo), parent }, 600, (line) => {
       try {
         const m = JSON.parse(line) as { line?: string; done?: boolean; location?: Location; error?: string };
         if (m.line) progress(m.line);
         if (m.done || m.error) last = m;
-      } catch {
-        // Not one of the runtime's lines.
-      }
-    }, () => (last.location ? ok(last.location) : fail(new Error(last.error ?? "The clone stopped."))));
+        } catch {
+          // Not one of the runtime's lines.
+        }
+      }, () => (last.location ? ok(last.location) : fail(new Error(last.error ?? "The clone stopped."))));
+      stop = () => ((stopped = true), end(), fail(new Error("The clone stopped.")));
+    });
   });
   return { stop: () => stop(), done };
 }

@@ -120,7 +120,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
           <DialogDescription>The page keeps your notes; the folder keeps its files. Nothing in the folder is changed.</DialogDescription>
         </DialogHeader>
         <Form className="contents" onSubmit={(e) => (e.preventDefault(), void submit(differs))}>
-          <DialogPanel className="grid gap-4">
+          <DialogPanel className="grid grid-cols-[minmax(0,1fr)] gap-4">
             <SegmentedControl aria-label="Where the folder is" className="w-full" render={<RadioGroupPrimitive onValueChange={(v) => (setSource(v as "mac" | "github"), setError(null))} value={source} />}>
               <SegmentedControlItem className="flex-1" render={<RadioPrimitive.Root disabled={busy} value="mac" />}>
                 <FolderOpen />
@@ -145,7 +145,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
                   {there && (
                     <FieldError match>
                       {there} is already there.{" "}
-                      <Button className="h-auto p-0 text-xs sm:h-auto sm:text-xs" onClick={() => (setSource("mac"), setPath(there), void submit(false, there))} variant="link">
+                      <Button className="h-auto p-0 text-xs underline sm:h-auto sm:text-xs" onClick={() => (setSource("mac"), setPath(there), void submit(false, there))} variant="link">
                         Link it
                       </Button>
                     </FieldError>

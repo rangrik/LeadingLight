@@ -29,7 +29,8 @@ pub struct Runtime {
     status: Mutex<Option<Status>>,
     // One start at a time; the others wait for its answer.
     starting: Mutex<()>,
-    streams: Mutex<HashMap<u64, UnixStream>>,
+    // A stream's connection once open; None while it starts the runtime and connects.
+    streams: Mutex<HashMap<u64, Option<UnixStream>>>,
     next: AtomicU64,
 }
 
@@ -312,11 +313,24 @@ pub async fn runtime_call(app: AppHandle, method: String, path: String, body: Op
 // A streamed answer, one line each, until runtime_stream_stop or it ends: the runtime's events, or
 // a clone's progress. Stopping closes the connection, so berthd stops the work as well.
 #[tauri::command]
-pub fn runtime_stream(app: AppHandle, rt: State<'_, Runtime>, method: String, path: String, body: Option<Value>, quiet: u64, on: Channel<String>) -> Result<u64, String> {
+pub fn runtime_stream(app: AppHandle, rt: State<'_, Runtime>, method: String, path: String, body: Option<Value>, quiet: u64, on: Channel<String>) -> u64 {
     let id = rt.next.fetch_add(1, Ordering::Relaxed);
-    let s = UnixStream::connect(socket(&home(&app))).map_err(|e| e.to_string())?;
-    rt.streams.lock().unwrap().insert(id, s.try_clone().map_err(|e| e.to_string())?);
+    rt.streams.lock().unwrap().insert(id, None);
     std::thread::spawn(move || {
+        // The runtime starts first if it isn't running, as a call would; a stop meanwhile wins.
+        let connect = || -> Result<UnixStream, String> {
+            let rt = app.state::<Runtime>();
+            let ready = matches!(rt.status.lock().unwrap().as_ref(), Some(s) if s.state == "ready");
+            if !ready && ensure(&app, &rt, false).state != "ready" {
+                return Err("The project runtime isn't running.".into());
+            }
+            let s = UnixStream::connect(socket(&home(&app))).map_err(|e| e.to_string())?;
+            match rt.streams.lock().unwrap().get_mut(&id) {
+                Some(slot) => *slot = Some(s.try_clone().map_err(|e| e.to_string())?),
+                None => return Err("stopped".into()),
+            }
+            Ok(s)
+        };
         let run = |mut s: UnixStream| -> Result<(), String> {
             // Silence past quiet seconds is a lost stream (berthd's events say something every 25 s).
             s.set_read_timeout(Some(Duration::from_secs(quiet))).map_err(|e| e.to_string())?;
@@ -347,17 +361,17 @@ pub fn runtime_stream(app: AppHandle, rt: State<'_, Runtime>, method: String, pa
             lines(&all);
             Ok(())
         };
-        let _ = run(s);
+        let _ = connect().and_then(run);
         // An empty line is the end; the webview asks again from its last event.
         let _ = on.send(String::new());
         app.state::<Runtime>().streams.lock().unwrap().remove(&id);
     });
-    Ok(id)
+    id
 }
 
 #[tauri::command]
 pub fn runtime_stream_stop(rt: State<'_, Runtime>, id: u64) {
-    if let Some(s) = rt.streams.lock().unwrap().remove(&id) {
+    if let Some(Some(s)) = rt.streams.lock().unwrap().remove(&id) {
         let _ = s.shutdown(std::net::Shutdown::Both);
     }
 }

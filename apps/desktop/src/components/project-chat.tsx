@@ -78,7 +78,10 @@ function turnsOf(chat: Chat): Shown[] {
       // Nor is one still waiting for the person's yes.
       const asking = chat.requests.some((r) => r.tool_use === t.tool && (r.state === "pending" || r.state === "recorded"));
       const files = out[out.length - 1]?.files;
-      const output = chat.outputs.find((o) => o.tool === t.tool && (o.path === t.file || o.path.endsWith(`/${t.file}`)));
+      const same = (o: Output) => o.path === t.file || o.path.endsWith(`/${t.file}`);
+      const found = chat.outputs.find((o) => o.tool === t.tool && same(o));
+      // Deleted by this turn: it opens as its last kept version before.
+      const output = found?.missing ? { ...found, ...chat.outputs.filter((o) => same(o) && o.kept && o.at < found.at).at(-1), missing: true, tool: found.tool } : found;
       // The turn's last write of a file is the one its chip opens.
       if (files && !t.error && !asking) files.splice(0, files.length, ...files.filter((f) => f.name !== t.file), { name: t.file, tool: t.tool, output });
     } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
@@ -92,10 +95,11 @@ function turnsOf(chat: Chat): Shown[] {
     if (!(isLast && live)) turn.items = turn.items.map((i) => (i.kind === "tool" && i.status === "running" ? { ...i, status: "stopped" } : i));
     // The reply being written shows until the record has its words.
     if (isLast && (live || chat.draft)) return chat.draft && !inRecord(chat.window, chat.draft) && turn.items.push({ kind: "text", text: chat.draft });
-    // Only turns started by a message line up with them: the agent can start one itself. A turn
-    // just sent isn't in the list yet while its last one has ended.
-    const lag = live && sent.at(-1)?.ended ? 1 : 0;
-    const ledger = sent[sent.length - (out.length - k) + lag];
+    // Only turns started by a message line up with them: the agent can start one itself. Around a
+    // send one side is ahead: the record has the message the list hasn't started, or the list has
+    // started a turn for a message still on its way into the record.
+    const shift = live && sent.at(-1)?.ended ? 1 : sending(chat).length > 0 && sent.at(-1) && !sent.at(-1)?.ended ? -1 : 0;
+    const ledger = sent[sent.length - (out.length - k) + shift];
     const ms = ledger?.started && ledger.ended ? Date.parse(ledger.ended) - Date.parse(ledger.started) : 0;
     turn.items.push({ kind: "end", ms, how: turn.error ? "failed" : turn.stopped ? "stopped" : "done", error: turn.error });
   });
@@ -308,7 +312,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
                 ...t.reports.map((r) => ({ session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: r.status, duration: r.duration, answer: r.answer, error: r.error })),
                 ...out.map((s) => ({ session: s, agent: state(s)?.agent, live: state(s)?.agent_state === "waiting" ? ("waiting" as const) : ("working" as const) })),
               ];
-              return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={(s) => void ask("POST", `/v1/sessions/${s}/interrupt`).catch(() => {})} rows={rows} />;
+              return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={(s) => void ask("POST", `/v1/sessions/${s}/interrupt`).catch(() => {})} prefix={`${location}-`} rows={rows} />;
             })()}
           </div>
         ))}
@@ -317,7 +321,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             <Turn items={[{ kind: "user", text }]} live onGoAhead={() => {}} page={title} />
           </div>
         ))}
-        {chat.error && <p className="mt-2 text-destructive-foreground">{chat.error}</p>}
+        {chat.error && <p className="mt-2 break-words text-destructive-foreground">{chat.error}</p>}
       </div>
       {front &&
         (front.kind === "question" ? (
@@ -392,7 +396,9 @@ function FilePreview({ file, location, worktree, conv, live, onClose }: { file: 
       void ask<Detail>("GET", `/v1/sessions/${live}/transcript/tool/${encodeURIComponent(file.tool)}`).then(
         (d) => {
           const marked = (s: string | undefined, m: string) => (s ? s.replace(/\n$/, "").split("\n").map((l) => `${m}${l}`) : []);
-          put((d.hunks?.flatMap((h) => h.lines) ?? [...marked(d.old, "-"), ...marked(d.new, "+")]).join("\n"));
+          // A deletion's record holds the text it took away, as an addition's would.
+          const lines = d.hunks?.flatMap((h) => h.lines) ?? (file.output?.missing ? marked(d.new || d.old, "-") : [...marked(d.old, "-"), ...marked(d.new, "+")]);
+          put(lines.join("\n"));
         },
         (e) => put(`Couldn't read the change: ${e.message}`),
       );
@@ -406,7 +412,7 @@ function FilePreview({ file, location, worktree, conv, live, onClose }: { file: 
     }
     return () => void (current = false);
   }, [file, view]);
-  const said = { then: "As this turn left it.", now: "As it is in the folder now.", change: "What this turn changed." }[view];
+  const said = { then: file?.output?.missing ? "As it was before this turn deleted it." : "As this turn left it.", now: "As it is in the folder now.", change: "What this turn changed." }[view];
   return (
     <Dialog onOpenChange={(o) => !o && onClose()} open={file !== null}>
       <DialogPopup className="sm:max-w-2xl">
