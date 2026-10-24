@@ -1,12 +1,19 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// Claude through the installed Claude Code (agent.rs), and the menu bar, built from
+// Claude through the installed Claude Code (agent.rs), the menu bar, built from
 // src/lib/shortcuts.json (Shipyard's, see vendor/shipyard/README.md); each item tells
-// the webview as berth://menu.
+// the webview as berth://menu, and the idea capture box (capture.rs).
 mod agent;
+mod capture;
 mod menu;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
+
+// Closing the main window hides it, so ⌃⌥I keeps working; only Quit lets it close.
+static QUITTING: AtomicBool = AtomicBool::new(false);
 
 fn migrations() -> Vec<Migration> {
     vec![
@@ -25,7 +32,7 @@ fn migrations() -> Vec<Migration> {
     ]
 }
 
-// ⌘Q closes the window instead of quitting at once, so the webview saves first
+// ⌘Q closes the windows instead of quitting at once, so the webview saves first
 // (App.tsx, onCloseRequested). The app menu's last item is the predefined Quit;
 // it is swapped for ours.
 #[cfg(target_os = "macos")]
@@ -52,16 +59,38 @@ pub fn run() {
                 .add_migrations(DB_URL, migrations())
                 .build(),
         )
+        .plugin(tauri_nspanel::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(agent::Agents::default())
-        .invoke_handler(tauri::generate_handler![agent::agent_status, agent::agent_ask, agent::agent_cancel, agent::agent_list, agent::agent_folder])
-        .setup(|_app| {
+        .invoke_handler(tauri::generate_handler![
+            agent::agent_status,
+            agent::agent_ask,
+            agent::agent_cancel,
+            agent::agent_list,
+            agent::agent_folder,
+            capture::capture_show,
+            capture::capture_hide,
+            capture::capture_open
+        ])
+        .setup(|app| {
             #[cfg(target_os = "macos")]
-            menu_bar(_app)?;
+            menu_bar(app)?;
+            capture::setup(app.handle())?;
             Ok(())
         })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == capture::MAIN && !QUITTING.load(Ordering::Relaxed) {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .on_menu_event(|app, event| {
-            use tauri::Manager;
             if event.id() == "quit" {
+                QUITTING.store(true, Ordering::Relaxed);
+                capture::release(app);
                 for window in app.webview_windows().values() {
                     let _ = window.close();
                 }
@@ -69,6 +98,15 @@ pub fn run() {
                 menu::on_event(app, event.id().as_ref());
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // The Dock icon brings the hidden main window back.
+            if let RunEvent::Reopen { has_visible_windows: false, .. } = event {
+                if let Some(main) = app.get_webview_window(capture::MAIN) {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
+        });
 }

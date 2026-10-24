@@ -2,6 +2,7 @@
   "_": "LeadingLight's keyboard shortcuts, in Shipyard's shape (vendor/shipyard/app/src/lib/shortcuts.ts reads it through an alias; src-tauri/src/menu.rs builds the Mac menu bar from it). group is the menu an item is in; accel, when set, puts it there with that accelerator, so macOS cannot take the key first. Never give ⌘C, ⌘V, ⌘A or ⌘F an accelerator: text fields need them. The editor's own keys (⌘B, ⌘I, …) stay out: its toolbar shows them.",
   "shortcuts": [
     { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N" },
+    { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },
     { "id": "save", "group": "File", "label": "Save", "keys": "⌘S", "accel": "CmdOrCtrl+S", "what": "Save now" },
     { "id": "sidebar", "group": "View", "label": "Show or hide the sidebar", "keys": "⌘\\", "accel": "CmdOrCtrl+\\" },
     { "id": "zoom-in", "group": "View", "label": "Zoom in", "keys": "⌘+", "accel": "CmdOrCtrl+=", "sep": true },

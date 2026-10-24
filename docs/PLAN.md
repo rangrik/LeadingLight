@@ -114,6 +114,12 @@ Left out of M2 (see `DEFERRED.md`): stickers (waiting on a decision),
 queries, block references, images and web links as pages, the graph, one page open twice,
 editing an embed in place, editing values inside lists.
 
+## M2.75 — Idea capture (built)
+
+- ⌃⌥I from any app opens a small box; what is typed is an Idea page, linked in Today under
+  "Ideas". A non-activating panel in the Mac app, the same box inside the window in a browser
+  (features/capture.feature, DECISIONS.md 13).
+
 ## M3 — Everyday polish
 
 - Search (⌘K), trash view with restore, images and files, remember window state.

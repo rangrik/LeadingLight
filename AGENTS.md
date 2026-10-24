@@ -7,7 +7,8 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
 ## Layout
 
 - `apps/desktop` — the app. `src/` is React, `src-tauri/` is Rust (window, SQLite migrations, the
-  menu bar, and `agent.rs`, which drives the installed Claude Code for Ask about this).
+  menu bar, `agent.rs`, which drives the installed Claude Code for Ask about this, and `capture.rs`,
+  the ⌃⌥I idea capture panel). `capture.html` + `src/capture.tsx` is that panel's page.
 - `packages/ui` — COSS UI components (shadcn-style, on Base UI). Import as `@leadinglight/ui/components/<name>`.
   Docs: https://coss.com/ui/docs/get-started (setup), https://coss.com/ui/docs/styling (tokens, `isolate`),
   `https://coss.com/ui/docs/components/<name>.md` per component, https://coss.com/ui/llms.txt (index).

@@ -187,6 +187,8 @@ export function BlockEditor({
   writing,
   onStats,
   onFocusChange,
+  label = "Page body",
+  placeholder,
   ref,
 }: {
   content: EditorDoc | null;
@@ -194,6 +196,9 @@ export function BlockEditor({
   // Gets a reader, not the document: serialising a long page on every keystroke is slow.
   onChange?: (read: () => EditorDoc) => void;
   links?: LinkHost;
+  // The editor's accessible name, and the hint on an empty line.
+  label?: string;
+  placeholder?: string;
   // An embedded page: shown, never edited or saved from here.
   readOnly?: boolean;
   onExitTop?: () => void;
@@ -235,6 +240,7 @@ export function BlockEditor({
         assets,
         openLink: (href) => openRef.current(href),
         links,
+        placeholder,
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
@@ -289,7 +295,7 @@ export function BlockEditor({
       attributes: {
         class: "ll-editor",
         role: "textbox",
-        "aria-label": "Page body",
+        "aria-label": label,
         "aria-multiline": "true",
       },
     },

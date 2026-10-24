@@ -596,3 +596,7 @@
 }
 .ll-editor .ll-spelling { text-decoration-color: var(--destructive); }
 .ll-editor .ll-grammar { text-decoration-color: var(--success); }
+
+/* The slash and link menus mount on <body> (TipTap's suggestion), so they sit above fixed
+   surfaces holding an editor, such as the capture box. */
+body > .react-renderer { z-index: 50; }

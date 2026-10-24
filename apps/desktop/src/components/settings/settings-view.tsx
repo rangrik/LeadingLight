@@ -1,4 +1,4 @@
-import { ArrowLeft, Info, Keyboard, Palette, PenLine, Sparkles } from "lucide-react";
+import { ArrowLeft, Info, Keyboard, Lightbulb, Palette, PenLine, Sparkles } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { closeSettings } from "@/views/settings/open";
@@ -21,17 +21,19 @@ import { PanelHeader } from "~/components/panel-header";
 import { AboutSection } from "~/components/settings/about-section";
 import { AiSection } from "~/components/settings/ai-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
+import { CaptureSection } from "~/components/settings/capture-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. Appearance, Writing, AI and About are ours; Shortcuts is Shipyard's (vendor/shipyard); the
-// ones about agents, machines and Shipyard's own General stay out until there is ours.
-export type SectionId = "appearance" | "writing" | "ai" | "shortcuts" | "about";
+// one. Appearance, Writing, Capture, AI and About are ours; Shortcuts is Shipyard's (vendor/shipyard);
+// the ones about agents, machines and Shipyard's own General stay out until there is ours.
+export type SectionId = "appearance" | "writing" | "capture" | "ai" | "shortcuts" | "about";
 
 const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
   { id: "writing", title: "Writing", icon: PenLine, Component: WritingSection },
+  { id: "capture", title: "Capture", icon: Lightbulb, Component: CaptureSection },
   { id: "ai", title: "AI", icon: Sparkles, Component: AiSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
   { id: "about", title: "About", icon: Info, Component: AboutSection },

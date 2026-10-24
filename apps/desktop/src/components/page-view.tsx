@@ -128,6 +128,7 @@ export function PageView({ page }: { page: LLObject }) {
       setProperties: replaceProps,
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
+      focus: () => editorRef.current?.focus("end"),
     });
     return () => {
       untrack();
@@ -332,7 +333,7 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing)}
           />
         </div>
-        {day && <CreatedThisDay day={day} id={page.id} />}
+        {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
     </div>

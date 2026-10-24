@@ -26,10 +26,13 @@ const aliasesOf = (p: ObjectSummary) =>
     .map((a) => a.trim())
     .filter(Boolean);
 
+// How a link menu makes pages: the main window does it itself; the capture panel asks it to.
+export type LinkActions = { here?: () => string | undefined; create: (title: string, typeId: string) => Promise<string>; day: (day: string) => Promise<string> };
+
 // What "@", "[[" and "#" offer: matching pages (by title or alias), days, and a new page.
-function search(query: string, tag: boolean): LinkItem[] {
+function search(query: string, tag: boolean, actions: LinkActions): LinkItem[] {
   const q = query.trim().toLowerCase();
-  const here = focusedPage();
+  const here = actions.here?.();
   const pool = space.get().pages.filter((p) => p.id !== here && !p.properties.templateOf && (p.typeId === "tag") === tag);
   const alias = (p: ObjectSummary) => aliasesOf(p).find((a) => a.toLowerCase().includes(q));
   const found = pool
@@ -54,7 +57,7 @@ function search(query: string, tag: boolean): LinkItem[] {
       // The day's note, if it is already listed, is offered once, by its label.
       const listed = items.findIndex((i) => pageOf(i.key)?.properties.day === day);
       if (listed >= 0) items.splice(listed, 1);
-      items.push({ key: `day-${day}`, title: label, hint: dailyTitle(day), icon: <CalendarDays className="size-4 shrink-0 text-muted-foreground" />, link: () => ensureDaily(day) });
+      items.push({ key: `day-${day}`, title: label, hint: dailyTitle(day), icon: <CalendarDays className="size-4 shrink-0 text-muted-foreground" />, link: () => actions.day(day) });
     }
   }
   const name = query.trim();
@@ -63,7 +66,7 @@ function search(query: string, tag: boolean): LinkItem[] {
       key: "new",
       title: `Create ${tag ? "#" : ""}“${name}”`,
       icon: <Plus className="size-4 shrink-0 text-muted-foreground" />,
-      link: async () => (await createPage({ title: name, typeId: tag ? "tag" : PAGE_TYPE })).id,
+      link: () => actions.create(name, tag ? "tag" : PAGE_TYPE),
     });
   }
   return items;
@@ -196,4 +199,11 @@ function LinkBlock({ id, view, setView }: { id: string; view: string | null; set
   );
 }
 
-export const linkHost: LinkHost = { search, title: (id) => pageLabel(pageOf(id)?.title ?? ""), Mention: MentionChip, Block: LinkBlock };
+export const makeLinkHost = (actions: LinkActions): LinkHost => ({
+  search: (query, tag) => search(query, tag, actions),
+  title: (id) => pageLabel(pageOf(id)?.title ?? ""),
+  Mention: MentionChip,
+  Block: LinkBlock,
+});
+
+export const linkHost = makeLinkHost({ here: focusedPage, create: async (title, typeId) => (await createPage({ title, typeId })).id, day: ensureDaily });

@@ -12,6 +12,8 @@ type Live = {
   // Quotes into an essay, and scrolls to an anchor (DECISIONS.md, 11).
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
+  // The cursor at the end of the body, for a page opened to write on.
+  focus: () => void;
 };
 const live = new Map<string, Live>();
 const waiting = new Map<string, ((page: Live) => void)[]>();
@@ -53,7 +55,8 @@ export async function editPage(id: string, change: Change) {
   }
   const obj = await objects.get(id);
   if (!obj) return;
-  const content = obj.content ? change.content?.(obj.content) : undefined;
+  // A page never written in has no body yet; the change starts one.
+  const content = change.content?.(obj.content ?? { type: "doc", content: [] });
   const properties = change.properties?.(obj.properties);
   await objects.update(id, { ...(content && { content }), ...(properties && { properties }) });
   if (properties) patchSummary(id, { properties });

@@ -154,3 +154,30 @@ worker. It adds about 20 MB to the app, chosen over a few home-made rules becaus
 slips. Counts beside the page's name count everything, marks shown or not, so the tagger and Harper
 load whenever Counts is on. Each block's findings are kept per block node, which an edit leaves
 alone unless it touched that block, so counting a long page only redoes what changed.
+
+## 13. Idea capture: a non-activating panel; the box is a view, saving runs in the main window
+
+⌃⌥I must open a box over whatever app is in front without pulling LeadingLight forward, and
+closing it must give the keyboard back. A second Tauri window can't do that: showing or
+focusing one activates the app, which brings every window of ours to the front. So the capture
+window is turned into an `NSPanel` with the non-activating style (`tauri-nspanel`), as
+Spotlight, Alfred and Raycast do. A spike proved it against AppKit's own answers: with another
+app's window above ours, showing the panel made it the key window while that app stayed
+frontmost (menu bar and all), the main window kept its depth in the window stack, and hiding
+the panel left the app inactive, the keyboard back in the other app. `NSApp.isActive` reads
+true while the panel is key; that is the key-window flag only.
+
+The box's webview is a view and nothing more: it sends what was typed to the main window and
+hears back when it is saved. Saving runs in the main window, where the space, the open panes
+and `editPage` live, so a daily note open in a pane gets its new line through its own editor
+(see 9) and every list already knows the new page. In a browser the same box sits inside the
+window and calls the same code directly. For that the main window must exist, so closing it
+hides it and the Dock icon brings it back; only Quit ends the app. Transparent windows need
+Tauri's `macos-private-api`, which the panel's shadow and rounded corners rely on.
+
+The box's body is the block editor itself, not a plain field. In the panel the editor draws
+"@" from the panel's own copy of the space, read from the store each time the box shows; the
+pages its link menu makes (a new page, a day's note) are made by the main window on its behalf,
+so there is still one writer and nothing is made twice. Every captured idea is tagged
+`in-the-middle`, a tag page made the first time, so a list of what came in on the fly is one
+click away.

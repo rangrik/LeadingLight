@@ -33,9 +33,9 @@ Feature: Tags, daily notes and templates
     Then that day's note opens
 
   Scenario: What was made today
-    Given I created the pages "Dune" and "Notes" today
+    Given I created the pages "Dune" and "Notes" and the tag "classic" today
     When I open today's note
-    Then "Created this day · 2" lists Dune and Notes at the end
+    Then "Created this day · 2" lists Dune and Notes at the end, not the tag (tags have their own place)
 
   Scenario: Daily notes stay out of Pages
     Given today's note exists

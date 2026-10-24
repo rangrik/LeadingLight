@@ -33,6 +33,13 @@
 .ll-page-dim > :not(.ll-page),
 .ll-page-dim > .ll-page > :not(.ll-page-body) { opacity: 0.3; }
 
+/* The capture box's editor (capture-box.tsx): 15 px, no handle gutter (a 640 px box has no
+   room left of the text), no drop room below. */
+.ll-capture .ll-editor { font-size: 15px; }
+.ll-capture .ll-editor > * { padding-block: 3px; }
+.ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 8px; }
+.ll-capture .ll-handle { display: none; }
+
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
   outline: none;

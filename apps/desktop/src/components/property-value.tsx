@@ -52,7 +52,10 @@ const asFile = (v: unknown) => (v && typeof v === "object" && typeof (v as FileV
 const empty = <span className="text-muted-foreground/60">Empty</span>;
 
 // Opens the page; with Shift, beside the one in view.
-export const visit = (id: string, e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
+// Where a click on a page goes: a pane here, or, from the capture panel, the main window.
+let opener = (id: string, e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
+export const setVisit = (fn: typeof opener) => void (opener = fn);
+export const visit = (id: string, e: React.MouseEvent) => opener(id, e);
 
 // A page as a small chip: its icon and title.
 export function PageChip({ id, onRemove }: { id: string; onRemove?: () => void }) {
