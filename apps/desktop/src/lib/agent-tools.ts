@@ -10,9 +10,9 @@ import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
-import { sentNotes } from "~/lib/feedback";
+import { type Batch, batchOf, sentNotes } from "~/lib/feedback";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { agentFor, agentOf, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
+import { agentFor, agentOf, type Answer, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
 import { editPage } from "~/lib/live";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
@@ -254,6 +254,34 @@ const published = (r: ObjectSummary | LLObject) => {
   };
 };
 
+// The parts of a response to a feedback batch: each point, what it was about with links to the
+// words and to the batch as sent, then its answer, or why there is none (features/response.feature).
+function answerTo(agent: ObjectSummary, given: string, answers: unknown, first: number) {
+  const f = pageOf(parseHref(given)?.page ?? given);
+  const b = batchOf(f);
+  if (!f || !b) throw new Refusal(`Nothing was published: there is no feedback batch "${given}".`);
+  const lead = ids(agent.properties["agent-parent"])[0] ?? agent.id;
+  if (b.agent !== lead) throw new Refusal("Nothing was published: that feedback was sent to another agent.");
+  const list = (Array.isArray(answers) ? answers : []) as Args[];
+  const strange = list.map((x) => str(x?.point)).filter((p) => !b.points.some((x) => x.id === p));
+  if (strange.length) throw new Refusal(`Nothing was published: the batch has no point ${strange.join(", ")}; its points are ${b.points.map((x) => x.id).join(", ")}.`);
+  const blocks: EditorDoc[] = [];
+  const out: Answer[] = [];
+  const text = (t: string, href?: string) => ({ type: "text", text: t, ...(href && { marks: [{ type: "link", attrs: { href } }] }) });
+  for (const p of b.points) {
+    const given = list.find((x) => str(x.point) === p.id);
+    const md = str(given?.markdown).trim();
+    const why = str(given?.unanswered).trim();
+    out.push({ point: p.id, block: first + blocks.length, ...(!md && { unanswered: why || "no answer was given", ...(!why && { missing: true }) }) });
+    blocks.push(
+      { type: "heading", attrs: { level: 3 }, content: [text(`Point ${p.id.slice(1)}`)] },
+      { type: "paragraph", content: [text("On “"), text(p.quote, `ll:${p.page}#${p.note}`), text("” in "), { type: "mention", attrs: { id: p.page, tag: false } }, text(" · "), text("your note", `ll:${f.id}`)] },
+      ...(md ? (htmlDoc(markdownHtml(md).html).content ?? []) : [{ type: "paragraph", content: [text(`Not answered: ${why || "no answer was given."}`)] }]),
+    );
+  }
+  return { batch: f.id, blocks, answers: out };
+}
+
 // A new report, kept before it is answered; the same call again finds the first.
 async function publish(c: Caller, a: Args, call: AgentCall) {
   const done = space.get().pages.find((p) => reportOf(p)?.command === call.id);
@@ -267,15 +295,31 @@ async function publish(c: Caller, a: Args, call: AgentCall) {
   const corrects = reportOf(pageOf(to)) ? to : undefined;
   if (corrects) to = reportOf(pageOf(corrects))!.to;
   const sources = await sourcesOf(c, a.sources);
-  // The files it shows, kept in LeadingLight as the runtime copied them, after its words.
   const words = htmlDoc(markdownHtml(md).html);
-  const evidence = await keepEvidence(call.files ?? [], a.evidence, (words.content?.length ?? 0) + 1);
-  const content = { ...words, content: [...(words.content ?? []), ...evidenceBlocks(evidence)] };
-  // Only the agent given the task says it is ready for review; a worker's report is read as any other.
-  const ready = a.ready === true && !ids(agent.properties["agent-parent"]).length;
-  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(evidence.length && { evidence: evidence.map(({ url, ...e }) => (url?.startsWith("data:") ? e : { ...e, url })) }), ...(corrects && { corrects }), ...(ready && { ready }) };
+  // An answer to a feedback batch: a part for each of its points, after the agent's words.
+  const reply = str(a.batch) ? answerTo(agent, str(a.batch), a.answers, (words.content?.length ?? 0) + 1) : undefined;
+  // The files it shows, kept in LeadingLight as the runtime copied them, last.
+  const before = [...(words.content ?? []), ...(reply?.blocks ?? [])];
+  const evidence = await keepEvidence(call.files ?? [], a.evidence, before.length + 1);
+  const content = { ...words, content: [...before, ...evidenceBlocks(evidence)] };
+  // Only the agent given the task says it is ready for review, and never with a point left out; a
+  // worker's report is read as any other.
+  const ready = a.ready === true && !ids(agent.properties["agent-parent"]).length && !reply?.answers.some((x) => x.missing);
+  const meta: ReportMeta = {
+    by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources,
+    ...(evidence.length && { evidence: evidence.map(({ url, ...e }) => (url?.startsWith("data:") ? e : { ...e, url })) }),
+    ...(reply && { batch: reply.batch, answers: reply.answers }),
+    ...(corrects && { corrects }),
+    ...(ready && { ready }),
+  };
   const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content, properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
-  return { ...published(report), ...(a.ready === true && !ready && { ready: "Not set: only the agent given the task says it is ready; tell it instead." }) };
+  if (reply) await editPage(reply.batch, { properties: (p) => ({ ...p, batch: { ...(p.batch as Batch), response: report.id } }) });
+  const missing = reply?.answers.filter((x) => x.missing).map((x) => x.point) ?? [];
+  return {
+    ...published(report),
+    ...(missing.length && { incomplete: `Points ${missing.join(", ")} have no answer; the report says so and isn't ready for review. Publish another report to answer them.` }),
+    ...(a.ready === true && !ready && !missing.length && { ready: "Not set: only the agent given the task says it is ready; tell it instead." }),
+  };
 }
 
 // Subtasks of the agent's task: made by it, ticked by it. Its main task, and any task it didn't

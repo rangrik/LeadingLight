@@ -178,7 +178,8 @@ const Unformat = Extension.create({
   },
 });
 
-// Meta+click (Ctrl+click elsewhere) opens a link; a plain click puts the cursor in it. Chips and
+// Meta+click (Ctrl+click elsewhere) opens a link; a plain click puts the cursor in it, but in a
+// report, which takes no cursor, opens it. Chips and
 // quotes that point into the app (data-href) open on a plain click and never take the cursor.
 const OpenLinks = Extension.create<{ open: (href: string) => void }>({
   name: "openLinks",
@@ -202,8 +203,9 @@ const OpenLinks = Extension.create<{ open: (href: string) => void }>({
               return true;
             },
           },
-          handleClick: (_view, _pos, event) => {
-            if (!(event.metaKey || event.ctrlKey)) return false;
+          handleClick: (view, _pos, event) => {
+            // Words that can't be edited (a report) have no cursor to place: a click opens.
+            if (!(event.metaKey || event.ctrlKey) && !view.dom.closest("[data-annotate]")) return false;
             const href = (event.target as HTMLElement).closest("a[href]")?.getAttribute("href");
             if (!href) return false;
             this.options.open(href);
@@ -253,7 +255,8 @@ export function createExtensions(opts: {
       heading: { levels: [1, 2, 3, 4] },
       codeBlock: false,
       orderedList: false,
-      link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
+      // ll: is the app's own address for a page and a place in it (an agent's report links with it).
+      link: { openOnClick: false, autolink: true, defaultProtocol: "https", protocols: ["ll"] },
       dropcursor: { color: "var(--info)", width: 2 },
     }),
     Bold.extend(emphasis("**", "__")),

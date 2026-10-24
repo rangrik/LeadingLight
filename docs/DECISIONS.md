@@ -370,3 +370,14 @@ the task, then sends it to that agent's own conversation with the batch's comman
 message key, so a retry after a lost answer is the same message. A conversation that is gone fails
 the send and says so; it never goes to another agent. A note becomes readable to agents only once
 sent; the rest stay private.
+
+## 25. A response answers every point of its batch, or says it doesn't
+
+An agent answers a batch with one publish naming the batch. The app builds the response's parts
+itself, one per point of the frozen batch: the words the point was about, linked to the note where
+it was written and to the batch as sent, then the agent's answer or why there is none. A point the
+agent leaves out reads "Not answered", the byline counts what was answered, and the response can't
+make the task ready. An answer to another agent's batch, or to a point the batch doesn't have, is
+refused. Links use the app's own ll: addresses, which the editor keeps and, in a report, opens on a
+plain click. The old notes are done once sent: nothing to close, and the batch keeps what each was
+about if the words go.

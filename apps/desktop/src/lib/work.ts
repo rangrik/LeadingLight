@@ -20,7 +20,9 @@ export type Source = { page: string; quote?: string; excerpt?: string };
 export type Target = { page: string; quote?: string; excerpt?: string; block?: number; at?: number };
 // A question an agent said it would ask, and what it is about (the context tool).
 export type Ask = { question: string; about: Target[]; at: number };
-export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; evidence?: Evidence[]; corrects?: string; ready?: boolean };
+// A response's answer to one point of a batch, from its block; missing when the agent gave none.
+export type Answer = { point: string; block: number; unanswered?: string; missing?: boolean };
+export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; evidence?: Evidence[]; batch?: string; answers?: Answer[]; corrects?: string; ready?: boolean };
 
 export const runOf = (p?: ObjectSummary) => p?.properties.run as Run | undefined;
 // What an agent says it is doing, and its steps: its to change, in place (the status tool).

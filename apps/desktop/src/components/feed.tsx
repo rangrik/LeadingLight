@@ -1,4 +1,4 @@
-import { CircleCheck, Inbox, Info, MessageCircleQuestion, ShieldQuestion, X } from "lucide-react";
+import { CircleCheck, Inbox, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
@@ -21,7 +21,7 @@ import { sessions, watchWork } from "~/lib/work-watch";
 // approval is answered in the item, as in its chat, through the same receipts.
 
 export const FEED_W = 320;
-const ICON = { question: MessageCircleQuestion, approval: ShieldQuestion, review: CircleCheck, notice: Info };
+const ICON = { question: MessageCircleQuestion, approval: ShieldQuestion, review: CircleCheck, answer: MessageSquareReply, notice: Info };
 const title = (id?: string) => (id ? pageLabel(pageOf(id)?.title ?? "") : "");
 
 // The items, kept current as the runtime, the chats and the pages change.
@@ -96,10 +96,10 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
               <Answer item={item} />
             </div>
           )}
-          {(item.kind === "review" || item.kind === "notice") && (
+          {!item.request && (
             <div className="flex gap-1">
               <Button onClick={() => feedPrefs.set({ dismissed: [...feedPrefs.get().dismissed, item.id].slice(-200) })} size="xs" variant="ghost">
-                {item.kind === "review" ? "Later" : "Dismiss"}
+                {item.kind === "notice" ? "Dismiss" : "Later"}
               </Button>
             </div>
           )}

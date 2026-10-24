@@ -34,6 +34,20 @@ export function ReportByline({ report, about }: { report: ObjectSummary; about?:
         </button>
       )}
       <span>· {formatAgo(meta.at)}</span>
+      {meta.batch && pageOf(meta.batch) && (
+        <span>
+          ·{" "}
+          <button className="underline-offset-2 hover:underline" onClick={go(meta.batch)} type="button">
+            answers your feedback
+          </button>
+        </span>
+      )}
+      {/* Honest about what it left out (features/response.feature). */}
+      {meta.answers?.some((a) => a.missing) && (
+        <span className="text-destructive-foreground">
+          · {meta.answers.filter((a) => !a.missing).length} of {meta.answers.length} points answered
+        </span>
+      )}
       {meta.corrects && pageOf(meta.corrects) && (
         <span>
           · corrects{" "}

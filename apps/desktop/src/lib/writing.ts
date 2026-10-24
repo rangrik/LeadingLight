@@ -32,7 +32,8 @@ const prefs = localPrefs<WritingPrefs>("ll.writing", {
 });
 
 // Suggested: the tools on pages written in, off on records (a person, a book, a task, a tag, a list).
-const RECORDS = new Set(["person", "book", "task", "tag", "collection"]);
+// Records, and what agents write (their marks would only be noise on words no one can change).
+const RECORDS = new Set(["person", "book", "task", "tag", "collection", "agent", "report", "feedback"]);
 export const suggested = (typeId: string) => !RECORDS.has(typeId);
 export const toolsOn = (p: WritingPrefs, typeId: string) => p.types[typeId] ?? suggested(typeId);
 

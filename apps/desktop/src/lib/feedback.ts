@@ -19,7 +19,7 @@ import { reportOf, runOf } from "~/lib/work";
 
 export const FEEDBACK = "feedback";
 export type Point = { id: string; note: string; page: string; text: string; quote: string; excerpt: string; evidence?: { name: string; sha: string; block: number }[] };
-export type Batch = { command: string; task: string; agent: string; conversation: string; points: Point[]; comment?: string; state: "sending" | "sent" | "failed"; error?: string; at: number; sentAt?: number };
+export type Batch = { command: string; task: string; agent: string; conversation: string; points: Point[]; comment?: string; state: "sending" | "sent" | "failed"; error?: string; at: number; sentAt?: number; response?: string };
 export const batchOf = (p?: ObjectSummary) => p?.properties.batch as Batch | undefined;
 
 type Draft = { picks: { page: string; note: string }[]; comment: string };

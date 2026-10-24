@@ -1,4 +1,5 @@
 import { assignmentOf } from "~/lib/assign";
+import { batchOf } from "~/lib/feedback";
 import { liveEditor, whenLive } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
 import { focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
@@ -18,7 +19,7 @@ import { sessions, stateOf } from "~/lib/work-watch";
 export type FeedItem = {
   // One per actionable thing, the same after any reconnect.
   id: string;
-  kind: "question" | "approval" | "review" | "notice";
+  kind: "question" | "approval" | "review" | "answer" | "notice";
   reason: string;
   agent?: string;
   task?: string;
@@ -91,8 +92,17 @@ export function feedItems(): FeedItem[] {
       items.push({ ...base, id: `stopped:${agent.id}:${runOf(agent)!.session}`, kind: "notice", reason: `${name(agent.id)} stopped before “${name(task.id)}” was ready`, at: task.updatedAt, targets: [{ page: task.id }] });
     }
   }
+  // An answer to feedback, unless it is the review item already.
+  for (const f of pages.filter((p) => batchOf(p)?.response)) {
+    const b = batchOf(f)!;
+    const report = pageOf(b.response!);
+    if (!report || items.some((i) => i.id === `review:${report.id}`)) continue;
+    const answered = reportOf(report)?.answers ?? [];
+    const all = answered.every((x) => !x.missing);
+    items.push({ agent: b.agent, task: b.task, project: projectOf(runOf(pageOf(b.agent))?.location), id: `answer:${report.id}`, kind: "answer", reason: all ? `${name(b.agent)} answered your feedback on “${name(b.task)}”` : `${name(b.agent)} answered ${answered.filter((x) => !x.missing).length} of ${answered.length} points of your feedback on “${name(b.task)}”`, at: report.createdAt, targets: [{ page: report.id }] });
+  }
   const { dismissed } = feedPrefs.get();
-  return items.filter((i) => (i.kind !== "review" && i.kind !== "notice") || !dismissed.includes(i.id)).sort((a, b) => b.at - a.at);
+  return items.filter((i) => i.kind === "question" || i.kind === "approval" || !dismissed.includes(i.id)).sort((a, b) => b.at - a.at);
 }
 
 // Shows a target beside the Feed, keeping the page being read where it is: in the pane the Feed
