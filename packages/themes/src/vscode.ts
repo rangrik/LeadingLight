@@ -740,7 +740,7 @@ export const gruvboxLight: Theme = {
 // Nudged: terminal selected text #839496 → #9eafb1.
 // Accessibility pass: muted text #859698 → #92a3a5, sidebar text #93a1a1 →
 // #94a2a2 (focus rings 3:1, muted text 4.5:1 on popovers and highlighted
-// rows).
+// rows), foreground #94a2a2 → #97a5a5 (4.5:1 on selected blocks).
 export const solarizedDark: Theme = {
   id: "solarized-dark",
   name: "Solarized Dark",
@@ -748,7 +748,7 @@ export const solarizedDark: Theme = {
   syntax: "solarized-dark",
   colors: {
     background: "#002b36",
-    foreground: "#94a2a2",
+    foreground: "#97a5a5",
     sidebar: "#00212b",
     sidebarForeground: "#94a2a2",
     muted: "#073642",

@@ -115,14 +115,17 @@ function locate(editor: Editor, text: string, near: number): Selected | null {
 }
 
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
+// A paragraph that shows nothing: empty, or only spaces and line breaks (pasted blank lines).
+const isBlankLine = (node: PMNode) =>
+  node.type.name === "paragraph" && node.content.content.every((n) => n.type.name === "hardBreak" || (n.isText && !n.text?.trim()));
 
 const TEXT_LINE = "p, h1, h2, h3, h4, summary, pre";
 // How far a line's box is from a point along one axis (0 when the point is inside it).
 const gap = (from: number, to: number, at: number) => (at < from ? from - at : at > to ? at - to : 0);
 
 // A click on blank page space; returns whether it placed the cursor. Beside a block the cursor
-// goes into the line at that height; above the blocks, to the start; below them a new line opens
-// after the last block, unless that block is already an empty line.
+// goes into the line at that height; above the blocks, to the start; below them into the first of
+// the blank lines the page ends with, emptied, and only when there are none does a new line open.
 function placeAt(editor: Editor, x: number, y: number): boolean {
   if (!editor.isEditable) return false;
   const { view, state } = editor;
@@ -132,7 +135,7 @@ function placeAt(editor: Editor, x: number, y: number): boolean {
     view.focus();
     return true;
   };
-  let above: { node: PMNode; pos: number } | null = null;
+  let above = false;
   for (let i = 0, pos = 0; i < doc.childCount; pos += doc.child(i).nodeSize, i++) {
     const node = doc.child(i);
     const rect = (view.nodeDOM(pos) as HTMLElement | null)?.getBoundingClientRect();
@@ -171,12 +174,14 @@ function placeAt(editor: Editor, x: number, y: number): boolean {
       }
       return go(state.tr.setSelection(TextSelection.near(doc.resolve(pos + 1))));
     }
-    above = { node, pos };
+    above = true;
   }
   if (!above) return go(state.tr.setSelection(Selection.atStart(doc)));
-  if (isEmptyLine(above.node)) return go(state.tr.setSelection(TextSelection.create(doc, above.pos + 1)));
-  const at = above.pos + above.node.nodeSize;
-  const tr = state.tr.insert(at, state.schema.nodes.paragraph.create());
+  let at = doc.content.size;
+  for (let i = doc.childCount - 1; i >= 0 && isBlankLine(doc.child(i)); i--) at -= doc.child(i).nodeSize;
+  const tr = state.tr;
+  if (at < doc.content.size) tr.delete(at + 1, at + doc.nodeAt(at)!.nodeSize - 1);
+  else tr.insert(at, state.schema.nodes.paragraph.create());
   return go(tr.setSelection(TextSelection.create(tr.doc, at + 1)));
 }
 

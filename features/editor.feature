@@ -158,8 +158,14 @@ Feature: Block editor
     And the cursor is not in the body (I clicked the sidebar)
     When I click the blank space below "Notes"
     Then a new empty paragraph follows "Notes" with the cursor in it
-    When I click into the sidebar and then the blank space below again
+    When I click into the sidebar and then the blank space below again, and again
     Then no second paragraph is added: the cursor goes into the empty one
+    When I press Backspace once
+    Then the empty paragraph is gone and the cursor is at the end of "Notes"
+    Given the body ends with two blank lines, the last holding only a line break (pasted blank lines)
+    When I click the blank space below them, twice
+    Then the cursor is in the first of them, now empty, and no paragraph is added
+    And Backspace once removes that line
     When I click the side margin beside "Plan"
     Then the cursor is in "Plan" and no block is added
     When the cursor is in "Notes" and I click the blank space below

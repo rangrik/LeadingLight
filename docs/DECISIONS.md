@@ -203,3 +203,11 @@ pages its link menu makes (a new page, a day's note) are made by the main window
 so there is still one writer and nothing is made twice. Every captured idea is tagged
 `in-the-middle`, a tag page made the first time, so a list of what came in on the fly is one
 click away.
+
+## 15. A day not yet written in is a draft
+
+Opening a day (Today, the arrows, the calendar) shows a page that lives only in memory, under
+the id it will keep. Its first save stores it (`storeDraft` in `lib/space.ts`), so browsing never
+leaves empty notes in Daily notes, and the open editor carries on with nothing remounted. Linking
+a day (a capture, the "@" menu) stores it at once, its open draft included, so a day is never
+stored twice.
