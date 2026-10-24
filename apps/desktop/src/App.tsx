@@ -18,7 +18,7 @@ import {
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
-import { ToastProvider } from "@leadinglight/ui/components/toast";
+import { ToastProvider, toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
@@ -34,11 +34,13 @@ import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
-import { dailyFor, ensureDaily, today } from "~/lib/daily";
+import { dayPage, dayShown, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
 import { pageLabel } from "~/lib/labels";
 import { parentOf, roleOf } from "~/lib/linked";
+import { copyPageLink } from "~/lib/links";
+import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
@@ -219,6 +221,14 @@ export default function App() {
   // A row opens its page; Shift opens it beside the one in front, as Shift on a link does.
   const opener = (id: string) => (e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
 
+  // Nothing on screen shows a copied link, so a toast says so.
+  const copyLink = (id: string, name: string) => () =>
+    void copyPageLink(id, name).then(
+      () => toastManager.add({ type: "success", title: "Link copied", timeout: 2000 }),
+      () => toastManager.add({ type: "error", title: "Couldn't copy the link" }),
+    );
+  const isPinned = (p: ObjectSummary) => p.properties.pinned === true;
+
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
@@ -227,12 +237,20 @@ export default function App() {
     .sort(byRecent)
     .map((p) => {
       const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
+      const name = roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title);
       return {
-        name: roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title),
+        id: p.id,
+        name,
+        title: p.title,
         icon: <RowIcon icon={iconFor(p)} />,
         isActive: p.id === current,
         onSelect: opener(p.id),
         onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
+        // Both go through the page's editor when it is open, so its own next save keeps them.
+        onRename: (title: string) => void editPage(p.id, { title }),
+        pinned: isPinned(p),
+        onPin: () => void editPage(p.id, { properties: ({ pinned: _, ...rest }) => (isPinned(p) ? rest : { ...rest, pinned: true }) }),
+        onCopyLink: copyLink(p.id, name),
         onDelete: () => setPendingDelete(p),
         open: p.id === current || kids.some((c) => c.id === current),
         children: kids.map((c) => {
@@ -243,6 +261,7 @@ export default function App() {
             // An essay opens beside its page.
             onSelect: (e: React.MouseEvent) => (roleOf(c) === "essay" ? void openEssay(p.id) : opener(c.id)(e)),
             onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: c.id, label: name }),
+            onCopyLink: copyLink(c.id, name),
             onDelete: () => setPendingDelete(c),
           };
         }),
@@ -277,9 +296,10 @@ export default function App() {
         <AppSidebar
           onCreate={create}
           onNewIdea={toggleCapture}
-          onToday={(e) => void ensureDaily(today()).then((id) => opener(id)(e))}
-          pages={navPages}
-          todayActive={current !== undefined && current === dailyFor(today())?.id}
+          onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
+          pages={navPages.filter((p) => !p.pinned)}
+          pinned={navPages.filter((p) => p.pinned)}
+          todayActive={current !== undefined && current === dayShown(today())}
           types={navTypes}
         />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">

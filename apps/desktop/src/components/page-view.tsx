@@ -16,6 +16,7 @@ import { setPageStats } from "~/components/page-stats";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
+import { useKeysFor } from "~/lib/keymap";
 import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
@@ -45,6 +46,7 @@ const fit = (el: HTMLTextAreaElement | null) => {
 export function PageView({ page }: { page: LLObject }) {
   const [title, setTitle] = useState(page.title);
   const [typeId, setTypeId] = useState(page.typeId);
+  const keysFor = useKeysFor();
   const [props, setProps] = useState(page.properties);
   const latest = useRef(page.properties);
   const [adding, setAdding] = useState(false);
@@ -98,6 +100,11 @@ export function PageView({ page }: { page: LLObject }) {
     patchSummary(page.id, { typeId: next });
     queue({ typeId: next });
   };
+  const rename = (value: string) => {
+    setTitle(value);
+    patchSummary(page.id, { title: value });
+    queue({ title: value });
+  };
   const setIcon = (icon?: PageIcon) => setProp("icon", icon);
   const setCover = (cover?: PageCover) => setProp("cover", cover);
   const addDescription = () => {
@@ -139,6 +146,7 @@ export function PageView({ page }: { page: LLObject }) {
       setContent: (doc) => editorRef.current?.setContent(doc),
       properties: () => latest.current,
       setProperties: replaceProps,
+      setTitle: rename,
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
       focus: () => editorRef.current?.focus("end"),
@@ -286,12 +294,7 @@ export function PageView({ page }: { page: LLObject }) {
               aria-label="Title"
               className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
               onFocus={() => editorRef.current?.clearBlocks()}
-              onChange={(e) => {
-                const value = e.currentTarget.value.replace(/\n/g, "");
-                setTitle(value);
-                patchSummary(page.id, { title: value });
-                queue({ title: value });
-              }}
+              onChange={(e) => rename(e.currentTarget.value.replace(/\n/g, ""))}
               onKeyDown={toBody}
               onPaste={pasteTitle}
               placeholder={role === "essay" ? "Essay title" : "Untitled"}
@@ -339,6 +342,7 @@ export function PageView({ page }: { page: LLObject }) {
             assets={assets}
             content={page.content}
             onAsk={openAsk}
+            askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });
               touchLive(page.id);

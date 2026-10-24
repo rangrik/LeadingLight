@@ -160,7 +160,8 @@ Feature: Idea capture
 
   Scenario: Settings › Capture
     When I open Settings and pick "Capture"
-    Then a group shows "New idea shortcut" with "⌃⌥I", and "Open at login" with a switch
+    Then a group shows "New idea shortcut" with a "⌃⌥I" key button, and "Open at login" with a switch
+    # The key button changes the key as Settings › Shortcuts does (features/shortcuts.feature).
     # In a browser the switch is disabled: there is nothing to start at login.
 
   # The app only. The panel can't be driven by tests; try these in the Mac app.

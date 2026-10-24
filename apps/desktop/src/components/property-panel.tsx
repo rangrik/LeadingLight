@@ -246,7 +246,6 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
           </MenuTrigger>
           <MenuPopup align="start">
             <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>
-            <MenuItem onClick={() => setDeleting(true)}>Delete page…</MenuItem>
             {!roleOf(page) && (
               <>
                 <MenuSeparator />
@@ -269,6 +268,10 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
                 </MenuRadioItem>
               </MenuRadioGroup>
             </MenuGroup>
+            <MenuSeparator />
+            <MenuItem onClick={() => setDeleting(true)} variant="destructive">
+              Delete page…
+            </MenuItem>
           </MenuPopup>
         </Menu>
       </div>

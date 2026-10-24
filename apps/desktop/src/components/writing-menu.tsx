@@ -1,9 +1,9 @@
 import { Focus } from "lucide-react";
-import { keysFor } from "@/lib/shortcuts";
 import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { useKeysFor } from "~/lib/keymap";
 import { type Tool, toggleTool, useBackToPage, useWritingPrefs } from "~/lib/writing";
 
 const TOOLS: { id: Tool; label: string }[] = [
@@ -18,6 +18,7 @@ const TOOLS: { id: Tool; label: string }[] = [
 export function WritingMenu({ className }: { className?: string }) {
   const prefs = useWritingPrefs();
   const back = useBackToPage();
+  const keysFor = useKeysFor();
   return (
     <Menu>
       <MenuTrigger onPointerDown={back.onPointerDown} render={<Button aria-label="Writing" className={cn("size-7", className)} size="icon" variant="ghost" />}>

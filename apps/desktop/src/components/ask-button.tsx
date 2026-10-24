@@ -5,12 +5,14 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { closeAsk, toggleAsk, useAsk } from "~/lib/ask";
+import { useKeysFor } from "~/lib/keymap";
 import { liveEditor } from "~/lib/live";
 
 // The Ask button in a page card's header, beside its Writing menu: Claude or GPT for that page.
 export function AskButton({ page, className }: { page: string; className?: string }) {
   const { open, page: asked } = useAsk();
   const who = isClaude(useAiPrefs().model) ? "Claude" : "GPT";
+  const keys = useKeysFor()("ask");
   const mine = open && asked?.id === page;
   const click = () => {
     if (mine) return closeAsk();
@@ -24,7 +26,7 @@ export function AskButton({ page, className }: { page: string; className?: strin
         <Sparkles />
       </TooltipTrigger>
       <TooltipPopup>
-        Ask {who} <Kbd>⌘J</Kbd>
+        Ask {who} <Kbd>{keys}</Kbd>
       </TooltipPopup>
     </Tooltip>
   );

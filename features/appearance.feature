@@ -67,6 +67,16 @@ Feature: Appearance and settings
 
   Scenario: Every theme keeps its text readable
     Then the contrast check (pnpm check:themes) passes for every built-in theme
+    And it covers the editor in dark themes: selected blocks stand clearly apart from the page
+      (further than a hovered row), text on them stays 4.5:1, and an unticked to-do box's edge is 3:1
+
+  Scenario: Selected blocks and to-do boxes in dark mode
+    Given a page with a heading, a paragraph and two to-dos, one ticked, in LeadingLight Dark
+    When I press Meta+A twice
+    Then every block shows a blue tint that reads at a glance against the page, as one shape
+    And the unticked box is plainly an outlined box, not a faint smudge
+    And the same holds in Solarized Dark, Tokyo Night and One Dark Pro
+    And in light mode both look as before
 
   Scenario: About says which build this is
     Given Settings › About is open

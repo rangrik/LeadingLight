@@ -1,13 +1,15 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
-// Changes: pages instead of projects, labelled Recent (Pages is a type's name), a New page action,
-// a Sort menu and empty text, rows select instead of linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet);
-// rows can be dragged beside the open page; a page's Thoughts page and essay hang under it on a
-// tree (see Children).
-import { ArrowUpDown, Ellipsis, Plus, Trash } from "lucide-react";
+// Changes: pages instead of projects, its label given (Pinned, Recent) with a New page action, a
+// Sort menu and empty text for Recent, rows select instead of linking; the row menu is Rename,
+// Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
+// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
+import { ArrowUpDown, Ellipsis, Link, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Input } from "@leadinglight/ui/components/input";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Popover, PopoverPopup } from "@leadinglight/ui/components/popover";
 import {
   SidebarGroup,
   SidebarGroupAction,
@@ -29,7 +31,19 @@ export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent"
 export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
   recentOrder.get().by === "updated" ? b.updatedAt - a.updatedAt : b.createdAt - a.createdAt;
 
-type Child = { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void; onDelete: () => void };
+// What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes.
+type Actions = { onCopyLink: () => void; onDelete: () => void };
+type Child = Actions & { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void };
+type Row = Child & {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  onRename: (title: string) => void;
+  pinned: boolean;
+  onPin: () => void;
+  open: boolean;
+  children: Child[];
+};
 
 // The tree after xevrion's sidebar submenu (MIT, github.com/xevrion/ui-lab): a trunk from the page
 // with a curved branch to each child, and the branch to the open child drawn in the primary colour,
@@ -87,7 +101,7 @@ function Children({ items }: { items: Child[] }) {
             >
               <span>{c.name}</span>
             </SidebarMenuSubButton>
-            <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" onDelete={c.onDelete} />
+            <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" item={c} />
           </SidebarMenuSubItem>
         ))}
       </SidebarMenuSub>
@@ -95,8 +109,8 @@ function Children({ items }: { items: Child[] }) {
   );
 }
 
-// A row's "More" menu, with Delete.
-function RowMenu({ onDelete, className, showOnHover }: { onDelete: () => void; className?: string; showOnHover?: boolean }) {
+// A row's "More" menu. Delete is last and red, a line apart from the rest.
+function RowMenu({ item, onRename, className, showOnHover }: { item: Actions & Partial<Row>; onRename?: () => void; className?: string; showOnHover?: boolean }) {
   const { isMobile } = useSidebar();
   return (
     <Menu>
@@ -110,8 +124,25 @@ function RowMenu({ onDelete, className, showOnHover }: { onDelete: () => void; c
         <span className="sr-only">More</span>
       </MenuTrigger>
       <MenuPopup align={isMobile ? "end" : "start"} className="w-48" side={isMobile ? "bottom" : "right"}>
-        <MenuItem onClick={onDelete}>
-          <Trash className="text-muted-foreground" />
+        {onRename && (
+          <MenuItem onClick={onRename}>
+            <PencilLine />
+            <span>Rename</span>
+          </MenuItem>
+        )}
+        {item.onPin && (
+          <MenuItem onClick={item.onPin}>
+            {item.pinned ? <PinOff /> : <Pin />}
+            <span>{item.pinned ? "Unpin" : "Pin"}</span>
+          </MenuItem>
+        )}
+        <MenuItem onClick={item.onCopyLink}>
+          <Link />
+          <span>Copy link</span>
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem onClick={item.onDelete} variant="destructive">
+          <Trash />
           <span>Delete</span>
         </MenuItem>
       </MenuPopup>
@@ -119,65 +150,90 @@ function RowMenu({ onDelete, className, showOnHover }: { onDelete: () => void; c
   );
 }
 
-export function NavProjects({
-  projects,
-  onCreate,
-}: {
-  projects: {
-    name: string;
-    icon: React.ReactNode;
-    isActive: boolean;
-    onSelect: (e: React.MouseEvent) => void;
-    onDrag: (e: React.PointerEvent<HTMLElement>) => void;
-    onDelete: () => void;
-    open: boolean;
-    children: Child[];
-  }[];
-  onCreate: () => void;
-}) {
+// Rename opens a field under the row, as in Notion's sidebar: Enter or a click away keeps the new
+// name, Escape drops it, and an empty name changes nothing.
+function RenameField({ open, anchor, title, onDone }: { open: boolean; anchor: React.RefObject<HTMLElement | null>; title: string; onDone: (title?: string) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  const done = (keep: boolean) => {
+    const value = input.current?.value.trim();
+    onDone(keep && value ? value : undefined);
+  };
+  return (
+    <Popover onOpenChange={(next, { reason }) => !next && done(reason !== "escape-key")} open={open}>
+      <PopoverPopup align="start" anchor={anchor} aria-label="Rename" className="w-64">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            done(true);
+          }}
+        >
+          <Input aria-label="Page name" autoFocus defaultValue={title} onFocus={(e) => e.currentTarget.select()} placeholder="Untitled" ref={input} size="sm" />
+        </form>
+      </PopoverPopup>
+    </Popover>
+  );
+}
+
+function PageRow({ item }: { item: Row }) {
+  // The field sits under the row itself, not under its open tree.
+  const ref = useRef<HTMLButtonElement>(null);
+  const [renaming, setRenaming] = useState(false);
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
+        {item.icon}
+        <span>{item.name}</span>
+      </SidebarMenuButton>
+      <RowMenu item={item} onRename={() => setRenaming(true)} showOnHover />
+      <RenameField
+        anchor={ref}
+        onDone={(title) => {
+          setRenaming(false);
+          if (title !== undefined && title !== item.title) item.onRename(title);
+        }}
+        open={renaming}
+        title={item.title}
+      />
+      <AnimatePresence initial={false}>{item.open && item.children.length > 0 && <Children items={item.children} />}</AnimatePresence>
+    </SidebarMenuItem>
+  );
+}
+
+export function NavProjects({ label, projects, onCreate, sortable }: { label: string; projects: Row[]; onCreate?: () => void; sortable?: boolean }) {
   const { by } = recentOrder.use();
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Recent</SidebarGroupLabel>
-      {/* Left of New page, 4 px apart. */}
-      <Menu>
-        <MenuTrigger render={<SidebarGroupAction aria-label="Sort Recent" className="right-9 aria-expanded:bg-sidebar-accent" />}>
-          <ArrowUpDown />
-        </MenuTrigger>
-        {/* Below, so it doesn't cover New page. */}
-        <MenuPopup align="start" side="bottom">
-          <MenuGroup>
-            <MenuGroupLabel>Sort by</MenuGroupLabel>
-            <MenuRadioGroup onValueChange={(v) => recentOrder.set({ by: v as "created" | "updated" })} value={by}>
-              <MenuRadioItem closeOnClick value="created">
-                Created
-              </MenuRadioItem>
-              <MenuRadioItem closeOnClick value="updated">
-                Updated
-              </MenuRadioItem>
-            </MenuRadioGroup>
-          </MenuGroup>
-        </MenuPopup>
-      </Menu>
-      <SidebarGroupAction aria-label="New page" onClick={onCreate}>
-        <Plus />
-      </SidebarGroupAction>
-      {projects.length === 0 && <p className="px-2 py-1.5 text-sm">No pages yet</p>}
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {sortable && (
+        // Left of New page, 4 px apart; it opens below so it doesn't cover New page.
+        <Menu>
+          <MenuTrigger render={<SidebarGroupAction aria-label={`Sort ${label}`} className="right-9 aria-expanded:bg-sidebar-accent" />}>
+            <ArrowUpDown />
+          </MenuTrigger>
+          <MenuPopup align="start" side="bottom">
+            <MenuGroup>
+              <MenuGroupLabel>Sort by</MenuGroupLabel>
+              <MenuRadioGroup onValueChange={(v) => recentOrder.set({ by: v as "created" | "updated" })} value={by}>
+                <MenuRadioItem closeOnClick value="created">
+                  Created
+                </MenuRadioItem>
+                <MenuRadioItem closeOnClick value="updated">
+                  Updated
+                </MenuRadioItem>
+              </MenuRadioGroup>
+            </MenuGroup>
+          </MenuPopup>
+        </Menu>
+      )}
+      {onCreate && (
+        <SidebarGroupAction aria-label="New page" onClick={onCreate}>
+          <Plus />
+        </SidebarGroupAction>
+      )}
+      {onCreate && projects.length === 0 && <p className="px-2 py-1.5 text-sm">No pages yet</p>}
       <SidebarMenu>
-        {projects.map((item, i) => (
-          <SidebarMenuItem key={i}>
-            <SidebarMenuButton
-              aria-current={item.isActive ? "page" : undefined}
-              isActive={item.isActive}
-              onClick={item.onSelect}
-              onPointerDown={item.onDrag}
-            >
-              {item.icon}
-              <span>{item.name}</span>
-            </SidebarMenuButton>
-            <RowMenu onDelete={item.onDelete} showOnHover />
-            <AnimatePresence initial={false}>{item.open && item.children.length > 0 && <Children items={item.children} />}</AnimatePresence>
-          </SidebarMenuItem>
+        {projects.map((item) => (
+          <PageRow item={item} key={item.id} />
         ))}
       </SidebarMenu>
     </SidebarGroup>

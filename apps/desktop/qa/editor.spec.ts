@@ -16,6 +16,25 @@ test("Escape in the slash menu, then Backspace, only edits text", async ({ page 
   await expect(body.locator("p").first()).toHaveText("keep me");
 });
 
+// Seam: a click on blank space below the blocks (placeAt) against blank lines already there.
+// Catches each click adding another empty line, as a pasted blank line (a lone <br>) made it do.
+test("Clicks below the text reuse the blank line the page ends with", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  const title = page.getByRole("textbox", { name: "Title" });
+  await title.press("Enter");
+  await page.evaluate(() => (window as unknown as { __editor: { commands: { setContent(html: string): void } } }).__editor.commands.setContent("<p>Notes</p><p><br></p>"));
+  const body = page.getByRole("textbox", { name: "Page body" });
+  for (let i = 0; i < 2; i++) {
+    await title.click();
+    const box = (await body.boundingBox())!;
+    await page.mouse.click(box.x + 100, box.y + box.height + 60);
+  }
+  await expect(body.locator("p")).toHaveCount(2);
+  await page.keyboard.press("Backspace");
+  await expect(body.locator("p")).toHaveCount(1);
+});
+
 // Seam: the browser's own right-click (on macOS it selects a word) against our block selection.
 // Catches the block menu opening on a word, so its Delete removes nothing.
 test("Right-clicking selected blocks opens the block menu for all of them", async ({ page }) => {

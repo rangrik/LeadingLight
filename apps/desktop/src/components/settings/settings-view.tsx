@@ -2,7 +2,6 @@ import { ArrowLeft, Info, Keyboard, Lightbulb, Palette, PenLine, Sparkles } from
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { closeSettings } from "@/views/settings/open";
-import { ShortcutsSection } from "@/views/settings/shortcuts-section";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
@@ -22,12 +21,12 @@ import { AboutSection } from "~/components/settings/about-section";
 import { AiSection } from "~/components/settings/ai-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
 import { CaptureSection } from "~/components/settings/capture-section";
+import { ShortcutsSection } from "~/components/settings/shortcuts-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
-// one. Appearance, Writing, Capture, AI and About are ours; Shortcuts is Shipyard's (vendor/shipyard);
-// the ones about agents, machines and Shipyard's own General stay out until there is ours.
+// one. Shipyard's sections about agents, machines and its own General stay out until there is ours.
 export type SectionId = "appearance" | "writing" | "capture" | "ai" | "shortcuts" | "about";
 
 const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [

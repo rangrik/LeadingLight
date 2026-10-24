@@ -22,15 +22,28 @@ Feature: Tags, daily notes and templates
     When I click "Today" in the sidebar
     Then a page titled with today's full date opens, of type "Daily note"
     And it shows "Previous day", "Today" (disabled), "Next day" and "Pick a day"
+    And "Today" in the sidebar shows as the current page
+    And Daily notes doesn't list it yet: a day's note is stored by its first edit
+    When I type "plan" in its body
+    Then Daily notes lists today's note, holding "plan"
     When I click "Today" in the sidebar again
     Then the same page opens; there is one daily note for today
 
-  Scenario: Moving between days
-    Given today's note is open
-    When I click "Previous day"
-    Then yesterday's note opens, made on the spot
+  Scenario: Moving between days stores nothing
+    Given today's note is open and not written in
+    When I click "Previous day" twice, then "Next day"
+    Then each day's note opens, titled with its date
     When I click "Pick a day" and choose the 1st of this month
     Then that day's note opens
+    And Daily notes lists none of these days, after a reload too
+    When I type "x" in the 1st's body and go to the next day and back
+    Then the 1st opens holding "x", and it is the only one of these days Daily notes lists
+
+  Scenario: An idea captured while today's unwritten note is open
+    Given today's note is open and not written in
+    When I capture the idea "Kite"
+    Then the open note shows the "Ideas" heading with "Kite" at once
+    And Daily notes lists one note for today, which holds the bullet after a reload
 
   Scenario: What was made today
     Given I created the pages "Dune" and "Notes" and the tag "classic" today
@@ -61,4 +74,4 @@ Feature: Tags, daily notes and templates
   Scenario: A daily note template
     Given the Daily note type has a default template with the body "Plan"
     When I open a day that has no note yet
-    Then its note starts with "Plan"
+    Then its note starts with "Plan", and is stored only once I edit it

@@ -39,7 +39,25 @@ export const typeOf = (id: string) => {
   const { types } = space.get();
   return types.find((t) => t.id === id) ?? types.find((t) => t.id === PAGE_TYPE) ?? PLAIN;
 };
-export const pageOf = (id: string) => space.get().pages.find((p) => p.id === id);
+// Pages shown before they exist (a day not yet written in), kept in memory: the first edit stores
+// one under the same id, so browsing never leaves empty pages behind.
+const drafts = new Map<string, LLObject>();
+const storing = new Map<string, Promise<unknown>>();
+export const draft = (obj: LLObject) => (drafts.set(obj.id, obj), obj.id);
+export const draftOf = (id: string) => drafts.get(id);
+export const findDraft = (test: (p: LLObject) => boolean) => [...drafts.values()].find(test);
+// Stores a draft (with the edit that stores it); later saves wait until it is in.
+export function storeDraft(id: string, patch: ObjectPatch = {}): Promise<unknown> {
+  const obj = drafts.get(id);
+  if (!obj) return storing.get(id) ?? Promise.resolve();
+  drafts.delete(id);
+  const made = createPage({ ...obj, ...patch });
+  storing.set(id, made);
+  void made.finally(() => storing.delete(id));
+  return made;
+}
+
+export const pageOf = (id: string) => space.get().pages.find((p) => p.id === id) ?? drafts.get(id);
 export const propOf = (id: string) => space.get().props.find((p) => p.id === id);
 
 // A page's properties: its type's in order, then its own. A key with no definition is kept in
@@ -78,7 +96,8 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
 }
 
 export function savePage(id: string, patch: ObjectPatch): Promise<void> {
-  return objects.update(id, patch).then(() => {
+  const write = drafts.has(id) ? storeDraft(id, patch) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch));
+  return write.then(() => {
     patchSummary(id, { updatedAt: Date.now() });
     markSaved();
   }, reportSaveError);
@@ -106,6 +125,7 @@ export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "
 // Thoughts page or essay is unlinked from its page, which can then make a new one (DECISIONS.md, 11).
 export function removePage(id: string) {
   const { parent, role } = pageOf(id)?.properties ?? {};
+  drafts.delete(id);
   if (typeof parent === "string" && typeof role === "string") void editPage(parent, { properties: ({ [role]: _, ...rest }) => rest });
   objects.remove(id).catch(console.error);
   forgetPage(id);
