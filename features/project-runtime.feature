@@ -16,7 +16,8 @@ Feature: The project runtime
     Then the Go download matches its checksum
     And Shipyard's LICENSE and THIRD_PARTY_NOTICES.md at that commit match vendor/shipyard's
     And every patch applies
-    And apps/desktop/src-tauri/binaries/berthd-aarch64-apple-darwin says "berthd v0.3.30-ll.1"
+    And apps/desktop/src-tauri/binaries/berthd-aarch64-apple-darwin says "berthd v0.3.30-ll.2+" and a
+      hash of the patch set, so two patch sets never share a version
     And building again gives a file with the same checksum
 
   Scenario: A patch that no longer applies stops the build
@@ -28,8 +29,10 @@ Feature: The project runtime
   Scenario: The runtime keeps to its own state
     Given the person's Shipyard is running, with its own tmux server named "berth"
     When the probe runs
-    Then every session it starts is in a tmux server of its own, never in "berth"
-    And ~/.claude/settings.json and ~/.codex/config.toml are not written
+    Then every session it starts is in a tmux server of its own, and the "berth" server's sessions
+      are the same before and after
+    And ~/.claude/settings.json, ~/.codex/config.toml and ~/.codex/hooks.json are not written
+    And agent events the person's own berth hooks send from inside its agents are not recorded
 
   Scenario: Claude asks, is answered once, and is given an approval
     When the probe asks Claude, in "plain folder", to ask which colour I prefer, then write it down

@@ -10,11 +10,11 @@ in bypass. A plan mode sends Codex's plan collaboration mode, where its
 request_user_input questions come; every turn names its mode, since a mode
 lasts until another is named.
 ---
- internal/box/codexdriver.go | 39 +++++++++++++++++++++++++++++++++++--
- 1 file changed, 37 insertions(+), 2 deletions(-)
+ internal/box/codexdriver.go | 38 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 36 insertions(+), 2 deletions(-)
 
 diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
-index eefc40b..44eb492 100644
+index eefc40b..57ed152 100644
 --- a/internal/box/codexdriver.go
 +++ b/internal/box/codexdriver.go
 @@ -30,7 +30,16 @@ const DriverCodex = "codex"
@@ -35,28 +35,27 @@ index eefc40b..44eb492 100644
  
  func codexPolicy(mode string) (approval string, sandbox map[string]any) {
  	workspace := map[string]any{"type": "workspaceWrite", "writableRoots": []string{}, "networkAccess": false, "excludeTmpdirEnvVar": false, "excludeSlashTmp": false}
-@@ -110,6 +119,9 @@ type codexConv struct {
+@@ -110,6 +119,7 @@ type codexConv struct {
  	mode        string
  	model       string
  	effort      string
-+	// threadModel is the model Codex opened the thread with: plan mode
-+	// names one, and none was asked for.
-+	threadModel string
++	opened      struct{ model, effort string } // the thread's own, for plan mode
  	busy        bool
  	since       time.Time
  	draft       strings.Builder
-@@ -346,6 +358,10 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+@@ -346,6 +356,11 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
  				Thread struct {
  					ID string `json:"id"`
  				} `json:"thread"`
-+				Model string `json:"model"`
++				Model  string `json:"model"`
++				Effort string `json:"reasoningEffort"`
 +			}
 +			if json.Unmarshal(m.Result, &r) == nil && r.Model != "" {
-+				c.threadModel = r.Model
++				c.opened.model, c.opened.effort = r.Model, r.Effort
  			}
  			if json.Unmarshal(m.Result, &r) == nil && r.Thread.ID != "" && r.Thread.ID != c.threadID {
  				c.threadID = r.Thread.ID
-@@ -623,6 +639,9 @@ func (c *codexConv) handshake() {
+@@ -623,6 +638,9 @@ func (c *codexConv) handshake() {
  	c.write(ctx, map[string]any{"jsonrpc": "2.0", "method": "initialized"})
  	approval, _ := codexPolicy(mode)
  	params := map[string]any{"cwd": cwd, "approvalPolicy": approval, "sandbox": threadSandbox(mode)}
@@ -66,16 +65,16 @@ index eefc40b..44eb492 100644
  	if model != "" {
  		params["model"] = model
  	}
-@@ -727,7 +746,7 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
+@@ -727,7 +745,7 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
  		return err
  	}
  	c.mu.Lock()
 -	mode, model, effort := c.mode, c.model, c.effort
-+	mode, model, effort, threadModel := c.mode, c.model, c.effort, c.threadModel
++	mode, model, effort, opened := c.mode, c.model, c.effort, c.opened
  	c.mu.Unlock()
  	approval, sandbox := codexPolicy(mode)
  	params := map[string]any{"threadId": tid, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}},
-@@ -738,6 +757,22 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
+@@ -738,6 +756,22 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
  	if effort != "" {
  		params["effort"] = effort
  	}
@@ -84,14 +83,14 @@ index eefc40b..44eb492 100644
 +	}
 +	// Plan mode is Codex's collaboration mode, where it asks its questions;
 +	// it lasts until a turn names another, so every turn names one.
-+	if m := firstNonEmpty(model, threadModel); m != "" {
++	if m := firstNonEmpty(model, opened.model); m != "" {
 +		kind := "default"
 +		if mode == "plan" {
 +			kind = "plan"
 +		}
 +		settings := map[string]any{"model": m}
-+		if effort != "" {
-+			settings["reasoning_effort"] = effort
++		if e := firstNonEmpty(effort, opened.effort); e != "" {
++			settings["reasoning_effort"] = e
 +		}
 +		params["collaborationMode"] = map[string]any{"mode": kind, "settings": settings}
 +	}

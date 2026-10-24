@@ -6,17 +6,34 @@ Subject: [PATCH] Embedded mode: own tmux server, leave the person's agent
 
 BERTH_TMUX_SOCKET names berthd's tmux server, so a berthd inside another
 app never joins the person's own. BERTH_EMBEDDED=1 skips refreshing berth's
-hooks in ~/.claude and ~/.codex and preparing agent accounts.
+hooks in ~/.claude and ~/.codex and preparing agent accounts, and drops the
+agent events the person's own berth hooks post from inside its agents: all
+of them are structured, and their drivers say what they do.
 ---
- cmd/berthd/main.go       |  8 +++++---
+ cmd/berthd/main.go       | 21 +++++++++++++++------
+ internal/box/api.go      |  6 ++++++
  internal/box/sessions.go | 11 ++++++++++-
- 2 files changed, 15 insertions(+), 4 deletions(-)
+ 3 files changed, 31 insertions(+), 7 deletions(-)
 
 diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
-index 949bab8..fdb51a6 100644
+index 949bab8..4526f73 100644
 --- a/cmd/berthd/main.go
 +++ b/cmd/berthd/main.go
-@@ -410,7 +410,9 @@ func serve(b boxHome, args []string) error {
+@@ -317,6 +317,13 @@ func serve(b boxHome, args []string) error {
+ 	}
+ 	defer journal.Close()
+ 	bus := &events.Bus{Journal: journal}
++	// Hooks that ran while berthd was down. Embedded, its agents are all
++	// structured and say what they do themselves (api.go, emit).
++	spooled := func(e events.Event) {
++		if !box.Embedded || !strings.HasPrefix(e.Type, "agent.") {
++			bus.Publish(e)
++		}
++	}
+ 	// A new laptop, by the name it gave and its key; laptops' lists of who
+ 	// the box trusts follow it.
+ 	s.OnPaired = func(p trust.Peer) {
+@@ -410,7 +417,9 @@ func serve(b boxHome, args []string) error {
  	bx.Sessions.MemoryHigh = bx.Guard.SessionMemoryHigh
  	// A session on an agent account without berth's hooks and skills gets
  	// them before its agent starts.
@@ -27,8 +44,12 @@ index 949bab8..fdb51a6 100644
  	bx.Artifacts = &box.ArtifactStore{Dir: filepath.Join(b.dir, "artifacts"), Events: bus, Box: hostname}
  	go bx.Artifacts.Run(ctx)
  	go bx.RunShots(ctx)
-@@ -430,7 +432,7 @@ func serve(b boxHome, args []string) error {
- 	if n := integrations.DrainSpool(b.spool(), func(e events.Event) { bus.Publish(e) }); n > 0 {
+@@ -427,10 +436,10 @@ func serve(b boxHome, args []string) error {
+ 	bx.Mount(s)
+ 	bx.ResumeTeams()
+ 	// Hooks that ran while berthd was down, in order, before anything new.
+-	if n := integrations.DrainSpool(b.spool(), func(e events.Event) { bus.Publish(e) }); n > 0 {
++	if n := integrations.DrainSpool(b.spool(), spooled); n > 0 {
  		logger.Printf("published %d agent hooks spooled while berthd was down", n)
  	}
 -	if home, err := os.UserHomeDir(); err == nil {
@@ -36,7 +57,25 @@ index 949bab8..fdb51a6 100644
  		if done := integrations.RefreshHooked(home, exe); len(done) > 0 {
  			logger.Printf("updated berth's hooks for %s", strings.Join(done, ", "))
  		}
-@@ -533,7 +535,7 @@ func attachLocal(args []string) error {
+@@ -491,7 +500,7 @@ func serve(b boxHome, args []string) error {
+ 		return err
+ 	}
+ 	// Hooks that spooled while the socket was being made.
+-	integrations.DrainSpool(b.spool(), func(e events.Event) { bus.Publish(e) })
++	integrations.DrainSpool(b.spool(), spooled)
+ 	go func() {
+ 		t := time.NewTicker(30 * time.Second)
+ 		defer t.Stop()
+@@ -500,7 +509,7 @@ func serve(b boxHome, args []string) error {
+ 			case <-ctx.Done():
+ 				return
+ 			case <-t.C:
+-				integrations.DrainSpool(b.spool(), func(e events.Event) { bus.Publish(e) })
++				integrations.DrainSpool(b.spool(), spooled)
+ 			}
+ 		}
+ 	}()
+@@ -533,7 +542,7 @@ func attachLocal(args []string) error {
  	if err != nil {
  		return err
  	}
@@ -45,6 +84,23 @@ index 949bab8..fdb51a6 100644
  }
  
  func pair(b boxHome, args []string) error {
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 208ab00..09f002e 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -1193,6 +1193,12 @@ func (b *Box) emit(w http.ResponseWriter, r *http.Request) error {
+ 	if err := b.before(r, "event.emit", map[string]any{"type": req.Type}); err != nil {
+ 		return err
+ 	}
++	if Embedded && strings.HasPrefix(req.Type, "agent.") {
++		// Every agent here is structured and its driver says what it does; the
++		// person's own berth hooks, firing inside it, would say it again.
++		writeJSON(w, map[string]bool{"ok": true})
++		return nil
++	}
+ 	private := map[string]any{}
+ 	for _, k := range []string{"title", adapters.AskKey} {
+ 		if v, ok := req.Data[k]; ok {
 diff --git a/internal/box/sessions.go b/internal/box/sessions.go
 index bd63ef0..0d94f8c 100644
 --- a/internal/box/sessions.go

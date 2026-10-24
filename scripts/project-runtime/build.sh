@@ -20,14 +20,15 @@ TRIPLE=aarch64-apple-darwin
 OUT=apps/desktop/src-tauri/binaries
 mkdir -p "$CACHE" "$OUT"
 
-# The toolchain, checked against the pin's checksum.
+# The toolchain, checked against the pin's checksum; a cached one carries the checksum it had.
 GO="$CACHE/go$GO_VERSION"
-if [ ! -x "$GO/bin/go" ]; then
+if [ "$(cat "$GO/.sha256" 2>/dev/null)" != "$GO_SHA" ] || [ ! -x "$GO/bin/go" ]; then
   curl -fsSL -o "$CACHE/go.tar.gz" "$GO_URL"
   echo "$GO_SHA  $CACHE/go.tar.gz" | shasum -a 256 -c -
   rm -rf "$GO" && mkdir -p "$GO"
   tar -xzf "$CACHE/go.tar.gz" -C "$GO" --strip-components=1
   rm "$CACHE/go.tar.gz"
+  echo "$GO_SHA" > "$GO/.sha256"
 fi
 
 # The source at exactly the pinned commit (its hash is the tree's).
@@ -43,13 +44,16 @@ node -e "const n=require('./$PIN').notices; for (const [a,b] of Object.entries(n
   cmp -s "$BUILD/$FROM" "$TO" || { echo "$FROM at $COMMIT differs from $TO" >&2; exit 1; }
 done
 
-for P in $(node -p "require('./$PIN').patches.join(' ')"); do
+PATCHES=$(node -p "require('./$PIN').patches.join(' ')")
+for P in $PATCHES; do
   (cd "$BUILD" && git apply --whitespace=nowarn "$ROOT/runtime/shipyard/patches/$P") || { echo "patch $P no longer applies to $COMMIT" >&2; exit 1; }
 done
+# The version names the patch set too, so two sets never pass for one.
+SUM=$(cd runtime/shipyard/patches && cat $PATCHES | shasum -a 256 | cut -c1-8)
 
 (cd "$BUILD" && env -i HOME="$HOME" PATH="$GO/bin:/usr/bin:/bin" GOPATH="$CACHE/gopath" GOCACHE="$CACHE/gocache" \
   GOTOOLCHAIN=local GOFLAGS=-mod=readonly CGO_ENABLED=0 \
-  go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/cosscom/shipyard/internal/version.Version=v$VERSION" \
+  go build -trimpath -buildvcs=false -ldflags="-s -w -X github.com/cosscom/shipyard/internal/version.Version=v$VERSION+$SUM" \
   -o "$BUILD/berthd" ./cmd/berthd)
 mv "$BUILD/berthd" "$OUT/berthd-$TRIPLE"
 shasum -a 256 "$OUT/berthd-$TRIPLE" | sed "s|$OUT/||" > "$OUT/berthd-$TRIPLE.sha256"

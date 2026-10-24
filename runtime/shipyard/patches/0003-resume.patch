@@ -6,27 +6,57 @@ Subject: [PATCH] Resume: a resumed agent is followed, opened and keeps its
 
 A follower that met an ended log let go without saying so, and a resume
 starting moments later was never followed; it now waits briefly for a host
-and is followed afresh after. Codex forgets the last process's thread when
-its app server ends or starts, so a first send waits for this one's resume
-instead of meeting "Not initialized". Claude carries on with the model
-and effort the conversation had. Stopping a structured session waits for
-its host to let go of the socket, so a resume right after starts its own.
+and is followed afresh after. A stopped session's conversation is let go,
+so a resume under a new name isn't followed, and told, twice. Codex forgets
+the last process's thread when its app server ends or starts, so a first
+send waits for this one's resume instead of meeting "Not initialized".
+Claude carries on with the model and effort the conversation had. Stopping
+a structured session waits for its host to let go of the socket, so a
+resume right after starts its own.
 ---
- internal/box/claudedriver.go  | 13 +++++++++++--
- internal/box/codexdriver.go   | 14 +++++++++++---
+ internal/box/api.go           |  3 +++
+ internal/box/claudedriver.go  | 18 +++++++++++++++---
+ internal/box/codexdriver.go   | 19 +++++++++++++++----
  internal/box/conversations.go |  3 ++-
  internal/box/sessions.go      |  5 +++++
- 4 files changed, 29 insertions(+), 6 deletions(-)
+ 5 files changed, 40 insertions(+), 8 deletions(-)
 
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 09f002e..88444fc 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -662,6 +662,7 @@ func (b *Box) stopSessionsIn(from, dir string) {
+ 			continue
+ 		}
+ 		if b.Sessions.Kill(ctx, s.Name) == nil {
++			b.forgetConversation(s.Name)
+ 			b.Events.Publish(events.Event{Type: "session.stopped", Box: b.Name, Origin: from, Data: map[string]any{"name": s.Name, "path": s.Dir}})
+ 		}
+ 	}
+@@ -907,6 +908,8 @@ func (b *Box) removeSession(w http.ResponseWriter, r *http.Request) error {
+ 	if err := b.Sessions.Kill(r.Context(), name); err != nil {
+ 		return err
+ 	}
++	// Its conversation may carry on in another session (a resume): it is let go here.
++	b.forgetConversation(name)
+ 	b.publish(r, "session.stopped", map[string]any{"name": name})
+ 	writeJSON(w, map[string]string{"removed": name})
+ 	return nil
 diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
-index 32218b7..244ed3d 100644
+index 32218b7..a7d0607 100644
 --- a/internal/box/claudedriver.go
 +++ b/internal/box/claudedriver.go
-@@ -319,9 +319,14 @@ func (c *claudeConv) follow() {
+@@ -317,11 +317,19 @@ func (c *claudeConv) follow() {
+ 	var noHost time.Time
+ 	for {
  		c.mu.Lock()
- 		from, done := c.lastSeq, c.exited
+-		from, done := c.lastSeq, c.exited
++		from, done, gone := c.lastSeq, c.exited, c.gone
  		c.mu.Unlock()
 -		if done && !hostAlive(c.sock) {
++		if gone {
++			return
++		}
 +		if done && !awaitHost(c.sock, resumeGrace) {
  			// Its last word was its end, and no host has started since. (A
 -			// host started again listens a moment before it says so.)
@@ -39,7 +69,7 @@ index 32218b7..244ed3d 100644
  			return
  		}
  		err := agenthost.Attach(context.Background(), c.sock, from, func(e agenthost.Entry) error {
-@@ -357,6 +362,10 @@ func (c *claudeConv) follow() {
+@@ -357,6 +365,10 @@ func (c *claudeConv) follow() {
  // following its session (until it is asked about again).
  const hostGone = time.Minute
  
@@ -51,14 +81,20 @@ index 32218b7..244ed3d 100644
  func (c *claudeConv) signal() {
  	close(c.changed)
 diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
-index 44eb492..94f3471 100644
+index 57ed152..519dd18 100644
 --- a/internal/box/codexdriver.go
 +++ b/internal/box/codexdriver.go
-@@ -226,9 +226,14 @@ func (c *codexConv) follow() {
+@@ -222,11 +222,19 @@ func (c *codexConv) follow() {
+ 	var noHost time.Time
+ 	for {
  		c.mu.Lock()
- 		from, done := c.lastSeq, c.exited
+-		from, done := c.lastSeq, c.exited
++		from, done, gone := c.lastSeq, c.exited, c.gone
  		c.mu.Unlock()
 -		if done && !hostAlive(c.sock) {
++		if gone {
++			return
++		}
 +		if done && !awaitHost(c.sock, resumeGrace) {
  			// Its last word was its end, and no host has started since. (A
 -			// host started again listens a moment before it says so.)
@@ -71,7 +107,7 @@ index 44eb492..94f3471 100644
  			return
  		}
  		err := agenthost.Attach(context.Background(), c.sock, from, func(e agenthost.Entry) error {
-@@ -316,11 +321,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+@@ -314,11 +322,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
  		switch e.Event {
  		case "started":
  			c.busy, c.pending, c.since, c.exited, c.initialized, c.turnID = false, nil, time.Time{}, false, false, ""
