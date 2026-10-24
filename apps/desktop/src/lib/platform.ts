@@ -4,7 +4,8 @@ export const isNative: Promise<boolean> = (async () => {
   if (!("__TAURI_INTERNALS__" in window)) return false;
   try {
     const { getIdentifier } = await import("@tauri-apps/api/app");
-    return (await getIdentifier()) === "com.leadinglight.app";
+    // The real app or a worktree's dev app (scripts/install-dev-app.sh).
+    return (await getIdentifier()).startsWith("com.leadinglight.");
   } catch {
     return false;
   }

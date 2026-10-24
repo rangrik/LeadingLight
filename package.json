@@ -9,6 +9,7 @@
     "qa": "pnpm --filter @leadinglight/desktop qa",
     "check:themes": "pnpm --filter @leadinglight/themes run check",
     "sync:shipyard": "scripts/sync-shipyard.sh",
-    "install:app": "scripts/install-app.sh"
+    "install:app": "scripts/install-app.sh",
+    "install:dev-app": "scripts/install-dev-app.sh"
   }
 }

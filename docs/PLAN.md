@@ -130,7 +130,9 @@ editing an embed in place, editing values inside lists.
 ## M3 — Everyday polish
 
 - Search (⌘K), trash view with restore, images and files, remember window state.
-- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do.
+- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do. Any key in the shortcuts
+  table can be changed in Settings (built: features/shortcuts.feature, DECISIONS.md 15); a new
+  editor key goes in `lib/keymap.ts`'s taken list, so no shortcut can claim it.
 
 ## Later
 

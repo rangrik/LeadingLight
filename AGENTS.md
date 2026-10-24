@@ -35,6 +35,7 @@ QA_PORT=$BERTH_PORT pnpm qa                # in a Berth worktree, when :1420 is 
 pnpm check:themes                          # every built-in theme keeps its contrast
 pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor/shipyard
 pnpm install:app                           # build the Mac app and put it in /Applications
+pnpm install:dev-app                       # this worktree's own "LeadingLight Dev <hash>", own data
 ```
 
 ## Design rules
@@ -78,10 +79,25 @@ pnpm install:app                           # build the Mac app and put it in /Ap
    It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
    drives the native Tauri window.
 5. Fix what it found. Re-run QA on the failed scenarios.
-6. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
-7. Once the change is merged into main, build the Mac app from main and install it
-   (`pnpm install:app`, which refuses while the app is running: ask the user to quit it, never
-   kill it), then ask the user to test it, saying what to try and what to look at.
+6. Only if part of the change can't be tested in the browser with full confidence (the menu bar,
+   global keys, the capture panel, anything WebKit does differently), also run
+   `pnpm install:dev-app`. It installs "LeadingLight Dev <hash>" (a hash of the branch, so it is
+   this worktree's) beside the real app, with its own data, so the user's notes are never touched.
+   A global key such as ⌃⌥I belongs to whichever app started first; say so in the steps.
+   Don't drive it. Give the user numbered steps for exactly what the browser couldn't show, each
+   with what they should see, and wait for their report. The browser stays the first way; this
+   never replaces it.
+7. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
+8. Once the user says it works, or told you to finish without asking, close it out yourself:
+   commit; merge main into the branch and run the change's scenarios again (see Traps); merge
+   the branch into main in the main checkout (`$BERTH_ROOT_PATH`); there, build the Mac app and
+   install it (`pnpm install:app`, which refuses while the app is running: ask the user to quit
+   it, never kill it); remove your dev app and its data (`pnpm install:dev-app --remove` in the
+   worktree). Then tell the user what to try in the installed app and what to look at. Last,
+   clean up: stop the worktree's servers; free and delete the merged branch (`git checkout
+   --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and close the worktree
+   with `"$BERTH_HOME/bin/berthd" worktree rm "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends
+   your session, so send your report before it.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
@@ -103,6 +119,11 @@ Each of these passed every check here and still failed for the user, or cost hou
   Three things made typing slow there: a `:has()` rule on a page-wide container (Chromium
   restyles the whole page on every key), thousands of ProseMirror node decorations (rebuilding
   the set is quadratic), and redrawing inline decorations around the cursor on every key.
+- A dev app once ran as the browser build: the app knew itself by the exact identifier
+  `com.leadinglight.app`, and the dev app's is `com.leadinglight.dev.<hash>`, so the menu bar,
+  global keys and SQLite were never used and the test of them meant nothing. Anything that asks
+  "is this the Mac app?" goes through `isNative` (`apps/desktop/src/lib/platform.ts`). Check the
+  dev app has room for the traffic lights before handing it over: if it doesn't, it isn't native.
 - An ellipsis cuts text on a fraction of a pixel. Whatever shares a row with truncating text
   should take only the room left (`flex: 1 1 0; min-width: 0`), not shrink beside it.
 

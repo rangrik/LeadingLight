@@ -139,3 +139,18 @@ test("Meta+Alt+/ opens the Keyboard shortcuts sheet with our table", async ({ pa
   await expect(sheet).toBeHidden();
   await expect(page.getByRole("menu")).toBeVisible();
 });
+
+// features/shortcuts.feature. Guards the seam between a changed key and the handler: the new
+// key runs, the old one (once also the sidebar's own listener) does not, and a reload keeps it.
+test("A changed shortcut replaces the old key", async ({ page }) => {
+  const folded = () => page.evaluate(() => localStorage.getItem("ll.sidebar.open") === "false");
+  await page.keyboard.press("Meta+,");
+  await settingsNav(page).getByTestId("settings-nav-shortcuts").click();
+  await page.getByRole("button", { name: "Keys for Show or hide the sidebar" }).click();
+  await page.keyboard.press("Meta+Shift+L");
+  await page.reload();
+  await page.keyboard.press("Meta+\\");
+  expect(await folded()).toBe(false);
+  await page.keyboard.press("Meta+Shift+L");
+  expect(await folded()).toBe(true);
+});
