@@ -319,7 +319,8 @@ export default function App() {
         }),
       };
     });
-  const navTypes = types.map((t) => ({
+  // The app's own types (agents, reports, feedback) are listed once there is one of them.
+  const navTypes = types.filter((t) => !t.made || pages.some((p) => p.typeId === t.id)).map((t) => ({
     id: t.id,
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,
