@@ -1,19 +1,22 @@
-import { ChevronDown, FileText, GitBranch, MessagesSquare, Plus } from "lucide-react";
+import { ChevronDown, FileText, FileX, GitBranch, MessagesSquare, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
+import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
 import { toastManager } from "@leadinglight/ui/components/toast";
+import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { type ChatSettings, type Command, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
-import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
+import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import type { TranscriptItem } from "~/lib/project-runtime/transcript";
-import { ask } from "~/lib/project-runtime/transport";
+import { ask, call } from "~/lib/project-runtime/transport";
 import { pageOf } from "~/lib/space";
 import type { Item } from "~/lib/threads";
 
@@ -44,7 +47,9 @@ const ACCESS_IN_FOLDER: Record<Agent, { value: Access; description: string }[]> 
 const NAME: Record<Agent, string> = { claude: "Claude", codex: "Codex" };
 
 // The record's items as the note chat's turns: one per prompt, its steps, its words, its end.
-type Shown = { items: Item[]; files: string[]; stopped?: boolean; error?: string };
+// A file a turn wrote: its name, the call that wrote it, and the version the runtime kept.
+type Written = { name: string; tool?: string; output?: Output };
+type Shown = { items: Item[]; files: Written[]; stopped?: boolean; error?: string };
 function turnsOf(chat: Chat): Shown[] {
   const out: Shown[] = [];
   const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [] }));
@@ -67,7 +72,9 @@ function turnsOf(chat: Chat): Shown[] {
       // Nor is one still waiting for the person's yes.
       const asking = chat.requests.some((r) => r.tool_use === t.tool && (r.state === "pending" || r.state === "recorded"));
       const files = out[out.length - 1]?.files;
-      if (files && !t.error && !asking && !files.includes(t.file)) files.push(t.file);
+      const output = chat.outputs.find((o) => o.tool === t.tool && (o.path === t.file || o.path.endsWith(`/${t.file}`)));
+      // The turn's last write of a file is the one its chip opens.
+      if (files && !t.error && !asking) files.splice(0, files.length, ...files.filter((f) => f.name !== t.file), { name: t.file, tool: t.tool, output });
     } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
   }
   // Ended turns end; the ledger knows how the session's own last ones went.
@@ -93,7 +100,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const prefs = useAiPrefs();
   const [list, setList] = useState<Conversation[]>([]);
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
-  const [file, setFile] = useState<string | null>(null);
+  const [file, setFile] = useState<Written | null>(null);
   const [attached, setAttached] = useState<File[]>([]);
   const [branch, setBranch] = useState(false);
   const [commands, setCommands] = useState<Command[]>([]);
@@ -259,9 +266,10 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             {t.files.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {t.files.map((f) => (
-                  <Button key={f} onClick={() => setFile(f)} size="xs" variant="outline">
-                    <FileText />
-                    {f}
+                  <Button key={f.name} onClick={() => setFile(f)} size="xs" variant="outline">
+                    {f.output?.missing ? <FileX /> : <FileText />}
+                    {/* Deleted by that turn: it still opens as it last was, if kept. */}
+                    <span className={cn(f.output?.missing && "text-muted-foreground line-through")}>{f.name}</span>
                   </Button>
                 ))}
               </div>
@@ -319,33 +327,75 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           settings={settings}
         />
       </div>
-      <FilePreview file={file} location={location} onClose={() => setFile(null)} worktree={started?.location?.split("/")[1]} />
+      <FilePreview conv={started?.id} file={file} live={live} location={location} onClose={() => setFile(null)} worktree={started?.location?.split("/")[1]} />
     </div>
   );
 }
 
 // A file the agent changed, as it is in the folder now.
-function FilePreview({ file, location, worktree, onClose }: { file: string | null; location: string; worktree?: string; onClose: () => void }) {
+// A file a turn wrote: as that turn left it (the runtime's kept version), as it is now, and the
+// change that turn made.
+type View = "then" | "now" | "change";
+function FilePreview({ file, location, worktree, conv, live, onClose }: { file: Written | null; location: string; worktree?: string; conv?: string; live: string | null; onClose: () => void }) {
+  const views = file ? ([file.output?.kept && "then", "now", file.tool && live && "change"].filter(Boolean) as View[]) : [];
+  const [view, setView] = useState<View>("now");
   const [text, setText] = useState<string | null>(null);
+  useEffect(() => void (file && setView(file.output?.kept ? "then" : "now")), [file]);
   useEffect(() => {
     setText(null);
     if (!file) return;
-    // The chat's own worktree, else the folder's: a checkout's main worktree, or a plain folder itself.
-    type Loc = { name: string; worktrees?: { name: string; main?: boolean }[] };
-    const where = worktree ? Promise.resolve(worktree) : ask<Loc[]>("GET", "/v1/locations").then((all) => all.find((l) => l.name === location)?.worktrees?.find((w) => w.main)?.name ?? location);
-    void where
-      .then((wt) => ask<{ content?: string }>("GET", `/v1/locations/${location}/worktrees/${encodeURIComponent(wt)}/file?path=${encodeURIComponent(file)}`))
-      .then((f) => setText(f.content ?? ""), (e) => setText(`Couldn't read it: ${e.message}`));
-  }, [file]);
+    // A slower answer for the view left behind never takes this one's place.
+    let current = true;
+    const put = (s: string) => void (current && setText(s));
+    const shown = (body: unknown) => (typeof body === "string" ? body : JSON.stringify(body, null, 2));
+    if (view === "then" && file.output && conv) {
+      void call("GET", `/v1/conversations/${conv}/outputs/${file.output.id}`).then((r) => put(r.status === 200 ? shown(r.body) : "This version wasn't kept."));
+    } else if (view === "change" && file.tool && live) {
+      type Detail = { hunks?: { lines: string[] }[]; old?: string; new?: string };
+      void ask<Detail>("GET", `/v1/sessions/${live}/transcript/tool/${encodeURIComponent(file.tool)}`).then(
+        (d) => {
+          const marked = (s: string | undefined, m: string) => (s ? s.replace(/\n$/, "").split("\n").map((l) => `${m}${l}`) : []);
+          put((d.hunks?.flatMap((h) => h.lines) ?? [...marked(d.old, "-"), ...marked(d.new, "+")]).join("\n"));
+        },
+        (e) => put(`Couldn't read the change: ${e.message}`),
+      );
+    } else {
+      // The chat's own worktree, else the folder's: a checkout's main worktree, or a plain folder itself.
+      type Loc = { name: string; worktrees?: { name: string; main?: boolean }[] };
+      const where = worktree ? Promise.resolve(worktree) : ask<Loc[]>("GET", "/v1/locations").then((all) => all.find((l) => l.name === location)?.worktrees?.find((w) => w.main)?.name ?? location);
+      void where
+        .then((wt) => ask<{ content?: string }>("GET", `/v1/locations/${location}/worktrees/${encodeURIComponent(wt)}/file?path=${encodeURIComponent(file.name)}`))
+        .then((f) => put(f.content ?? ""), () => put("It isn't in the folder now."));
+    }
+    return () => void (current = false);
+  }, [file, view]);
+  const said = { then: "As this turn left it.", now: "As it is in the folder now.", change: "What this turn changed." }[view];
   return (
     <Dialog onOpenChange={(o) => !o && onClose()} open={file !== null}>
       <DialogPopup className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{file}</DialogTitle>
-          <DialogDescription>As it is in the folder now.</DialogDescription>
+          <DialogTitle>{file?.name}</DialogTitle>
+          <DialogDescription>{said}</DialogDescription>
         </DialogHeader>
-        <DialogPanel>
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">{text ?? "…"}</pre>
+        <DialogPanel className="grid gap-3">
+          {views.length > 1 && (
+            <SegmentedControl aria-label="Which version" render={<RadioGroupPrimitive onValueChange={(v) => setView(v as View)} value={view} />}>
+              {views.map((v) => (
+                <SegmentedControlItem key={v} render={<RadioPrimitive.Root value={v} />}>
+                  {{ then: "Then", now: "Now", change: "Change" }[v]}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
+          )}
+          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+            {view === "change" && text
+              ? text.split("\n").map((l, i) => (
+                  <span className={cn("block", l.startsWith("+") && "text-success-foreground", l.startsWith("-") && "text-destructive-foreground")} key={i}>
+                    {l || " "}
+                  </span>
+                ))
+              : (text ?? "…")}
+          </pre>
         </DialogPanel>
       </DialogPopup>
     </Dialog>

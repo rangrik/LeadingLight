@@ -164,3 +164,26 @@ Feature: A project's chat
     Given "Research" is linked to a plain folder
     Then + doesn't offer Own branch
 
+  # Outputs, kept as each turn left them (slice 7)
+
+  Scenario: A file opens as the turn left it
+    Given a turn that wrote summary.md
+    When I change summary.md on disk and press "summary.md" under that turn
+    Then it shows summary.md as that turn left it, saying so
+    And "Now" shows it as it is in the folder
+
+  Scenario: The change a turn made
+    Given a turn that edited notes.txt
+    When I open it from under the turn and choose "Change"
+    Then the lines it took out and put in show, marked - and +
+
+  Scenario: Kept after its branch is gone
+    Given a chat on its own branch wrote result.txt, and its worktree was removed
+    When I press "result.txt" under its turn
+    Then it opens as that turn left it, and "Now" says it isn't in the folder
+
+  Scenario: No file that isn't there
+    Given a turn whose write was refused, or a file a later turn deleted
+    Then a refused write lists no file
+    And a deleted file shows as deleted, and opening it shows it as it last was
+

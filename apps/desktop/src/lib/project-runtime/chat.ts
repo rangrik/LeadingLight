@@ -15,6 +15,8 @@ import { createStore } from "~/lib/state";
 export type Conversation = { id: string; agent: string; location?: string; dir: string; session?: string; live?: boolean; mode?: string; model?: string; effort?: string; title?: string; created: string; updated?: string };
 export type Session = { name: string; agent_state?: string; exited?: boolean; driver?: string };
 export type Turn = { n: number; state: string; started?: string; ended?: string; origin?: string };
+// A file an agent wrote, kept by the runtime as that write left it (slice 7).
+export type Output = { id: string; path: string; tool: string; at: number; size: number; kept: boolean; missing?: boolean };
 // An answer being written, and how far it has got (features/agent-interactions.feature).
 export type AnswerDraft = Draft & { index: number; sent?: boolean };
 export type Chat = {
@@ -27,6 +29,7 @@ export type Chat = {
   submissions: MessageSubmissionRecord[];
   texts: Record<string, string>;
   requests: RuntimeRequest[];
+  outputs: Output[];
   answers: Record<string, AnswerDraft>;
   deliveries: Record<string, { delivery: Delivery; error?: string }>;
   // Read from the runtime at least once since it opened.
@@ -36,7 +39,7 @@ export type Chat = {
   error: string | null;
 };
 
-const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], answers: {}, deliveries: {}, restore: null, error: null });
+const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], answers: {}, deliveries: {}, restore: null, error: null });
 const chats = new Map<string, ReturnType<typeof createStore<Chat>>>();
 export const chatOf = (key: string) => {
   let s = chats.get(key);
@@ -100,6 +103,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const page = name ? await ask<TranscriptPage>("GET", `/v1/sessions/${name}/transcript?since=${w.next}${w.gen ? `&gen=${w.gen}` : ""}`).catch(() => null) : null;
   const turns = session ? await ask<Turn[]>("GET", `/v1/sessions/${name}/turns`).catch(() => []) : [];
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
+  // What its agents wrote, kept with the conversation; there with no session too.
+  const outputs = await ask<Output[]>("GET", `/v1/conversations/${conv.id}/outputs`).catch(() => null);
   // The session's own mode: approving a plan changes it without the conversation's record.
   const controls = session && !session.exited ? await ask<{ mode?: string }>("GET", `/v1/sessions/${name}/controls`).catch(() => null) : null;
   const window = page && page.source !== "none" ? merge(w, page) : w;
@@ -121,7 +126,7 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // A mode set while this read was out is newer than both the conversation and the session's.
   const changed = watching.get(key)?.conv.id === conv.id && watching.get(key)!.conv !== conv;
   const latest = changed ? watching.get(key)!.conv : { ...conv, mode: controls?.mode ?? conv.mode };
-  patch(key, { synced: true, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  patch(key, { synced: true, outputs: outputs ?? chatOf(key).get().outputs, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
 
