@@ -24,8 +24,23 @@
           "y": 28
         },
         "dragDropEnabled": false
+      },
+      {
+        "label": "capture",
+        "title": "New idea",
+        "url": "capture.html",
+        "width": 640,
+        "height": 320,
+        "visible": false,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "focus": false,
+        "acceptFirstMouse": true
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null,
       "assetProtocol": {

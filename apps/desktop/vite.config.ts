@@ -37,6 +37,8 @@ function noShikiWasm(): Plugin {
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss(), noShikiWasm()],
   worker: { format: "es" as const, plugins: () => [noShikiWasm()] },
+  // Two pages: the app, and the capture box's panel (src-tauri/src/capture.rs).
+  build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html") } } },
   // The vendored Shipyard code (vendor/shipyard/README.md) runs on its mock
   // fixtures, as Shipyard's live demo does, until there is an agent backend.
   define: {

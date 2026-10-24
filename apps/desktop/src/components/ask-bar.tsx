@@ -1,6 +1,7 @@
 import { ArrowUp, TextQuote } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { askEditor, askFromBar, closeBar, quoteInReply, useAsk } from "~/lib/ask";
 
 // The ask bar: a small bar by the selected words, with a field to ask Claude about them
@@ -16,6 +17,7 @@ const EDGE = 12;
 
 export function AskBar() {
   const { bar } = useAsk();
+  const who = isClaude(useAiPrefs().model) ? "Claude" : "GPT";
   const [question, setQuestion] = useState("");
   const [at, setAt] = useState<{ top: number; left: number; below: boolean; max: number }>();
   const ref = useRef<HTMLDivElement>(null);
@@ -115,7 +117,7 @@ export function AskBar() {
 
   return (
     <div
-      aria-label="Ask Claude"
+      aria-label={`Ask ${who}`}
       className="absolute z-40 flex h-9 items-center gap-1 rounded-lg border bg-popover p-1 pl-2.5 text-popover-foreground shadow-lg"
       data-below={at?.below ? "" : undefined}
       data-testid="ask-bar"
@@ -130,7 +132,7 @@ export function AskBar() {
       style={at ? { top: at.top, left: at.left, maxWidth: at.max } : { top: 0, left: 0, visibility: "hidden" }}
     >
       <input
-        aria-label="Ask Claude about this"
+        aria-label={`Ask ${who} about this`}
         className="h-full w-[min(15rem,40vw)] min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         onChange={(e) => setQuestion(e.target.value)}
         onKeyDown={(e) => {
@@ -139,7 +141,7 @@ export function AskBar() {
             send();
           }
         }}
-        placeholder="Ask Claude about this…"
+        placeholder={`Ask ${who} about this…`}
         ref={field}
         value={question}
       />

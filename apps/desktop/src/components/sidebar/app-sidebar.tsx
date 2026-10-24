@@ -1,8 +1,9 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), and NavProjects as Pages under our Types; NavMain, NavSecondary and NavUser wait for content.
+// skips it), NavProjects as Pages under our Types, and the plans' usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Lightbulb } from "lucide-react";
+import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
   SidebarContent,
@@ -13,6 +14,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { UsageButton } from "~/components/usage-button";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -55,10 +57,12 @@ export function AppSidebar({
   types,
   onCreate,
   onToday,
+  onNewIdea,
   todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   onToday: (e: React.MouseEvent) => void;
+  onNewIdea: () => void;
   todayActive: boolean;
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];
@@ -77,6 +81,14 @@ export function AppSidebar({
                 <span>Today</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            {/* The capture box (features/capture.feature); its key shows on hover. */}
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={onNewIdea}>
+                <Lightbulb />
+                <span>New idea</span>
+                <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">⌃⌥I</Kbd>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
         <nav aria-label="Types">
@@ -86,6 +98,7 @@ export function AppSidebar({
           <NavProjects onCreate={onCreate} projects={pages} />
         </nav>
       </SidebarContent>
+      <UsageButton />
     </Sidebar>
   );
 }

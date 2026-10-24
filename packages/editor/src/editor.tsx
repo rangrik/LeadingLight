@@ -1,4 +1,4 @@
-import { type Editor, type FocusPosition, getSchema, type JSONContent } from "@tiptap/core";
+import { type Editor, type Extensions, type FocusPosition, generateJSON, getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
@@ -25,6 +25,13 @@ export type { NotesStore } from "./sidenotes";
 export { citesIn } from "./anchors";
 
 export type EditorDoc = JSONContent;
+
+// A page body from HTML, for a page no editor has open (one an assistant makes).
+let parsing: Extensions | null = null;
+export function htmlDoc(html: string): EditorDoc {
+  parsing ??= createExtensions({ onExitTop: () => false, openLink: () => {}, assets: { put: () => Promise.reject(new Error("No files here")), open: () => {} } });
+  return generateJSON(html, parsing);
+}
 
 // How a page looks: Plain is the calm default, Playful adds hand-made touches (see editor.css).
 export type PageStyle = "plain" | "playful";
@@ -190,6 +197,8 @@ export function BlockEditor({
   writing,
   onStats,
   onFocusChange,
+  label = "Page body",
+  placeholder,
   ref,
 }: {
   content: EditorDoc | null;
@@ -197,6 +206,9 @@ export function BlockEditor({
   // Gets a reader, not the document: serialising a long page on every keystroke is slow.
   onChange?: (read: () => EditorDoc) => void;
   links?: LinkHost;
+  // The editor's accessible name, and the hint on an empty line.
+  label?: string;
+  placeholder?: string;
   // An embedded page: shown, never edited or saved from here.
   readOnly?: boolean;
   onExitTop?: () => void;
@@ -238,6 +250,7 @@ export function BlockEditor({
         assets,
         openLink: (href) => openRef.current(href),
         links,
+        placeholder,
         onExitTop: () => {
           onExitTopRef.current?.();
           return Boolean(onExitTopRef.current);
@@ -292,7 +305,7 @@ export function BlockEditor({
       attributes: {
         class: "ll-editor",
         role: "textbox",
-        "aria-label": "Page body",
+        "aria-label": label,
         "aria-multiline": "true",
       },
     },

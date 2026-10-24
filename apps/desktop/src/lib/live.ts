@@ -1,10 +1,11 @@
-import type { EditorDoc } from "@leadinglight/editor/editor";
+import type { BlockEditorHandle, EditorDoc } from "@leadinglight/editor/editor";
 import { objects } from "./objects";
 import { markSaved, patchSummary } from "./space";
 
 // Pages open in a pane. A change to one of them from elsewhere (linking a mention, merging a
-// tag) must go through its editor, or the pane would save its own copy over the change.
+// tag, Claude's edits) must go through its editor, or the pane would save its own copy over it.
 type Live = {
+  editor: () => BlockEditorHandle | null;
   content: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
   properties: () => Record<string, unknown>;
@@ -12,6 +13,8 @@ type Live = {
   // Quotes into an essay, and scrolls to an anchor (DECISIONS.md, 11).
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
+  // The cursor at the end of the body, for a page opened to write on.
+  focus: () => void;
 };
 const live = new Map<string, Live>();
 const waiting = new Map<string, ((page: Live) => void)[]>();
@@ -32,8 +35,9 @@ export function watchLive(id: string, fn: () => void) {
   return () => void set.delete(fn);
 }
 export const touchLive = (id: string) => watchers.get(id)?.forEach((fn) => fn());
-// What an open page holds right now, edits not yet saved included.
+// What an open page holds right now, edits not yet saved included, and its editor.
 export const liveContent = (id: string) => live.get(id)?.content();
+export const liveEditor = (id: string) => live.get(id)?.editor() ?? null;
 
 // Runs fn with the page's editor now if it is open, else as soon as it opens.
 export function whenLive(id: string, fn: (page: Live) => void) {
@@ -53,7 +57,8 @@ export async function editPage(id: string, change: Change) {
   }
   const obj = await objects.get(id);
   if (!obj) return;
-  const content = obj.content ? change.content?.(obj.content) : undefined;
+  // A page never written in has no body yet; the change starts one.
+  const content = change.content?.(obj.content ?? { type: "doc", content: [] });
   const properties = change.properties?.(obj.properties);
   await objects.update(id, { ...(content && { content }), ...(properties && { properties }) });
   if (properties) patchSummary(id, { properties });

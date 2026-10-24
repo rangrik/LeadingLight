@@ -1,8 +1,8 @@
 import { expect, type Page, test } from "@playwright/test";
 
-// Scenarios from features/ask.feature, on the browser build's stand-in answers.
-// The seam: the selection toolbar and ⌘J into the ask bar and the panel, the panel into
-// the editor (insert), the keyboard staying out of the page, and the signed-out state.
+// Scenarios from features/ask.feature, on the browser build's stand-in for Claude Code.
+// The seams: the selection toolbar, ⌘J and the Ask button into the panel; a page tool into the
+// editor only once allowed; threads kept across a reload; the keyboard staying out of the page.
 const bar = (page: Page) => page.getByRole("toolbar", { name: "Ask Claude" });
 const panel = (page: Page) => page.getByRole("region", { name: "Agent" });
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
@@ -85,12 +85,105 @@ test("Meta+J with nothing selected asks about the page; keys stay out of it; Esc
   await page.keyboard.press("Meta+J");
   await expect(panel(page)).toBeVisible();
   await expect(panel(page).locator("blockquote")).toHaveCount(0);
-  await expect(question(page)).toHaveAttribute("placeholder", "Ask about this page…");
+  await expect(question(page)).toHaveAttribute("aria-placeholder", "Ask about this page…");
   await page.keyboard.type("hello");
   await expect(body(page)).toHaveText("A line.");
   await page.keyboard.press("Escape");
   await expect(panel(page)).toBeHidden();
   await expect(body(page)).toBeFocused();
+});
+
+test("The Ask button opens and closes the panel; Meta+J in the panel closes it", async ({ page }) => {
+  await pageWith(page, "A line.");
+  await page.getByRole("button", { name: "Ask Claude" }).click();
+  await expect(panel(page)).toContainText("What should we do with “Cells”?");
+  await expect(question(page)).toBeFocused();
+  await page.getByRole("button", { name: "Ask Claude" }).click();
+  await expect(panel(page)).toBeHidden();
+  await page.keyboard.press("Meta+J");
+  await expect(question(page)).toBeFocused();
+  await page.keyboard.press("Meta+J");
+  await expect(panel(page)).toBeHidden();
+  await expect(body(page)).toBeFocused();
+});
+
+// Seam: a card's Ask button against the page asked about. Catches it asking about the other pane's page.
+test("With pages side by side, each card's Ask button asks about its own page", async ({ page }) => {
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Pages" });
+  for (const title of ["Left", "Right"]) {
+    await nav.getByRole("button", { name: "New page" }).click();
+    await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
+    await page.getByRole("textbox", { name: "Title" }).fill(title);
+  }
+  await nav.getByRole("button", { name: "Left", exact: true }).click({ modifiers: ["Shift"] });
+  for (const side of ["Right", "Left"]) {
+    await page.getByRole("region", { name: side, exact: true }).getByRole("button", { name: "Ask Claude" }).click();
+    await expect(panel(page)).toContainText(`What should we do with “${side}”?`);
+  }
+});
+
+// The page changes only through an allowed step, and a declined one leaves it as it was.
+test("A change waits for approval: Decline keeps the page, Allow once makes it", async ({ page }) => {
+  await pageWith(page, "The mitochondria is the powerhouse of the cell.");
+  const card = page.getByRole("group", { name: "Approval" });
+  for (const choice of ["Decline", "Allow once"]) {
+    await select(page, "powerhouse");
+    await page.waitForTimeout(50);
+    await page.keyboard.press("Meta+J");
+    await bar(page).getByRole("textbox", { name: "Ask Claude about this" }).fill("Make it bold");
+    await page.keyboard.press("Enter");
+    await expect(card).toContainText("Edit “Cells”?");
+    await expect(body(page).locator("strong")).toHaveCount(0);
+    // The card holds the keyboard, so its keys never land in the page.
+    await expect(card).toBeFocused();
+    if (choice === "Decline") await page.keyboard.press("3");
+    else await card.getByRole("button", { name: choice }).click();
+  }
+  await expect(body(page)).toHaveText("The mitochondria is the powerhouse of the cell.");
+  await expect(body(page).locator("strong")).toHaveText("powerhouse");
+  await panel(page).getByRole("button", { name: /Stopped after/ }).click();
+  await expect(panel(page)).toContainText(/Edited “Cells”\s*· declined/);
+  await expect(panel(page)).toContainText("Made “powerhouse” bold.");
+});
+
+// The same change through GPT: Codex's app-server protocol, the app gating its own tools.
+test("GPT through Codex: a change waits for approval, then lands", async ({ page }) => {
+  await pageWith(page, "The mitochondria is the powerhouse of the cell.");
+  await page.keyboard.press("Meta+J");
+  await panel(page).getByRole("button", { name: "Model and effort" }).click();
+  await page.getByRole("radio", { name: /GPT-6.1-Sol/ }).click();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  await select(page, "powerhouse");
+  await page.waitForTimeout(50);
+  await page.keyboard.press("Meta+J");
+  await page.getByRole("toolbar", { name: "Ask GPT" }).getByRole("textbox", { name: "Ask GPT about this" }).fill("Make it bold");
+  await page.keyboard.press("Enter");
+  const card = page.getByRole("group", { name: "Approval" });
+  await expect(card).toContainText("Edit “Cells”?");
+  await expect(body(page).locator("strong")).toHaveCount(0);
+  await card.getByRole("button", { name: "Allow once" }).click();
+  await expect(body(page).locator("strong")).toHaveText("powerhouse");
+  await expect(panel(page)).toContainText("Made “powerhouse” bold.");
+});
+
+test("Threads are kept across a reload, and a new one starts empty", async ({ page }) => {
+  await pageWith(page, "A line.");
+  await page.keyboard.press("Meta+J");
+  await question(page).fill("Hello?");
+  await page.keyboard.press("Enter");
+  await expect(panel(page)).toContainText("Worked for");
+  await page.reload();
+  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Cells", exact: true }).click();
+  await page.keyboard.press("Meta+J");
+  await expect(panel(page)).toContainText("A stand-in answer");
+  await panel(page).getByRole("button", { name: "Threads" }).click();
+  await page.getByRole("menuitem", { name: "New thread" }).click();
+  await expect(panel(page)).toContainText("What should we do with “Cells”?");
+  await panel(page).getByRole("button", { name: "Threads" }).click();
+  await page.getByRole("menuitemradio", { name: /Hello\?/ }).click();
+  await expect(panel(page)).toContainText("A stand-in answer");
 });
 
 test("Stop ends a streaming answer", async ({ page }) => {
@@ -100,6 +193,7 @@ test("Stop ends a streaming answer", async ({ page }) => {
   await page.keyboard.press("Enter");
   await panel(page).getByRole("button", { name: "Stop" }).click();
   await expect(panel(page).getByRole("button", { name: "Send" })).toBeVisible();
+  await expect(panel(page)).toContainText("Stopped after");
 });
 
 test("Not signed in: the panel says how, and Send waits", async ({ page }) => {
@@ -118,6 +212,7 @@ test("Settings › AI shows the account and keeps the model", async ({ page }) =
   const section = page.getByTestId("settings-ai");
   await expect(section.getByRole("heading", { name: "AI" })).toBeVisible();
   await expect(section).toContainText("Signed in as you@example.com");
-  await section.getByRole("button", { name: "Haiku", exact: true }).click();
+  await section.getByRole("combobox").filter({ hasText: "Opus" }).click();
+  await page.getByRole("option", { name: "Haiku", exact: true }).click();
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem("ll.ai") ?? "{}").model)).toBe("haiku");
 });

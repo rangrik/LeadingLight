@@ -1,3 +1,4 @@
+import type { EditorDoc } from "@leadinglight/editor/editor";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
@@ -6,11 +7,14 @@ import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/componen
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
 import { visit } from "~/components/property-value";
-import { DAILY, ensureDaily, shiftDay, today } from "~/lib/daily";
+import { ensureDaily, shiftDay, today } from "~/lib/daily";
+import { hasBlockLink, linesMentioning } from "~/lib/doc-links";
 import { fromIso, isoDay } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
+import { liveContent } from "~/lib/live";
+import type { ObjectSummary } from "~/lib/objects";
 import { openPage } from "~/lib/panes";
-import { iconFor, space } from "~/lib/space";
+import { iconFor, listed, space } from "~/lib/space";
 
 export const goToDay = async (day: string) => openPage(await ensureDaily(day));
 
@@ -48,10 +52,13 @@ export function DailyBar({ day }: { day: string }) {
   );
 }
 
-// At the end of a daily note: what was made that day.
-export function CreatedThisDay({ day, id }: { day: string; id: string }) {
+// At the end of a daily note: the pages made that day (tags and daily notes have their own
+// places), except what its body links already (ideas captured that day), so nothing shows twice.
+export function CreatedThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
   const { pages } = space.use();
-  const made = pages.filter((p) => p.id !== id && p.typeId !== DAILY && !p.properties.templateOf && isoDay(new Date(p.createdAt)) === day);
+  const doc = liveContent(id) ?? content;
+  const linked = (p: ObjectSummary) => linesMentioning(doc, p.id).length > 0 || hasBlockLink(doc, p.id);
+  const made = pages.filter((p) => p.id !== id && listed(p) && isoDay(new Date(p.createdAt)) === day && !linked(p));
   if (!made.length) return null;
   return (
     <section aria-label="Created this day" className="mt-16 border-t pt-6 text-sm">

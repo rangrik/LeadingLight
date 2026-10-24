@@ -22,13 +22,17 @@ import { ToastProvider } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
+import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
+import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
+import { linkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
+import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
 import { dailyFor, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
@@ -41,6 +45,7 @@ import { flushAll } from "~/lib/saving";
 import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
+import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 
@@ -70,15 +75,19 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const view = useStore((s) => s.view);
+  const { corner } = useAiPrefs();
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
   const settingsRef = useRef<HTMLDivElement>(null);
   const lastFocus = useRef<HTMLElement | null>(null);
+  // The capture box gives the keyboard back to the page, not to the sidebar row that opened it.
+  const captureFrom = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const onFocus = (e: FocusEvent) => {
       const t = e.target instanceof HTMLElement ? e.target : null;
       if (t && !t.closest(".ll-settings")) lastFocus.current = t;
+      if (t && !t.closest(".ll-settings, [data-slot=sidebar], [role=dialog]")) captureFrom.current = t;
     };
     document.addEventListener("focusin", onFocus);
     return () => document.removeEventListener("focusin", onFocus);
@@ -122,9 +131,53 @@ export default function App() {
       .catch(console.error);
   }, []);
 
+  // The capture box (features/capture.feature): in the app a panel of its own (capture.rs),
+  // whose drafts are saved here; in a browser the same box inside the window, which gives the
+  // keyboard back to where it was when it closes.
+  const [capture, setCapture] = useState(false);
+  const closeCapture = useCallback(() => {
+    setCapture(false);
+    if (captureFrom.current?.isConnected) captureFrom.current.focus();
+  }, []);
+  const toggleCapture = useCallback(() => {
+    void isNative.then(async (native) => {
+      if (native) return (await import("@tauri-apps/api/core")).invoke("capture_show");
+      if (capture) closeCapture();
+      else setCapture(true);
+    });
+  }, [capture, closeCapture]);
+  const captureHost = useMemo<CaptureHost>(
+    () => ({
+      save: saveCapture,
+      open: (id) => {
+        setCapture(false);
+        openIdea(id);
+      },
+      close: closeCapture,
+      links: linkHost,
+    }),
+    [closeCapture],
+  );
+  useEffect(() => {
+    let gone = false;
+    let off: (() => void) | undefined;
+    void hostCapture().then((f) => (gone ? f() : (off = f)));
+    return () => {
+      gone = true;
+      off?.();
+    };
+  }, []);
+  // A click anywhere else closes the box, as the panel does; the editor's menus count as inside.
+  useEffect(() => {
+    if (!capture) return;
+    const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest(`[role=dialog], ${POPUP}`) && closeCapture();
+    document.addEventListener("pointerdown", onDown);
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, [capture, closeCapture]);
+
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
-  useShortcuts(useMemo(() => ({ newPage: create, toggleSidebar }), [create, toggleSidebar]));
+  useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar }), [create, toggleCapture, toggleSidebar]));
 
   // Save pending edits whenever the app might be about to go away.
   useEffect(() => {
@@ -214,7 +267,14 @@ export default function App() {
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
-        <AppSidebar onCreate={create} onToday={(e) => void ensureDaily(today()).then((id) => opener(id)(e))} pages={navPages} todayActive={current !== undefined && current === dailyFor(today())?.id} types={navTypes} />
+        <AppSidebar
+          onCreate={create}
+          onNewIdea={toggleCapture}
+          onToday={(e) => void ensureDaily(today()).then((id) => opener(id)(e))}
+          pages={navPages}
+          todayActive={current !== undefined && current === dailyFor(today())?.id}
+          types={navTypes}
+        />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {root ? (
             <PaneArea windowToggle={mac} />
@@ -254,7 +314,8 @@ export default function App() {
     );
 
   return (
-    <ToastProvider>
+    // Toasts sit on the edge away from the Ask panel's corner, so they never cover it.
+    <ToastProvider position={corner.startsWith("b") ? "top-center" : "bottom-center"}>
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
@@ -265,7 +326,13 @@ export default function App() {
               </Suspense>
             </div>
           )}
+          {capture && (
+            <div className="fixed inset-x-0 top-[15vh] z-50 flex justify-center">
+              <CaptureBox className="h-80 w-[640px] shadow-2xl" host={captureHost} />
+            </div>
+          )}
           <ShortcutsSheet />
+          <CliUpdates />
           <ZoomHud />
         </TooltipProvider>
       </ShipyardToasts>

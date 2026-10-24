@@ -16,8 +16,9 @@ const CODES: Record<string, string | undefined> = { Slash: "/", Backslash: "\\",
 // each key first and says which one (menu.rs emits berth://menu); in a
 // browser the page reads the keys itself. The sidebar's ⌘\ is the sidebar's
 // own in a browser (packages/ui sidebar.tsx), so only the menu's event
-// toggles it here.
-export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }) {
+// toggles it here. ⌃⌥I is the Mac app's global shortcut (capture.rs), which takes the key
+// before the menu sees it; the menu item and a browser's key come through here.
+export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void }) {
   useEffect(() => {
     const run = (id: string) => {
       switch (id) {
@@ -25,6 +26,8 @@ export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }
           // A new page is made to be written in: Settings goes first.
           if (useStore.getState().view.kind === "settings") closeSettings();
           return actions.newPage();
+        case "new-idea":
+          return actions.newIdea();
         case "save":
           return void flushAll();
         case "sidebar":
@@ -56,7 +59,9 @@ export function useShortcuts(actions: { newPage(): void; toggleSidebar(): void }
       // By physical key, so Option and Shift (which change e.key) still match the table.
       const key = e.code.startsWith("Key") ? e.code.slice(3) : e.code.startsWith("Digit") ? e.code.slice(5) : CODES[e.code];
       if (!key) return;
-      const id = byAccel.get(`CmdOrCtrl+${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${key}`);
+      const rest = `${e.altKey ? "Alt+" : ""}${e.shiftKey ? "Shift+" : ""}${key}`;
+      // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
+      const id = (e.ctrlKey && !e.metaKey && byAccel.get(`Ctrl+${rest}`)) || byAccel.get(`CmdOrCtrl+${rest}`);
       if (!id) return;
       e.preventDefault();
       run(id);

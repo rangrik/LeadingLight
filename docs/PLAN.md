@@ -34,6 +34,11 @@ stillness, the mock agent connection, and Ask about this: a bar beside the selec
 and a panel in the note that ask Claude through the Claude Code sign-in on this Mac, with a
 composer that mentions agents and pages (`features/ask.feature`, `features/composer.feature`).
 
+- Claude on every page (built, `features/ask.feature`): the Ask button and ⌘J, threads kept per
+  page, page tools behind Ask for approval, Approve for me or Full access, Plan mode, and the
+  model and effort picker, after synara. Claude through Claude Code, GPT through Codex.
+- Keeping Claude Code and Codex up to date from the app, and how much of each plan is left at
+  the bottom of the sidebar (`features/cli-updates.feature`, `features/usage.feature`).
 - An agents area on the conversation UI, on mock data first, then a backend.
 - The designer's pass on Settings and the agent panel (the brief).
 
@@ -49,6 +54,8 @@ menu, the Writing menu at the panel's top right, and Settings › Writing. See
 - Grammar check (⇧⌘G): Harper's grammar and spelling mistakes underlined, with its reason.
 - Counts (⇧⌘W): beside the page's name, words, reading time, parts of speech, style and grammar,
   for the page or the selection; a click shows every number.
+- They work on the types of pages chosen in Settings › Writing › Use on: suggested on for pages
+  written in, off for records (people, books, tags, collections).
 
 ## M2 — Objects and links (built)
 
@@ -113,6 +120,12 @@ tags, daily notes, templates, starter types.
 Left out of M2 (see `DEFERRED.md`): stickers (waiting on a decision),
 queries, block references, images and web links as pages, the graph, one page open twice,
 editing an embed in place, editing values inside lists.
+
+## M2.75 — Idea capture (built)
+
+- ⌃⌥I from any app opens a small box; what is typed is an Idea page, linked in Today under
+  "Ideas". A non-activating panel in the Mac app, the same box inside the window in a browser
+  (features/capture.feature, DECISIONS.md 14).
 
 ## M3 — Everyday polish
 
