@@ -4,13 +4,13 @@ import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { openChat } from "~/components/assign";
 import { visit } from "~/components/property-value";
-import { assignmentOf, carryOn, isTask, start, stopAgent, syncWorkers, taskOfDocument } from "~/lib/assign";
+import { accept, acceptedOf, assignmentOf, carryOn, isTask, start, stopAgent, syncWorkers, taskOfDocument } from "~/lib/assign";
 import { openHref } from "~/lib/essay";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { objects, type ObjectSummary } from "~/lib/objects";
 import { pageOf, space } from "~/lib/space";
-import { reportsOn, runOf, subtasksOf, workersOf, workOf } from "~/lib/work";
+import { reportOf, reportsOn, runOf, subtasksOf, workersOf, workOf } from "~/lib/work";
 import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
 // An assigned task's work, under its title (features/task-work.feature): the widgets Activity
@@ -20,7 +20,11 @@ import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 // being read never move.
 
 const name = (id: string) => pageLabel(pageOf(id)?.title ?? "");
-const Row = ({ children, className }: { children: React.ReactNode; className?: string }) => <div className={cn("flex min-w-0 items-center gap-2", className)}>{children}</div>;
+const Row = ({ children, className, ...rest }: { children: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={cn("flex min-w-0 items-center gap-2", className)} {...rest}>
+    {children}
+  </div>
+);
 
 // Keeps what is on screen in place when the box above it changes height, where the browser doesn't
 // do so itself (WebKit has no scroll anchoring).
@@ -175,6 +179,49 @@ export function EvidenceWidget({ task }: { task: ObjectSummary }) {
   );
 }
 
+// Ready for review: the report to read, and Accept; once accepted, when, and anything published since.
+export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: ObjectSummary }) {
+  const { pages } = space.use();
+  const live = sessions.use();
+  const state = stateOf(task, agent, live);
+  const own = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id);
+  const accepted = acceptedOf(task);
+  const since = accepted ? reportsOn(task.id, pages).filter((r) => r.createdAt > accepted.at) : [];
+  const last = own.at(-1);
+  if (state === "review" && last)
+    return (
+      <Row className="ms-6" data-widget="review">
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">
+          Read{" "}
+          <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => visit(last.id, e)} type="button">
+            {pageLabel(last.title)}
+          </button>
+          , then accept it or send feedback.
+        </span>
+        <Button onClick={() => void accept(task.id, last.id)} size="xs">
+          <Check className="size-3.5" />
+          Accept
+        </Button>
+      </Row>
+    );
+  if (state === "done")
+    return (
+      <div className="ms-6 text-muted-foreground" data-widget="review">
+        {accepted ? `Accepted ${formatAgo(accepted.at)}` : "Done"}
+        {since.length > 0 && (
+          <>
+            {" · "}
+            {/* Late work is shown as new; it never undoes the acceptance. */}
+            <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => visit(since.at(-1)!.id, e)} type="button">
+              {since.length === 1 ? "a report" : `${since.length} reports`} since
+            </button>
+          </>
+        )}
+      </div>
+    );
+  return null;
+}
+
 // Under the title of an assigned task; on a page assigned through a task, that task.
 export function WorkPanel({ pageId }: { pageId: string }) {
   const { pages } = space.use();
@@ -206,6 +253,7 @@ export function WorkPanel({ pageId }: { pageId: string }) {
       {page && agent && run && (
         <div className="mt-3 flex flex-col gap-1.5 rounded-lg border px-3 py-2.5" data-testid="work-row">
           <ActivityWidget agent={agent} task={page} />
+          <ReviewWidget agent={agent} task={page} />
           <ChecklistWidget agent={agent} task={page} />
           <EvidenceWidget task={page} />
         </div>

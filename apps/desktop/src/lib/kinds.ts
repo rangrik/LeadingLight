@@ -125,6 +125,16 @@ export function kinds({ types }: Space): Kind[] {
       shows: "Under an assigned task's title, opened with a click.",
     },
     {
+      id: "review",
+      name: "Review",
+      lucide: "circle-check",
+      widget: true,
+      purpose: "Work ready for you to read, with Accept; once accepted, when, and anything published after.",
+      made: "The app, when the agent given the task publishes its report as ready.",
+      changes: "Only your Accept marks the task done. Later reports show as new and never undo it.",
+      shows: "Under an assigned task's title, and in the Feed.",
+    },
+    {
       id: "evidence-widget",
       name: "Evidence",
       lucide: "images",

@@ -1,4 +1,4 @@
-import { assignmentOf } from "~/lib/assign";
+import { acceptedOf, assignmentOf } from "~/lib/assign";
 import { batchOf } from "~/lib/feedback";
 import { liveEditor, whenLive } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
@@ -88,6 +88,10 @@ export function feedItems(): FeedItem[] {
     if (state === "review") {
       const report = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id).at(-1)!;
       items.push({ ...base, id: `review:${report.id}`, kind: "review", reason: `“${name(task.id)}” is ready for review`, at: report.createdAt, targets: [{ page: report.id }] });
+    } else if (state === "done" && acceptedOf(task)) {
+      // Published after it was accepted: told, never undoing it.
+      const late = reportsOn(task.id, pages).filter((r) => r.createdAt > acceptedOf(task)!.at).at(-1);
+      if (late) items.push({ ...base, id: `late:${late.id}`, kind: "notice", reason: `${name(agent.id)} published after you accepted “${name(task.id)}”`, at: late.createdAt, targets: [{ page: late.id }] });
     } else if (state === "stopped") {
       items.push({ ...base, id: `stopped:${agent.id}:${runOf(agent)!.session}`, kind: "notice", reason: `${name(agent.id)} stopped before “${name(task.id)}” was ready`, at: task.updatedAt, targets: [{ page: task.id }] });
     }

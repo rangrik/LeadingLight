@@ -381,3 +381,10 @@ make the task ready. An answer to another agent's batch, or to a point the batch
 refused. Links use the app's own ll: addresses, which the editor keeps and, in a report, opens on a
 plain click. The old notes are done once sent: nothing to close, and the batch keeps what each was
 about if the words go.
+
+## 26. Accepting is the person's press, and later work never undoes it
+
+An assigned task is done when the person accepts it, which ticks Done and keeps which report it was
+accepted on and when. Done comes first in the task's state, so a report, a worker or a late event
+after it changes nothing; what arrives later is shown as new on the task and in the Feed. Unticking
+Done reopens it, also only by the person. A task no agent was given keeps its checkbox as before.

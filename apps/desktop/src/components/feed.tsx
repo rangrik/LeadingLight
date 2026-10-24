@@ -6,6 +6,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
+import { accept } from "~/lib/assign";
 import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
@@ -98,6 +99,11 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
           )}
           {!item.request && (
             <div className="flex gap-1">
+              {item.kind === "review" && item.task && (
+                <Button onClick={() => void accept(item.task!, item.targets[0]?.page)} size="xs">
+                  Accept
+                </Button>
+              )}
               <Button onClick={() => feedPrefs.set({ dismissed: [...feedPrefs.get().dismissed, item.id].slice(-200) })} size="xs" variant="ghost">
                 {item.kind === "notice" ? "Dismiss" : "Later"}
               </Button>

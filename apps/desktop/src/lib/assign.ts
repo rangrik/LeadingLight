@@ -163,3 +163,11 @@ export async function carryOn(agentId: string): Promise<void> {
   const kind = conv.agent === "codex" ? "codex" : "claude";
   await send(conv.id, run.location, "Carry on with the task.", { model: conv.model ?? "", effort: conv.effort ?? "", ...accessOf(conv.mode, kind) });
 }
+
+// The person accepts the task: Done, with the report it was accepted on. Only this, from the
+// person's own press, marks an assigned task done (DECISIONS.md, 26); work that comes later shows
+// as new, and never undoes it.
+export type Accepted = { at: number; report?: string };
+export const acceptedOf = (p?: ObjectSummary) => p?.properties.accepted as Accepted | undefined;
+export const accept = (task: string, report?: string) =>
+  editPage(task, { properties: (p) => ({ ...p, done: true, accepted: { at: Date.now(), ...(report && { report }) } }) });
