@@ -90,7 +90,8 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
           </Button>
         )}
       </Row>
-      {work?.activity && state !== "done" && (
+      {/* What it is doing, while it does; at rest the line would be stale. */}
+      {work?.activity && (state === "working" || state === "input") && (
         <p className="ms-6 truncate text-muted-foreground">
           {work.activity} · {formatAgo(work.at)}
         </p>

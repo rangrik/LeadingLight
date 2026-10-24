@@ -125,7 +125,7 @@ const STATE = { sending: "Sending…", sent: "Sent", failed: "Not sent" };
 export function FeedbackGroup({ feedback }: { feedback: ObjectSummary }) {
   const b = batchOf(feedback)!;
   return (
-    <article aria-label={`Feedback: ${b.points.length} points`} className="mt-12 border-t pt-6 text-sm first:mt-0" data-feedback={feedback.id}>
+    <article aria-label={`Feedback: ${b.points.length} ${b.points.length === 1 ? "point" : "points"}`} className="mt-12 border-t pt-6 text-sm first:mt-0" data-feedback={feedback.id}>
       <div className="flex items-center gap-2">
         <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-muted-foreground">
           <span className="font-medium text-foreground">You sent feedback</span>
