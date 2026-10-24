@@ -111,7 +111,8 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   };
   // Blank space under the last line belongs to the body.
   const onBlankMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest(".ProseMirror, button, a, input, [role]")) return;
+    // The box is a dialog itself, so only roles inside it count as controls.
+    if ((e.target as HTMLElement).closest(".ProseMirror, button, a, input, [role]:not([role=dialog])")) return;
     if (editorRef.current?.placeAt(e.clientX, e.clientY)) e.preventDefault();
   };
   const empty = !title.trim() && !hasBody;

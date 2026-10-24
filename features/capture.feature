@@ -170,6 +170,11 @@ Feature: Idea capture
     And the same holds when the box was opened with Control+Alt+I
     # In the app: the keyboard goes back to the app that was in front (see the last scenarios).
 
+  Scenario: Blank space under the body belongs to the body
+    Given the box is open with "Plan" in the title line
+    When I click the empty area under the body's last line
+    Then the cursor is at the end of the body, and Escape, ⌘↩ and ⇧⌘↩ still work
+
   Scenario: Tab stays in the box
     Given the box is open with the title line focused
     When I press Tab
