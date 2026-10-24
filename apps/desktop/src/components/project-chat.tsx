@@ -1,5 +1,5 @@
-import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus, Square } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
@@ -214,6 +214,18 @@ export function ProjectChat({ pageId }: { pageId: string }) {
     }, () => {});
   };
   const now = chat.turns.at(-1);
+  // A card that hides the composer carries its Stop: the agent can be stopped while it asks.
+  const footer = (line: ReactNode) => (
+    <div className="mt-2 flex min-h-6 items-center gap-2">
+      <div className="min-w-0 flex-1 [&>p]:mt-0">{line}</div>
+      {open && (
+        <Button onClick={() => void stop(key)} size="xs" variant="ghost">
+          <Square className="size-2.5 fill-current" />
+          Stop
+        </Button>
+      )}
+    </div>
+  );
   // A worker's own chat, when the runtime lists it among the folder's.
   const openWorker = (s: string) => void listChats(location).then((l) => {
     const c = l.find((x) => x.session === s);
@@ -345,11 +357,11 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             ref={card}
             request={front}
           >
-            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, draft.index, true)} />
+            {footer(<DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, draft.index, true)} />)}
           </QuestionCard>
         ) : (
           <ApprovalCard busy={delivery !== "pending" && delivery !== "failed"} key={front.id} onChoose={(choice) => answer(key, front, { choice }, 0, true)} ref={card} request={front}>
-            <DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, 0, true)} />
+            {footer(<DeliveryLine delivery={delivery} error={sent?.error} onRetry={() => draft && answer(key, front, draft.answer, 0, true)} />)}
           </ApprovalCard>
         ))}
       {/* Kept mounted under a request, so a message being written survives it. */}

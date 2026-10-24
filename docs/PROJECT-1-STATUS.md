@@ -36,7 +36,6 @@ with libevent and utf8proc, built from pinned sources, their licenses in `runtim
   pick this chat up again" until then; the runtime reads a conversation's record only through a session.
 - After a relink to a moved folder, an older chat resumes in the new place (runtime ll.21); one
   still running at the time keeps working in the old path until it is stopped.
-- A question card hides the composer, so Stop is out of reach until it's answered.
 - With its session gone, a turn's file view has no Change (the runtime reads a call's detail through
   a session), and the composer shows the mode the chat list last read.
 - A file deleted by a shell command (rm) isn't seen as deleted; only Codex's own deletes are.

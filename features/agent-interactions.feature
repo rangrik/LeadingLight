@@ -76,6 +76,11 @@ Feature: An agent's questions and approvals
     When the agent's session is stopped, or its process ends
     Then the card goes, and my words are back in the composer with a line saying why
 
+  Scenario: Stop while the agent asks
+    Given a question or approval card in front, which hides the composer
+    When I press Stop on the card
+    Then the agent's turn stops, the card goes, and the composer is back with any words I had typed
+
   Scenario: The keys stay with the card
     Given a card with two questions in front
     When I answer the first and press Next
