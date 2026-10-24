@@ -104,7 +104,7 @@ export function ObjectList({ items, props, card, settings, onSettings, empty }: 
   const groupProp = groupable.find((p) => p.id === settings.group) ?? (kind === "board" ? groupable[0] : undefined);
   const groups = grouped(sorted(items, settings, props), groupProp).filter((g) => kind === "board" || g.items.length > 0);
   const set = (patch: Partial<ViewSettings>) => onSettings({ ...settings, ...patch });
-  const sortItems = { ...BUILT_IN, ...(items.some((p) => p.properties.day) ? DAY : {}), ...Object.fromEntries(props.filter((p) => p.kind !== "file").map((p) => [p.id, p.name])) };
+  const sortItems = { ...BUILT_IN, ...(settings.sort.by === "day" || items.some((p) => p.properties.day) ? DAY : {}), ...Object.fromEntries(props.filter((p) => p.kind !== "file").map((p) => [p.id, p.name])) };
   const groupItems = { [NONE]: "No grouping", ...Object.fromEntries(groupable.map((p) => [p.id, p.name])) };
 
   // A grouped list doesn't repeat the group's value on every row.
