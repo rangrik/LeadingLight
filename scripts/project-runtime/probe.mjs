@@ -286,6 +286,11 @@ async function workers() {
     if (mode !== "bypassPermissions") throw new Error(`the worker's mode is ${mode}`);
     return { worker: worker.name, mode };
   });
+  await check("workers: a worker started with its task in one step reports back too", async () => {
+    // As an agent may: berthd session new --prompt, from its own session.
+    execFileSync(bin, ["session", "new", "plain", "--name", "probe-oneshot", "--agent", "claude", "--prompt", "Reply with the single word FIG."], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } });
+    await until("its report, with the lead", async () => (await items(lead)).some((i) => i.kind === "report" && i.report?.session === "probe-oneshot"), 240_000);
+  });
   await check("workers: a checked loop repairs within its bound", async () => {
     // A task the first try won't meet, and a check that says why: the loop feeds that back.
     await api("POST", "/v1/sessions", { name: "probe-fixer", location: "plain", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low" });

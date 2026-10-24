@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 10:03:40 -0700
+Subject: [PATCH] A session an agent starts with its task reports back
+
+berthd session new --prompt, run by an agent, watches the new session's first turn for that agent, as task new does, so its result comes back without anyone copying it.
+---
+ internal/box/api.go | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/internal/box/api.go b/internal/box/api.go
+index fd7dde1..6d76724 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -764,6 +764,11 @@ func (b *Box) addSession(w http.ResponseWriter, r *http.Request) error {
+ 			}
+ 			sess = b.titleNew(r.Context(), sess, req.Title, req.Prompt)
+ 			b.announceOpen(r, sess, req.Open)
++			// Started with its task by an agent (session new --prompt): that agent hears when it's done,
++			// as with task new.
++			if req.Prompt != "" {
++				b.watchCaller(r, Watch{Kind: "task", Session: sess.Name})
++			}
+ 			writeJSON(w, sess)
+ 			return nil
+ 		}
+-- 
+2.51.2
+
