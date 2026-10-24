@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
-  "version": "0.3.30-ll.16",
+  "version": "0.3.30-ll.17",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -30,6 +30,7 @@
     "0015-plan-mode-and-title.patch",
     "0016-console-peek.patch",
     "0017-tabs-and-refusals.patch",
-    "0018-embedded-note.patch"
+    "0018-embedded-note.patch",
+    "0019-clone-cleanup.patch"
   ]
 }

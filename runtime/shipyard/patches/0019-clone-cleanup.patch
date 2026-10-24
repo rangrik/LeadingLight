@@ -1,0 +1,47 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:39:30 -0700
+Subject: [PATCH] A failed clone takes away the folders made for it
+
+When a clone fails or is stopped, the parent folders it made for itself go with it, so nothing is left from a clone that didn't happen.
+---
+ internal/box/projects.go | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/internal/box/projects.go b/internal/box/projects.go
+index 5c0a1b5..6cdbd2d 100644
+--- a/internal/box/projects.go
++++ b/internal/box/projects.go
+@@ -218,6 +218,17 @@ func (b *Box) cloneLocation(w http.ResponseWriter, r *http.Request) error {
+ 	if err := b.before(r, "location.add", map[string]any{"location": name, "path": dest, "url": req.URL}); err != nil {
+ 		return err
+ 	}
++	// The folders made for it go too if it fails: the highest of them is made.
++	made := filepath.Dir(dest)
++	for p := made; ; p = filepath.Dir(p) {
++		if _, err := os.Stat(p); err == nil || p == filepath.Dir(p) {
++			break
++		}
++		made = p
++	}
++	if _, err := os.Stat(made); err == nil {
++		made = ""
++	}
+ 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+ 		return err
+ 	}
+@@ -263,6 +274,11 @@ func (b *Box) cloneLocation(w http.ResponseWriter, r *http.Request) error {
+ 	}
+ 	if err := cmd.Wait(); err != nil {
+ 		os.RemoveAll(dest)
++		for p := filepath.Dir(dest); made != "" && strings.HasPrefix(p, made); p = filepath.Dir(p) {
++			if os.Remove(p) != nil {
++				break
++			}
++		}
+ 		send(map[string]any{"done": true, "error": strings.TrimPrefix(last, "fatal: ")})
+ 		return nil
+ 	}
+-- 
+2.51.2
+
