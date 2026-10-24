@@ -16,6 +16,7 @@ import { closeUpdateToast } from "~/components/cli-updates";
 import { behind, cliPrefs, commandOf, INSTALL, loadTools, SOURCE, type Tool, tools, updateTool } from "~/lib/clis";
 import { openLink } from "~/lib/links";
 import { isNative } from "~/lib/platform";
+import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transport";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
@@ -125,6 +126,7 @@ function Account({ status }: { status: AgentStatus | "checking" }) {
 function RuntimeGroup() {
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const { enabled } = projectPrefs.use();
   useEffect(() => void runtimeStatus().then(setStatus), []);
   const start = () => {
     setBusy(true);
@@ -143,6 +145,9 @@ function RuntimeGroup() {
         : "Starts when a project chat first needs it.";
   return (
     <SettingsGroup title="Projects">
+      <SettingsRow label="Linked folders and project chats" description="In development: link a page to a folder on this Mac, and chat with an agent working in it.">
+        <Switch checked={enabled} onCheckedChange={(on) => projectPrefs.set({ enabled: on })} />
+      </SettingsRow>
       <SettingsRow
         label="Runtime"
         description={

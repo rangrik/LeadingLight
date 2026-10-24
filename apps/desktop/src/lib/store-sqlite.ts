@@ -1,7 +1,7 @@
 import Database from "@tauri-apps/plugin-sql";
 import type { PropDef, TypeDef } from "./catalog";
 import { readIcon } from "./page-meta";
-import { asDoc, type LLObject, newObject, type ObjectStore, PAGE_TYPE } from "./store";
+import { asDoc, type LLObject, newObject, type ObjectStore, PAGE_TYPE, type ProjectFolder } from "./store";
 
 // Must match DB_URL in src-tauri/src/lib.rs.
 const DB_URL = "sqlite:leadinglight.db";
@@ -158,5 +158,24 @@ export const sqliteStore: ObjectStore = {
 
   async deleteProp(id) {
     await (await db()).execute("DELETE FROM property_defs WHERE id = $1", [id]);
+  },
+
+  async folders() {
+    const rows = await (await db()).select<{ page_id: string; path: string; folder_id: string; location: string; created_at: number; updated_at: number }[]>(
+      "SELECT * FROM project_folders",
+    );
+    return rows.map((r): ProjectFolder => ({ pageId: r.page_id, path: r.path, folderId: r.folder_id, location: r.location, createdAt: r.created_at, updatedAt: r.updated_at }));
+  },
+
+  async putFolder(f) {
+    await (await db()).execute(
+      `INSERT INTO project_folders (page_id, path, folder_id, location, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT(page_id) DO UPDATE SET path = excluded.path, folder_id = excluded.folder_id, location = excluded.location, updated_at = excluded.updated_at`,
+      [f.pageId, f.path, f.folderId, f.location, f.createdAt, f.updatedAt],
+    );
+  },
+
+  async deleteFolder(pageId) {
+    await (await db()).execute("DELETE FROM project_folders WHERE page_id = $1", [pageId]);
   },
 };

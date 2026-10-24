@@ -34,6 +34,12 @@ fn migrations() -> Vec<Migration> {
             sql: include_str!("../migrations/002_properties.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "pages linked to folders",
+            sql: include_str!("../migrations/003_project_folders.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -76,6 +82,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())

@@ -1,0 +1,98 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 04:57:37 -0700
+Subject: [PATCH] A location names its folder, and says when it is gone
+
+folder_id is the folder's device and inode: another path to it (a link,
+another case on a case-blind disk) is the same folder, and a folder moved
+on its disk keeps it. missing says the path is no folder now; a missing
+folder is no workspace.
+---
+ internal/box/locations.go      | 20 +++++++++++++++++++-
+ internal/box/locations_test.go | 22 ++++++++++++++++++++++
+ 2 files changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/internal/box/locations.go b/internal/box/locations.go
+index e8158ed..23aa6e4 100644
+--- a/internal/box/locations.go
++++ b/internal/box/locations.go
+@@ -17,6 +17,7 @@ import (
+ 	"sort"
+ 	"strconv"
+ 	"strings"
++	"syscall"
+ 	"time"
+ 
+ 	"github.com/cosscom/shipyard/internal/statefile"
+@@ -29,7 +30,12 @@ type Location struct {
+ 	Name string `json:"name"`
+ 	Path string `json:"path"`
+ 	// Repo is true when Path is the root of a git repository.
+-	Repo      bool       `json:"repo"`
++	Repo bool `json:"repo"`
++	// FolderID names the folder itself (device and inode): another path to
++	// it is the same folder, and a folder moved on its disk keeps it.
++	// Missing says Path is no folder now (moved away, or its disk gone).
++	FolderID  string     `json:"folder_id,omitempty"`
++	Missing   bool       `json:"missing,omitempty"`
+ 	Worktrees []Worktree `json:"worktrees,omitempty"`
+ 	// Scripts run when berth creates or removes worktrees here.
+ 	Scripts Scripts `json:"scripts"`
+@@ -434,9 +440,21 @@ func describe(ctx context.Context, s savedLocation) Location {
+ 	if s.Kit != nil && s.Kit.Team != nil {
+ 		loc.KitTeam = s.Kit.Team.Org
+ 	}
++	st, err := os.Stat(s.Path)
++	if err != nil || !st.IsDir() {
++		loc.Missing = true
++		return loc
++	}
++	if sys, ok := st.Sys().(*syscall.Stat_t); ok {
++		loc.FolderID = fmt.Sprintf("%d:%d", sys.Dev, sys.Ino)
++	}
+ 	repo, trust, _ := repoLayer(s)
+ 	loc.RepoTrust = trust.State
+ 	out, err := git(ctx, "-C", s.Path, "worktree", "list", "--porcelain")
++	if _, gerr := os.Lstat(filepath.Join(s.Path, ".git")); err == nil && gerr != nil {
++		// A folder inside a repository, not its root, is a plain folder too.
++		err = gerr
++	}
+ 	if err != nil {
+ 		// A folder that isn't a repository is its own one workspace, so its
+ 		// sessions, ports, services and browser work as a checkout's do.
+diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
+index b48226f..30243c9 100644
+--- a/internal/box/locations_test.go
++++ b/internal/box/locations_test.go
+@@ -122,9 +122,31 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {
+ 	if err := l.RemoveWorktree(context.Background(), "scratch", "scratch", true); err == nil {
+ 		t.Fatal("removed a plain directory's workspace")
+ 	}
++	// Another path to it is the same folder; once it's gone the location says so.
++	alias := filepath.Join(t.TempDir(), "alias")
++	os.Symlink(dir, alias)
++	other, err := l.Add(context.Background(), "again", alias)
++	if err != nil || loc.FolderID == "" || other.FolderID != loc.FolderID {
++		t.Fatalf("folder ids %q and %q: %v", loc.FolderID, other.FolderID, err)
++	}
++	os.Remove(alias)
++	os.RemoveAll(dir)
++	if gone, _ := l.Get(context.Background(), "scratch"); !gone.Missing || len(gone.Worktrees) != 0 {
++		t.Fatalf("a removed folder: %+v", gone)
++	}
+ 	if _, err := l.CreateWorktree(context.Background(), "scratch", "x", "", ""); err == nil {
+ 		t.Fatal("created a worktree in a non-repository")
+ 	}
++	// A folder inside a repository is a plain folder of its own, not the repository.
++	repo := t.TempDir()
++	gitIn(t, repo, "init", "-q")
++	os.MkdirAll(filepath.Join(repo, "docs"), 0o755)
++	if inner, err := l.Add(context.Background(), "inner", filepath.Join(repo, "docs")); err != nil || inner.Repo || len(inner.Worktrees) != 1 || inner.Worktrees[0].Path != inner.Path {
++		t.Fatalf("a folder inside a repository: %+v %v", inner, err)
++	}
++	if root, _ := l.Add(context.Background(), "root", repo); !root.Repo {
++		t.Fatalf("a repository's root: %+v", root)
++	}
+ }
+ 
+ func TestAddRejectsMissingPathsAndBadNames(t *testing.T) {

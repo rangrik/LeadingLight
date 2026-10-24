@@ -23,6 +23,7 @@
     "fs:allow-appdata-read-recursive",
     "fs:allow-appdata-write-recursive",
     "fs:allow-appdata-meta-recursive",
+    "dialog:allow-open",
     "autostart:default"
   ]
 }

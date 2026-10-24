@@ -1,5 +1,5 @@
 import type { PropDef, TypeDef } from "./catalog";
-import { asDoc, type LLObject, newObject, type ObjectStore, PAGE_TYPE, summarize } from "./store";
+import { asDoc, type LLObject, newObject, type ObjectStore, PAGE_TYPE, type ProjectFolder, summarize } from "./store";
 
 // Browser-only store for dev, QA and previews. IndexedDB with one record per page, so a big
 // image in one page can't stop the others saving (localStorage caps out near 5 MB in total).
@@ -7,6 +7,7 @@ const DB = "leadinglight";
 const OBJECTS = "objects";
 const TYPES = "types";
 const PROPS = "props";
+const FOLDERS = "folders";
 const OLD_KEY = "leadinglight.objects";
 
 // The last stored copy of each page this session has opened.
@@ -16,7 +17,7 @@ let dbPromise: Promise<IDBDatabase> | undefined;
 
 function db(): Promise<IDBDatabase> {
   dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 2);
+    const req = indexedDB.open(DB, 3);
     req.onupgradeneeded = (e) => {
       const d = req.result;
       if (e.oldVersion < 1) {
@@ -28,6 +29,7 @@ function db(): Promise<IDBDatabase> {
         d.createObjectStore(TYPES, { keyPath: "id" });
         d.createObjectStore(PROPS, { keyPath: "id" });
       }
+      if (e.oldVersion < 3) d.createObjectStore(FOLDERS, { keyPath: "pageId" });
     };
     req.onsuccess = () => {
       localStorage.removeItem(OLD_KEY);
@@ -121,5 +123,15 @@ export const localStore: ObjectStore = {
 
   async deleteProp(id) {
     await tx(PROPS, "readwrite", (s) => s.delete(id));
+  },
+
+  folders: () => tx<ProjectFolder[]>(FOLDERS, "readonly", (s) => s.getAll()),
+
+  async putFolder(folder) {
+    await tx(FOLDERS, "readwrite", (s) => s.put(folder));
+  },
+
+  async deleteFolder(pageId) {
+    await tx(FOLDERS, "readwrite", (s) => s.delete(pageId));
   },
 };

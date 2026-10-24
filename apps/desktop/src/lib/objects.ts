@@ -4,7 +4,7 @@ import type { ObjectStore } from "./store";
 import { localStore } from "./store-local";
 import { sqliteStore } from "./store-sqlite";
 
-export type { LLObject, ObjectPatch, ObjectSummary } from "./store";
+export type { LLObject, ObjectPatch, ObjectSummary, ProjectFolder } from "./store";
 
 const store = isNative.then((native) => (native ? sqliteStore : localStore));
 
@@ -20,6 +20,9 @@ export const objects: ObjectStore = {
   deleteType: async (id) => (await store).deleteType(id),
   putProp: async (prop) => (await store).putProp(prop),
   deleteProp: async (id) => (await store).deleteProp(id),
+  folders: async () => (await store).folders(),
+  putFolder: async (folder) => (await store).putFolder(folder),
+  deleteFolder: async (pageId) => (await store).deleteFolder(pageId),
 };
 
 // A saved page's words as plain text, one line per block: what a mentioned page adds

@@ -20,6 +20,10 @@ export type LLObject = ObjectSummary & { content: EditorDoc | null };
 // updatedAt is set only by a fix-up that isn't an edit, to keep the page's date.
 export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properties" | "typeId" | "updatedAt">>;
 
+// A page linked to a folder on this Mac (features/external-projects.feature). The runtime knows
+// the folder as location; folderId is the folder's own identity, so another path to it matches.
+export type ProjectFolder = { pageId: string; path: string; folderId: string; location: string; createdAt: number; updatedAt: number };
+
 export interface ObjectStore {
   list(): Promise<ObjectSummary[]>;
   get(id: string): Promise<LLObject | null>;
@@ -34,6 +38,9 @@ export interface ObjectStore {
   deleteType(id: string): Promise<void>;
   putProp(prop: PropDef): Promise<void>;
   deleteProp(id: string): Promise<void>;
+  folders(): Promise<ProjectFolder[]>;
+  putFolder(folder: ProjectFolder): Promise<void>;
+  deleteFolder(pageId: string): Promise<void>;
 }
 
 export function newObject(init: Partial<LLObject> = {}): LLObject {
