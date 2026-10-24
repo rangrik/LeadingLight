@@ -73,5 +73,10 @@ Feature: An agent's questions and approvals
 
   Scenario: The agent's process ends before I answer
     Given a question card in front and part of an answer typed
-    When the agent's session is stopped
-    Then the card says it can't be answered now, and my words are back in the composer
+    When the agent's session is stopped, or its process ends
+    Then the card goes, and my words are back in the composer with a line saying why
+
+  Scenario: The keys stay with the card
+    Given a card with two questions in front
+    When I answer the first and press Next
+    Then the number keys pick on the second question without clicking it first

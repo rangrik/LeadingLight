@@ -17,6 +17,7 @@ type Tone = "neutral" | "primary" | "destructive";
 function ChoiceRow({ shortcut, label, description, selected, tone = "neutral", disabled, trailing, onSelect }: { shortcut: number | null; label: string; description?: string; selected?: boolean; tone?: Tone; disabled?: boolean; trailing?: ReactNode; onSelect: () => void }) {
   return (
     <button
+      aria-label={description && description !== label ? `${label}, ${description}` : label}
       aria-pressed={selected === undefined ? undefined : selected}
       className={cn(
         "group flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 ease-out",
@@ -27,7 +28,7 @@ function ChoiceRow({ shortcut, label, description, selected, tone = "neutral", d
       onClick={onSelect}
       type="button"
     >
-      {shortcut !== null && <Kbd className={cn("mt-px", selected && "bg-foreground text-background", tone === "primary" && !selected && "text-primary", tone === "destructive" && !selected && "text-destructive-foreground")}>{shortcut}</Kbd>}
+      {shortcut !== null && <Kbd className={cn(selected && "bg-foreground text-background", tone === "primary" && !selected && "text-primary", tone === "destructive" && !selected && "text-destructive-foreground")}>{shortcut}</Kbd>}
       <span className="min-w-0 flex-1 leading-snug">
         <span className="font-medium">{label}</span>
         {description && description !== label && <span className="ms-1.5 text-muted-foreground">{description}</span>}
@@ -47,10 +48,7 @@ const digit = (e: KeyboardEvent, count: number) => {
 const LINE: Partial<Record<Delivery, string>> = {
   sending: "Sending…",
   recorded: "Sent. Waiting for the agent to take it.",
-  resolved: "Answered.",
   elsewhere: "Answered from another window.",
-  cancelled: "The agent stopped asking.",
-  expired: "The agent that asked has ended, so this can't be answered now. Your answer is back in the composer.",
 };
 
 // Where the answer is on its way, and a way to try again when it didn't go.
@@ -149,6 +147,8 @@ export function QuestionCard({ request, answer, index, busy, onAnswer, children,
         className="mt-2 flex items-center gap-1.5"
         onSubmit={(e) => {
           e.preventDefault();
+          // Enter right after a pick: the pick's own move on would send it a second time.
+          if (timer.current) window.clearTimeout(timer.current);
           if (answered(index)) advance(answer);
         }}
       >
@@ -168,7 +168,7 @@ const PROMPT: Record<string, string> = { Bash: "The agent wants to run a command
 const ACTIONS: Record<"approval" | "plan", { choice: string; label: string; description: string; tone: Tone }[]> = {
   approval: [
     { choice: "allow", label: "Allow once", description: "Just this request", tone: "primary" },
-    { choice: "allow_always", label: "Always allow in this chat", description: "Don't ask again for this", tone: "neutral" },
+    { choice: "allow_always", label: "Always allow in this chat", description: "Don't ask again for this kind of step while the agent runs", tone: "neutral" },
     { choice: "deny", label: "Decline", description: "The agent goes on without it", tone: "destructive" },
   ],
   plan: [
@@ -203,7 +203,7 @@ export function ApprovalCard({ request, busy, onChoose, children, ref }: { reque
       tabIndex={-1}
     >
       <p className="font-medium leading-snug">{PROMPT[request.tool ?? ""] ?? `The agent wants to use ${request.tool}`}</p>
-      {text && <pre className="mt-2 max-h-36 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-xs">{text}</pre>}
+      {text && <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-xs">{text}</pre>}
       <div className="mt-2 space-y-0.5">
         {actions.map((a, k) => (
           <ChoiceRow description={a.description} disabled={busy} key={a.choice} label={a.label} onSelect={() => onChoose(a.choice)} shortcut={k + 1} tone={a.tone} />

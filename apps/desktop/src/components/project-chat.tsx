@@ -104,7 +104,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   useEffect(() => {
     const here = document.activeElement === document.body || !!field.current?.closest("[data-testid=project-chat]")?.contains(document.activeElement);
     if (open && here) card.current?.focus();
-  }, [open?.id]);
+  }, [open?.id, key, open && chat.answers[open.id]?.index]);
 
   if (!state || !location) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">Link a folder to this page to chat in it.</p>;
   if (state.missing) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">The folder isn't there any more. Relink it from the page's folder row.</p>;
@@ -140,7 +140,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
     <div className="@container/panel flex h-full flex-col text-sm" data-testid="project-chat">
       <div className="flex h-10 shrink-0 items-center gap-1 border-b px-3">
         <Menu>
-          <MenuTrigger render={<Button aria-label="Chats" className="h-7 min-w-0 gap-1.5 px-1.5 font-medium sm:h-7" size="sm" variant="ghost" />}>
+          <MenuTrigger render={<Button aria-label="Chats" className="h-7 min-w-0 shrink gap-1.5 px-1.5 font-medium sm:h-7" size="sm" variant="ghost" />}>
             <MessagesSquare className="text-muted-foreground" />
             <span className="truncate">{conv?.title || "New chat"}</span>
             <ChevronDown className="size-3.5 opacity-60" />
@@ -234,7 +234,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         ))}
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
-        {chat.restore?.why && <p className="mx-3 mb-1 text-muted-foreground text-xs">{chat.restore.why}</p>}
+        {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
         <Composer agents={[]} busy={busy} commands={[]} fieldRef={field} onSend={(q) => go(q)} onStop={() => void stop(key)} pages={[]} placeholder="Ask Claude to work in the folder…" ready restore={chat.restore} settings={settings} />
       </div>
       <FilePreview file={file} location={location} onClose={() => setFile(null)} />
