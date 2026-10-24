@@ -1,4 +1,4 @@
-From 5a01b3843be93c0b82f468dd0e24b83ef7f732f8 Mon Sep 17 00:00:00 2001
+From 18b54f91beb2bf32e10f744b2d7aa14a924442d1 Mon Sep 17 00:00:00 2001
 From: LeadingLight <noreply@anthropic.com>
 Date: Sat, 24 Oct 2026 12:06:41 -0700
 Subject: [PATCH] LeadingLight's tools for its project agents
@@ -17,14 +17,14 @@ one sent again is kept once.
  internal/box/claudedriver.go       |   3 +
  internal/box/codexdriver.go        |   3 +
  internal/box/embeddednote.go       |   4 +-
- internal/box/leadinglight.go       | 514 +++++++++++++++++++++++++++++
+ internal/box/leadinglight.go       | 549 +++++++++++++++++++++++++++++
  internal/box/leadinglight_test.go  |  54 +++
  internal/box/peerpid_darwin.go     |  24 ++
  internal/box/peerpid_other.go      |   8 +
  internal/mcpserver/leadinglight.go |  73 ++++
  internal/mcpserver/mcp.go          |  23 +-
  internal/wire/server.go            |  13 +-
- 12 files changed, 733 insertions(+), 11 deletions(-)
+ 12 files changed, 768 insertions(+), 11 deletions(-)
  create mode 100644 internal/box/leadinglight.go
  create mode 100644 internal/box/leadinglight_test.go
  create mode 100644 internal/box/peerpid_darwin.go
@@ -127,10 +127,10 @@ index f3fb4ea..293cbe5 100644
 +	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."
 diff --git a/internal/box/leadinglight.go b/internal/box/leadinglight.go
 new file mode 100644
-index 0000000..b4f2029
+index 0000000..cc6e38f
 --- /dev/null
 +++ b/internal/box/leadinglight.go
-@@ -0,0 +1,514 @@
+@@ -0,0 +1,549 @@
 +package box
 +
 +import (
@@ -138,9 +138,12 @@ index 0000000..b4f2029
 +	"context"
 +	"crypto/rand"
 +	"crypto/sha256"
++	"encoding/base64"
 +	"encoding/hex"
 +	"encoding/json"
++	"fmt"
 +	"io"
++	"mime"
 +	"net/http"
 +	"os"
 +	"path/filepath"
@@ -177,6 +180,7 @@ index 0000000..b4f2029
 +	Name  string `json:"name,omitempty"`
 +	Size  int64  `json:"size,omitempty"`
 +	SHA   string `json:"sha,omitempty"`
++	Mime  string `json:"mime,omitempty"`
 +	Error string `json:"error,omitempty"`
 +}
 +
@@ -255,15 +259,30 @@ index 0000000..b4f2029
 +// save keeps the writes, dropping settled ones past a week. Called with the lock held.
 +func (l *llBridge) save() {
 +	out := []*LLCall{}
++	gone := map[string]bool{}
 +	for _, c := range l.calls {
 +		if !c.Write {
 +			continue
 +		}
-+		if c.State != "waiting" && time.Since(time.UnixMilli(c.At)) > llKeep {
++		// A week on, even one never taken goes (its folder was unlinked), with its files.
++		if time.Since(time.UnixMilli(c.At)) > llKeep {
 +			delete(l.calls, c.ID)
++			for _, f := range c.Files {
++				gone[f.SHA] = f.SHA != ""
++			}
 +			continue
 +		}
 +		out = append(out, c)
++	}
++	for _, c := range out {
++		for _, f := range c.Files {
++			gone[f.SHA] = false
++		}
++	}
++	for sha, drop := range gone {
++		if drop {
++			os.Remove(filepath.Join(l.dir, "files", sha))
++		}
 +	}
 +	slices.SortFunc(out, func(a, b *LLCall) int { return int(a.At - b.At) })
 +	raw, _ := json.MarshalIndent(out, "", "  ")
@@ -341,6 +360,17 @@ index 0000000..b4f2029
 +		c = &LLCall{ID: id, Tool: body.Tool, Args: body.Args, Caller: caller, Write: write, Sum: llSum(body.Args), At: time.Now().UnixMilli(), State: "waiting", settled: make(chan struct{})}
 +		if write {
 +			c.Files = l.keepFiles(caller, body.Tool, body.Args)
++		}
++		// Evidence that can't be kept is said now, while the agent can still put it right.
++		var bad []string
++		for i, f := range c.Files {
++			if f.Error != "" {
++				bad = append(bad, fmt.Sprintf("Evidence %d (%s): %s.", i+1, f.Ref, f.Error))
++			}
++		}
++		if len(bad) > 0 {
++			l.mu.Unlock()
++			return badRequest("Nothing was published. %s", strings.Join(bad, " "))
 +		}
 +		l.calls[c.ID] = c
 +		if write {
@@ -467,35 +497,40 @@ index 0000000..b4f2029
 +			f.Error = "give a path or an output"
 +		}
 +		if f.Error == "" {
-+			f.Size, f.SHA, f.Error = l.keepFile(path)
++			f.Size, f.SHA, f.Mime, f.Error = l.keepFile(path, f.Name)
 +		}
 +		out = append(out, f)
 +	}
 +	return out
 +}
 +
-+func (l *llBridge) keepFile(path string) (int64, string, string) {
++// keepFile copies a file under its content's hash, which names that version of it.
++func (l *llBridge) keepFile(path, name string) (size int64, sha, kind, failure string) {
 +	src, err := os.Open(path)
 +	if err != nil {
-+		return 0, "", "it can't be read"
++		return 0, "", "", "it can't be read"
 +	}
 +	defer src.Close()
 +	if st, err := src.Stat(); err != nil || st.IsDir() {
-+		return 0, "", "it is a folder, not a file"
++		return 0, "", "", "it is a folder, not a file"
 +	} else if st.Size() > llMaxFile {
-+		return 0, "", "it is larger than 50 MB"
++		return 0, "", "", "it is larger than 50 MB"
 +	}
 +	data, err := io.ReadAll(io.LimitReader(src, llMaxFile+1))
 +	if err != nil || len(data) > llMaxFile {
-+		return 0, "", "it can't be read"
++		return 0, "", "", "it can't be read"
 +	}
 +	sum := sha256.Sum256(data)
-+	sha := hex.EncodeToString(sum[:])
++	sha = hex.EncodeToString(sum[:])
 +	os.MkdirAll(filepath.Join(l.dir, "files"), 0o700)
 +	if err := statefile.Write(filepath.Join(l.dir, "files", sha), data); err != nil {
-+		return 0, "", "it couldn't be kept"
++		return 0, "", "", "it couldn't be kept"
 +	}
-+	return int64(len(data)), sha, ""
++	kind = mime.TypeByExtension(filepath.Ext(name))
++	if kind == "" {
++		kind = http.DetectContentType(data)
++	}
++	return int64(len(data)), sha, kind, ""
 +}
 +
 +// GET /v1/ll/calls?wait=N: the calls the app hasn't answered, waiting up to N seconds for one.
@@ -592,7 +627,7 @@ index 0000000..b4f2029
 +	return *c, true
 +}
 +
-+// GET /v1/ll/files/{sha}: a kept file's bytes.
++// GET /v1/ll/files/{sha}: a kept file's bytes, in base64.
 +func (b *Box) llFile(w http.ResponseWriter, r *http.Request) error {
 +	if !wire.IsLocal(r.Context()) {
 +		return httpError{http.StatusForbidden, "only the app on this Mac reads kept files"}
@@ -605,8 +640,8 @@ index 0000000..b4f2029
 +	if err != nil {
 +		return httpError{http.StatusNotFound, "no such file"}
 +	}
-+	w.Header().Set("Content-Type", "application/octet-stream")
-+	w.Write(data)
++	// As text for the app's own calls, which carry JSON.
++	writeJSON(w, map[string]string{"data": base64.StdEncoding.EncodeToString(data)})
 +	return nil
 +}
 +

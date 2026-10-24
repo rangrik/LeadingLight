@@ -9,6 +9,7 @@ import { docText, type LLObject, type ObjectSummary, objects } from "~/lib/objec
 import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
+import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { agentFor, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/work";
 
@@ -17,7 +18,6 @@ import { agentFor, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/
 // the agent: its session's folder names the project, its conversation the agent.
 
 export type Caller = { session: string; conversation?: string; location?: string; dir?: string; agent?: string; by?: string; turn?: string };
-export type KeptFile = { ref: string; name?: string; size?: number; sha?: string; error?: string };
 export type AgentCall = { id: string; tool: string; args: Record<string, unknown> | null; caller: Caller; files?: KeptFile[] };
 type Args = Record<string, unknown>;
 
@@ -237,8 +237,13 @@ async function sourcesOf(c: Caller, given: unknown): Promise<Source[]> {
 }
 
 const published = (r: ObjectSummary | LLObject) => {
-  const { to } = reportOf(r)!;
-  return { report: ref(r.id), to: ref(to), note: `It shows after “${titleOf(to)}”'s own words in LeadingLight. Its blocks are ${ref(r.id)}#b1, #b2 and so on. Reports don't change: to correct one, publish another to it.` };
+  const { to, evidence } = reportOf(r)!;
+  return {
+    report: ref(r.id),
+    to: ref(to),
+    ...(evidence?.length && { evidence: evidence.map((e) => ({ name: e.name, ref: `${ref(r.id)}#b${e.block}`, version: e.sha.slice(0, 12) })) }),
+    note: `It shows after “${titleOf(to)}”'s own words in LeadingLight. Its blocks are ${ref(r.id)}#b1, #b2 and so on. Reports don't change: to correct one, publish another to it.`,
+  };
 };
 
 // A new report, kept before it is answered; the same call again finds the first.
@@ -254,8 +259,12 @@ async function publish(c: Caller, a: Args, call: AgentCall) {
   const corrects = reportOf(pageOf(to)) ? to : undefined;
   if (corrects) to = reportOf(pageOf(corrects))!.to;
   const sources = await sourcesOf(c, a.sources);
-  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(corrects && { corrects }), ...(a.ready === true && { ready: true }) };
-  const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content: htmlDoc(markdownHtml(md).html), properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
+  // The files it shows, kept in LeadingLight as the runtime copied them, after its words.
+  const words = htmlDoc(markdownHtml(md).html);
+  const evidence = await keepEvidence(call.files ?? [], a.evidence, (words.content?.length ?? 0) + 1);
+  const content = { ...words, content: [...(words.content ?? []), ...evidenceBlocks(evidence)] };
+  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(evidence.length && { evidence: evidence.map(({ url, ...e }) => (url?.startsWith("data:") ? e : { ...e, url })) }), ...(corrects && { corrects }), ...(a.ready === true && { ready: true }) };
+  const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content, properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
   return published(report);
 }
 

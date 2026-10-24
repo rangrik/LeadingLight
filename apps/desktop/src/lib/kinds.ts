@@ -68,5 +68,14 @@ export function kinds({ types }: Space): Kind[] {
       changes: "Nothing, once published. A correction is a new report after it.",
       shows: "After the words of the page it is about, and in Reports.",
     },
+    {
+      id: "evidence",
+      name: "Evidence",
+      lucide: "image",
+      purpose: "A screenshot, recording or document that shows an agent's work, inside its report.",
+      made: "Agents, naming files in their folder when they publish. LeadingLight keeps its own copy.",
+      changes: "Nothing. A newer version of the file comes with a new report; the one you reviewed stays.",
+      shows: "In its report, where images and videos play and documents open.",
+    },
   ];
 }

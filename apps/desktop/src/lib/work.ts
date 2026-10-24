@@ -1,3 +1,4 @@
+import type { Evidence } from "~/lib/evidence";
 import type { ObjectSummary } from "~/lib/objects";
 import { createPage, pageOf, space } from "~/lib/space";
 import { summarize } from "~/lib/store";
@@ -13,7 +14,7 @@ export const REPORT = "report";
 export type Run = { conversation: string; session: string; location: string; agent: string; by?: string };
 // What a report rests on: a page and the words it quotes, kept as they were then.
 export type Source = { page: string; quote?: string; excerpt?: string };
-export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; corrects?: string; ready?: boolean };
+export type ReportMeta = { by: string; conversation?: string; session: string; turn?: string; to: string; at: number; command: string; sources?: Source[]; evidence?: Evidence[]; corrects?: string; ready?: boolean };
 
 export const runOf = (p?: ObjectSummary) => p?.properties.run as Run | undefined;
 export const reportOf = (p?: ObjectSummary) => p?.properties.report as ReportMeta | undefined;

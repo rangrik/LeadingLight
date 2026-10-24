@@ -317,3 +317,9 @@ that edits or deletes. A correction is a new report. Each publish carries the ru
 so a retry or a call offered again finds the report it made rather than making another. Agent and
 Report are found by type id and marked as made by the app, so New never offers them and a renamed
 type keeps working.
+
+Evidence is files, not links to them: the runtime copies each file a publish names (from the
+agent's folder or its kept outputs, so a shell command's output counts) when the call is made, and
+the app stores it as any page's image or file, inside the report. Its content's hash names the
+version reviewed; the folder changing or being cleaned up later leaves it as published. A file that
+can't be kept refuses the publish at once, so a report never shows a hole.
