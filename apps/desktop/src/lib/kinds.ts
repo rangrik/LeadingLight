@@ -78,6 +78,14 @@ export function kinds({ types }: Space): Kind[] {
       shows: "In its report, where images and videos play and documents open.",
     },
     {
+      id: "feedback",
+      ...named(type("feedback"), "Feedback"),
+      purpose: "Sidenotes you chose to send to a task's agent, with an overall comment, sent once as one batch.",
+      made: "You, ticking notes on the task's pages and pressing Send feedback.",
+      changes: "Nothing once sent, but whether it reached the agent; a failed send can be tried again.",
+      shows: "In its task's stream after the report it answers, and in Feedback.",
+    },
+    {
       id: "request",
       name: "Question or approval",
       lucide: "message-circle-question",

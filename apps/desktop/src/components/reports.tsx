@@ -10,7 +10,9 @@ import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { type ObjectSummary, objects } from "~/lib/objects";
 import { iconFor, pageOf, space } from "~/lib/space";
-import { reportOf, reportsOn } from "~/lib/work";
+import { FeedbackGroup } from "~/components/feedback";
+import { batchOf } from "~/lib/feedback";
+import { reportOf } from "~/lib/work";
 
 // What agents published beside a page (features/reports.feature): after the page's own words, oldest
 // first, each signed and dated and read as it was written. A report never changes.
@@ -80,15 +82,14 @@ function ReportGroup({ report }: { report: ObjectSummary }) {
   );
 }
 
+// The page's stream after its own words: agents' reports and the feedback sent on them, in order.
 export function Reports({ pageId }: { pageId: string }) {
   const { pages } = space.use();
-  const list = reportsOn(pageId, pages);
+  const list = pages.filter((p) => p.properties.parent === pageId && (reportOf(p) || batchOf(p))).sort((a, b) => a.createdAt - b.createdAt);
   if (!list.length) return null;
   return (
     <section aria-label="Reports">
-      {list.map((r) => (
-        <ReportGroup key={r.id} report={r} />
-      ))}
+      {list.map((r) => (reportOf(r) ? <ReportGroup key={r.id} report={r} /> : <FeedbackGroup feedback={r} key={r.id} />))}
     </section>
   );
 }

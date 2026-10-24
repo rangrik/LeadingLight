@@ -10,6 +10,7 @@ import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
+import { sentNotes } from "~/lib/feedback";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { agentFor, agentOf, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
 import { editPage } from "~/lib/live";
@@ -71,8 +72,6 @@ export function scope(project: string): Promise<Set<string>> {
   return pages;
 }
 
-// Sidenotes sent as feedback (features/feedback.feature); every other one is private.
-const sharedNotes = () => new Set(space.get().pages.flatMap((p) => ((p.properties.batch as { items?: { note: string }[] } | undefined)?.items ?? []).map((i) => i.note)));
 
 // A page id from an id, an ll: link, or a title within the project.
 async function pageIn(c: Caller, given: unknown): Promise<{ id: string; project: string }> {
@@ -133,7 +132,8 @@ async function read(c: Caller, a: Args) {
   let withheld = 0;
   // A Thoughts page holds the person's own notes: only those sent as feedback are read.
   if (roleOf(p) === "thoughts") {
-    const shared = sharedNotes();
+    // Only notes sent as feedback (features/feedback.feature); every other one is private.
+    const shared = sentNotes();
     const kept = (doc?.content ?? []).filter((n) => n.type === "thought" && shared.has(n.attrs?.id));
     withheld = (doc?.content ?? []).filter((n) => n.type === "thought").length - kept.length;
     doc = { type: "doc", content: kept };

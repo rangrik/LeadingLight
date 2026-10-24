@@ -1,7 +1,7 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget } from "@leadinglight/editor/editor";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
@@ -20,7 +20,7 @@ import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
 import { useKeysFor } from "~/lib/keymap";
-import { pageStyle } from "~/lib/labels";
+import { pageLabel, pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
@@ -28,7 +28,8 @@ import { docMarkdown } from "~/lib/page-markdown";
 import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
-import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
+import { pageOf, patchSummary, savePage, space, typeOf } from "~/lib/space";
+import { draftOf, drafts, pick, recipientFor, sentNotes } from "~/lib/feedback";
 import { useThoughts } from "~/lib/thoughts";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -136,8 +137,22 @@ export function PageView({ page }: { page: LLObject }) {
     makeRoom();
   });
   const essay = childOf(current, "essay");
-  // An agent's report reads as it was published (features/reports.feature).
+  // An agent's report reads as it was published (features/reports.feature), taking only sidenotes.
   const report = !!reportOf(current);
+  // Notes on a task's pages can go to its agent as feedback (features/feedback.feature): only when
+  // this page's task or sent notes change does the page draw again.
+  const pickKey = useSyncExternalStore(space.subscribe, () => {
+    const to = recipientFor(page.id);
+    return to ? `${to.task} ${to.agent} ${[...sentNotes()].join(",")}` : "";
+  });
+  const chosen = drafts.use();
+  const shared = useMemo<NotesStore | undefined>(() => {
+    if (!notes || !pickKey) return notes;
+    const [task, agent, sentList] = pickKey.split(" ");
+    const sent = new Set(sentList ? sentList.split(",") : []);
+    const to = pageLabel(pageOf(agent)?.title ?? "").split(": ")[0];
+    return { ...notes, pick: { to, on: (id) => draftOf(task).picks.some((x) => x.note === id), set: (id, on) => pick(task, page.id, id, on), sent: (id) => sent.has(id) } };
+  }, [notes, pickKey, chosen]);
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
   const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
@@ -368,7 +383,7 @@ export function PageView({ page }: { page: LLObject }) {
               touchLive(page.id);
             }}
             links={linkHost}
-            notes={role ? undefined : notes}
+            notes={role === "thoughts" || role === "essay" ? undefined : shared}
             onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
             onFocusChange={setInBody}
@@ -376,7 +391,7 @@ export function PageView({ page }: { page: LLObject }) {
             openLink={openHref}
             quoteTo={quoteTo}
             quotes={quotes}
-            readOnly={report}
+            annotate={report}
             ref={editorRef}
             style={pageStyle(props)}
             writing={editorWriting(writing, typeId)}

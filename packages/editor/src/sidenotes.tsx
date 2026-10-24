@@ -8,6 +8,7 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { anchors } from "./anchors";
 import type { AssetStore } from "./assets";
 import { createExtensions } from "./extensions";
@@ -18,6 +19,8 @@ export type NotesStore = {
   write: (id: string, body: JSONContent[]) => void;
   add: (id: string, quote: string) => void;
   remove: (id: string) => void;
+  // Notes chosen to go to an agent as feedback, to, and those that went already.
+  pick?: { to: string; on: (id: string) => boolean; set: (id: string, on: boolean) => void; sent: (id: string) => boolean };
 };
 
 export const GUTTER = 32;
@@ -266,6 +269,7 @@ export function Sidenotes({
           <aside
             className="ll-note"
             data-active={active === id || undefined}
+            data-pick={notes.pick ? (notes.pick.sent(id) ? "sent" : "open") : undefined}
             data-new={focusId === id || undefined}
             data-note-id={id}
             key={id}
@@ -284,6 +288,15 @@ export function Sidenotes({
             }}
             style={{ top: tops[id] ?? spots[id].top, left: edge + GUTTER }}
           >
+            {/* A note to send ticks here; one sent shows a muted check (features/feedback.feature). */}
+            {notes.pick &&
+              (notes.pick.sent(id) ? (
+                <span className="ll-note-sent">
+                  Sent
+                </span>
+              ) : (
+                <Checkbox aria-label={`Send note ${i + 1} to ${notes.pick.to}`} checked={notes.pick.on(id)} className="ll-note-pick" onCheckedChange={(on) => notes.pick?.set(id, !!on)} />
+              ))}
             <span className="ll-note-num">{i + 1}</span>
             <NoteEditor
               assets={assets}

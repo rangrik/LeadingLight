@@ -22,6 +22,7 @@ import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { FeedView } from "~/components/feed";
+import { FeedbackButton } from "~/components/feedback";
 import { BrowserPane } from "~/components/agent-browser";
 import { ProjectChat } from "~/components/project-chat";
 import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
@@ -188,6 +189,7 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
+                {isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
                   <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />

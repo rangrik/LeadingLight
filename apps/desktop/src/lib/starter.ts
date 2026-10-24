@@ -37,6 +37,7 @@ const PROPS: Seed<PropDef>[] = [
   { id: "agent-profile", name: "Profile", kind: "text", options: {} },
   { id: "report-by", name: "By", kind: "relation", options: { type: "agent", reverse: "Reports" } },
   { id: "subtask-of", name: "Subtask of", kind: "relation", options: { reverse: "Subtasks" } },
+  { id: "feedback-to", name: "To", kind: "relation", options: { type: "agent", reverse: "Feedback" } },
 ];
 
 const type = (id: string, name: string, plural: string, icon: string | undefined, color: Color, props: string[], card: string[] = []): Seed<TypeDef> => ({
@@ -67,6 +68,7 @@ const TYPES: Seed<TypeDef>[] = [
   // Made by the app for a project's agents, never from New.
   { ...type("agent", "Agent", "Agents", "bot", "purple", ["agent-profile", "agent-task", "agent-parent"]), system: true, made: "app" },
   { ...type("report", "Report", "Reports", "scroll-text", "blue", ["report-by"]), system: true, made: "app" },
+  { ...type("feedback", "Feedback", "Feedback", "message-square-quote", "orange", ["feedback-to"]), system: true, made: "app" },
 ];
 
 // Everything to add to a space that hasn't been given the starter set yet.
@@ -97,6 +99,10 @@ function later(catalog: Catalog, now: number): Catalog {
     for (const id of ["agent", "report"]) if (!catalog.types.some((t) => t.id === id)) added.types.push({ ...TYPES.find((t) => t.id === id)!, createdAt: now });
   }
   if (missing("subtask-of")) prop("subtask-of");
+  if (missing("feedback-to")) {
+    prop("feedback-to");
+    if (!catalog.types.some((t) => t.id === "feedback")) added.types.push({ ...TYPES.find((t) => t.id === "feedback")!, createdAt: now });
+  }
   if (missing("idea-project")) {
     prop("idea-project");
     const idea = catalog.types.find((t) => t.id === "idea");

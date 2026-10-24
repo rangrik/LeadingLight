@@ -359,3 +359,14 @@ the Feed settles the chat's card and the same answer can't be given twice. What 
 comes from the agent's context tool, kept on its Agent page and matched by the question's words;
 without it, the task stands in and the item says so. Opening it reuses one pane beside the page being
 read, so that page stays where it was; a narrow window shows the Feed as a pane instead of a lane.
+
+## 24. Feedback is chosen sidenotes, frozen into one batch, sent once to the task's own agent
+
+A report's words can't change, but it takes sidenotes like any page: its editor drops every change
+but adding or taking off a note's mark. On a page whose task has an agent, each note can be ticked
+for sending; what is ticked is kept on this Mac per task until sent. Send freezes the ticked notes,
+each with the words it is about and its block, and an overall comment, into a Feedback page under
+the task, then sends it to that agent's own conversation with the batch's command id as the
+message key, so a retry after a lost answer is the same message. A conversation that is gone fails
+the send and says so; it never goes to another agent. A note becomes readable to agents only once
+sent; the rest stay private.

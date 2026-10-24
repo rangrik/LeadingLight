@@ -64,12 +64,15 @@ export function SelectionToolbar({
   note,
   quote,
   onAsk,
+  annotate,
   askKeys,
 }: {
   editor: Editor;
   note?: boolean;
   quote?: { label: string; run: () => void };
   onAsk?: () => void;
+  // Words that can't change: only a sidenote, and Ask, are offered.
+  annotate?: boolean;
   askKeys?: string;
 }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
@@ -145,35 +148,39 @@ export function SelectionToolbar({
             />
           ) : (
             <>
-              <ToolButton label="Bold" onClick={() => chain().toggleBold().run()} pressed={s.bold} shortcut="⌘B">
-                <Bold />
-              </ToolButton>
-              <ToolButton label="Italic" onClick={() => chain().toggleItalic().run()} pressed={s.italic} shortcut="⌘I">
-                <Italic />
-              </ToolButton>
-              <ToolButton label="Underline" onClick={() => chain().toggleUnderline().run()} pressed={s.underline} shortcut="⌘U">
-                <Underline />
-              </ToolButton>
-              <ToolButton label="Strikethrough" onClick={() => chain().toggleStrike().run()} pressed={s.strike} shortcut="⌘⇧S">
-                <Strikethrough />
-              </ToolButton>
-              <ToolButton label="Code" onClick={() => chain().toggleCode().run()} pressed={s.code} shortcut="⌘E">
-                <Code />
-              </ToolButton>
-              <ToolButton label="Highlight" onClick={() => chain().toggleHighlight().run()} pressed={s.highlight} shortcut="⌘⇧H">
-                <Highlighter />
-              </ToolButton>
-              <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
-              <ToolButton label="Link" onClick={openLink} pressed={s.link}>
-                <Link />
-              </ToolButton>
-              {(note || quote) && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}
+              {!annotate && (
+                <>
+                  <ToolButton label="Bold" onClick={() => chain().toggleBold().run()} pressed={s.bold} shortcut="⌘B">
+                    <Bold />
+                  </ToolButton>
+                  <ToolButton label="Italic" onClick={() => chain().toggleItalic().run()} pressed={s.italic} shortcut="⌘I">
+                    <Italic />
+                  </ToolButton>
+                  <ToolButton label="Underline" onClick={() => chain().toggleUnderline().run()} pressed={s.underline} shortcut="⌘U">
+                    <Underline />
+                  </ToolButton>
+                  <ToolButton label="Strikethrough" onClick={() => chain().toggleStrike().run()} pressed={s.strike} shortcut="⌘⇧S">
+                    <Strikethrough />
+                  </ToolButton>
+                  <ToolButton label="Code" onClick={() => chain().toggleCode().run()} pressed={s.code} shortcut="⌘E">
+                    <Code />
+                  </ToolButton>
+                  <ToolButton label="Highlight" onClick={() => chain().toggleHighlight().run()} pressed={s.highlight} shortcut="⌘⇧H">
+                    <Highlighter />
+                  </ToolButton>
+                  <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
+                  <ToolButton label="Link" onClick={openLink} pressed={s.link}>
+                    <Link />
+                  </ToolButton>
+                </>
+              )}
+              {(note || quote) && !annotate && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}
               {note && (
                 <ToolButton label="Add sidenote" onClick={() => editor.commands.addSidenote()} shortcut="⌘⇧M">
                   <MessageSquarePlus />
                 </ToolButton>
               )}
-              {quote && (
+              {quote && !annotate && (
                 <ToolButton label={quote.label} onClick={quote.run}>
                   <TextQuote />
                 </ToolButton>

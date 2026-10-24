@@ -1,7 +1,8 @@
 import { type Editor, type Extensions, type FocusPosition, generateJSON, getSchema, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
-import { NodeSelection, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
+import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -114,6 +115,14 @@ function locate(editor: Editor, text: string, near: number): Selected | null {
   return best;
 }
 
+// Annotating a page that can't change (an agent's report): its words stay as they are, and only
+// sidenotes are added to them or taken off.
+const annotating = new PluginKey("annotateOnly");
+const annotateOnly = new Plugin({
+  key: annotating,
+  filterTransaction: (tr) => !tr.docChanged || tr.steps.every((s) => (s instanceof AddMarkStep || s instanceof RemoveMarkStep) && s.mark.type.name === "note"),
+});
+
 const isEmptyLine = (node?: PMNode | null) => node?.type.name === "paragraph" && node.content.size === 0;
 // A paragraph that shows nothing: empty, or only spaces and line breaks (pasted blank lines).
 const isBlankLine = (node: PMNode) =>
@@ -193,6 +202,7 @@ export function BlockEditor({
   openLink: open = (href) => void window.open(href, "_blank", "noopener"),
   links,
   readOnly,
+  annotate,
   onAsk,
   askKeys,
   style = "plain",
@@ -217,6 +227,8 @@ export function BlockEditor({
   placeholder?: string;
   // An embedded page: shown, never edited or saved from here.
   readOnly?: boolean;
+  // Words that can't change, but take sidenotes (an agent's report).
+  annotate?: boolean;
   onExitTop?: () => void;
   openLink?: (href: string) => void;
   // Given, the selection toolbar offers Ask with the selected words.
@@ -320,6 +332,12 @@ export function BlockEditor({
     // page opens, a table fixed up) isn't an edit, so it isn't saved and doesn't move Updated.
     onUpdate: ({ editor, transaction }) => transaction.docChanged && !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
+
+  useEffect(() => {
+    if (!annotate) return;
+    editor.registerPlugin(annotateOnly);
+    return () => void (!editor.isDestroyed && editor.unregisterPlugin(annotating));
+  }, [editor, annotate]);
 
   const aids = JSON.stringify(writing ?? OFF);
   useLayoutEffect(() => {
@@ -539,7 +557,7 @@ export function BlockEditor({
   const hasNotes = useEditorState({ editor, selector: ({ editor }) => anchors(editor.state.doc, "note").length > 0 });
 
   return (
-    <div className={writing?.focus ? "ll-editor-root ll-typewriter" : "ll-editor-root"} data-notes={(notes && hasNotes) || undefined} data-style={style}>
+    <div className={writing?.focus ? "ll-editor-root ll-typewriter" : "ll-editor-root"} data-annotate={annotate || undefined} data-notes={(notes && hasNotes) || undefined} data-style={style}>
       {unreadable && (
         <Alert className="mb-3" variant="warning">
           <TriangleAlert />
@@ -548,11 +566,11 @@ export function BlockEditor({
         </Alert>
       )}
       {/* Before the text, so Tab from the title reaches it (the text keeps Tab for itself). */}
-      {!readOnly && <TableOfContents editor={editor} />}
+      {!readOnly && !annotate && <TableOfContents editor={editor} />}
       <EditorContent editor={editor} />
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
-      <BlockHandle editor={editor} />
-      <SelectionToolbar editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote} />
+      {!annotate && <BlockHandle editor={editor} />}
+      <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote} />
       <TableToolbar editor={editor} />
       <MarkTip editor={editor} />
       <EmojiPicker editor={editor} />
