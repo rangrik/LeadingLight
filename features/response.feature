@@ -39,7 +39,7 @@ Feature: Reading the agent's answer to my feedback
 
   Scenario: Only the batch's own agent answers it, about its own points
     When another agent publishes an answer to the batch, or an answer to a point it doesn't have
-    Then the publish is refused and nothing shows
+    Then the publish is refused, saying which of the two it was, and nothing shows
 
   Scenario: A second round
     Given I read the response and add a note to its answer for point 1

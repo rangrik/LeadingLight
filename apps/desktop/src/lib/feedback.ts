@@ -1,5 +1,5 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
-import { assignmentOf, isTask, taskOfDocument } from "~/lib/assign";
+import { agentOfTask, isTask, taskOfDocument } from "~/lib/assign";
 import { pageLabel } from "~/lib/labels";
 import { editPage } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
@@ -34,12 +34,15 @@ export function recipientFor(pageId: string): { task: string; agent: string } | 
   if (!p) return;
   const about = reportOf(p)?.to;
   const task = isTask(p) ? p : about && isTask(pageOf(about)) ? pageOf(about) : taskOfDocument(about ?? pageId);
-  const agent = assignmentOf(task)?.agent;
-  return task && agent && pageOf(agent) ? { task: task.id, agent } : undefined;
+  const agent = agentOfTask(task);
+  return task && agent ? { task: task.id, agent: agent.id } : undefined;
 }
 
-// Notes that went in a batch: no longer private, as the agent was given them.
-export const sentNotes = (pages = space.get().pages) => new Set(pages.flatMap((p) => (batchOf(p)?.points ?? []).map((x) => x.note)));
+// Notes the agent was given, as they were sent; the rest stay private.
+export const sentPoints = (pages = space.get().pages) => new Map(pages.flatMap((p) => (batchOf(p)?.state === "sent" ? batchOf(p)!.points.map((x) => [x.note, x] as const) : [])));
+// Each note in a batch, and how far that batch got.
+const LABEL = { sent: "Sent", sending: "Sending…", failed: "Not sent" };
+export const noteStates = (pages = space.get().pages) => new Map(pages.flatMap((p) => (batchOf(p)?.points ?? []).map((x) => [x.note, LABEL[batchOf(p)!.state]] as const)));
 
 export function pick(task: string, page: string, note: string, on: boolean) {
   const d = draftOf(task);
@@ -114,13 +117,14 @@ export async function deliver(feedbackId: string): Promise<void> {
     await ask("POST", `/v1/sessions/${session}/send`, { text: message(f, b), when: "idle", idem_key: b.command });
     await set({ state: "sent", sentAt: Date.now() });
   } catch (e) {
-    await set({ state: "failed", error: e instanceof Error ? e.message : String(e) });
+    const why = e instanceof Error ? e.message : String(e);
+    await set({ state: "failed", error: /failed to fetch|load failed|network/i.test(why) ? "LeadingLight couldn't reach the project runtime" : why });
   }
 }
 
 // Freezes the task's chosen notes and comment as one batch, clears the draft, and sends it.
 export async function send(task: string): Promise<string> {
-  const agent = pageOf(assignmentOf(pageOf(task))?.agent ?? "");
+  const agent = agentOfTask(pageOf(task));
   const run = runOf(agent);
   if (!agent || !run?.conversation) throw new Error("This task has no agent to send feedback to.");
   // Notes and marks typed a moment ago are saved first, so the batch has them.

@@ -4,7 +4,7 @@ import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { openChat } from "~/components/assign";
 import { visit } from "~/components/property-value";
-import { accept, acceptedOf, assignmentOf, carryOn, isTask, start, stopAgent, syncWorkers, taskOfDocument } from "~/lib/assign";
+import { accept, acceptedOf, agentOfTask, carryOn, isTask, start, stopAgent, syncWorkers, taskOfDocument } from "~/lib/assign";
 import { openHref } from "~/lib/essay";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
@@ -21,7 +21,7 @@ import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
 const name = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 const Row = ({ children, className, ...rest }: { children: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn("flex min-w-0 items-center gap-2", className)} {...rest}>
+  <div className={cn("flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1", className)} {...rest}>
     {children}
   </div>
 );
@@ -140,7 +140,7 @@ export function ChecklistWidget({ task, agent }: { task: ObjectSummary; agent: O
           {subs.map((s) =>
             item(
               s.id,
-              <button className="underline-offset-2 hover:underline" onClick={(e) => visit(s.id, e)} type="button">
+              <button className={cn("underline-offset-2 hover:underline", s.properties.done === true && "line-through")} onClick={(e) => visit(s.id, e)} type="button">
                 {pageLabel(s.title)}
               </button>,
               s.properties.done === true,
@@ -231,7 +231,7 @@ export function WorkPanel({ pageId }: { pageId: string }) {
   useAnchored(box);
   const page = pages.find((p) => p.id === pageId);
   const viaTask = page && !isTask(page) ? taskOfDocument(pageId) : undefined;
-  const agent = pageOf(assignmentOf(page)?.agent ?? "");
+  const agent = agentOfTask(page);
   const run = runOf(agent);
   const live = sessions.use();
   useEffect(() => {

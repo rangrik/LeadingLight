@@ -43,7 +43,7 @@ import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { closePane, focusedPage, leaves, openBeside, openPage, panes, showOnly } from "~/lib/panes";
-import { feedPrefs } from "~/lib/feed";
+import { feedPrefs, wantFocus } from "~/lib/feed";
 import { FEED_W, FeedLane } from "~/components/feed";
 import { isNative } from "~/lib/platform";
 import { serveAgents } from "~/lib/project-runtime/bridge";
@@ -152,6 +152,7 @@ export default function App() {
     if (!projectPrefs.get().enabled) return;
     const narrow = (row.current?.clientWidth ?? 0) < FEED_W + 8 + 480;
     const open = panes.get().root && leaves(panes.get().root!).find((l) => l.page === FEED_VIEW);
+    wantFocus.now = !feedPrefs.get().open;
     if (!narrow) return feedPrefs.set({ open: !feedPrefs.get().open });
     if (open) closePane(open.id);
     else openBeside(FEED_VIEW);
@@ -176,7 +177,7 @@ export default function App() {
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         // The top of Recent (which leaves tasks out), in the order chosen.
-        showOnly(list.filter((p) => listed(p) && p.typeId !== "task").sort(byRecent)[0]?.id ?? null);
+        showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);

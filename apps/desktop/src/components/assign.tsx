@@ -9,7 +9,7 @@ import { Textarea } from "@leadinglight/ui/components/textarea";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { ACCESS, type Access, isClaude, MODELS, useAiPrefs } from "~/lib/ai-prefs";
 import { type Agent as Profile, listAgents } from "~/lib/agents";
-import { assign, assignmentOf, isTask, projectFor, taskOfDocument } from "~/lib/assign";
+import { agentOfTask, assign, isTask, projectFor, taskOfDocument } from "~/lib/assign";
 import { codex, effortFor, loadCodex } from "~/lib/codex";
 import { pageLabel } from "~/lib/labels";
 import { openBeside } from "~/lib/panes";
@@ -171,7 +171,7 @@ export function AssignButton({ pageId }: { pageId: string }) {
   const [open, setOpen] = useState(false);
   const project = useProject(pageId);
   const page = pageOf(pageId);
-  if (!project || !page || assignmentOf(page) || taskOfDocument(pageId) || runOf(page) || page.properties.report || page.properties.role) return null;
+  if (!project || !page || agentOfTask(page) || taskOfDocument(pageId) || runOf(page) || page.properties.report || page.properties.role) return null;
   return (
     <>
       <Button className="text-muted-foreground" onClick={() => setOpen(true)} size="sm" variant="ghost">

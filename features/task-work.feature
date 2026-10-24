@@ -37,7 +37,7 @@ Feature: Following an assigned task
 
   Scenario: Stop and carry on
     When I press Stop in the panel while it works
-    Then the agent stops and the panel says so
+    Then the agent stops and the panel says "Idle", with Continue
     When I press Continue
     Then the agent carries on with the task, and the panel says "Working"
 

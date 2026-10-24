@@ -1,4 +1,4 @@
-import { acceptedOf, assignmentOf } from "~/lib/assign";
+import { acceptedOf, agentOfTask, isTask } from "~/lib/assign";
 import { batchOf } from "~/lib/feedback";
 import { liveEditor, whenLive } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
@@ -35,6 +35,8 @@ export type FeedItem = {
 };
 
 export const feedPrefs = localPrefs("ll.feed", { open: false, project: "all", dismissed: [] as string[] });
+// Opened from the keyboard: its first item takes the focus once it shows.
+export const wantFocus = { now: false };
 
 // An assigned agent is "Claude: its task"; the Feed names its task apart, so just "Claude".
 const name = (id?: string) => ((id && pageOf(id)?.title.trim()) || "An agent").split(": ")[0];
@@ -89,8 +91,8 @@ export function feedItems(): FeedItem[] {
     }
   }
   // Tasks ready for review, by their agent's last report; and agents that stopped short.
-  for (const task of pages.filter((p) => assignmentOf(p))) {
-    const agent = pageOf(assignmentOf(task)!.agent);
+  for (const task of pages.filter((p) => isTask(p))) {
+    const agent = agentOfTask(task);
     if (!agent) continue;
     const state = stateOf(task, agent, live);
     const base = { agent: agent.id, task: task.id, project: projectOf(runOf(agent)?.location) };
@@ -104,7 +106,8 @@ export function feedItems(): FeedItem[] {
     }
     if (state === "review") {
       const report = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id).at(-1)!;
-      items.push({ ...base, id: `review:${report.id}`, kind: "review", reason: `“${name(task.id)}” is ready for review`, at: report.createdAt, targets: [{ page: report.id }] });
+      const answers = reportOf(report)?.batch ? `${name(agent.id)} answered your feedback; ` : "";
+      items.push({ ...base, id: `review:${report.id}`, kind: "review", reason: `${answers}“${name(task.id)}” is ready for review`, at: report.createdAt, targets: [{ page: report.id }] });
     } else if (state === "done" && acceptedOf(task)) {
       // Published after it was accepted: told, never undoing it.
       const late = reportsOn(task.id, pages).filter((r) => r.createdAt > acceptedOf(task)!.at).at(-1);
@@ -123,7 +126,8 @@ export function feedItems(): FeedItem[] {
     items.push({ agent: b.agent, task: b.task, project: projectOf(runOf(pageOf(b.agent))?.location), id: `answer:${report.id}`, kind: "answer", reason: all ? `${name(b.agent)} answered your feedback on “${name(b.task)}”` : `${name(b.agent)} answered ${answered.filter((x) => !x.missing).length} of ${answered.length} points of your feedback on “${name(b.task)}”`, at: report.createdAt, targets: [{ page: report.id }] });
   }
   const { dismissed } = feedPrefs.get();
-  return items.filter((i) => i.kind === "question" || i.kind === "approval" || !dismissed.includes(i.id)).sort((a, b) => b.at - a.at);
+  const waits = (i: FeedItem) => (i.kind === "question" || i.kind === "approval" ? 1 : 0);
+  return items.filter((i) => waits(i) || !dismissed.includes(i.id)).sort((a, b) => waits(b) - waits(a) || b.at - a.at);
 }
 
 // What an agent said after the person's last message, when it ended its turn there.
@@ -136,16 +140,19 @@ function lastWords(conversation: string, at: number) {
 
 // Shows a target beside the Feed, keeping the page being read where it is: in the pane the Feed
 // last opened, else a new one beside. In a narrow window the Feed's own pane goes there instead.
-let contextPane: string | null = null;
+let contextPane: { leaf: string; page: string } | null = null;
 export function showTarget(t: Target, feedPane?: string) {
   const { root } = panes.get();
   const open = root && leaves(root).find((l) => l.page === t.page);
   if (open) focusPane(open.id);
   else if (feedPane) showIn(feedPane, t.page, FEED_VIEW);
-  else if (root && contextPane && leaves(root).some((l) => l.id === contextPane)) (showIn(contextPane, t.page), focusPane(contextPane));
-  else {
+  else if (root && contextPane && leaves(root).some((l) => l.id === contextPane!.leaf && l.page === contextPane!.page)) {
+    showIn(contextPane.leaf, t.page);
+    focusPane(contextPane.leaf);
+    contextPane = { ...contextPane, page: t.page };
+  } else {
     openBeside(t.page);
-    contextPane = panes.get().focus;
+    contextPane = { leaf: panes.get().focus, page: t.page };
   }
   // Once the page has laid out its words.
   whenLive(t.page, (page) => requestAnimationFrame(() => requestAnimationFrame(() => reveal(t, page.reveal))));

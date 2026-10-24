@@ -2,6 +2,7 @@ import { type Access, isClaude } from "~/lib/ai-prefs";
 import type { Agent as Profile } from "~/lib/agents";
 import { pageLabel } from "~/lib/labels";
 import { editPage } from "~/lib/live";
+import { flushAll } from "~/lib/saving";
 import { type ObjectSummary, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
 import { accessOf, type Conversation, listChats, modeFor, send, sync } from "~/lib/project-runtime/chat";
@@ -18,6 +19,13 @@ import { watchWork } from "~/lib/work-watch";
 
 export type Assignment = { agent: string; at: number; note?: string };
 export const assignmentOf = (p?: ObjectSummary) => p?.properties.assignment as Assignment | undefined;
+// The agent a task was given: by the task's own link, or, should the app have quit before that link
+// was saved, by the Agent page made for it (it is made first, linked to the task).
+export function agentOfTask(p?: ObjectSummary): ObjectSummary | undefined {
+  const linked = pageOf(assignmentOf(p)?.agent ?? "");
+  if (linked || !p) return linked;
+  return space.get().pages.find((a) => a.typeId === AGENT && (a.properties["agent-task"] as string[] | undefined)?.[0] === p.id && !(a.properties["agent-parent"] as string[] | undefined)?.length);
+}
 // A task is any page whose type has Done (DECISIONS.md, 17), a space's own task types included.
 export const isTask = (p?: ObjectSummary) => !!p && typeOf(p.typeId).props.includes("done");
 // The task a document was assigned through.
@@ -47,7 +55,8 @@ async function brief(task: ObjectSummary, run: Run & { note?: string; profile?: 
   const doc = typeof task.properties.brief === "string" ? task.properties.brief : undefined;
   const project = await projectFor(task.id);
   return [
-    `You were given a task in LeadingLight: “${title(task.id)}” (ll:${task.id})${project ? `, in the project “${title(project)}” (ll:${project})` : ""}.`,
+    title(task.id),
+    `You were given this task in LeadingLight (ll:${task.id})${project ? `, in the project “${title(project)}” (ll:${project})` : ""}.`,
     (await md(task.id)).trim() && `The task's brief:\n\n${(await md(task.id)).trim()}`,
     doc && `It asks for what this page says, “${title(doc)}” (ll:${doc}):\n\n${(await md(doc)).trim()}`,
     run.note && `The person adds: ${run.note}`,
@@ -119,8 +128,8 @@ export async function assign(pageId: string, o: { model: string; effort: string;
     const project = await projectFor(pageId);
     if (!project) throw new Error("This page isn't part of a project with a linked folder. Set its project, or link a folder to it, first.");
     const task = isTask(page) ? page : await taskFor(page, project);
-    const had = assignmentOf(pageOf(task.id));
-    if (had && pageOf(had.agent)) return (await start(had.agent), had.agent);
+    const had = agentOfTask(pageOf(task.id));
+    if (had) return (await start(had.id), had.id);
     const kind = isClaude(o.model) ? "claude" : "codex";
     const id = crypto.randomUUID();
     const run = { conversation: "", session: sessionFor(id), location: folders.get().get(project)!.folder.location, agent: kind, model: o.model, effort: o.effort, mode: modeFor({ access: o.access, plan: false }, kind), ...(o.note && { note: o.note }), ...(o.profile && { profile: o.profile.prompt }) };
@@ -128,6 +137,8 @@ export async function assign(pageId: string, o: { model: string; effort: string;
     // The Agent page and the task's link to it are kept before the agent starts.
     await createPage({ id, typeId: AGENT, title: `${o.profile?.name ?? NAME[kind]}: ${title(task.id)}`, properties: { run, "agent-task": [task.id], "agent-profile": profile } });
     await editPage(task.id, { properties: (p) => ({ ...p, assignment: { agent: id, at: Date.now(), ...(o.note && { note: o.note }) } }) });
+    // Saved now, not after the editor's pause: a quit in between must not lose the link.
+    await flushAll();
     await start(id);
     return id;
   } finally {

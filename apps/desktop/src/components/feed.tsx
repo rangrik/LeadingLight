@@ -8,7 +8,7 @@ import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-req
 import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
 import { accept } from "~/lib/assign";
-import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget } from "~/lib/feed";
+import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
@@ -152,9 +152,17 @@ function FeedList({ paneId }: { paneId?: string }) {
   const all = folders.use();
   const [selected, setSelected] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
+  const root = useRef<HTMLDivElement>(null);
   const projects = [...all.values()].map((f) => f.folder.pageId);
+  useEffect(() => {
+    if (!wantFocus.now) return;
+    wantFocus.now = false;
+    // The first item, or with none the Feed's project menu.
+    (list.current?.querySelector<HTMLButtonElement>(":scope > li > button") ?? root.current?.querySelector<HTMLElement>("[aria-label=Project]"))?.focus();
+  }, [items.length]);
   const select = (item: FeedItem) => {
     setSelected(item.id === selected ? null : item.id);
+    requestAnimationFrame(() => list.current?.querySelector(`[data-feed-item="${CSS.escape(item.id)}"]`)?.scrollIntoView({ block: "nearest" }));
     if (item.id !== selected && item.targets[0] && !paneId) showTarget(item.targets[0]);
   };
   const onKey = (e: KeyboardEvent) => {
@@ -166,7 +174,7 @@ function FeedList({ paneId }: { paneId?: string }) {
     e.preventDefault();
   };
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col" ref={root}>
       <div className="px-2 pb-2">
         <Select items={{ all: "All projects", ...Object.fromEntries(projects.map((p) => [p, title(p)])) }} onValueChange={(v) => feedPrefs.set({ project: v as string })} value={projects.includes(prefs.project) ? prefs.project : "all"}>
           <SelectTrigger aria-label="Project" size="sm">

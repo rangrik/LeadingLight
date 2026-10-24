@@ -7,7 +7,7 @@ Feature: The Feed
   is enough, and an answered question never comes back. Routine steps never show here.
 
   Names used below:
-  - Feed: the row under New idea in the sidebar, with how many items need me; ⇧⌘I does the same
+  - Feed: the row under New idea in the sidebar, with how many items need me; ⌥⌘F does the same
   - lane: the Feed beside the sidebar, before the pages, with All projects or one project, and Close
   - "Write the summary": an assigned task in "Research" (features/assign.feature)
   - "Plan": a page of "Research" with the paragraph "We ship in May"
@@ -60,7 +60,7 @@ Feature: The Feed
     Then only Garden's question is listed; All projects lists both
 
   Scenario: The keyboard
-    When I press ⇧⌘I, move with ↓ and ↑, and press Enter on an item
+    When I press ⌥⌘F, move with ↓ and ↑, and press Enter on an item
     Then the lane opens, the focus moves through the items, and Enter opens the item
 
   Scenario: A narrow window

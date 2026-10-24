@@ -10,9 +10,9 @@ import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
-import { type Batch, batchOf, sentNotes } from "~/lib/feedback";
+import { type Batch, batchOf, sentPoints } from "~/lib/feedback";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { agentFor, agentOf, type Answer, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
+import { agentFor, agentOf, type Answer, type Ask, relationsOf, runOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
 // answered here when the runtime passes a call on. Who calls comes from the runtime, never from
@@ -131,10 +131,14 @@ async function read(c: Caller, a: Args) {
   let withheld = 0;
   // A Thoughts page holds the person's own notes: only those sent as feedback are read.
   if (roleOf(p) === "thoughts") {
-    // Only notes sent as feedback (features/feedback.feature); every other one is private.
-    const shared = sentNotes();
-    const kept = (doc?.content ?? []).filter((n) => n.type === "thought" && shared.has(n.attrs?.id));
-    withheld = (doc?.content ?? []).filter((n) => n.type === "thought").length - kept.length;
+    // Only notes sent as feedback (features/feedback.feature), as sent: later words were never given.
+    const sent = sentPoints();
+    const thoughts = (doc?.content ?? []).filter((n) => n.type === "thought");
+    const kept = thoughts.flatMap((n) => {
+      const x = sent.get(n.attrs?.id);
+      return x ? [{ type: "paragraph", content: [{ type: "text", text: `“${x.quote}”: ${x.text}` }] }] : [];
+    });
+    withheld = thoughts.length - kept.length;
     doc = { type: "doc", content: kept };
   }
   const from = Math.max(0, Number(str(a.cursor)) || 0);
@@ -262,7 +266,7 @@ function answerTo(agent: ObjectSummary, given: string, answers: unknown, first: 
   const b = batchOf(f);
   if (!f || !b) throw new Refusal(`Nothing was published: there is no feedback batch "${given}".`);
   const lead = ids(agent.properties["agent-parent"])[0] ?? agent.id;
-  if (b.agent !== lead) throw new Refusal("Nothing was published: that feedback was sent to another agent.");
+  if (b.agent !== lead && b.conversation !== runOf(agent)?.conversation) throw new Refusal("Nothing was published: that feedback was sent to another agent.");
   const list = (Array.isArray(answers) ? answers : []) as Args[];
   const strange = list.map((x) => str(x?.point)).filter((p) => !b.points.some((x) => x.id === p));
   if (strange.length) throw new Refusal(`Nothing was published: the batch has no point ${strange.join(", ")}; its points are ${b.points.map((x) => x.id).join(", ")}.`);
@@ -276,7 +280,7 @@ function answerTo(agent: ObjectSummary, given: string, answers: unknown, first: 
     out.push({ point: p.id, block: first + blocks.length, ...(!md && { unanswered: why || "no answer was given", ...(!why && { missing: true }) }) });
     blocks.push(
       { type: "heading", attrs: { level: 3 }, content: [text(`Point ${p.id.slice(1)}`)] },
-      { type: "paragraph", content: [text("On “"), text(p.quote, `ll:${p.page}#${p.note}`), text("” in "), { type: "mention", attrs: { id: p.page, tag: false } }, text(" · "), text("your note", `ll:${f.id}`)] },
+      { type: "paragraph", content: [text("On “"), text(p.quote.length > 80 ? `${p.quote.slice(0, 80)}…` : p.quote, `ll:${p.page}#${p.note}`), text("” in "), { type: "mention", attrs: { id: p.page, tag: false } }, text(" · "), text("your note", `ll:${f.id}`)] },
       ...(md ? (htmlDoc(markdownHtml(md).html).content ?? []) : [{ type: "paragraph", content: [text(`Not answered: ${why || "no answer was given."}`)] }]),
     );
   }

@@ -29,7 +29,7 @@ import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, space, typeOf } from "~/lib/space";
-import { draftOf, drafts, pick, recipientFor, sentNotes } from "~/lib/feedback";
+import { draftOf, drafts, noteStates, pick, recipientFor } from "~/lib/feedback";
 import { useThoughts } from "~/lib/thoughts";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -144,15 +144,15 @@ export function PageView({ page }: { page: LLObject }) {
   // this page's task or sent notes change does the page draw again.
   const pickKey = useSyncExternalStore(space.subscribe, () => {
     const to = recipientFor(page.id);
-    return to ? `${to.task} ${to.agent} ${[...sentNotes()].join(",")}` : "";
+    return to ? `${to.task} ${to.agent} ${JSON.stringify([...noteStates()])}` : "";
   });
   const chosen = drafts.use();
   const shared = useMemo<NotesStore | undefined>(() => {
     if (!notes || !pickKey) return notes;
-    const [task, agent, sentList] = pickKey.split(" ");
-    const sent = new Set(sentList ? sentList.split(",") : []);
+    const [task, agent, ...rest] = pickKey.split(" ");
+    const states = new Map<string, string>(JSON.parse(rest.join(" ")));
     const to = pageLabel(pageOf(agent)?.title ?? "").split(": ")[0];
-    return { ...notes, pick: { to, on: (id) => draftOf(task).picks.some((x) => x.note === id), set: (id, on) => pick(task, page.id, id, on), sent: (id) => sent.has(id) } };
+    return { ...notes, pick: { to, on: (id) => draftOf(task).picks.some((x) => x.note === id), set: (id, on) => pick(task, page.id, id, on), sent: (id) => states.get(id) } };
   }, [notes, pickKey, chosen]);
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;

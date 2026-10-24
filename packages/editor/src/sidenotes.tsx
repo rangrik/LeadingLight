@@ -20,7 +20,8 @@ export type NotesStore = {
   add: (id: string, quote: string) => void;
   remove: (id: string) => void;
   // Notes chosen to go to an agent as feedback, to, and those that went already.
-  pick?: { to: string; on: (id: string) => boolean; set: (id: string, on: boolean) => void; sent: (id: string) => boolean };
+  // sent is how far the batch holding a note got ("Sent", "Not sent"), or nothing.
+  pick?: { to: string; on: (id: string) => boolean; set: (id: string, on: boolean) => void; sent: (id: string) => string | undefined };
 };
 
 export const GUTTER = 32;
@@ -291,9 +292,7 @@ export function Sidenotes({
             {/* A note to send ticks here; one sent shows a muted check (features/feedback.feature). */}
             {notes.pick &&
               (notes.pick.sent(id) ? (
-                <span className="ll-note-sent">
-                  Sent
-                </span>
+                <span className="ll-note-sent">{notes.pick.sent(id)}</span>
               ) : (
                 <Checkbox aria-label={`Send note ${i + 1} to ${notes.pick.to}`} checked={notes.pick.on(id)} className="ll-note-pick" onCheckedChange={(on) => notes.pick?.set(id, !!on)} />
               ))}

@@ -18,7 +18,7 @@ Feature: Assign a task to an agent
 
   Scenario: Assign a task
     Given "Write the summary" is open
-    When I press Assign, keep Sonnet and Approve for me, and press Assign in the dialog
+    When I press Assign, pick Sonnet and Approve for me, and press Assign in the dialog
     Then the dialog closes and says "Assigned to Claude: Write the summary"
     And the work row shows "Claude: Write the summary" and "Working", and Assign is gone
     And Agents lists "Claude: Write the summary", whose Task is "Write the summary"
@@ -30,13 +30,13 @@ Feature: Assign a task to an agent
     Then it gets the task, its brief as the task says it, and the project
 
   Scenario: Assigning twice starts one agent
-    When I press Assign in the dialog twice quickly, or reload while it starts
-    Then there is one Agent page and one conversation for the task
+    When I press Assign in the dialog twice quickly, or reload or quit while it starts
+    Then there is one Agent page and one conversation for the task, and Assign doesn't come back
     And after a reload the work row shows the same agent
 
   Scenario: The chat is there when wanted
     When I press Chat in the work row
-    Then the project's chat opens beside the task on that agent's conversation, titled with the task
+    Then the project's chat opens beside the task on that agent's conversation, titled with the task's name
 
   Scenario: A page of the project, through a task of its own
     Given "Brief" is a page "Research" links to

@@ -49,11 +49,12 @@ Feature: Sending feedback on an agent's work
     Given a batch was sent
     When I change note 1 afterwards, or the agent publishes a new report
     Then the batch still shows note 1 as sent, with the words it was about
+    And an agent reading the Thoughts page reads note 1 as it was sent, not as changed
 
   Scenario: Delivery that fails
     Given the agent's conversation can't be reached
     When I send feedback
-    Then the stream shows "Not sent" and why, with Try again
+    Then the stream shows "Not sent" and why, with Try again, and the notes say "Not sent", not "Sent"
     When it can be reached again and I press Try again
     Then it says "Sent", and the agent has the batch once
 

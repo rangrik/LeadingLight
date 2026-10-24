@@ -14,7 +14,7 @@
     { "id": "grammar", "group": "View", "label": "Grammar check", "keys": "⇧⌘G", "accel": "CmdOrCtrl+Shift+G" },
     { "id": "count", "group": "View", "label": "Counts", "keys": "⇧⌘W", "accel": "CmdOrCtrl+Shift+W" },
     { "id": "ask", "group": "Go", "label": "Ask about this…", "keys": "⌘J", "accel": "CmdOrCtrl+J", "what": "Ask Claude about the selected words, or the page" },
-    { "id": "feed", "group": "Go", "label": "Feed", "keys": "⇧⌘I", "accel": "CmdOrCtrl+Shift+I", "what": "Show or hide what agents need from you" },
+    { "id": "feed", "group": "Go", "label": "Feed", "keys": "⌥⌘F", "accel": "CmdOrCtrl+Alt+F", "what": "Show or hide what agents need from you" },
     { "id": "settings", "group": "Go", "label": "Settings…", "keys": "⌘,", "accel": "CmdOrCtrl+,", "sep": true },
     { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘⌥/", "accel": "CmdOrCtrl+Alt+/" }
   ]
