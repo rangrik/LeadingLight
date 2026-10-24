@@ -268,6 +268,27 @@ async function codex() {
   });
 }
 
+// Workers (patch 0018): a lead hands work to another agent with the runtime's own commands, told
+// of them in its instructions, and the result comes back to it without anyone copying it over.
+async function workers() {
+  const lead = "probe-lead";
+  await check("workers: a lead hands work to a Codex worker, and its result comes back by itself", async () => {
+    await api("POST", "/v1/sessions", { name: lead, location: "plain", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low",
+      prompt: "Hand this task to a Codex worker, not doing it yourself: 'Reply with the single word MANGO.' Then end your turn. When the worker's result reaches you, reply with only the word it gave." });
+    const reply = await until("the worker's word, back with the lead", async () => (await items(lead)).some((i) => i.kind === "report") && (await items(lead)).filter((i) => i.kind === "text").at(-1)?.text?.includes("MANGO"), 300_000);
+    const all = (await api("GET", "/v1/sessions")).json;
+    const worker = all.find((x) => x.name !== lead && x.agent === "codex" && x.location?.startsWith("plain"));
+    if (!reply || !worker) throw new Error(`sessions ${JSON.stringify(all.map((x) => [x.name, x.agent]))}`);
+    return { worker: worker.name };
+  });
+  await check("workers: the same worker launched twice is one", async () => {
+    const body = { name: "probe-once", location: "plain", agent: "claude", driver: "claude", mode: "default", model: "haiku", effort: "low" };
+    const [a, b] = [await api("POST", "/v1/sessions", body), await api("POST", "/v1/sessions", body)];
+    const n = (await api("GET", "/v1/sessions")).json.filter((x) => x.name === "probe-once").length;
+    if (a.status !== 200 || b.status < 400 || n !== 1) throw new Error(`${a.status} ${b.status}, ${n} sessions`);
+  });
+}
+
 // The runtime's requests (patch 0007): each asked thing named once, answered once by command.
 async function requests() {
   const s = "probe-requests";
@@ -403,6 +424,7 @@ try {
   if (!only || only === "codex") await codex();
   if (!only || only === "browser") await browser();
   if (!only || only === "requests") await requests();
+  if (!only || only === "workers") await workers();
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
     if (mcp() !== mcpBefore) throw new Error("the person's MCP servers changed");

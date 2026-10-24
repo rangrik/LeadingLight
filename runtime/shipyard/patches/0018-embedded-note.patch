@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:31:51 -0700
+Subject: [PATCH] Embedded: agents are told how to hand work on, and of their
+ browser
+
+An embedded berthd adds one paragraph to Claude Code's system prompt and Codex's developer instructions: how to start a worker, send it the task and hear back, follow up, stop it, and use the folder's browser.
+---
+ internal/box/claudedriver.go |  3 +++
+ internal/box/codexdriver.go  |  3 +++
+ internal/box/embeddednote.go | 11 +++++++++++
+ 3 files changed, 17 insertions(+)
+ create mode 100644 internal/box/embeddednote.go
+
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index 2df1b1c..a6a24bb 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -118,6 +118,9 @@ func (b *Box) launchClaudeIn(p AgentPreset, model, effort, mode, resume, dir, so
+ 	for _, f := range claudeStructuredFlags(claudeMode) {
+ 		words = append(words, shellQuote(f))
+ 	}
++	if Embedded {
++		words = append(words, "--append-system-prompt", shellQuote(embeddedNote))
++	}
+ 	if EmbeddedFiles != "" {
+ 		// Its attachments are kept with the conversation, outside the folder it works in.
+ 		if err := os.MkdirAll(conversationAttachments(dir), 0o700); err == nil {
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index 08255fc..c2c0121 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -738,6 +738,9 @@ func (c *codexConv) handshake() {
+ 	}()
+ 	approval, _ := codexPolicy(mode)
+ 	params := map[string]any{"cwd": cwd, "approvalPolicy": approval, "sandbox": threadSandbox(mode)}
++	if Embedded {
++		params["developerInstructions"] = embeddedNote
++	}
+ 	if r := codexReviewer(mode); r != "" {
+ 		params["approvalsReviewer"] = r
+ 	}
+diff --git a/internal/box/embeddednote.go b/internal/box/embeddednote.go
+new file mode 100644
+index 0000000..78b17fd
+--- /dev/null
++++ b/internal/box/embeddednote.go
+@@ -0,0 +1,11 @@
++package box
++
++// embeddedNote is what an embedded berthd tells its agents about the
++// runtime they work in: how to hand work to another agent, and their
++// browser. One paragraph, added to Claude Code's system prompt and Codex's
++// developer instructions.
++const embeddedNote = "You work inside a project runtime. To hand part of the work to another agent, run " +
++	"`berthd session new $BERTH_LOCATION --agent claude` (or `--agent codex`) and then " +
++	"`berthd session send <its name> '<the task>'`, then end your turn: its result comes back to you as a " +
++	"<berth-notification> when it finishes. Send again to follow up; `berthd session kill <name>` stops it. " +
++	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone."
+-- 
+2.51.2
+
