@@ -16,11 +16,12 @@ import { type Tool, setWritingPrefs, suggested, toolsOn, useWritingPrefs } from 
 
 const PART_LABEL: Record<Part, string> = { noun: "Nouns", verb: "Verbs", adjective: "Adjectives", adverb: "Adverbs", conjunction: "Conjunctions" };
 const CHECK_LABEL: Record<Check, string> = { filler: "Fillers", redundancy: "Redundancies", cliche: "Clichés" };
+// Only a switch sits beside its label; any other control goes on its own line below it.
+const STACK = "flex-col items-stretch gap-3";
 // A tool and the choice under it read as one block: no line between them, the choice indented
-// and close. Rows of checkboxes keep their label level with the first row, as a Mac pane does.
+// and close.
 const HAS_CHOICE = "border-b-0";
-const UNDER = "ps-6 pt-0";
-const LIST = "ps-6 pt-0 items-start";
+const UNDER = `ps-6 pt-0 ${STACK}`;
 
 // A tool's shortcut beside its switch, in COSS's Kbd.
 function ToolSwitch({ tool, on }: { tool: Tool; on: boolean }) {
@@ -65,7 +66,7 @@ export function WritingSection() {
         <SettingsRow className={HAS_CHOICE} label="Syntax highlight" description="Colours parts of speech, in English, so you can see how each sentence is built.">
           <ToolSwitch on={p.syntax} tool="syntax" />
         </SettingsRow>
-        <SettingsRow className={LIST} label="Parts of speech">
+        <SettingsRow className={UNDER} label="Parts of speech">
           <Choices
             all={PARTS}
             disabled={!p.syntax}
@@ -82,7 +83,7 @@ export function WritingSection() {
         <SettingsRow className={HAS_CHOICE} label="Style check" description="Strikes through words that add nothing, in English. Nothing is deleted.">
           <ToolSwitch on={p.style} tool="style" />
         </SettingsRow>
-        <SettingsRow className={LIST} label="Strike through">
+        <SettingsRow className={UNDER} label="Strike through">
           <Choices all={CHECKS} disabled={!p.style} label={(check) => CHECK_LABEL[check]} onChange={(checks) => setWritingPrefs({ checks })} value={p.checks} />
         </SettingsRow>
         <SettingsRow label="Grammar check" description="Underlines misspellings in red and grammar in green, found on this Mac by Harper.">
@@ -94,7 +95,7 @@ export function WritingSection() {
       </SettingsGroup>
       <SettingsGroup title="Types of pages">
         <SettingsRow
-          className="items-start"
+          className={STACK}
           description={
             <>
               Suggested: on for pages you write in, off for records such as people and books.{" "}
@@ -109,6 +110,7 @@ export function WritingSection() {
         >
           <Choices
             all={types.map((t) => t.id)}
+            columns={3}
             label={(id) => {
               const t = types.find((x) => x.id === id)!;
               return (
@@ -128,18 +130,17 @@ export function WritingSection() {
 }
 
 // Any of a few: COSS's checkbox group field (coss.com/ui/r/p-field-13.json), whose labels grey out
-// with the field. Fixed columns, so every group on the page lines up.
-function Choices<T extends string>({ all, value, onChange, label, disabled }: { all: T[]; value: T[]; onChange(v: T[]): void; label(v: T): React.ReactNode; disabled?: boolean }) {
+// with the field. A short list runs on one line; a longer one sits in even columns.
+function Choices<T extends string>({ all, value, onChange, label, disabled, columns }: { all: T[]; value: T[]; onChange(v: T[]): void; label(v: T): React.ReactNode; disabled?: boolean; columns?: number }) {
   const row = useSettingsRow();
   return (
     <Field disabled={disabled} render={(props) => <Fieldset {...props} aria-describedby={row?.describedBy} aria-labelledby={row?.labelledBy} />}>
-      {/* Read down each column, not across. */}
       <CheckboxGroup
         aria-labelledby={row?.labelledBy}
-        className="grid grid-flow-col grid-cols-[repeat(2,9rem)] gap-x-6 gap-y-3"
+        className={columns ? "grid gap-x-6 gap-y-3" : "flex-row flex-wrap gap-x-6 gap-y-3"}
         disabled={disabled}
         onValueChange={(v) => onChange(all.filter((x) => v.includes(x)))}
-        style={{ gridTemplateRows: `repeat(${Math.ceil(all.length / 2)}, auto)` }}
+        style={columns ? { gridTemplateColumns: `repeat(${columns}, 10rem)` } : undefined}
         value={value}
       >
         {all.map((v) => (

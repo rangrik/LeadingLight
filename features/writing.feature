@@ -11,10 +11,11 @@ Feature: Writing tools
     by side, on the card in front, and on the others when pointed at, like "Close page"), a menu of
     "Focus mode" ⇧⌘F, "Syntax highlight" ⇧⌘D, "Style check" ⌥⇧⌘D, "Grammar check" ⇧⌘G,
     "Counts" ⇧⌘W and "Writing settings…"
-  - Settings › Writing: a switch for each of the five with its shortcut beside it; under Focus
-    mode, Syntax highlight and Style check, indented with their dividers, the choice of what each
-    does, greyed while its switch is off (checkboxes where any of several can be on, read down
-    each column); and "Use the tools on": a checkbox for each type of page
+  - Settings › Writing: a switch for each of the five, beside its label with its shortcut; only
+    switches sit beside their label, every other control on its own line under it. Under Focus
+    mode, Syntax highlight and Style check, indented in one block with them, the choice of what
+    each does, greyed while its switch is off (checkboxes where any of several can be on, on one
+    line); and "Use the tools on": a checkbox for each type of page, in even columns
   - the counts: button "Counts" right after the breadcrumbs, past a thin divider
   - dimmed: drawn at low opacity, 150–200 ms ease-out to change
 
