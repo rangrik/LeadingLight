@@ -131,7 +131,7 @@ editing an embed in place, editing values inside lists.
 
 - Settings › Types and Settings › Properties list every one, edit it, and make new ones
   (features/settings-types-properties.feature).
-- Tasks: a starter type whose line links have a checkbox (features/tasks.feature, DECISIONS.md 15).
+- Tasks: a starter type whose line links have a checkbox (features/tasks.feature, DECISIONS.md 17).
 - The slash menu's "New" section makes a page of any type where the cursor is and links it
   (features/new-objects.feature).
 - The capture box: the theme, a header bar with a project picker, ⌘↩ saves, ⇧⌘↩ opens beside,
@@ -141,7 +141,9 @@ editing an embed in place, editing values inside lists.
 ## M3 — Everyday polish
 
 - Search (⌘K), trash view with restore, images and files, remember window state.
-- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do.
+- Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do. Any key in the shortcuts
+  table can be changed in Settings (built: features/shortcuts.feature, DECISIONS.md 15); a new
+  editor key goes in `lib/keymap.ts`'s taken list, so no shortcut can claim it.
 
 ## Later
 

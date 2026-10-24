@@ -211,7 +211,26 @@ An idea is not written into the day's note. It shows there because it was made t
 Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
 the page in view, never in its place.
 
-## 15. Tasks are a type; the checkbox comes from the Done property
+## 15. Changed shortcuts are written into the table, kept on this Mac
+
+Settings › Shortcuts can change any key in `lib/shortcuts.json`. Only the changed ones are kept
+(localStorage, `ll.shortcuts`), so a new default in the table still reaches the rest. At load
+they are written into the table's own objects, which Shipyard's sheet and `keysFor` read, so
+its files stay as they are. The key handler, the Mac menu bar (each item's accelerator, set by
+`shortcuts_set` in `lib.rs`; `menu.rs` is still Shipyard's) and the global New idea key all
+follow. In the Mac app a menu key wins over the editor's, so a key macOS or the editor uses is
+refused by name, as is one another shortcut has. While a key is being recorded the menu bar and
+the global key are emptied, or ⌘N would make a page instead of being recorded. The sidebar's
+own ⌘\ listener in `packages/ui` is gone; the table's handler toggles it like any other key.
+
+## 16. A day not yet written in is a draft
+
+Opening a day (Today, the arrows, the calendar) shows a page that lives only in memory, under
+the id it will keep. Its first save stores it (`storeDraft` in `lib/space.ts`), so browsing never
+leaves empty notes in Daily notes, and the open editor carries on with nothing remounted. Linking
+a day (the "@" menu) stores it at once, its open draft included, so a day is never stored twice.
+
+## 17. Tasks are a type; the checkbox comes from the Done property
 
 A task is a page of the starter type Task, not a tag, because it carries a state, a due date
 and a project, which a tag can't. A line link gets a checkbox when its page's type has the

@@ -1,5 +1,5 @@
 import type { Theme } from "./theme.ts";
-import { contrast, distance, over } from "./color.ts";
+import { contrast, distance, mix, over } from "./color.ts";
 
 // What a theme must meet to ship with LeadingLight (contrast.test.ts runs it over
 // every theme). Begun from Shipyard's; ours to extend:
@@ -17,6 +17,9 @@ import { contrast, distance, over } from "./color.ts";
 //   sidebar (WCAG's bar for UI that isn't text).
 // - Done, waiting, failed and running look different from each other, and
 //   the first three from the theme's primary colour.
+// - In a dark theme the editor's selected blocks stand clear of the page,
+//   further than a hovered row, with text on them 4.5:1, and an unticked
+//   to-do's edge is 3:1 (packages/editor/src/editor.css).
 
 export interface Check {
   what: string;
@@ -32,6 +35,11 @@ export const APART = 0.1;
 export const APART_PRIMARY = 0.08;
 // The wash behind a state's text (bg-warning/15, bg-info/16 and the like).
 export const TINT = 0.16;
+// editor.css: selected blocks in dark (info at 20%), and an unticked to-do's
+// edge (muted text at 70% on the page). SEEN is a tint plainly seen at a glance.
+export const BLOCK_TINT = 0.2;
+export const BOX_EDGE = 0.7;
+export const SEEN = 0.075;
 
 const STATES = ["success", "warning", "destructive", "info"] as const;
 
@@ -85,6 +93,14 @@ export function checks(t: Theme): Check[] {
   // Running and primary are often both the theme's blue; the rest are not.
   for (const s of ["success", "warning", "destructive"] as const) {
     out.push({ what: `${s} apart from primary`, value: distance(c[s], c.primary), min: APART_PRIMARY });
+  }
+
+  if (t.appearance === "dark" && c.info) {
+    const selected = over(c.info, c.background, BLOCK_TINT);
+    const hovered = distance(over(c.accent, c.background), c.background);
+    out.push({ what: "selected blocks apart from the page", value: distance(selected, c.background), min: Math.max(SEEN, hovered) });
+    text("foreground on selected blocks", c.foreground, selected);
+    out.push({ what: "an unticked to-do's edge on the page", value: contrast(mix(c.mutedForeground, c.background, BOX_EDGE), c.background), min: UI });
   }
   return out;
 }

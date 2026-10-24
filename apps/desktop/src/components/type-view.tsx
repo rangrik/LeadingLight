@@ -270,7 +270,7 @@ export function TypeSettings({ type, onClose, onDelete }: { type?: TypeDef; onCl
                 </Button>
               </span>
             ) : (
-              <Button className="me-auto" onClick={() => setConfirming(true)} variant="ghost">
+              <Button className="me-auto" onClick={() => setConfirming(true)} variant="destructive-outline">
                 Delete type
               </Button>
             ))}

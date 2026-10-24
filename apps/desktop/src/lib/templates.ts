@@ -9,20 +9,22 @@ export const templatesOf = (typeId: string) => space.get().pages.filter((p) => p
 const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 const fill = (title: string) => title.replaceAll("{date}", day.format(new Date()));
 
-// A new page of the type, started from the chosen template or the type's default one.
-export async function newPage(typeId: string, init: Partial<LLObject> = {}, templateId?: string): Promise<LLObject> {
+// What a new page of the type starts as: the chosen template or the type's default one.
+export async function pageInit(typeId: string, init: Partial<LLObject> = {}, templateId?: string): Promise<Partial<LLObject>> {
   const id = templateId ?? typeOf(typeId).template;
   const template = id ? await objects.get(id) : null;
-  if (!template) return createPage({ typeId, ...init });
+  if (!template) return { typeId, ...init };
   const { templateOf: _, ...properties } = template.properties;
-  return createPage({
+  return {
     typeId,
     title: fill(template.title),
     content: template.content,
     ...init,
     properties: { ...properties, ...init.properties },
-  });
+  };
 }
+
+export const newPage = async (typeId: string, init: Partial<LLObject> = {}, templateId?: string) => createPage(await pageInit(typeId, init, templateId));
 
 export const newTemplate = (typeId: string) =>
   createPage({ typeId, title: `${typeOf(typeId).name} template`, properties: { templateOf: typeId } });
