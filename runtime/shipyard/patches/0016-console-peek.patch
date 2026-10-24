@@ -1,0 +1,60 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:10:55 -0700
+Subject: [PATCH] Browser: a watcher peeks at a tab's console
+
+GET .../browser/console?peek=1 is the tab's last messages, every level, without marking them read, so a person watching doesn't use up what the tab's agent hasn't read yet.
+---
+ internal/box/browser.go    | 19 +++++++++++++++++++
+ internal/box/browserapi.go |  5 +++++
+ 2 files changed, 24 insertions(+)
+
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index fd09a96..efd22a6 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -649,6 +649,25 @@ func (br *browser) addFailureLocked(text string) {
+ 
+ // newConsole takes the errors and warnings since the last look, at most n
+ // (all levels with all).
++// PeekConsole is the tab's last messages, every level, leaving what is new to
++// its agent as new.
++func (br *browser) PeekConsole() BrowserResult {
++	br.mu.Lock()
++	defer br.mu.Unlock()
++	var out []string
++	for _, e := range br.console {
++		line := e.level + ": " + e.text
++		if e.count > 1 {
++			line += fmt.Sprintf(" (×%d)", e.count)
++		}
++		out = append(out, line)
++	}
++	if len(out) > 50 {
++		out = out[len(out)-50:]
++	}
++	return BrowserResult{Text: strings.Join(out, "\n")}
++}
++
+ func (br *browser) newConsole(n int, all bool) []string {
+ 	br.mu.Lock()
+ 	defer br.mu.Unlock()
+diff --git a/internal/box/browserapi.go b/internal/box/browserapi.go
+index 233b5cc..984ab03 100644
+--- a/internal/box/browserapi.go
++++ b/internal/box/browserapi.go
+@@ -311,6 +311,11 @@ func (b *Box) browserConsole(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	if r.URL.Query().Get("peek") == "1" {
++		// A watcher reads it without using up what the tab's agent hasn't read yet.
++		writeJSON(w, br.PeekConsole())
++		return nil
++	}
+ 	writeJSON(w, br.Console(r.URL.Query().Get("all") == "1"))
+ 	return nil
+ }
+-- 
+2.51.2
+

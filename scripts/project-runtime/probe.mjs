@@ -325,7 +325,7 @@ async function requests() {
 async function browser() {
   const site = join(root, "site folder");
   mkdirSync(site);
-  writeFileSync(join(site, "index.html"), '<!doctype html><title>Probe page</title><h1 id="h">Not pressed</h1><button onclick="h.textContent=\'Pressed\'">Press me</button>');
+  writeFileSync(join(site, "index.html"), '<!doctype html><title>Probe page</title><h1 id="h">Not pressed</h1><button onclick="h.textContent=\'Pressed\'">Press me</button><script>console.error("probe-console")</script>');
   const loc = (await api("POST", "/v1/locations", { name: "site", path: site })).json;
   const ws = loc.worktrees?.[0];
   await check("browser: a plain folder is its own workspace, with ports of the runtime's own", async () => {
@@ -366,6 +366,11 @@ async function browser() {
       if (!reply.includes("Pressed") || !page.includes('heading "Pressed"')) throw new Error(`agent said ${reply}; the tab shows ${page}`);
       if (!reply.includes(join(state, "box", "bin", "berthd"))) throw new Error(`the agent's berthd is not the runtime's: ${reply}`);
       if (frames < 2 || shown.size < 2 || !seen.startsWith("http://site.")) throw new Error(`observer saw ${frames} frames (${shown.size} different) of ${seen}`);
+      // A watcher's look at the console leaves the agent's unread messages unread.
+      const peek = (await api("GET", `${tab}/console?peek=1`)).json.text;
+      await api("POST", `${tab}/eval`, { js: 'console.error("probe-later")' });
+      const agents = (await api("GET", `${tab}/console`)).json.text;
+      if (!peek.includes("probe-console") || !agents.includes("probe-later")) throw new Error(`peek ${peek}; agent then read ${agents}`);
       return { frames, different: shown.size, seen };
     });
     await check("browser: the folder holds only what it held", async () => {
