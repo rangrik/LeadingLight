@@ -36,6 +36,7 @@ const PROPS: Seed<PropDef>[] = [
   { id: "agent-parent", name: "Started by", kind: "relation", options: { type: "agent", reverse: "Workers" } },
   { id: "agent-profile", name: "Profile", kind: "text", options: {} },
   { id: "report-by", name: "By", kind: "relation", options: { type: "agent", reverse: "Reports" } },
+  { id: "subtask-of", name: "Subtask of", kind: "relation", options: { reverse: "Subtasks" } },
 ];
 
 const type = (id: string, name: string, plural: string, icon: string | undefined, color: Color, props: string[], card: string[] = []): Seed<TypeDef> => ({
@@ -95,6 +96,7 @@ function later(catalog: Catalog, now: number): Catalog {
     for (const id of ["agent-task", "agent-parent", "agent-profile", "report-by"]) prop(id);
     for (const id of ["agent", "report"]) if (!catalog.types.some((t) => t.id === id)) added.types.push({ ...TYPES.find((t) => t.id === id)!, createdAt: now });
   }
+  if (missing("subtask-of")) prop("subtask-of");
   if (missing("idea-project")) {
     prop("idea-project");
     const idea = catalog.types.find((t) => t.id === "idea");

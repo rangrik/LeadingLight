@@ -333,3 +333,17 @@ and records it, rather than starting another; one never made is started then. A 
 task is assigned through a task made for it once, linked to the page and its project. A task is any
 type with Done, so a space's own task types work unchanged; assigning adds only a link on the task.
 The brief the agent gets is the task as written when it starts.
+
+## 22. A task's state comes from the runtime; only the person marks it done
+
+An assigned task reads Working, Needs your input, Ready for review, Idle or Stopped from the runtime's
+sessions for its agent and that agent's workers, the work it waits to hear back from, and its agent's
+own last report. Ready for review means the agent given the task published with ready; a worker's
+report is read like any other but changes nothing. Done is the task's Done, which only the person sets:
+an agent's task tool ticks only subtasks its own team made, and refuses the task it was given.
+
+What the agent says it is doing and its checklist live on its Agent page and change in place; a
+count shows only for steps it listed, never a percentage. Workers become Agent pages under the agent
+that started them, so they stay listed after the runtime forgets them. The panel under the title
+opens its checklist only on a click, and where the browser doesn't anchor scrolling the panel makes
+up for its own growth, so updates never move the words being read.

@@ -11,7 +11,8 @@ import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { agentFor, agentOf, relationsOf, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/work";
+import { agentFor, agentOf, relationsOf, REPORT, reportOf, type ReportMeta, type Source, taskOfAgent, type Work, workersOf } from "~/lib/work";
+import { editPage } from "~/lib/live";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
 // answered here when the runtime passes a call on. Who calls comes from the runtime, never from
@@ -270,12 +271,62 @@ async function publish(c: Caller, a: Args, call: AgentCall) {
   const words = htmlDoc(markdownHtml(md).html);
   const evidence = await keepEvidence(call.files ?? [], a.evidence, (words.content?.length ?? 0) + 1);
   const content = { ...words, content: [...(words.content ?? []), ...evidenceBlocks(evidence)] };
-  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(evidence.length && { evidence: evidence.map(({ url, ...e }) => (url?.startsWith("data:") ? e : { ...e, url })) }), ...(corrects && { corrects }), ...(a.ready === true && { ready: true }) };
+  // Only the agent given the task says it is ready for review; a worker's report is read as any other.
+  const ready = a.ready === true && !ids(agent.properties["agent-parent"]).length;
+  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(evidence.length && { evidence: evidence.map(({ url, ...e }) => (url?.startsWith("data:") ? e : { ...e, url })) }), ...(corrects && { corrects }), ...(ready && { ready }) };
   const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content, properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
-  return published(report);
+  return { ...published(report), ...(a.ready === true && !ready && { ready: "Not set: only the agent given the task says it is ready; tell it instead." }) };
 }
 
-const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment, publish };
+// Subtasks of the agent's task: made by it, ticked by it. Its main task, and any task it didn't
+// make, only the person ticks (DECISIONS.md, 22).
+async function task(c: Caller, a: Args, call: AgentCall) {
+  const agent = await agentFor(c);
+  const main = taskOfAgent(agent);
+  const action = str(a.action);
+  if (action === "create") {
+    const made = space.get().pages.find((p) => p.properties.command === call.id);
+    if (made) return { subtask: ref(made.id), title: made.title };
+    if (!main || !pageOf(main)) throw new Refusal("You have no task to add subtasks to: subtasks belong to a task you were given.");
+    const title = str(a.title).trim();
+    if (!title) throw new Refusal("Give the subtask a title.");
+    const parent = pageOf(main)!;
+    // Its project, as its task has it.
+    const projectProp = typeOf(parent.typeId).props.find((id) => propOf(id)?.kind === "relation" && ids(parent.properties[id]).some((x) => folders.get().has(x)));
+    const brief = str(a.brief).trim();
+    const made2 = await createPage({
+      typeId: parent.typeId,
+      title,
+      properties: { "subtask-of": [main], madeBy: agent.id, command: call.id, ...(projectProp && { [projectProp]: parent.properties[projectProp] }) },
+      ...(brief && { content: htmlDoc(markdownHtml(brief).html) }),
+    });
+    return { subtask: ref(made2.id), title };
+  }
+  if (action !== "done" && action !== "undo") throw new Refusal("action is create, done or undo.");
+  const { id } = await pageIn(c, a.id);
+  const sub = pageOf(id)!;
+  // Made by its own team: the agent, the one that started it, or their workers.
+  const lead = ids(agent.properties["agent-parent"])[0] ?? agent.id;
+  const mine = [lead, ...workersOf(lead).map((w) => w.id)].includes(str(sub.properties.madeBy));
+  if (!mine) throw new Refusal(`Only the person marks “${titleOf(id)}” done${id === main ? ": it is the task you were given. Publish a report with ready: true when it is ready for review" : ""}.`);
+  await editPage(id, { properties: (p) => ({ ...p, done: action === "done" }) });
+  return { subtask: ref(id), done: action === "done" };
+}
+
+// What the agent is doing now and its steps, shown live on its task; each call replaces the last.
+async function status(c: Caller, a: Args) {
+  const agent = await agentFor(c);
+  const list = (Array.isArray(a.checklist) ? a.checklist : []) as Args[];
+  const work: Work = {
+    ...(str(a.activity).trim() && { activity: str(a.activity).trim().slice(0, 200) }),
+    ...(Array.isArray(a.checklist) && { checklist: list.filter((x) => str(x?.text).trim()).slice(0, 50).map((x) => ({ text: str(x.text).trim().slice(0, 200), ...(x.done === true && { done: true }) })) }),
+    at: Date.now(),
+  };
+  await editPage(agent.id, { properties: (p) => ({ ...p, work }) });
+  return { shown: "on your task, in place of what you said before" };
+}
+
+const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment, publish, task, status };
 const WRITES = new Set(["publish", "task", "status", "context"]);
 
 export async function runAgentTool(call: AgentCall): Promise<unknown> {

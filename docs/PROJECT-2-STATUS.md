@@ -8,7 +8,7 @@ The plan is [PROJECT-2.md](PROJECT-2.md). One row per slice, filled in as each l
 | 2 Attributed publication | Built | features/reports.feature, objects.feature; a real Claude chat published to a page open with unsaved typing (the words, cursor and scroll stayed), a retried publish made one report, a publish with the app closed was told "kept" and appeared once on reopen; sources checked against the page's words |
 | 3 Evidence inside the report | Built | features/evidence.feature; a real Claude chat made chart.png with a shell command and published it with a caption: the report shows the image, still red and blue after the agent overwrote it green and deleted it; a missing file was refused at once with its reason |
 | 4 Assign a task/document | Built | features/assign.feature; through the UI: Assign pressed twice quickly made one Agent page and one conversation; the agent (real Claude) worked in the folder, wrote summary.md and published a ready report with it as evidence; after a reload the same agent showed |
-| 5 Subtasks and live widgets | | |
+| 5 Subtasks and live widgets | Built | features/task-work.feature; a real Claude agent set its activity and checklist, made subtasks Outline and Draft and ticked Outline, was refused ticking its own task, started a Codex worker (kept as an Agent page under it) and published a ready report; the panel went Working, Ready for review; Stop and Continue from the panel; growing the checklist moved a paragraph being read by 0 px in Chromium and WebKit |
 | 6 Feed and contextual answers | | |
 | 7 Select and send feedback | | |
 | 8 Read the new response | | |

@@ -12,7 +12,7 @@ import { IconPicker, PageIconView } from "~/components/page-icon";
 import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
 import { ReportByline, Reports } from "~/components/reports";
-import { WorkRow } from "~/components/assign";
+import { WorkPanel } from "~/components/work-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
@@ -340,7 +340,7 @@ export function PageView({ page }: { page: LLObject }) {
           )}
         </div>
         {report ? <div className="mt-2"><ReportByline about report={current} /></div> : <FolderRow pageId={page.id} />}
-        <WorkRow pageId={page.id} />
+        <WorkPanel pageId={page.id} />
         {templateOf && (
           <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">
             <LayoutTemplate className="size-4" />

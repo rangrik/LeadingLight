@@ -4,12 +4,12 @@ import { pageLabel } from "~/lib/labels";
 import { editPage } from "~/lib/live";
 import { type ObjectSummary, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
-import { listChats, modeFor } from "~/lib/project-runtime/chat";
+import { accessOf, type Conversation, listChats, modeFor, send, sync } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
-import { call } from "~/lib/project-runtime/transport";
+import { ask, call } from "~/lib/project-runtime/transport";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { summarize } from "~/lib/store";
-import { AGENT, relationsOf, type Run, runOf } from "~/lib/work";
+import { AGENT, agentFor, relationsOf, type Run, runOf } from "~/lib/work";
 import { watchWork } from "~/lib/work-watch";
 
 // Giving a task to an agent (features/assign.feature, DECISIONS.md 21). One Agent page and one
@@ -59,13 +59,24 @@ async function brief(task: ObjectSummary, run: Run & { note?: string; profile?: 
 }
 
 // Starts an assignment's agent once. Asked again (a reload, a restart, a second click), it finds the
-// conversation already there by its session's name and only records it.
-export async function start(agentId: string): Promise<void> {
+// conversation already there by its session's name and only records it. One start at a time.
+const starting = new Map<string, Promise<void>>();
+export function start(agentId: string): Promise<void> {
+  const going = starting.get(agentId) ?? startOnce(agentId).finally(() => starting.delete(agentId));
+  starting.set(agentId, going);
+  return going;
+}
+
+async function startOnce(agentId: string): Promise<void> {
   const agent = pageOf(agentId);
   const run = runOf(agent) as (Run & { model: string; effort: string; mode: string; note?: string; profile?: string }) | undefined;
   const task = agent && pageOf((agent.properties["agent-task"] as string[] | undefined)?.[0] ?? "");
   if (!agent || !run || run.conversation || !task) return;
-  const find = async () => (await listChats(run.location)).find((c) => c.session === run.session);
+  // The one that ran, should two have its name (two windows starting it at once).
+  const find = async () => {
+    const named = (await listChats(run.location)).filter((c) => c.session === run.session);
+    return named.find((c) => c.live) ?? named.find((c) => c.updated) ?? named[0];
+  };
   let conv = await find();
   if (!conv) {
     const r = await call<{ error?: string }>("POST", "/v1/sessions", { name: run.session, location: run.location, agent: run.agent, driver: run.agent, mode: run.mode, model: run.model, effort: run.effort, title: title(task.id), prompt: await brief(task, run) });
@@ -122,4 +133,33 @@ export async function assign(pageId: string, o: { model: string; effort: string;
   } finally {
     busy.delete(pageId);
   }
+}
+
+// Workers an agent started, each kept as an Agent page under it, so they stay listed after the
+// runtime forgets them. Looked for at most every 10 s per agent.
+const looked = new Map<string, number>();
+export async function syncWorkers(agentId: string): Promise<void> {
+  const agent = pageOf(agentId);
+  const run = runOf(agent);
+  if (!run?.conversation || Date.now() - (looked.get(agentId) ?? 0) < 10_000) return;
+  looked.set(agentId, Date.now());
+  // Wherever they work: a worker may be started in another worktree.
+  const theirs = (await ask<Conversation[]>("GET", "/v1/conversations?limit=200")).filter((c) => c.by === run.session);
+  for (const c of theirs) {
+    if (space.get().pages.some((p) => runOf(p)?.conversation === c.id)) continue;
+    await agentFor({ session: c.session ?? "", conversation: c.id, location: c.location, agent: c.agent, by: run.session });
+  }
+}
+
+// Stops the agent's turn; its workers carry on until told.
+export const stopAgent = (agentId: string) => call("POST", `/v1/sessions/${runOf(pageOf(agentId))?.session}/interrupt`);
+
+// Asks a stopped or idle agent to carry on, resuming its conversation when its session has ended.
+export async function carryOn(agentId: string): Promise<void> {
+  const run = runOf(pageOf(agentId));
+  const conv = run && (await listChats(run.location.split("/")[0])).find((c) => c.id === run.conversation);
+  if (!run || !conv) throw new Error("Its conversation isn't in the runtime any more.");
+  await sync(conv.id, conv);
+  const kind = conv.agent === "codex" ? "codex" : "claude";
+  await send(conv.id, run.location, "Carry on with the task.", { model: conv.model ?? "", effort: conv.effort ?? "", ...accessOf(conv.mode, kind) });
 }

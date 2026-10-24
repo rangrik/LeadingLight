@@ -1,4 +1,4 @@
-import { Bot, MessagesSquare } from "lucide-react";
+import { Bot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -7,10 +7,9 @@ import { Form } from "@leadinglight/ui/components/form";
 import { Select, SelectGroup, SelectGroupLabel, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { Textarea } from "@leadinglight/ui/components/textarea";
 import { toastManager } from "@leadinglight/ui/components/toast";
-import { visit } from "~/components/property-value";
 import { ACCESS, type Access, isClaude, MODELS, useAiPrefs } from "~/lib/ai-prefs";
 import { type Agent as Profile, listAgents } from "~/lib/agents";
-import { assign, assignmentOf, isTask, projectFor, start, taskOfDocument } from "~/lib/assign";
+import { assign, assignmentOf, isTask, projectFor, taskOfDocument } from "~/lib/assign";
 import { codex, effortFor, loadCodex } from "~/lib/codex";
 import { pageLabel } from "~/lib/labels";
 import { openBeside } from "~/lib/panes";
@@ -18,10 +17,9 @@ import { folders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { chatView, pageOf, space } from "~/lib/space";
 import { runOf } from "~/lib/work";
-import { sessions, watchWork } from "~/lib/work-watch";
 
 // Assign (features/assign.feature): a task, or a page of a project, given to an agent. The dialog is
-// COSS's "Dialog with form"; the row under a task's title says who has it and how it is going.
+// COSS's "Dialog with form"; how the work goes shows under the task's title (work-panel.tsx).
 
 // The page's project, while projects are on: what Assign needs.
 export function useProject(pageId: string) {
@@ -182,60 +180,5 @@ export function AssignButton({ pageId }: { pageId: string }) {
       </Button>
       <AssignDialog onOpenChange={setOpen} open={open} pageId={pageId} />
     </>
-  );
-}
-
-const STATE: Record<string, string> = { running: "Working", waiting: "Waiting for you" };
-
-// Under a task's title: the agent that has it and how it is going; on a page assigned through a
-// task, that task.
-export function WorkRow({ pageId }: { pageId: string }) {
-  const { pages } = space.use();
-  const live = sessions.use();
-  const [failed, setFailed] = useState<string | null>(null);
-  const page = pages.find((p) => p.id === pageId);
-  const viaTask = page && !isTask(page) ? taskOfDocument(pageId) : undefined;
-  const agent = pageOf(assignmentOf(page)?.agent ?? "");
-  const run = runOf(agent);
-  useEffect(() => {
-    if (!agent || !run) return;
-    watchWork();
-    // Not started yet (a reload or a restart while it started): started now, once.
-    if (!run.conversation) void start(agent.id).catch((e: Error) => setFailed(e.message));
-  }, [agent?.id, run?.conversation]);
-  if (viaTask)
-    return (
-      <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm" data-testid="work-row">
-        <Bot className="size-4 shrink-0" />
-        Assigned as the task
-        <button className="font-medium text-foreground underline-offset-2 hover:underline" onClick={(e) => visit(viaTask.id, e)} type="button">
-          {pageLabel(viaTask.title)}
-        </button>
-      </p>
-    );
-  if (!agent || !run) return null;
-  const s = live.get(run.session);
-  const state = failed ? `Didn't start: ${failed}` : !run.conversation ? "Starting…" : (STATE[s?.agent_state ?? ""] ?? "Not working now");
-  return (
-    <div className="mt-2 flex min-w-0 items-center gap-2 text-sm" data-testid="work-row">
-      <Bot className="size-4 shrink-0 text-muted-foreground" />
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
-        <button className="min-w-0 truncate font-medium underline-offset-2 hover:underline" onClick={(e) => visit(agent.id, e)} type="button">
-          {pageLabel(agent.title)}
-        </button>
-        <span className="shrink-0 text-muted-foreground">{state}</span>
-      </span>
-      {failed && (
-        <Button onClick={() => (setFailed(null), void start(agent.id).catch((e: Error) => setFailed(e.message)))} size="xs" variant="outline">
-          Try again
-        </Button>
-      )}
-      {run.conversation && (
-        <Button onClick={() => openChat(run.location, run.conversation)} size="xs" variant="outline">
-          <MessagesSquare className="size-4" />
-          Chat
-        </Button>
-      )}
-    </div>
   );
 }
