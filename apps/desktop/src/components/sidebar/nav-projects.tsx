@@ -22,7 +22,7 @@ import {
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
 
-type Child = { name: string; isActive: boolean; onSelect: () => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void; onDelete: () => void };
+type Child = { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void; onDelete: () => void };
 
 // The tree after xevrion's sidebar submenu (MIT, github.com/xevrion/ui-lab): a trunk from the page
 // with a curved branch to each child, and the branch to the open child drawn in the primary colour,
@@ -120,7 +120,7 @@ export function NavProjects({
     name: string;
     icon: React.ReactNode;
     isActive: boolean;
-    onSelect: () => void;
+    onSelect: (e: React.MouseEvent) => void;
     onDrag: (e: React.PointerEvent<HTMLElement>) => void;
     onDelete: () => void;
     open: boolean;

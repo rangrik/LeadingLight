@@ -44,10 +44,17 @@ pnpm install:app                           # build the Mac app and put it in /Ap
 - No focus rings or outlines on buttons, rows, menu items. Text fields keep a soft ring.
 - Light and dark follow the system. Colors come from theme tokens in `packages/ui/src/styles/globals.css`. No hardcoded hex in app code.
 - Motion: 150–200 ms, ease-out, only on state changes (hover, open, collapse).
-- Build UI from COSS components, as shipped: Sidebar, Menu, Toolbar, Toggle, Select, Popover,
-  Tooltip, Kbd, Input, Button, AlertDialog, Empty. Compose them with Base UI's `render` prop rather
-  than restyling. Only when focus must stay in the editor (the slash menu) or the editor positions
-  the surface itself, copy the COSS classes (see `surface` in `packages/editor/src/ui.tsx`).
+- Never write a UI component from scratch. Every control, list, table, menu, tooltip, dialog and
+  form part is COSS's, as shipped (`packages/ui`; add a missing one with the command above). Put
+  them together the way COSS's own examples do: `https://coss.com/ui/r/p-<component>-<n>.json`
+  (for example `p-checkbox-group-3`, `p-field-13`). Where COSS has none, copy shadcn's Base UI
+  version (`https://ui.shadcn.com/r/styles/base-vega/<name>.json`) into `packages/ui`, point it at
+  COSS's primitives, restyle only after copying and only to match, and list the changes at its top.
+  Compose with Base UI's `render` prop rather than restyling.
+- Choose the control by what it means: a switch turns one thing on, checkboxes choose any of
+  several, a segmented control or radio group picks one of a few, a tooltip explains (never the
+  browser's `title`). Only when focus must stay in the editor (the slash menu) or the editor
+  positions the surface itself, copy the COSS classes (see `surface` in `packages/editor/src/ui.tsx`).
   Edits to files in `packages/ui` stay rare, small, and marked with a `LeadingLight:` comment.
 - Before building any block or layout by hand, look for the official one. shadcn serves Base UI
   versions of its blocks (`https://ui.shadcn.com/r/styles/base-vega/<block>.json`); copy their
@@ -77,6 +84,26 @@ pnpm install:app                           # build the Mac app and put it in /Ap
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
+
+## Traps
+
+Each of these passed every check here and still failed for the user, or cost hours.
+
+- Test the way the user will. QA once opened two panes by calling `openBeside()`, and the user
+  was then told to Shift-click a sidebar row, which did not open a pane. Do every step you give
+  the user yourself, the same way, first. The Berth browser can't send modifier clicks or drags;
+  use Playwright for those (`click({ modifiers: ["Shift"] })`, `page.mouse`).
+- Headless QA can't see the browser's own UI: `title` tooltips, spellcheck underlines, native
+  menus. A `title` tooltip also waits 2–4 s on macOS. Never use `title` for UI; use COSS's
+  Tooltip (`packages/editor/src/mark-tip.tsx` anchors one to words in the editor).
+- After merging main, run all of the change's scenarios again. Main once gave every page its own
+  card and header; the counts merged without a conflict and were still wrong in a split.
+- Test a long page: 2000 paragraphs (`__editor.commands.setContent`), timing keys against 16 ms.
+  Three things made typing slow there: a `:has()` rule on a page-wide container (Chromium
+  restyles the whole page on every key), thousands of ProseMirror node decorations (rebuilding
+  the set is quadratic), and redrawing inline decorations around the cursor on every key.
+- An ellipsis cuts text on a fraction of a pixel. Whatever shares a row with truncating text
+  should take only the room left (`flex: 1 1 0; min-width: 0`), not shrink beside it.
 
 ## Rules for any developer (human or agent)
 

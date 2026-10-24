@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components
 import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
+import { MarkTip } from "./mark-tip";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
@@ -520,6 +521,7 @@ export function BlockEditor({
       <BlockHandle editor={editor} />
       <SelectionToolbar editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} quote={quote} />
       <TableToolbar editor={editor} />
+      <MarkTip editor={editor} />
       <EmojiPicker editor={editor} />
     </div>
   );

@@ -31,6 +31,13 @@ Feature: Pages side by side
     And "B" is focused: its sidebar row is marked current and its header's title is in the
       regular text colour, A's muted
 
+  Scenario: Shift-clicking a sidebar row opens it beside
+    When I Shift-click the sidebar row "B"
+    Then "B" opens on the right of "A", as Shift-clicking a link does, and is focused
+    When I Shift-click "A"
+    Then "A" is focused where it is; nothing opens twice
+    And Shift on a type row (People) or on Today opens it beside the same way
+
   Scenario Outline: Each edge puts the page on that side
     When I drag the sidebar row "B" near the <edge> edge of "A" and let go
     Then "B" takes the <half> half of the page area and "A" the other half

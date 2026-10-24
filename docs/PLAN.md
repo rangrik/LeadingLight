@@ -54,6 +54,8 @@ menu, the Writing menu at the panel's top right, and Settings › Writing. See
 - Grammar check (⇧⌘G): Harper's grammar and spelling mistakes underlined, with its reason.
 - Counts (⇧⌘W): beside the page's name, words, reading time, parts of speech, style and grammar,
   for the page or the selection; a click shows every number.
+- They work on the types of pages chosen in Settings › Writing › Use on: suggested on for pages
+  written in, off for records (people, books, tags, collections).
 
 ## M2 — Objects and links (built)
 

@@ -59,7 +59,7 @@ export function AppSidebar({
   todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  onToday: () => void;
+  onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];

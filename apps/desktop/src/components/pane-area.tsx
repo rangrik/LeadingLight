@@ -18,13 +18,17 @@ import { WritingMenu } from "~/components/writing-menu";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes } from "~/lib/panes";
-import { describe, space, TYPE_VIEW } from "~/lib/space";
+import { describe, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
+import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
 type Size = { w: number; h: number };
 
 // A page's card: the sidebar-08 inset panel's look, one per open page.
 export const CARD = "bg-background md:rounded-xl md:shadow-sm/5";
 const GAP = 8; // between cards, as between a card and the window's edge
+// A control on a card that isn't in front: there on hover, or while it has focus or is open.
+const BACK_CARD = "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100";
 const EPS = 1e-6;
 
 // Edges rounded to whole pixels, so icons and text stay sharp at any split.
@@ -83,6 +87,7 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
   const { root, focus } = panes.use();
   const { open: sidebarOpen } = useSidebar();
   space.use(); // titles and icons follow edits
+  const writing = useWritingPrefs();
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -154,17 +159,17 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 root={shown.parent ?? "Pages"}
                 sidebarOpen={sidebarOpen}
               >
-                {/* One Ask button and Writing menu, at the window's top right where the toolbar's end is. */}
-                {rect.x + rect.w > 1 - EPS && rect.y < EPS && (
-                  <>
-                    <AskButton />
-                    <WritingMenu />
-                  </>
+                {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
+                    like Close page: on the card in front, the others on hover. Ask gives way in
+                    narrow cards, so the title stays whole; ⌘J still asks. */}
+                {!leaf.page.startsWith(TYPE_VIEW) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {!leaf.page.startsWith(TYPE_VIEW) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
+                  <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
                 {split && (
                   <Button
                     aria-label="Close page"
-                    className={cn(leaf.id !== focus && "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100")}
+                    className={cn(leaf.id !== focus && BACK_CARD)}
                     onClick={() => closePane(leaf.id)}
                     size="icon-xs"
                     variant="ghost"

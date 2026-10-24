@@ -9,8 +9,10 @@ Feature: Ask Claude, an agent on every page
   part through the same steps, so every surface can be tried and tested.
 
   Names used below:
-  - the Ask button: button "Ask Claude" at the window's top right, beside the Writing menu
-    ("Ask GPT" while a GPT model is chosen, as is the ask bar)
+  - the Ask button: button "Ask Claude" in each page card's header, beside its Writing menu, on
+    the card in front and the others on hover ("Ask GPT" while a GPT model is chosen, as is the
+    ask bar); it asks about its own card's page, and gives way in a card too narrow for it and
+    the whole title, where ⌘J still asks
   - the agent panel: region "Agent" inside the page panel, docked to a corner of the note
   - the composer: the field "Question" at the bottom of the panel (features/composer.feature)
   - a turn: one question and everything Claude does to answer it

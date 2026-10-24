@@ -48,7 +48,7 @@ export function PanelHeader({ sidebarOpen, root, current, icon, lead = true, tog
         )}
         {/* One line in any card: the counts give way first, then the page's title, with an
             ellipsis. On one baseline, so the counts' smaller text sits on the crumbs' line. */}
-        <div className="flex min-w-0 items-baseline gap-2">
+        <div className="flex min-w-0 flex-1 items-baseline">
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               <BreadcrumbItem className="hidden shrink-0 md:block">{root}</BreadcrumbItem>

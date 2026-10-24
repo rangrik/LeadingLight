@@ -1,4 +1,4 @@
-import { CHECKS, type Check, type Part, PARTS, type Writing } from "@leadinglight/editor/writing";
+import { CHECKS, type Check, OFF, type Part, PARTS, type Writing } from "@leadinglight/editor/writing";
 import { useRef } from "react";
 import { askEditor } from "~/lib/ask";
 import { localPrefs } from "~/lib/local-prefs";
@@ -14,6 +14,8 @@ export type WritingPrefs = {
   checks: Check[];
   grammar: boolean;
   count: boolean;
+  // Types whose pages get the tools, where the person chose other than suggested.
+  types: Record<string, boolean>;
 };
 export type Tool = "focus" | "syntax" | "style" | "grammar" | "count";
 
@@ -26,26 +28,34 @@ const prefs = localPrefs<WritingPrefs>("ll.writing", {
   checks: CHECKS,
   grammar: true,
   count: true,
+  types: {},
 });
+
+// Suggested: the tools on pages written in, off on records (a person, a book, a tag, a list).
+const RECORDS = new Set(["person", "book", "tag", "collection"]);
+export const suggested = (typeId: string) => !RECORDS.has(typeId);
+export const toolsOn = (p: WritingPrefs, typeId: string) => p.types[typeId] ?? suggested(typeId);
 
 export const setWritingPrefs = prefs.set;
 export const useWritingPrefs = prefs.use;
 export const toggleTool = (tool: Tool) => prefs.set({ [tool]: !prefs.get()[tool] });
 
-// What the editor is asked to show.
-export const editorWriting = (p: WritingPrefs): Writing => ({
-  focus: p.focus ? p.focusOn : null,
-  syntax: p.syntax ? p.parts : [],
-  style: p.style ? p.checks : [],
-  grammar: p.grammar,
-});
+// What the editor is asked to show, on a page of this type.
+export const editorWriting = (p: WritingPrefs, typeId: string): Writing =>
+  toolsOn(p, typeId)
+    ? { focus: p.focus ? p.focusOn : null, syntax: p.syntax ? p.parts : [], style: p.style ? p.checks : [], grammar: p.grammar }
+    : OFF;
 
 // A writing tool's menu or popover gives the keyboard back to the page it was opened from, so
 // what it changed shows at once.
 export function useBackToPage() {
   const writing = useRef(false);
   return {
-    onPointerDown: () => void (writing.current = Boolean(document.activeElement?.closest(".ll-editor"))),
+    // Only to a page in the same card: a menu used on another card moves there instead.
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      const editor = document.activeElement?.closest(".ll-editor");
+      writing.current = Boolean(editor && e.currentTarget.closest("[data-pane-area] > section")?.contains(editor));
+    },
     finalFocus: () => {
       if (!writing.current) return true;
       askEditor()?.refocus();

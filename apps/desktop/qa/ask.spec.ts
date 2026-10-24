@@ -107,6 +107,22 @@ test("The Ask button opens and closes the panel; Meta+J in the panel closes it",
   await expect(body(page)).toBeFocused();
 });
 
+// Seam: a card's Ask button against the page asked about. Catches it asking about the other pane's page.
+test("With pages side by side, each card's Ask button asks about its own page", async ({ page }) => {
+  await page.goto("/");
+  const nav = page.getByRole("navigation", { name: "Pages" });
+  for (const title of ["Left", "Right"]) {
+    await nav.getByRole("button", { name: "New page" }).click();
+    await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
+    await page.getByRole("textbox", { name: "Title" }).fill(title);
+  }
+  await nav.getByRole("button", { name: "Left", exact: true }).click({ modifiers: ["Shift"] });
+  for (const side of ["Right", "Left"]) {
+    await page.getByRole("region", { name: side, exact: true }).getByRole("button", { name: "Ask Claude" }).click();
+    await expect(panel(page)).toContainText(`What should we do with “${side}”?`);
+  }
+});
+
 // The page changes only through an allowed step, and a declined one leaves it as it was.
 test("A change waits for approval: Decline keeps the page, Allow once makes it", async ({ page }) => {
   await pageWith(page, "The mitochondria is the powerhouse of the cell.");
