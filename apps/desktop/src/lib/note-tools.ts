@@ -6,6 +6,7 @@ import { docMarkdown, plainWords } from "~/lib/page-markdown";
 import { pageOf, space } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
+import { isReport } from "~/lib/work";
 
 // The page tools Claude and GPT work with, run here in the webview: an MCP server over Claude
 // Code's control protocol, and Codex's dynamic tools (lib/turn.ts). Reading never asks; changes go
@@ -97,7 +98,8 @@ export async function runTool(pageId: string, name: string, a: Record<string, st
     return ok(`Created ${quoted(obj.id)} (id: ${obj.id}).`);
   }
 
-  // The rest change this page, through its editor.
+  // The rest change this page, through its editor. A report stays as its agent published it.
+  if (isReport(pageId)) return fail(`${quoted(pageId)} is an agent's report, which isn't changed once published.`);
   const ed = liveEditor(pageId);
   if (!ed) return fail(`${quoted(pageId)} is not open any more, so it can't be changed. Ask the person to open it.`);
   if (name === "edit_page") {

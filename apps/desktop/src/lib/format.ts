@@ -18,5 +18,13 @@ export function formatDate(v: DateValue): string {
 }
 export const formatMoment = (ms: number) => moment.format(ms);
 
+// "just now", "5 minutes ago", "yesterday": when something an agent did happened.
+const ago = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+export function formatAgo(ms: number, now = Date.now()) {
+  const m = Math.round((ms - now) / 60000);
+  if (m === 0) return "just now";
+  return Math.abs(m) < 60 ? ago.format(m, "minute") : Math.abs(m) < 1440 ? ago.format(Math.round(m / 60), "hour") : ago.format(Math.round(m / 1440), "day");
+}
+
 export const isDateValue = (v: unknown): v is DateValue =>
   Boolean(v && typeof v === "object" && typeof (v as DateValue).start === "string");

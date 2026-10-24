@@ -31,6 +31,11 @@ const PROPS: Seed<PropDef>[] = [
   { id: "done", name: "Done", kind: "checkbox", options: {} },
   { id: "task-project", name: "Project", kind: "relation", options: { type: "project", reverse: "Tasks" } },
   { id: "idea-project", name: "Project", kind: "relation", options: { type: "project", reverse: "Ideas" } },
+  // Project 2: who did a task's work, and what they published (DECISIONS.md, 20).
+  { id: "agent-task", name: "Task", kind: "relation", options: { reverse: "Agents" } },
+  { id: "agent-parent", name: "Started by", kind: "relation", options: { type: "agent", reverse: "Workers" } },
+  { id: "agent-profile", name: "Profile", kind: "text", options: {} },
+  { id: "report-by", name: "By", kind: "relation", options: { type: "agent", reverse: "Reports" } },
 ];
 
 const type = (id: string, name: string, plural: string, icon: string | undefined, color: Color, props: string[], card: string[] = []): Seed<TypeDef> => ({
@@ -58,6 +63,9 @@ const TYPES: Seed<TypeDef>[] = [
   type("task", "Task", "Tasks", "circle-check", "green", ["done", "due", "task-project", "tags"], ["due", "task-project"]),
   type("idea", "Idea", "Ideas", "lightbulb", "yellow", IDEA_PROPS, ["idea-project"]),
   type("collection", "Collection", "Collections", "library", "teal", ["items", "tags"]),
+  // Made by the app for a project's agents, never from New.
+  { ...type("agent", "Agent", "Agents", "bot", "purple", ["agent-profile", "agent-task", "agent-parent"]), system: true, made: "app" },
+  { ...type("report", "Report", "Reports", "scroll-text", "blue", ["report-by"]), system: true, made: "app" },
 ];
 
 // Everything to add to a space that hasn't been given the starter set yet.
@@ -82,6 +90,10 @@ function later(catalog: Catalog, now: number): Catalog {
     prop("task-project");
     // A space that made its own Task type keeps it, rather than getting a second.
     if (!catalog.types.some((t) => t.id === "task" || t.name.toLowerCase() === "task")) added.types.push({ ...TYPES.find((t) => t.id === "task")!, createdAt: now });
+  }
+  if (missing("report-by")) {
+    for (const id of ["agent-task", "agent-parent", "agent-profile", "report-by"]) prop(id);
+    for (const id of ["agent", "report"]) if (!catalog.types.some((t) => t.id === id)) added.types.push({ ...TYPES.find((t) => t.id === id)!, createdAt: now });
   }
   if (missing("idea-project")) {
     prop("idea-project");

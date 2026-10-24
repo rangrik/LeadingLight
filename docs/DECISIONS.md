@@ -304,3 +304,16 @@ made while the app is quit appears when it next opens, once.
 An agent reads the project page and what it reaches through links a few steps out, never through a
 tag or a daily note, which nearly every page shares. Sidenotes are private unless sent as feedback.
 The tools add and never change: there is no edit or delete.
+
+## 20. An agent's report is its own page, beside the page it is about
+
+What an agent publishes is a new page of the system type Report (`lib/work.ts`), linked to the page
+it is about as its parent, and shown after that page's words, signed and dated. Its agent is an
+Agent page, one per runtime conversation, so authorship is a link the person can follow. Nothing
+an agent publishes goes into the page's own body, so the person's open editor, its unsaved words,
+its cursor and its scroll never meet it, and no autosave can write over either. A report never
+changes once published: its page opens read-only, Ask won't change it, and the agent has no tool
+that edits or deletes. A correction is a new report. Each publish carries the runtime's call id,
+so a retry or a call offered again finds the report it made rather than making another. Agent and
+Report are found by type id and marked as made by the app, so New never offers them and a renamed
+type keeps working.

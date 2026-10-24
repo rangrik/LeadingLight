@@ -48,7 +48,7 @@ import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
-import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -147,7 +147,8 @@ export default function App() {
   const { enabled: projectsOn } = projectPrefs.use();
   const linkedFolders = folders.use().size > 0;
   useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
-  useEffect(() => void (projectsOn && linkedFolders && serveAgents()), [projectsOn, linkedFolders]);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
@@ -158,6 +159,7 @@ export default function App() {
     loadSpace()
       .then(async (list) => {
         await foldDescriptions().catch(console.error);
+        setLoaded(true);
         // The top of Recent (which leaves tasks out), in the order chosen.
         showOnly(list.filter((p) => listed(p) && p.typeId !== "task").sort(byRecent)[0]?.id ?? null);
       })
@@ -266,11 +268,12 @@ export default function App() {
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
   const navPages = pages
-    // Tasks live in their type's view; there are too many for this list.
-    .filter((p) => listed(p) && p.typeId !== "task" && !isChild(p))
+    // Tasks live in their type's view; there are too many for this list. So do agents' pages.
+    .filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !isChild(p))
     .sort(byRecent)
     .map((p) => {
-      const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
+      // Its Thoughts page and essay; its reports read in the page itself.
+      const kids = pages.filter((c) => parentOf(c) === p.id && (roleOf(c) === "thoughts" || roleOf(c) === "essay")).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
       const name = roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title);
       return {
         id: p.id,

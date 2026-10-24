@@ -1,4 +1,4 @@
-import { type AgentCall, runAgentTool } from "~/lib/agent-tools";
+import { type AgentCall, projectOf, runAgentTool } from "~/lib/agent-tools";
 import { call } from "~/lib/project-runtime/transport";
 
 // Agents' LeadingLight tools are answered here (DECISIONS.md, 19). The runtime holds each call
@@ -9,6 +9,8 @@ let serving = false;
 let writes: Promise<unknown> = Promise.resolve();
 
 async function answer(c: AgentCall, write: boolean) {
+  // Another app's folder (a second browser profile on this runtime): its write waits for that app.
+  if (write && !projectOf(c.caller)) return;
   const run = () => runAgentTool(c).then((result) => ({ result: result ?? null }), (e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
   const out = write ? await (writes = writes.then(run, run)) : await run();
   // Not told: the runtime offers the call again after a while, and a write is applied once.

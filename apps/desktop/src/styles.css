@@ -38,6 +38,9 @@
 .ll-page-dim > :not(.ll-page),
 .ll-page-dim > .ll-page > :not(.ll-page-body) { opacity: 0.3; }
 
+/* A report in its page's stream reads to its end: no room below for drops (reports.tsx). */
+[data-report] .ll-editor-root { padding-bottom: 0; }
+
 /* The capture box's editor (capture-box.tsx): 15 px, no handle gutter (a 640 px box has no
    room left of the text), no drop room below. */
 .ll-capture .ll-editor { font-size: 15px; }

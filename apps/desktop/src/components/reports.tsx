@@ -1,0 +1,94 @@
+import { BlockEditor, type EditorDoc } from "@leadinglight/editor/editor";
+import { useEffect, useState } from "react";
+import { Button } from "@leadinglight/ui/components/button";
+import { linkHost } from "~/components/link-views";
+import { RowIcon } from "~/components/page-icon";
+import { visit } from "~/components/property-value";
+import { assets } from "~/lib/assets";
+import { openHref } from "~/lib/essay";
+import { formatAgo } from "~/lib/format";
+import { pageLabel } from "~/lib/labels";
+import { type ObjectSummary, objects } from "~/lib/objects";
+import { iconFor, pageOf, space } from "~/lib/space";
+import { reportOf, reportsOn } from "~/lib/work";
+
+// What agents published beside a page (features/reports.feature): after the page's own words, oldest
+// first, each signed and dated and read as it was written. A report never changes.
+
+const titleOf = (id: string) => pageLabel(pageOf(id)?.title ?? "");
+
+// Who wrote it and when; on the report's own page, what it is about.
+export function ReportByline({ report, about }: { report: ObjectSummary; about?: boolean }) {
+  const meta = reportOf(report);
+  const by = meta && pageOf(meta.by);
+  if (!meta) return null;
+  const go = (id: string) => (e: React.MouseEvent) => visit(id, e);
+  return (
+    <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-muted-foreground text-sm" data-testid="report-byline">
+      {by && (
+        <button className="-ms-1 flex items-center gap-1.5 rounded-md px-1 font-medium text-foreground hover:bg-accent" onClick={go(by.id)} type="button">
+          <RowIcon icon={iconFor(by)} />
+          {pageLabel(by.title)}
+        </button>
+      )}
+      <span>· {formatAgo(meta.at)}</span>
+      {meta.corrects && pageOf(meta.corrects) && (
+        <span>
+          · corrects{" "}
+          <button className="underline-offset-2 hover:underline" onClick={go(meta.corrects)} type="button">
+            {titleOf(meta.corrects)}
+          </button>
+        </span>
+      )}
+      {about && pageOf(meta.to) && (
+        <span>
+          · about{" "}
+          <button className="underline-offset-2 hover:underline" onClick={go(meta.to)} type="button">
+            {titleOf(meta.to)}
+          </button>
+        </span>
+      )}
+    </p>
+  );
+}
+
+function ReportGroup({ report }: { report: ObjectSummary }) {
+  // Its words never change, so they are read once.
+  const [doc, setDoc] = useState<EditorDoc | null>();
+  useEffect(() => {
+    let live = true;
+    objects.get(report.id).then((o) => live && setDoc(o?.content ?? null), console.error);
+    return () => void (live = false);
+  }, [report.id]);
+  const title = pageLabel(report.title);
+  return (
+    // The first sits below the page's own room for drops; each after it, a section's gap below.
+    <article aria-label={`Report: ${title}`} className="mt-12 border-t pt-6 first:mt-0" data-report={report.id}>
+      <div className="flex items-center gap-2">
+        <ReportByline report={report} />
+        <Button className="ms-auto text-muted-foreground" onClick={(e) => visit(report.id, e)} size="xs" variant="ghost">
+          Open
+        </Button>
+      </div>
+      <h2 className="mt-3 font-heading font-semibold text-2xl leading-tight tracking-tight">{title}</h2>
+      {doc !== undefined && (
+        <div className="pt-2">
+          <BlockEditor assets={assets} content={doc} label={`Report: ${title}`} links={linkHost} openLink={openHref} readOnly />
+        </div>
+      )}
+    </article>
+  );
+}
+
+export function Reports({ pageId }: { pageId: string }) {
+  const { pages } = space.use();
+  const list = reportsOn(pageId, pages);
+  if (!list.length) return null;
+  return (
+    <section aria-label="Reports">
+      {list.map((r) => (
+        <ReportGroup key={r.id} report={r} />
+      ))}
+    </section>
+  );
+}

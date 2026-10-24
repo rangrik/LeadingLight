@@ -40,6 +40,7 @@ export type TypeDef = {
   linkView: LinkView;
   template?: string; // the default template's page id
   system?: boolean; // can't be deleted: the app relies on it
+  made?: "app"; // made by the app for its agents (an Agent, a Report), so New doesn't offer it
   view?: ViewSettings; // its list of pages
   createdAt: number;
 };

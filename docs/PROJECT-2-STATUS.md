@@ -5,7 +5,7 @@ The plan is [PROJECT-2.md](PROJECT-2.md). One row per slice, filled in as each l
 | Slice | State | Evidence |
 |---|---|---|
 | 1 Scoped content reads | Built | features/project-context.feature; runtime 0.3.30-ll.25 (patch 0030, its Go test); scope seam test; a real Claude and a real Codex chat read Plan's text and status, were refused an outside page without its title, and found no private note |
-| 2 Attributed publication | | |
+| 2 Attributed publication | Built | features/reports.feature, objects.feature; a real Claude chat published to a page open with unsaved typing (the words, cursor and scroll stayed), a retried publish made one report, a publish with the app closed was told "kept" and appeared once on reopen; sources checked against the page's words |
 | 3 Evidence inside the report | | |
 | 4 Assign a task/document | | |
 | 5 Subtasks and live widgets | | |

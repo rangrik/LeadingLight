@@ -1,14 +1,16 @@
-import type { EditorDoc } from "@leadinglight/editor/editor";
+import { type EditorDoc, htmlDoc } from "@leadinglight/editor/editor";
+import { markdownHtml } from "@/lib/markdown-html";
 import { type Graph, scopeOf } from "~/lib/agent-scope";
 import type { PropDef } from "~/lib/catalog";
 import { pageLabel } from "~/lib/labels";
 import { parseHref, roleOf } from "~/lib/linked";
 import { liveContent } from "~/lib/live";
-import { docText, type ObjectSummary, objects } from "~/lib/objects";
+import { docText, type LLObject, type ObjectSummary, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
-import { pageOf, propOf, space, typeOf } from "~/lib/space";
+import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
+import { agentFor, REPORT, reportOf, type ReportMeta, type Source } from "~/lib/work";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
 // answered here when the runtime passes a call on. Who calls comes from the runtime, never from
@@ -204,10 +206,66 @@ async function project(c: Caller) {
   return { project: named(folder.pageId), folder: folder.path, how: "read and search cover the project's pages; the folder's files are yours to read as usual." };
 }
 
-const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment };
+const plain = (s: string) => s.replace(/\s+/g, " ").trim();
+
+// Where a report goes: the page named, else the agent's task, else the project.
+async function destination(c: Caller, to: unknown, agent: ObjectSummary): Promise<string> {
+  if (str(to)) return (await pageIn(c, to)).id;
+  const task = ids(agent.properties["agent-task"]).find((id) => pageOf(id));
+  return task ?? projectOf(c)!.pageId;
+}
+
+// Each source is a page of the project holding the words it quotes; the line around them is kept.
+async function sourcesOf(c: Caller, given: unknown): Promise<Source[]> {
+  const out: Source[] = [];
+  const wrong: string[] = [];
+  for (const [i, s] of (Array.isArray(given) ? given : []).entries()) {
+    const { page, quote } = (s ?? {}) as Args;
+    try {
+      const { id } = await pageIn(c, page);
+      const q = plain(str(quote));
+      const lines = roleOf(pageOf(id)!) === "thoughts" ? [] : docText(await bodyOf(id)).split("\n").map(plain);
+      const line = q ? lines.find((l) => l.includes(q)) : "";
+      if (line === undefined) wrong.push(`Source ${i + 1}: “${q.slice(0, 80)}” isn't in “${titleOf(id)}”; quote its words exactly, or leave the quote out.`);
+      else out.push({ page: id, ...(q && { quote: q, excerpt: line.slice(0, 400) }) });
+    } catch (e) {
+      wrong.push(`Source ${i + 1}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  if (wrong.length) throw new Refusal(`Nothing was published. ${wrong.join(" ")}`);
+  return out;
+}
+
+const published = (r: ObjectSummary | LLObject) => {
+  const { to } = reportOf(r)!;
+  return { report: ref(r.id), to: ref(to), note: `It shows after “${titleOf(to)}”'s own words in LeadingLight. Its blocks are ${ref(r.id)}#b1, #b2 and so on. Reports don't change: to correct one, publish another to it.` };
+};
+
+// A new report, kept before it is answered; the same call again finds the first.
+async function publish(c: Caller, a: Args, call: AgentCall) {
+  const done = space.get().pages.find((p) => reportOf(p)?.command === call.id);
+  if (done) return published(done);
+  const md = str(a.markdown).trim();
+  if (!md) throw new Refusal("Nothing was published: give the report's text as markdown.");
+  if (!projectOf(c)) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
+  const agent = await agentFor(c);
+  let to = await destination(c, a.to, agent);
+  // A report about a report corrects it: it goes beside the first, never into it.
+  const corrects = reportOf(pageOf(to)) ? to : undefined;
+  if (corrects) to = reportOf(pageOf(corrects))!.to;
+  const sources = await sourcesOf(c, a.sources);
+  const meta: ReportMeta = { by: agent.id, conversation: c.conversation, session: c.session, turn: c.turn, to, at: Date.now(), command: call.id, sources, ...(corrects && { corrects }), ...(a.ready === true && { ready: true }) };
+  const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content: htmlDoc(markdownHtml(md).html), properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
+  return published(report);
+}
+
+const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment, publish };
+const WRITES = new Set(["publish", "task", "status", "context"]);
 
 export async function runAgentTool(call: AgentCall): Promise<unknown> {
   const tool = TOOLS[call.tool];
   if (!tool) throw new Refusal(`LeadingLight has no tool called ${call.tool}.`);
+  // A write can add pages to the project: the next read looks again.
+  if (WRITES.has(call.tool)) scopes.clear();
   return tool(call.caller, call.args ?? {}, call);
 }

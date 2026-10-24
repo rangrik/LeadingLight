@@ -11,6 +11,7 @@ import { CoverBand, CoverPicker } from "~/components/page-cover";
 import { IconPicker, PageIconView } from "~/components/page-icon";
 import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
+import { ReportByline, Reports } from "~/components/reports";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
@@ -28,6 +29,7 @@ import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-m
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
 import { useThoughts } from "~/lib/thoughts";
+import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 
 // The body is read only when a save runs, not on every keystroke.
@@ -133,6 +135,8 @@ export function PageView({ page }: { page: LLObject }) {
     makeRoom();
   });
   const essay = childOf(current, "essay");
+  // An agent's report reads as it was published (features/reports.feature).
+  const report = !!reportOf(current);
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
   const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
@@ -259,7 +263,10 @@ export function PageView({ page }: { page: LLObject }) {
           )}
           <div className="relative">
             {/* Shown on hover, sitting in the space above the title so nothing moves. */}
-            <div className="absolute bottom-full -ms-2 mb-1 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/head:opacity-100 has-data-popup-open:opacity-100">
+            <div
+              className="absolute bottom-full -ms-2 mb-1 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/head:opacity-100 has-data-popup-open:opacity-100 data-[report]:hidden"
+              data-report={report || undefined}
+            >
               {!icon && (
                 <IconPicker onChange={setIcon}>
                   <Button aria-label="Add icon" className="text-muted-foreground" size="sm" variant="ghost">
@@ -307,6 +314,7 @@ export function PageView({ page }: { page: LLObject }) {
               onKeyDown={toBody}
               onPaste={pasteTitle}
               placeholder={role === "essay" ? "Essay title" : "Untitled"}
+              readOnly={report}
               ref={titleRef}
               rows={1}
               value={title}
@@ -330,21 +338,21 @@ export function PageView({ page }: { page: LLObject }) {
             />
           )}
         </div>
-        <FolderRow pageId={page.id} />
+        {report ? <div className="mt-2"><ReportByline about report={current} /></div> : <FolderRow pageId={page.id} />}
         {templateOf && (
           <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">
             <LayoutTemplate className="size-4" />
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        <PropertyPanel
+        {!report && <PropertyPanel
           onDescription={description === undefined ? addDescription : undefined}
           page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
           setProp={setProp}
           setType={setType}
           typeId={typeId}
           values={props}
-        />
+        />}
         {day && <DailyBar day={day} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
@@ -366,11 +374,13 @@ export function PageView({ page }: { page: LLObject }) {
             openLink={openHref}
             quoteTo={quoteTo}
             quotes={quotes}
+            readOnly={report}
             ref={editorRef}
             style={pageStyle(props)}
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        <Reports pageId={page.id} />
         <Linked id={page.id} />
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />

@@ -501,6 +501,15 @@ export function BlockEditor({
         touched.current = true;
       },
       reveal: (id) => {
+        const tint = "color-mix(in srgb, var(--info) 24%, transparent)";
+        // A report's block (b1, b2…), which never moves: reports don't change.
+        const nth = /^b(\d+)$/.exec(id);
+        if (nth) {
+          const block = editor.view.dom.children[Number(nth[1]) - 1] as HTMLElement | undefined;
+          block?.scrollIntoView({ block: "center", behavior: "smooth" });
+          block?.animate([{ backgroundColor: tint }, { backgroundColor: tint, offset: 0.6 }, { backgroundColor: "transparent" }], 1400);
+          return;
+        }
         // The cursor goes to the end of the anchor too, so typing continues there.
         const { doc } = editor.state;
         let at = [...anchors(doc, "note"), ...anchors(doc, "cited")].find((a) => a.id === id)?.to;
@@ -512,7 +521,6 @@ export function BlockEditor({
         const els = [...editor.view.dom.querySelectorAll<HTMLElement>(sel)];
         els[0]?.scrollIntoView({ block: "center", behavior: "smooth" });
         // An animation, not a class: changing the text's DOM would make the editor re-read it.
-        const tint = "color-mix(in srgb, var(--info) 24%, transparent)";
         for (const el of els) el.animate([{ backgroundColor: tint }, { backgroundColor: tint, offset: 0.6 }, { backgroundColor: "transparent" }], 1400);
       },
     }),

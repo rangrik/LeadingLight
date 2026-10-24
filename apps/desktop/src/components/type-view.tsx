@@ -62,10 +62,13 @@ export function TypeView({ typeId }: { typeId: string }) {
       <div className="mb-3">{type.icon ? <PageIconView icon={type.icon} large /> : <FileText className="size-16 text-muted-foreground [&_*]:stroke-[1.5]" />}</div>
       <h1 className="font-bold font-heading text-[36px] leading-[1.2] tracking-tight">{type.plural}</h1>
       <div className="-ms-2 mt-3 flex flex-wrap items-center gap-1">
-        <Button aria-label={`New ${type.name.toLowerCase()}`} className="text-muted-foreground" onClick={() => void create()} size="sm" variant="ghost">
-          <Plus />
-          <span className="hidden @md:inline">New {type.name.toLowerCase()}</span>
-        </Button>
+        {/* Agents and reports are the app's to make. */}
+        {!type.made && (
+          <Button aria-label={`New ${type.name.toLowerCase()}`} className="text-muted-foreground" onClick={() => void create()} size="sm" variant="ghost">
+            <Plus />
+            <span className="hidden @md:inline">New {type.name.toLowerCase()}</span>
+          </Button>
+        )}
         {templates.length > 0 && (
           <Menu>
             <MenuTrigger render={<Button aria-label="New from a template" className="-ms-1 text-muted-foreground" size="icon-sm" variant="ghost" />}>

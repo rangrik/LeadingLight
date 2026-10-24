@@ -1,4 +1,4 @@
-From be752dac85ef2f7c1e80af529adff96a75513c28 Mon Sep 17 00:00:00 2001
+From 5a01b3843be93c0b82f468dd0e24b83ef7f732f8 Mon Sep 17 00:00:00 2001
 From: LeadingLight <noreply@anthropic.com>
 Date: Sat, 24 Oct 2026 12:06:41 -0700
 Subject: [PATCH] LeadingLight's tools for its project agents
@@ -17,14 +17,14 @@ one sent again is kept once.
  internal/box/claudedriver.go       |   3 +
  internal/box/codexdriver.go        |   3 +
  internal/box/embeddednote.go       |   4 +-
- internal/box/leadinglight.go       | 507 +++++++++++++++++++++++++++++
+ internal/box/leadinglight.go       | 514 +++++++++++++++++++++++++++++
  internal/box/leadinglight_test.go  |  54 +++
  internal/box/peerpid_darwin.go     |  24 ++
  internal/box/peerpid_other.go      |   8 +
- internal/mcpserver/leadinglight.go |  73 +++++
+ internal/mcpserver/leadinglight.go |  73 ++++
  internal/mcpserver/mcp.go          |  23 +-
  internal/wire/server.go            |  13 +-
- 12 files changed, 726 insertions(+), 11 deletions(-)
+ 12 files changed, 733 insertions(+), 11 deletions(-)
  create mode 100644 internal/box/leadinglight.go
  create mode 100644 internal/box/leadinglight_test.go
  create mode 100644 internal/box/peerpid_darwin.go
@@ -127,10 +127,10 @@ index f3fb4ea..293cbe5 100644
 +	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."
 diff --git a/internal/box/leadinglight.go b/internal/box/leadinglight.go
 new file mode 100644
-index 0000000..179ccf2
+index 0000000..b4f2029
 --- /dev/null
 +++ b/internal/box/leadinglight.go
-@@ -0,0 +1,507 @@
+@@ -0,0 +1,514 @@
 +package box
 +
 +import (
@@ -199,7 +199,7 @@ index 0000000..179ccf2
 +}
 +
 +const (
-+	llLease   = 30 * time.Second
++	llLease   = 10 * time.Second
 +	llKeep    = 7 * 24 * time.Hour
 +	llMaxFile = 50 << 20
 +)
@@ -272,7 +272,7 @@ index 0000000..179ccf2
 +}
 +
 +// open says whether the app has asked for calls lately. Called with the lock held.
-+func (l *llBridge) open() bool { return l.asking > 0 || time.Since(l.asked) < llLease+5*time.Second }
++func (l *llBridge) open() bool { return l.asking > 0 || time.Since(l.asked) < 35*time.Second }
 +
 +func (l *llBridge) tell() {
 +	close(l.wake)
@@ -530,11 +530,18 @@ index 0000000..179ccf2
 +			slices.SortFunc(out, func(a, b LLCall) int { return int(a.At - b.At) })
 +			return out
 +		}
++		// Up to the deadline, or until a call taken by an app that went away is free again.
++		until := deadline
++		for _, c := range l.calls {
++			if free := c.claimed.Add(llLease); c.State == "waiting" && free.Before(until) {
++				until = free
++			}
++		}
 +		wake := l.wake
 +		l.mu.Unlock()
 +		select {
 +		case <-wake:
-+		case <-time.After(time.Until(deadline)):
++		case <-time.After(time.Until(until) + 10*time.Millisecond):
 +		case <-ctx.Done():
 +		}
 +		l.mu.Lock()

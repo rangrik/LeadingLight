@@ -71,7 +71,7 @@ function search(query: string, tag: boolean, actions: LinkActions, typeId?: stri
   if (!name || pool.some((p) => pageLabel(p.title).toLowerCase() === q)) return items;
   if (tag) return [...items, { key: "new", title: `Create #“${name}”`, icon: plus, link: () => actions.create(name, "tag") }];
   // Every page has a type, so a new one asks which. Tags have "#"; a day's note is made by its date.
-  const types = space.get().types.filter((t) => t.id !== "tag" && t.id !== DAILY);
+  const types = space.get().types.filter((t) => t.id !== "tag" && t.id !== DAILY && !t.made);
   return [
     ...items,
     ...types.map((t) => ({ key: `new:${t.id}`, title: t.name, section: `Create “${name}”`, icon: <RowIcon icon={t.icon} />, link: () => actions.create(name, t.id) })),
@@ -249,7 +249,7 @@ export const makeLinkHost = (actions: LinkActions): LinkHost => ({
   types: () =>
     space
       .get()
-      .types.filter((t) => t.id !== "daily")
+      .types.filter((t) => t.id !== "daily" && !t.made)
       .map((t) => ({ id: t.id, name: t.name, icon: <RowIcon icon={t.icon} />, tag: t.id === "tag" })),
   title: (id) => pageLabel(pageOf(id)?.title ?? ""),
   Mention: MentionChip,
