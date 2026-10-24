@@ -280,3 +280,12 @@ started (the runtime can't change a running session's model yet). Access maps to
 modes: Claude's default, auto and bypassPermissions; Codex's untrusted (asks before each command),
 default (works freely inside the folder, asks before leaving it) and bypassPermissions. Access and
 Plan mode change a started chat's session; a new chat's choices are its own, not Settings › AI's.
+
+The runtime keeps its own things out of the person's folders: a chat's own-branch worktree, its
+attachments and each file an agent wrote, kept as the write left it, all live in the runtime's state.
+Each agent has a browser tab of its own (its session's name), and a public site opens only once the
+person allows it. Agents are told, in one paragraph of their instructions, how to hand work to a
+worker, keep one at a check, and use the browser; Shipyard's sessions, notifications and durable
+runs do the rest, and a worker started by an agent with full access gets it too. A restart loses no
+send: the turn ledger is written before berthd exits.
+
