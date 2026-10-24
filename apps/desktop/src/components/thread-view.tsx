@@ -160,7 +160,7 @@ function StepRow({ item, page }: { item: Step; page: string }) {
           {running ? <Spinner className="size-4 shrink-0" /> : <Icon className="size-4 shrink-0" />}
           <span className="truncate">
             {label}
-            {item.kind === "tool" && (item.status === "failed" || item.status === "declined") && (
+            {item.kind === "tool" && (item.status === "failed" || item.status === "declined" || item.status === "stopped") && (
               <span className={cn(item.status === "failed" && "text-destructive-foreground")}> · {item.status}</span>
             )}
           </span>

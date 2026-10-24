@@ -5,7 +5,7 @@ import type { Quote } from "~/lib/ask";
 // Each page's threads with Claude, kept on this Mac between launches. A stream that lands after
 // the person switched pages still goes to the thread that asked, so they live outside React.
 
-export type Status = "running" | "done" | "failed" | "declined";
+export type Status = "running" | "done" | "failed" | "declined" | "stopped";
 export type Item =
   | { kind: "user"; text: string; quote?: string; files?: string[] }
   | { kind: "text"; text: string }

@@ -150,3 +150,17 @@ Feature: A project's chat
     Then the tool runs (asking first in Ask for approval) and its result shows in the answer
     And my Claude Code and Codex settings, and my MCP servers, are as they were
 
+  # Its own branch (slice 6)
+
+  Scenario: A chat on its own branch
+    Given "Research" is linked to a Git checkout
+    When I start a new chat with + › Own branch on, and ask it to change a file
+    Then the chat's header shows its branch "ll/chat-…"
+    And the change is on that branch in a worktree the runtime keeps, not in my checkout
+    And my checkout's files and branch are as they were
+    And nothing new appears beside my checkout's folder
+
+  Scenario: Own branch only where there is Git
+    Given "Research" is linked to a plain folder
+    Then + doesn't offer Own branch
+

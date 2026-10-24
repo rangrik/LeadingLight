@@ -110,8 +110,8 @@ pub fn run() {
             capture::capture_open,
             runtime::runtime_status,
             runtime::runtime_call,
-            runtime::runtime_events,
-            runtime::runtime_events_stop,
+            runtime::runtime_stream,
+            runtime::runtime_stream_stop,
             shortcuts_set
         ])
         .setup(|app| {

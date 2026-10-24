@@ -186,7 +186,10 @@ function detail(r: RuntimeRequest): string {
   const actions = (Array.isArray(input.commandActions) ? input.commandActions : []) as { command?: string }[];
   const changes = (Array.isArray(input.changes) ? input.changes : []) as { path?: string; diff?: string; kind?: { type?: string } }[];
   const how = (c: (typeof changes)[number]) => ({ add: " (new file)", delete: " (deleted)" })[c.kind?.type ?? ""] ?? "";
-  if (changes.length) return changes.map((c) => `${s(c.path).split("/").at(-1)}${how(c)}\n${s(c.diff)}`.trim()).join("\n\n");
+  // A new or deleted file's diff is its whole text; its lines are marked as a change's are.
+  const marked = (c: (typeof changes)[number]) => ({ add: "+", delete: "-" })[c.kind?.type ?? ""];
+  const lines = (c: (typeof changes)[number]) => (marked(c) ? s(c.diff).replace(/\n$/, "").split("\n").map((l) => `${marked(c)}${l}`).join("\n") : s(c.diff));
+  if (changes.length) return changes.map((c) => `${s(c.path).split("/").at(-1)}${how(c)}\n${lines(c)}`.trim()).join("\n\n");
   // Codex's other fields are only ids.
   const rest = "threadId" in input ? "" : Object.keys(input).length ? JSON.stringify(input, null, 2) : "";
   // A plan shows in the turn above its card, so it isn't repeated here.
@@ -195,7 +198,11 @@ function detail(r: RuntimeRequest): string {
 }
 
 export function ApprovalCard({ request, busy, onChoose, children, ref }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement> }) {
-  const actions = ACTIONS[request.kind === "plan" ? "plan" : "approval"].map((a) => (request.kind === "plan" && a.choice === "deny" ? { ...a, choice: "keep_planning" } : a));
+  // Codex's "always" is for this very command; Claude's for steps of its kind.
+  const exact = "threadId" in ((request.input ?? {}) as object) && request.tool === "Bash";
+  const actions = ACTIONS[request.kind === "plan" ? "plan" : "approval"].map((a) =>
+    request.kind === "plan" && a.choice === "deny" ? { ...a, choice: "keep_planning" } : exact && a.choice === "allow_always" ? { ...a, description: "Don't ask again for this command while the agent runs" } : a,
+  );
   const text = detail(request);
   const why = s((request.input as Record<string, unknown> | undefined)?.reason);
   return (

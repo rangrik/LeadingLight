@@ -40,6 +40,8 @@ export type ChatSettings = Pick<AiPrefs, "model" | "effort" | "access" | "plan">
   locked?: boolean;
   // Only one agent's models: a started project chat keeps its agent.
   models?: "claude" | "gpt";
+  // A new project chat in a Git checkout can work on a branch of its own.
+  branch?: { on: boolean; set: (on: boolean) => void };
   // The access a chat's agent has, in its words; others aren't offered.
   accessChoices?: { value: Access; description: string }[];
 };
@@ -228,10 +230,18 @@ function AddMenu({ back, s, mentions, commands, files }: Back & { mentions: bool
               <MenuSeparator />
             </>
           )}
-          <MenuCheckboxItem checked={s.plan} onCheckedChange={(plan) => s.onChange({ plan })} variant="switch">
+          {s.branch && (
+            <MenuCheckboxItem checked={s.branch.on} closeOnClick onCheckedChange={s.branch.set} variant="switch">
+              <span className="flex flex-col">
+                Own branch
+                <span className="text-muted-foreground text-xs">Works apart from your checkout, on a branch of its own</span>
+              </span>
+            </MenuCheckboxItem>
+          )}
+          <MenuCheckboxItem checked={s.plan} closeOnClick onCheckedChange={(plan) => s.onChange({ plan })} variant="switch">
             <span className="flex flex-col">
               Plan mode
-              <span className="text-muted-foreground text-xs">Claude plans first and changes nothing</span>
+              <span className="text-muted-foreground text-xs">Plans first and changes nothing</span>
             </span>
           </MenuCheckboxItem>
         </MenuPopup>

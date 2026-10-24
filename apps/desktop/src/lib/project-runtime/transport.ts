@@ -41,51 +41,46 @@ export async function ask<T = unknown>(method: string, path: string, body?: unkn
   return r.body;
 }
 
-// The runtime's events after since, as they come; ended() once the stream stops for any reason.
-export function events(since: number | null, on: (e: RuntimeEvent) => void, ended: () => void): () => void {
-  const read = (line: string) => {
-    if (!line.trim()) return;
-    try {
-      on(JSON.parse(line));
-    } catch {
-      // A line that isn't an event is skipped.
-    }
-  };
+// A streamed answer, line by line, as it comes; ended() once it stops for any reason. Stopping
+// closes it, so berthd stops the work too (a clone). Silence past quiet seconds is a lost stream.
+export function stream(method: string, path: string, body: unknown, quiet: number, on: (line: string) => void, ended: () => void): () => void {
   let stop = () => {};
   let done = false;
   const end = () => !done && ((done = true), ended());
+  const read = (line: string) => line.trim() && on(line);
   void isNative.then(async (native) => {
     if (native) {
       const { Channel } = await import("@tauri-apps/api/core");
       const channel = new Channel<string>();
       // An empty line is the stream's end (runtime.rs).
       channel.onmessage = (line) => (line ? read(line) : end());
-      const id = await invoke<number>("runtime_events", { since, on: channel });
-      stop = () => void invoke("runtime_events_stop", { id });
+      const id = await invoke<number>("runtime_stream", { method, path, body: body ?? null, quiet, on: channel }).catch(() => null);
+      if (id === null) return end();
+      stop = () => void invoke("runtime_stream_stop", { id });
       return;
     }
     const abort = new AbortController();
     stop = () => abort.abort();
-    // berthd says something at least every 25 s; silence past that is a lost stream.
-    let quiet = window.setTimeout(() => abort.abort(), 40_000);
+    let silent = window.setTimeout(() => abort.abort(), quiet * 1000);
     try {
-      const res = await fetch(`/__runtime/v1/events${since === null ? "" : `?since=${since}`}`, { signal: abort.signal });
+      const res = await fetch(`/__runtime${path}`, { method, signal: abort.signal, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
       const reader = res.body?.getReader();
       const text = new TextDecoder();
       let rest = "";
       for (;;) {
         const chunk = await reader?.read();
         if (!chunk || chunk.done) break;
-        window.clearTimeout(quiet);
-        quiet = window.setTimeout(() => abort.abort(), 40_000);
+        window.clearTimeout(silent);
+        silent = window.setTimeout(() => abort.abort(), quiet * 1000);
         const lines = (rest + text.decode(chunk.value, { stream: true })).split("\n");
         rest = lines.pop() ?? "";
         lines.forEach(read);
       }
+      read(rest);
     } catch {
       // Stopped, or the dev server went away.
     }
-    window.clearTimeout(quiet);
+    window.clearTimeout(silent);
     end();
   });
   return () => {
@@ -93,3 +88,13 @@ export function events(since: number | null, on: (e: RuntimeEvent) => void, ende
     stop();
   };
 }
+
+// The runtime's events after since, as they come; berthd says something at least every 25 s.
+export const events = (since: number | null, on: (e: RuntimeEvent) => void, ended: () => void) =>
+  stream("GET", `/v1/events${since === null ? "" : `?since=${since}`}`, undefined, 40, (line) => {
+    try {
+      on(JSON.parse(line));
+    } catch {
+      // A line that isn't an event is skipped.
+    }
+  }, ended);

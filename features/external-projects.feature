@@ -59,3 +59,31 @@ Feature: A page linked to a folder
     Given "Research" is linked to "~/LL QA/My Project"
     When I choose Unlink from the folder row's ··· menu
     Then the folder row is gone, the page is unchanged, and the folder holds what it held
+
+  # A GitHub checkout (slice 6)
+
+  Scenario: Clone a repository and link it
+    When I press Link folder, choose GitHub, enter "octocat/Hello-World" and Clone
+    Then git's progress shows under the field while it clones into "~/Developer/Hello-World"
+    And the page is linked to the new checkout, and its chat works there
+
+  Scenario: A private repository, through this Mac's own Git sign-in
+    Given git on this Mac can reach a private repository of mine (its credential helper or SSH)
+    When I clone it the same way
+    Then it clones and links without asking me for a password in LeadingLight
+
+  Scenario: Cancel a clone
+    When I press Cancel while a large repository is cloning
+    Then the clone stops, and no half-made folder is left in "~/Developer"
+
+  Scenario: The checkout is already there
+    Given "~/Developer/Hello-World" exists, with files I changed and haven't committed
+    When I clone "octocat/Hello-World" into "~/Developer"
+    Then it says the folder is already there and offers Link it
+    When I press Link it
+    Then the page is linked to that checkout, and my changed files are as they were
+
+  Scenario: A wrong repository says why
+    When I clone "octocat/no-such-repository-here"
+    Then it says git couldn't find it, and nothing is made or linked
+

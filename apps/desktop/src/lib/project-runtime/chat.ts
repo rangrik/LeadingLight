@@ -29,6 +29,8 @@ export type Chat = {
   requests: RuntimeRequest[];
   answers: Record<string, AnswerDraft>;
   deliveries: Record<string, { delivery: Delivery; error?: string }>;
+  // Read from the runtime at least once since it opened.
+  synced?: boolean;
   // Words given back to the composer: a message not sent, or an answer that can't go now, and why.
   restore: { text: string; at: number; why?: string } | null;
   error: string | null;
@@ -119,7 +121,7 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // A mode set while this read was out is newer than both the conversation and the session's.
   const changed = watching.get(key)?.conv.id === conv.id && watching.get(key)!.conv !== conv;
   const latest = changed ? watching.get(key)!.conv : { ...conv, mode: controls?.mode ?? conv.mode };
-  patch(key, { conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  patch(key, { synced: true, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
 
@@ -183,7 +185,7 @@ export function watch(key: string, conv: Conversation): () => void {
 
 // Sends text: a new chat starts its agent in the folder; an ended one is resumed first. Each
 // message carries a key of its own, so a send repeated after a lost answer is one message.
-export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan">, files: File[] = []): Promise<Conversation> {
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = []): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
@@ -196,8 +198,10 @@ export async function send(key: string, location: string, text: string, prefs: P
     if (!conv) {
       const name = `chat-${crypto.randomUUID().slice(0, 8)}`;
       const agent = agentOf(prefs.model);
+      // Its own branch: a worktree the runtime keeps, so the checkout is left as it is.
+      const where = prefs.branch ? `${location}/${(await ask<{ name: string }>("POST", `/v1/locations/${location}/worktrees`, { name, branch: `ll/${name}` })).name}` : location;
       // With files the agent starts without a prompt, so they are there before the message naming them.
-      await ask("POST", "/v1/sessions", { name, location, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, title: text.split("\n")[0], ...(!files.length && { prompt: text }) });
+      await ask("POST", "/v1/sessions", { name, location: where, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, title: text.split("\n")[0], ...(!files.length && { prompt: text }) });
       conv = (await listChats(location)).find((c) => c.session === name) ?? null;
       if (!conv) throw new Error("The runtime didn't keep the chat.");
       if (files.length) await ask("POST", `/v1/sessions/${name}/send`, { text: await full(name), when: "now", idem_key: id });

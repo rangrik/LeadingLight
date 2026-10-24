@@ -1,14 +1,15 @@
 import { objects, type ProjectFolder } from "~/lib/objects";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
-import { ask } from "~/lib/project-runtime/transport";
+import { ask, stream } from "~/lib/project-runtime/transport";
 import { createStore } from "~/lib/state";
 
 // Pages linked to folders (features/external-projects.feature). LeadingLight keeps which page
 // has which folder; the runtime knows each folder as a location named after the page, and says
 // which folder it is (its identity, not its path) and whether it is there.
 
-type Location = { name: string; path: string; folder_id?: string; missing?: boolean };
-export type FolderState = { folder: ProjectFolder; missing: boolean };
+type Location = { name: string; path: string; folder_id?: string; missing?: boolean; repo?: boolean };
+// repo: a Git checkout, whose chats can work on a branch of their own.
+export type FolderState = { folder: ProjectFolder; missing: boolean; repo?: boolean };
 
 export const folders = createStore<Map<string, FolderState>>(new Map());
 
@@ -44,10 +45,10 @@ export async function refresh(): Promise<void> {
     // A link from before this runtime (a new Mac, a cleared runtime) is told to it again.
     if (!loc) {
       const again = await ask<Location>("POST", "/v1/locations", { name: s.folder.location, path: s.folder.path }).catch(() => null);
-      next.set(id, { ...s, missing: !again || !!again.missing });
+      next.set(id, { ...s, missing: !again || !!again.missing, repo: !!again?.repo });
       continue;
     }
-    next.set(id, { ...s, missing: !!loc.missing });
+    next.set(id, { ...s, missing: !!loc.missing, repo: !!loc.repo });
   }
   folders.set(next);
 }
@@ -80,8 +81,30 @@ export async function linkFolder(pageId: string, path: string, force = false): P
   const now = Date.now();
   const folder: ProjectFolder = { pageId, path: loc.path, folderId: loc.folder_id ?? found.folder_id ?? "", location, createdAt: mine?.createdAt ?? now, updatedAt: now };
   await objects.putFolder(folder);
-  folders.set(new Map(folders.get()).set(pageId, { folder, missing: false }));
+  folders.set(new Map(folders.get()).set(pageId, { folder, missing: false, repo: !!loc.repo }));
   return { ok: true, folder };
+}
+
+// owner/name is a GitHub repository; anything else is git's own URL.
+const repoUrl = (s: string) => (/^[\w.-]+\/[\w.-]+$/.test(s) ? `https://github.com/${s}.git` : s);
+
+// Clones a repository with this Mac's own Git sign-in into parent, git's progress line by line.
+// The runtime removes a clone that fails or is stopped. Resolves to where it landed.
+export function cloneRepo(repo: string, parent: string, progress: (line: string) => void) {
+  let stop = () => {};
+  const done = new Promise<{ name: string; path: string }>((ok, fail) => {
+    let last: { location?: Location; error?: string } = {};
+    stop = stream("POST", "/v1/locations/clone", { url: repoUrl(repo), parent }, 600, (line) => {
+      try {
+        const m = JSON.parse(line) as { line?: string; done?: boolean; location?: Location; error?: string };
+        if (m.line) progress(m.line);
+        if (m.done || m.error) last = m;
+      } catch {
+        // Not one of the runtime's lines.
+      }
+    }, () => (last.location ? ok(last.location) : fail(new Error(last.error ?? "The clone stopped."))));
+  });
+  return { stop: () => stop(), done };
 }
 
 // The page forgets its folder; the folder and its files are left as they are.

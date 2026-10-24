@@ -7,8 +7,8 @@ use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -29,7 +29,7 @@ pub struct Runtime {
     status: Mutex<Option<Status>>,
     // One start at a time; the others wait for its answer.
     starting: Mutex<()>,
-    streams: Mutex<HashMap<u64, Arc<AtomicBool>>>,
+    streams: Mutex<HashMap<u64, UnixStream>>,
     next: AtomicU64,
 }
 
@@ -162,7 +162,8 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
     let log = std::fs::OpenOptions::new().create(true).append(true).open(home.join("berthd.log"));
     let mut c = Command::new(dir.join("berthd"));
     c.args(["serve", "--listen", "127.0.0.1:0"]).env_clear();
-    for key in ["HOME", "USER", "LOGNAME", "SHELL", "TMPDIR"] {
+    // SSH_AUTH_SOCK: git clones and pushes reach the person's SSH agent.
+    for key in ["HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "SSH_AUTH_SOCK"] {
         if let Some(v) = std::env::var_os(key) {
             c.env(key, v);
         }
@@ -308,27 +309,24 @@ pub async fn runtime_call(app: AppHandle, method: String, path: String, body: Op
     .map_err(|e| e.to_string())?
 }
 
-// The runtime's events from since, one line each, until runtime_events_stop or the stream ends.
+// A streamed answer, one line each, until runtime_stream_stop or it ends: the runtime's events, or
+// a clone's progress. Stopping closes the connection, so berthd stops the work as well.
 #[tauri::command]
-pub fn runtime_events(app: AppHandle, rt: State<'_, Runtime>, since: Option<i64>, on: Channel<String>) -> u64 {
+pub fn runtime_stream(app: AppHandle, rt: State<'_, Runtime>, method: String, path: String, body: Option<Value>, quiet: u64, on: Channel<String>) -> Result<u64, String> {
     let id = rt.next.fetch_add(1, Ordering::Relaxed);
-    let stop = Arc::new(AtomicBool::new(false));
-    rt.streams.lock().unwrap().insert(id, stop.clone());
-    let sock = socket(&home(&app));
+    let s = UnixStream::connect(socket(&home(&app))).map_err(|e| e.to_string())?;
+    rt.streams.lock().unwrap().insert(id, s.try_clone().map_err(|e| e.to_string())?);
     std::thread::spawn(move || {
-        let path = match since {
-            Some(n) => format!("/v1/events?since={n}"),
-            None => "/v1/events".into(),
-        };
-        let run = || -> Result<(), String> {
-            let mut s = UnixStream::connect(&sock).map_err(|e| e.to_string())?;
-            // berthd says something at least every 25 s; silence past that is a lost stream.
-            s.set_read_timeout(Some(Duration::from_secs(40))).map_err(|e| e.to_string())?;
-            s.write_all(format!("GET {path} HTTP/1.1\r\nHost: box\r\nConnection: close\r\n\r\n").as_bytes()).map_err(|e| e.to_string())?;
+        let run = |mut s: UnixStream| -> Result<(), String> {
+            // Silence past quiet seconds is a lost stream (berthd's events say something every 25 s).
+            s.set_read_timeout(Some(Duration::from_secs(quiet))).map_err(|e| e.to_string())?;
+            let bytes = body.map(|b| b.to_string().into_bytes()).unwrap_or_default();
+            let head = format!("{method} {path} HTTP/1.1\r\nHost: box\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", bytes.len());
+            s.write_all(head.as_bytes()).and_then(|_| s.write_all(&bytes)).map_err(|e| e.to_string())?;
             let mut r = BufReader::new(s);
-            read_head(&mut r)?;
+            let (_, chunked) = read_head(&mut r)?;
             let mut pending = Vec::new();
-            read_chunks(&mut r, |data| {
+            let mut lines = |data: &[u8]| {
                 pending.extend_from_slice(data);
                 while let Some(i) = pending.iter().position(|&b| b == b'\n') {
                     let line: Vec<u8> = pending.drain(..=i).collect();
@@ -337,21 +335,30 @@ pub fn runtime_events(app: AppHandle, rt: State<'_, Runtime>, since: Option<i64>
                         return false;
                     }
                 }
-                !stop.load(Ordering::Relaxed)
-            })
+                true
+            };
+            if chunked {
+                return read_chunks(&mut r, lines);
+            }
+            // A refusal comes whole, not streamed: one line.
+            let mut all = Vec::new();
+            r.read_to_end(&mut all).map_err(|e| e.to_string())?;
+            all.push(b'\n');
+            lines(&all);
+            Ok(())
         };
-        let _ = run();
-        // The webview hears the stream ended and asks again from its last event.
+        let _ = run(s);
+        // An empty line is the end; the webview asks again from its last event.
         let _ = on.send(String::new());
         app.state::<Runtime>().streams.lock().unwrap().remove(&id);
     });
-    id
+    Ok(id)
 }
 
 #[tauri::command]
-pub fn runtime_events_stop(rt: State<'_, Runtime>, id: u64) {
-    if let Some(stop) = rt.streams.lock().unwrap().remove(&id) {
-        stop.store(true, Ordering::Relaxed);
+pub fn runtime_stream_stop(rt: State<'_, Runtime>, id: u64) {
+    if let Some(s) = rt.streams.lock().unwrap().remove(&id) {
+        let _ = s.shutdown(std::net::Shutdown::Both);
     }
 }
 

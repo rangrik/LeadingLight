@@ -1,4 +1,4 @@
-import { ChevronDown, FileText, MessagesSquare, Plus } from "lucide-react";
+import { ChevronDown, FileText, GitBranch, MessagesSquare, Plus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -37,7 +37,7 @@ const ACCESS_IN_FOLDER: Record<Agent, { value: Access; description: string }[]> 
   ],
   codex: [
     { value: "ask", description: "Codex asks before each command and change" },
-    { value: "auto", description: "Codex works freely inside the folder and asks before going outside it or using the network" },
+    { value: "auto", description: "Codex works freely in the folder and temporary folders, and asks before going elsewhere or online" },
     { value: "full", description: "Codex runs anything without asking, outside the folder too" },
   ],
 };
@@ -75,6 +75,8 @@ function turnsOf(chat: Chat): Shown[] {
   const sent = chat.turns.filter((t) => t.origin !== "terminal");
   out.forEach((turn, k) => {
     const isLast = k === out.length - 1;
+    // A step still going when its turn ended was stopped with it.
+    if (!(isLast && live)) turn.items = turn.items.map((i) => (i.kind === "tool" && i.status === "running" ? { ...i, status: "stopped" } : i));
     // The reply being written shows until the record has its words.
     if (isLast && (live || chat.draft)) return chat.draft && !inRecord(chat.window, chat.draft) && turn.items.push({ kind: "text", text: chat.draft });
     // Only turns started by a message line up with them: the agent can start one itself.
@@ -93,6 +95,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
   const [file, setFile] = useState<string | null>(null);
   const [attached, setAttached] = useState<File[]>([]);
+  const [branch, setBranch] = useState(false);
   const [commands, setCommands] = useState<Command[]>([]);
   // A new chat's settings start as Settings › AI's and stay this chat's own.
   const defaults = () => ({ model: prefs.model, effort: prefs.effort, access: prefs.access, plan: prefs.plan });
@@ -134,15 +137,19 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const open = chat.requests.find((r) => r.blocking && (r.state === "pending" || r.state === "recorded"));
   // A question the agent isn't waiting on sits above the composer, which stays.
   const front = open ?? chat.requests.find((r) => !r.blocking && r.kind === "question" && (r.state === "pending" || r.state === "recorded"));
-  // It takes the keyboard from the composer it hides, never from the page.
+  // It takes the keyboard from the composer it hides, never from the page; and when the chat opens on it.
+  const opening = useRef(true);
   useEffect(() => {
-    const here = document.activeElement === document.body || !!field.current?.closest("[data-testid=project-chat]")?.contains(document.activeElement);
+    const here = opening.current || document.activeElement === document.body || !!field.current?.closest("[data-testid=project-chat]")?.contains(document.activeElement);
     if (open && here) card.current?.focus();
-  }, [open?.id, key, open && chat.answers[open.id]?.index]);
+    if (open || chat.synced) opening.current = false;
+  }, [open?.id, key, open && chat.answers[open.id]?.index, chat.synced]);
 
   if (!state || !location) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">Link a folder to this page to chat in it.</p>;
   if (state.missing) return <p className="m-auto p-6 text-center text-muted-foreground text-sm">The folder isn't there any more. Relink it from the page's folder row.</p>;
-  const busy = chat.session?.agent_state === "running" || waitingOn.length > 0 || !!chat.draft;
+  // An agent waiting with nothing in front of the person is still at work (Codex runs an approved command so).
+  const working = chat.session?.agent_state === "running" || (chat.session?.agent_state === "waiting" && !open);
+  const busy = working || waitingOn.length > 0 || !!chat.draft;
   const draft = front ? chat.answers[front.id] : undefined;
   const sent = front ? chat.deliveries[front.id] : undefined;
   const delivery = front ? (sent?.delivery === "sending" || sent?.delivery === "failed" ? sent.delivery : deliveryOf(front, draft, false, false)) : "pending";
@@ -165,11 +172,11 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             (err) => toastManager.add({ type: "error", title: String(err.message ?? err) }),
           ),
       }
-    : { ...mine, accessChoices: ACCESS_IN_FOLDER[agent], onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
+    : { ...mine, accessChoices: ACCESS_IN_FOLDER[agent], branch: state.repo ? { on: branch, set: setBranch } : undefined, onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
   const go = (text: string) => {
     stuck.current = true;
     const files = attached;
-    void send(key, location, text, settings, files).then((c) => {
+    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files).then((c) => {
       setAttached((a) => a.filter((f) => !files.includes(f)));
       if (!current) {
         adopt(key, c.id);
@@ -190,7 +197,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             <ChevronDown className="size-3.5 opacity-60" />
           </MenuTrigger>
           <MenuPopup align="start" className="w-72" finalFocus={field}>
-            <MenuItem onClick={() => (setCurrent(null), setFresh(defaults()))}>
+            <MenuItem onClick={() => (setCurrent(null), setFresh(defaults()), setBranch(false))}>
               <Plus />
               New chat
             </MenuItem>
@@ -204,7 +211,10 @@ export function ProjectChat({ pageId }: { pageId: string }) {
                       <MenuRadioItem className="grid-cols-[.75rem_minmax(0,1fr)]" closeOnClick key={c.id} value={c.id}>
                         <span className="flex min-w-0 items-baseline gap-3">
                           <span className="min-w-0 flex-1 truncate">{c.title || "Untitled chat"}</span>
-                          <span className="shrink-0 text-muted-foreground text-xs">{when(c.updated ?? c.created)}</span>
+                          <span className="shrink-0 text-muted-foreground text-xs">
+                            {c.agent === "codex" && "Codex · "}
+                            {when(c.updated ?? c.created)}
+                          </span>
                         </span>
                       </MenuRadioItem>
                     ))}
@@ -214,6 +224,13 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
           </MenuPopup>
         </Menu>
+        {/* A chat on its own branch says which; its worktree is the runtime's (slice 6). */}
+        {started?.location?.includes("/") && (
+          <span className="ms-auto flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs">
+            <GitBranch className="size-4 shrink-0" />
+            <span className="truncate">ll/{started.location.split("/")[1]}</span>
+          </span>
+        )}
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
@@ -221,7 +238,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         ref={log}
       >
         {/* A chat whose agent session was removed reads its record again once it is picked up. */}
-        {turns.length === 0 && waitingOn.length === 0 && started && !started.session && <p className="m-auto p-6 text-center text-muted-foreground">Send a message to pick this chat up again; its earlier turns come back with it.</p>}
+        {turns.length === 0 && waitingOn.length === 0 && started && chat.synced && !chat.session && <p className="m-auto p-6 text-center text-muted-foreground">Send a message to pick this chat up again; its earlier turns come back with it.</p>}
         {turns.length === 0 && waitingOn.length === 0 && !started && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />
@@ -302,20 +319,21 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           settings={settings}
         />
       </div>
-      <FilePreview file={file} location={location} onClose={() => setFile(null)} />
+      <FilePreview file={file} location={location} onClose={() => setFile(null)} worktree={started?.location?.split("/")[1]} />
     </div>
   );
 }
 
 // A file the agent changed, as it is in the folder now.
-function FilePreview({ file, location, onClose }: { file: string | null; location: string; onClose: () => void }) {
+function FilePreview({ file, location, worktree, onClose }: { file: string | null; location: string; worktree?: string; onClose: () => void }) {
   const [text, setText] = useState<string | null>(null);
   useEffect(() => {
     setText(null);
     if (!file) return;
-    // The folder's own workspace: a checkout's main worktree, or a plain folder itself.
-    void ask<{ name: string; worktrees?: { name: string; main?: boolean }[] }[]>("GET", "/v1/locations")
-      .then((all) => all.find((l) => l.name === location)?.worktrees?.find((w) => w.main)?.name ?? location)
+    // The chat's own worktree, else the folder's: a checkout's main worktree, or a plain folder itself.
+    type Loc = { name: string; worktrees?: { name: string; main?: boolean }[] };
+    const where = worktree ? Promise.resolve(worktree) : ask<Loc[]>("GET", "/v1/locations").then((all) => all.find((l) => l.name === location)?.worktrees?.find((w) => w.main)?.name ?? location);
+    void where
       .then((wt) => ask<{ content?: string }>("GET", `/v1/locations/${location}/worktrees/${encodeURIComponent(wt)}/file?path=${encodeURIComponent(file)}`))
       .then((f) => setText(f.content ?? ""), (e) => setText(`Couldn't read it: ${e.message}`));
   }, [file]);

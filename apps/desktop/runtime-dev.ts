@@ -87,7 +87,7 @@ async function ensure(restart: boolean): Promise<Status> {
   fs.mkdirSync(path.join(home, "user"), { recursive: true });
   const log = fs.openSync(path.join(home, "berthd.log"), "a");
   const env = {
-    HOME: os.homedir(), USER: process.env.USER, LOGNAME: process.env.LOGNAME, SHELL: process.env.SHELL, TMPDIR: process.env.TMPDIR,
+    HOME: os.homedir(), USER: process.env.USER, LOGNAME: process.env.LOGNAME, SHELL: process.env.SHELL, TMPDIR: process.env.TMPDIR, SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
     LANG: "en_US.UTF-8", PATH: shellPath(), BERTH_HOME: home, BERTH_USER_DIR: path.join(home, "user"), BERTH_EMBEDDED: "1",
     BERTH_TMUX_SOCKET: `leadinglight-dev-${hash}`, BERTH_PORT_BASE: String(48000 + (parseInt(hash, 16) % 9) * 100),
   };
