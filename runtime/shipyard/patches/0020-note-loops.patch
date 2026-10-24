@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:41:31 -0700
+Subject: [PATCH] Embedded: agents are told of checked loops and second
+ opinions
+
+The note adds berthd loop, which prompts a worker, runs a check and feeds failures back at most N times as a durable run, and handing a review to another worker; the agent chooses.
+---
+ internal/box/embeddednote.go | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/internal/box/embeddednote.go b/internal/box/embeddednote.go
+index 78b17fd..f3fb4ea 100644
+--- a/internal/box/embeddednote.go
++++ b/internal/box/embeddednote.go
+@@ -8,4 +8,7 @@ const embeddedNote = "You work inside a project runtime. To hand part of the wor
+ 	"`berthd session new $BERTH_LOCATION --agent claude` (or `--agent codex`) and then " +
+ 	"`berthd session send <its name> '<the task>'`, then end your turn: its result comes back to you as a " +
+ 	"<berth-notification> when it finishes. Send again to follow up; `berthd session kill <name>` stops it. " +
++	"To keep a worker at something until a check passes, `berthd loop <name> --prompt '<the task>' --check '<command>' --max 3 --detach` " +
++	"prompts it, runs the check and gives it the failures, at most that many times, as a run that outlives your turn; you hear how it ended. " +
++	"For a second opinion, hand the review to another worker. Use these when they help; you choose. " +
+ 	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone."
+-- 
+2.51.2
+

@@ -279,7 +279,25 @@ async function workers() {
     const all = (await api("GET", "/v1/sessions")).json;
     const worker = all.find((x) => x.name !== lead && x.agent === "codex" && x.location?.startsWith("plain"));
     if (!reply || !worker) throw new Error(`sessions ${JSON.stringify(all.map((x) => [x.name, x.agent]))}`);
-    return { worker: worker.name };
+    // Started by a lead with full access, it has it too: nobody else is there to answer its asks.
+    const mode = (await api("GET", "/v1/conversations")).json.find((c) => c.session === worker.name)?.mode;
+    if (mode !== "bypassPermissions") throw new Error(`the worker's mode is ${mode}`);
+    return { worker: worker.name, mode };
+  });
+  await check("workers: a checked loop repairs within its bound", async () => {
+    // A task the first try won't meet, and a check that says why: the loop feeds that back.
+    await api("POST", "/v1/sessions", { name: "probe-fixer", location: "plain", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low" });
+    rmSync(join(folder, "n.txt"), { force: true });
+    const check = 'test "$(cat n.txt)" = 3 || { echo "n.txt must hold 3, it holds $(cat n.txt)"; exit 1; }';
+    // Started as the lead would, from its session: the lead hears how it ended.
+    const said = execFileSync(bin, ["loop", "probe-fixer", "--prompt", "Write the number 1 to n.txt, nothing else.", "--check", check, "--max", "3", "--detach"], { env: { ...process.env, BERTH_HOME: state, BERTH_SESSION: lead } }).toString();
+    const id = /Loop run (\S+) started/.exec(said)?.[1];
+    if (!id) throw new Error(said);
+    const run = await until("the loop ended", async () => { const r = (await api("GET", `/v1/runs/${id}`)).json; return ["succeeded", "failed", "cancelled"].includes(r?.status) && r; }, 400_000);
+    const n = readFileSync(join(folder, "n.txt"), "utf8").trim();
+    if (run.status !== "succeeded" || n !== "3") throw new Error(`run ${run.status}, n.txt ${n}`);
+    await until("the lead told of the run", async () => (await items(lead)).some((i) => i.kind === "report" && i.report?.run === id), 120_000);
+    return { run: id, status: run.status };
   });
   await check("workers: the same worker launched twice is one", async () => {
     const body = { name: "probe-once", location: "plain", agent: "claude", driver: "claude", mode: "default", model: "haiku", effort: "low" };

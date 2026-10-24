@@ -1,0 +1,27 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:48:22 -0700
+Subject: [PATCH] A detached loop reports back to the agent that started it
+
+berthd loop --detach names its caller, as berthd run does, so the agent that started it hears how it ended.
+---
+ internal/boxcmd/runcmd.go | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/internal/boxcmd/runcmd.go b/internal/boxcmd/runcmd.go
+index 57565b3..bda8f29 100644
+--- a/internal/boxcmd/runcmd.go
++++ b/internal/boxcmd/runcmd.go
+@@ -359,7 +359,8 @@ func loopRun(ctx context.Context, c *box.Client, session, prompt, check string,
+ 	if prompt != "" {
+ 		params["prompt"] = prompt
+ 	}
+-	s, err := c.StartRun(ctx, box.RunRequest{Template: "loop", Params: params}, "loop-"+session+"-"+strconv.FormatInt(time.Now().UnixNano(), 36))
++	// Detached, the agent that started it hears how it ended, as with a run it starts.
++	s, err := reportBack(c, !detach).StartRun(ctx, box.RunRequest{Template: "loop", Params: params}, "loop-"+session+"-"+strconv.FormatInt(time.Now().UnixNano(), 36))
+ 	if err != nil {
+ 		return err
+ 	}
+-- 
+2.51.2
+

@@ -1,0 +1,48 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:55:31 -0700
+Subject: [PATCH] Embedded: a worker takes its lead's full access
+
+berthd session new names the agent that runs it; in an embedded berthd a worker started by an agent with full access gets it too, since nobody else is there to answer its every ask.
+---
+ internal/box/api.go       | 9 +++++++++
+ internal/boxcmd/boxcmd.go | 3 ++-
+ 2 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 92579d2..fd7dde1 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -738,6 +738,15 @@ func (b *Box) addSession(w http.ResponseWriter, r *http.Request) error {
+ 		if !ok {
+ 			return badRequest("unknown agent %q", req.Agent)
+ 		}
++		// A worker an embedded agent starts works with that agent's full access, if it has it:
++		// nobody else would be there to answer its every ask.
++		if caller := strings.TrimSpace(r.Header.Get(CallerHeader)); Embedded && req.Mode == "" && caller != "" {
++			if cs, err := b.Sessions.Get(r.Context(), caller); err == nil && cs.conv != "" {
++				if meta, _ := readConversation(cs.conv); meta.Mode == "bypassPermissions" {
++					req.Mode = "bypassPermissions"
++				}
++			}
++		}
+ 		// No driver named (the berth tools, the CLI): the box's default.
+ 		if kind, mode, err := b.startDriver(p, req.Driver, req.Mode); err != nil {
+ 			return err
+diff --git a/internal/boxcmd/boxcmd.go b/internal/boxcmd/boxcmd.go
+index b47c1e9..e094af8 100644
+--- a/internal/boxcmd/boxcmd.go
++++ b/internal/boxcmd/boxcmd.go
+@@ -1038,7 +1038,8 @@ func sessionNew(ctx context.Context, c *box.Client, args []string, out io.Writer
+ 		return usageErr("session new LOC[/WORKTREE] [--name N] [--agent ID [--prompt TEXT]] [--title T] [--open split|tab] [-- COMMAND...]")
+ 	}
+ 	req.Location, req.Command = pos[0], commandLine(command)
+-	sess, err := c.StartSession(ctx, req)
++	// Named by the agent that starts it, so a worker can take its access (addSession).
++	sess, err := reportBack(c, false).StartSession(ctx, req)
+ 	if err != nil {
+ 		return err
+ 	}
+-- 
+2.51.2
+
