@@ -1,7 +1,8 @@
 // Drives the built runtime against real Claude Code and Codex: launch, send,
-// answer, approve, restart, resume, and an agent's browser in a plain folder.
+// answer, approve, restart, resume, an agent's browser in a plain folder, and requests
+// answered once by id.
 // Run after every runtime update.
-//   node scripts/project-runtime/probe.mjs [claude|codex|browser]
+//   node scripts/project-runtime/probe.mjs [claude|codex|browser|requests]
 import { spawn, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request } from "node:http";
@@ -195,6 +196,52 @@ async function codex() {
   });
 }
 
+// The runtime's requests (patch 0007): each asked thing named once, answered once by command.
+async function requests() {
+  const s = "probe-requests";
+  const open = (kind) => until(`a pending ${kind}`, async () => (await api("GET", `/v1/sessions/${s}/requests`)).json?.find((r) => r.kind === kind && r.state === "pending"));
+  const respond = (id, body) => api("POST", `/v1/sessions/${s}/requests/${encodeURIComponent(id)}/respond`, body);
+  let question;
+  await check("requests: a question is named by its process and Claude's own id", async () => {
+    await api("POST", "/v1/sessions", { name: s, location: "plain", agent: "claude", driver: "claude", mode: "default", model: "sonnet", effort: "low",
+      prompt: "Use AskUserQuestion to ask me one single-choice question: which season do I prefer, options Summer and Winter. Then use the Write tool to write my answer to season.txt, then reply DONE." });
+    question = await open("question");
+    if (!/^\d+-/.test(question.id) || question.questions?.[0]?.options?.length !== 2) throw new Error(JSON.stringify(question));
+    return question.id;
+  });
+  await check("requests: the same command twice is one answer and one receipt; another command is refused", async () => {
+    const body = { command: "probe-q1", answers: [{ picks: ["Winter"] }] };
+    const [a, b] = await Promise.all([respond(question.id, body), respond(question.id, body)]);
+    if (a.status !== 200 || b.status !== 200 || a.json.receipt.state !== "written" || JSON.stringify(a.json.receipt) !== JSON.stringify(b.json.receipt)) throw new Error(JSON.stringify([a.json, b.json]));
+    const other = await respond(question.id, { command: "probe-q2", answers: [{ picks: ["Summer"] }] });
+    if (other.status !== 409) throw new Error(`another command: ${other.status} ${JSON.stringify(other.json)}`);
+    const done = await until("resolved", async () => (await api("GET", `/v1/sessions/${s}/requests`)).json.find((r) => r.id === question.id && r.state === "resolved"));
+    const asked = (await items(s)).find((i) => i.kind === "question");
+    if (asked?.answers?.join() !== "Winter") throw new Error(`answered ${asked?.answers}`);
+    return { state: done.state, command: done.command };
+  });
+  await check("requests: an approval is answered by id, and what an ended process asked can't be answered", async () => {
+    const approval = await open("approval");
+    const r = await respond(approval.id, { command: "probe-a1", choice: "allow" });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.json));
+    await until("season.txt", async () => readFileSync(join(folder, "season.txt"), "utf8").includes("Winter"));
+    await until("idle", async () => (await session(s))?.agent_state === "finished");
+    // A new question, then the agent's process ends before it's answered.
+    await send(s, "Use AskUserQuestion to ask me which drink I prefer, options Tea and Coffee.", "probe-r2");
+    const left = await open("question");
+    await api("DELETE", `/v1/sessions/${s}`);
+    const conv = (await api("GET", "/v1/conversations")).json.find((c) => c.session === s).id;
+    const back = (await resume(conv)).name;
+    // Stopping it ends its turn (cancelled) or its process (expired): either way, never answered.
+    const late = await api("POST", `/v1/sessions/${back}/requests/${encodeURIComponent(left.id)}/respond`, { command: "probe-r3", answers: [{ picks: ["Tea"] }] });
+    if (![409, 410].includes(late.status) || !["cancelled", "expired"].includes(late.json?.request?.state)) throw new Error(`an ended process's question: ${late.status} ${JSON.stringify(late.json)}`);
+    const log = readFileSync(join(state, "box", "conversations", conv, "events.jsonl"), "utf8");
+    const native = left.id.slice(left.id.indexOf("-") + 1);
+    if (log.split("\n").some((l) => l.includes('"dir":"in"') && l.includes(native))) throw new Error("an answer reached the agent");
+    return { state: late.json.request.state };
+  });
+}
+
 // A plain folder's own page, driven by an agent through its browser while an observer
 // watches that tab, with nothing written into the folder.
 async function browser() {
@@ -258,6 +305,7 @@ try {
   if (!only || only === "claude") await claude();
   if (!only || only === "codex") await codex();
   if (!only || only === "browser") await browser();
+  if (!only || only === "requests") await requests();
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
     seeOurs();

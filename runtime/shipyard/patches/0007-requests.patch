@@ -1,0 +1,1051 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 05:15:49 -0700
+Subject: [PATCH] Requests: what an agent asks, named once, answered once
+
+Each question, approval or plan a structured agent asks is a request named
+by its agent process's place in the log (its generation) and the agent's
+own id: pending, recorded once an answer is written, resolved once the
+agent takes it (the tool's result comes back, or Codex says so),
+cancelled when withdrawn, expired when its process ends. The ledger is
+rebuilt from the log. GET /v1/sessions/{name}/requests lists them;
+POST .../requests/{id}/respond answers one with a command id, kept in the
+conversation's requests.json before the answer is written, so a retry is
+told the same receipt and a second answer is refused. request.changed
+says which changed.
+---
+ internal/box/api.go           |   1 +
+ internal/box/claudedriver.go  | 196 +++++++++++++++++--
+ internal/box/codexdriver.go   | 155 ++++++++++++++-
+ internal/box/requests.go      | 354 ++++++++++++++++++++++++++++++++++
+ internal/box/requests_test.go |  75 +++++++
+ 5 files changed, 767 insertions(+), 14 deletions(-)
+ create mode 100644 internal/box/requests.go
+ create mode 100644 internal/box/requests_test.go
+
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 88444fc..09dc7f4 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -275,6 +275,7 @@ func (b *Box) Mount(s *wire.Server) {
+ 	b.mountRuns(route)
+ 	b.mountHistory(route)
+ 	b.mountAnswer(route)
++	b.mountRequests(route)
+ 	b.mountConversations(route)
+ 	b.mountBrowser(route)
+ 	b.mountNotify(route)
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index a7d0607..2acedf9 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -232,6 +232,8 @@ type claudeConv struct {
+ 	queue []func()
+ 	kick  chan struct{}
+ 	gone  bool
++	// reqs is what Claude asked, by request (requests.go).
++	reqs *requestLedger
+ }
+ 
+ // claudeDriver holds the structured sessions berthd follows.
+@@ -289,7 +291,7 @@ func (d *claudeDriver) conv(sess Session) (*claudeConv, error) {
+ 	if c == nil || c.conv != sess.conv {
+ 		c = &claudeConv{b: d.b, name: sess.Name, cwd: sess.Dir, conv: sess.conv, sock: sess.sock,
+ 			log: filepath.Join(sess.conv, agenthost.LogName), replies: map[string]chan json.RawMessage{}, changed: make(chan struct{}), caught: make(chan struct{}),
+-			kick: make(chan struct{}, 1)}
++			kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv)}
+ 		go c.speak()
+ 		d.convs[sess.Name] = c
+ 	}
+@@ -313,6 +315,9 @@ func (c *claudeConv) follow() {
+ 		return nil
+ 	})
+ 	c.reconcile()
++	c.mu.Lock()
++	c.reqs.reconcile()
++	c.mu.Unlock()
+ 	c.caughtOnce.Do(func() { close(c.caught) })
+ 	var noHost time.Time
+ 	for {
+@@ -422,14 +427,21 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 			}
+ 		}
+ 	}()
++	defer func() {
++		if ids := c.reqs.told(); live && len(ids) > 0 {
++			say = append(say, func() { c.b.tellRequests(c.name, ids) })
++		}
++	}()
+ 	switch e.Dir {
+ 	case "host":
+ 		switch e.Event {
+ 		case "started":
+ 			// A host started again (resumed, or back from its terminal).
++			c.reqs.started(e.Seq, e.At)
+ 			c.busy, c.pending, c.since, c.exited = false, nil, time.Time{}, false
+ 			say = append(say, func() { c.event(adapters.Ready, nil, nil) })
+ 		case "exited":
++			c.reqs.exited(e.At)
+ 			c.exited, c.busy, c.pending = true, false, nil
+ 			say = append(say, func() { c.event(adapters.Exited, nil, nil) })
+ 		}
+@@ -437,6 +449,7 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 	case "in":
+ 		var l streamLine
+ 		if json.Unmarshal(e.Data, &l) == nil && l.Type == "control_response" && l.Response != nil {
++			c.reqs.mark(l.Response.RequestID, ReqRecorded, e.At)
+ 			if c.drop(l.Response.RequestID) && live {
+ 				// Answered: the tool runs, or the agent goes on without it,
+ 				// unless another permission still waits for the person.
+@@ -494,6 +507,10 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 		}
+ 		say = append(say, c.changedConversation)
+ 	case "user":
++		// A tool's result: the permission or question behind it is settled.
++		for _, id := range toolResults(l.Message) {
++			c.reqs.resolveToolUse(id, e.At)
++		}
+ 		if !helper && l.IsReplay {
+ 			if text, ok := promptText(l.Message); ok && !c.busy {
+ 				c.busy, c.since = true, time.UnixMilli(e.At)
+@@ -522,6 +539,9 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 			go c.answer(r, true, false, "")
+ 			return
+ 		}
++		qs, _ := claudeQuestions(r.Input)
++		c.reqs.open(&Request{native: r.ID, Kind: claudeKind(r.Tool), Blocking: true, Tool: r.Tool, ToolUse: r.ToolUseID, Helper: r.AgentID,
++			Input: r.Input, Questions: qs, Choices: claudeChoices(r.Tool), raw: r}, e.At)
+ 		c.pending = append(c.pending, r)
+ 		// What shows is the oldest still waiting: the one an answer answers
+ 		// (pick). A helper asking meanwhile waits its turn behind it.
+@@ -532,6 +552,7 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 		})
+ 	case "control_cancel_request":
+ 		// Withdrawn: a helper that asked was stopped, or the turn was.
++		c.reqs.mark(l.RequestID, ReqCancelled, e.At)
+ 		if c.drop(l.RequestID) && live {
+ 			say = append(say, c.afterAsk())
+ 		}
+@@ -551,6 +572,7 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 		if helper {
+ 			return
+ 		}
++		c.reqs.endTurn(e.At)
+ 		// The turn ends, but a helper still working in the background may
+ 		// be waiting for the person: its permission stays, and so does the
+ 		// wait, for Claude goes on once it is answered.
+@@ -865,7 +887,7 @@ func (c *claudeConv) choices() []AskChoice {
+ 	return permissionChoices
+ }
+ 
+-// pick answers the oldest permission with the choice its key names.
++// pick answers the oldest permission with the choice its key names, once.
+ func (c *claudeConv) pick(ctx context.Context, key string) error {
+ 	r, ok := c.first()
+ 	if !ok {
+@@ -874,6 +896,20 @@ func (c *claudeConv) pick(ctx context.Context, key string) error {
+ 	if r.Tool == "AskUserQuestion" {
+ 		return httpError{http.StatusConflict, "Claude asked questions: answer them in the chat"}
+ 	}
++	c.mu.Lock()
++	cmd, free := c.reqs.claim(r.ID)
++	c.mu.Unlock()
++	if !free {
++		return httpError{http.StatusConflict, "that permission is answered already"}
++	}
++	err := c.pickFor(r, key)
++	c.mu.Lock()
++	c.reqs.release(r.ID, cmd, err)
++	c.mu.Unlock()
++	return err
++}
++
++func (c *claudeConv) pickFor(r claudeRequest, key string) error {
+ 	if r.Tool == "ExitPlanMode" {
+ 		switch key {
+ 		case "1", "2":
+@@ -1026,10 +1062,28 @@ func (d *claudeDriver) Answer(ctx context.Context, sess Session, req AnswerReque
+ 			r, found = p, true
+ 		}
+ 	}
++	cmd, free := c.reqs.claim(r.ID)
+ 	c.mu.Unlock()
+-	if !found {
++	if !found || !free {
+ 		return nil, httpError{http.StatusConflict, "Claude isn't waiting for those answers"}
+ 	}
++	qs, err := claudeQuestions(r.Input)
++	if err == nil {
++		var shown []string
++		if shown, err = checkAnswers(qs, req.Answers); err == nil {
++			if err = c.respond(r, answeredInput(r.Input, qs, shown)); err == nil {
++				return shown, nil
++			}
++		}
++	}
++	c.mu.Lock()
++	c.reqs.release(r.ID, cmd, err)
++	c.mu.Unlock()
++	return nil, err
++}
++
++// claudeQuestions are the questions an AskUserQuestion call asks.
++func claudeQuestions(input json.RawMessage) ([]transcript.Question, error) {
+ 	var in struct {
+ 		Questions []struct {
+ 			Question    string `json:"question"`
+@@ -1041,7 +1095,7 @@ func (d *claudeDriver) Answer(ctx context.Context, sess Session, req AnswerReque
+ 			} `json:"options"`
+ 		} `json:"questions"`
+ 	}
+-	if err := json.Unmarshal(r.Input, &in); err != nil {
++	if err := json.Unmarshal(input, &in); err != nil {
+ 		return nil, err
+ 	}
+ 	qs := make([]transcript.Question, len(in.Questions))
+@@ -1051,24 +1105,144 @@ func (d *claudeDriver) Answer(ctx context.Context, sess Session, req AnswerReque
+ 			qs[i].Options = append(qs[i].Options, transcript.Option{Label: o.Label, Description: o.Description})
+ 		}
+ 	}
+-	shown, err := checkAnswers(qs, req.Answers)
+-	if err != nil {
+-		return nil, err
+-	}
++	return qs, nil
++}
++
++// answeredInput is AskUserQuestion's input with the person's answers, as Claude takes them.
++func answeredInput(raw json.RawMessage, qs []transcript.Question, shown []string) map[string]any {
+ 	answers := map[string]string{}
+ 	for i, q := range qs {
+ 		answers[q.Question] = shown[i]
+ 	}
+ 	var input map[string]any
+-	json.Unmarshal(r.Input, &input)
++	json.Unmarshal(raw, &input)
+ 	if input == nil {
+ 		input = map[string]any{}
+ 	}
+ 	input["answers"] = answers
+-	if err := c.respond(r, map[string]any{"behavior": "allow", "updatedInput": input}); err != nil {
++	return map[string]any{"behavior": "allow", "updatedInput": input}
++}
++
++func claudeKind(tool string) string {
++	switch tool {
++	case "AskUserQuestion":
++		return "question"
++	case "ExitPlanMode":
++		return "plan"
++	}
++	return "approval"
++}
++
++func claudeChoices(tool string) []AskChoice {
++	switch tool {
++	case "AskUserQuestion":
++		return nil
++	case "ExitPlanMode":
++		return planChoices
++	}
++	return permissionChoices
++}
++
++// toolResults are the tool calls a user message carries results for.
++func toolResults(raw json.RawMessage) []string {
++	var m struct {
++		Content []struct {
++			Type      string `json:"type"`
++			ToolUseID string `json:"tool_use_id"`
++		} `json:"content"`
++	}
++	if json.Unmarshal(raw, &m) != nil {
++		return nil
++	}
++	var ids []string
++	for _, b := range m.Content {
++		if b.Type == "tool_result" {
++			ids = append(ids, b.ToolUseID)
++		}
++	}
++	return ids
++}
++
++func (d *claudeDriver) requests(sess Session) ([]Request, error) {
++	c, err := d.conv(sess)
++	if err != nil {
+ 		return nil, err
+ 	}
+-	return shown, nil
++	<-c.caught
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	return c.reqs.list(), nil
++}
++
++// respond answers one request by its id, once per command (requests.go).
++func (d *claudeDriver) respond(ctx context.Context, sess Session, id string, body Respond) (Receipt, Request, error) {
++	c, err := d.conv(sess)
++	if err != nil {
++		return Receipt{}, Request{}, err
++	}
++	<-c.caught
++	c.mu.Lock()
++	rc, r, err := c.reqs.takeAnswer(id, body)
++	// The same command still being written: its outcome, once it has one.
++	for i := 0; err == nil && rc.State == "writing" && i < 100; i++ {
++		c.mu.Unlock()
++		time.Sleep(50 * time.Millisecond)
++		c.mu.Lock()
++		rc = c.reqs.receipts[body.Command]
++	}
++	if err != nil || rc.Command != "" {
++		defer c.mu.Unlock()
++		if r == nil {
++			return rc, Request{}, err
++		}
++		return rc, *r, err
++	}
++	cr, _ := r.raw.(claudeRequest)
++	resp, err := claudeResponse(cr, r, body)
++	if err != nil {
++		c.mu.Unlock()
++		return Receipt{}, *r, err
++	}
++	rc = c.reqs.beginAnswer(r, body.Command)
++	c.mu.Unlock()
++	werr := c.respond(cr, resp)
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	rc = c.reqs.endAnswer(rc, werr)
++	return rc, *r, werr
++}
++
++// claudeResponse is the control response that answers a request as body says.
++func claudeResponse(r claudeRequest, req *Request, body Respond) (map[string]any, error) {
++	switch req.Kind {
++	case "question":
++		shown, err := answerFor(req.Questions, body.Answers)
++		if err != nil {
++			return nil, err
++		}
++		return answeredInput(r.Input, req.Questions, shown), nil
++	case "plan":
++		switch body.Choice {
++		case "accept_edits", "approve_each":
++			mode := map[string]string{"accept_edits": "acceptEdits", "approve_each": "default"}[body.Choice]
++			return map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(r.Input),
++				"updatedPermissions": []map[string]any{{"type": "setMode", "mode": mode, "destination": "session"}}}, nil
++		case "keep_planning":
++			return map[string]any{"behavior": "deny", "message": firstNonEmpty(body.Message, "The person wants to keep planning.")}, nil
++		}
++		return nil, badRequest("a plan takes accept_edits, approve_each or keep_planning")
++	}
++	switch body.Choice {
++	case "allow", "allow_always":
++		resp := map[string]any{"behavior": "allow", "updatedInput": json.RawMessage(r.Input)}
++		if body.Choice == "allow_always" && len(r.Suggestions) > 0 {
++			resp["updatedPermissions"] = sessionOnly(r.Suggestions)
++		}
++		return resp, nil
++	case "deny":
++		return map[string]any{"behavior": "deny", "message": firstNonEmpty(body.Message, "The person said no.")}, nil
++	}
++	return nil, badRequest("an approval takes allow, allow_always or deny")
+ }
+ 
+ func (d *claudeDriver) Conversation(ctx context.Context, sess Session, _ []Session, since int, gen string) (transcript.Result, error) {
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index 514afda..3071d82 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -138,6 +138,7 @@ type codexConv struct {
+ 	queue       []func()
+ 	kick        chan struct{}
+ 	gone        bool
++	reqs        *requestLedger // what Codex asked, by request (requests.go)
+ }
+ 
+ type codexDriver struct {
+@@ -177,7 +178,7 @@ func (d *codexDriver) conv(sess Session) (*codexConv, error) {
+ 	if c == nil || c.conv != sess.conv {
+ 		c = &codexConv{b: d.b, name: sess.Name, cwd: sess.Dir, conv: sess.conv, sock: sess.sock,
+ 			log: filepath.Join(sess.conv, agenthost.LogName), replies: map[string]chan json.RawMessage{}, sent: map[string]string{},
+-			changed: make(chan struct{}), caught: make(chan struct{}), kick: make(chan struct{}, 1)}
++			changed: make(chan struct{}), caught: make(chan struct{}), kick: make(chan struct{}, 1), reqs: newRequestLedger(sess.conv)}
+ 		if meta, ok := readConversation(sess.conv); ok {
+ 			c.mode, c.model, c.effort = meta.Mode, meta.Model, meta.Effort
+ 		}
+@@ -219,6 +220,9 @@ func (c *codexConv) follow() {
+ 		return nil
+ 	})
+ 	c.reconcile()
++	c.mu.Lock()
++	c.reqs.reconcile()
++	c.mu.Unlock()
+ 	c.caughtOnce.Do(func() { close(c.caught) })
+ 	var noHost time.Time
+ 	for {
+@@ -318,10 +322,16 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 			}
+ 		}
+ 	}()
++	defer func() {
++		if ids := c.reqs.told(); live && len(ids) > 0 {
++			say = append(say, func() { c.b.tellRequests(c.name, ids) })
++		}
++	}()
+ 	switch e.Dir {
+ 	case "host":
+ 		switch e.Event {
+ 		case "started":
++			c.reqs.started(e.Seq, e.At)
+ 			c.busy, c.pending, c.since, c.exited, c.initialized, c.turnID = false, nil, time.Time{}, false, false, ""
+ 			// A new app server knows no thread until it opens one: a send
+ 			// waits for that, not the last process's (handshake resumes it).
+@@ -330,6 +340,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 				say = append(say, func() { go c.handshake() })
+ 			}
+ 		case "exited":
++			c.reqs.exited(e.At)
+ 			c.exited, c.busy, c.pending, c.threadID = true, false, nil, ""
+ 			say = append(say, func() { c.event(adapters.Exited, nil, nil) })
+ 		}
+@@ -348,6 +359,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		case m.Method == "" && len(m.ID) > 0:
+ 			// berthd answered one of Codex's requests.
+ 			c.drop(string(m.ID))
++			c.reqs.mark(string(m.ID), ReqRecorded, e.At)
+ 		}
+ 		return
+ 	case "out":
+@@ -399,6 +411,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		switch m.Method {
+ 		case "item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/tool/requestUserInput":
+ 			c.pending = append(c.pending, r)
++			c.reqs.open(codexReq(r), e.At)
+ 			if live {
+ 				ask, reason := r.ask(c.cwd)
+ 				say = append(say, func() {
+@@ -462,12 +475,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		}
+ 		say = append(say, c.changedConversation)
+ 	case "serverRequest/resolved":
++		c.reqs.mark(string(p.RequestID), ReqResolved, e.At)
+ 		before := len(c.pending)
+ 		c.drop(string(p.RequestID))
+ 		if live && len(c.pending) < before {
+ 			say = append(say, func() { c.event(adapters.Started, map[string]any{"signal": "tool"}, nil) })
+ 		}
+ 	case "turn/completed":
++		c.reqs.endTurn(e.At)
+ 		c.busy, c.pending, c.since, c.turnID = false, nil, time.Time{}, ""
+ 		c.draft.Reset()
+ 		data := map[string]any{}
+@@ -725,7 +740,7 @@ func (c *codexConv) respond(r codexRequest, result any) error {
+ 	return c.write(context.Background(), map[string]any{"jsonrpc": "2.0", "id": r.ID, "result": result})
+ }
+ 
+-// pick answers the oldest approval with the choice its key names.
++// pick answers the oldest approval with the choice its key names, once.
+ func (c *codexConv) pick(key string) error {
+ 	r, ok := c.first()
+ 	if !ok {
+@@ -734,6 +749,20 @@ func (c *codexConv) pick(key string) error {
+ 	if r.Method == "item/tool/requestUserInput" {
+ 		return httpError{http.StatusConflict, "Codex asked questions: answer them in the chat"}
+ 	}
++	c.mu.Lock()
++	cmd, free := c.reqs.claim(r.key())
++	c.mu.Unlock()
++	if !free {
++		return httpError{http.StatusConflict, "that approval is answered already"}
++	}
++	err := c.pickFor(r, key)
++	c.mu.Lock()
++	c.reqs.release(r.key(), cmd, err)
++	c.mu.Unlock()
++	return err
++}
++
++func (c *codexConv) pickFor(r codexRequest, key string) error {
+ 	switch key {
+ 	case "1", "y", "Y":
+ 		return c.respond(r, map[string]any{"decision": "accept"})
+@@ -893,10 +922,19 @@ func (d *codexDriver) Answer(ctx context.Context, sess Session, req AnswerReques
+ 			r, found = p, true
+ 		}
+ 	}
++	cmd, free := c.reqs.claim(r.key())
+ 	c.mu.Unlock()
+-	if !found {
++	if !found || !free {
+ 		return nil, httpError{http.StatusConflict, "Codex isn't waiting for those answers"}
+ 	}
++	shown, err := c.answerFor(r, req)
++	c.mu.Lock()
++	c.reqs.release(r.key(), cmd, err)
++	c.mu.Unlock()
++	return shown, err
++}
++
++func (c *codexConv) answerFor(r codexRequest, req AnswerRequest) ([]string, error) {
+ 	var in struct {
+ 		Questions []struct {
+ 			ID       string `json:"id"`
+@@ -971,3 +1009,114 @@ func (d *codexDriver) askChoices(sess Session) []AskChoice {
+ 	}
+ 	return c.choices()
+ }
++
++// codexReq is what a Codex request asks, for the ledger (requests.go).
++func codexReq(r codexRequest) *Request {
++	var p struct {
++		ItemID     string `json:"itemId"`
++		IsBlocking *bool  `json:"isBlocking"`
++		Questions  []struct {
++			ID       string `json:"id"`
++			Header   string `json:"header"`
++			Question string `json:"question"`
++			Options  []struct {
++				Label       string `json:"label"`
++				Description string `json:"description"`
++			} `json:"options"`
++		} `json:"questions"`
++	}
++	json.Unmarshal(r.Params, &p)
++	req := &Request{native: r.key(), Kind: "approval", Blocking: true, ToolUse: p.ItemID, Input: r.Params, Choices: permissionChoices, raw: r}
++	switch r.Method {
++	case "item/commandExecution/requestApproval":
++		req.Tool = "Bash"
++	case "item/fileChange/requestApproval":
++		req.Tool = "Edit"
++	default:
++		// A question Codex doesn't wait on may be answered later, or not at all.
++		req.Kind, req.Tool, req.Choices = "question", "request_user_input", nil
++		if p.IsBlocking != nil {
++			req.Blocking = *p.IsBlocking
++		}
++		for _, q := range p.Questions {
++			tq := transcript.Question{ID: q.ID, Header: q.Header, Question: q.Question}
++			for _, o := range q.Options {
++				tq.Options = append(tq.Options, transcript.Option{Label: o.Label, Description: o.Description})
++			}
++			req.Questions = append(req.Questions, tq)
++		}
++	}
++	return req
++}
++
++func (d *codexDriver) requests(sess Session) ([]Request, error) {
++	c, err := d.conv(sess)
++	if err != nil {
++		return nil, err
++	}
++	<-c.caught
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	return c.reqs.list(), nil
++}
++
++// respond answers one request by its id, once per command (requests.go).
++func (d *codexDriver) respond(ctx context.Context, sess Session, id string, body Respond) (Receipt, Request, error) {
++	c, err := d.conv(sess)
++	if err != nil {
++		return Receipt{}, Request{}, err
++	}
++	<-c.caught
++	c.mu.Lock()
++	rc, r, err := c.reqs.takeAnswer(id, body)
++	// The same command still being written: its outcome, once it has one.
++	for i := 0; err == nil && rc.State == "writing" && i < 100; i++ {
++		c.mu.Unlock()
++		time.Sleep(50 * time.Millisecond)
++		c.mu.Lock()
++		rc = c.reqs.receipts[body.Command]
++	}
++	if err != nil || rc.Command != "" {
++		defer c.mu.Unlock()
++		if r == nil {
++			return rc, Request{}, err
++		}
++		return rc, *r, err
++	}
++	cr, _ := r.raw.(codexRequest)
++	result, err := codexResponse(r, body)
++	if err != nil {
++		c.mu.Unlock()
++		return Receipt{}, *r, err
++	}
++	rc = c.reqs.beginAnswer(r, body.Command)
++	c.mu.Unlock()
++	werr := c.respond(cr, result)
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	rc = c.reqs.endAnswer(rc, werr)
++	return rc, *r, werr
++}
++
++// codexResponse is the result that answers a request as body says.
++func codexResponse(req *Request, body Respond) (any, error) {
++	if req.Kind == "question" {
++		if _, err := answerFor(req.Questions, body.Answers); err != nil {
++			return nil, err
++		}
++		answers := map[string]any{}
++		for i, q := range req.Questions {
++			picks := append([]string{}, body.Answers[i].Picks...)
++			if o := body.Answers[i].Other; o != "" {
++				picks = append(picks, o)
++			}
++			answers[q.ID] = map[string]any{"answers": picks}
++		}
++		return map[string]any{"answers": answers}, nil
++	}
++	decision := map[string]string{"allow": "accept", "allow_always": "acceptForSession", "deny": "decline"}[body.Choice]
++	if decision == "" {
++		return nil, badRequest("an approval takes allow, allow_always or deny")
++	}
++	return map[string]any{"decision": decision}, nil
++}
+diff --git a/internal/box/requests.go b/internal/box/requests.go
+new file mode 100644
+index 0000000..5980527
+--- /dev/null
++++ b/internal/box/requests.go
+@@ -0,0 +1,354 @@
++package box
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"net/http"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/events"
++	"github.com/cosscom/shipyard/internal/statefile"
++	"github.com/cosscom/shipyard/internal/transcript"
++)
++
++// Requests (the "requests" capability): what a structured agent asks a person, a question, an
++// approval or a plan, each named once for the app, berthd and the agent: the life of the agent
++// process it came from (its generation, where that process's start sits in the log) and the
++// agent's own id for it. The ledger is rebuilt from the log, which says when each was asked,
++// answered, taken or let go. Only the app's command ids are kept beside it (requests.json), so an
++// answer sent twice is written once, and told the same receipt.
++
++const (
++	ReqPending   = "pending"   // asked, unanswered
++	ReqRecorded  = "recorded"  // an answer is written to the agent, not yet taken
++	ReqResolved  = "resolved"  // taken: the tool ran or was refused, or Codex said so
++	ReqCancelled = "cancelled" // withdrawn: its turn ended, or the agent took it back
++	ReqExpired   = "expired"   // its agent process ended before it was answered
++)
++
++// Request is one thing a structured agent asked.
++type Request struct {
++	ID         string                `json:"id"`
++	Generation int64                 `json:"generation"`
++	Kind       string                `json:"kind"` // question, approval, plan
++	Blocking   bool                  `json:"blocking"`
++	Tool       string                `json:"tool,omitempty"`
++	ToolUse    string                `json:"tool_use,omitempty"`
++	Helper     string                `json:"helper,omitempty"`
++	Input      json.RawMessage       `json:"input,omitempty"`
++	Questions  []transcript.Question `json:"questions,omitempty"`
++	Choices    []AskChoice           `json:"choices,omitempty"`
++	State      string                `json:"state"`
++	Command    string                `json:"command,omitempty"`
++	Opened     int64                 `json:"opened"`
++	Settled    int64                 `json:"settled,omitempty"`
++	native     string
++	raw        any
++}
++
++// Receipt is what became of one command: its answer written, or refused and why.
++type Receipt struct {
++	Command string `json:"command"`
++	Request string `json:"request"`
++	State   string `json:"state"` // writing, written, refused
++	Error   string `json:"error,omitempty"`
++	At      int64  `json:"at"`
++}
++
++// Respond is an answer to one request: a question's answers, or an approval's or a plan's choice
++// (allow, allow_always, deny; accept_edits, approve_each, keep_planning).
++type Respond struct {
++	Command string           `json:"command"`
++	Answers []QuestionAnswer `json:"answers,omitempty"`
++	Choice  string           `json:"choice,omitempty"`
++	Message string           `json:"message,omitempty"`
++}
++
++// requestLedger is one conversation's requests. Its owner's lock guards it.
++type requestLedger struct {
++	gen      int64
++	byID     map[string]*Request
++	order    []string
++	native   map[string]string // the agent's ids in this generation
++	dir      string
++	receipts map[string]Receipt
++	changed  []string // ids changed since last told
++}
++
++func newRequestLedger(dir string) *requestLedger {
++	l := &requestLedger{byID: map[string]*Request{}, native: map[string]string{}, dir: dir, receipts: map[string]Receipt{}}
++	if raw, err := os.ReadFile(filepath.Join(dir, "requests.json")); err == nil {
++		json.Unmarshal(raw, &l.receipts)
++	}
++	return l
++}
++
++func (l *requestLedger) save() {
++	raw, _ := json.MarshalIndent(l.receipts, "", "  ")
++	statefile.Write(filepath.Join(l.dir, "requests.json"), raw)
++}
++
++func (l *requestLedger) settle(r *Request, state string, at int64) {
++	if r.State == state || r.State == ReqResolved || r.State == ReqExpired || r.State == ReqCancelled {
++		return
++	}
++	r.State = state
++	if state != ReqRecorded {
++		r.Settled = at
++	}
++	l.changed = append(l.changed, r.ID)
++}
++
++// started begins a new agent process: what the last one asked can't be answered now.
++func (l *requestLedger) started(seq, at int64) {
++	l.exited(at)
++	l.gen, l.native = seq, map[string]string{}
++}
++
++func (l *requestLedger) exited(at int64) {
++	for _, id := range l.order {
++		if r := l.byID[id]; r.State == ReqPending || r.State == ReqRecorded {
++			l.settle(r, ReqExpired, at)
++		}
++	}
++}
++
++func (l *requestLedger) open(r *Request, at int64) {
++	r.ID = strconv.FormatInt(l.gen, 10) + "-" + r.native
++	if old := l.byNative(r.native); old != nil {
++		if old.State == ReqPending || old.State == ReqRecorded {
++			return
++		}
++		// An id the agent uses again once its request settled names a new one.
++		for k := 2; l.byID[r.ID] != nil; k++ {
++			r.ID = strconv.FormatInt(l.gen, 10) + "-" + r.native + "." + strconv.Itoa(k)
++		}
++	}
++	r.Generation, r.State, r.Opened = l.gen, ReqPending, at
++	l.native[r.native] = r.ID
++	l.byID[r.ID] = r
++	l.order = append(l.order, r.ID)
++	l.changed = append(l.changed, r.ID)
++}
++
++func (l *requestLedger) byNative(native string) *Request { return l.byID[l.native[native]] }
++
++func (l *requestLedger) mark(native, state string, at int64) {
++	if r := l.byNative(native); r != nil {
++		l.settle(r, state, at)
++	}
++}
++
++// resolveToolUse settles the request behind a tool call whose result came back.
++func (l *requestLedger) resolveToolUse(toolUse string, at int64) {
++	for _, id := range l.order {
++		if r := l.byID[id]; r.Generation == l.gen && r.ToolUse == toolUse && toolUse != "" {
++			l.settle(r, ReqResolved, at)
++		}
++	}
++}
++
++// endTurn withdraws what the turn's own agent still waited on; a helper's question, or one the
++// agent didn't wait on, may be answered after it.
++func (l *requestLedger) endTurn(at int64) {
++	for _, id := range l.order {
++		if r := l.byID[id]; r.Generation == l.gen && r.State == ReqPending && r.Helper == "" && r.Blocking {
++			l.settle(r, ReqCancelled, at)
++		}
++	}
++}
++
++// reconcile says what became of commands berthd was writing when it stopped.
++func (l *requestLedger) reconcile() {
++	dirty := false
++	for k, rc := range l.receipts {
++		if rc.State != "writing" {
++			continue
++		}
++		if r := l.byID[rc.Request]; r != nil && r.State != ReqPending && r.State != ReqExpired {
++			rc.State = "written"
++		} else {
++			rc.State, rc.Error = "refused", "berthd stopped before the answer was written"
++		}
++		l.receipts[k], dirty = rc, true
++	}
++	if dirty {
++		l.save()
++	}
++}
++
++func (l *requestLedger) list() []Request {
++	out := make([]Request, 0, len(l.order))
++	for _, id := range l.order {
++		out = append(out, *l.byID[id])
++	}
++	return out
++}
++
++// told takes the ids changed since last asked.
++func (l *requestLedger) told() []string {
++	c := l.changed
++	l.changed = nil
++	return c
++}
++
++// requestHost is a structured driver's side of requests.
++type requestHost interface {
++	requests(sess Session) ([]Request, error)
++	respond(ctx context.Context, sess Session, id string, body Respond) (Receipt, Request, error)
++}
++
++func (b *Box) mountRequests(route func(string, func(http.ResponseWriter, *http.Request) error)) {
++	route("GET /v1/sessions/{name}/requests", b.listRequests)
++	route("POST /v1/sessions/{name}/requests/{id}/respond", b.respondRequest)
++}
++
++func (b *Box) requestDriver(r *http.Request) (Session, requestHost, error) {
++	sess, err := b.Sessions.Get(r.Context(), r.PathValue("name"))
++	if err != nil {
++		return Session{}, nil, err
++	}
++	h, ok := b.driverFor(sess).(requestHost)
++	if !ok {
++		return Session{}, nil, badRequest("%s isn't a structured session", sess.Name)
++	}
++	return sess, h, nil
++}
++
++func (b *Box) listRequests(w http.ResponseWriter, r *http.Request) error {
++	sess, h, err := b.requestDriver(r)
++	if err != nil {
++		return err
++	}
++	all, err := h.requests(sess)
++	if err != nil {
++		return err
++	}
++	writeJSON(w, all)
++	return nil
++}
++
++func (b *Box) respondRequest(w http.ResponseWriter, r *http.Request) error {
++	var body Respond
++	if err := decode(r, &body); err != nil {
++		return err
++	}
++	if strings.TrimSpace(body.Command) == "" {
++		return badRequest("say which command this is (command): a retry carries the same one")
++	}
++	sess, h, err := b.requestDriver(r)
++	if err != nil {
++		return err
++	}
++	rc, req, err := h.respond(r.Context(), sess, r.PathValue("id"), body)
++	if err != nil {
++		var refused requestRefused
++		if errors.As(err, &refused) {
++			w.Header().Set("Content-Type", "application/json")
++			w.WriteHeader(refused.status)
++			json.NewEncoder(w).Encode(map[string]any{"code": "refused", "error": refused.msg, "request": req, "receipt": rc})
++			return nil
++		}
++		return err
++	}
++	writeJSON(w, map[string]any{"receipt": rc, "request": req})
++	return nil
++}
++
++// requestRefused is an answer not taken, with the request as it stands.
++type requestRefused struct {
++	status int
++	msg    string
++}
++
++func (e requestRefused) Error() string { return e.msg }
++
++// takeAnswer checks a command against the ledger: its receipt again, or the request it may answer.
++// Called with the owner's lock held.
++func (l *requestLedger) takeAnswer(id string, body Respond) (Receipt, *Request, error) {
++	if rc, ok := l.receipts[body.Command]; ok {
++		r := l.byID[rc.Request]
++		if r == nil {
++			r = &Request{ID: rc.Request, State: ReqExpired}
++		}
++		return rc, r, nil
++	}
++	r := l.byID[id]
++	switch {
++	case r == nil && strings.HasPrefix(id, strconv.FormatInt(l.gen, 10)+"-"):
++		return Receipt{}, nil, requestRefused{http.StatusNotFound, "no such request"}
++	case r == nil:
++		return Receipt{}, &Request{ID: id, State: ReqExpired}, requestRefused{http.StatusGone, "that request was from an agent process that has ended"}
++	case r.State == ReqExpired:
++		return Receipt{}, r, requestRefused{http.StatusGone, "that request was from an agent process that has ended"}
++	case r.State != ReqPending:
++		return Receipt{}, r, requestRefused{http.StatusConflict, "that request is " + r.State + " already"}
++	case r.Command != "":
++		return Receipt{}, r, requestRefused{http.StatusConflict, "another answer to it is being written"}
++	}
++	return Receipt{}, r, nil
++}
++
++// beginAnswer records that a command's answer is being written, before it is.
++func (l *requestLedger) beginAnswer(r *Request, command string) Receipt {
++	rc := Receipt{Command: command, Request: r.ID, State: "writing", At: time.Now().UnixMilli()}
++	l.receipts[command] = rc
++	r.Command = command
++	l.save()
++	return rc
++}
++
++func (l *requestLedger) endAnswer(rc Receipt, err error) Receipt {
++	rc.State = "written"
++	if err != nil {
++		rc.State, rc.Error = "refused", err.Error()
++		if r := l.byID[rc.Request]; r != nil && r.Command == rc.Command {
++			r.Command = ""
++		}
++	}
++	l.receipts[rc.Command] = rc
++	l.save()
++	return rc
++}
++
++// claim marks a request as being answered by an older route, which brings no command of its
++// own, so a second answer at the same moment is refused. Called with the owner's lock held.
++func (l *requestLedger) claim(native string) (string, bool) {
++	r := l.byNative(native)
++	if r == nil {
++		return "", true
++	}
++	if r.State != ReqPending || r.Command != "" {
++		return "", false
++	}
++	r.Command = "berth-" + strconv.FormatInt(time.Now().UnixNano(), 36)
++	return r.Command, true
++}
++
++// release gives back a claim whose answer couldn't be written.
++func (l *requestLedger) release(native, command string, err error) {
++	if r := l.byNative(native); err != nil && r != nil && r.Command == command {
++		r.Command = ""
++	}
++}
++
++// tellRequests says on the bus which requests changed, for clients to read them again.
++func (b *Box) tellRequests(session string, ids []string) {
++	for _, id := range ids {
++		b.Events.Publish(events.Event{Type: "request.changed", Box: b.Name, Data: map[string]any{"session": session, "id": id}})
++	}
++}
++
++// answerFor is a question's answers as the agent takes them, checked against what it asked.
++func answerFor(qs []transcript.Question, as []QuestionAnswer) ([]string, error) {
++	if len(qs) == 0 {
++		return nil, fmt.Errorf("that request asks no questions")
++	}
++	return checkAnswers(qs, as)
++}
+diff --git a/internal/box/requests_test.go b/internal/box/requests_test.go
+new file mode 100644
+index 0000000..cb36a36
+--- /dev/null
++++ b/internal/box/requests_test.go
+@@ -0,0 +1,75 @@
++package box
++
++import (
++	"encoding/json"
++	"errors"
++	"testing"
++
++	"github.com/cosscom/shipyard/internal/agenthost"
++)
++
++// The seam: one answer per request, whatever is sent twice, and no answer to a request whose
++// agent process has ended, rebuilt the same from the log after berthd restarts.
++func TestRequestsAnswerOnceAndExpire(t *testing.T) {
++	dir := t.TempDir()
++	c := &claudeConv{reqs: newRequestLedger(dir), changed: make(chan struct{}), replies: map[string]chan json.RawMessage{}}
++	line := func(seq int64, dir, data string) agenthost.Entry {
++		return agenthost.Entry{Seq: seq, At: seq, Dir: dir, Data: json.RawMessage(data)}
++	}
++	c.apply(agenthost.Entry{Seq: 1, Dir: "host", Event: "started"}, false)
++	c.apply(line(2, "out", `{"type":"control_request","request_id":"r1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"t1","input":{"questions":[{"question":"Colour?","options":[{"label":"Red"},{"label":"Blue"}]}]}}}`), false)
++	reqs := c.reqs.list()
++	if len(reqs) != 1 || reqs[0].ID != "1-r1" || reqs[0].Kind != "question" || reqs[0].State != ReqPending || len(reqs[0].Questions) != 1 {
++		t.Fatalf("asked: %+v", reqs)
++	}
++	body := Respond{Command: "cmd-1", Answers: []QuestionAnswer{{Picks: []string{"Blue"}}}}
++	_, r, err := c.reqs.takeAnswer("1-r1", body)
++	if err != nil {
++		t.Fatal(err)
++	}
++	rc := c.reqs.endAnswer(c.reqs.beginAnswer(r, "cmd-1"), nil)
++	// The same command again is told its receipt; another command is refused while it is written.
++	if again, _, err := c.reqs.takeAnswer("1-r1", body); err != nil || again != rc {
++		t.Fatalf("retry: %+v %v", again, err)
++	}
++	var refused requestRefused
++	if _, _, err := c.reqs.takeAnswer("1-r1", Respond{Command: "cmd-2"}); !errors.As(err, &refused) || refused.status != 409 {
++		t.Fatalf("a second answer: %v", err)
++	}
++	c.apply(line(3, "in", `{"type":"control_response","response":{"request_id":"r1","subtype":"success","response":{}}}`), false)
++	c.apply(line(4, "out", `{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}`), false)
++	if s := c.reqs.list()[0].State; s != ReqResolved {
++		t.Fatalf("after its result: %s", s)
++	}
++	// A new process: what the last one asked is gone, and its ids answer nothing.
++	c.apply(line(5, "out", `{"type":"control_request","request_id":"r2","request":{"subtype":"can_use_tool","tool_name":"Write","tool_use_id":"t2","input":{}}}`), false)
++	c.apply(agenthost.Entry{Seq: 6, Dir: "host", Event: "started"}, false)
++	if s := c.reqs.list()[1].State; s != ReqExpired {
++		t.Fatalf("after a restart: %s", s)
++	}
++	if _, _, err := c.reqs.takeAnswer("1-r2", Respond{Command: "cmd-5", Choice: "allow"}); !errors.As(err, &refused) || refused.status != 410 {
++		t.Fatalf("an expired request: %v", err)
++	}
++	if _, _, err := c.reqs.takeAnswer("5-r2", Respond{Command: "cmd-3", Choice: "allow"}); !errors.As(err, &refused) || refused.status != 410 {
++		t.Fatalf("an old process's request: %v", err)
++	}
++	// An older route's answer claims the request, so a second at the same moment is refused.
++	c.apply(line(7, "out", `{"type":"control_request","request_id":"r4","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"t4","input":{}}}`), false)
++	if _, ok := c.reqs.claim("r4"); !ok {
++		t.Fatal("a free request couldn't be claimed")
++	}
++	if _, ok := c.reqs.claim("r4"); ok {
++		t.Fatal("a claimed request was claimed again")
++	}
++	// berthd stopped mid-write: a receipt for a request still pending is refused, so it can be sent again.
++	c.apply(line(8, "out", `{"type":"control_request","request_id":"r3","request":{"subtype":"can_use_tool","tool_name":"Bash","tool_use_id":"t3","input":{}}}`), false)
++	_, r3, _ := c.reqs.takeAnswer("6-r3", Respond{Command: "cmd-4"})
++	c.reqs.beginAnswer(r3, "cmd-4")
++	reread := newRequestLedger(dir)
++	reread.started(6, 6)
++	reread.open(&Request{native: "r3", Kind: "approval"}, 7)
++	reread.reconcile()
++	if rc := reread.receipts["cmd-4"]; rc.State != "refused" || reread.receipts["cmd-1"].State != "written" {
++		t.Fatalf("receipts after a restart: %+v", reread.receipts)
++	}
++}

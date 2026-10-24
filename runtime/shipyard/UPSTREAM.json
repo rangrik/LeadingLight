@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
-  "version": "0.3.30-ll.5",
+  "version": "0.3.30-ll.6",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -18,6 +18,7 @@
     "0003-resume.patch",
     "0004-plain-folder-workspace.patch",
     "0005-embedded-ports-path-files.patch",
-    "0006-folder-identity.patch"
+    "0006-folder-identity.patch",
+    "0007-requests.patch"
   ]
 }
