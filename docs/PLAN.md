@@ -132,6 +132,12 @@ editing an embed in place, editing values inside lists.
 - Search (⌘K), trash view with restore, images and files, remember window state.
 - Keyboard-first: ⌘N new page, ⌘\ sidebar, ⌘1–3 headings, ⌘⇧L to-do.
 
+## Planned — external linked projects
+
+[Project 1](PROJECT-1.md): local/GitHub project chat, real agent tools, connected browsers
+and flexible delegation. Four useful releases, delivered through small tested changes.
+Project 2 then connects this engine to LeadingLight's documents, task pages and reading experience.
+
 ## Later
 
 - Sync between devices. Mobile.
