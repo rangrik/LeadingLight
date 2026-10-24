@@ -1,1 +1,3 @@
 /gen/schemas
+# The project runtime, built by scripts/project-runtime/build.sh
+/binaries/

@@ -1,0 +1,69 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 04:02:41 -0700
+Subject: [PATCH] Embedded mode: own tmux server, leave the person's agent
+ config alone
+
+BERTH_TMUX_SOCKET names berthd's tmux server, so a berthd inside another
+app never joins the person's own. BERTH_EMBEDDED=1 skips refreshing berth's
+hooks in ~/.claude and ~/.codex and preparing agent accounts.
+---
+ cmd/berthd/main.go       |  8 +++++---
+ internal/box/sessions.go | 11 ++++++++++-
+ 2 files changed, 15 insertions(+), 4 deletions(-)
+
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index 949bab8..fdb51a6 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -410,7 +410,9 @@ func serve(b boxHome, args []string) error {
+ 	bx.Sessions.MemoryHigh = bx.Guard.SessionMemoryHigh
+ 	// A session on an agent account without berth's hooks and skills gets
+ 	// them before its agent starts.
+-	bx.Sessions.Prepare = bx.PrepareAccounts
++	if !box.Embedded {
++		bx.Sessions.Prepare = bx.PrepareAccounts
++	}
+ 	bx.Artifacts = &box.ArtifactStore{Dir: filepath.Join(b.dir, "artifacts"), Events: bus, Box: hostname}
+ 	go bx.Artifacts.Run(ctx)
+ 	go bx.RunShots(ctx)
+@@ -430,7 +432,7 @@ func serve(b boxHome, args []string) error {
+ 	if n := integrations.DrainSpool(b.spool(), func(e events.Event) { bus.Publish(e) }); n > 0 {
+ 		logger.Printf("published %d agent hooks spooled while berthd was down", n)
+ 	}
+-	if home, err := os.UserHomeDir(); err == nil {
++	if home, err := os.UserHomeDir(); err == nil && !box.Embedded {
+ 		if done := integrations.RefreshHooked(home, exe); len(done) > 0 {
+ 			logger.Printf("updated berth's hooks for %s", strings.Join(done, ", "))
+ 		}
+@@ -533,7 +535,7 @@ func attachLocal(args []string) error {
+ 	if err != nil {
+ 		return err
+ 	}
+-	return syscall.Exec(tmux, []string{"tmux", "-u", "-L", "berth", "attach-session", "-t", "=" + args[0]}, os.Environ())
++	return syscall.Exec(tmux, []string{"tmux", "-u", "-L", box.TmuxSocket(), "attach-session", "-t", "=" + args[0]}, os.Environ())
+ }
+ 
+ func pair(b boxHome, args []string) error {
+diff --git a/internal/box/sessions.go b/internal/box/sessions.go
+index bd63ef0..0d94f8c 100644
+--- a/internal/box/sessions.go
++++ b/internal/box/sessions.go
+@@ -173,7 +173,16 @@ func (s *Sessions) EnvVar(ctx context.Context, sess Session, key string) string
+ 	return v
+ }
+ 
+-const tmuxSocket = "berth"
++// tmuxSocket names berth's tmux server; BERTH_TMUX_SOCKET gives an
++// embedded berthd a server of its own beside the person's.
++var tmuxSocket = firstNonEmpty(os.Getenv("BERTH_TMUX_SOCKET"), "berth")
++
++// Embedded says berthd runs inside another app (BERTH_EMBEDDED=1): it
++// leaves the person's agent configuration alone.
++var Embedded = os.Getenv("BERTH_EMBEDDED") == "1"
++
++// TmuxSocket is the name of berth's tmux server.
++func TmuxSocket() string { return tmuxSocket }
+ 
+ // tmuxConfig is berth's own tmux server's. The status line is off because
+ // the app draws its own chrome around every terminal; focus events pass

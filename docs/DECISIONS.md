@@ -247,3 +247,24 @@ and any type can be ticked off. Ticking writes the page through its open editor 
 Starter additions reach spaces made before them once: each brings a property of its own, and
 a space without that property hasn't had it. Properties can't be deleted, so a type the
 person deleted doesn't come back.
+
+## 18. Project agents run in our own pinned berthd; the app is its client
+
+Project chats need agents that keep working while the window is closed, ask and get answers,
+and can be resumed. Shipyard's berthd already does this with Claude Code's stream-json and
+Codex's app server, under an agent host that outlives berthd. So the app starts its own berthd,
+built from Shipyard at a pinned commit with a short patch series (`runtime/shipyard`), with its
+own state folder, socket and tmux server, and talks to it as a client. It does not mount
+Shipyard's chat. berthd owns the agent processes, their pending questions and approvals, turns,
+history, worktrees, browsers and runs. LeadingLight owns the project page's binding to a folder
+and the outputs the person keeps. Native session and request IDs stay opaque. Note chats keep
+their own runner (7).
+
+A probe on 2026-10-24 (`pnpm runtime:probe`) launched, answered, approved, restarted and resumed
+both agents. What it found was patched rather than worked around: berthd would share the
+person's tmux server and rewrite their agent hooks on start; the person's Codex auto-review
+approved requests unseen, and Codex's questions needed its plan mode; a resumed agent could go
+unfollowed, meet "Not initialized", lose its model, or meet its old host still closing. Each fix
+was a few lines (about 90 in all), so Shipyard stays the owner
+and Paseo's daemon, the fallback, is not needed. Answers are still not keyed by request or
+lifecycle and a second click is refused rather than given its receipt; that is slice 4a.

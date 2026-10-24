@@ -1,0 +1,20 @@
+{
+  "repo": "https://github.com/cosscom/shipyard.git",
+  "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
+  "version": "0.3.30-ll.1",
+  "license": "MIT",
+  "notices": {
+    "LICENSE": "vendor/shipyard/LICENSE",
+    "THIRD_PARTY_NOTICES.md": "vendor/shipyard/THIRD_PARTY_NOTICES.md"
+  },
+  "go": {
+    "version": "1.27.3",
+    "url": "https://go.dev/dl/go1.27.3.darwin-arm64.tar.gz",
+    "sha256": "dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2"
+  },
+  "patches": [
+    "0001-embedded-mode.patch",
+    "0002-codex-approvals-and-plan-mode.patch",
+    "0003-resume.patch"
+  ]
+}

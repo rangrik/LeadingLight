@@ -1,0 +1,100 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@leadinglight.app>
+Date: Sat, 24 Oct 2026 04:02:57 -0700
+Subject: [PATCH] Codex: approvals reach the person; plan mode asks its
+ questions
+
+The person's own Codex config can route approvals to auto_review, which
+approves them unseen; structured sessions name the user as reviewer unless
+in bypass. A plan mode sends Codex's plan collaboration mode, where its
+request_user_input questions come; every turn names its mode, since a mode
+lasts until another is named.
+---
+ internal/box/codexdriver.go | 39 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 37 insertions(+), 2 deletions(-)
+
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index eefc40b..44eb492 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -30,7 +30,16 @@ const DriverCodex = "codex"
+ 
+ // codexModes are the modes a structured Codex session offers, each an
+ // approval policy and a sandbox for its turns.
+-var codexModes = []string{"default", "untrusted", "readOnly", "bypassPermissions"}
++var codexModes = []string{"default", "untrusted", "readOnly", "plan", "bypassPermissions"}
++
++// codexReviewer routes approvals to the person, whatever the person's own
++// Codex config says (its auto_review approves them unseen); bypass asks none.
++func codexReviewer(mode string) string {
++	if mode == "bypassPermissions" {
++		return ""
++	}
++	return "user"
++}
+ 
+ func codexPolicy(mode string) (approval string, sandbox map[string]any) {
+ 	workspace := map[string]any{"type": "workspaceWrite", "writableRoots": []string{}, "networkAccess": false, "excludeTmpdirEnvVar": false, "excludeSlashTmp": false}
+@@ -110,6 +119,9 @@ type codexConv struct {
+ 	mode        string
+ 	model       string
+ 	effort      string
++	// threadModel is the model Codex opened the thread with: plan mode
++	// names one, and none was asked for.
++	threadModel string
+ 	busy        bool
+ 	since       time.Time
+ 	draft       strings.Builder
+@@ -346,6 +358,10 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 				Thread struct {
+ 					ID string `json:"id"`
+ 				} `json:"thread"`
++				Model string `json:"model"`
++			}
++			if json.Unmarshal(m.Result, &r) == nil && r.Model != "" {
++				c.threadModel = r.Model
+ 			}
+ 			if json.Unmarshal(m.Result, &r) == nil && r.Thread.ID != "" && r.Thread.ID != c.threadID {
+ 				c.threadID = r.Thread.ID
+@@ -623,6 +639,9 @@ func (c *codexConv) handshake() {
+ 	c.write(ctx, map[string]any{"jsonrpc": "2.0", "method": "initialized"})
+ 	approval, _ := codexPolicy(mode)
+ 	params := map[string]any{"cwd": cwd, "approvalPolicy": approval, "sandbox": threadSandbox(mode)}
++	if r := codexReviewer(mode); r != "" {
++		params["approvalsReviewer"] = r
++	}
+ 	if model != "" {
+ 		params["model"] = model
+ 	}
+@@ -727,7 +746,7 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
+ 		return err
+ 	}
+ 	c.mu.Lock()
+-	mode, model, effort := c.mode, c.model, c.effort
++	mode, model, effort, threadModel := c.mode, c.model, c.effort, c.threadModel
+ 	c.mu.Unlock()
+ 	approval, sandbox := codexPolicy(mode)
+ 	params := map[string]any{"threadId": tid, "input": []any{map[string]any{"type": "text", "text": text, "text_elements": []any{}}},
+@@ -738,6 +757,22 @@ func (d *codexDriver) Send(ctx context.Context, sess Session, text string, enter
+ 	if effort != "" {
+ 		params["effort"] = effort
+ 	}
++	if r := codexReviewer(mode); r != "" {
++		params["approvalsReviewer"] = r
++	}
++	// Plan mode is Codex's collaboration mode, where it asks its questions;
++	// it lasts until a turn names another, so every turn names one.
++	if m := firstNonEmpty(model, threadModel); m != "" {
++		kind := "default"
++		if mode == "plan" {
++			kind = "plan"
++		}
++		settings := map[string]any{"model": m}
++		if effort != "" {
++			settings["reasoning_effort"] = effort
++		}
++		params["collaborationMode"] = map[string]any{"mode": kind, "settings": settings}
++	}
+ 	_, err = c.request(ctx, "turn/start", params, 30*time.Second)
+ 	return err
+ }
