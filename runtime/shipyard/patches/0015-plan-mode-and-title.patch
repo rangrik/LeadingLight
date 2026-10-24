@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 08:02:15 -0700
+Subject: [PATCH] An approved plan's mode, and a first message's title, kept
+ with the conversation
+
+Approving a plan with accept_edits or approve_each notes the mode it starts in, so a resumed agent isn't back in plan mode. A conversation started without a prompt takes its title from its first message.
+---
+ internal/box/claudedriver.go | 4 ++++
+ internal/box/orchestrate.go  | 8 ++++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index 613ea70..2df1b1c 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -1219,6 +1219,10 @@ func (d *claudeDriver) respond(ctx context.Context, sess Session, id string, bod
+ 	rc = c.reqs.beginAnswer(r, body.Command)
+ 	c.mu.Unlock()
+ 	werr := c.respond(cr, resp)
++	// An approved plan starts the work in the mode it chose: the conversation keeps it for a resume.
++	if mode := map[string]string{"accept_edits": "acceptEdits", "approve_each": "default"}[body.Choice]; werr == nil && r.Kind == "plan" && mode != "" {
++		noteConversation(c.conv, func(m *Conversation) { m.Mode = mode })
++	}
+ 	c.mu.Lock()
+ 	defer c.mu.Unlock()
+ 	rc = c.reqs.endAnswer(rc, werr)
+diff --git a/internal/box/orchestrate.go b/internal/box/orchestrate.go
+index a018b78..1a030d1 100644
+--- a/internal/box/orchestrate.go
++++ b/internal/box/orchestrate.go
+@@ -154,6 +154,14 @@ func (b *Box) sendToSession(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	// A conversation started without a prompt is named by its first message.
++	if sess, err := b.Sessions.Get(r.Context(), name); err == nil && sess.conv != "" {
++		noteConversation(sess.conv, func(c *Conversation) {
++			if c.Title == "" && strings.TrimSpace(req.Text) != "" {
++				c.Title = adapters.Clip(adapters.Title(req.Text), adapters.TitleMax)
++			}
++		})
++	}
+ 	if res.Turn != "" {
+ 		b.watchCaller(r, Watch{Kind: "turn", Session: name, Turn: res.Turn})
+ 	}
+-- 
+2.51.2
+
