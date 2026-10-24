@@ -309,7 +309,9 @@ export function BlockEditor({
         "aria-multiline": "true",
       },
     },
-    onUpdate: ({ editor }) => !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
+    // What the editor adds by itself after a step that changed nothing (a closing empty line as a
+    // page opens, a table fixed up) isn't an edit, so it isn't saved and doesn't move Updated.
+    onUpdate: ({ editor, transaction }) => transaction.docChanged && !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
   });
 
   const aids = JSON.stringify(writing ?? OFF);

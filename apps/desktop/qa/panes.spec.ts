@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-const nav = (page: Page) => page.getByRole("navigation", { name: "Pages" });
+const nav = (page: Page) => page.getByRole("navigation", { name: "Recent" });
 const body = (page: Page, pane: string) =>
   page.getByRole("region", { name: pane, exact: true }).getByRole("textbox", { name: "Page body" });
 

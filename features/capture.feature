@@ -74,7 +74,7 @@ Feature: Idea capture
     Given pages "Dune" and "Notes" exist and the box is open with the body focused
     When I type "Read @dun" and press Enter
     Then the line holds a link to "Dune", and so does the saved page
-    When I type "@Arrakis" and pick "Create “Arrakis”"
+    When I type "@Arrakis" and pick "Page" under "Create “Arrakis”"
     Then a page "Arrakis" exists, listed in the sidebar, and the line links to it
     # In the app the panel asks the main window to make the page, so there is one writer.
 

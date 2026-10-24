@@ -11,14 +11,14 @@ import { ValueView, visit } from "~/components/property-value";
 import { LINK_VIEWS } from "~/components/type-view";
 import { assets } from "~/lib/assets";
 import type { LinkView } from "~/lib/catalog";
-import { dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
+import { DAILY, dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
 import { openLink } from "~/lib/links";
-import { type LLObject, type ObjectSummary, objects } from "~/lib/objects";
+import { docText, type LLObject, type ObjectSummary, objects } from "~/lib/objects";
 import { COLORS, readCover } from "~/lib/page-meta";
 import { focusedPage } from "~/lib/panes";
-import { createPage, iconFor, pageOf, propOf, space, typeOf } from "~/lib/space";
-import { PAGE_TYPE } from "~/lib/store";
+import { iconFor, pageOf, propOf, space, typeOf } from "~/lib/space";
+import { newPage } from "~/lib/templates";
 
 const aliasesOf = (p: ObjectSummary) =>
   String(p.properties.aliases ?? "")
@@ -61,15 +61,14 @@ function search(query: string, tag: boolean, actions: LinkActions): LinkItem[] {
     }
   }
   const name = query.trim();
-  if (name && !pool.some((p) => pageLabel(p.title).toLowerCase() === q)) {
-    items.push({
-      key: "new",
-      title: `Create ${tag ? "#" : ""}“${name}”`,
-      icon: <Plus className="size-4 shrink-0 text-muted-foreground" />,
-      link: () => actions.create(name, tag ? "tag" : PAGE_TYPE),
-    });
-  }
-  return items;
+  if (!name || pool.some((p) => pageLabel(p.title).toLowerCase() === q)) return items;
+  if (tag) return [...items, { key: "new", title: `Create #“${name}”`, icon: <Plus className="size-4 shrink-0 text-muted-foreground" />, link: () => actions.create(name, "tag") }];
+  // Every page has a type, so a new one asks which. Tags have "#"; a day's note is made by its date.
+  const types = space.get().types.filter((t) => t.id !== "tag" && t.id !== DAILY);
+  return [
+    ...items,
+    ...types.map((t) => ({ key: `new:${t.id}`, title: t.name, section: `Create “${name}”`, icon: <RowIcon icon={t.icon} />, link: () => actions.create(name, t.id) })),
+  ];
 }
 
 // "@Dune" or "#idea" inside a line; follows renames and icon changes.
@@ -96,8 +95,24 @@ function MentionChip({ id, tag }: { id: string; tag: boolean }) {
   );
 }
 
+// A gallery card's words: the description, else the body's start. Bodies aren't kept in memory
+// (DECISIONS.md, 9), so the body is read when the card shows, and again after each save.
+function Snippet({ page, description }: { page: ObjectSummary; description: string }) {
+  const [body, setBody] = useState("");
+  useEffect(() => {
+    if (description) return;
+    let live = true;
+    void objects.get(page.id).then((o) => live && setBody(docText(o?.content ?? null).replaceAll("\n", " ").slice(0, 300)));
+    return () => {
+      live = false;
+    };
+  }, [description, page.id, page.updatedAt]);
+  const text = description || body;
+  return text ? <p className="line-clamp-3 text-muted-foreground text-sm">{text}</p> : null;
+}
+
 // A page as a card: its cover, icon, title and the properties its type shows on cards.
-export function PageCard({ page, wide, className }: { page: ObjectSummary; wide?: boolean; className?: string }) {
+export function PageCard({ page, wide, snippet, className }: { page: ObjectSummary; wide?: boolean; snippet?: boolean; className?: string }) {
   const type = typeOf(page.typeId);
   const cover = readCover(page.properties.cover);
   const shown = type.card
@@ -123,6 +138,7 @@ export function PageCard({ page, wide, className }: { page: ObjectSummary; wide?
           <span className="truncate">{pageLabel(page.title)}</span>
         </span>
         {wide && description && <span className="truncate text-muted-foreground text-sm">{description}</span>}
+        {snippet && <Snippet description={description} page={page} />}
         {shown.length > 0 && (
           <span className="flex flex-wrap items-center gap-1.5 text-muted-foreground text-xs">
             {shown.map((p) => (
@@ -206,4 +222,5 @@ export const makeLinkHost = (actions: LinkActions): LinkHost => ({
   Block: LinkBlock,
 });
 
-export const linkHost = makeLinkHost({ here: focusedPage, create: async (title, typeId) => (await createPage({ title, typeId })).id, day: ensureDaily });
+// A new page starts from its type's default template, as "New" does.
+export const linkHost = makeLinkHost({ here: focusedPage, create: async (title, typeId) => (await newPage(typeId, { title })).id, day: ensureDaily });

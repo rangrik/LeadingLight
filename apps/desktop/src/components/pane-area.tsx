@@ -13,6 +13,7 @@ import { PageStats } from "~/components/page-stats";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
 import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
+import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
@@ -156,7 +157,8 @@ export function PaneArea({ windowToggle }: { windowToggle: boolean }) {
                 toggle={!windowToggle}
                 muted={split && leaf.id !== focus}
                 onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
-                root={shown.parent ?? "Pages"}
+                onRoot={(e) => shown.parent && visit(shown.parent.view, e)}
+                root={shown.parent?.title}
                 sidebarOpen={sidebarOpen}
               >
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown

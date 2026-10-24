@@ -10,7 +10,7 @@ const question = (page: Page) => page.getByRole("textbox", { name: "Question" })
 
 async function pageWith(page: Page, text: string) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   const title = page.getByRole("textbox", { name: "Title" });
   await expect(title).toBeFocused();
   await title.fill("Cells");
@@ -91,7 +91,7 @@ test("The bar opens again, and follows the page as it scrolls", async ({ page })
 
 test("@ mentions an agent or a page, as tokens in the text", async ({ page }) => {
   await pageWith(page, "Glossary of terms.");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
   await page.getByRole("textbox", { name: "Title" }).fill("Notes");
   await page.keyboard.press("Meta+J");

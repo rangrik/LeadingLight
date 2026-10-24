@@ -29,9 +29,13 @@ Feature: Links between pages
 
   Scenario: Creating a page from the menu
     When I type "@Arrakis" in the body
-    Then the last item is "Create “Arrakis”"
-    When I pick it
+    Then the menu ends with the heading "Create “Arrakis”" and one item per type, each with its
+      icon: "Page", "Person", "Book", "Meeting", "Project", "Idea", "Collection"
+    And there is no "Tag" (that is "#") and no "Daily note" (one per day, made by date)
+    When I press Enter on "Page"
     Then a page "Arrakis" exists and the line links to it
+    When I type "@Paul" and pick "Person"
+    Then "Paul" is a Person, with the Person properties, and the line links to it
 
   Scenario: Links follow a rename
     Given "Notes" links to "Dune"

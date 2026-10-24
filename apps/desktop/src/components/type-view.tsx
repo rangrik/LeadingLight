@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Settings2, Star, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, FileText, Plus, Settings2, Star, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@leadinglight/ui/components/empty";
 import { Field, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
@@ -25,6 +26,18 @@ import { newPage, newTemplate, templatesOf } from "~/lib/templates";
 export const LINK_VIEWS: Record<LinkView, string> = { line: "Line", card: "Small card", wide: "Wide card", page: "Page" };
 const DEFAULT_VIEW: ViewSettings = { kind: "list", sort: { by: "title" } };
 const DAILY_VIEW: ViewSettings = { kind: "list", sort: { by: "day", desc: true } };
+// What each starter type is for, said while it has no pages. A renamed one keeps its sentence.
+const ABOUT: Record<string, string> = {
+  page: "Pages hold anything you write: notes, drafts, plans.",
+  tag: "Tags gather pages on one topic. Type # in a page to tag it.",
+  daily: "One note for each day. Today in the sidebar opens today's.",
+  person: "People you know, with how to reach them and where they work.",
+  book: "Books you're reading or want to read, with their author and your rating.",
+  meeting: "Meetings, with when they were, who came and their project.",
+  project: "Projects you're working on, with their status and due date.",
+  idea: "Ideas as they come. ⌃⌥I catches one from any app.",
+  collection: "Collections gather pages into a list of their own.",
+};
 
 // A type's home: its name, a New button, its settings and its pages.
 export function TypeView({ typeId }: { typeId: string }) {
@@ -41,11 +54,8 @@ export function TypeView({ typeId }: { typeId: string }) {
     // A type's view isn't read like a page: it takes the pane's width in every view, so
     // switching views never moves its header.
     <div className="w-full max-w-[1200px] ps-6 pe-6 pt-10 @sm:ps-16 pb-48 @xl:pe-16">
-      {type.icon && (
-        <div className="mb-3">
-          <PageIconView icon={type.icon} large />
-        </div>
-      )}
+      {/* A type without an icon (Pages) shows the page symbol its rows show. */}
+      <div className="mb-3">{type.icon ? <PageIconView icon={type.icon} large /> : <FileText className="size-16 text-muted-foreground [&_*]:stroke-[1.5]" />}</div>
       <h1 className="font-bold font-heading text-[36px] leading-[1.2] tracking-tight">{type.plural}</h1>
       <div className="-ms-2 mt-3 flex flex-wrap items-center gap-1">
         <Button aria-label={`New ${type.name.toLowerCase()}`} className="text-muted-foreground" onClick={() => void create()} size="sm" variant="ghost">
@@ -74,7 +84,20 @@ export function TypeView({ typeId }: { typeId: string }) {
       <div className="mt-4">
         <ObjectList
           card={defs(type.card)}
-          empty={`No ${type.plural.toLowerCase()} yet`}
+          empty={
+            <Empty className="md:py-16">
+              <EmptyHeader>
+                <EmptyTitle>No {type.plural.toLowerCase()} yet</EmptyTitle>
+                <EmptyDescription>{ABOUT[type.id] ?? `Every ${type.name.toLowerCase()} you make is listed here.`}</EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button onClick={() => void create()}>
+                  <Plus />
+                  New {type.name.toLowerCase()}
+                </Button>
+              </EmptyContent>
+            </Empty>
+          }
           items={items}
           onSettings={(view) => void putType({ ...type, view })}
           props={defs(type.props)}

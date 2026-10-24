@@ -1,10 +1,11 @@
 Feature: Pages
-  Pages are the first kind of object. They are listed in the sidebar, newest first.
+  Pages are the first kind of object. They are listed in the sidebar under "Recent" (not "Pages",
+  which is also the name of a type), newest first: newest made, or last edited if chosen.
   Each page has a title field and a body (the block editor).
 
   Names used below are accessible names (aria-label or visible text):
-  - sidebar: navigation "Pages"; one button per page, named by its title ("Untitled" when empty)
-  - "New page" button at the right of the "Pages" label in the sidebar
+  - sidebar: navigation "Recent" (labelled "Recent"); one button per page, named by its title ("Untitled" when empty)
+  - "New page" button at the right of the "Recent" label in the sidebar
   - "More" button on each row (the sidebar-08 "…", shown on hover), opening a menu with "Delete"
   - title field: textbox "Title"
   - body: textbox "Page body"
@@ -30,6 +31,20 @@ Feature: Pages
     Given I have created a page titled "First"
     When I create a page titled "Second"
     Then the sidebar lists "Second" above "First"
+
+  Scenario: Choosing how Recent is ordered
+    Given I have created a page titled "First", then one titled "Second"
+    Then Recent lists "Second" above "First"
+    When I click "Sort Recent" beside "New page"
+    Then a menu "Sort by" offers "Created" (chosen) and "Updated"
+    When I pick "Updated", then type in the body of "First"
+    Then within a second "First" moves above "Second"
+    When I open "Second" and change nothing
+    Then the order stays
+    When I reload
+    Then "Updated" is still chosen and "First" is still on top
+    When I pick "Created"
+    Then "Second" is back on top
 
   Scenario: The title shows in the sidebar as I type
     Given I have created a page

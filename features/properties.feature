@@ -12,7 +12,7 @@ Feature: Properties and types
     as a button (opening its menu) and its value
   - property picker: popover "Add property" with a searchbox "Find or create a property"
   - property editor: dialog "Edit property"
-  - sidebar sections: "Types" (one row per type, by its plural name) and "Pages"
+  - sidebar sections: "Types" (one row per type, by its plural name) and "Recent"
   - type view: what a type's sidebar row opens: its plural name, a "New" button, a
     "Type settings" button and its pages
   - type settings: dialog "Type settings"
@@ -59,6 +59,54 @@ Feature: Properties and types
     When I click "Add property" on "Dune" and type "pag"
     Then "Pages" is offered as an existing property, and picking it adds the row
 
+  Scenario: The property picker says properties are shared, and who uses each
+    When I click "Add property" on the plain page "Dune"
+    Then the picker says "Properties are shared by all pages."
+    And "Birthday" shows "People" on its right and "Rating" shows "Books": the types that use them
+    And "Status" is listed twice, one showing "Books" and the other "Projects"
+    And no row shows a kind such as "Text" on its right; the icon on the left shows the kind
+    And a property I made that no type uses shows nothing on its right
+
+  Scenario: The description isn't a second property
+    When I click "Add property" and type "desc"
+    Then the picker offers "Description" with "Under the title" on its right, and no
+      "New property “Description”"
+    When I pick it
+    Then the "Description" field shows under the title, focused, and there is no "Description" row
+    When I type "A desert planet" and open "Add property" again, typing "desc"
+    Then "Description" is not offered, and neither is "New property “Description”"
+    When I open "Type settings" for Books, click "Add property" and type "description"
+    Then "New property “Description”" is not offered there either, and the picker says
+      "A page's description is the line under its title."
+    When I type the name of a property the page already has
+    Then the picker says "Already added." rather than showing nothing
+
+  Scenario: A "Description" property from an older build joins the line under the title
+    Given a space saved by an older build, with a Text property "Description" on the Book type:
+      "Dune" holds "A desert planet" in it and nothing under its title, "Emma" holds "Comedy of
+      manners" in it and "A novel" under its title, and "Ulysses" holds it empty
+    When the app opens
+    Then "Dune" shows "A desert planet" under its title and "Emma" shows "A novel Comedy of manners"
+    And "Ulysses" has no line under its title
+    And no page shows a "Description" row, Books' Type settings no longer list it, and
+      "Add property" offers only the "Description" that is the line under the title
+    And each of the three keeps the Updated date it had
+    When I reload
+    Then all of that is still so
+    Given instead the older "Description" property was a Number
+    When the app opens
+    Then it is renamed "Description (old)" and keeps its values
+
+  Scenario: A property can't be renamed "Description"
+    When I open "Edit property" for "Rating" and type "Description" as its name
+    Then "Save" is off and the dialog says "A page's description is the line under its title."
+
+  Scenario: Page options holds the page's own actions
+    When I click "Page options"
+    Then it lists "Save as type…", "Delete page…", "Start an essay on this page" and the group
+      "To-do and highlight style" with "Plain" and "Playful"
+    And it has no "Open Pages": the breadcrumb's "Pages" opens the list (shell.feature)
+
   Scenario: Adding a page's own property to its type
     Given "Dune" is a Book with its own property "Pages"
     When I open the "Pages" property menu and click "Add to Book"
@@ -104,6 +152,21 @@ Feature: Properties and types
     Then the pane shows "Books" with both pages, and clicking one opens it
     When I click "New"
     Then a new untitled Book opens with the Book properties
+
+  Scenario: Every type's view has the same header
+    When I open "Pages", "Books" and "Tags" in turn
+    Then each starts with its type's 64 px icon above its name; Pages shows the page symbol
+    And each has the same controls: "List", "Table", "Gallery", "Board", "Sort by", the sort
+      direction and "Group by"
+
+  Scenario: An empty type says what it is for
+    Given there are no Books
+    When I open "Books"
+    Then it shows "No books yet", one sentence on what Books are for, and a "New book" button
+    When I click that "New book" button
+    Then a new untitled Book opens
+    When I open a type I made, "Novels", with no pages
+    Then it shows "No novels yet" with a sentence that fits any type, and a "New novel" button
 
   Scenario: Editing a type
     When I open "Books", click "Type settings", rename it to "Book" / "Library", pick the icon "📚"

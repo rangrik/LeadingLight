@@ -38,7 +38,7 @@ test("A captured idea lands in Today, open or not, and reads back", async ({ pag
   await page.keyboard.type("- Along the river");
   await expect(notes(page).locator("ul li")).toHaveText("Along the river");
   await expect(box(page).getByText("Saved")).toHaveAttribute("aria-hidden", "false");
-  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Walk the long way" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Walk the long way" })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-box.png" });
   await page.keyboard.press("Escape");
   await expect(box(page)).toHaveCount(0);
@@ -73,7 +73,7 @@ test("A captured idea lands in Today, open or not, and reads back", async ({ pag
   await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Third");
   await expect(body(page)).toBeFocused();
   await expect(page.getByText("in-the-middle", { exact: true })).toBeVisible();
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Walk the long way" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Walk the long way" }).click();
   await expect(body(page).locator("h2")).toHaveText("Plan");
   await expect(body(page).locator("ul li")).toHaveText("Along the river");
   await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Tags" })).toBeVisible();

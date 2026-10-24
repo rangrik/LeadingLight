@@ -1,13 +1,13 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
-// Changes: pages instead of projects, a New page action and empty text, rows select instead of
-// linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet);
+// Changes: pages instead of projects, labelled Recent (Pages is a type's name), a New page action,
+// a Sort menu and empty text, rows select instead of linking, Delete wired; View/Share and the trailing "More" row dropped (nothing behind them yet);
 // rows can be dragged beside the open page; a page's Thoughts page and essay hang under it on a
 // tree (see Children).
-import { Ellipsis, Plus, Trash } from "lucide-react";
+import { ArrowUpDown, Ellipsis, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "@leadinglight/ui/components/menu";
 import {
   SidebarGroup,
   SidebarGroupAction,
@@ -21,6 +21,13 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { localPrefs } from "~/lib/local-prefs";
+import type { ObjectSummary } from "~/lib/objects";
+
+// How Recent is ordered, newest first either way; kept on this Mac.
+export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent", { by: "created" });
+export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
+  recentOrder.get().by === "updated" ? b.updatedAt - a.updatedAt : b.createdAt - a.createdAt;
 
 type Child = { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void; onDelete: () => void };
 
@@ -128,9 +135,30 @@ export function NavProjects({
   }[];
   onCreate: () => void;
 }) {
+  const { by } = recentOrder.use();
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel>Pages</SidebarGroupLabel>
+      <SidebarGroupLabel>Recent</SidebarGroupLabel>
+      {/* Left of New page, 4 px apart. */}
+      <Menu>
+        <MenuTrigger render={<SidebarGroupAction aria-label="Sort Recent" className="right-9 aria-expanded:bg-sidebar-accent" />}>
+          <ArrowUpDown />
+        </MenuTrigger>
+        {/* Below, so it doesn't cover New page. */}
+        <MenuPopup align="start" side="bottom">
+          <MenuGroup>
+            <MenuGroupLabel>Sort by</MenuGroupLabel>
+            <MenuRadioGroup onValueChange={(v) => recentOrder.set({ by: v as "created" | "updated" })} value={by}>
+              <MenuRadioItem closeOnClick value="created">
+                Created
+              </MenuRadioItem>
+              <MenuRadioItem closeOnClick value="updated">
+                Updated
+              </MenuRadioItem>
+            </MenuRadioGroup>
+          </MenuGroup>
+        </MenuPopup>
+      </Menu>
       <SidebarGroupAction aria-label="New page" onClick={onCreate}>
         <Plus />
       </SidebarGroupAction>

@@ -2,14 +2,15 @@ import { type Editor, Extension, mergeAttributes, Node } from "@tiptap/core";
 import { type EditorState, PluginKey } from "@tiptap/pm/state";
 import { type NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, ReactRenderer } from "@tiptap/react";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
-import { type ComponentType, type ReactNode, useEffect, useRef } from "react";
+import { type ComponentType, Fragment, type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { keepFocus, surface } from "./ui";
 
 // Links to other pages. The editor stores only page ids; the app supplies search, creation
 // and how a link looks, so titles and icons always show their current state.
 
-export type LinkItem = { key: string; title: string; icon: ReactNode; hint?: string; link: () => Promise<string> };
+// Items sharing a section sit under its heading; a key starting "new" makes a page.
+export type LinkItem = { key: string; title: string; icon: ReactNode; hint?: string; section?: string; link: () => Promise<string> };
 export type LinkHost = {
   search: (query: string, tag: boolean) => LinkItem[];
   title: (id: string) => string; // for copying as plain text
@@ -90,20 +91,26 @@ function LinkMenu({ items, index, empty, onPick, onHover }: MenuProps) {
       <div className="max-h-[min(20rem,50vh)] overflow-y-auto overscroll-contain p-1" ref={list}>
         {items.length === 0 && <div className="px-2 py-1.5 text-muted-foreground text-sm">{empty}</div>}
         {items.map((item, i) => (
-          <div
-            aria-selected={i === index}
-            className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1 text-foreground text-sm data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-            data-highlighted={i === index || undefined}
-            key={item.key}
-            onClick={() => onPick(item)}
-            onMouseDown={keepFocus}
-            onMouseMove={() => i !== index && onHover(i)}
-            role="option"
-          >
-            {item.icon}
-            <span className="flex-1 truncate">{item.title}</span>
-            {item.hint && <span className="shrink-0 text-muted-foreground text-xs">{item.hint}</span>}
-          </div>
+          <Fragment key={item.key}>
+            {item.section && item.section !== items[i - 1]?.section && (
+              <div className="truncate px-2 py-1.5 font-medium text-muted-foreground text-xs" role="presentation">
+                {item.section}
+              </div>
+            )}
+            <div
+              aria-selected={i === index}
+              className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1 text-foreground text-sm data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+              data-highlighted={i === index || undefined}
+              onClick={() => onPick(item)}
+              onMouseDown={keepFocus}
+              onMouseMove={() => i !== index && onHover(i)}
+              role="option"
+            >
+              {item.icon}
+              <span className="flex-1 truncate">{item.title}</span>
+              {item.hint && <span className="shrink-0 text-muted-foreground text-xs">{item.hint}</span>}
+            </div>
+          </Fragment>
         ))}
       </div>
     </div>
@@ -123,7 +130,7 @@ function linkSuggestion(editor: Editor, host: LinkHost, char: keyof typeof keys,
       const query = state.doc.textBetween(range.from, range.to).slice(char.length);
       // "#" alone starts a heading; the menu waits for the first letter.
       if (tag) return query.length > 0;
-      return char === "[[" || !query.includes(" ") || host.search(query, false).some((i) => i.key !== "new");
+      return char === "[[" || !query.includes(" ") || host.search(query, false).some((i) => !i.key.startsWith("new"));
     },
     items: ({ query }) => host.search(query, tag),
     command: ({ editor, range, props }) => {

@@ -73,7 +73,7 @@ export async function hostCapture(): Promise<() => void> {
     }),
     listen<LinkRequest>("ll:capture-link", async (e) => {
       const { seq, kind, title = "", typeId = PAGE_TYPE, day = today() } = e.payload;
-      const id = await (kind === "day" ? ensureDaily(day) : createPage({ title, typeId }).then((p) => p.id)).catch((err) => (console.error(err), null));
+      const id = await (kind === "day" ? ensureDaily(day) : newPage(typeId, { title }).then((p) => p.id)).catch((err) => (console.error(err), null));
       await emitTo("capture", "ll:capture-linked", { seq, id });
     }),
     listen<string>("ll:open-page", (e) => openIdea(e.payload)),

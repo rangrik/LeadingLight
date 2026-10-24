@@ -13,7 +13,7 @@ async function typeLines(page: Page, lines: string[]) {
 }
 
 async function writeSample(page: Page) {
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).fill("Trip to Kyoto");
   await page.keyboard.press("Enter");
   await expect(body(page)).toBeFocused();
@@ -103,7 +103,7 @@ test("gallery @gallery", async ({ page }) => {
   await page.waitForTimeout(250);
   await shot(page, "07a-code-controls");
 
-  const firstRow = page.getByRole("navigation", { name: "Pages" }).getByRole("listitem").first();
+  const firstRow = page.getByRole("navigation", { name: "Recent" }).getByRole("listitem").first();
   await firstRow.hover();
   await firstRow.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();

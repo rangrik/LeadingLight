@@ -17,7 +17,7 @@ test("An Unsplash cover is reported as used and keeps its credit", async ({ page
   });
   await page.route("https://images.unsplash.com/**", (r) => r.fulfill({ status: 404 }));
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add cover" }).click();
   await page.getByRole("tab", { name: "Unsplash" }).click();

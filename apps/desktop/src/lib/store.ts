@@ -17,7 +17,8 @@ export type ObjectSummary = {
 export type LLObject = ObjectSummary & { content: EditorDoc | null };
 
 // properties replaces the whole map: only one editor holds a page, so it has every value.
-export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properties" | "typeId">>;
+// updatedAt is set only by a fix-up that isn't an edit, to keep the page's date.
+export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properties" | "typeId" | "updatedAt">>;
 
 export interface ObjectStore {
   list(): Promise<ObjectSummary[]>;

@@ -1,6 +1,6 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), NavProjects as Pages under our Types, and the plans' usage as the footer (NavUser's place).
+// skips it), NavProjects as Recent under our Types, and the plans' usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
 import { CalendarDays, Lightbulb } from "lucide-react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -94,7 +94,7 @@ export function AppSidebar({
         <nav aria-label="Types">
           <NavTypes types={types} />
         </nav>
-        <nav aria-label="Pages">
+        <nav aria-label="Recent">
           <NavProjects onCreate={onCreate} projects={pages} />
         </nav>
       </SidebarContent>

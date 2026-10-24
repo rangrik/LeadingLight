@@ -1,5 +1,5 @@
-import { ChevronsUpDown, Ellipsis, Plus, Waypoints } from "lucide-react";
-import { type ReactElement, useState } from "react";
+import { AlignLeft, ChevronsUpDown, Ellipsis, Plus, Waypoints } from "lucide-react";
+import { type ReactElement, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Field, FieldLabel } from "@leadinglight/ui/components/field";
@@ -26,18 +26,37 @@ import type { ObjectSummary } from "~/lib/objects";
 import { openEssay } from "~/lib/essay";
 import { pageStyle } from "~/lib/labels";
 import { childOf, roleOf } from "~/lib/linked";
-import { leaves, openPage, panes } from "~/lib/panes";
-import { propsOf, putProp, putType, removePage, space, typeOf, typeView } from "~/lib/space";
+import { leaves, panes } from "~/lib/panes";
+import { propsOf, putProp, putType, removePage, space, typeOf } from "~/lib/space";
 
 const NEW_KINDS = (Object.keys(KINDS) as Kind[]).filter((k) => k !== "created" && k !== "updated");
 
-// Find a property by name, or name a new one and pick its kind.
-export function AddProperty({ exclude, onAdd, children }: { exclude: string[]; onAdd: (prop: PropDef) => void; children: ReactElement }) {
+// Find a property by name, or name a new one and pick its kind. A page's description is the line
+// under its title, so "Description" opens that rather than becoming a second one.
+export function AddProperty({
+  exclude,
+  onAdd,
+  onDescription,
+  children,
+}: {
+  exclude: string[];
+  onAdd: (prop: PropDef) => void;
+  onDescription?: () => void;
+  children: ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [naming, setNaming] = useState(false);
+  const toDescription = useRef(false);
   const { props, types } = space.use();
   const q = query.trim();
+  const offerDescription = onDescription && "description".includes(q.toLowerCase());
+  const canCreate = q && q.toLowerCase() !== "description" && !props.some((p) => p.name.toLowerCase() === q.toLowerCase());
+  const describe = () => {
+    toDescription.current = true;
+    onDescription?.();
+    setOpen(false);
+  };
   // Which types use it, so two properties with one name can be told apart.
   const usedBy = (id: string) =>
     types
@@ -60,11 +79,13 @@ export function AddProperty({ exclude, onAdd, children }: { exclude: string[]; o
         setOpen(next);
         setQuery("");
         setNaming(false);
+        if (next) toDescription.current = false;
       }}
       open={open}
     >
       <PopoverTrigger render={children} />
-      <PopoverPopup align="start" aria-label="Add property" className="w-72">
+      {/* Picking Description leaves the keyboard in the description field. */}
+      <PopoverPopup align="start" aria-label="Add property" className="w-72" finalFocus={() => !toDescription.current}>
         {naming ? (
           <>
             <p className="px-1 pb-2 text-muted-foreground text-sm">Kind of “{q}”</p>
@@ -85,23 +106,38 @@ export function AddProperty({ exclude, onAdd, children }: { exclude: string[]; o
             <Input
               aria-label="Find or create a property"
               onChange={(e) => setQuery(e.currentTarget.value)}
-              onKeyDown={(e) => e.key === "Enter" && q && !shown.length && setNaming(true)}
+              onKeyDown={(e) => e.key === "Enter" && !shown.length && (offerDescription ? describe() : canCreate && setNaming(true))}
               placeholder="Find or create a property"
               size="sm"
               value={query}
             />
             <div className="-mx-1 mt-2 flex max-h-64 flex-col overflow-y-auto text-sm *:shrink-0">
+              {/* Why a plain page is offered Birthday: the right side names the types using each. */}
+              {shown.length > 0 && <p className="px-2 py-1.5 font-medium text-muted-foreground text-xs">Properties are shared by all pages.</p>}
+              {offerDescription && (
+                <button className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onClick={describe} type="button">
+                  <AlignLeft className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">Description</span>
+                  <span className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs">Under the title</span>
+                </button>
+              )}
               {shown.map((p) => {
                 const Icon = KIND_ICONS[p.kind];
                 return (
                   <button className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" key={p.id} onClick={() => done(p)} type="button">
                     <Icon className="size-4 shrink-0 text-muted-foreground" />
                     <span className="truncate">{p.name}</span>
-                    <span className="ms-auto shrink-0 text-muted-foreground text-xs">{usedBy(p.id) || KINDS[p.kind]}</span>
+                    <span className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs">{usedBy(p.id)}</span>
                   </button>
                 );
               })}
-              {q && !props.some((p) => p.name.toLowerCase() === q.toLowerCase()) && (
+              {/* Never an empty popup: say why nothing can be added. */}
+              {q && !shown.length && !offerDescription && !canCreate && (
+                <p className="px-2 py-1.5 text-muted-foreground">
+                  {q.toLowerCase() === "description" ? "A page's description is the line under its title." : "Already added."}
+                </p>
+              )}
+              {canCreate && (
                 <button className="flex h-8 items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-accent" onClick={() => setNaming(true)} type="button">
                   <Plus className="size-4" />
                   New property “{q}”
@@ -121,13 +157,14 @@ type PanelProps = {
   values: Record<string, unknown>;
   setProp: (key: string, value: unknown) => void;
   setType: (typeId: string) => void;
+  onDescription?: () => void; // while the page has none
 };
 
 const asIds = (v: unknown) => (Array.isArray(v) ? v : []);
 
 // The line under the title: the page's type, "Add property", page options. Then one row per
 // property: the type's in order, then the page's own, then pages linking here two-way.
-export function PropertyPanel({ page, typeId, values, setProp, setType }: PanelProps) {
+export function PropertyPanel({ page, typeId, values, setProp, setType, onDescription }: PanelProps) {
   const { types, props, pages } = space.use();
   const [editing, setEditing] = useState<PropDef | null>(null);
   const [saving, setSaving] = useState(false);
@@ -197,7 +234,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType }: PanelP
             ))}
           </SelectPopup>
         </Select>
-        <AddProperty exclude={shown.map((p) => p.id)} onAdd={(p) => setProp(p.id, values[p.id] ?? null)}>
+        <AddProperty exclude={shown.map((p) => p.id)} onAdd={(p) => setProp(p.id, values[p.id] ?? null)} onDescription={onDescription}>
           <Button aria-label="Add property" className="text-muted-foreground" size="sm" variant="ghost">
             <Plus />
             <span className="hidden @md:inline">Add property</span>
@@ -209,19 +246,20 @@ export function PropertyPanel({ page, typeId, values, setProp, setType }: PanelP
           </MenuTrigger>
           <MenuPopup align="start">
             <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>
-            <MenuItem onClick={() => openPage(typeView(typeId))}>Open {type.plural}</MenuItem>
             <MenuItem onClick={() => setDeleting(true)}>Delete page…</MenuItem>
             {!roleOf(page) && (
               <>
                 <MenuSeparator />
+                {/* Says who writes it: you do, quoting this page. */}
                 <MenuItem disabled={essayOpen} onClick={() => void openEssay(page.id)}>
-                  {essay ? "Open essay" : "Write essay"}
+                  {essay ? "Open essay" : "Start an essay on this page"}
                 </MenuItem>
               </>
             )}
             <MenuSeparator />
             <MenuGroup>
-              <MenuGroupLabel>Style</MenuGroupLabel>
+              {/* Named for what it changes, since a page without either looks the same in both. */}
+              <MenuGroupLabel>To-do and highlight style</MenuGroupLabel>
               <MenuRadioGroup onValueChange={(style) => setProp("style", style)} value={pageStyle(values)}>
                 <MenuRadioItem closeOnClick value="plain">
                   Plain

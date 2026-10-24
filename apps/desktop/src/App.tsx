@@ -31,6 +31,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
 import { dailyFor, ensureDaily, today } from "~/lib/daily";
@@ -42,7 +43,7 @@ import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -121,7 +122,11 @@ export default function App() {
 
   useEffect(() => {
     loadSpace()
-      .then((list) => showOnly(list.find(listed)?.id ?? null))
+      .then(async (list) => {
+        await foldDescriptions().catch(console.error);
+        // The top of Recent, in the order chosen.
+        showOnly(list.filter(listed).sort(byRecent)[0]?.id ?? null);
+      })
       .catch(console.error);
   }, []);
 
@@ -216,8 +221,10 @@ export default function App() {
 
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
+  recentOrder.use(); // the list follows a change of order
   const navPages = pages
     .filter((p) => listed(p) && !isChild(p))
+    .sort(byRecent)
     .map((p) => {
       const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
       return {
@@ -280,7 +287,7 @@ export default function App() {
             <PaneArea windowToggle={mac} />
           ) : (
             <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
-              <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} toggle={!mac} />
+              <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
               <Empty className="min-h-0 flex-1">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">

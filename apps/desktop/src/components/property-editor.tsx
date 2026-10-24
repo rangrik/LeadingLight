@@ -37,9 +37,12 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
   const { types } = space.use();
   const set = (patch: PropOptions) => setOptions({ ...options, ...patch });
   const choices = options.choices ?? [];
+  // A property by that name would be a second description beside the line under the title.
+  const taken = name.trim().toLowerCase() === "description";
   const setChoice = (i: number, patch: Partial<(typeof choices)[number]>) => set({ choices: choices.map((c, j) => (j === i ? { ...c, ...patch } : c)) });
 
   const save = async () => {
+    if (taken) return;
     const clean = name.trim() || prop.name;
     if (kind === prop.kind) await putProp({ ...prop, name: clean, options: { ...options, choices: options.choices?.filter((c) => c.name.trim()) } });
     else onReplaced?.(await changeKind(prop, clean, kind, { ...defaultOptions(kind), many: options.many }));
@@ -63,6 +66,7 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
           <Field>
             <FieldLabel>Name</FieldLabel>
             <Input onChange={(e) => setName(e.currentTarget.value)} value={name} />
+            {taken && <p className="text-muted-foreground text-sm">A page's description is the line under its title.</p>}
           </Field>
           <Field>
             <FieldLabel>Kind</FieldLabel>
@@ -173,7 +177,9 @@ export function PropertyEditor({ prop, onClose, onReplaced }: { prop: PropDef; o
           <Button onClick={onClose} type="button" variant="ghost">
             Cancel
           </Button>
-          <Button type="submit">Save</Button>
+          <Button disabled={taken} type="submit">
+            Save
+          </Button>
         </DialogFooter>
         </form>
       </DialogPopup>
