@@ -277,7 +277,9 @@ async function workers() {
       prompt: "Hand this task to a Codex worker, not doing it yourself: 'Reply with the single word MANGO.' Then end your turn. When the worker's result reaches you, reply with only the word it gave." });
     const reply = await until("the worker's word, back with the lead", async () => (await items(lead)).some((i) => i.kind === "report") && (await items(lead)).filter((i) => i.kind === "text").at(-1)?.text?.includes("MANGO"), 300_000);
     const all = (await api("GET", "/v1/sessions")).json;
-    const worker = all.find((x) => x.name !== lead && x.agent === "codex" && x.location?.startsWith("plain"));
+    // The lead's worker: the Codex session made after it (earlier scenarios leave others in this folder).
+    const since = Date.parse(all.find((x) => x.name === lead)?.created ?? "");
+    const worker = all.filter((x) => x.name !== lead && x.agent === "codex" && x.location?.startsWith("plain") && Date.parse(x.created) > since).at(-1);
     if (!reply || !worker) throw new Error(`sessions ${JSON.stringify(all.map((x) => [x.name, x.agent]))}`);
     // Started by a lead with full access, it has it too: nobody else is there to answer its asks.
     const mode = (await api("GET", "/v1/conversations")).json.find((c) => c.session === worker.name)?.mode;
@@ -304,6 +306,56 @@ async function workers() {
     const [a, b] = [await api("POST", "/v1/sessions", body), await api("POST", "/v1/sessions", body)];
     const n = (await api("GET", "/v1/sessions")).json.filter((x) => x.name === "probe-once").length;
     if (a.status !== 200 || b.status < 400 || n !== 1) throw new Error(`${a.status} ${b.status}, ${n} sessions`);
+  });
+}
+
+// Recovery (slice 11): a moved folder's chat carries on there; a restart between a send and its
+// repeat, or in the middle of a checked loop, leaves one turn and one run.
+async function recovery() {
+  const a = join(root, "moving A"), b2 = join(root, "moving B");
+  mkdirSync(a);
+  await api("POST", "/v1/locations", { name: "moving", path: a });
+  const s = "probe-moving";
+  await check("recovery: a chat whose folder moved carries on where it went", async () => {
+    await api("POST", "/v1/sessions", { name: s, location: "moving", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "haiku", effort: "low", prompt: "Remember the word PEAR. Reply with OK." });
+    await until("its turn", async () => (await session(s))?.agent_state === "finished");
+    const conv = await convOf(s);
+    await api("DELETE", `/v1/sessions/${s}`);
+    execFileSync("mv", [a, b2]);
+    await api("POST", "/v1/locations", { name: "moving", path: b2 });
+    const r = await resume(conv);
+    if (r.dir !== b2.replace(/^\/tmp/, "/private/tmp") && r.dir !== b2) throw new Error(`resumed in ${r.dir}`);
+    const n = (await items(r.name)).length;
+    await send(r.name, "Which word did I ask you to remember? One word.", "moving-1");
+    await replyAfter(r.name, n, "PEAR");
+    return { dir: r.dir };
+  });
+  await check("recovery: a send, a restart, and the same send again is one turn", async () => {
+    const name = (await api("GET", "/v1/conversations")).json.find((c) => c.dir?.endsWith("moving B"))?.session;
+    await until("idle", async () => (await session(name))?.agent_state === "finished");
+    const before = (await api("GET", `/v1/sessions/${name}/turns`)).json.length;
+    const first = await send(name, "Reply with the single word ONCE.", "recover-send");
+    await stop();
+    await start();
+    const again = await send(name, "Reply with the single word ONCE.", "recover-send");
+    await until("idle", async () => (await session(name))?.agent_state === "finished");
+    const after = (await api("GET", `/v1/sessions/${name}/turns`)).json.length;
+    if (first.status !== 200 || !again.json.duplicate || after !== before + 1) throw new Error(`${first.status} ${JSON.stringify(again.json)}, turns ${before} → ${after}`);
+  });
+  await check("recovery: a restart in the middle of a checked loop leaves one run, ended once", async () => {
+    await api("POST", "/v1/sessions", { name: "probe-steady", location: "plain", agent: "claude", driver: "claude", mode: "bypassPermissions", model: "sonnet", effort: "low" });
+    rmSync(join(folder, "m.txt"), { force: true });
+    const check = 'sleep 3; test "$(cat m.txt)" = 2 || { echo "m.txt must hold 2"; exit 1; }';
+    const said = execFileSync(bin, ["loop", "probe-steady", "--prompt", "Write the number 1 to m.txt, nothing else.", "--check", check, "--max", "3", "--detach"], { env: { ...process.env, BERTH_HOME: state } }).toString();
+    const id = /Loop run (\S+) started/.exec(said)?.[1];
+    await until("its first round", async () => existsSync(join(folder, "m.txt")));
+    await stop();
+    await start();
+    const run = await until("the loop ended", async () => { const r = (await api("GET", `/v1/runs/${id}`)).json; return ["succeeded", "failed", "cancelled", "interrupted"].includes(r?.status) && r; }, 400_000);
+    const runs = (await api("GET", "/v1/runs")).json;
+    const loops = (Array.isArray(runs) ? runs : runs.runs ?? []).filter((r) => r.template === "loop" && JSON.stringify(r).includes("probe-steady"));
+    if (run.status !== "succeeded" || readFileSync(join(folder, "m.txt"), "utf8").trim() !== "2" || loops.length !== 1) throw new Error(`run ${run.status}, ${loops.length} loops`);
+    return { run: id, status: run.status };
   });
 }
 
@@ -443,6 +495,7 @@ try {
   if (!only || only === "browser") await browser();
   if (!only || only === "requests") await requests();
   if (!only || only === "workers") await workers();
+  if (!only || only === "recovery") await recovery();
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
     if (mcp() !== mcpBefore) throw new Error("the person's MCP servers changed");

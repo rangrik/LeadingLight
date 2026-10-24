@@ -115,3 +115,31 @@ Feature: The project runtime
       newer one runs
     And agents that were running carry on under the newer one
     And the older build's berthd and tmux are kept beside it for rolling back
+
+  # Recovery, and the installed app's acceptance (slice 11)
+
+  Scenario: A chat whose folder moved carries on where it went
+    Given a chat in a folder that is then moved, and the page relinked to it
+    When the chat is sent a message
+    Then it resumes in the folder's new place and remembers what was said
+
+  Scenario: Interrupted between a send and its repeat
+    When a message is sent, the runtime restarts, and the same message is sent again
+    Then the agent has one turn for it
+
+  Scenario: Interrupted in the middle of a checked loop
+    When the runtime restarts while a checked loop runs
+    Then the loop goes on and ends once, with the file as the check wanted
+
+  Scenario: LeadingLight builds a feature in itself
+    Given the installed app built from merged main, and a page linked to an isolated LeadingLight worktree
+    When I ask its chat to add "Copy page link" to a page's ··· menu, using the page's ll: link,
+      try it in the connected browser, and have an independent worker review it
+    Then the chat reports the files it changed, what the browser showed, and the reviewer's answer
+    And the menu item copies the page's link
+
+  Scenario: A plain folder's summary
+    Given a page linked to a plain folder with two documents and a CSV
+    When I ask its chat for a sourced summary with totals checked against the CSV, and to preview it
+    Then the summary names its sources, its totals match the CSV, and its preview opens in the chat's browser
+

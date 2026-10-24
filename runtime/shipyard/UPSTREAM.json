@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
-  "version": "0.3.30-ll.20",
+  "version": "0.3.30-ll.22",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -34,6 +34,8 @@
     "0019-clone-cleanup.patch",
     "0020-note-loops.patch",
     "0021-loop-reports-back.patch",
-    "0022-worker-access.patch"
+    "0022-worker-access.patch",
+    "0023-moved-resume.patch",
+    "0024-flush-ledger.patch"
   ]
 }

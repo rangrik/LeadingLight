@@ -1,0 +1,42 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 09:04:49 -0700
+Subject: [PATCH] The turn ledger is written before berthd exits
+
+serve returns as soon as its server stops, and the ledger's last write ran on a goroutine the exit could beat: a send just answered, with its idem key, was lost across a restart, and the turn it started came back as one nobody sent. It is flushed on the way out now.
+---
+ cmd/berthd/main.go    | 3 +++
+ internal/box/turns.go | 3 +++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index a624161..8c0a2f7 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -453,6 +453,9 @@ func serve(b boxHome, args []string) error {
+ 		}
+ 	}
+ 	go turns.Run(ctx, bx)
++	// On the way out the ledger is written before the process ends: a send just answered, and its
++	// idem key, survive a restart (its own last write runs on a goroutine the exit can beat).
++	defer turns.Flush()
+ 	// Agents hear back about work they started, after the ledger has it.
+ 	bx.Reports = &box.Notifier{Path: filepath.Join(b.dir, "notify.json")}
+ 	go bx.Reports.Run(ctx, bx)
+diff --git a/internal/box/turns.go b/internal/box/turns.go
+index d2891bb..7a3b2b6 100644
+--- a/internal/box/turns.go
++++ b/internal/box/turns.go
+@@ -1510,6 +1510,9 @@ func (t *Turns) screenEvent(name, screen string) (string, map[string]any) {
+ 	return typ, data
+ }
+ 
++// Flush writes the ledger now, if anything changed since it was last written.
++func (t *Turns) Flush() { t.save() }
++
+ // save writes the ledger, the inbox, the legacy states and the archive.
+ func (t *Turns) save() {
+ 	t.mu.Lock()
+-- 
+2.51.2
+

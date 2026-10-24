@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 09:00:24 -0700
+Subject: [PATCH] A chat whose folder moved carries on where its location went
+
+Resuming a conversation whose folder is gone, while its location now names another folder (a relink after a move), restarts it there and notes the new folder.
+---
+ internal/box/conversations.go | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/internal/box/conversations.go b/internal/box/conversations.go
+index 700339d..b511e9e 100644
+--- a/internal/box/conversations.go
++++ b/internal/box/conversations.go
+@@ -331,7 +331,13 @@ func (b *Box) resumeConversation(w http.ResponseWriter, r *http.Request) error {
+ 		return nil
+ 	}
+ 	if st, err := os.Stat(conv.Dir); err != nil || !st.IsDir() {
+-		return httpError{http.StatusGone, "the folder it worked in, " + conv.Dir + ", is gone"}
++		// Its folder moved and its location follows it (a relink): it carries on there.
++		d, derr := b.Locations.Dir(r.Context(), conv.Location)
++		if derr != nil || d == conv.Dir {
++			return httpError{http.StatusGone, "the folder it worked in, " + conv.Dir + ", is gone"}
++		}
++		conv.Dir = d
++		noteConversation(dir, func(c *Conversation) { c.Dir = d })
+ 	}
+ 	sid := conversationSession(dir)
+ 	if sid == "" && conv.Agent == "claude" {
+-- 
+2.51.2
+

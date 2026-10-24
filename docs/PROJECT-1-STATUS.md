@@ -16,8 +16,8 @@ notices are vendor/shipyard's, checked equal at build time.
 
 - A chat whose session was removed outside the app (the API's DELETE) shows only "Send a message to
   pick this chat up again" until then; the runtime reads a conversation's record only through a session.
-- After a relink to a moved folder, older chats can't resume: their conversations keep the old path
-  (slice 11). One still running there keeps working in the old path, and a write can make it again. The app checks the folder before each send; the runtime doesn't refuse a session in a
+- After a relink to a moved folder, an older chat resumes in the new place (runtime ll.21); one
+  still running at the time keeps working in the old path until it is stopped. The app checks the folder before each send; the runtime doesn't refuse a session in a
   missing location yet (next runtime bump).
 - A question card hides the composer, so Stop is out of reach until it's answered.
 - With its session gone, a turn's file view has no Change (the runtime reads a call's detail through
