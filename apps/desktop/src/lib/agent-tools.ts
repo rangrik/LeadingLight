@@ -4,7 +4,7 @@ import { type Graph, scopeOf } from "~/lib/agent-scope";
 import type { PropDef } from "~/lib/catalog";
 import { pageLabel } from "~/lib/labels";
 import { parseHref, roleOf } from "~/lib/linked";
-import { liveContent } from "~/lib/live";
+import { editPage, liveContent } from "~/lib/live";
 import { docText, type LLObject, type ObjectSummary, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
@@ -13,13 +13,12 @@ import { evidenceBlocks, type KeptFile, keepEvidence } from "~/lib/evidence";
 import { type Batch, batchOf, sentNotes } from "~/lib/feedback";
 import { createPage, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { agentFor, agentOf, type Answer, type Ask, relationsOf, REPORT, reportOf, type ReportMeta, type Source, type Target, taskOfAgent, type Work, workersOf } from "~/lib/work";
-import { editPage } from "~/lib/live";
 
 // LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
 // answered here when the runtime passes a call on. Who calls comes from the runtime, never from
 // the agent: its session's folder names the project, its conversation the agent.
 
-export type Caller = { session: string; conversation?: string; location?: string; dir?: string; agent?: string; by?: string; turn?: string };
+export type Caller = { session: string; conversation?: string; location?: string; dir?: string; agent?: string; by?: string; turn?: string; title?: string };
 export type AgentCall = { id: string; tool: string; args: Record<string, unknown> | null; caller: Caller; files?: KeptFile[] };
 type Args = Record<string, unknown>;
 
@@ -155,7 +154,7 @@ async function read(c: Caller, a: Args) {
       updated: new Date(p.updatedAt).toISOString(),
     }),
     ...part(doc, from),
-    ...(withheld > 0 && { private_notes: `${withheld} of the person's notes here are private and not shown.` }),
+    ...(withheld > 0 && { private_notes: `${withheld} of the person's notes here ${withheld === 1 ? "is" : "are"} private and not shown.` }),
     ...(first && {
       links: [...(await graph.out(id))].filter((x, i, all) => graph.exists(x) && all.indexOf(x) === i).map((x) => ({ ...named(x), ...(!inScope.has(x) && { outside: true }) })),
       linked_from: near.filter((x) => inScope.has(x)).map(named),
@@ -210,6 +209,7 @@ async function project(c: Caller) {
     folder: folder.path,
     ...(you && { you: named(you.id) }),
     ...(task && { task: { ...named(task), brief: part(await bodyOf(task), 0).text, done: pageOf(task)!.properties.done === true } }),
+    ...(c.conversation && { outputs: ((await ask<{ id: string; path: string; kept: boolean }[]>("GET", `/v1/conversations/${c.conversation}/outputs`).catch(() => [])) ?? []).filter((o) => o.kept).slice(-20).map((o) => ({ output: o.id, path: o.path })) }),
     how: "read and search cover the project's pages; the folder's files are yours to read as usual. publish adds a report beside your task, or the page you name.",
   };
 }
@@ -245,10 +245,11 @@ async function sourcesOf(c: Caller, given: unknown): Promise<Source[]> {
 }
 
 const published = (r: ObjectSummary | LLObject) => {
-  const { to, evidence } = reportOf(r)!;
+  const { to, evidence, corrects } = reportOf(r)!;
   return {
     report: ref(r.id),
     to: ref(to),
+    ...(corrects && { corrects: `Kept as a correction to ${ref(corrects)}, which stays as it was.` }),
     ...(evidence?.length && { evidence: evidence.map((e) => ({ name: e.name, ref: `${ref(r.id)}#b${e.block}`, version: e.sha.slice(0, 12) })) }),
     note: `It shows after “${titleOf(to)}”'s own words in LeadingLight. Its blocks are ${ref(r.id)}#b1, #b2 and so on. Reports don't change: to correct one, publish another to it.`,
   };

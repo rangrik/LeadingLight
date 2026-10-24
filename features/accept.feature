@@ -19,6 +19,10 @@ Feature: Accepting an agent's work
     When I press Accept
     Then the task's Done is ticked, the panel says "Accepted just now", and the Feed item goes
 
+  Scenario: Accepted at rest
+    Given the agent answered my feedback without saying it is ready, and stopped
+    Then the panel says "Its latest report is … Accept it when you're satisfied." with Accept
+
   Scenario: Only I accept
     When the agent tries to mark "Write the summary" done with its task tool
     Then it is refused and Done stays unticked

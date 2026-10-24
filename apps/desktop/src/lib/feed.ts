@@ -4,6 +4,7 @@ import { liveEditor, whenLive } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
 import { focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
 import { chatOf, type Conversation, watch } from "~/lib/project-runtime/chat";
+import { said } from "~/lib/project-runtime/transcript";
 import { folders } from "~/lib/project-runtime/folders";
 import type { RuntimeRequest } from "~/lib/project-runtime/requests";
 import { ask } from "~/lib/project-runtime/transport";
@@ -26,8 +27,10 @@ export type FeedItem = {
   project?: string;
   at: number;
   targets: Target[];
-  // The chat it is answered in (the conversation's id) and the request.
+  // The chat it is answered in (the conversation's id) and the request; or, for an agent that
+  // stopped to ask in its own words, the chat a reply goes to.
   request?: { key: string; request: RuntimeRequest };
+  reply?: { key: string; location: string };
   note?: string;
 };
 
@@ -43,13 +46,19 @@ const WANTS: Record<string, string> = { Bash: "run a command", Edit: "change a f
 // Every agent's conversation, followed as an open chat is (lib/project-runtime/chat.ts) without
 // reading its reply as it is written, so its requests are known with no chat open.
 const followed = new Map<string, () => void>();
+// Conversations the runtime didn't have when last asked, asked about again only after a minute.
+const missing = new Map<string, number>();
 export async function followAgents(): Promise<void> {
-  const want = space.get().pages.flatMap((p) => (runOf(p)?.conversation ? [runOf(p)!.conversation] : [])).filter((c) => !followed.has(c));
+  const want = space
+    .get()
+    .pages.flatMap((p) => (runOf(p)?.conversation ? [runOf(p)!.conversation] : []))
+    .filter((c) => !followed.has(c) && Date.now() - (missing.get(c) ?? 0) > 60_000);
   if (!want.length) return;
   const convs = await ask<Conversation[]>("GET", "/v1/conversations?limit=200").catch(() => null);
   for (const id of want) {
     const conv = convs?.find((c) => c.id === id);
     if (conv && !followed.has(id)) followed.set(id, watch(id, conv, { reply: false }));
+    else if (!conv) missing.set(id, Date.now());
   }
 }
 
@@ -85,6 +94,14 @@ export function feedItems(): FeedItem[] {
     if (!agent) continue;
     const state = stateOf(task, agent, live);
     const base = { agent: agent.id, task: task.id, project: projectOf(runOf(agent)?.location) };
+    // Stopped to ask in its own words (Codex outside Plan mode has no question tool): its last words,
+    // with what it said they are about, until it works again.
+    const run = runOf(agent);
+    const last = state === "idle" && run ? lastWords(run.conversation, Date.parse(live.get(run.session)?.state_since ?? "") || task.updatedAt) : undefined;
+    if (last) {
+      const asked = ((agent.properties.asks as Ask[] | undefined) ?? []).filter((a) => words(last.text).includes(words(a.question).slice(0, 60))).at(-1);
+      items.push({ ...base, id: `said:${run!.conversation}:${last.id}`, kind: "question", reason: `${name(agent.id)} ${last.text.includes("?") ? "asks" : "says"}: ${last.text.length > 220 ? `${last.text.slice(0, 220)}…` : last.text}`, at: last.at, targets: asked?.about ?? [{ page: task.id }], reply: { key: run!.conversation, location: run!.location } });
+    }
     if (state === "review") {
       const report = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id).at(-1)!;
       items.push({ ...base, id: `review:${report.id}`, kind: "review", reason: `“${name(task.id)}” is ready for review`, at: report.createdAt, targets: [{ page: report.id }] });
@@ -107,6 +124,14 @@ export function feedItems(): FeedItem[] {
   }
   const { dismissed } = feedPrefs.get();
   return items.filter((i) => i.kind === "question" || i.kind === "approval" || !dismissed.includes(i.id)).sort((a, b) => b.at - a.at);
+}
+
+// What an agent said after the person's last message, when it ended its turn there.
+function lastWords(conversation: string, at: number) {
+  const items = chatOf(conversation).get().window.items;
+  const from = items.map((i) => said(i) !== null).lastIndexOf(true);
+  const text = items.slice(from + 1).filter((i) => i.kind === "text" && i.text?.trim()).at(-1);
+  return text ? { id: text.id, text: text.text!.trim().replace(/\s+/g, " "), at } : undefined;
 }
 
 // Shows a target beside the Feed, keeping the page being read where it is: in the pane the Feed

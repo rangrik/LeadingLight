@@ -18,7 +18,7 @@ Feature: Evidence inside a report
     When I ask a chat to make chart.png in the folder with a shell command and publish a report to
       "Brief" with chart.png as evidence, captioned "Sales by month"
     Then the report shows the chart as an image after its words, with "Sales by month" under it
-    And the image opens larger when I click it, as any image on a page does
+    And clicking the image opens it larger, as a file opens; it has no size bar, as the report can't change
 
   Scenario: A recording and a document
     When an agent publishes demo.mp4 and notes.pdf as evidence

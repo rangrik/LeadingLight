@@ -11,7 +11,7 @@ import { CoverBand, CoverPicker } from "~/components/page-cover";
 import { IconPicker, PageIconView } from "~/components/page-icon";
 import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
-import { ReportByline, Reports } from "~/components/reports";
+import { ReportByline, Reports, ReportSources } from "~/components/reports";
 import { WorkPanel } from "~/components/work-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
@@ -107,6 +107,7 @@ export function PageView({ page }: { page: LLObject }) {
     queue({ typeId: next });
   };
   const rename = (value: string) => {
+    if (reportOf(pageOf(page.id))) return;
     setTitle(value);
     patchSummary(page.id, { title: value });
     queue({ title: value });
@@ -397,6 +398,7 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        {report && <ReportSources report={current} />}
         <Reports pageId={page.id} />
         <Linked id={page.id} />
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}

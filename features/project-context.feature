@@ -60,4 +60,4 @@ Feature: A project's agents read its pages
   Scenario: LeadingLight closed
     Given a chat's agent is working and I quit LeadingLight
     When the agent reads a page
-    Then it is told LeadingLight isn't open, and can still read the folder's files
+    Then within a few seconds it is told LeadingLight isn't open, and can still read the folder's files

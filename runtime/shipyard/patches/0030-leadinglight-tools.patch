@@ -1,4 +1,4 @@
-From 18b54f91beb2bf32e10f744b2d7aa14a924442d1 Mon Sep 17 00:00:00 2001
+From 3f737a9467e6645695f679705a6bc6d1d4a6e73d Mon Sep 17 00:00:00 2001
 From: LeadingLight <noreply@anthropic.com>
 Date: Sat, 24 Oct 2026 12:06:41 -0700
 Subject: [PATCH] LeadingLight's tools for its project agents
@@ -17,14 +17,14 @@ one sent again is kept once.
  internal/box/claudedriver.go       |   3 +
  internal/box/codexdriver.go        |   3 +
  internal/box/embeddednote.go       |   4 +-
- internal/box/leadinglight.go       | 549 +++++++++++++++++++++++++++++
+ internal/box/leadinglight.go       | 581 +++++++++++++++++++++++++++++
  internal/box/leadinglight_test.go  |  54 +++
  internal/box/peerpid_darwin.go     |  24 ++
  internal/box/peerpid_other.go      |   8 +
  internal/mcpserver/leadinglight.go |  73 ++++
  internal/mcpserver/mcp.go          |  23 +-
  internal/wire/server.go            |  13 +-
- 12 files changed, 768 insertions(+), 11 deletions(-)
+ 12 files changed, 800 insertions(+), 11 deletions(-)
  create mode 100644 internal/box/leadinglight.go
  create mode 100644 internal/box/leadinglight_test.go
  create mode 100644 internal/box/peerpid_darwin.go
@@ -127,10 +127,10 @@ index f3fb4ea..293cbe5 100644
 +	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."
 diff --git a/internal/box/leadinglight.go b/internal/box/leadinglight.go
 new file mode 100644
-index 0000000..cc6e38f
+index 0000000..990397a
 --- /dev/null
 +++ b/internal/box/leadinglight.go
-@@ -0,0 +1,549 @@
+@@ -0,0 +1,581 @@
 +package box
 +
 +import (
@@ -172,6 +172,7 @@ index 0000000..cc6e38f
 +	Agent        string `json:"agent,omitempty"`
 +	By           string `json:"by,omitempty"`
 +	Turn         string `json:"turn,omitempty"`
++	Title        string `json:"title,omitempty"`
 +}
 +
 +// LLFile is a file a write names (evidence), kept by berthd as it was at the call.
@@ -290,8 +291,9 @@ index 0000000..cc6e38f
 +	statefile.Write(filepath.Join(l.dir, "outbox.json"), raw)
 +}
 +
-+// open says whether the app has asked for calls lately. Called with the lock held.
-+func (l *llBridge) open() bool { return l.asking > 0 || time.Since(l.asked) < 35*time.Second }
++// open says whether the app is asking for calls, or was a moment ago: it asks again at once after
++// each answer, so a longer gap means it has gone. Called with the lock held.
++func (l *llBridge) open() bool { return l.asking > 0 || time.Since(l.asked) < 5*time.Second }
 +
 +func (l *llBridge) tell() {
 +	close(l.wake)
@@ -317,8 +319,12 @@ index 0000000..cc6e38f
 +	}
 +	c := LLCaller{Session: name, Location: sess.Location, Dir: sess.Dir, Agent: sess.Agent, Turn: sess.Turn}
 +	if sess.conv != "" {
++		// The conversation says which agent it runs (a Codex session names no preset).
 +		conv, _ := readConversation(sess.conv)
-+		c.Conversation, c.By = filepath.Base(sess.conv), conv.By
++		c.Conversation, c.By, c.Title = filepath.Base(sess.conv), conv.By, conv.Title
++		if conv.Agent != "" {
++			c.Agent = conv.Agent
++		}
 +	}
 +	return c, nil
 +}
@@ -383,13 +389,35 @@ index 0000000..cc6e38f
 +	if write {
 +		wait = llWriteWait
 +	}
-+	select {
-+	case <-c.settled:
-+	case <-time.After(wait):
-+	case <-r.Context().Done():
++	deadline := time.After(wait)
++	tick := time.NewTicker(500 * time.Millisecond)
++	defer tick.Stop()
++	gone := false
++wait:
++	for {
++		select {
++		case <-c.settled:
++			break wait
++		case <-deadline:
++			break wait
++		case <-r.Context().Done():
++			break wait
++		case <-tick.C:
++			// A read no app has taken while none is asking: the app went away a moment ago.
++			l.mu.Lock()
++			gone = !write && c.State == "waiting" && c.claimed.IsZero() && !l.open()
++			l.mu.Unlock()
++			if gone {
++				break wait
++			}
++		}
 +	}
 +	l.mu.Lock()
 +	defer l.mu.Unlock()
++	if gone {
++		delete(l.calls, c.ID)
++		return httpError{http.StatusServiceUnavailable, "LeadingLight isn't open, so its pages can't be read now. The folder's files can still be read."}
++	}
 +	if r.Context().Err() != nil {
 +		if !write && c.State == "waiting" {
 +			delete(l.calls, c.ID)
@@ -556,6 +584,10 @@ index 0000000..cc6e38f
 +	for {
 +		out := []LLCall{}
 +		for _, c := range l.calls {
++			// One that went away takes nothing.
++			if ctx.Err() != nil {
++				break
++			}
 +			if c.State == "waiting" && time.Since(c.claimed) > llLease {
 +				c.claimed = time.Now()
 +				out = append(out, *c)

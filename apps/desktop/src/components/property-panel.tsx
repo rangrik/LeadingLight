@@ -173,7 +173,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
   const type = typeOf(typeId);
   const { type: typeProps, own } = propsOf(typeId, values);
   const shown = [...typeProps, ...own];
-  const choosable = types.filter((t) => t.id !== "daily");
+  const choosable = types.filter((t) => t.id !== "daily" && !t.made);
   // A page's essay opens beside it (DECISIONS.md, 11); a Thoughts page or an essay has none.
   const { root } = panes.use();
   const essay = childOf({ ...page, properties: values }, "essay");

@@ -21,6 +21,7 @@ import { objects } from "~/lib/objects";
 import { inlineHtml } from "~/lib/note-tools";
 import { docMarkdown } from "~/lib/page-markdown";
 import { pageOf } from "~/lib/space";
+import { isReport } from "~/lib/work";
 import { type Item, newThread, patchThread, pickThread, setPending, usePageThreads } from "~/lib/threads";
 import { answer, sendTurn, stopTurn } from "~/lib/turn";
 
@@ -442,7 +443,7 @@ export function AgentPanel({ windowToggle, dock, fit }: { windowToggle: boolean;
             <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
               <Sparkles className="size-6 text-muted-foreground" />
               <p className="text-balance text-lg">What should we do with {title ? `“${title}”` : "this page"}?</p>
-              <p className="text-balance text-muted-foreground text-xs">{gpt ? "GPT" : "Claude"} can read and change this page, find your other pages, and look things up.</p>
+              <p className="text-balance text-muted-foreground text-xs">{gpt ? "GPT" : "Claude"} can read {page && isReport(page.id) ? "this report (an agent's, which doesn't change)" : "and change this page"}, find your other pages, and look things up.</p>
             </div>
           )}
           {turnsOf(items).map((t, k, all) => (

@@ -13,7 +13,7 @@ import { createStore } from "~/lib/state";
 // a chat keeps up while another page is in front.
 
 export type Conversation = { id: string; agent: string; location?: string; dir: string; session?: string; live?: boolean; mode?: string; model?: string; effort?: string; title?: string; by?: string; created: string; updated?: string };
-export type Session = { name: string; agent_state?: string; exited?: boolean; driver?: string; agent?: string; created?: string };
+export type Session = { name: string; agent_state?: string; state_since?: string; exited?: boolean; driver?: string; agent?: string; created?: string };
 export type Turn = { n: number; state: string; started?: string; ended?: string; origin?: string };
 // A file an agent wrote, kept by the runtime as that write left it (slice 7).
 export type Output = { id: string; path: string; tool: string; at: number; size: number; kept: boolean; missing?: boolean };

@@ -105,7 +105,9 @@ function useFailed(src: string | null) {
 }
 
 // Media controls change the page, so a read-only page doesn't show them.
-const isSelected = ({ selected, editor }: NodeViewProps) => selected && editor.isEditable;
+// Words that can't change (a report, an embed) only take notes: their media aren't edited.
+const fixed = (editor: NodeViewProps["editor"]) => !editor.isEditable || !!editor.view.dom.closest("[data-annotate]");
+const isSelected = ({ selected, editor }: NodeViewProps) => selected && !fixed(editor);
 
 function ReplaceAndRemove({ accept, onFile, onRemove }: { accept: string; onFile: (f: File) => void; onRemove: () => void }) {
   const picker = useFilePicker(accept, onFile);
@@ -154,8 +156,10 @@ const WIDTHS = [
 function ImageView(props: NodeViewProps) {
   const { node, updateAttributes, deleteNode } = props;
   const selected = isSelected(props);
-  const { put } = useAsset(props);
+  const { assets, put } = useAsset(props);
   const { failed, onError } = useFailed(node.attrs.src);
+  // There, a click shows the image itself, larger, as a file opens.
+  const view = fixed(props.editor) ? () => assets.open({ url: node.attrs.src, name: node.attrs.name, size: node.attrs.size, mime: node.attrs.mime }) : undefined;
   return (
     <NodeViewWrapper className="ll-media" data-media="image" data-width={node.attrs.width}>
       {failed ? (
@@ -165,7 +169,7 @@ function ImageView(props: NodeViewProps) {
       ) : node.attrs.src ? (
         // The frame is the image's own size, so the toolbar and the outline sit on the image.
         <div className="ll-image-frame relative">
-          <img alt={node.attrs.name ?? ""} className="ll-image" draggable={false} onError={onError} src={node.attrs.src} />
+          <img alt={node.attrs.name ?? ""} className={view ? "ll-image cursor-zoom-in" : "ll-image"} draggable={false} onClick={view} onError={onError} src={node.attrs.src} />
           {selected && (
             <MediaToolbar label="Image">
               {WIDTHS.map(([value, label]) => (

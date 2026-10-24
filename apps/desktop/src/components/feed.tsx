@@ -1,6 +1,7 @@
 import { CircleCheck, Inbox, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Input } from "@leadinglight/ui/components/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
@@ -10,7 +11,7 @@ import { accept } from "~/lib/assign";
 import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
-import { answer, chatOf } from "~/lib/project-runtime/chat";
+import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { pageOf, space } from "~/lib/space";
@@ -70,6 +71,34 @@ function Answer({ item }: { item: FeedItem }) {
   );
 }
 
+// A reply to an agent that asked in its own words: a message to its chat, as the chat would send.
+function Reply({ item }: { item: FeedItem }) {
+  const { key, location } = item.reply!;
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const go = () => {
+    const conv = chatOf(key).get().conv;
+    if (!conv || !text.trim()) return;
+    setSending(true);
+    setError(null);
+    send(key, location, text.trim(), { model: conv.model ?? "", effort: conv.effort ?? "", ...accessOf(conv.mode, conv.agent === "codex" ? "codex" : "claude") })
+      .then(() => setText(""), (e: Error) => setError(e.message))
+      .finally(() => setSending(false));
+  };
+  return (
+    <form className="flex flex-col gap-1.5" onSubmit={(e) => (e.preventDefault(), go())}>
+      <div className="flex gap-1.5">
+        <Input aria-label="Your reply" disabled={sending} onChange={(e) => setText(e.currentTarget.value)} placeholder="Reply" size="sm" value={text} />
+        <Button disabled={sending || !text.trim()} size="sm" type="submit">
+          {sending ? "Sending…" : "Send"}
+        </Button>
+      </div>
+      {error && <p className="text-destructive-foreground text-xs">Not sent: {error}</p>}
+    </form>
+  );
+}
+
 function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boolean; onSelect: () => void; paneId?: string }) {
   const Icon = ICON[item.kind];
   const meta = [item.task ? title(item.task) : title(item.agent), title(item.project), formatAgo(item.at)].filter(Boolean).join(" · ");
@@ -97,7 +126,8 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
               <Answer item={item} />
             </div>
           )}
-          {!item.request && (
+          {item.reply && <Reply item={item} />}
+          {!item.request && !item.reply && (
             <div className="flex gap-1">
               {item.kind === "review" && item.task && (
                 <Button onClick={() => void accept(item.task!, item.targets[0]?.page)} size="xs">

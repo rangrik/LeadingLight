@@ -22,7 +22,7 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 const cut = (s: string, n = 48) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 const LL_STEPS: Record<string, [typeof Wrench, string]> = {
-  project: [FileText, "Read its assignment in LeadingLight"],
+  project: [FileText, "Read its project in LeadingLight"],
   read: [FileText, "Read a page in LeadingLight"],
   search: [Search, "Searched LeadingLight"],
   attachment: [Paperclip, "Opened an attachment from LeadingLight"],

@@ -326,6 +326,7 @@ export function BlockEditor({
         role: "textbox",
         "aria-label": label,
         "aria-multiline": "true",
+        ...(annotate && { spellcheck: "false" }),
       },
     },
     // What the editor adds by itself after a step that changed nothing (a closing empty line as a

@@ -41,7 +41,7 @@ export const isReport = (id: string) => !!reportOf(pageOf(id));
 // The reports beside a page, oldest first.
 export const reportsOn = (pageId: string, pages = space.get().pages) => pages.filter((p) => p.properties.parent === pageId && reportOf(p)).sort((a, b) => a.createdAt - b.createdAt);
 
-export type Caller = { session: string; conversation?: string; location?: string; agent?: string; by?: string };
+export type Caller = { session: string; conversation?: string; location?: string; agent?: string; by?: string; title?: string };
 
 // The Agent page of a caller: by its conversation, or by its session until an assignment has
 // recorded the conversation.
@@ -65,7 +65,7 @@ export async function agentFor(c: Caller): Promise<ObjectSummary> {
   return summarize(
     await createPage({
       typeId: AGENT,
-      title: lead ? `${name}, working for ${lead.title}` : name,
+      title: lead ? `${name}, working for ${lead.title}` : c.title ? `${name}: ${c.title.replace(/…$/, "").slice(0, 60)}` : name,
       properties: { run, "agent-profile": name, ...(lead && { "agent-parent": [lead.id] }), ...(task && { "agent-task": [task] }) },
     }),
   );

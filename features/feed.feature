@@ -69,6 +69,13 @@ Feature: The Feed
     Then the Feed opens as a pane beside the page, as any page does
     And selecting what an item is about shows it in that pane, its crumb leading back to the Feed
 
+  Scenario: An agent that asks in its own words
+    Given a Codex agent outside Plan mode, which has no question tool
+    When it says what its question is about, asks in its reply and stops
+    Then the Feed lists "Codex asks: …" with its words, and what it said the question is about
+    When I type "Average" in the item's reply and press Send
+    Then the agent gets it as a message in its chat and carries on, and the item goes
+
   Scenario: An agent with no context
     When an agent asks a question without saying what it is about
     Then its item says it didn't say, and its task opens beside the lane

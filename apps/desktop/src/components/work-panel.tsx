@@ -188,15 +188,16 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
   const accepted = acceptedOf(task);
   const since = accepted ? reportsOn(task.id, pages).filter((r) => r.createdAt > accepted.at) : [];
   const last = own.at(-1);
-  if (state === "review" && last)
+  // Ready, or reported and at rest: the person can accept whenever satisfied.
+  if ((state === "review" || state === "idle" || state === "stopped") && last)
     return (
       <Row className="ms-6" data-widget="review">
         <span className="min-w-0 flex-1 truncate text-muted-foreground">
-          Read{" "}
+          {state === "review" ? "Read " : "Its latest report is "}
           <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => visit(last.id, e)} type="button">
             {pageLabel(last.title)}
           </button>
-          , then accept it or send feedback.
+          {state === "review" ? ", then accept it or send feedback." : ". Accept it when you're satisfied."}
         </span>
         <Button onClick={() => void accept(task.id, last.id)} size="xs">
           <Check className="size-3.5" />

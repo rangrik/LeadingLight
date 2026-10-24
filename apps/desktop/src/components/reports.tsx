@@ -6,6 +6,7 @@ import { RowIcon } from "~/components/page-icon";
 import { visit } from "~/components/property-value";
 import { assets } from "~/lib/assets";
 import { openHref } from "~/lib/essay";
+import { showTarget } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { type ObjectSummary, objects } from "~/lib/objects";
@@ -68,6 +69,25 @@ export function ReportByline({ report, about }: { report: ObjectSummary; about?:
   );
 }
 
+// What a report rests on, each opening where its words are.
+export function ReportSources({ report }: { report: ObjectSummary }) {
+  const sources = reportOf(report)?.sources ?? [];
+  if (!sources.length) return null;
+  return (
+    <p className="mt-3 text-muted-foreground text-sm" data-testid="report-sources">
+      Rests on{" "}
+      {sources.map((s, i) => (
+        <span key={i}>
+          {i > 0 && " · "}
+          <button className="underline-offset-2 hover:text-foreground hover:underline" onClick={() => showTarget(s)} type="button">
+            {s.quote ? `“${s.quote.length > 60 ? `${s.quote.slice(0, 60)}…` : s.quote}” in ${titleOf(s.page)}` : titleOf(s.page)}
+          </button>
+        </span>
+      ))}
+    </p>
+  );
+}
+
 function ReportGroup({ report }: { report: ObjectSummary }) {
   // Its words never change, so they are read once.
   const [doc, setDoc] = useState<EditorDoc | null>();
@@ -92,6 +112,7 @@ function ReportGroup({ report }: { report: ObjectSummary }) {
           <BlockEditor assets={assets} content={doc} label={`Report: ${title}`} links={linkHost} openLink={openHref} readOnly />
         </div>
       )}
+      <ReportSources report={report} />
     </article>
   );
 }
