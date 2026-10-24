@@ -1,0 +1,169 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 07:07:50 -0700
+Subject: [PATCH] A running chat's model and effort; attachments kept with the
+ conversation
+
+POST /v1/sessions/{name}/model sets them: Claude Code at once (set_model, effortLevel), Codex from its next turn; the conversation keeps them. An embedded berthd keeps a session's attachments in its conversation's folder, never the person's, and lets Claude Code read there (--add-dir).
+---
+ internal/box/api.go          |  1 +
+ internal/box/attachments.go  | 28 +++++++++++++++--
+ internal/box/claudedriver.go |  6 ++++
+ internal/box/model.go        | 60 ++++++++++++++++++++++++++++++++++++
+ 4 files changed, 93 insertions(+), 2 deletions(-)
+ create mode 100644 internal/box/model.go
+
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 09dc7f4..92579d2 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -229,6 +229,7 @@ func (b *Box) Mount(s *wire.Server) {
+ 	route("POST /v1/sessions/{name}/interrupt", b.interruptSession)
+ 	route("GET /v1/sessions/{name}/controls", b.sessionControls)
+ 	route("POST /v1/sessions/{name}/mode", b.setMode)
++	route("POST /v1/sessions/{name}/model", b.setModel)
+ 	route("POST /v1/sessions/{name}/switch", b.switchSession)
+ 	route("GET /v1/sessions/{name}/wait", b.waitForSession)
+ 	route("GET /v1/sessions/{name}/turns", b.listTurns)
+diff --git a/internal/box/attachments.go b/internal/box/attachments.go
+index a9ec516..c13ca72 100644
+--- a/internal/box/attachments.go
++++ b/internal/box/attachments.go
+@@ -109,6 +109,17 @@ func sniffAttachment(name string, data []byte) (string, string, error) {
+ // SaveAttachment writes an attachment into the worktree at dir and returns
+ // it. The file is the box user's alone (0600), in a folder git ignores.
+ func SaveAttachment(ctx context.Context, dir, name string, data []byte) (Attachment, error) {
++	return saveAttachment(ctx, filepath.Join(dir, filepath.FromSlash(attachmentDir)), dir, name, data)
++}
++
++// conversationAttachments is where an embedded berthd keeps a conversation's
++// attachments: in its own state, never in the person's folder. Claude Code may
++// read there (launchClaudeIn).
++func conversationAttachments(conv string) string { return filepath.Join(conv, "attachments") }
++
++// saveAttachment keeps the file in folder; repo, when set, is the worktree
++// whose git must not see it.
++func saveAttachment(ctx context.Context, folder, repo, name string, data []byte) (Attachment, error) {
+ 	if len(data) == 0 {
+ 		return Attachment{}, badRequest("the file is empty")
+ 	}
+@@ -119,11 +130,12 @@ func SaveAttachment(ctx context.Context, dir, name string, data []byte) (Attachm
+ 	if err != nil {
+ 		return Attachment{}, httpError{http.StatusUnsupportedMediaType, err.Error()}
+ 	}
+-	folder := filepath.Join(dir, filepath.FromSlash(attachmentDir))
+ 	if err := os.MkdirAll(folder, 0o700); err != nil {
+ 		return Attachment{}, err
+ 	}
+-	excludeFromGit(ctx, dir, attachmentDir+"/")
++	if repo != "" {
++		excludeFromGit(ctx, repo, attachmentDir+"/")
++	}
+ 	file := attachmentName(name, ext)
+ 	stamp := time.Now().Format("20060102-150405")
+ 	for i := 0; ; i++ {
+@@ -213,6 +225,18 @@ func (b *Box) sessionAttachment(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	if EmbeddedFiles != "" && sess.conv != "" {
++		name, data, err := readAttachment(r)
++		if err != nil {
++			return err
++		}
++		a, err := saveAttachment(r.Context(), conversationAttachments(sess.conv), "", name, data)
++		if err != nil {
++			return err
++		}
++		writeJSON(w, a)
++		return nil
++	}
+ 	return b.attach1(w, r, sess.Dir)
+ }
+ 
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index 2acedf9..a814617 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -118,6 +118,12 @@ func (b *Box) launchClaudeIn(p AgentPreset, model, effort, mode, resume, dir, so
+ 	for _, f := range claudeStructuredFlags(claudeMode) {
+ 		words = append(words, shellQuote(f))
+ 	}
++	if EmbeddedFiles != "" {
++		// Its attachments are kept with the conversation, outside the folder it works in.
++		if err := os.MkdirAll(conversationAttachments(dir), 0o700); err == nil {
++			words = append(words, "--add-dir", shellQuote(conversationAttachments(dir)))
++		}
++	}
+ 	if resume != "" {
+ 		// A conversation never prompted, here or in its terminal, has
+ 		// nothing saved to resume (toTerminal): it starts under its ID.
+diff --git a/internal/box/model.go b/internal/box/model.go
+new file mode 100644
+index 0000000..87cbb9d
+--- /dev/null
++++ b/internal/box/model.go
+@@ -0,0 +1,60 @@
++package box
++
++import (
++	"net/http"
++)
++
++// setModel answers POST /v1/sessions/{name}/model {model?, effort?}: a chat's
++// model and effort, changed while its agent runs. Claude Code takes them at
++// once (set_model, and effortLevel in its settings); Codex from its next
++// turn, which carries them. The conversation keeps them, so the agent
++// carries on with them when it is resumed.
++func (b *Box) setModel(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Model  string `json:"model"`
++		Effort string `json:"effort"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	sess, err := b.Sessions.Get(r.Context(), r.PathValue("name"))
++	if err != nil {
++		return err
++	}
++	if sess.Exited {
++		return ErrSessionExited
++	}
++	switch d := b.driverFor(sess).(type) {
++	case *claudeDriver:
++		c, err := d.conv(sess)
++		if err != nil {
++			return err
++		}
++		if req.Model != "" {
++			if _, err := c.control(r.Context(), map[string]any{"subtype": "set_model", "model": req.Model}); err != nil {
++				return err
++			}
++		}
++		if req.Effort != "" {
++			if _, err := c.control(r.Context(), map[string]any{"subtype": "apply_flag_settings", "settings": map[string]any{"effortLevel": req.Effort}}); err != nil {
++				return err
++			}
++		}
++	case *codexDriver:
++		c, err := d.conv(sess)
++		if err != nil {
++			return err
++		}
++		c.mu.Lock()
++		c.model, c.effort = firstNonEmpty(req.Model, c.model), firstNonEmpty(req.Effort, c.effort)
++		c.mu.Unlock()
++	default:
++		return badRequest("this agent's model is set when it starts")
++	}
++	noteConversation(sess.conv, func(m *Conversation) {
++		m.Model, m.Effort = firstNonEmpty(req.Model, m.Model), firstNonEmpty(req.Effort, m.Effort)
++	})
++	b.publish(r, "session.model", map[string]any{"name": sess.Name, "model": req.Model, "effort": req.Effort})
++	writeJSON(w, map[string]any{"model": req.Model, "effort": req.Effort})
++	return nil
++}
+-- 
+2.51.2
+

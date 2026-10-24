@@ -28,6 +28,9 @@ const loginPath = execFileSync("/bin/zsh", ["-lc", "echo $PATH"]).toString().tri
 const watched = [join(homedir(), ".claude", "settings.json"), join(homedir(), ".codex", "config.toml"), join(homedir(), ".codex", "hooks.json")];
 const mtimes = () => watched.map((f) => (existsSync(f) ? statSync(f).mtimeMs : 0));
 const before = mtimes();
+// Claude Code writes ~/.claude.json itself; the person's MCP servers in it must stay theirs.
+const mcp = () => { try { return JSON.stringify(JSON.parse(readFileSync(join(homedir(), ".claude.json"), "utf8")).mcpServers ?? null); } catch { return ""; } };
+const mcpBefore = mcp();
 const theirs = () => tmuxList("berth").sort().join();
 const theirsBefore = theirs();
 // The probe's own tmux server, as seen while its agents run.
@@ -121,6 +124,7 @@ const convOf = async (s) => (await api("GET", "/v1/conversations")).json.find((c
 
 async function claude() {
   const s = "probe-claude";
+  let resumed;
   await check("claude: launches in the folder", async () => {
     const r = await api("POST", "/v1/sessions", { name: s, location: "plain", agent: "claude", driver: "claude", mode: "default", model: "sonnet", effort: "low",
       prompt: "Use the AskUserQuestion tool to ask me one single-choice question: which colour do I prefer, options Red and Blue. Then use the Write tool to write my answer to answer.txt, then reply DONE." });
@@ -149,11 +153,37 @@ async function claude() {
     const conv = await convOf(s);
     await api("DELETE", `/v1/sessions/${s}`);
     const r = await resume(conv);
+    resumed = r.name;
     if (!r.command.includes("--model sonnet") || !r.command.includes("--effort low")) throw new Error(`resumed without its model or effort: ${r.command}`);
     const n = (await items(r.name)).length;
     const [a, b] = [await send(r.name, "What colour did I pick? One word.", "claude-1"), await send(r.name, "What colour did I pick? One word.", "claude-1")];
     if (a.status !== 200 || !b.json.duplicate || a.json.turn !== b.json.turn) throw new Error(`sends ${JSON.stringify([a.json, b.json])}`);
     await replyAfter(r.name, n, "Blue");
+  });
+  await check("claude: a model and effort set while it runs reach it", async () => {
+    await until("idle", async () => (await session(resumed))?.agent_state === "finished");
+    const r = await api("POST", `/v1/sessions/${resumed}/model`, { model: "haiku", effort: "medium" });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.json));
+    const n = (await items(resumed)).length;
+    await send(resumed, "Reply with the single word OK.", "claude-m");
+    await replyAfter(resumed, n, "OK");
+    const log = readFileSync(join(state, "box", "conversations", await convOf(resumed), "events.jsonl"), "utf8");
+    const last = [...log.matchAll(/"model":"(claude-[^"]+)"/g)].at(-1)?.[1];
+    if (!last?.includes("haiku")) throw new Error(`answered by ${last}`);
+    const meta = (await api("GET", "/v1/conversations")).json.find((c) => c.session === resumed);
+    if (meta.model !== "haiku" || meta.effort !== "medium") throw new Error(`kept ${meta.model} ${meta.effort}`);
+    return { model: last };
+  });
+  await check("claude: an attachment stays out of the folder, and the agent reads it unasked", async () => {
+    const word = `kiwi${Date.now() % 100000}`;
+    const a = await api("POST", `/v1/sessions/${resumed}/attachments`, { name: "note.txt", data: Buffer.from(`The word is ${word}.`).toString("base64") });
+    if (a.status !== 200 || a.json.path.startsWith(folder.replace(/^\/tmp/, "/private/tmp")) || a.json.path.startsWith(folder)) throw new Error(JSON.stringify(a.json));
+    const n = (await items(resumed)).length;
+    await send(resumed, `Read the file ${a.json.path} and reply with only the word in it.`, "claude-a");
+    await replyAfter(resumed, n, word);
+    const asked = ((await api("GET", `/v1/sessions/${resumed}/requests`)).json ?? []).filter((x) => x.opened > Date.now() - 120000 && x.tool === "Read");
+    if (asked.length) throw new Error("it asked to read its own attachment");
+    return { path: a.json.path };
   });
 }
 
@@ -205,6 +235,22 @@ async function codex() {
     await api("POST", `/v1/sessions/${s}/requests/${encodeURIComponent(edit.id)}/respond`, { command: "probe-e1", choice: "allow" });
     await until("edit.txt", async () => readFileSync(join(folder, "edit.txt"), "utf8").includes("hello codex"));
     return { path: change.path.split("/").at(-1) };
+  });
+  await check("codex: a model and effort set while it runs reach its next turn", async () => {
+    await until("idle", async () => (await session(s))?.agent_state === "finished");
+    const conv = await convOf(s);
+    const log = () => readFileSync(join(state, "box", "conversations", conv, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l).data ?? {});
+    // Its own model again, so the check needs no particular account; the effort is what changes.
+    const model = log().find((d) => d.result?.thread)?.result.model;
+    const r = await api("POST", `/v1/sessions/${s}/model`, { model, effort: "low" });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.json));
+    await api("POST", `/v1/sessions/${s}/mode`, { mode: "default" });
+    const n = (await items(s)).length;
+    await send(s, "Reply with the single word OK.", "codex-m");
+    await replyAfter(s, n, "OK");
+    const turn = log().filter((d) => d.method === "turn/start").at(-1)?.params;
+    if (turn?.model !== model || turn?.effort !== "low") throw new Error(`next turn ${turn?.model} ${turn?.effort}`);
+    return { model, effort: turn.effort };
   });
   await check("codex: resumed and sent to at once, it carries on", async () => {
     await until("idle", async () => (await session(s))?.agent_state === "finished");
@@ -330,6 +376,7 @@ try {
   if (!only || only === "requests") await requests();
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
+    if (mcp() !== mcpBefore) throw new Error("the person's MCP servers changed");
     seeOurs();
     if (!ours.size) throw new Error("the probe's agents were never in its own tmux server");
     if (theirs() !== theirsBefore) throw new Error("the person's tmux server changed");
