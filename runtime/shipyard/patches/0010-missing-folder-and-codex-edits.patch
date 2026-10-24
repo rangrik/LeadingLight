@@ -1,0 +1,117 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 06:59:18 -0700
+Subject: [PATCH] Nothing starts in a missing folder; a Codex edit approval
+ carries its changes
+
+A location whose folder is gone gives no place to start, so an agent never runs in berthd's own folder instead. Codex asks about a file change by its item alone; the changes (paths and diffs) its item started with now go with the request.
+---
+ internal/box/codexdriver.go    | 25 ++++++++++++++++++++++---
+ internal/box/locations.go      |  4 ++++
+ internal/box/locations_test.go |  4 ++++
+ 3 files changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index dfb093f..bfef9c4 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -125,6 +125,7 @@ type codexConv struct {
+ 	since       time.Time
+ 	draft       strings.Builder
+ 	pending     []codexRequest
++	changes     map[string]json.RawMessage // a file change's edits, by item, until it completes
+ 	replies     map[string]chan json.RawMessage
+ 	sent        map[string]string // our request ids → their methods
+ 	next        int
+@@ -411,7 +412,16 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		switch m.Method {
+ 		case "item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/tool/requestUserInput":
+ 			c.pending = append(c.pending, r)
+-			c.reqs.open(codexReq(r), e.At)
++			req := codexReq(r)
++			// Codex asks about a file change by its item alone; the card shows what it changes.
++			if ch := c.changes[req.ToolUse]; ch != nil && req.Tool == "Edit" {
++				var in map[string]any
++				if json.Unmarshal(r.Params, &in) == nil {
++					in["changes"] = ch
++					req.Input, _ = json.Marshal(in)
++				}
++			}
++			c.reqs.open(req, e.At)
+ 			if live {
+ 				ask, reason := r.ask(c.cwd)
+ 				say = append(say, func() {
+@@ -434,7 +444,9 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 			Status string `json:"status"`
+ 		} `json:"turn"`
+ 		Item struct {
+-			Type    string `json:"type"`
++			Type    string          `json:"type"`
++			ID      string          `json:"id"`
++			Changes json.RawMessage `json:"changes"`
+ 			Content []struct {
+ 				Text string `json:"text"`
+ 			} `json:"content"`
+@@ -464,6 +476,12 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		if p.Item.Type == "agentMessage" {
+ 			c.draft.Reset()
+ 		}
++		if p.Item.Type == "fileChange" && len(p.Item.Changes) > 0 {
++			if c.changes == nil {
++				c.changes = map[string]json.RawMessage{}
++			}
++			c.changes[p.Item.ID] = p.Item.Changes
++		}
+ 		say = append(say, c.changedConversation)
+ 	case "item/agentMessage/delta":
+ 		if c.draft.Len() < maxDraft {
+@@ -473,6 +491,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		if p.Item.Type == "agentMessage" {
+ 			c.draft.Reset()
+ 		}
++		delete(c.changes, p.Item.ID)
+ 		say = append(say, c.changedConversation)
+ 	case "serverRequest/resolved":
+ 		c.reqs.mark(string(p.RequestID), ReqResolved, e.At)
+@@ -483,7 +502,7 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		}
+ 	case "turn/completed":
+ 		c.reqs.endTurn(e.At)
+-		c.busy, c.pending, c.since, c.turnID = false, nil, time.Time{}, ""
++		c.busy, c.pending, c.since, c.turnID, c.changes = false, nil, time.Time{}, "", nil
+ 		c.draft.Reset()
+ 		data := map[string]any{}
+ 		switch p.Turn.Status {
+diff --git a/internal/box/locations.go b/internal/box/locations.go
+index 23aa6e4..e2d690d 100644
+--- a/internal/box/locations.go
++++ b/internal/box/locations.go
+@@ -261,6 +261,10 @@ func (l *Locations) Dir(ctx context.Context, ref string) (string, error) {
+ 	if err != nil {
+ 		return "", err
+ 	}
++	// Nothing starts in a folder that isn't there: an agent would run wherever it was started from.
++	if loc.Missing {
++		return "", httpError{http.StatusGone, "the folder " + loc.Path + " isn't there any more"}
++	}
+ 	if wt == "" {
+ 		return loc.Path, nil
+ 	}
+diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
+index 30243c9..167140b 100644
+--- a/internal/box/locations_test.go
++++ b/internal/box/locations_test.go
+@@ -134,6 +134,10 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {
+ 	if gone, _ := l.Get(context.Background(), "scratch"); !gone.Missing || len(gone.Worktrees) != 0 {
+ 		t.Fatalf("a removed folder: %+v", gone)
+ 	}
++	// Nothing starts there: an agent would run wherever berthd was started.
++	if dir, err := l.Dir(context.Background(), "scratch"); err == nil {
++		t.Fatalf("a removed folder still gives a place to start: %q", dir)
++	}
+ 	if _, err := l.CreateWorktree(context.Background(), "scratch", "x", "", ""); err == nil {
+ 		t.Fatal("created a worktree in a non-repository")
+ 	}
+-- 
+2.51.2
+

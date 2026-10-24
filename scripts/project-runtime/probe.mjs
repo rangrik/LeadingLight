@@ -190,6 +190,22 @@ async function codex() {
     if (own && sent !== own) throw new Error(`plan effort ${own} in config, plan turn sent ${sent}`);
     return { ...answered, planEffort: sent };
   });
+  await check("codex: an edit approval names its file and its lines", async () => {
+    await until("idle", async () => (await session(s))?.agent_state === "finished");
+    await api("POST", `/v1/sessions/${s}/mode`, { mode: "untrusted" });
+    await send(s, "Create edit.txt containing the line hello codex, with your patch tool (apply_patch), not a shell command.", "codex-e");
+    // Untrusted asks before every command too; those are allowed on the way to the edit.
+    const edit = await until("an edit approval", async () => {
+      const open = ((await api("GET", `/v1/sessions/${s}/requests`)).json ?? []).filter((r) => r.state === "pending");
+      for (const r of open.filter((r) => r.tool === "Bash")) await api("POST", `/v1/sessions/${s}/requests/${encodeURIComponent(r.id)}/respond`, { command: `probe-${r.id}`, choice: "allow" });
+      return open.find((r) => r.tool === "Edit");
+    });
+    const change = edit.input?.changes?.[0];
+    if (!change?.path?.endsWith("edit.txt") || !change.diff?.includes("hello codex")) throw new Error(JSON.stringify(edit.input));
+    await api("POST", `/v1/sessions/${s}/requests/${encodeURIComponent(edit.id)}/respond`, { command: "probe-e1", choice: "allow" });
+    await until("edit.txt", async () => readFileSync(join(folder, "edit.txt"), "utf8").includes("hello codex"));
+    return { path: change.path.split("/").at(-1) };
+  });
   await check("codex: resumed and sent to at once, it carries on", async () => {
     await until("idle", async () => (await session(s))?.agent_state === "finished");
     const conv = await convOf(s);
