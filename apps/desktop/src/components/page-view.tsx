@@ -4,7 +4,7 @@ import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Backlinks } from "~/components/backlinks";
+import { Backlinks, Linked } from "~/components/backlinks";
 import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
 import { linkHost } from "~/components/link-views";
 import { CoverBand, CoverPicker } from "~/components/page-cover";
@@ -361,6 +361,7 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        <Linked id={page.id} />
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>

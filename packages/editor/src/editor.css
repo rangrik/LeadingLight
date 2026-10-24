@@ -80,8 +80,9 @@
   cursor: pointer;
 }
 /* Dark themes draw --input close to the page, so the box's edge comes from muted text: 3:1 on the
-   page (pnpm check:themes). */
-.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"] {
+   page (pnpm check:themes). A task line's box (the app's link-views.tsx) is the same box. */
+.dark .ll-editor ul[data-type="taskList"] input[type="checkbox"],
+.dark .ll-editor .ll-page-link [data-slot="checkbox"]:not([data-checked]) {
   border-color: color-mix(in srgb, var(--muted-foreground) 70%, var(--background));
   background: color-mix(in srgb, var(--input) 32%, transparent);
 }

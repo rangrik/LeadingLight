@@ -8,6 +8,11 @@ Feature: Links between pages
   - link menu: listbox "Link to a page", opened by "@", "[[" or "#" followed by a letter
   - block link: a link on its own line, with a "Link view" menu on hover
   - backlinks: section "Backlinks" at the end of a page, and its "Unlinked mentions" list
+  - linked sections: at a page's end, before the backlinks, one section per property that names
+    the pages pointing here through it ("Linked ideas · 2" for an idea's Project, "Linked books"
+    for a book's Author). Each page is a small card: its icon, its title and its tags.
+  - backlink tabs: under "Backlinks · N", COSS tabs: "All" then one tab per type the linking
+    pages have, by its plural name with a count ("Ideas 2"), in the sidebar's order
 
   Background:
     Given the app is open in a browser at 1280x800 with no stored data
@@ -30,7 +35,8 @@ Feature: Links between pages
   Scenario: Creating a page from the menu
     When I type "@Arrakis" in the body
     Then the menu ends with the heading "Create “Arrakis”" and one item per type, each with its
-      icon: "Page", "Person", "Book", "Meeting", "Project", "Idea", "Collection"
+      icon, in the order of the sidebar's Types: "Page", "Person", "Book", "Meeting", "Project",
+      "Task", "Idea", "Collection" and any type made in Settings
     And there is no "Tag" (that is "#") and no "Daily note" (one per day, made by date)
     When I press Enter on "Page"
     Then a page "Arrakis" exists and the line links to it
@@ -76,6 +82,40 @@ Feature: Links between pages
     When I open "Dune"
     Then "Backlinks · 2" lists "Notes" with "Reading @Dune this week" under it
     And "Arrakis" with "Through Items"
+
+  Scenario: Pages pointing here through a property
+    Given the ideas "Worms" (tagged "sand") and "Spice" have the Project "Dune", and "Notes" mentions "Dune"
+    When I open "Dune"
+    Then its properties show no "Ideas" row
+    And "Linked ideas · 2" shows two small cards, "Worms" with "#sand" and "Spice"
+    And "Backlinks · 1" lists only "Notes"; the ideas are not listed twice
+    When I click the card "Worms"
+    Then "Worms" opens; Shift-click opens it beside
+    When "Spice" changes its Project to nothing
+    Then "Linked ideas · 1" shows only "Worms"
+
+  Scenario: Backlinks by type, in tabs
+    Given "Dune" is linked from the page "Notes", the ideas "Worms" and "Spice", and the task "Reread"
+    When I open "Dune"
+    Then "Backlinks · 4" shows the tabs "All 4", "Pages 1", "Tasks 1" and "Ideas 2", with "All" picked
+    When I click "Ideas 2"
+    Then only "Worms" and "Spice" are listed, each with its line, and "Backlinks · 4" still reads 4
+    When I press ArrowLeft
+    Then "Tasks 1" is picked and only "Reread" is listed
+
+  Scenario: Tabs only when they sort something
+    Given "Dune" is linked from "Notes" and "Journal", both plain pages
+    When I open "Dune"
+    Then "Backlinks · 2" lists both, with no tabs
+
+  Scenario: The picked tab empties out
+    Given "Ideas 2" is picked on "Dune" and both ideas are edited to drop their link
+    Then "All" is picked again and the "Ideas" tab is gone
+
+  Scenario: Each page starts on All
+    Given "Ideas" was picked on "Dune"
+    When I open "Notes" and then "Dune" again
+    Then "All" is picked
 
   Scenario: Unlinked mentions can be linked
     Given "Journal" says "finished dune today" with no link

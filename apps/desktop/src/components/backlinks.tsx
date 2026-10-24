@@ -1,7 +1,9 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { PageCard } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
 import { visit } from "~/components/property-value";
 import { hasBlockLink, lineText, linesMentioning, linesSaying, linkFirst } from "~/lib/doc-links";
@@ -15,13 +17,36 @@ type Source = { page: LLObject; lines: string[]; via: string[]; block: boolean }
 const titleOf = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 const asIds = (v: unknown) => (Array.isArray(v) ? v : []);
 
+// Pages pointing here through a property that names its other side ("Linked ideas" for an idea's
+// Project): not a property of this page but links to it, so small cards with their tags, by kind.
+export function Linked({ id }: { id: string }) {
+  const { pages, props } = space.use();
+  return props
+    .filter((p) => p.kind === "relation" && p.options.reverse)
+    .map((p) => ({ name: `Linked ${p.options.reverse!.toLowerCase()}`, prop: p, from: pages.filter((x) => !x.properties.templateOf && asIds(x.properties[p.id]).includes(id)) }))
+    .filter((r) => r.from.length > 0)
+    .map(({ name, prop, from }) => (
+      <section aria-label={name} className="mt-16 border-t pt-6 text-sm" key={prop.id}>
+        <h2 className="mb-2 font-medium text-muted-foreground">
+          {name} · {from.length}
+        </h2>
+        <div className="flex flex-wrap gap-2">
+          {from.map((p) => (
+            <PageCard key={p.id} page={p} show={["tags"]} />
+          ))}
+        </div>
+      </section>
+    ));
+}
+
 // Everything that links to this page, then pages that name it without a link. Links through a
-// two-way property show on the page itself, so they are left out here.
+// two-way property are listed in Linked above, so they are left out here.
 export function Backlinks({ id, title }: { id: string; title: string }) {
-  const { saved, props } = space.use();
+  const { saved, props, types } = space.use();
   const [linked, setLinked] = useState<Source[]>([]);
   const [unlinked, setUnlinked] = useState<Source[]>([]);
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("all");
   const name = title.trim();
 
   useEffect(() => {
@@ -55,17 +80,45 @@ export function Backlinks({ id, title }: { id: string; title: string }) {
     };
   }, [id, name, saved, props]);
 
+  // Tabs only when the links span two types or more.
+  const byType = types.map((t) => ({ type: t, sources: linked.filter((s) => typeOf(s.page.typeId).id === t.id) })).filter((g) => g.sources.length);
+  const tabs = byType.length > 1 ? byType : [];
+  // A tab that loses its last backlink, or its tabs, goes back to All.
+  if (tab !== "all" && !tabs.some((g) => g.type.id === tab)) setTab("all");
+  const list = (
+    <div className="flex flex-col gap-3">
+      {(tabs.find((g) => g.type.id === tab)?.sources ?? linked).map((s) => (
+        <SourceRow key={s.page.id} source={s} />
+      ))}
+    </div>
+  );
+
   if (!linked.length && !unlinked.length) return null;
   return (
     <section aria-label="Backlinks" className="mt-16 border-t pt-6 text-sm">
       {linked.length > 0 && (
         <>
           <h2 className="mb-2 font-medium text-muted-foreground">Backlinks · {linked.length}</h2>
-          <div className="flex flex-col gap-3">
-            {linked.map((s) => (
-              <SourceRow key={s.page.id} source={s} />
-            ))}
-          </div>
+          {tabs.length ? (
+            <Tabs onValueChange={setTab} value={tab}>
+              {/* Lined up with the heading. A narrow pane scrolls the tabs, not the page; pb-px fits the underline. */}
+              <div className="-ms-2.5 overflow-x-auto pb-px">
+                <TabsList activateOnFocus variant="underline">
+                  <TabsTab value="all">
+                    All <Count n={linked.length} />
+                  </TabsTab>
+                  {tabs.map((g) => (
+                    <TabsTab key={g.type.id} value={g.type.id}>
+                      {g.type.plural} <Count n={g.sources.length} />
+                    </TabsTab>
+                  ))}
+                </TabsList>
+              </div>
+              <TabsPanel value={tab}>{list}</TabsPanel>
+            </Tabs>
+          ) : (
+            list
+          )}
         </>
       )}
       {unlinked.length > 0 && (
@@ -95,6 +148,8 @@ export function Backlinks({ id, title }: { id: string; title: string }) {
     </section>
   );
 }
+
+const Count = ({ n }: { n: number }) => <span className="text-muted-foreground tabular-nums">{n}</span>;
 
 function SourceRow({ source, children }: { source: Source; children?: React.ReactNode }) {
   const page = pageOf(source.page.id) ?? source.page;

@@ -1,4 +1,4 @@
-import { AlignLeft, ChevronsUpDown, Ellipsis, Plus, Waypoints } from "lucide-react";
+import { AlignLeft, ChevronsUpDown, Ellipsis, Plus } from "lucide-react";
 import { type ReactElement, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -20,11 +20,11 @@ import { Select, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { RowIcon } from "~/components/page-icon";
 import { defaultOptions, PropertyEditor } from "~/components/property-editor";
-import { KIND_ICONS, PageChip, PropValue } from "~/components/property-value";
+import { KIND_ICONS, PropValue } from "~/components/property-value";
 import { type Kind, KINDS, newId, type PropDef } from "~/lib/catalog";
 import type { ObjectSummary } from "~/lib/objects";
 import { openEssay } from "~/lib/essay";
-import { pageStyle } from "~/lib/labels";
+import { pageStyle, pluralOf } from "~/lib/labels";
 import { childOf, roleOf } from "~/lib/linked";
 import { leaves, panes } from "~/lib/panes";
 import { propsOf, putProp, putType, removePage, space, typeOf } from "~/lib/space";
@@ -117,7 +117,7 @@ export function AddProperty({
               {offerDescription && (
                 <button className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onClick={describe} type="button">
                   <AlignLeft className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">Description</span>
+                  <span className="max-w-[60%] shrink-0 truncate">Description</span>
                   <span className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs">Under the title</span>
                 </button>
               )}
@@ -126,7 +126,8 @@ export function AddProperty({
                 return (
                   <button className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" key={p.id} onClick={() => done(p)} type="button">
                     <Icon className="size-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{p.name}</span>
+                    <span className="max-w-[60%] shrink-0 truncate">{p.name}</span>
+                    {/* The name stays whole; the types take what room is left. */}
                     <span className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs">{usedBy(p.id)}</span>
                   </button>
                 );
@@ -160,22 +161,17 @@ type PanelProps = {
   onDescription?: () => void; // while the page has none
 };
 
-const asIds = (v: unknown) => (Array.isArray(v) ? v : []);
-
 // The line under the title: the page's type, "Add property", page options. Then one row per
-// property: the type's in order, then the page's own, then pages linking here two-way.
+// property: the type's in order, then the page's own. Pages linking here through a property are
+// listed at the page's end (backlinks.tsx, Linked).
 export function PropertyPanel({ page, typeId, values, setProp, setType, onDescription }: PanelProps) {
-  const { types, props, pages } = space.use();
+  const { types } = space.use();
   const [editing, setEditing] = useState<PropDef | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const type = typeOf(typeId);
   const { type: typeProps, own } = propsOf(typeId, values);
   const shown = [...typeProps, ...own];
-  const reverse = props
-    .filter((p) => p.kind === "relation" && p.options.reverse)
-    .map((p) => ({ prop: p, from: pages.filter((x) => asIds(x.properties[p.id]).includes(page.id)) }))
-    .filter((r) => r.from.length > 0);
   const choosable = types.filter((t) => t.id !== "daily");
   // A page's essay opens beside it (DECISIONS.md, 11); a Thoughts page or an essay has none.
   const { root } = panes.use();
@@ -275,23 +271,10 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
           </MenuPopup>
         </Menu>
       </div>
-      {shown.length + reverse.length > 0 && (
+      {shown.length > 0 && (
         <div className="mt-1 flex flex-col">
           {typeProps.map((p) => row(p, false))}
           {own.map((p) => row(p, true))}
-          {reverse.map(({ prop, from }) => (
-            <div className="grid grid-cols-1 items-start @md:grid-cols-[10rem_minmax(0,1fr)] @md:gap-2" key={`reverse-${prop.id}`}>
-              <span className="flex h-8 items-center gap-2 text-muted-foreground">
-                <Waypoints className="size-4 shrink-0" />
-                <span className="truncate">{prop.options.reverse}</span>
-              </span>
-              <div className="flex min-h-8 flex-wrap items-center gap-1 py-1">
-                {from.map((p) => (
-                  <PageChip id={p.id} key={p.id} />
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
       <DeletePageDialog
@@ -328,7 +311,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
 function SaveAsType({ onSave, onClose }: { onSave: (name: string, plural: string) => Promise<void>; onClose: () => void }) {
   const [name, setName] = useState("");
   const [plural, setPlural] = useState<string | null>(null);
-  const plurals = plural ?? (name.trim() ? `${name.trim()}s` : "");
+  const plurals = plural ?? (name.trim() ? pluralOf(name.trim()) : "");
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
       <DialogPopup className="max-w-sm">

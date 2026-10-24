@@ -5,6 +5,7 @@ export function NavTypes({
   types,
 }: {
   types: {
+    id: string;
     name: string;
     icon: React.ReactNode;
     isActive: boolean;
@@ -17,7 +18,7 @@ export function NavTypes({
       <SidebarGroupLabel>Types</SidebarGroupLabel>
       <SidebarMenu>
         {types.map((item) => (
-          <SidebarMenuItem key={item.name}>
+          <SidebarMenuItem key={item.id}>
             <SidebarMenuButton
               aria-current={item.isActive ? "page" : undefined}
               isActive={item.isActive}

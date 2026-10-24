@@ -267,21 +267,28 @@ function SelectValue({ prop, value, onChange }: { prop: PropDef; value: string[]
   );
 }
 
-// Pages the picker offers: of the property's type, when it has one.
+// Pages the picker offers: of the property's type, when it has one, last changed first. Enter
+// takes the first. create is there for the capture panel, whose pages the main window makes.
 export function PagePicker({
   typeId,
   exclude,
   onPick,
+  onClear,
   label,
   empty: isEmpty,
   trigger,
+  popup,
+  create = async (title, typeId) => (await createPage({ title, typeId })).id,
 }: {
   typeId?: string;
   exclude: string[];
   onPick: (id: string) => void;
+  onClear?: () => void;
   label: string;
   empty?: boolean;
   trigger?: React.ReactElement;
+  popup?: React.ComponentProps<typeof PopoverPopup>;
+  create?: (title: string, typeId: string) => Promise<string>;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -290,13 +297,18 @@ export function PagePicker({
   const shown = pages
     .filter((p) => (!typeId || p.typeId === typeId) && !exclude.includes(p.id) && !p.properties.templateOf)
     .filter((p) => pageLabel(p.title).toLowerCase().includes(q))
+    .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 50);
-  const done = (id: string) => {
-    onPick(id);
+  const noun = typeId ? typeOf(typeId).name.toLowerCase() : "page";
+  const find = `Find or create ${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}`;
+  const fresh = q && !shown.some((p) => pageLabel(p.title).toLowerCase() === q);
+  const done = (id?: string) => {
+    if (id) onPick(id);
+    else onClear?.();
     setQuery("");
     setOpen(false);
   };
-  const create = async () => done((await createPage({ title: query.trim(), typeId: typeId ?? "page" })).id);
+  const make = async () => done(await create(query.trim(), typeId ?? "page"));
   return (
     <Popover onOpenChange={setOpen} open={open}>
       {trigger ? (
@@ -308,25 +320,37 @@ export function PagePicker({
           <Plus className="size-4" />
         </PopoverTrigger>
       )}
-      <PopoverPopup align="start" className="w-72">
+      <PopoverPopup align="start" className="w-72" {...popup}>
         <Input
-          aria-label="Find or create a page"
+          aria-label={find}
           onChange={(e) => setQuery(e.currentTarget.value)}
-          placeholder={typeId ? `Find or create: ${typeOf(typeId).plural}` : "Find or create a page"}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter") return;
+            if (shown[0]) done(shown[0].id);
+            else if (fresh) void make();
+          }}
+          placeholder={find}
           size="sm"
           value={query}
         />
-        <div className="-mx-1 mt-2 flex max-h-60 flex-col overflow-y-auto text-sm *:shrink-0">
+        {/* At most half the window, so in the short capture panel it still fits below the trigger. */}
+        <div className="-mx-1 mt-2 flex max-h-[min(15rem,50svh)] flex-col overflow-y-auto text-sm *:shrink-0">
           {shown.map((p) => (
             <button className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" key={p.id} onClick={() => done(p.id)} type="button">
               <RowIcon icon={iconFor(p)} />
               <span className="truncate">{pageLabel(p.title)}</span>
             </button>
           ))}
-          {query.trim() && !shown.some((p) => pageLabel(p.title).toLowerCase() === q) && (
-            <button className="flex h-8 items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-accent" onClick={() => void create()} type="button">
+          {onClear && (
+            <button className="flex h-8 items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-accent" onClick={() => done()} type="button">
+              <X className="size-4" />
+              No {noun}
+            </button>
+          )}
+          {fresh && (
+            <button className="flex h-8 items-center gap-2 rounded-md px-2 text-muted-foreground hover:bg-accent" onClick={() => void make()} type="button">
               <Plus className="size-4" />
-              Create “{query.trim()}”
+              Create {typeId && `${noun} `}“{query.trim()}”
             </button>
           )}
         </div>

@@ -29,6 +29,8 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn Error>> {
     let window = app.get_webview_window(LABEL).ok_or("no capture window")?;
     let panel = window.to_panel::<CapturePanel>()?;
     panel.set_level(PanelLevel::Floating.value());
+    // macOS's shadow rings the box with a dark line in light themes; the page draws its own.
+    panel.set_has_shadow(false);
     // Shows over full-screen apps, on whatever space is in front.
     panel.set_collection_behavior(CollectionBehavior::new().full_screen_auxiliary().move_to_active_space().into());
     panel.add_style_mask(StyleMask::empty().nonactivating_panel().into())?;

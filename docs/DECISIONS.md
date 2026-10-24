@@ -195,14 +195,21 @@ and `editPage` live, so a daily note open in a pane gets its new line through it
 (see 9) and every list already knows the new page. In a browser the same box sits inside the
 window and calls the same code directly. For that the main window must exist, so closing it
 hides it and the Dock icon brings it back; only Quit ends the app. Transparent windows need
-Tauri's `macos-private-api`, which the panel's shadow and rounded corners rely on.
+Tauri's `macos-private-api`, which the box's rounded corners rely on. macOS's own window shadow
+rings a transparent window with a dark line, so the panel has none and the box draws its own,
+in a window a little larger than the box.
 
 The box's body is the block editor itself, not a plain field. In the panel the editor draws
 "@" from the panel's own copy of the space, read from the store each time the box shows; the
-pages its link menu makes (a new page, a day's note) are made by the main window on its behalf,
-so there is still one writer and nothing is made twice. Every captured idea is tagged
+pages its link menu and project picker make are made by the main window on its behalf, so
+there is still one writer and nothing is made twice. Every captured idea is tagged
 `in-the-middle`, a tag page made the first time, so a list of what came in on the fly is one
 click away.
+
+An idea is not written into the day's note. It shows there because it was made that day
+("Created this day"), like any page, so a busy day's note stays the person's own writing.
+Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
+the page in view, never in its place.
 
 ## 15. Changed shortcuts are written into the table, kept on this Mac
 
@@ -221,5 +228,15 @@ own ⌘\ listener in `packages/ui` is gone; the table's handler toggles it like 
 Opening a day (Today, the arrows, the calendar) shows a page that lives only in memory, under
 the id it will keep. Its first save stores it (`storeDraft` in `lib/space.ts`), so browsing never
 leaves empty notes in Daily notes, and the open editor carries on with nothing remounted. Linking
-a day (a capture, the "@" menu) stores it at once, its open draft included, so a day is never
-stored twice.
+a day (the "@" menu) stores it at once, its open draft included, so a day is never stored twice.
+
+## 17. Tasks are a type; the checkbox comes from the Done property
+
+A task is a page of the starter type Task, not a tag, because it carries a state, a due date
+and a project, which a tag can't. A line link gets a checkbox when its page's type has the
+`done` property, rather than when the type is Task, so no type is written into the code (8)
+and any type can be ticked off. Ticking writes the page through its open editor (9).
+
+Starter additions reach spaces made before them once: each brings a property of its own, and
+a space without that property hasn't had it. Properties can't be deleted, so a type the
+person deleted doesn't come back.

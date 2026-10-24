@@ -25,7 +25,7 @@ import { AskBar } from "~/components/ask-bar";
 import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
 import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
-import { linkHost } from "~/components/link-views";
+import { makeLinkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
@@ -34,7 +34,7 @@ import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
-import { dayPage, dayShown, today } from "~/lib/daily";
+import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
 import { pageLabel } from "~/lib/labels";
@@ -45,7 +45,7 @@ import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
+import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -126,8 +126,8 @@ export default function App() {
     loadSpace()
       .then(async (list) => {
         await foldDescriptions().catch(console.error);
-        // The top of Recent, in the order chosen.
-        showOnly(list.filter(listed).sort(byRecent)[0]?.id ?? null);
+        // The top of Recent (which leaves tasks out), in the order chosen.
+        showOnly(list.filter((p) => listed(p) && p.typeId !== "task").sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
@@ -161,7 +161,8 @@ export default function App() {
         openIdea(id);
       },
       close: closeCapture,
-      links: linkHost,
+      // Not the main host: the page in view is another page here, so "@" must offer it.
+      links: makeLinkHost({ create: async (title, typeId) => (await createPage({ title, typeId })).id, day: ensureDaily }),
     }),
     [closeCapture],
   );
@@ -233,7 +234,8 @@ export default function App() {
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
   const navPages = pages
-    .filter((p) => listed(p) && !isChild(p))
+    // Tasks live in their type's view; there are too many for this list.
+    .filter((p) => listed(p) && p.typeId !== "task" && !isChild(p))
     .sort(byRecent)
     .map((p) => {
       const kids = pages.filter((c) => parentOf(c) === p.id).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
@@ -268,6 +270,7 @@ export default function App() {
       };
     });
   const navTypes = types.map((t) => ({
+    id: t.id,
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,
     isActive: current === typeView(t.id),
@@ -353,9 +356,10 @@ export default function App() {
               </Suspense>
             </div>
           )}
+          {/* The row only places the box; a click beside it reaches the page under it. */}
           {capture && (
-            <div className="fixed inset-x-0 top-[15vh] z-50 flex justify-center">
-              <CaptureBox className="h-80 w-[640px] shadow-2xl" host={captureHost} />
+            <div className="pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center">
+              <CaptureBox className="pointer-events-auto h-80 w-[640px] shadow-2xl" host={captureHost} />
             </div>
           )}
           <ShortcutsSheet />
