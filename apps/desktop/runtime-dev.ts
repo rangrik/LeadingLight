@@ -30,9 +30,12 @@ const call = (method: string, p: string, body?: Buffer) =>
     req.end(body);
   });
 const info = () => call("GET", "/v1/info").then((r) => (r.status === 200 ? (JSON.parse(r.body.toString()) as { build: string; version: string }) : null), () => null);
+// The binary's version and build. A running berthd says its build from its file, which a rebuild
+// replaces, so the version (which names the patch set) is compared too.
 const buildOf = () => {
   try {
-    return /build ([0-9a-f]+)/.exec(execFileSync(bin, ["version"]).toString())?.[1] ?? null;
+    const m = /berthd (\S+) \(build ([0-9a-f]+)/.exec(execFileSync(bin, ["version"]).toString());
+    return m ? { version: m[1], build: m[2] } : null;
   } catch {
     return null;
   }
@@ -44,7 +47,7 @@ async function ensure(restart: boolean): Promise<Status> {
   const want = buildOf();
   if (!want) return { state: "failed", error: "No runtime built yet: run pnpm runtime:build.", home };
   const running = await info();
-  if (running && running.build === want && !restart) return { state: "ready", version: running.version, home };
+  if (running && running.build === want.build && running.version === want.version && !restart) return { state: "ready", version: running.version, home };
   if (running) {
     const pid = Number(fs.existsSync(path.join(home, "berthd.pid")) && fs.readFileSync(path.join(home, "berthd.pid"), "utf8"));
     if (pid) process.kill(pid, "SIGTERM");

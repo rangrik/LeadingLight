@@ -47,11 +47,14 @@ fn bundled(name: &str) -> Option<PathBuf> {
     p.is_file().then_some(p)
 }
 
-// "berthd v0.3.30-ll.1 (build 65d6b217d26e, darwin/arm64)": the build names the exact binary.
-fn build_of(bin: &Path) -> Option<String> {
+// "berthd v0.3.30-ll.5+94aedec3 (build dbbf20a1e075, darwin/arm64)": the version names the patch
+// set and the build the exact binary. A running berthd says its build from its file, so both count.
+fn build_of(bin: &Path) -> Option<(String, String)> {
     let out = Command::new(bin).arg("version").output().ok()?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
-    text.split("build ").nth(1).map(|s| s.split([',', ')']).next().unwrap_or("").trim().to_string())
+    let version = text.split_whitespace().nth(1)?.to_string();
+    let build = text.split("build ").nth(1)?.split([',', ')']).next()?.trim().to_string();
+    Some((version, build))
 }
 
 // A name and a block of ports of this app's own, so the real app, a dev app and the person's
@@ -135,12 +138,12 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
     let Some(bin) = bundled("berthd") else {
         return set(rt, &home, "failed", None, Some("This build has no runtime; run pnpm runtime:build.".into()));
     };
-    let Some(want) = build_of(&bin) else {
+    let Some((want_version, want)) = build_of(&bin) else {
         return set(rt, &home, "failed", None, Some(format!("{} doesn't run", bin.display())));
     };
     let version = |i: &Value| i["version"].as_str().map(String::from);
     if let Some(i) = info(&sock) {
-        if !restart && i["build"].as_str() == Some(want.as_str()) {
+        if !restart && i["build"].as_str() == Some(want.as_str()) && i["version"].as_str() == Some(want_version.as_str()) {
             return set(rt, &home, "ready", version(&i), None);
         }
         if i["build"].as_str() != Some(want.as_str()) {
