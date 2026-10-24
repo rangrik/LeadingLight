@@ -4,7 +4,7 @@ import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { Backlinks } from "~/components/backlinks";
+import { Backlinks, Linked } from "~/components/backlinks";
 import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
 import { linkHost } from "~/components/link-views";
 import { CoverBand, CoverPicker } from "~/components/page-cover";
@@ -108,6 +108,10 @@ export function PageView({ page }: { page: LLObject }) {
   };
   const setIcon = (icon?: PageIcon) => setProp("icon", icon);
   const setCover = (cover?: PageCover) => setProp("cover", cover);
+  const addDescription = () => {
+    setAdding(true);
+    setProp("description", "");
+  };
 
   const icon = readIcon(props.icon);
   const cover = readCover(props.cover);
@@ -286,16 +290,7 @@ export function PageView({ page }: { page: LLObject }) {
                 />
               )}
               {description === undefined && (
-                <Button
-                  aria-label="Add description"
-                  className="text-muted-foreground"
-                  onClick={() => {
-                    setAdding(true);
-                    setProp("description", "");
-                  }}
-                  size="sm"
-                  variant="ghost"
-                >
+                <Button aria-label="Add description" className="text-muted-foreground" onClick={addDescription} size="sm" variant="ghost">
                   <AlignLeft />
                   <Label>Add description</Label>
                 </Button>
@@ -338,7 +333,14 @@ export function PageView({ page }: { page: LLObject }) {
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        <PropertyPanel page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }} setProp={setProp} setType={setType} typeId={typeId} values={props} />
+        <PropertyPanel
+          onDescription={description === undefined ? addDescription : undefined}
+          page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
+          setProp={setProp}
+          setType={setType}
+          typeId={typeId}
+          values={props}
+        />
         {day && <DailyBar day={day} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
@@ -365,6 +367,7 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        <Linked id={page.id} />
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>

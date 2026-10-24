@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // Catches Escape in the slash menu selecting the block, so the next Backspace deletes it.
 test("Escape in the slash menu, then Backspace, only edits text", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("keep me");
   await page.keyboard.press("Enter");
@@ -20,7 +20,7 @@ test("Escape in the slash menu, then Backspace, only edits text", async ({ page 
 // Catches each click adding another empty line, as a pasted blank line (a lone <br>) made it do.
 test("Clicks below the text reuse the blank line the page ends with", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   const title = page.getByRole("textbox", { name: "Title" });
   await title.press("Enter");
   await page.evaluate(() => (window as unknown as { __editor: { commands: { setContent(html: string): void } } }).__editor.commands.setContent("<p>Notes</p><p><br></p>"));
@@ -39,7 +39,7 @@ test("Clicks below the text reuse the blank line the page ends with", async ({ p
 // Catches the block menu opening on a word, so its Delete removes nothing.
 test("Right-clicking selected blocks opens the block menu for all of them", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("one\ntwo words\nthree words");
   await page.keyboard.press("Escape");
@@ -54,7 +54,7 @@ test("Right-clicking selected blocks opens the block menu for all of them", asyn
 // Catches a drag that never starts (a cancelled mousedown did that); synthetic drag events can't.
 test("Dragging the handle with a real mouse moves the block", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("one\ntwo\nthree");
   const paragraphs = page.getByRole("textbox", { name: "Page body" }).locator("p");
@@ -73,7 +73,7 @@ test("Dragging the handle with a real mouse moves the block", async ({ page }) =
 test("New page, paste Markdown: the heading names it, the rest is formatted", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.evaluate(() => navigator.clipboard.writeText("# Trip plan\n\n## Packing\n\n- **passport**\n- charger\n"));
   await page.keyboard.press("ControlOrMeta+V");
   await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Trip plan");

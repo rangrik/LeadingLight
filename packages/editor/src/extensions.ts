@@ -288,7 +288,7 @@ export function createExtensions(opts: {
     opts.placeholder ? Placeholder.configure({ paragraph: opts.placeholder }) : Placeholder,
     BlurSelection,
     WritingAids,
-    SlashCommands,
+    SlashCommands.configure({ host }),
     BlockSelectionExtension,
     SelectAll,
     BlockDrop,

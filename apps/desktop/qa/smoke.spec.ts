@@ -5,7 +5,7 @@ test("create a page, write, and reload", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("No pages yet")).toBeVisible();
 
-  const sidebar = page.getByRole("navigation", { name: "Pages" });
+  const sidebar = page.getByRole("navigation", { name: "Recent" });
   await sidebar.getByRole("button", { name: "New page" }).click();
 
   const title = page.getByRole("textbox", { name: "Title" });

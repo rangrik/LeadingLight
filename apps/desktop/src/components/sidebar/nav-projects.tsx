@@ -1,14 +1,14 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
-// Changes: pages instead of projects, its label given (Pinned, Pages) with a New page action and
-// empty text for Pages, rows select instead of linking; the row menu is Rename, Pin, Copy link and
-// Delete (View/Share and the trailing "More" row dropped); rows can be dragged beside the open
-// page; a page's Thoughts page and essay hang under it on a tree (see Children).
-import { Ellipsis, Link, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
+// Changes: pages instead of projects, its label given (Pinned, Recent) with a New page action, a
+// Sort menu and empty text for Recent, rows select instead of linking; the row menu is Rename,
+// Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
+// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
+import { ArrowUpDown, Ellipsis, Link, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Input } from "@leadinglight/ui/components/input";
-import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup } from "@leadinglight/ui/components/popover";
 import {
   SidebarGroup,
@@ -23,6 +23,13 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { localPrefs } from "~/lib/local-prefs";
+import type { ObjectSummary } from "~/lib/objects";
+
+// How Recent is ordered, newest first either way; kept on this Mac.
+export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent", { by: "created" });
+export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
+  recentOrder.get().by === "updated" ? b.updatedAt - a.updatedAt : b.createdAt - a.createdAt;
 
 // What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes.
 type Actions = { onCopyLink: () => void; onDelete: () => void };
@@ -192,10 +199,32 @@ function PageRow({ item }: { item: Row }) {
   );
 }
 
-export function NavProjects({ label, projects, onCreate }: { label: string; projects: Row[]; onCreate?: () => void }) {
+export function NavProjects({ label, projects, onCreate, sortable }: { label: string; projects: Row[]; onCreate?: () => void; sortable?: boolean }) {
+  const { by } = recentOrder.use();
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      {sortable && (
+        // Left of New page, 4 px apart; it opens below so it doesn't cover New page.
+        <Menu>
+          <MenuTrigger render={<SidebarGroupAction aria-label={`Sort ${label}`} className="right-9 aria-expanded:bg-sidebar-accent" />}>
+            <ArrowUpDown />
+          </MenuTrigger>
+          <MenuPopup align="start" side="bottom">
+            <MenuGroup>
+              <MenuGroupLabel>Sort by</MenuGroupLabel>
+              <MenuRadioGroup onValueChange={(v) => recentOrder.set({ by: v as "created" | "updated" })} value={by}>
+                <MenuRadioItem closeOnClick value="created">
+                  Created
+                </MenuRadioItem>
+                <MenuRadioItem closeOnClick value="updated">
+                  Updated
+                </MenuRadioItem>
+              </MenuRadioGroup>
+            </MenuGroup>
+          </MenuPopup>
+        </Menu>
+      )}
       {onCreate && (
         <SidebarGroupAction aria-label="New page" onClick={onCreate}>
           <Plus />

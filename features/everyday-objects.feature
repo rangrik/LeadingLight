@@ -52,7 +52,7 @@ Feature: Tags, daily notes and templates
 
   Scenario: Daily notes stay out of Pages
     Given today's note exists
-    Then the sidebar's Pages list doesn't show it, and Daily notes lists it
+    Then the sidebar's Recent list doesn't show it, and Daily notes lists it
 
   Scenario: Making a template and a default
     When I open "Books", click "Type settings" and "New template"

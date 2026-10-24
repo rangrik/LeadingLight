@@ -4,6 +4,7 @@ import { ReactRenderer } from "@tiptap/react";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import { useEffect, useRef } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
+import type { LinkHost } from "./page-links";
 import { filterSlashItems, type SlashItem } from "./slash-items";
 import { keepFocus, surface } from "./ui";
 
@@ -43,7 +44,7 @@ function SlashMenu({ items, index, onPick, onHover }: MenuProps) {
               return (
                 <div
                   aria-selected={i === index}
-                  className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1 text-foreground text-sm data-highlighted:bg-accent data-highlighted:text-accent-foreground [&>svg]:-mx-0.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-80"
+                  className="flex min-h-7 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1 text-foreground text-sm data-highlighted:bg-accent data-highlighted:text-accent-foreground [&>:first-child]:-mx-0.5 [&>:first-child]:size-4 [&>:first-child]:shrink-0 [&>:first-child]:opacity-80"
                   data-highlighted={i === index || undefined}
                   key={item.id}
                   onClick={() => onPick(item)}
@@ -68,10 +69,13 @@ function SlashMenu({ items, index, onPick, onHover }: MenuProps) {
   );
 }
 
-export const SlashCommands = Extension.create({
+export const SlashCommands = Extension.create<{ host: LinkHost | null }>({
   name: "slashCommands",
+  addOptions: () => ({ host: null }),
 
   addProseMirrorPlugins() {
+    const host = this.options.host;
+    const find = (query: string) => filterSlashItems(query, host?.types() ?? []);
     return [
       Suggestion<SlashItem, SlashItem>({
         pluginKey: slashKey,
@@ -82,11 +86,11 @@ export const SlashCommands = Extension.create({
         allow: ({ state, range }) => {
           if (state.doc.resolve(range.from).parent.type.spec.code) return false;
           const query = state.doc.textBetween(range.from, range.to).slice(1);
-          return !(query.includes(" ") && filterSlashItems(query).length === 0);
+          return !(query.includes(" ") && find(query).length === 0);
         },
         placement: "bottom-start",
         offset: { mainAxis: 8 },
-        items: ({ query }) => filterSlashItems(query),
+        items: ({ query }) => find(query),
         command: ({ editor, range, props }) => props.run(editor, range),
         // Items and the highlight live here, not in React state, so a fast "/table⏎"
         // picks from the list the plugin has, not one React hasn't rendered yet.

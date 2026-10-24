@@ -1,14 +1,14 @@
 import { expect, type Page, test } from "@playwright/test";
 
 const open = (page: Page, name: string) =>
-  page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name, exact: true }).click();
+  page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name, exact: true }).click();
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 
 // Seam: saves wait 500 ms, and the page can go away inside that wait.
 // Catches the last edit being lost on reload, tab close or window close.
 test("Reloading right after typing keeps the edit", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("last words");
   await page.reload();
@@ -58,7 +58,7 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
   await page.addInitScript((v) => localStorage.getItem("seeded") || localStorage.setItem("leadinglight.objects", v), JSON.stringify(old));
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("seeded", "1"));
-  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Trip" })).toContainText("✈️");
+  await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Trip" })).toContainText("✈️");
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add description" }).click();
   await page.keyboard.type("Ten days");
@@ -75,6 +75,27 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
       }),
   );
   expect(stored).toMatchObject({ later: { kept: true }, description: "Ten days" });
+});
+
+// Seam: spaces saved when a property could be named "Description". Catches its text being lost,
+// or a second Description row left beside the line under the title.
+test("An old Description property joins the line under the title", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
+  await page.evaluate(
+    () =>
+      new Promise((done) => {
+        indexedDB.open("leadinglight").onsuccess = (e) => {
+          const t = (e.target as IDBOpenDBRequest).result.transaction(["props", "objects"], "readwrite");
+          t.objectStore("props").put({ id: "p_d", name: "Description", kind: "text", options: {}, createdAt: 1 });
+          t.objectStore("objects").put({ id: "d", typeId: "page", title: "Dune", content: null, properties: { p_d: "A desert planet" }, createdAt: 1, updatedAt: 1 });
+          t.oncomplete = done;
+        };
+      }),
+  );
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue("A desert planet");
+  await expect(page.getByRole("button", { name: "Description", exact: true })).toHaveCount(0);
 });
 
 // Seam: the browser store's upgrade from version 1, which had pages only. Catches existing
@@ -97,6 +118,6 @@ test("Pages stored before types existed survive the upgrade", async ({ page }) =
       }),
   );
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "From v1" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "From v1" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
 });

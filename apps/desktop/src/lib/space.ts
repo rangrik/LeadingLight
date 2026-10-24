@@ -80,17 +80,19 @@ export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.pr
 // What a pane shows: a page by its id, or a type's list of pages.
 export const TYPE_VIEW = "type:";
 export const typeView = (id: string) => `${TYPE_VIEW}${id}`;
-export function describe(view: string): { title: string; icon?: PageIcon; parent: string } {
+// The parent crumb opens what it names; a type's list has none.
+export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (view.startsWith(TYPE_VIEW)) {
     const type = typeOf(view.slice(TYPE_VIEW.length));
-    return { title: type.plural, icon: type.icon, parent: "Types" };
+    return { title: type.plural, icon: type.icon };
   }
   const page = pageOf(view);
   // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
   const title = page?.properties.role === "essay" && !page.title.trim() ? "Essay" : pageLabel(page?.title ?? "");
   // A Thoughts page or an essay is crumbed under its page.
   const owner = typeof page?.properties.parent === "string" ? pageOf(page.properties.parent) : undefined;
-  return { title, icon: page && iconFor(page), parent: owner ? pageLabel(owner.title) : typeOf(page?.typeId ?? PAGE_TYPE).plural };
+  const type = typeOf(page?.typeId ?? PAGE_TYPE);
+  return { title, icon: page && iconFor(page), parent: owner ? { title: pageLabel(owner.title), view: owner.id } : { title: type.plural, view: typeView(type.id) } };
 }
 
 export function savePage(id: string, patch: ObjectPatch): Promise<void> {
@@ -166,4 +168,25 @@ export async function deleteProp(id: string) {
   set({ props: space.get().props.filter((p) => p.id !== id) });
   await Promise.all(users.map((t) => putType({ ...t, props: t.props.filter((p) => p !== id), card: t.card.filter((p) => p !== id) })));
   await objects.deleteProp(id);
+}
+
+// Older builds let a property be named "Description" beside the line under the title. Its text
+// joins that line and it goes, so a page has one; one that isn't text is kept as "(old)".
+// Runs in the main window before any page opens, and finds nothing once done.
+export async function foldDescriptions() {
+  for (const prop of space.get().props.filter((p) => p.name.trim().toLowerCase() === "description")) {
+    if (prop.kind !== "text" && prop.kind !== "link") {
+      await putProp({ ...prop, name: `${prop.name.trim()} (old)` });
+      continue;
+    }
+    for (const page of space.get().pages.filter((p) => prop.id in p.properties)) {
+      const { [prop.id]: old, ...rest } = page.properties;
+      const line = typeof rest.description === "string" ? rest.description.trim() : "";
+      const text = typeof old === "string" ? old.replace(/\s+/g, " ").trim() : "";
+      const properties = text && !line.includes(text) ? { ...rest, description: `${line} ${text}`.trim() } : rest;
+      await objects.update(page.id, { properties, updatedAt: page.updatedAt });
+      patchSummary(page.id, { properties });
+    }
+    await deleteProp(prop.id);
+  }
 }

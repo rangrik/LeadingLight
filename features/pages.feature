@@ -1,13 +1,14 @@
 Feature: Pages
-  Pages are the first kind of object. They are listed in the sidebar, newest first.
+  Pages are the first kind of object. They are listed in the sidebar under "Recent" (not "Pages",
+  which is also the name of a type), newest first: newest made, or last edited if chosen.
   Each page has a title field and a body (the block editor).
 
   Names used below are accessible names (aria-label or visible text):
-  - sidebar: navigation "Pages"; one button per page, named by its title ("Untitled" when empty)
-  - "New page" button at the right of the "Pages" label in the sidebar
+  - sidebar: navigation "Recent" (labelled "Recent"); one button per page, named by its title ("Untitled" when empty)
+  - "New page" button at the right of the "Recent" label in the sidebar, with "Sort Recent" left of it
   - "More" button on each row (the sidebar-08 "…", shown on hover), opening a menu with "Rename",
     "Pin" ("Unpin" on a pinned page), "Copy link", a line, then "Delete" in the destructive colour
-  - "Pinned": a second sidebar group (navigation "Pinned") above "Pages", there only while a page is pinned
+  - "Pinned": a second sidebar group (navigation "Pinned") above "Recent", there only while a page is pinned
   - title field: textbox "Title"
   - body: textbox "Page body"
 
@@ -32,6 +33,20 @@ Feature: Pages
     Given I have created a page titled "First"
     When I create a page titled "Second"
     Then the sidebar lists "Second" above "First"
+
+  Scenario: Choosing how Recent is ordered
+    Given I have created a page titled "First", then one titled "Second"
+    Then Recent lists "Second" above "First"
+    When I click "Sort Recent" beside "New page"
+    Then a menu "Sort by" offers "Created" (chosen) and "Updated"
+    When I pick "Updated", then type in the body of "First"
+    Then within a second "First" moves above "Second"
+    When I open "Second" and change nothing
+    Then the order stays
+    When I reload
+    Then "Updated" is still chosen and "First" is still on top
+    When I pick "Created"
+    Then "Second" is back on top
 
   Scenario: The title shows in the sidebar as I type
     Given I have created a page
@@ -112,11 +127,11 @@ Feature: Pages
   Scenario: Pinning a page
     Given I have created pages titled "Old" and "New"
     When I choose "Pin" in the menu of "Old"
-    Then a "Pinned" group shows above "Pages" holding "Old", and "Pages" lists only "New"
+    Then a "Pinned" group shows above "Recent" holding "Old", and "Recent" lists only "New"
     And the menu of "Old" now reads "Unpin"
     And after a reload "Old" is still pinned
     When I choose "Unpin" in its menu
-    Then "Pinned" is gone and "Pages" lists "New", "Old" again
+    Then "Pinned" is gone and "Recent" lists "New", "Old" again
     # Failure case: the open page saves its own properties, which must not undo the pin.
     When "Old" is open, I type "more" in its body and pin it at once, then reload
     Then "Old" is pinned and its body holds "more"

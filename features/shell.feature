@@ -11,7 +11,7 @@ Feature: App shell
   - sidebar edge: the 8 px gap between the sidebar and the first card
   - the app's chrome in a browser: open the app with "?mac" to lay it out as the Mac app does
   - breadcrumb: navigation "breadcrumb" in a card header
-  - sidebar page list: navigation "Pages"
+  - sidebar page list: navigation "Recent"
 
   Background:
     Given the app is open in a browser at 1280x800
@@ -34,6 +34,11 @@ Feature: App shell
     Then the breadcrumb reads "Pages" then "Trip to Kyoto"
     When I change the title to "Trip to Osaka"
     Then the breadcrumb and the sidebar row read "Trip to Osaka" right away, before any save
+    When I click "Pages" in the breadcrumb
+    Then the Pages list opens in the same card, and its breadcrumb reads "Pages" alone, with no
+      "Types" before it
+    When I open a Book and click "Books" in its breadcrumb
+    Then the Books list opens; Shift-clicking it instead opens the list beside the book
 
   Scenario: Sidebar collapses and expands from the button
     When I click "Toggle Sidebar"

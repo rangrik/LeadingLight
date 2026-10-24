@@ -10,7 +10,7 @@ const question = (page: Page) => page.getByRole("textbox", { name: "Question" })
 
 async function pageWith(page: Page, text: string, url = "/") {
   await page.goto(url);
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   const title = page.getByRole("textbox", { name: "Title" });
   await expect(title).toBeFocused();
   await title.fill("Cells");
@@ -70,11 +70,11 @@ test("A thread stays with its page while an answer streams", async ({ page }) =>
   await page.keyboard.press("Meta+J");
   await question(page).fill("Hello?");
   await page.keyboard.press("Enter");
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
   await page.getByRole("textbox", { name: "Title" }).fill("Second");
   await page.waitForTimeout(2500);
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Cells", exact: true }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Cells", exact: true }).click();
   await page.keyboard.press("Meta+J");
   await expect(panel(page)).toContainText("Hello?");
   await expect(panel(page)).toContainText("A stand-in answer");
@@ -112,7 +112,7 @@ test("With pages side by side, each card's Ask button asks about its own page", 
   // Wide enough that both cards keep their Ask button beside the pinned panel.
   await page.setViewportSize({ width: 1600, height: 800 });
   await page.goto("/");
-  const nav = page.getByRole("navigation", { name: "Pages" });
+  const nav = page.getByRole("navigation", { name: "Recent" });
   for (const title of ["Left", "Right"]) {
     await nav.getByRole("button", { name: "New page" }).click();
     await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
@@ -204,7 +204,7 @@ test("Threads are kept across a reload, and a new one starts empty", async ({ pa
   await page.keyboard.press("Enter");
   await expect(panel(page)).toContainText("Worked for");
   await page.reload();
-  await page.getByRole("navigation", { name: "Pages" }).getByRole("button", { name: "Cells", exact: true }).click();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Cells", exact: true }).click();
   await page.keyboard.press("Meta+J");
   await expect(panel(page)).toContainText("A stand-in answer");
   await panel(page).getByRole("button", { name: "Threads" }).click();

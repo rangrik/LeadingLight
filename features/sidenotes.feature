@@ -1,7 +1,7 @@
 Feature: Sidenotes, thoughts and essays
   A sidenote is a thought written beside a sentence or a paragraph. Its text lives in the page's
-  Thoughts page, which collects every raw thought on that page. When ready, "Write essay" opens
-  a linked essay beside the page, and selected text can be quoted into it with a reference.
+  Thoughts page, which collects every raw thought on that page. When ready, "Start an essay on
+  this page" opens a linked essay beside the page, and selected text can be quoted into it with a reference.
 
   Names used below:
   - "Add sidenote" in the selection toolbar; ⌘⇧M does the same, and with no selection it notes
@@ -9,7 +9,7 @@ Feature: Sidenotes, thoughts and essays
   - margin: the column right of the text where notes sit, each level with its sentence
   - note number: the small numbered chip after a noted sentence
   - "Remove sidenote": a button on a note, shown while the pointer is over it
-  - "Write essay" / "Open essay" in "Page options"; the essay opens as a pane (panes.feature)
+  - "Start an essay on this page" / "Open essay" in "Page options"; the essay opens as a pane (panes.feature)
     right of its page, closed with "Close page" in that pane's header
   - "Add to essay" in the selection toolbar, shown once the page has an essay
 
@@ -61,7 +61,7 @@ Feature: Sidenotes, thoughts and essays
     Then a new Thoughts page appears under "Article" and keeps the note after a reload
 
   Scenario: Writing an essay beside the source
-    When I choose "Write essay" in "Page options"
+    When I choose "Start an essay on this page" in "Page options"
     Then an essay page opens on the right with the cursor in its title
     And "Article" stays on the left with its notes in the margin
     And the essay appears nested under "Article" in the sidebar, and the sidebar collapses
@@ -97,4 +97,4 @@ Feature: Sidenotes, thoughts and essays
     When I delete it again, close the essay and reload
     Then that sentence has no mark, and the other still has its own
     When I delete the essay page
-    Then no sentence in "Article" keeps a quote mark, and "Page options" offers "Write essay" again
+    Then no sentence in "Article" keeps a quote mark, and "Page options" offers "Start an essay on this page" again

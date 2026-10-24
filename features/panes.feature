@@ -6,7 +6,7 @@ Feature: Pages side by side
   resize them. A page is open in one place at most. Taken from Shipyard's split panes, pages only.
 
   Names used below:
-  - sidebar row: button in navigation "Pages", named by the page's title
+  - sidebar row: button in navigation "Recent", named by the page's title
   - pane: the card of one open page, a region named by its page's title, with rounded corners
   - card header: the bar at the top of a card with the page's breadcrumb (its parent, icon and
     title); the first card's also has "Toggle Sidebar"; while two or more pages are open each

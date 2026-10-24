@@ -53,7 +53,7 @@ export function DailyBar({ day }: { day: string }) {
 }
 
 // At the end of a daily note: the pages made that day (tags and daily notes have their own
-// places), except what its body links already (ideas captured that day), so nothing shows twice.
+// places), except those its body links already, so nothing shows twice.
 export function CreatedThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
   const { pages } = space.use();
   const doc = liveContent(id) ?? content;

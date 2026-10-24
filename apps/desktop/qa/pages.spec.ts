@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // Scenarios from features/pages.feature.
-const sidebar = (page: Page) => page.getByRole("navigation", { name: "Pages" });
+const sidebar = (page: Page) => page.getByRole("navigation", { name: "Recent" });
 const row = (page: Page, name: string) => sidebar(page).getByRole("button", { name, exact: true });
 const listItem = (page: Page, name: string) => sidebar(page).getByRole("listitem").filter({ hasText: name });
 const title = (page: Page) => page.getByRole("textbox", { name: "Title" });

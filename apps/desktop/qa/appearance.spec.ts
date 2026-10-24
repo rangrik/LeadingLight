@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 // Scenarios from features/appearance.feature: Shipyard's themes and Settings
 // (vendor/shipyard) wired into the app. The seam guarded: our shortcuts hook,
 // the alias and CSS wiring, and the theme applying over our COSS tokens.
-const pages = (page: Page) => page.getByRole("navigation", { name: "Pages" });
+const pages = (page: Page) => page.getByRole("navigation", { name: "Recent" });
 const settingsNav = (page: Page) => page.getByRole("navigation", { name: "Settings sections" });
 const themeCard = (page: Page, id: string) => page.locator(`[data-testid="theme-option"][data-theme-id="${id}"]`);
 const rootVar = (page: Page, name: string) => page.evaluate((n) => document.documentElement.style.getPropertyValue(n), name);
@@ -25,7 +25,7 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await expect(settingsNav(page)).toBeVisible();
   await expect(settingsNav(page).getByRole("button", { name: "Back to app" })).toBeVisible();
   // The pages underneath are covered and inert, not unmounted (their edits are kept).
-  await expect(page.locator("[inert]").getByRole("navigation", { name: "Pages" })).toBeAttached();
+  await expect(page.locator("[inert]").getByRole("navigation", { name: "Recent" })).toBeAttached();
   // Settings wears the app's shell: the same sidebar header, and ⌘\ folds it once, not twice.
   await expect(page.locator(".ll-settings").getByText("LeadingLight", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Meta+\\");
