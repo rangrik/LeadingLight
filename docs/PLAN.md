@@ -145,11 +145,16 @@ editing an embed in place, editing values inside lists.
   table can be changed in Settings (built: features/shortcuts.feature, DECISIONS.md 15); a new
   editor key goes in `lib/keymap.ts`'s taken list, so no shortcut can claim it.
 
-## Planned — external linked projects
+## External linked projects
 
 [Project 1](PROJECT-1.md): local/GitHub project chat, real agent tools, connected browsers
-and flexible delegation. Four useful releases, delivered through small tested changes.
-Project 2 then connects this engine to LeadingLight's documents, task pages and reading experience.
+and flexible delegation. All four releases reported merged and installed on 2026-10-24; see
+[delivery and remaining limits](PROJECT-1-STATUS.md).
+
+[Project 2 — Read, ask, and review](PROJECT-2.md): scoped project context, attributed reports and
+retained evidence; task assignment, live widgets and a contextual Feed; selected sidenotes sent as
+one feedback batch, one new linked response, and user acceptance of the main task. Three releases
+in nine small tested slices, with every object/widget explained in Settings.
 
 ## Later
 
