@@ -94,9 +94,10 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
    install it (`pnpm install:app`, which refuses while the app is running: ask the user to quit
    it, never kill it); remove your dev app and its data (`pnpm install:dev-app --remove` in the
    worktree). Then tell the user what to try in the installed app and what to look at. Last,
-   clean up: stop the worktree's servers, delete the merged branch, and close the worktree with
-   `"$BERTH_HOME/bin/berthd" worktree rm "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends your
-   session, so send your report before it.
+   clean up: stop the worktree's servers; free and delete the merged branch (`git checkout
+   --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and close the worktree
+   with `"$BERTH_HOME/bin/berthd" worktree rm "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends
+   your session, so send your report before it.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
