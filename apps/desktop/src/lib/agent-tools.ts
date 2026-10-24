@@ -1,0 +1,213 @@
+import type { EditorDoc } from "@leadinglight/editor/editor";
+import { type Graph, scopeOf } from "~/lib/agent-scope";
+import type { PropDef } from "~/lib/catalog";
+import { pageLabel } from "~/lib/labels";
+import { parseHref, roleOf } from "~/lib/linked";
+import { liveContent } from "~/lib/live";
+import { docText, type ObjectSummary, objects } from "~/lib/objects";
+import { docMarkdown } from "~/lib/page-markdown";
+import { folders } from "~/lib/project-runtime/folders";
+import { ask } from "~/lib/project-runtime/transport";
+import { pageOf, propOf, space, typeOf } from "~/lib/space";
+
+// LeadingLight's tools for a project's agents (features/project-context.feature, DECISIONS.md 19),
+// answered here when the runtime passes a call on. Who calls comes from the runtime, never from
+// the agent: its session's folder names the project, its conversation the agent.
+
+export type Caller = { session: string; conversation?: string; location?: string; dir?: string; agent?: string; by?: string; turn?: string };
+export type KeptFile = { ref: string; name?: string; size?: number; sha?: string; error?: string };
+export type AgentCall = { id: string; tool: string; args: Record<string, unknown> | null; caller: Caller; files?: KeptFile[] };
+type Args = Record<string, unknown>;
+
+// Said to the agent as it is.
+export class Refusal extends Error {}
+
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : typeof v === "string" ? [v] : []);
+export const ref = (id: string) => `ll:${id}`;
+export const titleOf = (id: string) => {
+  const p = pageOf(id);
+  return roleOf(p ?? ({ properties: {} } as ObjectSummary)) === "thoughts" ? "Thoughts" : pageLabel(p?.title ?? "");
+};
+const named = (id: string) => ({ ref: ref(id), title: titleOf(id), type: typeOf(pageOf(id)?.typeId ?? "page").name });
+
+export const projectOf = (c: Caller) => {
+  const loc = c.location?.split("/")[0];
+  return [...folders.get().values()].find((f) => f.folder.location === loc)?.folder;
+};
+
+export const bodyOf = async (id: string): Promise<EditorDoc | null> => liveContent(id) ?? (await objects.get(id))?.content ?? null;
+
+// Pages a body links to: mentions, page links, ll: links and an essay's references.
+function linksIn(doc: EditorDoc | null, out = new Set<string>()): Set<string> {
+  if (!doc) return out;
+  if ((doc.type === "mention" || doc.type === "pageLink") && typeof doc.attrs?.id === "string") out.add(doc.attrs.id);
+  for (const href of [str(doc.attrs?.href), ...(doc.marks ?? []).map((m) => str(m.attrs?.href))]) {
+    const to = parseHref(href)?.page;
+    if (to) out.add(to);
+  }
+  for (const c of doc.content ?? []) linksIn(c, out);
+  return out;
+}
+const relations = (p: ObjectSummary) => Object.entries(p.properties).flatMap(([k, v]) => (propOf(k)?.kind === "relation" ? ids(v) : []));
+
+const graph: Graph = {
+  out: async (id) => [...linksIn(await bodyOf(id)), ...relations(pageOf(id) ?? ({ properties: {} } as ObjectSummary))],
+  back: (id) => space.get().pages.filter((p) => p.properties.parent === id || relations(p).includes(id)).map((p) => p.id),
+  mentions: async (id) => (await objects.containing(id)).map((o) => o.id),
+  hub: (id) => ["tag", "daily"].includes(pageOf(id)?.typeId ?? ""),
+  exists: (id) => !!pageOf(id) && !pageOf(id)?.properties.templateOf,
+};
+
+// A few seconds' worth: an agent reading page after page doesn't walk the links each time.
+const scopes = new Map<string, { at: number; pages: Promise<Set<string>> }>();
+export function scope(project: string): Promise<Set<string>> {
+  const s = scopes.get(project);
+  if (s && Date.now() - s.at < 5000) return s.pages;
+  const pages = scopeOf(project, graph);
+  scopes.set(project, { at: Date.now(), pages });
+  return pages;
+}
+
+// Sidenotes sent as feedback (features/feedback.feature); every other one is private.
+const sharedNotes = () => new Set(space.get().pages.flatMap((p) => ((p.properties.batch as { items?: { note: string }[] } | undefined)?.items ?? []).map((i) => i.note)));
+
+// A page id from an id, an ll: link, or a title within the project.
+async function pageIn(c: Caller, given: unknown): Promise<{ id: string; project: string }> {
+  const project = projectOf(c)?.pageId;
+  if (!project) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
+  const raw = str(given).trim();
+  const inScope = await scope(project);
+  const id = parseHref(raw)?.page ?? (pageOf(raw) ? raw : [...inScope].find((p) => pageOf(p)?.title.trim().toLowerCase() === raw.toLowerCase()));
+  if (!id || !pageOf(id)) throw new Refusal(`No page ${raw ? `"${raw}"` : "was named"}; it may have been deleted. search finds pages by their words.`);
+  // Not even its title is told.
+  if (!inScope.has(id)) throw new Refusal(`That page isn't part of “${titleOf(project)}”, so it can't be read.`);
+  return { id, project };
+}
+
+// The Markdown of a body's top-level blocks from a cursor, up to about 12,000 characters.
+function part(doc: EditorDoc | null, from: number) {
+  const blocks = doc?.content ?? [];
+  const md = (n: EditorDoc) => docMarkdown({ type: "doc", content: [n] }, (id) => `[${titleOf(id)}](${ref(id)})`);
+  const out: string[] = [];
+  let size = 0;
+  let at = from;
+  for (; at < blocks.length && (size < 12000 || !out.length); at++) {
+    const text = md(blocks[at]);
+    size += text.length;
+    if (text) out.push(text);
+  }
+  return { text: out.join("\n\n"), ...(at < blocks.length && { cursor: String(at), part: `blocks ${from + 1}–${at} of ${blocks.length}` }) };
+}
+
+// Files on a page, each with an id read can be asked for: media blocks, then file properties.
+type Attachment = { id: string; name: string; kind: string; size?: number; mime?: string; url: string };
+function attachmentsOf(p: ObjectSummary, doc: EditorDoc | null): Attachment[] {
+  const out: Attachment[] = [];
+  const walk = (n: EditorDoc) => {
+    if (["image", "video", "audio", "file"].includes(n.type ?? "") && n.attrs?.src) out.push({ id: `b${out.length + 1}`, name: str(n.attrs.name) || n.type!, kind: n.type!, size: n.attrs.size, mime: n.attrs.mime, url: n.attrs.src });
+    (n.content ?? []).forEach(walk);
+  };
+  if (doc) walk(doc);
+  for (const [k, v] of Object.entries(p.properties)) {
+    const f = v as { url?: string; name?: string; size?: number; mime?: string };
+    if (propOf(k)?.kind === "file" && f?.url) out.push({ id: `p:${k}`, name: f.name ?? "file", kind: "file", size: f.size, mime: f.mime, url: f.url });
+  }
+  return out;
+}
+
+function valueOf(def: PropDef, v: unknown): unknown {
+  if (def.kind === "relation") return ids(v).filter((id) => pageOf(id)).map((id) => ({ ref: ref(id), title: titleOf(id) }));
+  if (def.kind === "select") return ids(v).map((id) => def.options.choices?.find((c) => c.id === id)?.name ?? id);
+  if (def.kind === "file") return (v as { name?: string })?.name;
+  return v;
+}
+
+async function read(c: Caller, a: Args) {
+  const { id, project } = await pageIn(c, a.page);
+  const p = pageOf(id)!;
+  const inScope = await scope(project);
+  let doc = await bodyOf(id);
+  let withheld = 0;
+  // A Thoughts page holds the person's own notes: only those sent as feedback are read.
+  if (roleOf(p) === "thoughts") {
+    const shared = sharedNotes();
+    const kept = (doc?.content ?? []).filter((n) => n.type === "thought" && shared.has(n.attrs?.id));
+    withheld = (doc?.content ?? []).filter((n) => n.type === "thought").length - kept.length;
+    doc = { type: "doc", content: kept };
+  }
+  const from = Math.max(0, Number(str(a.cursor)) || 0);
+  const first = from === 0;
+  const linked = graph.back(id).filter((x) => x !== id);
+  const mentioning = first ? (await graph.mentions(id)).filter((x) => x !== id && !linked.includes(x)) : [];
+  const near = [...new Set([...linked, ...mentioning])].filter((x) => graph.exists(x));
+  return {
+    ...named(id),
+    ...(first && {
+      ...(typeof p.properties.description === "string" && { description: p.properties.description }),
+      properties: Object.entries(p.properties).flatMap(([k, v]) => {
+        const def = propOf(k);
+        return def && def.kind !== "created" && def.kind !== "updated" ? [{ id: k, name: def.name, kind: def.kind, value: valueOf(def, v) }] : [];
+      }),
+      created: new Date(p.createdAt).toISOString(),
+      updated: new Date(p.updatedAt).toISOString(),
+    }),
+    ...part(doc, from),
+    ...(withheld > 0 && { private_notes: `${withheld} of the person's notes here are private and not shown.` }),
+    ...(first && {
+      links: [...(await graph.out(id))].filter((x, i, all) => graph.exists(x) && all.indexOf(x) === i).map((x) => ({ ...named(x), ...(!inScope.has(x) && { outside: true }) })),
+      linked_from: near.filter((x) => inScope.has(x)).map(named),
+      ...(near.some((x) => !inScope.has(x)) && { linked_from_outside: near.filter((x) => !inScope.has(x)).length }),
+      attachments: attachmentsOf(p, doc).map(({ url: _, ...rest }) => rest),
+    }),
+  };
+}
+
+async function search(c: Caller, a: Args) {
+  const project = projectOf(c)?.pageId;
+  if (!project) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
+  const q = str(a.query).trim().toLowerCase();
+  if (!q) throw new Refusal("Give some words to look for.");
+  const inScope = await scope(project);
+  const found = new Map<string, string>();
+  for (const id of inScope) if (titleOf(id).toLowerCase().includes(q)) found.set(id, "");
+  for (const o of await objects.containing(q)) {
+    // Thoughts pages hold private notes; their words are never searched.
+    if (!inScope.has(o.id) || roleOf(o) === "thoughts") continue;
+    const line = docText(liveContent(o.id) ?? o.content).split("\n").find((l) => l.toLowerCase().includes(q));
+    if (line !== undefined || found.has(o.id)) found.set(o.id, line ?? "");
+  }
+  const from = Math.max(0, Number(str(a.cursor)) || 0);
+  const rows = [...found].slice(from, from + 20).map(([id, line]) => ({ ...named(id), ...(line && { line: line.slice(0, 200) }) }));
+  return { found: rows, ...(found.size > from + 20 && { cursor: String(from + 20) }) };
+}
+
+const base64 = (bytes: Uint8Array) => {
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+
+// A copy the agent can open, kept with its chat (outside the folder), as Project 1's attachments are.
+async function attachment(c: Caller, a: Args) {
+  const { id } = await pageIn(c, a.page);
+  const file = attachmentsOf(pageOf(id)!, await bodyOf(id)).find((f) => f.id === str(a.attachment));
+  if (!file) throw new Refusal(`“${titleOf(id)}” has no attachment "${str(a.attachment)}"; read lists them.`);
+  const bytes = new Uint8Array(await (await fetch(file.url)).arrayBuffer());
+  const { path } = await ask<{ path: string }>("POST", `/v1/sessions/${c.session}/attachments`, { name: file.name, data: base64(bytes) });
+  return { path, name: file.name, size: bytes.length, ...(file.mime && { mime: file.mime }) };
+}
+
+async function project(c: Caller) {
+  const folder = projectOf(c);
+  if (!folder) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
+  return { project: named(folder.pageId), folder: folder.path, how: "read and search cover the project's pages; the folder's files are yours to read as usual." };
+}
+
+const TOOLS: Record<string, (c: Caller, a: Args, call: AgentCall) => Promise<unknown>> = { project, read, search, attachment };
+
+export async function runAgentTool(call: AgentCall): Promise<unknown> {
+  const tool = TOOLS[call.tool];
+  if (!tool) throw new Refusal(`LeadingLight has no tool called ${call.tool}.`);
+  return tool(call.caller, call.args ?? {}, call);
+}

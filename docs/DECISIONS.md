@@ -289,3 +289,18 @@ worker, keep one at a check, and use the browser; Shipyard's sessions, notificat
 runs do the rest, and a worker started by an agent with full access gets it too. A restart loses no
 send: the turn ledger is written before berthd exits.
 
+
+## 19. A project's agents reach LeadingLight through the runtime, as tools
+
+A project's agents read its pages and publish to them with LeadingLight's own MCP tools
+(`berthd mcp leadinglight`, runtime patch 0030), which the runtime gives every Claude and Codex
+session it starts, allowed without asking. A call goes to berthd, which finds the calling session
+from the process on the socket's other end (the kernel's word, not the agent's) and hands the call
+to the app, which answers from its store: the session's folder names the project, its conversation
+the agent. Reads need the app open and say so when it isn't. Writes are kept in the runtime's state
+first, with any evidence files copied as they are, and offered to the app until it answers, so one
+made while the app is quit appears when it next opens, once.
+
+An agent reads the project page and what it reaches through links a few steps out, never through a
+tag or a daily note, which nearly every page shares. Sidenotes are private unless sent as feedback.
+The tools add and never change: there is no edit or delete.

@@ -21,6 +21,17 @@ const secs = (ms: number) => {
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 const cut = (s: string, n = 48) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
+const LL_STEPS: Record<string, [typeof Wrench, string]> = {
+  project: [FileText, "Read its assignment in LeadingLight"],
+  read: [FileText, "Read a page in LeadingLight"],
+  search: [Search, "Searched LeadingLight"],
+  attachment: [Paperclip, "Opened an attachment from LeadingLight"],
+  publish: [FilePlus, "Published a report"],
+  task: [ListPlus, "Updated its subtasks"],
+  status: [ListPlus, "Updated its checklist"],
+  context: [Link, "Said what its question is about"],
+};
+
 // What a step did, in a few words, and how to ask for it before it runs.
 export function describe(name: string, input: Record<string, unknown>, page: string) {
   const other = str(input.page);
@@ -45,6 +56,9 @@ export function describe(name: string, input: Record<string, unknown>, page: str
       return { icon: Link, done: `Read ${host}`, ask: `Open ${host}?` };
     }
   }
+  // LeadingLight's own tools, as Claude ("read") and Codex ("leadinglight.read") name them.
+  const ll = name === "Run" ? LL_STEPS[str(input.target).replace(/^leadinglight\./, "")] : undefined;
+  if (ll) return { icon: ll[0], done: ll[1], ask: "" };
   // A project chat's steps, as the runtime names them: what was done to what.
   const step = { Run: [SquareTerminal, "Ran"], Read: [FileText, "Read"], Search: [Search, "Searched"], Edited: [PencilLine, "Edited"], Skill: [Wrench, "Used skill"], Subagent: [Bot, "Asked a subagent:"] }[name] as [typeof Wrench, string] | undefined;
   if (step && str(input.target)) return { icon: step[0], done: `${step[1]} ${cut(str(input.target))}`, ask: "" };

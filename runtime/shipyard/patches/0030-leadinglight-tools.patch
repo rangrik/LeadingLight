@@ -1,0 +1,907 @@
+From be752dac85ef2f7c1e80af529adff96a75513c28 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 12:06:41 -0700
+Subject: [PATCH] LeadingLight's tools for its project agents
+
+An embedded berthd gives its Claude and Codex agents an MCP server of LeadingLight's tools
+(berthd mcp leadinglight). Each call goes through berthd to the app (POST /v1/ll/call), which
+takes calls with GET /v1/ll/calls and answers them. A call never says who makes it: berthd
+finds the agent's session from the process on the socket's other end (LOCAL_PEERPID). Reads
+wait for the app and are refused when it isn't open. Writes are kept first (leadinglight/
+outbox.json), with any evidence files copied as they are (leadinglight/files), and offered to
+the app until it answers, so one made while the app is quit is taken when it next opens, and
+one sent again is kept once.
+---
+ cmd/berthd/main.go                 |   9 +
+ internal/box/api.go                |  16 +-
+ internal/box/claudedriver.go       |   3 +
+ internal/box/codexdriver.go        |   3 +
+ internal/box/embeddednote.go       |   4 +-
+ internal/box/leadinglight.go       | 507 +++++++++++++++++++++++++++++
+ internal/box/leadinglight_test.go  |  54 +++
+ internal/box/peerpid_darwin.go     |  24 ++
+ internal/box/peerpid_other.go      |   8 +
+ internal/mcpserver/leadinglight.go |  73 +++++
+ internal/mcpserver/mcp.go          |  23 +-
+ internal/wire/server.go            |  13 +-
+ 12 files changed, 726 insertions(+), 11 deletions(-)
+ create mode 100644 internal/box/leadinglight.go
+ create mode 100644 internal/box/leadinglight_test.go
+ create mode 100644 internal/box/peerpid_darwin.go
+ create mode 100644 internal/box/peerpid_other.go
+ create mode 100644 internal/mcpserver/leadinglight.go
+
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index 8c0a2f7..1761501 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -213,6 +213,15 @@ func run(args []string) error {
+ 		}
+ 		os.Exit(code)
+ 	case "mcp":
++		// berthd mcp leadinglight --socket S: LeadingLight's tools for an embedded berthd's agents,
++		// told its socket since Codex starts MCP servers with a bare environment.
++		if len(args) > 1 && args[1] == "leadinglight" {
++			sock := b.socket()
++			if len(args) > 3 && args[2] == "--socket" {
++				sock = args[3]
++			}
++			return mcpserver.ServeLeadingLight(context.Background(), sock, os.Stdin, os.Stdout)
++		}
+ 		return mcpserver.Serve(context.Background(), b.socket(), os.Stdin, os.Stdout)
+ 	case "agents":
+ 		return agents(args[1:], os.Stdout)
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 937acd2..e82b459 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -64,12 +64,15 @@ type Box struct {
+ 	// agent-host` (nil is this program's own).
+ 	ConversationsDir string
+ 	AgentHost        []string
+-	claudeOnce       sync.Once
+-	claudeDrv        *claudeDriver
+-	codexOnce        sync.Once
+-	codexDrv         *codexDriver
+-	acpOnce          sync.Once
+-	acpDrv           *acpDriver
++	// ll is the LeadingLight bridge (leadinglight.go), made on first use.
++	llOnce     sync.Once
++	ll         *llBridge
++	claudeOnce sync.Once
++	claudeDrv  *claudeDriver
++	codexOnce  sync.Once
++	codexDrv   *codexDriver
++	acpOnce    sync.Once
++	acpDrv     *acpDriver
+ 	// AgentDefaults is how agents start when what starts them names no
+ 	// driver (agentdefaults.go); nil is in their terminals.
+ 	AgentDefaults *AgentDefaultsStore
+@@ -277,6 +280,7 @@ func (b *Box) Mount(s *wire.Server) {
+ 	b.mountHistory(route)
+ 	b.mountAnswer(route)
+ 	b.mountRequests(route)
++	b.mountLeadingLight(route)
+ 	b.mountConversations(route)
+ 	b.mountBrowser(route)
+ 	b.mountNotify(route)
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index a6a24bb..0f4c9d7 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -121,6 +121,9 @@ func (b *Box) launchClaudeIn(p AgentPreset, model, effort, mode, resume, dir, so
+ 	if Embedded {
+ 		words = append(words, "--append-system-prompt", shellQuote(embeddedNote))
+ 	}
++	for _, f := range b.llClaudeFlags() {
++		words = append(words, shellQuote(f))
++	}
+ 	if EmbeddedFiles != "" {
+ 		// Its attachments are kept with the conversation, outside the folder it works in.
+ 		if err := os.MkdirAll(conversationAttachments(dir), 0o700); err == nil {
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index c2c0121..1b32d4e 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -87,6 +87,9 @@ func (b *Box) launchCodexIn(p AgentPreset, mode, dir, sock string) (structuredLa
+ 		words = append(words, shellQuote(w))
+ 	}
+ 	words = append(words, "--dir", shellQuote(dir), "--socket", shellQuote(sock), "--", p.Command, "app-server")
++	for _, f := range b.llCodexFlags() {
++		words = append(words, shellQuote(f))
++	}
+ 	return structuredLaunch{
+ 		mode: mode, agent: "codex",
+ 		command: strings.Join(words, " "),
+diff --git a/internal/box/embeddednote.go b/internal/box/embeddednote.go
+index f3fb4ea..293cbe5 100644
+--- a/internal/box/embeddednote.go
++++ b/internal/box/embeddednote.go
+@@ -11,4 +11,6 @@ const embeddedNote = "You work inside a project runtime. To hand part of the wor
+ 	"To keep a worker at something until a check passes, `berthd loop <name> --prompt '<the task>' --check '<command>' --max 3 --detach` " +
+ 	"prompts it, runs the check and gives it the failures, at most that many times, as a run that outlives your turn; you hear how it ended. " +
+ 	"For a second opinion, hand the review to another worker. Use these when they help; you choose. " +
+-	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone."
++	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone. " +
++	"The person reads your work in LeadingLight: its leadinglight tools read the project's pages and publish your reports " +
++	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."
+diff --git a/internal/box/leadinglight.go b/internal/box/leadinglight.go
+new file mode 100644
+index 0000000..179ccf2
+--- /dev/null
++++ b/internal/box/leadinglight.go
+@@ -0,0 +1,507 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"crypto/rand"
++	"crypto/sha256"
++	"encoding/hex"
++	"encoding/json"
++	"io"
++	"net/http"
++	"os"
++	"path/filepath"
++	"regexp"
++	"slices"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++	"github.com/cosscom/shipyard/internal/wire"
++)
++
++// The LeadingLight bridge: a project agent's LeadingLight tools (berthd mcp leadinglight) reach
++// the app that started this berthd. A call never says who makes it: berthd finds the agent's
++// session from the process on the socket's other end. Reads wait for the app; writes are kept
++// first (leadinglight/outbox.json) and offered to the app until it says what became of them, so
++// one made while the app is quit is taken when it next asks, and one sent again is kept once.
++
++// LLCaller is the agent behind a call, as berthd knows it.
++type LLCaller struct {
++	Session      string `json:"session"`
++	Conversation string `json:"conversation,omitempty"`
++	Location     string `json:"location,omitempty"`
++	Dir          string `json:"dir,omitempty"`
++	Agent        string `json:"agent,omitempty"`
++	By           string `json:"by,omitempty"`
++	Turn         string `json:"turn,omitempty"`
++}
++
++// LLFile is a file a write names (evidence), kept by berthd as it was at the call.
++type LLFile struct {
++	Ref   string `json:"ref"`
++	Name  string `json:"name,omitempty"`
++	Size  int64  `json:"size,omitempty"`
++	SHA   string `json:"sha,omitempty"`
++	Error string `json:"error,omitempty"`
++}
++
++// LLCall is one tool call on its way to the app.
++type LLCall struct {
++	ID     string          `json:"id"`
++	Tool   string          `json:"tool"`
++	Args   json.RawMessage `json:"args,omitempty"`
++	Caller LLCaller        `json:"caller"`
++	Write  bool            `json:"write,omitempty"`
++	Sum    string          `json:"sum,omitempty"` // of its arguments, to know it again
++	Files  []LLFile        `json:"files,omitempty"`
++	At     int64           `json:"at"`
++	State  string          `json:"state"` // waiting, done, failed
++	Result json.RawMessage `json:"result,omitempty"`
++	Error  string          `json:"error,omitempty"`
++
++	claimed time.Time
++	settled chan struct{}
++}
++
++const (
++	llLease   = 30 * time.Second
++	llKeep    = 7 * 24 * time.Hour
++	llMaxFile = 50 << 20
++)
++
++// How long a call waits for the app, and who is calling: tests change them.
++var (
++	llReadWait  = 40 * time.Second
++	llWriteWait = 15 * time.Second
++	llCallerOf  = (*Box).llCaller
++)
++
++// llWrites change something in LeadingLight, so they are kept before they are answered.
++var llWrites = map[string]bool{"publish": true, "task": true, "status": true, "context": true}
++
++type llBridge struct {
++	mu     sync.Mutex
++	dir    string
++	calls  map[string]*LLCall
++	wake   chan struct{}
++	asking int
++	asked  time.Time
++}
++
++func (b *Box) leadingLight() *llBridge {
++	b.llOnce.Do(func() {
++		l := &llBridge{dir: filepath.Join(filepath.Dir(b.ConversationsDir), "leadinglight"), calls: map[string]*LLCall{}, wake: make(chan struct{})}
++		var kept []*LLCall
++		if raw, err := os.ReadFile(filepath.Join(l.dir, "outbox.json")); err == nil {
++			json.Unmarshal(raw, &kept)
++		}
++		for _, c := range kept {
++			c.settled = make(chan struct{})
++			if c.State != "waiting" {
++				close(c.settled)
++			}
++			l.calls[c.ID] = c
++		}
++		b.ll = l
++	})
++	return b.ll
++}
++
++func (b *Box) mountLeadingLight(route func(string, func(http.ResponseWriter, *http.Request) error)) {
++	if b.ConversationsDir == "" {
++		return
++	}
++	route("POST /v1/ll/call", b.llCall)
++	route("GET /v1/ll/calls", b.llCalls)
++	route("POST /v1/ll/calls/{id}", b.llAnswer)
++	route("GET /v1/ll/files/{sha}", b.llFile)
++}
++
++// save keeps the writes, dropping settled ones past a week. Called with the lock held.
++func (l *llBridge) save() {
++	out := []*LLCall{}
++	for _, c := range l.calls {
++		if !c.Write {
++			continue
++		}
++		if c.State != "waiting" && time.Since(time.UnixMilli(c.At)) > llKeep {
++			delete(l.calls, c.ID)
++			continue
++		}
++		out = append(out, c)
++	}
++	slices.SortFunc(out, func(a, b *LLCall) int { return int(a.At - b.At) })
++	raw, _ := json.MarshalIndent(out, "", "  ")
++	os.MkdirAll(l.dir, 0o700)
++	statefile.Write(filepath.Join(l.dir, "outbox.json"), raw)
++}
++
++// open says whether the app has asked for calls lately. Called with the lock held.
++func (l *llBridge) open() bool { return l.asking > 0 || time.Since(l.asked) < llLease+5*time.Second }
++
++func (l *llBridge) tell() {
++	close(l.wake)
++	l.wake = make(chan struct{})
++}
++
++// llCaller is the session whose pane runs the process on the other end of the request.
++func (b *Box) llCaller(r *http.Request) (LLCaller, error) {
++	pid := 0
++	if c := wire.LocalConn(r.Context()); c != nil {
++		pid = peerPid(c)
++	}
++	name := ""
++	if pid > 1 {
++		name = b.sessionOfPid(r.Context(), pid)
++	}
++	if name == "" {
++		return LLCaller{}, httpError{http.StatusForbidden, "LeadingLight's tools are for the agents of its projects"}
++	}
++	sess, err := b.Sessions.Get(r.Context(), name)
++	if err != nil {
++		return LLCaller{}, err
++	}
++	c := LLCaller{Session: name, Location: sess.Location, Dir: sess.Dir, Agent: sess.Agent, Turn: sess.Turn}
++	if sess.conv != "" {
++		conv, _ := readConversation(sess.conv)
++		c.Conversation, c.By = filepath.Base(sess.conv), conv.By
++	}
++	return c, nil
++}
++
++func llID() string {
++	b := make([]byte, 8)
++	rand.Read(b)
++	return hex.EncodeToString(b)
++}
++
++// POST /v1/ll/call {tool, args, key?}: an agent's tool call, answered when the app has.
++func (b *Box) llCall(w http.ResponseWriter, r *http.Request) error {
++	var body struct {
++		Tool string          `json:"tool"`
++		Args json.RawMessage `json:"args"`
++		Key  string          `json:"key"`
++	}
++	if err := decodeLimit(r, &body, 4<<20); err != nil {
++		return err
++	}
++	caller, err := llCallerOf(b, r)
++	if err != nil {
++		return err
++	}
++	l := b.leadingLight()
++	l.mu.Lock()
++	write := llWrites[body.Tool]
++	c := l.same(caller, body.Tool, body.Args, body.Key)
++	if c == nil {
++		if !write && !l.open() {
++			l.mu.Unlock()
++			return httpError{http.StatusServiceUnavailable, "LeadingLight isn't open, so its pages can't be read now. The folder's files can still be read."}
++		}
++		id := llID()
++		if body.Key != "" {
++			sum := sha256.Sum256([]byte(caller.Conversation + "\x00" + body.Tool + "\x00" + body.Key))
++			id = hex.EncodeToString(sum[:8])
++		}
++		c = &LLCall{ID: id, Tool: body.Tool, Args: body.Args, Caller: caller, Write: write, Sum: llSum(body.Args), At: time.Now().UnixMilli(), State: "waiting", settled: make(chan struct{})}
++		if write {
++			c.Files = l.keepFiles(caller, body.Tool, body.Args)
++		}
++		l.calls[c.ID] = c
++		if write {
++			l.save()
++		}
++		l.tell()
++	}
++	l.mu.Unlock()
++	wait := llReadWait
++	if write {
++		wait = llWriteWait
++	}
++	select {
++	case <-c.settled:
++	case <-time.After(wait):
++	case <-r.Context().Done():
++	}
++	l.mu.Lock()
++	defer l.mu.Unlock()
++	if r.Context().Err() != nil {
++		if !write && c.State == "waiting" {
++			delete(l.calls, c.ID)
++		}
++		return nil
++	}
++	switch {
++	case c.State == "done":
++		writeJSON(w, map[string]any{"state": "done", "result": c.Result})
++	case c.State == "failed":
++		writeJSON(w, map[string]any{"state": "failed", "error": c.Error})
++	case write:
++		writeJSON(w, map[string]any{"state": "kept", "note": "LeadingLight hasn't taken this yet (it may be closed). It is kept and will be added when LeadingLight next opens; it isn't visible until then. Don't send it again."})
++	default:
++		delete(l.calls, c.ID)
++		return httpError{http.StatusGatewayTimeout, "LeadingLight didn't answer in time; try again."}
++	}
++	return nil
++}
++
++// same is a call this one repeats: one with the same key, or the conversation's last call of
++// the tool with the same arguments in the last ten minutes. Called with the lock held.
++func (l *llBridge) same(caller LLCaller, tool string, args json.RawMessage, key string) *LLCall {
++	if key != "" {
++		sum := sha256.Sum256([]byte(caller.Conversation + "\x00" + tool + "\x00" + key))
++		return l.calls[hex.EncodeToString(sum[:8])]
++	}
++	var last *LLCall
++	for _, c := range l.calls {
++		if c.Write && c.Tool == tool && c.Caller.Conversation == caller.Conversation && caller.Conversation != "" && (last == nil || c.At > last.At) {
++			last = c
++		}
++	}
++	if last != nil && time.Since(time.UnixMilli(last.At)) < 10*time.Minute && last.Sum == llSum(args) {
++		return last
++	}
++	return nil
++}
++
++func llSum(args json.RawMessage) string {
++	var flat bytes.Buffer
++	json.Compact(&flat, args)
++	sum := sha256.Sum256(flat.Bytes())
++	return hex.EncodeToString(sum[:8])
++}
++
++var llSHA = regexp.MustCompile(`^[0-9a-f]{64}$`)
++
++// keepFiles copies the files a publication's evidence names, so they stay as they were whatever
++// happens to the folder. Only the agent's own folder and conversation are read.
++func (l *llBridge) keepFiles(caller LLCaller, tool string, args json.RawMessage) []LLFile {
++	if tool != "publish" {
++		return nil
++	}
++	var a struct {
++		Evidence []struct {
++			Path   string `json:"path"`
++			Output string `json:"output"`
++		} `json:"evidence"`
++	}
++	json.Unmarshal(args, &a)
++	conv := ""
++	if caller.Conversation != "" {
++		conv = filepath.Join(filepath.Dir(l.dir), "conversations", caller.Conversation)
++	}
++	out := []LLFile{}
++	for _, e := range a.Evidence {
++		f := LLFile{Ref: e.Path}
++		path := ""
++		switch {
++		case e.Output != "":
++			f.Ref = "output:" + e.Output
++			if !outputID.MatchString(e.Output) || conv == "" {
++				f.Error = "no kept output by that id"
++				break
++			}
++			path = filepath.Join(conv, "outputs", e.Output)
++			for _, o := range readOutputs(conv) {
++				if o.ID == e.Output {
++					f.Name = filepath.Base(o.Path)
++				}
++			}
++		case e.Path != "":
++			path = e.Path
++			if !filepath.IsAbs(path) {
++				path = filepath.Join(caller.Dir, path)
++			}
++			real, err := filepath.EvalSymlinks(filepath.Clean(path))
++			if err != nil {
++				f.Error = "no such file"
++				break
++			}
++			inside := false
++			for _, root := range []string{caller.Dir, conv} {
++				if rr, err := filepath.EvalSymlinks(root); err == nil && root != "" && (real == rr || strings.HasPrefix(real, rr+string(filepath.Separator))) {
++					inside = true
++				}
++			}
++			if !inside {
++				f.Error = "it is outside the project's folder"
++				break
++			}
++			path, f.Name = real, filepath.Base(real)
++		default:
++			f.Error = "give a path or an output"
++		}
++		if f.Error == "" {
++			f.Size, f.SHA, f.Error = l.keepFile(path)
++		}
++		out = append(out, f)
++	}
++	return out
++}
++
++func (l *llBridge) keepFile(path string) (int64, string, string) {
++	src, err := os.Open(path)
++	if err != nil {
++		return 0, "", "it can't be read"
++	}
++	defer src.Close()
++	if st, err := src.Stat(); err != nil || st.IsDir() {
++		return 0, "", "it is a folder, not a file"
++	} else if st.Size() > llMaxFile {
++		return 0, "", "it is larger than 50 MB"
++	}
++	data, err := io.ReadAll(io.LimitReader(src, llMaxFile+1))
++	if err != nil || len(data) > llMaxFile {
++		return 0, "", "it can't be read"
++	}
++	sum := sha256.Sum256(data)
++	sha := hex.EncodeToString(sum[:])
++	os.MkdirAll(filepath.Join(l.dir, "files"), 0o700)
++	if err := statefile.Write(filepath.Join(l.dir, "files", sha), data); err != nil {
++		return 0, "", "it couldn't be kept"
++	}
++	return int64(len(data)), sha, ""
++}
++
++// GET /v1/ll/calls?wait=N: the calls the app hasn't answered, waiting up to N seconds for one.
++func (b *Box) llCalls(w http.ResponseWriter, r *http.Request) error {
++	if !wire.IsLocal(r.Context()) {
++		return httpError{http.StatusForbidden, "only the app on this Mac takes LeadingLight's calls"}
++	}
++	wait := 0 * time.Second
++	if d, err := time.ParseDuration(r.URL.Query().Get("wait") + "s"); err == nil {
++		wait = min(d, 30*time.Second)
++	}
++	writeJSON(w, b.leadingLight().take(r.Context(), wait))
++	return nil
++}
++
++// take offers each waiting call once, and again if it isn't answered within the lease.
++func (l *llBridge) take(ctx context.Context, wait time.Duration) []LLCall {
++	deadline := time.Now().Add(wait)
++	l.mu.Lock()
++	defer l.mu.Unlock()
++	l.asking++
++	defer func() { l.asking--; l.asked = time.Now() }()
++	for {
++		out := []LLCall{}
++		for _, c := range l.calls {
++			if c.State == "waiting" && time.Since(c.claimed) > llLease {
++				c.claimed = time.Now()
++				out = append(out, *c)
++			}
++		}
++		if len(out) > 0 || !time.Now().Before(deadline) || ctx.Err() != nil {
++			slices.SortFunc(out, func(a, b LLCall) int { return int(a.At - b.At) })
++			return out
++		}
++		wake := l.wake
++		l.mu.Unlock()
++		select {
++		case <-wake:
++		case <-time.After(time.Until(deadline)):
++		case <-ctx.Done():
++		}
++		l.mu.Lock()
++	}
++}
++
++// POST /v1/ll/calls/{id} {result?, error?}: what the app made of a call.
++func (b *Box) llAnswer(w http.ResponseWriter, r *http.Request) error {
++	if !wire.IsLocal(r.Context()) {
++		return httpError{http.StatusForbidden, "only the app on this Mac answers LeadingLight's calls"}
++	}
++	var body struct {
++		Result json.RawMessage `json:"result"`
++		Error  string          `json:"error"`
++	}
++	if err := decodeLimit(r, &body, 4<<20); err != nil {
++		return err
++	}
++	c, ok := b.leadingLight().settle(r.PathValue("id"), body.Result, body.Error)
++	if !ok {
++		return httpError{http.StatusNotFound, "no such call"}
++	}
++	writeJSON(w, c)
++	return nil
++}
++
++// settle keeps the app's answer once; a later one for the same call changes nothing.
++func (l *llBridge) settle(id string, result json.RawMessage, failure string) (LLCall, bool) {
++	l.mu.Lock()
++	defer l.mu.Unlock()
++	c := l.calls[id]
++	if c == nil {
++		return LLCall{}, false
++	}
++	if c.State == "waiting" {
++		c.State, c.Result, c.Error = "done", result, failure
++		if failure != "" {
++			c.State = "failed"
++		}
++		close(c.settled)
++		if c.Write {
++			l.save()
++		} else {
++			// A read is answered once; its waiter has what it needs.
++			time.AfterFunc(time.Second, func() { l.mu.Lock(); delete(l.calls, id); l.mu.Unlock() })
++		}
++	}
++	return *c, true
++}
++
++// GET /v1/ll/files/{sha}: a kept file's bytes.
++func (b *Box) llFile(w http.ResponseWriter, r *http.Request) error {
++	if !wire.IsLocal(r.Context()) {
++		return httpError{http.StatusForbidden, "only the app on this Mac reads kept files"}
++	}
++	sha := r.PathValue("sha")
++	if !llSHA.MatchString(sha) {
++		return httpError{http.StatusNotFound, "no such file"}
++	}
++	data, err := os.ReadFile(filepath.Join(b.leadingLight().dir, "files", sha))
++	if err != nil {
++		return httpError{http.StatusNotFound, "no such file"}
++	}
++	w.Header().Set("Content-Type", "application/octet-stream")
++	w.Write(data)
++	return nil
++}
++
++// llServer is the MCP server's line for an agent's configuration: this berthd, on this socket.
++func (b *Box) llServer() (exe, sock string, ok bool) {
++	if !Embedded || b.ConversationsDir == "" {
++		return "", "", false
++	}
++	exe, err := os.Executable()
++	if err != nil {
++		return "", "", false
++	}
++	return exe, filepath.Join(filepath.Dir(b.ConversationsDir), "berthd.sock"), true
++}
++
++// llClaudeFlags give Claude Code LeadingLight's tools, allowed without asking: they only read
++// the project's pages and add to them.
++func (b *Box) llClaudeFlags() []string {
++	exe, sock, ok := b.llServer()
++	if !ok {
++		return nil
++	}
++	cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"leadinglight": map[string]any{"type": "stdio", "command": exe, "args": []string{"mcp", "leadinglight", "--socket", sock}}}})
++	return []string{"--mcp-config", string(cfg), "--allowedTools", "mcp__leadinglight"}
++}
++
++// llCodexFlags are the same for Codex's app server, as config overrides; its tools approved, as
++// Claude's are.
++func (b *Box) llCodexFlags() []string {
++	exe, sock, ok := b.llServer()
++	if !ok {
++		return nil
++	}
++	cmd, _ := json.Marshal(exe)
++	args, _ := json.Marshal([]string{"mcp", "leadinglight", "--socket", sock})
++	return []string{"-c", "mcp_servers.leadinglight.command=" + string(cmd), "-c", "mcp_servers.leadinglight.args=" + string(args),
++		"-c", `mcp_servers.leadinglight.default_tools_approval_mode="approve"`}
++}
+diff --git a/internal/box/leadinglight_test.go b/internal/box/leadinglight_test.go
+new file mode 100644
+index 0000000..9b9292a
+--- /dev/null
++++ b/internal/box/leadinglight_test.go
+@@ -0,0 +1,54 @@
++package box
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++)
++
++// The seam: an agent's write reaches LeadingLight once, even when the app is closed when it is
++// made, berthd restarts before the app opens, or the agent sends it twice.
++func TestLeadingLightWritesAreKeptUntilTheAppTakesThem(t *testing.T) {
++	llWriteWait, llReadWait = 50*time.Millisecond, 50*time.Millisecond
++	llCallerOf = func(*Box, *http.Request) (LLCaller, error) { return LLCaller{Session: "s", Conversation: "c1"}, nil }
++	dir := filepath.Join(t.TempDir(), "conversations")
++	call := func(b *Box, h func(http.ResponseWriter, *http.Request) error, method, path, body string) map[string]any {
++		r := httptest.NewRequest(method, path, strings.NewReader(body))
++		w := httptest.NewRecorder()
++		if err := h(w, r); err != nil {
++			return map[string]any{"error": err.Error()}
++		}
++		var out any
++		json.Unmarshal(w.Body.Bytes(), &out)
++		if m, ok := out.(map[string]any); ok {
++			return m
++		}
++		return map[string]any{"list": out}
++	}
++	b := &Box{ConversationsDir: dir}
++	if got := call(b, b.llCall, "POST", "/v1/ll/call", `{"tool":"read","args":{"page":"x"}}`); !strings.Contains(got["error"].(string), "isn't open") {
++		t.Fatalf("a read with no app = %v", got)
++	}
++	publish := `{"tool":"publish","args":{"title":"T","markdown":"M"}}`
++	if got := call(b, b.llCall, "POST", "/v1/ll/call", publish); got["state"] != "kept" {
++		t.Fatalf("a write with no app = %v", got)
++	}
++	call(b, b.llCall, "POST", "/v1/ll/call", publish)
++	// berthd starts again: the write is still there, once, for the app.
++	b = &Box{ConversationsDir: dir}
++	calls := b.leadingLight().take(t.Context(), 0)
++	if len(calls) != 1 {
++		t.Fatalf("offered %d calls, want the one write", len(calls))
++	}
++	b.leadingLight().settle(calls[0].ID, json.RawMessage(`{"report":"r1"}`), "")
++	if got := call(b, b.llCall, "POST", "/v1/ll/call", publish); got["state"] != "done" || got["result"].(map[string]any)["report"] != "r1" {
++		t.Fatalf("the same write again = %v, want the first's result", got)
++	}
++	if left := b.leadingLight().take(t.Context(), 0); len(left) != 0 {
++		t.Fatalf("%d calls still offered after the answer", len(left))
++	}
++}
+diff --git a/internal/box/peerpid_darwin.go b/internal/box/peerpid_darwin.go
+new file mode 100644
+index 0000000..24b472d
+--- /dev/null
++++ b/internal/box/peerpid_darwin.go
+@@ -0,0 +1,24 @@
++package box
++
++import (
++	"net"
++	"syscall"
++)
++
++// peerPid is the process on the other end of a Unix socket connection, or 0.
++func peerPid(c net.Conn) int {
++	u, ok := c.(*net.UnixConn)
++	if !ok {
++		return 0
++	}
++	raw, err := u.SyscallConn()
++	if err != nil {
++		return 0
++	}
++	pid := 0
++	raw.Control(func(fd uintptr) {
++		// SOL_LOCAL (0), LOCAL_PEERPID (2): the kernel's word, not the caller's.
++		pid, _ = syscall.GetsockoptInt(int(fd), 0, 2)
++	})
++	return pid
++}
+diff --git a/internal/box/peerpid_other.go b/internal/box/peerpid_other.go
+new file mode 100644
+index 0000000..434efa4
+--- /dev/null
++++ b/internal/box/peerpid_other.go
+@@ -0,0 +1,8 @@
++//go:build !darwin
++
++package box
++
++import "net"
++
++// peerPid is unknown here, so LeadingLight's tools refuse every caller.
++func peerPid(net.Conn) int { return 0 }
+diff --git a/internal/mcpserver/leadinglight.go b/internal/mcpserver/leadinglight.go
+new file mode 100644
+index 0000000..3327d53
+--- /dev/null
++++ b/internal/mcpserver/leadinglight.go
+@@ -0,0 +1,73 @@
++package mcpserver
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"io"
++	"net/http"
++
++	"github.com/cosscom/shipyard/internal/box"
++)
++
++// LeadingLight's tools (`berthd mcp leadinglight`), for the agents of an embedded berthd's
++// projects. Each one is passed to the app through berthd (POST /v1/ll/call), which says who is
++// calling; nothing here names the caller.
++
++func arr(item map[string]any, desc string) map[string]any {
++	return map[string]any{"type": "array", "items": item, "description": desc}
++}
++
++var source = obj(map[string]any{"page": str("page id or ll: link"), "quote": str("the exact words it rests on, as the page has them")}, "page")
++
++// LLTools are LeadingLight's tools.
++var LLTools = []Tool{
++	{Name: "project", Description: "Start here. What you are working on in LeadingLight: your project, your task and its brief, who you are, and any feedback waiting for your answer.", InputSchema: obj(map[string]any{}), call: llTool("project")},
++	{Name: "read", Description: "Read a page in your project: its properties, its text as Markdown (a part at a time; pass cursor for the next part), the pages it links to and those linking to it, its reports and attachments. Pages outside the project are refused, and the person's private notes are never shown.", InputSchema: obj(map[string]any{"page": str("page id or ll: link"), "cursor": str("from the last part, for the next")}, "page"), call: llTool("read")},
++	{Name: "search", Description: "Find pages in your project by words in their title or text.", InputSchema: obj(map[string]any{"query": str("words to look for"), "cursor": str("from the last answer, for more")}, "query"), call: llTool("search")},
++	{Name: "attachment", Description: "Copy an attachment of a page (a file, image, video or audio on it) to a file you can open. Returns its path.", InputSchema: obj(map[string]any{"page": str("page id"), "attachment": str("the attachment's id, from read")}, "page", "attachment"), call: llTool("attachment")},
++	{Name: "publish", Description: "Publish a report the person reads in LeadingLight: new, signed prose beside a page (your task by default). It never changes anything written before; to correct a report, publish another. Markdown; evidence copies files from your folder (path) or your kept outputs (output) into LeadingLight as they are now, shown in the report (images, videos, documents). sources are what it rests on. To answer a feedback batch give batch and one answer for every point: {point, markdown}, or {point, unanswered: why}. ready: true when the work is ready for the person to review. key makes a retry publish once.", InputSchema: obj(map[string]any{
++		"title":    str("a short title"),
++		"markdown": str("the report"),
++		"to":       str("page id it is about, if not your task"),
++		"sources":  arr(source, "pages and words it rests on"),
++		"evidence": arr(obj(map[string]any{"path": str("a file in your folder"), "output": str("a kept output's id"), "caption": str("what it shows"), "at": num("for a video: the second that matters")}), "files that show the work"),
++		"batch":    str("the feedback batch this answers"),
++		"answers":  arr(obj(map[string]any{"point": str("the point's id"), "markdown": str("your answer"), "unanswered": str("why it isn't answered")}, "point"), "one per point of the batch"),
++		"ready":    map[string]any{"type": "boolean", "description": "the work is ready for the person's review"},
++		"key":      str("a key of your own: the same key publishes once"),
++	}, "title", "markdown"), call: llTool("publish")},
++	{Name: "task", Description: "Your subtasks of the task you were given: create one (title, brief), or mark one you created done or not done (id). Only the person marks your main task done.", InputSchema: obj(map[string]any{"action": str("create, done or undo"), "id": str("the subtask, for done and undo"), "title": str("for create"), "brief": str("for create: what it is, Markdown")}, "action"), call: llTool("task")},
++	{Name: "status", Description: "Say what you are doing now, and the concrete steps of your work as a checklist, shown live on your task. Each call replaces the last; keep it short.", InputSchema: obj(map[string]any{"activity": str("what you are doing now, one line"), "checklist": arr(obj(map[string]any{"text": str("a step"), "done": map[string]any{"type": "boolean"}}, "text"), "the steps, in order")}), call: llTool("status")},
++	{Name: "context", Description: "Before you ask the person something with your question tool, say what it is about, so LeadingLight shows it beside your question: the exact question, and the pages (with the words), report evidence or video moment it concerns.", InputSchema: obj(map[string]any{"question": str("the question, exactly as you will ask it"), "about": arr(obj(map[string]any{"page": str("page id"), "quote": str("the words it is about"), "evidence": str("an evidence id from a report"), "at": num("for a video: the second")}), "what it is about")}, "question", "about"), call: llTool("context")},
++}
++
++// llTool passes the call to the app through berthd, with a key the agent may give.
++func llTool(name string) func(ctx context.Context, s *Server, a map[string]any) (any, error) {
++	return func(ctx context.Context, s *Server, a map[string]any) (any, error) {
++		var out struct {
++			State  string          `json:"state"`
++			Result json.RawMessage `json:"result"`
++			Error  string          `json:"error"`
++			Note   string          `json:"note"`
++		}
++		err := s.Box.Call(ctx, http.MethodPost, "/v1/ll/call", map[string]any{"tool": name, "args": a, "key": arg(a, "key")}, &out)
++		switch {
++		case err != nil:
++			return nil, err
++		case out.State == "failed":
++			return nil, errors.New(out.Error)
++		case out.State == "kept":
++			return map[string]string{"kept": out.Note}, nil
++		}
++		return out.Result, nil
++	}
++}
++
++// ServeLeadingLight is the stdio loop with LeadingLight's tools.
++func ServeLeadingLight(ctx context.Context, socket string, in io.Reader, out io.Writer) error {
++	c := box.NewClient(box.NewLocal(socket))
++	c.Origin = "mcp"
++	srv := &Server{Box: c, tools: LLTools, info: "LeadingLight, where the person reads your work: read the project's pages, publish reports with evidence, keep your task's checklist and subtasks, and give context to your questions. Start with project."}
++	return srv.Serve(ctx, in, out)
++}
+diff --git a/internal/mcpserver/mcp.go b/internal/mcpserver/mcp.go
+index 1e3b1ff..5bc8a28 100644
+--- a/internal/mcpserver/mcp.go
++++ b/internal/mcpserver/mcp.go
+@@ -65,6 +65,23 @@ type Server struct {
+ 	// MCP servers with a bare environment.
+ 	Caller   string
+ 	AgentPid int
++	// tools and info replace berth's own tools and instructions (LeadingLight's server).
++	tools []Tool
++	info  string
++}
++
++func (s *Server) list() []Tool {
++	if s.tools != nil {
++		return s.tools
++	}
++	return Tools
++}
++
++func (s *Server) instructions() string {
++	if s.info != "" {
++		return s.info
++	}
++	return "Tools for this box's agents, worktrees and durable runs. Never block: wait_turn takes at most 90 s and returns a cursor. Work you start (task_new, send, exec, run_start, attempts) reports back: a <berth-notification> message from Shipyard, not the user, arrives at your next idle when it ends, needs a person or reaches a gate. So end your turn rather than polling."
+ }
+ 
+ // caller is the session the server works for, found once.
+@@ -197,12 +214,12 @@ func (s *Server) handle(ctx context.Context, req request) (any, *rpcError) {
+ 			"protocolVersion": v,
+ 			"capabilities":    map[string]any{"tools": map[string]any{}},
+ 			"serverInfo":      map[string]any{"name": "berth", "version": version.Version},
+-			"instructions":    "Tools for this box's agents, worktrees and durable runs. Never block: wait_turn takes at most 90 s and returns a cursor. Work you start (task_new, send, exec, run_start, attempts) reports back: a <berth-notification> message from Shipyard, not the user, arrives at your next idle when it ends, needs a person or reaches a gate. So end your turn rather than polling.",
++			"instructions":    s.instructions(),
+ 		}, nil
+ 	case "ping":
+ 		return map[string]any{}, nil
+ 	case "tools/list":
+-		return map[string]any{"tools": Tools}, nil
++		return map[string]any{"tools": s.list()}, nil
+ 	case "tools/call":
+ 		var p struct {
+ 			Name      string         `json:"name"`
+@@ -211,7 +228,7 @@ func (s *Server) handle(ctx context.Context, req request) (any, *rpcError) {
+ 		if err := json.Unmarshal(req.Params, &p); err != nil {
+ 			return nil, &rpcError{-32602, "invalid params"}
+ 		}
+-		for _, t := range Tools {
++		for _, t := range s.list() {
+ 			if t.Name == p.Name {
+ 				cctx, cancel := context.WithTimeout(ctx, 100*time.Second)
+ 				defer cancel()
+diff --git a/internal/wire/server.go b/internal/wire/server.go
+index 2bceb40..d92c4dc 100644
+--- a/internal/wire/server.go
++++ b/internal/wire/server.go
+@@ -112,12 +112,23 @@ func IsLocal(ctx context.Context) bool {
+ 	return v
+ }
+ 
++// LocalConn is the Unix socket connection a local request came on, or nil.
++func LocalConn(ctx context.Context) net.Conn {
++	if !IsLocal(ctx) {
++		return nil
++	}
++	c, _ := ctx.Value(connKey{}).(net.Conn)
++	return c
++}
++
+ // ServeLocal serves the Handle'd routes on ln, a Unix socket that only the
+ // box's user can open. Tools running on the box (Orca and Herdr hooks, the
+ // berthd CLI) use it; file permissions are its authorization.
+ func (s *Server) ServeLocal(ctx context.Context, ln net.Listener) error {
+ 	s.init()
+-	srv := &http.Server{Handler: s.local, ReadHeaderTimeout: headerTimeout}
++	srv := &http.Server{Handler: s.local, ReadHeaderTimeout: headerTimeout,
++		// The connection, so a route can ask which process is on its other end.
++		ConnContext: func(ctx context.Context, c net.Conn) context.Context { return context.WithValue(ctx, connKey{}, c) }}
+ 	stop := context.AfterFunc(ctx, func() { srv.Close() })
+ 	defer stop()
+ 	err := srv.Serve(ln)
+-- 
+2.51.2
+

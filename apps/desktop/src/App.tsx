@@ -44,6 +44,9 @@ import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
+import { serveAgents } from "~/lib/project-runtime/bridge";
+import { folders, loadFolders } from "~/lib/project-runtime/folders";
+import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
@@ -140,6 +143,11 @@ export default function App() {
   const dock = pinned && fit >= 280 ? pinned : null;
 
   useEffect(() => void isNative.then(setNative), []);
+  // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
+  const { enabled: projectsOn } = projectPrefs.use();
+  const linkedFolders = folders.use().size > 0;
+  useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
+  useEffect(() => void (projectsOn && linkedFolders && serveAgents()), [projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
