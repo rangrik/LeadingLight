@@ -1,4 +1,4 @@
-import { Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
+import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
 import { memo, type Ref, useEffect, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
@@ -45,7 +45,7 @@ export function describe(name: string, input: Record<string, unknown>, page: str
     }
   }
   // A project chat's steps, as the runtime names them: what was done to what.
-  const step = { Run: [SquareTerminal, "Ran"], Read: [FileText, "Read"], Search: [Search, "Searched"], Edited: [PencilLine, "Edited"], Skill: [Wrench, "Used skill"] }[name] as [typeof Wrench, string] | undefined;
+  const step = { Run: [SquareTerminal, "Ran"], Read: [FileText, "Read"], Search: [Search, "Searched"], Edited: [PencilLine, "Edited"], Skill: [Wrench, "Used skill"], Subagent: [Bot, "Asked a subagent:"] }[name] as [typeof Wrench, string] | undefined;
   if (step && str(input.target)) return { icon: step[0], done: `${step[1]} ${cut(str(input.target))}`, ask: "" };
   return { icon: Wrench, done: `Used ${name}`, ask: `Use ${name}?` };
 }

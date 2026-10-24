@@ -66,8 +66,10 @@ function turnsOf(chat: Chat): Shown[] {
     }
     // How a turn ended is said by a notice: stopped, or an error.
     else if (t.kind === "notice" && t.notice === "interrupted") last().stopped = true;
-    // A worker's outcome, told to this agent: it shows on that worker's row (features/agent-coordination.feature).
-    else if (t.kind === "report" && t.report?.session) last().reports.push(t.report);
+    // A worker's or a run's outcome, told to this agent: it shows on its row (features/agent-coordination.feature).
+    else if (t.kind === "report" && (t.report?.session || t.report?.run)) last().reports.push(t.report);
+    // Claude's own helpers are its steps, told apart from the runtime's workers.
+    else if (t.kind === "crew") for (const n of t.names ?? []) add({ kind: "tool", id: `${t.id}:${n}`, name: "Subagent", input: { target: n }, status: "done" });
     else if (t.kind === "notice" && t.level === "error") last().error = t.text;
     else if (t.kind === "text" || t.kind === "notice" || t.kind === "shell") add({ kind: "text", text: t.text ?? "" });
     else if (t.kind === "tools") for (const c of t.items ?? []) add({ kind: "tool", id: c.id ?? `${t.id}:${c.target}`, name: c.verb, input: { target: c.target }, status: t.done ? "done" : "running" });
@@ -306,13 +308,22 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
             {(() => {
               // Workers still out show under the latest turn; each one's outcome under the turn it came in.
-              const out = k === turns.length - 1 ? chat.workers.filter((w) => !t.reports.some((r) => r.session === w)) : [];
+              const last = k === turns.length - 1;
+              const out = last ? chat.workers.filter((w) => !t.reports.some((r) => r.session === w)) : [];
+              const going = last ? chat.runs.filter((id) => !t.reports.some((r) => r.run === id)) : [];
               const state = (s: string) => chat.sessions.find((x) => x.name === s);
               const rows: WorkerRow[] = [
-                ...t.reports.map((r) => ({ session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: r.status, duration: r.duration, answer: r.answer, error: r.error })),
+                ...t.reports.map((r) =>
+                  r.run && !r.session
+                    ? { session: r.run, run: true, label: r.template === "loop" ? "Checked loop" : r.title || `${r.template ?? "A"} run`, status: r.status, duration: r.duration, answer: r.answer }
+                    : { session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: r.status, duration: r.duration, answer: r.answer, error: r.error },
+                ),
                 ...out.map((s) => ({ session: s, agent: state(s)?.agent, live: state(s)?.agent_state === "waiting" ? ("waiting" as const) : ("working" as const) })),
+                ...going.map((id) => ({ session: id, run: true, label: "Checked loop", live: "working" as const })),
               ];
-              return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={(s) => void ask("POST", `/v1/sessions/${s}/interrupt`).catch(() => {})} prefix={`${location}-`} rows={rows} />;
+              // A run stops by its own route; a worker by interrupting its turn.
+              const stopRow = (s: string) => void ask("POST", going.includes(s) ? `/v1/runs/${s}/cancel` : `/v1/sessions/${s}/interrupt`).catch(() => {});
+              return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={stopRow} prefix={`${location}-`} rows={rows} />;
             })()}
           </div>
         ))}

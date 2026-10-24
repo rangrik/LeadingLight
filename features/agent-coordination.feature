@@ -44,3 +44,25 @@ Feature: An agent hands work to other agents
   Scenario: Open a worker's own chat
     When I press a worker's row
     Then its own chat opens, showing what it was asked and what it did
+
+  # Checks, reviews and repairs, when the agent wants them (slice 10)
+
+  Scenario: A check the agent keeps at until it passes
+    When the probe starts a checked loop on a worker whose first try fails the check
+    Then the loop gives the worker the check's failure and tries again, at most three times
+    And the run ends succeeded, with the file as the check wanted
+
+  Scenario: Runs show with the workers
+    Given the agent started a checked loop
+    Then the Workers card shows the run while it goes, with Stop, and how it ended once done
+
+  Scenario: The agent's own helpers are told apart from workers
+    When Claude asks one of its own subagents to look at something
+    Then the turn's steps say "Asked a subagent", not a worker row
+    And workers the runtime started show only on the Workers card
+
+  Scenario: The agent chooses
+    Given the agent has these tools
+    When I ask for a small change
+    Then it may make it directly, with no worker or run
+

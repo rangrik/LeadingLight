@@ -21,7 +21,9 @@ export type TranscriptItem = {
   questions?: Question[];
   answers?: string[];
   // A worker's outcome, told to the agent that started it.
-  report?: { kind?: string; session?: string; status?: string; duration?: string; summary?: string; answer?: string; error?: string };
+  report?: { kind?: string; session?: string; run?: string; template?: string; title?: string; status?: string; duration?: string; summary?: string; answer?: string; error?: string };
+  // Claude's own subagents, by name.
+  names?: string[];
   // A slash command the person sent, as the record keeps it.
   command?: string;
   args?: string;

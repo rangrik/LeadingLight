@@ -8,11 +8,11 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { cn } from "@leadinglight/ui/lib/utils";
 
-// One worker: live (its session's state) or done (its report).
-export type WorkerRow = { session: string; agent?: string; live?: "working" | "waiting"; status?: string; duration?: string; answer?: string; error?: string };
+// One worker, or a run: live (its state) or done (its report). label names a run (its title).
+export type WorkerRow = { session: string; label?: string; run?: boolean; agent?: string; live?: "working" | "waiting"; status?: string; duration?: string; answer?: string; error?: string };
 
 const NAME: Record<string, string> = { claude: "Claude", codex: "Codex" };
-const ENDED: Record<string, string> = { finished: "Done", interrupted: "Stopped", error: "Failed", failed: "Failed", exited: "Ended" };
+const ENDED: Record<string, string> = { finished: "Done", succeeded: "Done", interrupted: "Stopped", cancelled: "Stopped", error: "Failed", failed: "Failed", exited: "Ended" };
 
 // The workers a turn started, as synara's card shows a turn's subagents.
 export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: WorkerRow[]; prefix?: string; onStop: (session: string) => void; onOpen?: (session: string) => void }) {
@@ -27,9 +27,10 @@ export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: Worker
         const failed = !r.live && (r.status === "error" || r.status === "failed");
         return (
           <div className="group flex min-w-0 items-center gap-1 rounded-lg px-1.5 py-0.5 transition-colors duration-150 ease-out hover:bg-accent" key={r.session}>
-            <button aria-label={`Open ${r.session}`} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default" disabled={!onOpen} onClick={() => onOpen?.(r.session)} type="button">
+            <button aria-label={`Open ${r.label ?? r.session}`} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default" disabled={!onOpen || r.run} onClick={() => onOpen?.(r.session)} type="button">
               {/* Named in its folder: the folder's own prefix says nothing here. */}
-              <span className="min-w-0 truncate font-medium">{r.session.startsWith(prefix) ? r.session.slice(prefix.length) : r.session}</span>
+              <span className="min-w-0 truncate font-medium">{r.label ?? (r.session.startsWith(prefix) ? r.session.slice(prefix.length) : r.session)}</span>
+              {r.run && <span className="shrink-0 text-muted-foreground text-xs">Run</span>}
               {r.agent && <span className="shrink-0 text-muted-foreground text-xs">{NAME[r.agent] ?? r.agent}</span>}
               <span className={cn("flex min-w-0 flex-1 items-center gap-1.5 text-xs", failed ? "text-destructive-foreground" : "text-muted-foreground")}>
                 {r.live ? <Spinner className="size-3 shrink-0" /> : failed ? <CircleAlert className="size-3 shrink-0" /> : <Check className="size-3 shrink-0" />}
