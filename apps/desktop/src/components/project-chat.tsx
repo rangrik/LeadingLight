@@ -40,9 +40,11 @@ function turnsOf(chat: Chat): Shown[] {
     else if (t.kind === "text" || t.kind === "notice" || t.kind === "command" || t.kind === "shell") add({ kind: "text", text: t.text ?? "" });
     else if (t.kind === "tools") for (const c of t.items ?? []) add({ kind: "tool", id: c.id ?? `${t.id}:${c.target}`, name: c.verb, input: { target: c.target }, status: t.done ? "done" : "running" });
     else if (t.kind === "edit" && t.file) {
-      add({ kind: "tool", id: t.id, name: "Edited", input: { target: t.file }, status: "done", output: `+${t.added ?? 0} −${t.removed ?? 0}` });
+      // A refused edit changed nothing, so its file isn't listed. One the person was asked about was declined.
+      const how = !t.error ? "done" : chat.requests.some((r) => r.tool_use === t.tool) ? "declined" : "failed";
+      add({ kind: "tool", id: t.id, name: "Edited", input: { target: t.file }, status: how, output: t.error ? undefined : `+${t.added ?? 0} −${t.removed ?? 0}` });
       const files = out[out.length - 1]?.files;
-      if (files && !files.includes(t.file)) files.push(t.file);
+      if (files && !t.error && !files.includes(t.file)) files.push(t.file);
     } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
   }
   // Ended turns end; the ledger knows how the session's own last ones went.

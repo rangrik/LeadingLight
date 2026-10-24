@@ -1,0 +1,127 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 06:25:14 -0700
+Subject: [PATCH 1/2] Transcript: an edit the person declined says it failed
+
+Claude's record shows a Write or Edit when it is asked for; its result, refused or failed, now marks the edit failed and sends it again to a reader that saw it before, as Codex's record already does.
+---
+ internal/transcript/artifacts.go  |  4 ++--
+ internal/transcript/claude.go     | 21 ++++++++++++++++++++-
+ internal/transcript/edits_test.go | 24 ++++++++++++++++++++++++
+ internal/transcript/transcript.go |  2 ++
+ 4 files changed, 48 insertions(+), 3 deletions(-)
+ create mode 100644 internal/transcript/edits_test.go
+
+diff --git a/internal/transcript/artifacts.go b/internal/transcript/artifacts.go
+index c6e7741..9a5f54d 100644
+--- a/internal/transcript/artifacts.go
++++ b/internal/transcript/artifacts.go
+@@ -214,7 +214,7 @@ func htmlTitle(path string) string {
+ 	return strings.Join(strings.Fields(html.UnescapeString(string(m[1]))), " ")
+ }
+ 
+-// artifactsSince are the artifact and question items before index from
++// artifactsSince are the artifact, question and refused edit items before index from
+ // that a reader asking from since hasn't seen as they are now: still
+ // waiting for their result, or settled after it last read. A message from
+ // another agent changed since (a repeat counted, a question answered)
+@@ -227,7 +227,7 @@ func (c *conv) artifactsSince(from, since int) []Item {
+ 			break
+ 		}
+ 		it := &c.items[i]
+-		if ((it.Kind == "artifact" || it.Kind == "question") && (!it.Done || it.resolved >= since)) || (it.Msg != nil && it.resolved > 0 && it.resolved >= since) {
++		if ((it.Kind == "artifact" || it.Kind == "question") && (!it.Done || it.resolved >= since)) || (it.Msg != nil && it.resolved > 0 && it.resolved >= since) || (it.Kind == "edit" && it.Error && it.resolved >= since) {
+ 			out = append(out, *it)
+ 		}
+ 	}
+diff --git a/internal/transcript/claude.go b/internal/transcript/claude.go
+index e4e9c72..5f4b650 100644
+--- a/internal/transcript/claude.go
++++ b/internal/transcript/claude.go
+@@ -227,6 +227,7 @@ func (claudeParser) line(c *conv, b []byte) {
+ 				c.localArtifacts(bl.ToolUseID, text)
+ 			}
+ 			c.claudeAnswered(bl.ToolUseID, b, text, bl.IsError)
++			c.edited(bl.ToolUseID, bl.IsError)
+ 			// A rejected call with words for the agent (a plan sent back
+ 			// with "Tell Claude what to change") reads as what the person
+ 			// said.
+@@ -364,8 +365,12 @@ func claudeTool(c *conv, bl claudeBlock, at int64) {
+ 		default:
+ 			added, removed = lines(str("new_string")), lines(str("old_string"))
+ 		}
+-		c.add(Item{Kind: "edit", ID: c.id(), File: rel(c.dir, firstNonEmpty(str("file_path"), str("notebook_path"))), Added: added, Removed: removed, Tool: bl.ID})
++		i := c.add(Item{Kind: "edit", ID: c.id(), File: rel(c.dir, firstNonEmpty(str("file_path"), str("notebook_path"))), Added: added, Removed: removed, Tool: bl.ID})
+ 		c.byTool[bl.ID] = -1
++		if c.editCalls == nil {
++			c.editCalls = map[string]int{}
++		}
++		c.editCalls[bl.ID] = i
+ 	case "Agent", "Task":
+ 		name := firstNonEmpty(str("description"), str("subagent_type"), "Helper")
+ 		c.add(Item{Kind: "crew", ID: c.id(), Names: []string{name}, Tool: bl.ID})
+@@ -580,3 +585,17 @@ func commandMeta(c *conv, typ string, content json.RawMessage) {
+ 		c.items[n-1].Text, c.items[n-1].Markdown = clip(s, maxOutput), true
+ 	}
+ }
++
++// edited settles an edit by its result: one refused or failed (the person
++// declined it) changed nothing, and says so to a reader who saw it before.
++func (c *conv) edited(toolID string, failed bool) {
++	i, ok := c.editCalls[toolID]
++	if !ok {
++		return
++	}
++	delete(c.editCalls, toolID)
++	if it := c.at(i); failed && it != nil && it.Kind == "edit" && it.Tool == toolID {
++		it.Error = true
++		it.resolved = c.base + len(c.items)
++	}
++}
+diff --git a/internal/transcript/edits_test.go b/internal/transcript/edits_test.go
+new file mode 100644
+index 0000000..659bac1
+--- /dev/null
++++ b/internal/transcript/edits_test.go
+@@ -0,0 +1,24 @@
++package transcript
++
++import (
++	"path/filepath"
++	"testing"
++)
++
++// A Write the person declined changed nothing: a reader that saw the edit
++// before its result hears again that it failed.
++func TestARefusedEditSaysSo(t *testing.T) {
++	dir := t.TempDir()
++	p := filepath.Join(dir, "s.jsonl")
++	write(t, p, user("Write hi to a.txt"), assistant(tool("w1", "Write", m{"file_path": filepath.Join(dir, "a.txt"), "content": "hi"})))
++	r := NewReader()
++	res, _ := r.Read("claude", p, dir, 0)
++	write(t, p, user([]m{{"type": "tool_result", "tool_use_id": "w1", "is_error": true, "content": "The user doesn't want to proceed with this tool use."}}))
++	again, _ := r.Read("claude", p, dir, res.Next)
++	for _, it := range again.Items {
++		if it.Kind == "edit" && it.Tool == "w1" && it.Error {
++			return
++		}
++	}
++	t.Fatalf("the refused edit isn't sent again as failed: %+v", again.Items)
++}
+diff --git a/internal/transcript/transcript.go b/internal/transcript/transcript.go
+index 30f2f90..1c112a2 100644
+--- a/internal/transcript/transcript.go
++++ b/internal/transcript/transcript.go
+@@ -228,6 +228,8 @@ type conv struct {
+ 	// askCalls are the questions still waiting for their answer, by call
+ 	// → absolute index of their item (questions.go).
+ 	askCalls map[string]int
++	// editCalls are the edits still waiting for their result, by call.
++	editCalls map[string]int
+ }
+ 
+ // id names an item by where its line starts, and its place among the
+-- 
+2.51.2
+
+

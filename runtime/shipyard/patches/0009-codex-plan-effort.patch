@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: LeadingLight <noreply@anthropic.com>
+Date: Sat, 24 Oct 2026 06:25:14 -0700
+Subject: [PATCH 2/2] Codex: plan turns take the person's
+ plan_mode_reasoning_effort
+
+collaborationMode/list gives Codex's own plan preset; the person's plan effort is only in config/read, which now overrides it.
+---
+ internal/box/codexdriver.go | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index 3071d82..dfb093f 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -682,6 +682,19 @@ func (c *codexConv) handshake() {
+ 		for _, m := range list.Data {
+ 			presets[m.Mode] = struct{ model, effort string }{m.Model, m.Effort}
+ 		}
++		// The list is Codex's own; the person's plan_mode_reasoning_effort is only in their config.
++		if res, err := c.request(ctx, "config/read", map[string]any{}, 15*time.Second); err == nil {
++			var cfg struct {
++				Config struct {
++					PlanEffort string `json:"plan_mode_reasoning_effort"`
++				} `json:"config"`
++			}
++			if json.Unmarshal(res, &cfg) == nil && cfg.Config.PlanEffort != "" {
++				p := presets["plan"]
++				p.effort = cfg.Config.PlanEffort
++				presets["plan"] = p
++			}
++		}
+ 		c.mu.Lock()
+ 		c.presets = presets
+ 		c.mu.Unlock()
+-- 
+2.51.2
+

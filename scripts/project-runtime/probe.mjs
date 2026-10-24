@@ -182,7 +182,13 @@ async function codex() {
     await until("idle", async () => (await session(s))?.agent_state === "finished");
     await api("POST", `/v1/sessions/${s}/mode`, { mode: "plan" });
     await send(s, "Before planning anything, use request_user_input to ask me one question: which fruit do I prefer, options Apple and Pear. Then reply with only the fruit.", "codex-q");
-    return answerTwice(s, await openQuestion(s), "fruit", ["Apple", "Pear"], ["Pear"]);
+    const answered = await answerTwice(s, await openQuestion(s), "fruit", ["Apple", "Pear"], ["Pear"]);
+    // The plan turn takes the person's plan effort from their config, when they set one.
+    const lines = readFileSync(join(state, "box", "conversations", await convOf(s), "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l).data ?? {});
+    const own = lines.find((d) => d.result?.config)?.result.config.plan_mode_reasoning_effort;
+    const sent = lines.find((d) => d.method === "turn/start" && d.params.collaborationMode?.mode === "plan")?.params.collaborationMode.settings.reasoning_effort;
+    if (own && sent !== own) throw new Error(`plan effort ${own} in config, plan turn sent ${sent}`);
+    return { ...answered, planEffort: sent };
   });
   await check("codex: resumed and sent to at once, it carries on", async () => {
     await until("idle", async () => (await session(s))?.agent_state === "finished");
