@@ -1,6 +1,8 @@
 # Project 2: where it stands
 
-The plan is [PROJECT-2.md](PROJECT-2.md). One row per slice, filled in as each lands.
+The plan is [PROJECT-2.md](PROJECT-2.md). One row per slice. Each was built Gherkin first, with a
+short end-to-end run against real agents in the browser build; then an independent QA pass per
+release, its findings fixed; then the plan's acceptance path; then the checks on merged main.
 
 | Slice | State | Evidence |
 |---|---|---|
@@ -13,5 +15,29 @@ The plan is [PROJECT-2.md](PROJECT-2.md). One row per slice, filled in as each l
 | 7 Select and send feedback | Built | features/feedback.feature; on a real agent's report: typing changed nothing, four notes added, three ticked, still ticked after leaving and coming back; one left out in the dialog, a comment added, sent; the stream shows the batch as Sent; the agent's message had exactly the two points, and reading the Thoughts page through its tools showed those two and "2 private" |
 | 8 Read the new response | Built | features/response.feature; a real Claude agent answered a two-point batch with one report, Point 1 and Point 2 each linking to the noted words and the batch; a second batch on that response, where the agent was asked to leave the point out, read "0 of 1 points answered", wasn't ready though the agent asked, left the task Idle, and the first response kept its answers |
 | 9 Accept the result | Built | features/accept.feature; a real Claude agent's ready report made the panel say "Read Summary, then accept it or send feedback."; Accept ticked Done ("Accepted just now"); a report published afterwards left Done ticked, showed "a report since" and a Feed notice; a task no agent was given showed no panel; Settings › Objects lists every kind and widget Project 2 brought |
+
+## QA, acceptance and checks
+
+- **Release A QA** (independent, Sonnet, real Claude and Codex, browser build): 22 of 25 scenarios
+  passed. Fixed: a read just after quitting waited 40 s (now refused in seconds); a Codex agent's
+  report signed "Claude"; Ask's Insert below could reach an open report; Agent and Report in the
+  Type menu; every chat agent named "Claude"; images in a report did nothing on a click; sources
+  not shown; spellcheck marks on reports; agents couldn't find their kept outputs' ids.
+- **Acceptance, plain folder, Claude** ("Field Report": two notes and a CSV): assigned through
+  Assign; its question came to the Feed with "Every region should pass 400 units" lit in Targets
+  beside it and was answered there; LeadingLight was quit and reopened while it worked; its report
+  with a chart it drew arrived for the closed task while I typed in Targets (kept); four notes on
+  it, one kept private, three sent with a comment; one response, a part per point, with no private
+  note in it; a follow-up note sent and answered; accepted. No code or transcript opened.
+- **Acceptance, software project, Codex** (a Git checkout, a space with Task renamed "To-do" and its
+  own "Chore" type): a Chore assigned to GPT-6 Luna changed stats.py and its test, ran them and
+  published a ready report with the test output as evidence; accepted; the Chore kept its type;
+  Settings › Objects read "To-do, Chore" and listed every kind. A Codex agent outside Plan mode has
+  no question tool: it asks in its reply, which the Feed lists with a reply field (checked).
+- **Checks**: typecheck; seam tests 9/9; runtime Go tests for the touched packages (bridge seam
+  test included); the app's Rust tests; Playwright 69/69 after one fix; `pnpm runtime:probe` 27/28
+  on runtime ll.25: "agent config changed" failed because the Codex acceptance run, at the same
+  time, made Codex add its Git checkout to ~/.codex/config.toml as trusted, which Codex does
+  itself (Project 1's acceptance checkout is there too); those two test entries were taken out.
 
 ## Limits
