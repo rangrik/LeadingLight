@@ -160,7 +160,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
                     <InputGroupInput autoCapitalize="off" autoCorrect="off" disabled={busy} onChange={(e) => setInto(e.currentTarget.value)} spellCheck={false} value={into} />
                   </InputGroup>
                   {/* git's own words while it clones, with this Mac's sign-in for GitHub. */}
-                  <p className="min-h-4 truncate font-mono text-muted-foreground text-xs">{progress}</p>
+                  <p className="min-h-4 w-full truncate font-mono text-muted-foreground text-xs">{progress}</p>
                 </Field>
               </>
             ) : (

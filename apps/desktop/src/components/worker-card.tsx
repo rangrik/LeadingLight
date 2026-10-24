@@ -17,19 +17,23 @@ const ENDED: Record<string, string> = { finished: "Done", succeeded: "Done", int
 // The workers a turn started, as synara's card shows a turn's subagents.
 export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: WorkerRow[]; prefix?: string; onStop: (session: string) => void; onOpen?: (session: string) => void }) {
   const running = rows.filter((r) => r.live).length;
+  const workers = rows.filter((r) => !r.run).length;
+  const runs = rows.length - workers;
+  const count = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+  const name = (r: WorkerRow) => r.label ?? (r.session.startsWith(prefix) ? r.session.slice(prefix.length) : r.session);
   return (
     <div className="mt-2 rounded-xl border bg-background p-1.5" data-testid="workers">
       <p className="px-1.5 pt-0.5 pb-1 text-muted-foreground text-xs">
-        {rows.length === 1 ? "1 worker" : `${rows.length} workers`}
+        {[workers && count(workers, "worker", "workers"), runs && count(runs, "run", "runs")].filter(Boolean).join(" · ")}
         {running > 0 && ` · ${running} running`}
       </p>
       {rows.map((r) => {
         const failed = !r.live && (r.status === "error" || r.status === "failed");
         return (
           <div className="group flex min-w-0 items-center gap-1 rounded-lg px-1.5 py-0.5 transition-colors duration-150 ease-out hover:bg-accent" key={r.session}>
-            <button aria-label={`Open ${r.label ?? r.session}`} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default" disabled={!onOpen || r.run} onClick={() => onOpen?.(r.session)} type="button">
+            <button aria-label={`Open ${name(r)}`} className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-default" disabled={!onOpen || r.run} onClick={() => onOpen?.(r.session)} type="button">
               {/* Named in its folder: the folder's own prefix says nothing here. */}
-              <span className="min-w-0 truncate font-medium">{r.label ?? (r.session.startsWith(prefix) ? r.session.slice(prefix.length) : r.session)}</span>
+              <span className="min-w-0 truncate font-medium">{name(r)}</span>
               {r.run && <span className="shrink-0 text-muted-foreground text-xs">Run</span>}
               {r.agent && <span className="shrink-0 text-muted-foreground text-xs">{NAME[r.agent] ?? r.agent}</span>}
               <span className={cn("flex min-w-0 flex-1 items-center gap-1.5 text-xs", failed ? "text-destructive-foreground" : "text-muted-foreground")}>
@@ -40,7 +44,7 @@ export function WorkerCard({ rows, prefix = "", onStop, onOpen }: { rows: Worker
               </span>
             </button>
             {r.live && (
-              <Button aria-label={`Stop ${r.session}`} onClick={() => onStop(r.session)} size="xs" variant="ghost">
+              <Button aria-label={`Stop ${name(r)}`} onClick={() => onStop(r.session)} size="xs" variant="ghost">
                 <Square className="size-2.5 fill-current" />
                 Stop
               </Button>

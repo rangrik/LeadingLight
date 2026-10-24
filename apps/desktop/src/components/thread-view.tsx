@@ -72,6 +72,8 @@ const same = (a: TurnProps, b: TurnProps) => a.live === b.live && a.started === 
 export const Turn = memo(function Turn({ items, live, started, waiting, page, onGoAhead }: TurnProps) {
   const [open, setOpen] = useState(false);
   const now = useNow(live && !waiting);
+  // Until the runtime lists the turn, it began when it was first shown.
+  const [shownAt] = useState(Date.now);
   const user = items[0]?.kind === "user" ? items[0] : null;
   const end = items.find((i) => i.kind === "end");
   const body = items.filter((i) => i.kind !== "user" && i.kind !== "end");
@@ -82,7 +84,7 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
   const how = end?.how ?? (live ? "working" : "stopped");
   // A turn whose length isn't known (a project chat's older turns) says only how it ended.
   const length = end?.ms ? `${how === "done" ? " for" : ""} ${secs(end.ms)}` : "";
-  const line = waiting ? "Waiting for you" : live ? `Working for ${secs(now - (started ?? now))}` : `${{ done: "Worked", stopped: end?.ms ? "Stopped after" : "Stopped", failed: end?.ms ? "Failed after" : "Failed" }[how as "done"]}${length}`;
+  const line = waiting ? "Waiting for you" : live ? `Working for ${secs(now - (started ?? shownAt))}` : `${{ done: "Worked", stopped: end?.ms ? "Stopped after" : "Stopped", failed: end?.ms ? "Failed after" : "Failed" }[how as "done"]}${length}`;
   const shown = live || open;
   return (
     <div className="mt-4 first:mt-0">

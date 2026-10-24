@@ -90,7 +90,8 @@ function turnsOf(chat: Chat): Shown[] {
   }
   // Ended turns end; the ledger knows how the session's own last ones went.
   const live = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
-  const sent = chat.turns.filter((t) => t.origin !== "terminal");
+  // Turns a message started; not ones the agent started itself or a worker's report started.
+  const sent = chat.turns.filter((t) => !t.origin || t.origin === "berth");
   out.forEach((turn, k) => {
     const isLast = k === out.length - 1;
     // A step still going when its turn ended was stopped with it.
@@ -145,6 +146,11 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const conv = list.find((c) => c.id === current) ?? null;
   useEffect(() => (conv ? watch(key, conv) : undefined), [key, conv?.id, conv?.session]);
   const turns = useMemo(() => turnsOf(chat), [chat]);
+  // Workers once seen out, so a row stays until its report lands; workers stopped from their row.
+  const seen = useRef(new Set<string>());
+  for (const w of chat.workers) seen.current.add(w);
+  const [stopped, setStopped] = useState<string[]>([]);
+  const reported = new Set(turns.flatMap((t) => t.reports.map((r) => r.session ?? r.run ?? "")));
   // The agent's own skills and commands, those that work in a chat (not the ones needing its terminal).
   const live = chat.session && !chat.session.exited ? chat.session.name : null;
   useEffect(() => {
@@ -269,7 +275,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
           </MenuPopup>
         </Menu>
-        {tabs.length > 0 && (
+        {!!live && tabs.some((t) => t.name === live) && (
           <Button className="ms-auto h-7 gap-1.5 px-1.5 sm:h-7" onClick={() => openBeside(browserView(pageId, own, live ?? ""))} size="sm" variant="ghost">
             <Globe className="size-4" />
             Browser
@@ -277,7 +283,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         )}
         {/* A chat on its own branch says which; its worktree is the runtime's (slice 6). */}
         {started?.location?.includes("/") && (
-          <span className={cn("flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs", !tabs.length && "ms-auto")}>
+          <span className={cn("flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs", !(live && tabs.some((t) => t.name === live)) && "ms-auto")}>
             <GitBranch className="size-4 shrink-0" />
             <span className="truncate">ll/{started.location.split("/")[1]}</span>
           </span>
@@ -319,22 +325,37 @@ export function ProjectChat({ pageId }: { pageId: string }) {
               </div>
             )}
             {(() => {
-              // Workers still out show under the latest turn; each one's outcome under the turn it came in.
+              // Workers still out show under the latest turn, and stay there until their report comes,
+              // which waits for the agent's next idle; each one's outcome under the turn it came in.
               const last = k === turns.length - 1;
-              const out = last ? chat.workers.filter((w) => !t.reports.some((r) => r.session === w)) : [];
-              const going = last ? chat.runs.filter((id) => !t.reports.some((r) => r.run === id)) : [];
+              const out = last ? [...new Set([...chat.workers, ...seen.current])].filter((w) => !reported.has(w)) : [];
+              const going = last ? chat.runs.filter((id) => !reported.has(id)) : [];
               const state = (s: string) => chat.sessions.find((x) => x.name === s);
+              // A worker can be told of twice (its task and its turn): its last word counts.
+              const told = [...new Map(t.reports.map((r) => [r.session ?? r.run ?? "", r])).values()];
+              // Stopped from its row: its turn ends "finished", but it was stopped.
+              const how = (s: string, status?: string) => (stopped.includes(s) && status === "finished" ? "interrupted" : status);
               const rows: WorkerRow[] = [
-                ...t.reports.map((r) =>
+                ...told.map((r) =>
                   r.run && !r.session
-                    ? { session: r.run, run: true, label: r.template === "loop" ? "Checked loop" : r.title || `${r.template ?? "A"} run`, status: r.status, duration: r.duration, answer: r.answer }
-                    : { session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: r.status, duration: r.duration, answer: r.answer, error: r.error },
+                    ? { session: r.run, run: true, label: r.template === "loop" ? "Checked loop" : r.title || `${r.template ?? "A"} run`, status: how(r.run, r.status), duration: r.duration, answer: r.answer }
+                    : { session: r.session ?? "", agent: state(r.session ?? "")?.agent, status: how(r.session ?? "", r.status), duration: r.duration, answer: r.answer, error: r.error },
                 ),
-                ...out.map((s) => ({ session: s, agent: state(s)?.agent, live: state(s)?.agent_state === "waiting" ? ("waiting" as const) : ("working" as const) })),
+                ...out.map((s) => {
+                  const st = state(s)?.agent_state;
+                  return st === "running" || st === "waiting" || chat.workers.includes(s)
+                    ? { session: s, agent: state(s)?.agent, live: st === "waiting" ? ("waiting" as const) : ("working" as const) }
+                    : { session: s, agent: state(s)?.agent, status: how(s, "finished") };
+                }),
                 ...going.map((id) => ({ session: id, run: true, label: "Checked loop", live: "working" as const })),
               ];
-              // A run stops by its own route; a worker by interrupting its turn.
-              const stopRow = (s: string) => void ask("POST", going.includes(s) ? `/v1/runs/${s}/cancel` : `/v1/sessions/${s}/interrupt`).catch(() => {});
+              // A run stops by its own route, and the worker it drives with it; a worker by interrupting its turn.
+              const stopRow = (s: string) => {
+                setStopped((x) => [...x, s]);
+                if (!going.includes(s)) return void ask("POST", `/v1/sessions/${s}/interrupt`).catch(() => {});
+                void ask<{ params?: { session?: string } }>("GET", `/v1/runs/${s}`).then((r) => r.params?.session && ask("POST", `/v1/sessions/${r.params.session}/interrupt`), () => {}).catch(() => {});
+                void ask("POST", `/v1/runs/${s}/cancel`).catch(() => {});
+              };
               return rows.length > 0 && <WorkerCard onOpen={openWorker} onStop={stopRow} prefix={`${location}-`} rows={rows} />;
             })()}
           </div>
