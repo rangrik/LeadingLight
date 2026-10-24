@@ -139,6 +139,10 @@ questions travels in the question itself: the note's text, a mentioned page's te
 mentioned agent's instructions, each sent again only when it has changed since the thread
 last saw it.
 
+The panel is pinned beside the pages by default, a card of their kind, so it never sits on the
+words. Unpinned, it floats and snaps to a corner rather than going anywhere, so the page under it
+knows where it is and moves its words aside; a top corner starts under the header band.
+
 ## 11. Sidenotes, thoughts and essays are linked pages
 
 A sidenote's anchor is a `note` mark in the page; its text is a `thought` block in the page's

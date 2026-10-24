@@ -95,8 +95,10 @@ export function PageStats({ id }: { id: string }) {
 
   return (
     <Popover>
-      <div className="flex min-w-0 flex-1 basis-0 items-baseline overflow-hidden" ref={box}>
-        <Separator className={cn("mx-3 h-4 shrink-0 self-center", !fit && "invisible")} orientation="vertical" />
+      {/* Taller than the crumbs' line, so it takes no height there and leaves them on the header's
+          middle; its separator goes up the pixel that costs, level with the sidebar button's. */}
+      <div className="-my-1 flex min-w-0 flex-1 basis-0 items-baseline overflow-hidden" ref={box}>
+        <Separator className={cn("mx-3 h-4 shrink-0 -translate-y-px self-center", !fit && "invisible")} orientation="vertical" />
         <PopoverTrigger
           aria-label="Counts"
           className={cn(

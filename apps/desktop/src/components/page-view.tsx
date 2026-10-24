@@ -21,6 +21,7 @@ import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
+import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, typeOf } from "~/lib/space";
@@ -153,7 +154,12 @@ export function PageView({ page }: { page: LLObject }) {
   const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
   useEffect(() => {
     registerPage(askPage, editorRef.current);
-    return () => unregisterPage(page.id);
+    // Its pane can come to the front with no focus in it: its sidebar row, or the pane beside closed.
+    const off = panes.subscribe(() => void (focusedPage() === page.id && registerPage(askPage, editorRef.current)));
+    return () => {
+      off();
+      unregisterPage(page.id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.id]);
 

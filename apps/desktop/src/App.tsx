@@ -75,7 +75,7 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const view = useStore((s) => s.view);
-  const { corner } = useAiPrefs();
+  const { corner, pinned } = useAiPrefs();
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
@@ -276,8 +276,12 @@ export default function App() {
           types={navTypes}
         />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
+          {/* A pinned agent panel is a card beside the pages; a floating one sits over them. */}
           {root ? (
-            <PaneArea windowToggle={mac} />
+            <div className="flex min-h-0 flex-1">
+              <PaneArea windowToggle={mac} />
+              <AgentPanel windowToggle={mac} />
+            </div>
           ) : (
             <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
               <PanelHeader current={null} root="Pages" sidebarOpen={sidebarOpen} toggle={!mac} />
@@ -298,9 +302,8 @@ export default function App() {
               </Empty>
             </div>
           )}
-          {/* The ask bar sits by the selected words; the agent panel docks in a corner (lib/ask.ts). */}
+          {/* The ask bar sits by the selected words. */}
           {root && <AskBar />}
-          {root && <AgentPanel />}
         </SidebarInset>
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
@@ -314,8 +317,8 @@ export default function App() {
     );
 
   return (
-    // Toasts sit on the edge away from the Ask panel's corner, so they never cover it.
-    <ToastProvider position={corner.startsWith("b") ? "top-center" : "bottom-center"}>
+    // Toasts sit in the bottom corner across from the Ask panel, so they never cover it.
+    <ToastProvider position={(pinned ?? (corner.endsWith("l") ? "left" : "right")) === "left" ? "bottom-right" : "bottom-left"}>
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
