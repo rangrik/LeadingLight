@@ -34,10 +34,15 @@ release, its findings fixed; then the plan's acceptance path; then the checks on
   published a ready report with the test output as evidence; accepted; the Chore kept its type;
   Settings › Objects read "To-do, Chore" and listed every kind. A Codex agent outside Plan mode has
   no question tool: it asks in its reply, which the Feed lists with a reply field (checked).
+- **Release B and C QA** (independent, real agents): passed but for a quit right after Assign
+  letting a second Assign start a second agent; the Feed's key being the editor's italic (⇧⌘I, now
+  ⌥⌘F) and not taking the keyboard; an agent reading a sent note's later edits; a failed send's
+  notes saying Sent; one refusal naming the wrong reason; a Feed choice replacing the page read in
+  one sequence. All fixed, then a QA re-run of every failed scenario (below).
 - **Checks**: typecheck; seam tests 9/9; runtime Go tests for the touched packages (bridge seam
-  test included); the app's Rust tests; Playwright 69/69 after one fix; `pnpm runtime:probe` 27/28
-  on runtime ll.25: "agent config changed" failed because the Codex acceptance run, at the same
-  time, made Codex add its Git checkout to ~/.codex/config.toml as trusted, which Codex does
-  itself (Project 1's acceptance checkout is there too); those two test entries were taken out.
+  test included); the app's Rust tests; Playwright 69/69; `pnpm runtime:probe` 28/28 on the final
+  runtime ll.25. An earlier probe run was 27/28 only because the Codex acceptance run, at the same
+  time, made Codex add its Git checkout to ~/.codex/config.toml as trusted (Codex does this itself;
+  Project 1's acceptance checkout is listed too); those two test entries were taken out.
 
 ## Limits

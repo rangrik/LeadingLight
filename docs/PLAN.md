@@ -153,8 +153,8 @@ and flexible delegation. All four releases reported merged and installed on 2026
 
 [Project 2 — Read, ask, and review](PROJECT-2.md): scoped project context, attributed reports and
 retained evidence; task assignment, live widgets and a contextual Feed; selected sidenotes sent as
-one feedback batch, one new linked response, and user acceptance of the main task. Three releases
-in nine small tested slices, with every object/widget explained in Settings.
+one feedback batch, one new linked response, and user acceptance of the main task. All nine slices
+built, checked and merged; see [what shipped and its limits](PROJECT-2-STATUS.md).
 
 ## Later
 
