@@ -296,7 +296,8 @@ export function PageView({ page }: { page: LLObject }) {
                   <Label>Add description</Label>
                 </Button>
               )}
-              <LinkFolderButton label={<Label>Link folder</Label>} pageId={page.id} />
+              {/* Its words only where there is room for them beside the others. */}
+              <LinkFolderButton label={<span className="hidden @3xl:inline">Link folder</span>} pageId={page.id} />
             </div>
             <textarea
               aria-label="Title"

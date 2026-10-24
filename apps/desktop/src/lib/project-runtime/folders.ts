@@ -87,8 +87,7 @@ export async function linkFolder(pageId: string, path: string, force = false): P
 // The page forgets its folder; the folder and its files are left as they are.
 export async function unlinkFolder(pageId: string): Promise<void> {
   const s = folders.get().get(pageId);
-  if (!s) return;
-  await ask("DELETE", `/v1/locations/${s.folder.location}`).catch(() => {});
+  if (s) await ask("DELETE", `/v1/locations/${s.folder.location}`).catch(() => {});
   await objects.deleteFolder(pageId);
   const next = new Map(folders.get());
   next.delete(pageId);

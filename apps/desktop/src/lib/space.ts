@@ -5,6 +5,7 @@ import { type PageIcon, readIcon } from "./page-meta";
 import { editPage } from "./live";
 import { reportSaveError } from "./saving";
 import { closePane, leaves, panes, showOnly } from "./panes";
+import { unlinkFolder } from "./project-runtime/folders";
 import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
@@ -136,6 +137,8 @@ export function removePage(id: string) {
   drafts.delete(id);
   if (typeof parent === "string" && typeof role === "string") void editPage(parent, { properties: ({ [role]: _, ...rest }) => rest });
   objects.remove(id).catch(console.error);
+  // Its folder is free again for another page.
+  unlinkFolder(id).catch(console.error);
   forgetPage(id);
   // A deleted default template is no longer the default.
   for (const t of space.get().types.filter((t) => t.template === id)) void putType({ ...t, template: undefined });

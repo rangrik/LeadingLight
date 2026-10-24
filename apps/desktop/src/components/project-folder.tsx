@@ -10,7 +10,7 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { pageLabel } from "~/lib/labels";
 import { openBeside, openPage } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
-import { folders, linkFolder, loadFolders, unlinkFolder } from "~/lib/project-runtime/folders";
+import { folders, linkFolder, loadFolders, refresh, unlinkFolder } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { ask } from "~/lib/project-runtime/transport";
 import { chatView, pageOf } from "~/lib/space";
@@ -117,9 +117,9 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
               {other && (
                 <FieldError match>
                   That folder is already linked to {otherTitle}.{" "}
-                  <button className="underline" onClick={() => (onOpenChange(false), openPage(other))} type="button">
+                  <Button className="h-auto p-0 text-xs sm:h-auto" onClick={() => (onOpenChange(false), openPage(other))} variant="link">
                     Open {otherTitle}
-                  </button>
+                  </Button>
                 </FieldError>
               )}
               {differs && <FieldError match>This is a different folder from the one linked before.</FieldError>}
@@ -127,7 +127,8 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
           </DialogPanel>
           <DialogFooter>
             <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
-            <Button disabled={busy} type="submit">
+            {/* Answered on click (Enter clicks it too): Base UI's Form won't submit while the field shows an error. */}
+            <Button disabled={busy} onClick={(e) => (e.preventDefault(), void submit(differs))} type="submit">
               {differs ? "Link anyway" : linked ? "Relink" : "Link folder"}
             </Button>
           </DialogFooter>
@@ -160,6 +161,8 @@ export function FolderRow({ pageId }: { pageId: string }) {
   const [open, setOpen] = useState(false);
   const [shown, setShown] = useState("");
   useEffect(() => void (state && tilde(state.folder.path).then(setShown)), [state?.folder.path]);
+  // Opening the page looks again: the folder may have moved since.
+  useEffect(() => void (folders.get().has(pageId) && refresh().catch(() => {})), [pageId]);
   if (!state) return null;
   const Icon = state.missing ? FolderX : FolderOpen;
   return (
@@ -171,7 +174,7 @@ export function FolderRow({ pageId }: { pageId: string }) {
         </span>
       ) : (
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="shrink-0 font-medium">{nameOf(state.folder.path)}</span>
+          <span className="min-w-0 truncate font-medium">{nameOf(state.folder.path)}</span>
           <span className="min-w-0 flex-1 truncate font-mono text-muted-foreground text-xs">{shown}</span>
         </span>
       )}
@@ -188,7 +191,7 @@ export function FolderRow({ pageId }: { pageId: string }) {
       )}
       <Menu>
         <MenuTrigger render={<Button aria-label="Folder" size="icon-xs" variant="ghost" />}>
-          <Ellipsis />
+          <Ellipsis className="size-4" />
         </MenuTrigger>
         <MenuPopup align="end">
           <MenuItem onClick={() => setOpen(true)}>Relink…</MenuItem>

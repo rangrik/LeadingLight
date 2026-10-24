@@ -19,6 +19,9 @@ notices are vendor/shipyard's, checked equal at build time.
 - A chat whose session was removed outside the app (the API's DELETE) shows empty until its next
   message resumes it; the runtime reads a conversation's record only through a session.
 - A question card hides the composer, so Stop is out of reach until it's answered.
+- Codex plan turns get Codex's plan preset effort (medium), not the person's
+  `plan_mode_reasoning_effort`: the runtime reads `collaborationMode/list`, not `config/read`. Next
+  runtime bump.
 - tmux is the person's Homebrew copy; the installed app must provision it (slice 2).
 - An earlier agent's probes (03:14–03:35, under `/tmp/ll-p1-*` and four `/tmp/ll-probe-*`) left
   idle tmux servers on their own private sockets, not in the person's `berth` server. Not ours to
