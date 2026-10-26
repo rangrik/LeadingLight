@@ -61,7 +61,7 @@ Feature: Appearance and settings
   Scenario: Text size steps the interface, not the page body alone
     Given Settings › Appearance is open
     When I choose "Large" under Text size
-    Then the sidebar rows and the Settings text are larger
+    Then the sidebar rows, Settings text, page title and editor body are larger
     When I press Meta+0
     Then the text is back to the default size
 
@@ -83,6 +83,29 @@ Feature: Appearance and settings
     Then it shows the version, the commit the app was built from (with "+dirty" if the tree
       had uncommitted changes), when it was built, and the Shipyard version it is built on
     And the same commit shows beside "About" in the sidebar
+
+  Scenario: Choose a content width
+    When I open Settings › Appearance
+    And set "Content width" to 800 pixels
+    Then page text uses up to 800 pixels, with its usual handle and note gutters
+    And the title, properties and body line up
+    And the width survives a reload and applies to every open page
+    When I turn on "Full width"
+    Then the page uses all the room in its pane, keeping those gutters
+    When I turn "Full width" off
+    Then my 800 pixel width is restored
+    And a narrow pane fits its text to the space available without horizontal scrolling
+    And widths outside 320 to 1600 pixels are clamped to that range
+
+  Scenario: Commit content width from the keyboard
+    Given Settings › Appearance is open with Content width focused
+    When I replace the value with 800 and press Enter
+    Then 800 is saved and the field gives up focus
+    When I press Escape
+    Then Settings closes and page text uses up to 800 pixels
+    When I reopen Appearance, replace Content width with 900 and press Escape directly
+    Then 900 is saved, Settings closes, and page text uses up to 900 pixels
+    And the new width remains after a reload
 
   Scenario: Keyboard shortcuts are listed in one place
     Given Settings › Shortcuts is open

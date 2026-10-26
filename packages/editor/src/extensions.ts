@@ -3,7 +3,6 @@ import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-detai
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
 import Bold from "@tiptap/extension-bold";
 import Code from "@tiptap/extension-code";
-import Highlight from "@tiptap/extension-highlight";
 import Italic from "@tiptap/extension-italic";
 import Strike from "@tiptap/extension-strike";
 import Underline from "@tiptap/extension-underline";
@@ -18,6 +17,7 @@ import { BlockSelectionExtension, SelectAll } from "./block-selection";
 import { CodeBlock } from "./code-block";
 import { BlockDrop } from "./drop";
 import { EmojiPrefix } from "./emoji-prefix";
+import { TextHighlight } from "./highlight";
 import { Column, Columns, Group } from "./layout";
 import { MarkdownPaste } from "./markdown";
 import { OrderedListStyles } from "./lists";
@@ -27,6 +27,7 @@ import { SlashCommands, slashMenuOpen } from "./slash-menu";
 import { Tables } from "./table";
 import { Todo } from "./todo";
 import { WritingAids } from "./writing";
+import { CaretScroll } from "./caret-scroll";
 
 // ArrowUp on the first line, or Backspace in a lone empty block, hands focus back to the title.
 // Low priority so menus get the keys first.
@@ -268,7 +269,7 @@ export function createExtensions(opts: {
     TaskList,
     Todo.configure({ nested: true }),
     OrderedListStyles,
-    Highlight.extend(emphasis("==")),
+    TextHighlight.extend(emphasis("==")),
     Typography,
     Toggle.configure({ persist: true, HTMLAttributes: { class: "ll-toggle" } }),
     DetailsSummary,
@@ -291,6 +292,7 @@ export function createExtensions(opts: {
     opts.placeholder ? Placeholder.configure({ paragraph: opts.placeholder }) : Placeholder,
     BlurSelection,
     WritingAids,
+    CaretScroll,
     SlashCommands.configure({ host }),
     BlockSelectionExtension,
     SelectAll,

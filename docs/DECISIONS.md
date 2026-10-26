@@ -388,3 +388,13 @@ An assigned task is done when the person accepts it, which ticks Done and keeps 
 accepted on and when. Done comes first in the task's state, so a report, a worker or a late event
 after it changes nothing; what arrives later is shown as new on the task and in the Feed. Unticking
 Done reopens it, also only by the person. A task no agent was given keeps its checkbox as before.
+
+## 27. Web sources are saved pages; recordings keep audio before transcription
+
+Save webpage creates an ordinary page with its source address and capture date. Link-only never
+fetches the website. Copies become known editor blocks, never live website HTML; downloadable
+media uses the existing asset store. Native downloads are bounded, anonymous HTTP requests.
+
+Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
+uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
+Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.

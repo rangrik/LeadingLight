@@ -7,6 +7,7 @@ import { List, Plane } from "lucide-react";
 import { animate, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { pageLayout } from "./page-layout";
 
 type Item = { title: string; level: number };
 type Row = { top: number; height: number };
@@ -22,6 +23,7 @@ function useHeadings(editor: Editor): Item[] {
   const key = useEditorState({
     editor,
     selector: ({ editor }) => {
+      if (!pageLayout(editor.state.doc).headings) return "[]";
       const list: Item[] = [];
       editor.state.doc.descendants((node) => {
         if (node.type.name === "heading" && node.textContent.trim()) list.push({ title: node.textContent, level: node.attrs.level });

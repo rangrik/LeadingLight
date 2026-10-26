@@ -4,6 +4,7 @@ export type Asset = { url: string; name: string; size: number; mime: string };
 export interface AssetStore {
   put(file: File): Promise<Asset>;
   open(asset: Asset): void;
+  transcribe?(asset: Asset, language: string): Promise<string>;
 }
 
 export type MediaKind = "image" | "video" | "audio" | "file";

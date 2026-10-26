@@ -11,7 +11,7 @@
 
 .ll-editor {
   outline: none;
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.6;
   color: var(--foreground);
   caret-color: var(--foreground);
@@ -226,7 +226,9 @@
 .dark .ll-editor .hljs-type, .dark .ll-editor .hljs-class, .dark .ll-editor .hljs-variable, .dark .ll-editor .hljs-template-variable { color: var(--code-type, var(--color-teal-400)); }
 
 /* Table */
-.ll-editor .tableWrapper { overflow-x: auto; }
+.ll-editor .tableWrapper { overflow-x: auto; padding-top: 24px; }
+.ll-table-handle { position: absolute; z-index: 10; width: 20px; height: 20px; color: var(--muted-foreground); }
+.ll-table-handle svg { width: 16px; height: 16px; }
 .ll-editor table {
   border-collapse: collapse;
   table-layout: fixed;
@@ -244,6 +246,7 @@
 }
 .ll-editor th { background: var(--muted); font-weight: 600; text-align: left; }
 .ll-editor :is(td, th) > p { padding: 0; }
+.ll-editor :is(td, th) > p.is-empty::before { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ll-editor .selectedCell::after {
   content: "";
   position: absolute;
@@ -369,7 +372,8 @@
 }
 .ll-editor a:hover { text-decoration-color: currentColor; }
 .ll-editor mark {
-  background: color-mix(in srgb, var(--color-yellow-300) 50%, transparent);
+  --ll-highlight: var(--color-yellow-300);
+  background: color-mix(in srgb, var(--ll-highlight) 50%, transparent);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
@@ -378,18 +382,26 @@
   box-decoration-break: clone;
 }
 .dark .ll-editor mark {
-  background: color-mix(in srgb, var(--color-yellow-400) 35%, transparent);
+  background: color-mix(in srgb, var(--ll-highlight) 35%, transparent);
 }
+.ll-highlight-swatch { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 4px; background: color-mix(in srgb, var(--ll-highlight) 35%, transparent); color: var(--foreground); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="yellow"] { --ll-highlight: var(--color-yellow-300); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="orange"] { --ll-highlight: var(--color-orange-400); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="green"] { --ll-highlight: var(--color-green-400); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="blue"] { --ll-highlight: var(--color-blue-400); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="purple"] { --ll-highlight: var(--color-purple-400); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="pink"] { --ll-highlight: var(--color-pink-400); }
+:is(.ll-editor mark, .ll-highlight-swatch)[data-color="gray"] { --ll-highlight: var(--muted-foreground); }
 /* Playful: a marker stroke, with ragged ends, a slight slant and more ink at the edges. The
    margin takes back the extra padding, so the words don't move. */
 [data-style="playful"] .ll-editor mark {
-  --ll-ink: var(--color-yellow-300);
+  --ll-ink: var(--ll-highlight);
   background: linear-gradient(100deg, transparent 1%, color-mix(in srgb, var(--ll-ink) 60%, transparent) 3%, color-mix(in srgb, var(--ll-ink) 45%, transparent) 50%, color-mix(in srgb, var(--ll-ink) 65%, transparent) 96%, transparent 99%);
   border-radius: 0.8em 0.3em;
   padding: 0 0.2em;
   margin: 0 calc(1px - 0.2em);
 }
-.dark [data-style="playful"] .ll-editor mark { --ll-ink: color-mix(in srgb, var(--color-yellow-400) 60%, transparent); }
+.dark [data-style="playful"] .ll-editor mark { --ll-ink: color-mix(in srgb, var(--ll-highlight) 60%, transparent); }
 .ll-editor s { color: var(--muted-foreground); }
 /* The selected text while focus is in the link field. */
 /* The system's selection colour, as tall as the line like a real selection (an inline background

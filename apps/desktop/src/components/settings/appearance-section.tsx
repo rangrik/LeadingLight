@@ -16,6 +16,10 @@ import { berthThemes } from "@/themes/builtin";
 import { Segmented } from "@/views/settings/controls";
 import { SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Dots } from "@/views/settings/theme-preview";
+import { closeSettings } from "@/views/settings/open";
+import { NumberField, NumberFieldDecrement, NumberFieldGroup, NumberFieldIncrement, NumberFieldInput } from "@leadinglight/ui/components/number-field";
+import { Switch } from "@leadinglight/ui/components/switch";
+import { contentWidth, setPageLayout, usePageLayout } from "~/lib/page-layout";
 
 const OWN = new Set(berthThemes.map((t) => t.id));
 
@@ -23,6 +27,8 @@ export function AppearanceSection() {
   const themes = useThemes();
   const themeId = useStore((s) => s.themeId);
   const uiFontSize = usePrefs((p) => p.uiFontSize);
+  const layout = usePageLayout();
+  const [width, setWidth] = useState<number | null>(() => contentWidth(layout.width));
   const [query, setQuery] = useState("");
 
   const [all, setAll] = useState(false);
@@ -104,6 +110,27 @@ export function AppearanceSection() {
       </section>
 
       <SettingsGroup title="Interface">
+        <SettingsRow label="Full width" description="Let page content fill the available space.">
+          <Switch checked={layout.fullWidth} onCheckedChange={(fullWidth) => setPageLayout({ fullWidth })} />
+        </SettingsRow>
+        <SettingsRow label="Content width" description="Maximum text width in pixels. Narrow panes always fit their content.">
+          <NumberField className="w-36" size="sm" min={320} max={1600} step={8} value={width} disabled={layout.fullWidth} onValueChange={setWidth} onValueCommitted={(value) => {
+            const width = contentWidth(value ?? layout.width);
+            setWidth(width);
+            setPageLayout({ width });
+          }}>
+            <NumberFieldGroup>
+              <NumberFieldDecrement aria-label="Narrower content" />
+              <NumberFieldInput aria-label="Content width" onKeyDown={(event) => {
+                if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || !["Enter", "Escape"].includes(event.key)) return;
+                event.preventDefault();
+                event.currentTarget.blur();
+                if (event.key === "Escape") closeSettings();
+              }} />
+              <NumberFieldIncrement aria-label="Wider content" />
+            </NumberFieldGroup>
+          </NumberField>
+        </SettingsRow>
         <SettingsRow label="Text size" description={`${keysFor("zoom-in")} and ${keysFor("zoom-out")} step it from 11 to 20 px.`}>
           <Segmented
             value={String(uiFontSize)}

@@ -16,13 +16,16 @@ import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
 import type { LinkHost } from "./page-links";
+import { capturePageSelection, type PageSelection } from "./page-selection";
 import { SelectionToolbar } from "./selection-toolbar";
 import { type NotesStore, Sidenotes } from "./sidenotes";
 import { TableToolbar } from "./table";
 import { TableOfContents } from "./toc";
+import { pageLayout } from "./page-layout";
 import { type Count, countText, OFF, onFound, type Writing, writingKey } from "./writing";
 
 export type { NotesStore } from "./sidenotes";
+export type { PageSelection } from "./page-selection";
 export { citesIn } from "./anchors";
 
 export type EditorDoc = JSONContent;
@@ -204,6 +207,7 @@ export function BlockEditor({
   readOnly,
   annotate,
   onAsk,
+  onTurnInto,
   askKeys,
   style = "plain",
   notes,
@@ -213,6 +217,7 @@ export function BlockEditor({
   writing,
   onStats,
   onFocusChange,
+  onLayoutChange,
   label = "Page body",
   placeholder,
   ref,
@@ -233,6 +238,7 @@ export function BlockEditor({
   openLink?: (href: string) => void;
   // Given, the selection toolbar offers Ask with the selected words.
   onAsk?: (selected: Selected) => void;
+  onTurnInto?: (selection: PageSelection) => void;
   askKeys?: string;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
@@ -249,6 +255,7 @@ export function BlockEditor({
   onStats?: (stats: Stats) => void;
   // Whether the page is being written in, which Focus mode dims the rest of the page for.
   onFocusChange?: (focused: boolean) => void;
+  onLayoutChange?: (layout: { notes: boolean; toc: boolean }) => void;
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
@@ -555,7 +562,10 @@ export function BlockEditor({
       quoteTo.add(editor.state.doc.textBetween(from, to, " ").trim(), id);
     },
   };
-  const hasNotes = useEditorState({ editor, selector: ({ editor }) => anchors(editor.state.doc, "note").length > 0 });
+  const layout = useEditorState({ editor, selector: ({ editor }) => pageLayout(editor.state.doc) });
+  const hasNotes = Boolean(notes && layout.notes);
+  const hasToc = !readOnly && !annotate && layout.headings >= 2;
+  useLayoutEffect(() => onLayoutChange?.({ notes: hasNotes, toc: hasToc }), [onLayoutChange, hasNotes, hasToc]);
 
   return (
     <div className={writing?.focus ? "ll-editor-root ll-typewriter" : "ll-editor-root"} data-annotate={annotate || undefined} data-notes={(notes && hasNotes) || undefined} data-style={style}>
@@ -571,7 +581,14 @@ export function BlockEditor({
       <EditorContent editor={editor} />
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       {!annotate && <BlockHandle editor={editor} />}
-      <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote} />
+      <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}
+        onTurnInto={!readOnly && !annotate && onTurnInto ? () => {
+          const selection = capturePageSelection(editor);
+          if (!selection) return;
+          onTurnInto(selection);
+          editor.view.dispatch(editor.state.tr.setMeta("selectionToolbar", "hide"));
+        } : undefined}
+      />
       <TableToolbar editor={editor} />
       <MarkTip editor={editor} />
       <EmojiPicker editor={editor} />

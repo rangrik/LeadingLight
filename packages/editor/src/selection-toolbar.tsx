@@ -1,13 +1,16 @@
 import { type Editor, isTextSelection } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
-import { Bold, Code, Highlighter, Italic, Link, MessageSquarePlus, Sparkles, Strikethrough, TextQuote, Underline, Unlink } from "lucide-react";
+import { Bold, Code, Highlighter, Italic, Link, MessageSquarePlus, Replace, Sparkles, Strikethrough, TextQuote, Underline, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Input } from "@leadinglight/ui/components/input";
-import { Toolbar, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
-import { TooltipProvider } from "@leadinglight/ui/components/tooltip";
+import { Button } from "@leadinglight/ui/components/button";
+import { Menu, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Toolbar, ToolbarButton, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
+import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { flipWithin, surface, ToolButton } from "./ui";
+import { highlightColors } from "./highlight";
 
 function LinkEditor({
   href,
@@ -64,6 +67,7 @@ export function SelectionToolbar({
   note,
   quote,
   onAsk,
+  onTurnInto,
   annotate,
   askKeys,
 }: {
@@ -71,12 +75,14 @@ export function SelectionToolbar({
   note?: boolean;
   quote?: { label: string; run: () => void };
   onAsk?: () => void;
+  onTurnInto?: () => void;
   // Words that can't change: only a sidenote, and Ask, are offered.
   annotate?: boolean;
   askKeys?: string;
 }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const highlightOpen = useRef(false);
   const s = useEditorState({
     editor,
     selector: ({ editor }) => ({
@@ -86,6 +92,7 @@ export function SelectionToolbar({
       strike: editor.isActive("strike"),
       code: editor.isActive("code"),
       highlight: editor.isActive("highlight"),
+      highlightColor: (editor.getAttributes("highlight").color as string | undefined) ?? "yellow",
       link: editor.isActive("link"),
       href: (editor.getAttributes("link").href as string | undefined) ?? "",
       from: editor.state.selection.from,
@@ -114,7 +121,7 @@ export function SelectionToolbar({
       options={{ placement: "top", offset: 8, flip: flipWithin(editor.view.dom) }}
       pluginKey="selectionToolbar"
       shouldShow={({ editor, element, state, from, to }) => {
-        const focused = editor.isFocused || element.contains(document.activeElement);
+        const focused = editor.isFocused || element.contains(document.activeElement) || highlightOpen.current;
         if (!focused || !editor.isEditable || editor.isActive("codeBlock")) return false;
         if (!isTextSelection(state.selection) || from === to) return false;
         return state.doc.textBetween(from, to, " ").trim().length > 0;
@@ -165,13 +172,30 @@ export function SelectionToolbar({
                   <ToolButton label="Code" onClick={() => chain().toggleCode().run()} pressed={s.code} shortcut="⌘E">
                     <Code />
                   </ToolButton>
-                  <ToolButton label="Highlight" onClick={() => chain().toggleHighlight().run()} pressed={s.highlight} shortcut="⌘⇧H">
-                    <Highlighter />
-                  </ToolButton>
+                  <Menu onOpenChange={(open) => { highlightOpen.current = open; }}>
+                    <Tooltip>
+                      <TooltipTrigger render={<ToolbarButton render={<MenuTrigger render={<Button variant="ghost" size="icon-sm" />} />} />} aria-label="Highlight" data-active={s.highlight || undefined}>
+                        <Highlighter />
+                      </TooltipTrigger>
+                      <TooltipPopup>Highlight · ⌘⇧H</TooltipPopup>
+                    </Tooltip>
+                    <MenuPopup aria-label="Highlight" finalFocus={() => { editor.view.focus(); return false; }}>
+                      <MenuRadioGroup value={s.highlight ? s.highlightColor : ""} onValueChange={(color) => chain().setHighlight({ color }).run()}>
+                        {highlightColors.map((color) => <MenuRadioItem key={color} value={color} closeOnClick>
+                          <span className="flex items-center gap-2"><span aria-hidden="true" className="ll-highlight-swatch" data-color={color}>A</span>{color[0].toUpperCase() + color.slice(1)} highlight</span>
+                        </MenuRadioItem>)}
+                      </MenuRadioGroup>
+                      <MenuSeparator />
+                      <MenuItem onClick={() => chain().unsetHighlight().run()}>Remove highlight</MenuItem>
+                    </MenuPopup>
+                  </Menu>
                   <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
                   <ToolButton label="Link" onClick={openLink} pressed={s.link}>
                     <Link />
                   </ToolButton>
+                  {onTurnInto && <ToolButton label="Turn into" onClick={onTurnInto}>
+                    <Replace />
+                  </ToolButton>}
                 </>
               )}
               {(note || quote) && !annotate && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}

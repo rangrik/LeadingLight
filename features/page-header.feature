@@ -26,6 +26,15 @@ Feature: Page icon, cover and description
     Then "Add icon", "Add cover" and "Add description" are visible above the title
     And the title has not moved
 
+  Scenario: Header controls fit narrow pages
+    Given two pages are open side by side in a 960 pixel window with the sidebar collapsed
+    When I move the pointer over either title
+    Then all header controls fit inside that page as icons with accessible names
+    And neither page scrolls sideways, even before its controls appear
+    When I open Add description
+    Then the description field opens inside that page
+    And the same holds for a single page in a 520 pixel browser window
+
   Scenario: Picking an emoji icon
     When I click "Add icon"
     Then the icon picker opens on the "Emoji" tab with the search box focused

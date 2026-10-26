@@ -8,8 +8,7 @@ Feature: Block kinds
   - block handle: buttons "Add block" and "Drag to move"
   - code block controls (shown on hover or while the cursor is inside): a "Language" picker,
     buttons "Copy code" and "Download code"
-  - table controls: toolbar "Table" with buttons "Add row above", "Add row below",
-    "Add column left", "Add column right", "Delete row", "Delete column", "Delete table"
+  - table controls: handles "Row 1", "Column 1", and so on, opening menus beside that row or column
   - image controls: toolbar "Image" with toggles "Small", "Medium", "Full width" and buttons "Replace", "Remove"
   - media insert: button "Choose file" inside the placeholder block for Image, Video, Audio, File
   - embed: textbox "Embed URL" and button "Embed" inside the placeholder block
@@ -86,15 +85,65 @@ Feature: Block kinds
     And the cursor is in the first header cell
     When I type "Name" and press Tab and type "Role"
     Then the first two header cells read "Name" and "Role"
-    When I click "Add row below"
+    When I open "Row 1" and click "Add row below"
     Then the table has 4 rows
-    When I click "Add column right"
+    When I open "Column 2" and click "Add column right"
     Then the table has 4 columns
-    When I click "Delete column"
+    When I open "Column 2" and click "Delete column"
     Then the table has 3 columns
-    When I click "Delete table"
+    When I open "Row 1" and click "Delete table"
     Then no table remains and the cursor is in a paragraph
     And every table button shows a tooltip naming it on hover
+
+  Scenario: Enter adds a row while Shift-Enter keeps writing in a cell
+    Given the body contains a 3x3 table
+    When I type "Name" in the second cell of the last row and press Enter
+    Then one row is inserted below it and the cursor is in that row's second cell
+    When I type "Next" and press Cmd-Enter
+    Then one more row is inserted below it with the cursor in the second cell
+    When I type "First line" and press Shift-Enter and type "Second line"
+    Then both lines are in the same cell and no row is inserted
+    When I undo
+    Then the latest edit can be undone without losing the rest of the table
+
+  Scenario: Handles target their own row or column
+    Given the body contains a 3x3 table with words in each cell
+    And the cursor is in the last cell
+    When I open "Row 1" and click "Delete row"
+    Then only the first row is removed
+    When I open "Column 1" and click "Add column right"
+    Then an empty column is inserted after the first column
+    And resizing the page keeps each handle centred on its row or column
+    And the handles are hidden for a read-only page
+
+  Scenario: A table's block controls do not overlap its row handles
+    Given the body contains a 3x3 table
+    When I hover the first cell
+    Then "Add block" and "Drag to move" sit above the row handles
+    And each control has its own clickable area
+    When I click the centre of "Drag to move"
+    Then the "Block" menu opens, not the "Row 1" menu
+    When I close that menu and click the centre of "Row 1"
+    Then the "Row 1" menu opens
+    When I close that menu and click "Add block"
+    Then the slash menu opens in a paragraph after the table
+
+  Scenario: Lists and code inside cells keep their normal Enter behavior
+    Given a table cell contains a bullet list with "one"
+    When I press Enter and type "two"
+    Then the cell contains two bullets and the table has no new row
+    When I press Cmd-Enter
+    Then a row is inserted below the cell and the cursor moves into that row
+    Given another cell contains a code block with "first"
+    When I press Enter and type "second"
+    Then the code block contains two lines and the table has no new row
+    When I press Cmd-Enter
+    Then a row is inserted below the code's cell and the cursor moves into that row
+
+  Scenario: Enter in a heading directly inside a cell adds a row
+    Given a table cell contains a heading with "Section"
+    When I press Enter
+    Then a row is inserted below the cell and the cursor moves into that row
 
   Scenario: Table columns can be resized by dragging the border
     Given the body contains a 3x3 table

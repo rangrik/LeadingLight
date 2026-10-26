@@ -62,6 +62,7 @@ const WIDTH_KEY = "ll.sidebar.width";
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
+const SaveWebpage = lazy(() => import("~/components/save-webpage").then((m) => ({ default: m.SaveWebpage })));
 
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
 // middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
@@ -192,6 +193,7 @@ export default function App() {
   // whose drafts are saved here; in a browser the same box inside the window, which gives the
   // keyboard back to where it was when it closes.
   const [capture, setCapture] = useState(false);
+  const [saveWebpage, setSaveWebpage] = useState(false);
   const closeCapture = useCallback(() => {
     setCapture(false);
     if (captureFrom.current?.isConnected) captureFrom.current.focus();
@@ -352,6 +354,7 @@ export default function App() {
           onCreate={create}
           feed={projectsOn ? { open: lane || !!(root && leaves(root).some((l) => l.page === FEED_VIEW)), toggle: toggleFeed } : undefined}
           onNewIdea={toggleCapture}
+          onSaveWebpage={() => setSaveWebpage(true)}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}
@@ -420,6 +423,7 @@ export default function App() {
             </div>
           )}
           <ShortcutsSheet />
+          {saveWebpage && <Suspense fallback={null}><SaveWebpage open onOpenChange={setSaveWebpage} /></Suspense>}
           <CliUpdates />
           <ZoomHud />
         </TooltipProvider>

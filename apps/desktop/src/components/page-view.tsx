@@ -1,7 +1,7 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget } from "@leadinglight/editor/editor";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
@@ -33,6 +33,8 @@ import { draftOf, drafts, noteStates, pick, recipientFor } from "~/lib/feedback"
 import { useThoughts } from "~/lib/thoughts";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
+import { contentWidth, usePageLayout } from "~/lib/page-layout";
+import { TurnIntoPage } from "~/components/turn-into-page";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -40,7 +42,7 @@ type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<
 const SAVE_DELAY_MS = 500;
 
 // Narrow panes show the header controls as icons only.
-const Label = ({ children }: { children: string }) => <span className="hidden @md:inline">{children}</span>;
+const Label = ({ children }: { children: string }) => <span className="hidden @lg/page-title:inline">{children}</span>;
 
 // A textarea that grows with its text instead of scrolling.
 const fit = (el: HTMLTextAreaElement | null) => {
@@ -61,7 +63,10 @@ export function PageView({ page }: { page: LLObject }) {
   const editorRef = useRef<BlockEditorHandle>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const writing = useWritingPrefs();
+  const layout = usePageLayout();
+  const [margins, setMargins] = useState({ notes: false, toc: false });
   const [inBody, setInBody] = useState(false);
+  const [turnInto, setTurnInto] = useState<PageSelection | null>(null);
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
   const counting = tools && writing.count;
@@ -265,8 +270,8 @@ export function PageView({ page }: { page: LLObject }) {
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
           Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
-      <div className="ll-page pb-8">
-        <div className={cn("group/head", !(cover && icon) && "pt-10")}>
+      <div className="ll-page pb-8" data-page-notes={margins.notes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+        <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
               <button
@@ -321,11 +326,11 @@ export function PageView({ page }: { page: LLObject }) {
                 </Button>
               )}
               {/* Its words only where there is room for them beside the others. */}
-              <LinkFolderButton label={<span className="hidden @3xl:inline">Link folder</span>} pageId={page.id} />
+              <LinkFolderButton label={<span className="hidden @3xl/page-title:inline">Link folder</span>} pageId={page.id} />
             </div>
             <textarea
               aria-label="Title"
-              className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[36px] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
+              className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[2.25rem] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
               onFocus={() => editorRef.current?.clearBlocks()}
               onChange={(e) => rename(e.currentTarget.value.replace(/\n/g, ""))}
               onKeyDown={toBody}
@@ -378,6 +383,7 @@ export function PageView({ page }: { page: LLObject }) {
             assets={assets}
             content={page.content}
             onAsk={openAsk}
+            onTurnInto={report ? undefined : setTurnInto}
             askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });
@@ -388,6 +394,7 @@ export function PageView({ page }: { page: LLObject }) {
             onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
             onFocusChange={setInBody}
+            onLayoutChange={setMargins}
             onStats={counting ? (stats) => setPageStats(page.id, stats) : undefined}
             openLink={openHref}
             quoteTo={quoteTo}
@@ -404,6 +411,7 @@ export function PageView({ page }: { page: LLObject }) {
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
+      {turnInto && <TurnIntoPage selection={turnInto} onClose={() => setTurnInto(null)} />}
     </div>
   );
 }

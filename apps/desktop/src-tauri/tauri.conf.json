@@ -62,11 +62,13 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "entitlements": "Entitlements.plist"
     },
     "externalBin": [
       "binaries/berthd",
-      "binaries/tmux"
+      "binaries/tmux",
+      "binaries/leadinglight-transcribe"
     ],
     "resources": {
       "../../../runtime/tmux/licenses/": "licenses/tmux/",

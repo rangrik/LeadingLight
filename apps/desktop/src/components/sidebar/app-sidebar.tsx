@@ -3,7 +3,7 @@
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
 // usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Inbox, Lightbulb } from "lucide-react";
+import { CalendarDays, Globe, Inbox, Lightbulb } from "lucide-react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
@@ -63,12 +63,14 @@ export function AppSidebar({
   onCreate,
   onToday,
   onNewIdea,
+  onSaveWebpage,
   todayActive,
   feed,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   onToday: (e: React.MouseEvent) => void;
   onNewIdea: () => void;
+  onSaveWebpage: () => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
   pages: React.ComponentProps<typeof NavProjects>["projects"];
@@ -100,6 +102,12 @@ export function AppSidebar({
               </SidebarMenuButton>
             </SidebarMenuItem>
             {feed && <FeedButton feed={feed} />}
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={onSaveWebpage}>
+                <Globe />
+                <span>Save webpage</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
         <nav aria-label="Types">

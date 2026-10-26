@@ -21,6 +21,11 @@ Feature: Table of contents
     When only one heading is left
     Then the list is gone
 
+  Scenario: Opening a page reserves the list's gutter immediately
+    When I open a saved page with two or more headings
+    Then its title and text start beside the table of contents
+    And they do not slide sideways as the page opens
+
   Scenario: The list stays on the left when room is short
     When the panel is too narrow for the list beside the text, or the essay is open beside the page
     Then the trail stays left of the text as a slim rail, with the plane at the heading in view

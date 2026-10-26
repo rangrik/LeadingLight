@@ -95,8 +95,9 @@ test("gallery @gallery", async ({ page }) => {
 
   await body(page).getByText("Day", { exact: true }).click();
   await page.waitForTimeout(50);
-  await expect(page.getByRole("toolbar", { name: "Table" })).toBeVisible();
-  await shot(page, "07-table-toolbar");
+  await expect(page.getByRole("button", { name: "Row 1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Column 1", exact: true })).toBeVisible();
+  await shot(page, "07-table-handles");
 
   await body(page).getByText("Fushimi Inari', 'Arashiyama'").click();
   await expect(page.getByRole("button", { name: "Copy code" })).toBeVisible();

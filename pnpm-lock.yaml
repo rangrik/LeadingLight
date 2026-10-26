@@ -19,6 +19,9 @@ importers:
       '@leadinglight/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@mozilla/readability':
+        specifier: ^0.6.0
+        version: 0.6.0
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.4
@@ -651,6 +654,10 @@ packages:
 
   '@marijn/find-cluster-break@1.0.4':
     resolution: {integrity: sha512-Wy0V7+SGUjnF9/TkiM1hKVDPj7jKXduPNboMVtHTA8dySMURWqfg/JZ9E2Sq8JgSJmkl7k7Qe9FLeMSrSraWmQ==}
+
+  '@mozilla/readability@0.6.0':
+    resolution: {integrity: sha512-juG5VWh4qAivzTAeMzvY9xs9HY5rAcr2E4I7tiSSCokRFi7XIZCAu92ZkSTsIj1OPceCifL3cpfteP3pDT9/QQ==}
+    engines: {node: '>=14.0.0'}
 
   '@number-flow/react@0.6.2':
     resolution: {integrity: sha512-WjZuV4aA+vhRCgCF+adGLgFVVAJ8vdvq6EchRT2FiBIgElTXtDOA3YgkcMr9UHpvpS9v4H70AB5wZv0D9jc3QA==}
@@ -2583,6 +2590,8 @@ snapshots:
       '@lezer/lr': 1.4.11
 
   '@marijn/find-cluster-break@1.0.4': {}
+
+  '@mozilla/readability@0.6.0': {}
 
   '@number-flow/react@0.6.2(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:

@@ -46,6 +46,7 @@ function block(n: EditorDoc, title: (id: string) => string): string {
     case "image":
     case "video":
     case "audio":
+    case "voiceRecording":
     case "file":
     case "embed":
       return `[${n.type}${n.attrs?.name ? `: ${n.attrs.name}` : ""}]`;

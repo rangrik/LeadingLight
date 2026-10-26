@@ -14,6 +14,8 @@ mod capture;
 mod clis;
 mod menu;
 mod runtime;
+mod web;
+mod voice;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
@@ -112,6 +114,9 @@ pub fn run() {
             runtime::runtime_call,
             runtime::runtime_stream,
             runtime::runtime_stream_stop,
+            web::web_fetch,
+            web::web_save_media,
+            voice::voice_transcribe,
             shortcuts_set
         ])
         .setup(|app| {

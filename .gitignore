@@ -31,5 +31,6 @@ dist-ssr
 
 # QA artifacts
 apps/desktop/qa/.results
+apps/desktop/qa/.results-*
 apps/desktop/qa/report/*
 !apps/desktop/qa/report/REPORT.md

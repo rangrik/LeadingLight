@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
 import { Selection, TextSelection } from "@tiptap/pm/state";
+import { closeHistory } from "@tiptap/pm/history";
 import { Check, Copy, Repeat2, Trash } from "lucide-react";
 import {
   Menu,
@@ -81,6 +82,10 @@ function turnInto(editor: Editor, item: SlashItem) {
 export function BlockMenu({ editor, at, onClose }: { editor: Editor; at: MenuAt | null; onClose: () => void }) {
   const kinds = new Set(at ? selectedKinds(editor).map((b) => b.kind) : []);
   const current = kinds.size === 1 ? [...kinds][0] : undefined;
+  const run = (action: typeof deleteBlocks) => {
+    editor.view.dispatch(closeHistory(editor.state.tr));
+    action(editor.view);
+  };
   return (
     <Menu onOpenChange={(open) => !open && onClose()} open={at !== null}>
       <MenuPopup
@@ -90,6 +95,15 @@ export function BlockMenu({ editor, at, onClose }: { editor: Editor; at: MenuAt 
         anchor={at && { getBoundingClientRect: () => at.rect }}
         aria-label="Block"
         className="w-48"
+        onKeyDownCapture={(event) => {
+          const duplicate = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d";
+          const remove = !event.metaKey && !event.ctrlKey && !event.altKey && (event.key === "Backspace" || event.key === "Delete");
+          if (!duplicate && !remove) return;
+          event.preventDefault();
+          event.stopPropagation();
+          run(duplicate ? duplicateBlocks : deleteBlocks);
+          onClose();
+        }}
         // Back to the editor, which still holds the selected blocks.
         finalFocus={() => {
           editor.view.focus();
@@ -118,12 +132,12 @@ export function BlockMenu({ editor, at, onClose }: { editor: Editor; at: MenuAt 
             <MenuSeparator />
           </>
         )}
-        <MenuItem onClick={() => duplicateBlocks(editor.view)}>
+        <MenuItem onClick={() => run(duplicateBlocks)}>
           <Copy />
           Duplicate
           <MenuShortcut>⌘D</MenuShortcut>
         </MenuItem>
-        <MenuItem onClick={() => deleteBlocks(editor.view)}>
+        <MenuItem onClick={() => run(deleteBlocks)}>
           <Trash />
           Delete
           <MenuShortcut>⌫</MenuShortcut>

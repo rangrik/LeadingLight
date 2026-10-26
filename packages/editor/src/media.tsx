@@ -12,6 +12,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { type Asset, type AssetStore, formatSize, kindOf } from "./assets";
 import { placeFor } from "./drop";
 import { Player } from "./player";
+import { VoiceRecording } from "./voice";
 import { surface, ToolButton } from "./ui";
 
 type MediaOptions = { assets: AssetStore };
@@ -473,6 +474,7 @@ export function createMedia(assets: AssetStore) {
     ImageBlock.configure({ assets }),
     Video.configure({ assets }),
     Audio.configure({ assets }),
+    VoiceRecording.configure({ assets }),
     FileBlock.configure({ assets }),
     Embed,
     MediaCommands.configure({ assets }),

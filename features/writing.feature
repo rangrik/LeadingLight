@@ -54,6 +54,18 @@ Feature: Writing tools
     Then the page does not scroll by itself until I next type or move by keyboard
     And near the top of the page, where it can't scroll further, the line sits where it is
 
+  Scenario: Ordinary typing leaves room below the cursor
+    Given Focus mode is off
+    When I type enough lines to reach the bottom of the page card
+    Then the page scrolls automatically to leave 120 pixels below the cursor
+    And on a card shorter than 480 pixels the gap is a quarter of its height
+    And Enter, paste and input-method text keep the same gap
+    And only the pane being written in scrolls
+    When I click a line or drag to select text
+    Then the page does not jump to create a gap
+    When I turn on Focus mode
+    Then its middle-of-the-page position takes precedence
+
   Scenario: Sentence and Paragraph focus keep the line in the middle too
     Given Focus mode is on and set to Sentence
     When I type at the end of a long page

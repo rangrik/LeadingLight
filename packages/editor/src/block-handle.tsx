@@ -19,6 +19,9 @@ const TEXT = "p, h1, h2, h3, h4, summary, pre";
 // an empty media block) its row, and pictures their top edge.
 function firstLineCenter(el: HTMLElement): number {
   const line = el.matches(TEXT) ? el : el.querySelector<HTMLElement>(TEXT);
+  const table = line?.closest("table");
+  // The table's top rail leaves its row handles free along the left edge.
+  if (table) return table.getBoundingClientRect().top - SIZE / 2;
   const row = el.matches("hr") ? el : !line && el.querySelector<HTMLElement>(".ll-row");
   if (row) {
     const r = row.getBoundingClientRect();

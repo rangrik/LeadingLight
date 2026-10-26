@@ -60,6 +60,14 @@ Feature: Block menu
     When I open the block menu on "two" and click "Delete"
     Then the body reads "one", "three", "four" and the cursor is at the start of "three"
 
+  Scenario: The displayed shortcuts work while the menu is open
+    When I open the block menu on "two" and press Meta+D
+    Then the menu closes and the body reads "one", "two", "two", "three", "four"
+    When I open the block menu on "three" and press Backspace
+    Then the menu closes and the body reads "one", "two", "two", "four"
+    When I undo
+    Then "three" returns
+
   Scenario: Right-click on selected blocks
     When I select "two" and "three" and right-click on "three"
     Then the block menu opens at the pointer, not the browser's menu, and both blocks stay selected

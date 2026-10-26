@@ -44,4 +44,10 @@ const tauriAssets: AssetStore = {
 export const assets: AssetStore = {
   put: async (file) => ((await isNative) ? tauriAssets : browserAssets).put(file),
   open: (asset) => void isNative.then((native) => (native ? tauriAssets : browserAssets).open(asset)),
+  async transcribe(asset, language) {
+    if (!(await isNative)) throw new Error("Transcription requires the Mac app on macOS 26 or newer. Your audio is saved.");
+    const { invoke } = await import("@tauri-apps/api/core");
+    const filename = decodeURIComponent(new URL(asset.url).pathname).split("/").pop();
+    return invoke<string>("voice_transcribe", { filename, language });
+  },
 };

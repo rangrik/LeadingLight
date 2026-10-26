@@ -15,6 +15,7 @@ import {
   Landmark,
   List,
   ListOrdered,
+  Mic,
   Minus,
   Paperclip,
   Quote,
@@ -110,6 +111,9 @@ export const SLASH_ITEMS: SlashItem[] = [
   item("video", "Video", "Media", "movie mp4", Film, (e, r) => e.chain().focus().deleteRange(r).insertMedia("video").run()),
   item("audio", "Audio", "Media", "sound mp3 recording", AudioLines, (e, r) =>
     e.chain().focus().deleteRange(r).insertMedia("audio").run(),
+  ),
+  item("voice", "Voice recording", "Media", "record microphone dictation transcribe", Mic, (e, r) =>
+    e.chain().focus().deleteRange(r).insertContent({ type: "voiceRecording" }).run(),
   ),
   item("file", "File", "Media", "attachment pdf document", Paperclip, (e, r) =>
     e.chain().focus().deleteRange(r).insertMedia("file").run(),
