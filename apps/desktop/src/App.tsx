@@ -56,7 +56,7 @@ import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
-import { startTail } from "~/lib/tail";
+import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
@@ -218,13 +218,15 @@ export default function App() {
       close: closeCapture,
       // Not the main host: the page in view is another page here, so "@" must offer it.
       links: makeLinkHost({ create: async (title, typeId) => (await createPage({ title, typeId })).id, day: ensureDaily }),
+      guess: readCapture,
+      took: tookCapture,
     }),
     [closeCapture],
   );
   useEffect(() => {
     let gone = false;
     let off: (() => void) | undefined;
-    void hostCapture().then((f) => (gone ? f() : (off = f)));
+    void hostCapture({ guess: readCapture, took: tookCapture }).then((f) => (gone ? f() : (off = f)));
     return () => {
       gone = true;
       off?.();

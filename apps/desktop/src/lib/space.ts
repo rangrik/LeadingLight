@@ -9,6 +9,7 @@ import { unlinkFolder } from "./project-runtime/folders";
 import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
+import { ABOUT } from "./tail-memory";
 
 // Every page's summary, every type and every property, kept in memory: lists, cards, links and
 // pickers read from here instead of asking the store. Writes go to the store and here together.
@@ -146,9 +147,9 @@ export function forgetPage(id: string) {
   set({ pages: space.get().pages.filter((p) => p.id !== id) });
 }
 
-// What the sidebar's Pages list shows: tags and daily notes have their own places, and
-// templates show in their type's settings.
-export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
+// What the sidebar's Pages list shows: tags and daily notes have their own places, templates
+// show in their type's settings, and the page about how you work in Settings › AI › Tail.
+export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && p.typeId !== ABOUT && !p.properties.templateOf;
 
 // A deleted page's pane closes; when it was the only one, the next page takes its place. A deleted
 // Thoughts page or essay is unlinked from its page, which can then make a new one (DECISIONS.md, 11).

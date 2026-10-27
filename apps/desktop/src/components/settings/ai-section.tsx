@@ -27,6 +27,8 @@ import { ABOUT } from "~/lib/tail-memory";
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
   const prefs = useAiPrefs();
+  // The Effort rows read Codex's list, which comes in after the page opens.
+  codex.use();
   const [status, setStatus] = useState<AgentStatus | "checking">("checking");
   const check = () => {
     setStatus("checking");

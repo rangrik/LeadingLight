@@ -22,6 +22,8 @@ export const TAG = "in-the-middle";
 const PROJECT = "idea-project";
 // task: ⌃↩ saves it as a task in the project instead (docs/TAIL.md).
 export type Draft = { id: string | null; title: string; body: EditorDoc | null; project: string | null; task?: boolean };
+// Tail's read of the words: a task, and the project it seems to be for.
+export type Guess = { task: boolean; project: string | null };
 
 // The title line, else the body's first line, as Apple Notes does.
 const titleOf = ({ title, body }: Draft) => title.trim() || firstLineText(body, (id) => pageLabel(pageOf(id)?.title ?? ""));
@@ -69,15 +71,21 @@ type LinkRequest = { seq: number; kind: "create" | "day"; title?: string; typeId
 
 // In the app the box is a window of its own (capture.rs): it sends drafts here and hears back
 // once each is saved; pages its link menu and project picker make are made here too, so there
-// is one writer; and ⇧⌘↩ there opens the idea here.
-export async function hostCapture(): Promise<() => void> {
+// is one writer; tail guesses here, where it runs; and ⇧⌘↩ there opens the idea here.
+export async function hostCapture(tail: { guess: (text: string, opened: number) => Promise<Guess>; took: (project: string) => void }): Promise<() => void> {
   if (!(await isNative)) return () => {};
   const { emitTo, listen } = await import("@tauri-apps/api/event");
   const offs = await Promise.all([
     listen<{ seq: number; draft: Draft }>("ll:capture", async (e) => {
       const { seq, draft } = e.payload;
+      // ⌃↩ there saves the task tail guessed: the nod.
+      if (draft.task && draft.project) tail.took(draft.project);
       const id = await saveCapture(draft).catch((err) => (console.error(err), null));
       await emitTo("capture", "ll:capture-saved", { seq, id });
+    }),
+    listen<{ seq: number; text: string; opened: number }>("ll:capture-guess", async (e) => {
+      const { seq, text, opened } = e.payload;
+      await emitTo("capture", "ll:capture-guessed", { seq, ...(await tail.guess(text, opened)) });
     }),
     listen<LinkRequest>("ll:capture-link", async (e) => {
       const { seq, kind, title = "", typeId = PAGE_TYPE, day = today() } = e.payload;

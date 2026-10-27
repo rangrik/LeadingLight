@@ -197,7 +197,7 @@ the panel left the app inactive, the keyboard back in the other app. `NSApp.isAc
 true while the panel is key; that is the key-window flag only.
 
 The box's webview is a view and nothing more: it sends what was typed to the main window and
-hears back when it is saved. Saving runs in the main window, where the space, the open panes
+hears back when it is saved, and what tail guesses of it. Saving runs in the main window, where the space, the open panes
 and `editPage` live, so a daily note open in a pane gets its new line through its own editor
 (see 9) and every list already knows the new page. In a browser the same box sits inside the
 window and calls the same code directly. For that the main window must exist, so closing it

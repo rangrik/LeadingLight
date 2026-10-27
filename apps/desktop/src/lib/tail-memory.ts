@@ -46,10 +46,13 @@ export const sentenceOf = (line: string) => line.replace(/^\d{4}-\d{2}-\d{2} · 
 // Quiet while the page says so, so deleting the sentence lifts it.
 export const isQuiet = (lines: string[], kind: string, type: string, project?: string) => lines.some((l) => sentenceOf(l) === quietLine(kind, type, project));
 
-// An edit on a page takes its lines away, but never a done one, which keeps its moment. A chip
-// beside the line being written was not ignored; any other line was.
+// Where Today's rows are; they change only on a nod, a beat, or leaving Today.
+export const TODAY = "today";
+
+// An edit on a page takes its lines away, but never a done one, which keeps its moment, nor
+// Today's rows. A chip beside the line being written was not ignored; any other line was.
 export function edited<L extends { where: string; block?: number; done?: object }>(lines: L[], page: string, block?: number) {
-  const gone = lines.filter((l) => l.where === page && !l.done);
+  const gone = lines.filter((l) => l.where === page && l.where !== TODAY && !l.done);
   return { gone, ignored: gone.filter((l) => l.block !== block) };
 }
 

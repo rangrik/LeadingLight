@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dated, edited, type Entry, isOut, isQuiet, quietLine, record, seenOn } from "./tail-memory.ts";
+import { dated, edited, type Entry, isOut, isQuiet, quietLine, record, seenOn, TODAY } from "./tail-memory.ts";
 
 // The seam: when tail goes quiet. Two ignores in one place must quiet a kind there and nowhere
 // else; a nod lifts it; once its sentence is deleted, one more ignore must not quiet it again.
@@ -23,10 +23,12 @@ test("two ignores quiet a kind in one place; a nod or a deleted sentence lifts i
   assert.ok(!isQuiet(["2026-10-26 · Links on Meeting pages are fine."], "mention", "Meeting"));
 });
 
-// The seam: typing after a nod. A done line must keep its Undo and never count as ignored.
-test("an edit never lets a done line go", () => {
+// The seam: typing after a nod, or on Today. A done line must keep its Undo, and Today's rows must
+// stay, neither counted as ignored.
+test("an edit never lets a done line or a Today row go", () => {
   const lines = [{ where: "p", block: 2, done: {} }, { where: "p", block: 2 }, { where: "p", block: 3 }, { where: "q" }];
   assert.deepEqual(edited(lines, "p", 2), { gone: [lines[1], lines[2]], ignored: [lines[2]] });
+  assert.deepEqual(edited([{ where: TODAY }], TODAY), { gone: [], ignored: [] });
 });
 
 // The seam: a Today row shown day after day. Seen on a second day unchanged, it must stay out

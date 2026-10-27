@@ -27,6 +27,8 @@ Feature: Tail
     And a name too long for the row ends in an ellipsis, and the words after it still show
     And the body placeholder sits below them, and nothing else on the page changed
     And no count shows in the sidebar
+    When I write in Today's body
+    Then the three rows stay where they are, and none counts as ignored
 
   Scenario: A nod files the ideas, and Undo takes it back
     Given Today shows its three rows
@@ -86,6 +88,7 @@ Feature: Tail
     And typing on keeps it and its Undo for those eight seconds, and Undo keeps what I typed since
     When I press Undo while it shows
     Then the page is exactly as it was before the nod, and the task page is gone
+    And the chip leaves, and that line gets no offer again until its words change
 
   Scenario: A word that is a page's name
     Given "Garden plan" is open, with People off in Reads on as it is by default

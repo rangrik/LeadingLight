@@ -9,7 +9,7 @@ import { useStore } from "@/lib/store";
 import { CaptureBox, type CaptureHost } from "~/components/capture-box";
 import { makeLinkHost } from "~/components/link-views";
 import { setVisit } from "~/components/property-value";
-import type { Draft } from "~/lib/capture";
+import type { Draft, Guess } from "~/lib/capture";
 import { loadSpace } from "~/lib/space";
 import "./styles.css";
 
@@ -40,12 +40,25 @@ const made = async (request: object) => {
   return id;
 };
 const create = (title: string, typeId: string) => made({ kind: "create", title, typeId });
+// Tail's guess is a model turn in the main window, so it has no time limit; the box drops one
+// about older words.
+const guesses = new Map<number, (guess: Guess) => void>();
+void listen<Guess & { seq: number }>("ll:capture-guessed", ({ payload: { seq: n, ...guess } }) => {
+  guesses.get(n)?.(guess);
+  guesses.delete(n);
+});
 const host: CaptureHost = {
   save: (draft: Draft) => ask("ll:capture", { draft }, draft.id),
   open: (id) => void invoke("capture_open", { id }),
   close: () => void invoke("capture_hide"),
   links: makeLinkHost({ create, day: (day) => made({ kind: "day", day }) }),
   create,
+  guess: (text, opened) =>
+    new Promise((resolve) => {
+      const n = ++seq;
+      guesses.set(n, resolve);
+      void emitTo("main", "ll:capture-guess", { seq: n, text, opened });
+    }),
 };
 // A click on a link in the box opens the page in the main window.
 setVisit((id) => void invoke("capture_open", { id }));

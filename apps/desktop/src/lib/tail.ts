@@ -2,7 +2,7 @@ import type { EditorDoc } from "@leadinglight/editor/editor";
 import { onAiPrefs, tailPrefs } from "./ai-prefs";
 import type { Seen } from "./ask-prompt";
 import { isTask } from "./assign";
-import { ensureTag, IDEA, TAG } from "./capture";
+import { ensureTag, type Guess, IDEA, TAG } from "./capture";
 import { captureOf } from "./capture-inbox";
 import { dayShown, today } from "./daily";
 import { linkFirst } from "./doc-links";
@@ -16,7 +16,7 @@ import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
 import { isNative } from "./platform";
 import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
-import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietLine, record, seenOn, sentenceOf, type Shown } from "./tail-memory";
+import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietLine, record, seenOn, sentenceOf, type Shown, TODAY } from "./tail-memory";
 import { answerOf, buildDigest, type Candidate, mayRead, named, noteIn, parseAnswer, type Slots, stillTrue, TAIL, type Trigger } from "./tail-prompt";
 import { newPage } from "./templates";
 import { tailTurn } from "./turn";
@@ -60,7 +60,7 @@ export type Line = {
   seen?: boolean;
   state?: string;
 };
-export const TODAY = "today";
+export { TODAY };
 export const tail = createStore<Line[]>([]);
 // The last beat, for Settings › AI › Tail: when, how many lines it gave, or why it didn't go.
 export const lastBeat = createStore<{ at: number; lines: number; error?: string } | null>(null);
@@ -145,9 +145,9 @@ async function guessProject(text: string, pages: ObjectSummary[]): Promise<strin
 }
 
 // For the capture box: whether its words read as a task, and the project they seem to be for,
-// if the model agrees. One thread per opening of the box, named by when it opened. Not in the
-// Mac panel yet, which never starts tail.
-export async function readCapture(text: string, opened: number): Promise<{ task: boolean; project: string | null }> {
+// if the model agrees. One thread per opening of the box, named by when it opened. The Mac
+// panel asks here too (lib/capture.ts, hostCapture).
+export async function readCapture(text: string, opened: number): Promise<Guess> {
   const none = { task: false, project: null };
   const words = text.trim();
   if (!started || !chips() || !taskLike(words)) return none;
@@ -595,13 +595,14 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
 }
 
 // The page's thread, as for coming back; the model picks one or stays silent.
+const declined = new Map<string, string>();
 async function paused(page: string) {
   // A done line keeps its moment; the next offer waits for it.
   if (!chips() || !readable(pageOf(page)) || tail.get().some((l) => l.where === page && l.done)) return;
   const ed = liveEditor(page);
   const index = ed?.cursorBlock() ?? -1;
   const blocks = ed?.getJSON().content ?? [];
-  if (blocks[index]?.type !== "paragraph") return;
+  if (blocks[index]?.type !== "paragraph" || declined.get(page) === textOf(blocks[index])) return;
   const found = [asTask(page, index, blocks), mention(page, index, blocks)].filter((f) => f !== undefined);
   if (!found.length) return;
   const was = seen.get(page);
@@ -705,8 +706,11 @@ export async function undo(line: Line) {
     acting = false;
   }
   nodded = Date.now();
-  update(line.id, { done: undefined });
-  if (line.where !== TODAY) later(line.id, ms("chip"), () => drop((l) => l.id === line.id));
+  if (line.where === TODAY) return update(line.id, { done: undefined });
+  // An undone chip is a no for its line until the line's words change.
+  const block = line.block === undefined ? undefined : liveEditor(line.where)?.getJSON().content?.[line.block];
+  if (block) declined.set(line.where, textOf(block));
+  drop((l) => l.id === line.id);
 }
 
 // ⌃↩: the chip or row on the page in front, or on Today its first row.
@@ -786,6 +790,7 @@ async function seed() {
 function reset() {
   for (const t of [...timers.values(), ...pauses.values()]) clearTimeout(t);
   seen.clear();
+  declined.clear();
   waiting = null;
   beats++;
   Object.assign(memory, { last: 0, threads: {} });

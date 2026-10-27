@@ -8,22 +8,24 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { PagePicker } from "~/components/property-value";
 import { assets } from "~/lib/assets";
-import { type Draft, TAG } from "~/lib/capture";
+import { type Draft, type Guess, TAG } from "~/lib/capture";
 import { isKey, useKeysFor } from "~/lib/keymap";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
-import { readCapture, tookCapture } from "~/lib/tail";
 
 // Where the box sends what is typed: lib/capture.ts in the main window, called directly in a
 // browser, or over Tauri's events from the panel (capture.tsx). links is what "@" offers there,
-// and create makes the picker's projects there.
+// create makes the picker's projects there, and guess asks tail (lib/tail.ts) there.
 export type CaptureHost = {
   save: (draft: Draft) => Promise<string | null>;
   open: (id: string) => void;
   close: () => void;
   links: LinkHost;
   create?: (title: string, typeId: string) => Promise<string>;
+  guess: (text: string, opened: number) => Promise<Guess>;
+  // ⌃↩'s nod at the guess. The panel has none: its task is counted where it is saved.
+  took?: (project: string) => void;
 };
 
 const SAVE_DELAY_MS = 300;
@@ -44,7 +46,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const [project, setProject] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // Tail's read of the words (docs/TAIL.md): a task, and the project it seems to be for.
-  const [guess, setGuess] = useState<{ task: boolean; project: string | null }>({ task: false, project: null });
+  const [guess, setGuess] = useState<Guess>({ task: false, project: null });
   const keysFor = useKeysFor();
   const titleRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
@@ -90,7 +92,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       const text = `${draft.current.title}\n${editorRef.current?.text() ?? ""}`;
       if (text === a.text) return;
       a.text = text;
-      void readCapture(text, a.opened).then((g) => a.text === text && setGuess(g));
+      void host.guess(text, a.opened).then((g) => a.text === text && setGuess(g));
     }, GUESS_DELAY_MS);
   };
   const pick = (next: string | null) => {
@@ -119,7 +121,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       e.preventDefault();
       e.stopPropagation();
       if (!offer) return;
-      tookCapture(offer);
+      host.took?.(offer);
       draft.current = { ...draft.current, project: offer, task: true };
       version.current++;
       close();

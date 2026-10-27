@@ -146,12 +146,12 @@ Real now: every line and the capture box's guess come from a tail turn (`lib/tai
 `tailTurn` in `lib/turn.ts`), in the Mac app with the real timings; the nod ledger, the page about
 how you work and the quieting (`lib/tail-memory.ts`); and Settings › AI › Tail, whose Last beat row
 is the Mac app's one view of it. Not yet: the word rules still find every candidate, the model only
-picks; the Mac panel's guess; the rest in DEFERRED. In a browser `__tail.seed()`, `.beat()`,
+picks; the rest in DEFERRED. In a browser `__tail.seed()`, `.beat()`,
 `.reset()` and `.log` drive the scenes, and the stand-in plays the model.
 
 ## Later, not in this project
 
 The Feed row for a report tail has read, with its one-line verdict and Accept; trust earned
 per kind, so a nodded-at kind acts first and tells you after; drift detection, the thread held
-for you after ten minutes of page switching; the capture guess in the Mac panel; tail as a
-standing agent in the runtime that takes chores itself.
+for you after ten minutes of page switching; tail as a standing agent in the runtime that takes
+chores itself.
