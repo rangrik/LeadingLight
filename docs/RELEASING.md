@@ -11,10 +11,13 @@ free for this public repository. No personal access token or paid service is nee
    Features bump minor, fixes bump patch. `feat!: change storage format` marks a
    breaking change; below 1.0 that bumps minor, then major from 1.0 onward.
 2. **Prepare release** runs checks and maintains one release PR with version changes
-   and grouped release notes. Review its `CHANGELOG.md`; edit descriptions there
-   before merging when users need more context. Non-conventional titles do not
+   and grouped release notes. Review the release section of the PR description;
+   edit it and `CHANGELOG.md` together when users need more context. The PR
+   description becomes the GitHub release notes. Non-conventional titles do not
    produce release notes. Documentation and CI changes appear when a release is due.
-3. Merge the release PR when ready. The workflow creates a tag and draft, validates
+3. Approve and run **Checks** on the bot's PR when GitHub requests approval, or run
+   **Checks** manually on its branch. Merge the release PR once those checks pass.
+   The workflow creates a tag and draft, validates
    that exact commit, then builds and checks the app. It uploads a DMG, ZIP and
    `SHA256SUMS.txt` before publishing. Until every step succeeds, the draft stays private.
 
@@ -24,21 +27,26 @@ To request a specific version, add `Release-As: 0.3.0` to a conventional commit 
 
 The built-in GitHub token cannot trigger another workflow through a bot-created
 PR or release. Publication therefore runs as a reusable job in the same workflow.
-Bot-created release PRs may have no automatic PR checks; merge validation runs
+Bot-created release PR checks may need manual approval or dispatch; merge validation runs
 before any release is created, and the exact release commit is checked again.
 You can also run **Checks** manually on the release PR's branch before merging.
 
 ## Retry a failed release
 
-Open Actions → **Publish release** → **Run workflow**, choose `main` and the
-existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
+Open Actions → **Publish release** → **Run workflow**, choose `main`, disable
+**rehearsal** and enter the existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
 only draft assets, and publishes on success. A published version cannot be overwritten.
 While a draft is unfinished, **Prepare release** stops instead of starting another.
 
-If the tagged source is broken, fix and test it on a branch, then deliberately retire
-the failed draft and tag before preparing a new release. Do not move a published tag.
+If the tagged source is broken, delete only its draft release in GitHub Releases
+(keep its tag), merge a `fix:` commit, and run **Prepare release** for the next version.
+The retained tag gives the release bot a baseline. Never move or reuse a published tag.
 For a failure in workflow infrastructure, fix the workflow on `main` and retry;
 the app source remains the draft's pinned commit.
+
+To test packaging before a release, run **Publish release** on `main` with
+**rehearsal** enabled and the tag blank. It builds and verifies the same downloads,
+stores them as workflow artifacts for seven days, and publishes nothing.
 
 ## Downloads and signing
 

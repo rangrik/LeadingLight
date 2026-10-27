@@ -24,6 +24,12 @@ Feature: Versioned GitHub releases
     And a maintainer can retry the draft by its version tag
     And a retry cannot replace files in a published release
 
+  Scenario: Rehearse a build
+    Given I run Publish release on main with rehearsal enabled
+    When checks and packaging pass
+    Then the workflow stores the same downloads as build artifacts
+    And it creates no tag or GitHub release
+
   Scenario: Untrusted contributions
     Given a pull request comes from a fork
     When checks run
