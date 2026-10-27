@@ -46,6 +46,14 @@ jobs:
           REHEARSAL: ${{ inputs.rehearsal }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
+          if [ "$REHEARSAL" = true ] && [ -n "$TAG" ]; then
+            echo '::error::Leave the tag blank for a rehearsal, or disable rehearsal to publish that draft.'
+            exit 1
+          fi
+          if [ "$REHEARSAL" != true ] && [ -z "$TAG" ]; then
+            echo '::error::Enter the existing draft tag to publish.'
+            exit 1
+          fi
           if [ "$REHEARSAL" = true ]; then
             sha="$SOURCE_SHA"
             TAG="v$(gh api "repos/$GH_REPO/contents/version.txt?ref=$sha" --jq .content | base64 --decode | tr -d '\n')"
@@ -114,6 +122,9 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
           retention-days: 7
+      - name: Summarize rehearsal
+        if: inputs.rehearsal
+        run: echo 'Rehearsal passed. Downloads are in the workflow artifacts; no release was published.' >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     needs: [draft, macos]

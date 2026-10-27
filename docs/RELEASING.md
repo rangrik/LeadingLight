@@ -37,6 +37,8 @@ Open Actions → **Publish release** → **Run workflow**, choose `main`, disabl
 **rehearsal** and enter the existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
 only draft assets, and publishes on success. A published version cannot be overwritten.
 While a draft is unfinished, **Prepare release** stops instead of starting another.
+The draft must contain only the three generated assets; remove any unrelated
+manually added file before retrying.
 
 If the tagged source is broken, delete only its draft release in GitHub Releases
 (keep its tag), merge a `fix:` commit, and run **Prepare release** for the next version.
