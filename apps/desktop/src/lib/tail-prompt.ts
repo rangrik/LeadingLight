@@ -1,0 +1,131 @@
+import type { Seen } from "./ask-prompt";
+import type { ObjectSummary } from "./store";
+
+// What a tail turn sends and how its answer is read (docs/TAIL.md, "What it sees"). The app finds
+// the candidates; the model picks which to show and fills their slots; the app writes the line.
+// No app imports, so the never-list and the parser can be tested alone.
+
+export const TAIL = [
+  "You are tail, in LeadingLight, a notes app on this Mac. From offers the app found, you choose the few worth one line now; the person takes a line with one press or ignores it. Showing nothing is often right.",
+  'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to), the time now, pages (a summary of each, by ref), text (a page\'s words, only when new to you or changed), and candidates.',
+  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page).",
+  "Choose the candidates worth showing, most useful first: at most three for a beat, at most one for a page. Leave out any the pages make untrue or pointless.",
+  'Keep or change each slot in the guess: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words.',
+  'Answer with JSON only, no other words: {"show":[{"id":"c1","project":"p2"}]}, with only the slots its guess has, or {"show":[]}.',
+].join("\n");
+
+export type Trigger = "beat" | "page";
+export type Slots = { project?: string; day?: string; title?: string };
+// Something worth a line: the pages it is about, words from them, and the app's guess at its slots.
+export type Candidate = { id: string; kind: string; pages: string[]; facts?: Record<string, string | number>; guess?: Slots };
+
+// About 8k tokens for a beat and 4k for a page, at four characters a token, and one body's most.
+const BUDGET = { beat: { all: 32_000, body: 3_000 }, page: { all: 16_000, body: 12_000 } };
+
+// Never sent: templates, Thoughts pages (sidenotes; one sent as feedback is a page of its own) and
+// types Reads on leaves out.
+export const mayRead = (p: ObjectSummary, readsOn: (typeId: string) => boolean) => !p.properties.templateOf && p.properties.role !== "thoughts" && readsOn(p.typeId);
+
+const two = (n: number) => String(n).padStart(2, "0");
+const when = (at: number) => {
+  const d = new Date(at);
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;
+};
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const size = (x: unknown) => JSON.stringify(x).length;
+
+export type DigestInput = {
+  trigger: Trigger;
+  now: number;
+  pages: ObjectSummary[];
+  readsOn: (typeId: string) => boolean;
+  typeName: (typeId: string) => string;
+  // A body goes only if its page was updated after this and the thread hasn't seen it so.
+  since: number;
+  seen: Seen;
+  text: (id: string) => Promise<string>;
+  candidates: Candidate[];
+};
+
+// Summaries from memory, candidates' pages and projects first, then the newest; bodies only of
+// pages that changed, read only then. Pages are sent by short refs, which the answer uses.
+export async function buildDigest(o: DigestInput): Promise<{ message: string; seen: Seen; refs: Record<string, string> }> {
+  const budget = BUDGET[o.trigger];
+  const byId = new Map(o.pages.filter((p) => mayRead(p, o.readsOn)).map((p) => [p.id, p]));
+  const about = (c: Candidate) => [...c.pages, ...(c.guess?.project ? [c.guess.project] : [])];
+  // A candidate about a page tail may not read is not sent, words and all.
+  const candidates = o.candidates.filter((c) => about(c).every((id) => byId.has(id)));
+  const first = new Set(candidates.flatMap(about));
+  const rank = (p: ObjectSummary) => (first.has(p.id) ? 0 : p.typeId === "project" ? 1 : 2);
+  const order = [...byId.values()].sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
+  const ref = new Map(order.map((p, i) => [p.id, `p${i + 1}`]));
+
+  const sent = candidates.map((c, i) => ({
+    id: `c${i + 1}`,
+    kind: c.kind,
+    pages: c.pages.map((id) => ref.get(id)),
+    ...c.facts,
+    ...(c.guess && { guess: { ...c.guess, ...(c.guess.project && { project: ref.get(c.guess.project) }) } }),
+  }));
+  const summary = (p: ObjectSummary) => {
+    const line = typeof p.properties.description === "string" ? p.properties.description.trim().slice(0, 160) : "";
+    const due = (p.properties.due as { start?: string } | undefined)?.start;
+    const project = Object.values(p.properties).flatMap((v) => (Array.isArray(v) ? v : [])).filter((id) => byId.get(id)?.typeId === "project").map((id) => ref.get(id));
+    return { ref: ref.get(p.id), title: p.title.trim() || "Untitled", type: o.typeName(p.typeId), updated: when(p.updatedAt), ...(line && { line }), ...(typeof p.properties.done === "boolean" && { done: p.properties.done }), ...(due && { due }), ...(project.length && { project }) };
+  };
+  const pages: ReturnType<typeof summary>[] = [];
+  let room = budget.all * 0.6 - size(sent);
+  for (const p of order) {
+    const s = summary(p);
+    if (rank(p) > 0 && size(s) > room) break;
+    pages.push(s);
+    room -= size(s);
+  }
+  room = budget.all - size({ sent, pages });
+  const seen = { ...o.seen };
+  const text: { ref?: string; text: string }[] = [];
+  for (const p of order.slice(0, pages.length).sort((a, b) => b.updatedAt - a.updatedAt)) {
+    const at = String(p.updatedAt);
+    if (p.updatedAt <= o.since || seen[p.id] === at) continue;
+    const words = (await o.text(p.id)).slice(0, budget.body);
+    if (words.trim() && size(words) > room) continue;
+    if (words.trim()) text.push({ ref: ref.get(p.id), text: words });
+    room -= size(words);
+    seen[p.id] = at;
+  }
+  const now = new Date(o.now);
+  const message = JSON.stringify({ trigger: o.trigger, now: `${WEEKDAYS[now.getDay()]} ${when(o.now)}`, pages, ...(text.length && { text }), candidates: sent });
+  const refs = Object.fromEntries([...[...ref].map(([id, r]) => [r, id]), ...candidates.map((c, i) => [`c${i + 1}`, c.id])]);
+  return { message, seen, refs };
+}
+
+const DAY = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)$/i;
+
+// The model's choice, kept only where it checks out: a candidate sent, its slots of the right
+// kind (a slot left out keeps the guess). Anything else is dropped; an answer not JSON is silence.
+export function parseAnswer(text: string, o: { refs: Record<string, string>; candidates: Candidate[]; max: number; isProject: (id: string) => boolean }): { id: string; slots: Slots }[] {
+  let answer: { show?: unknown };
+  try {
+    answer = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+  } catch {
+    return [];
+  }
+  const out: { id: string; slots: Slots }[] = [];
+  for (const item of Array.isArray(answer?.show) ? (answer.show as Record<string, unknown>[]) : []) {
+    const c = o.candidates.find((x) => x.id === o.refs[String(item?.id)]);
+    if (!c || out.some((x) => x.id === c.id)) continue;
+    if (out.length >= o.max) break;
+    const slots: Slots = { ...c.guess };
+    const word = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    if (c.guess?.project && item.project !== undefined) slots.project = o.isProject(o.refs[word(item.project)] ?? "") ? o.refs[word(item.project)] : undefined;
+    if (c.guess?.day && item.day !== undefined) slots.day = DAY.test(word(item.day)) ? word(item.day)[0].toUpperCase() + word(item.day).slice(1).toLowerCase() : undefined;
+    if (c.guess?.title && item.title !== undefined) {
+      const t = word(item.title).replace(/[.!?…:;,]+$/, "");
+      slots.title = t && !t.includes("\n") && t.length <= 80 && t.split(/\s+/).length <= 8 ? t : undefined;
+    }
+    // A slot the model got wrong: no line rather than a guess.
+    if (Object.keys(c.guess ?? {}).some((k) => !slots[k as keyof Slots])) continue;
+    out.push({ id: c.id, slots });
+  }
+  return out;
+}

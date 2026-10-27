@@ -79,7 +79,8 @@ Context is scoped by the trigger, never a dump of the space. Each trigger has a 
 Never: sidenotes and Thoughts pages, unless sent as feedback; pages reached only through a tag
 or a daily note, which nearly every page shares (DECISIONS 19); pages of a type not ticked in
 **Reads on**. Reads on is Settings › AI › Tail › Reads on, per type, the same control and the
-same defaults as Settings › Writing › Use on: on for pages written in, off for records.
+same defaults as Settings › Writing › Use on: on for pages written in, off for records, except
+tasks, which the beat reads as open tasks.
 
 A thread sends a page's text once and again only when it changed, as Ask does (the Seen map in
 `lib/turn.ts`). The beat sends summaries from the `space` store, which already keeps every
@@ -134,8 +135,11 @@ shows exactly what would have been sent.
 
 `lib/tail.ts` and `components/tail.tsx` hold the store, the triggers, the word rules, expiry,
 nod and undo, and the four surfaces; `__tail.seed()` fills a browser build with the pages the
-scenes use, `__tail.beat()` runs a beat now. It lacks the model, Settings, the memory, Reads on,
-chips on list items and headings, and is off in the Mac app.
+scenes use, `__tail.beat()` runs a beat now, `__tail.log` holds each turn the stand-in answered.
+Since Release A, Today's rows and the return row come from a tail turn (`lib/tail-prompt.ts`,
+`tailTurn` in `lib/turn.ts`), in the Mac app too, with the real timings there; the chip and the
+capture guess are still word rules and stay in the browser build. `ll.ai`'s `tail` key holds the
+mode, model, effort and Reads on until Settings has them.
 
 ## Later, not in this project
 

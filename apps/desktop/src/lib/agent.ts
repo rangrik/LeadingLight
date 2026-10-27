@@ -20,7 +20,8 @@ export type AgentStatus = {
 export type Line = { type?: string } & Record<string, any>;
 export type AgentEvent = { type: "line"; line: Line } | { type: "error"; message: string };
 export type Mode = "ask" | "auto" | "full" | "plan";
-export type AskRequest = { id: string; prompt: string; system: string; model: string; effort: string; access: Mode; resume?: string; provider: "claude" | "codex" };
+// tail: a tail turn (lib/tail.ts), with no tools at all.
+export type AskRequest = { id: string; prompt: string; system: string; model: string; effort: string; access: Mode; resume?: string; provider: "claude" | "codex"; tail?: boolean };
 
 const fakeMode = () => new URLSearchParams(location.search).get("agent");
 const standIn = () => import("~/lib/agent-standin");

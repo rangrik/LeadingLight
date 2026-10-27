@@ -1,24 +1,31 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
+import { tailPrefs } from "./ai-prefs";
+import type { Seen } from "./ask-prompt";
 import { isTask } from "./assign";
 import { ensureTag, IDEA, TAG } from "./capture";
+import { captureOf } from "./capture-inbox";
 import { dayShown, today } from "./daily";
 import { linkFirst } from "./doc-links";
 import { lightWords } from "./feed";
 import { isoDay } from "./format";
 import { pageLabel } from "./labels";
-import { editPage, liveContent, liveEditor, watchLive, whenLive } from "./live";
+import { editPage, isLive, liveContent, liveEditor, watchLive, whenLive } from "./live";
 import { docText, type ObjectSummary, objects } from "./objects";
 import { focusedPage, openBeside, panes } from "./panes";
 import { isNative } from "./platform";
-import { createPage, listed, pageOf, removePage, retype, space } from "./space";
+import { createPage, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
+import { buildDigest, type Candidate, mayRead, parseAnswer, type Slots, TAIL, type Trigger } from "./tail-prompt";
 import { newPage } from "./templates";
+import { tailTurn } from "./turn";
+import { suggested } from "./writing";
 
-// Tail (docs/TAIL.md, features/tail.feature): reads along and offers one line to nod at. Word
-// rules stand in for the model. Nothing it shows is stored; nods go through an open editor, a new
-// page or a property, and each can be undone.
+// Tail (docs/TAIL.md, features/tail.feature): reads along and offers one line to nod at. Today's
+// rows and the return row come from a tail turn; the chip and the capture guess are still word
+// rules. Nothing it shows is stored; nods go through an open editor, a new page or a property,
+// and each can be undone.
 
-// Design values, then the real ones that come with the model (docs/TAIL.md, Timing).
+// Design values in the browser build, the real ones in the Mac app (docs/TAIL.md, Timing).
 const TIMES = {
   pause: [3_000, 20_000],
   away: [10_000, 15 * 60_000],
@@ -26,7 +33,9 @@ const TIMES = {
   chip: [60_000, 10 * 60_000],
   done: [8_000, 8_000],
 };
-const ms = (k: keyof typeof TIMES) => TIMES[k][0];
+let browser = false;
+void isNative.then((native) => (browser = !native));
+const ms = (k: keyof typeof TIMES) => TIMES[k][browser ? 0 : 1];
 
 // Words, and names or quoted words shown in the foreground that open their page.
 export type Part = string | { text: string; page: string };
@@ -47,9 +56,13 @@ export type Line = {
 export const TODAY = "today";
 export const tail = createStore<Line[]>([]);
 
-// The browser build only, until the model comes; localStorage "ll.tail" = "off" turns it off.
-let running = false;
-void isNative.then((native) => (running = !native && localStorage.getItem("ll.tail") !== "off"));
+// Off, Quiet or Normal (ll.ai's tail). The chip and the capture guess are word rules until they
+// move to the model, so they stay in the browser build, as in the prototype.
+const mode = () => tailPrefs().mode;
+const chips = () => browser && mode() === "normal";
+// Reads on, else Writing's Use on; tasks too, since the beat reads open tasks (docs/TAIL.md).
+const readsOn = (typeId: string) => tailPrefs().readsOn[typeId] ?? (suggested(typeId) || typeId === "task");
+const readable = (p?: ObjectSummary) => !!p && mayRead(p, readsOn);
 // The edits a nod makes are not the person typing.
 let acting = false;
 
@@ -106,10 +119,10 @@ const contentOf = async (id: string) => liveContent(id) ?? (await objects.get(id
 const name = (p: ObjectSummary): Part => ({ text: pageLabel(p.title), page: p.id });
 
 // The project whose title or page shares the most words with the text.
-async function guessProject(text: string): Promise<string | null> {
+async function guessProject(text: string, pages = space.get().pages): Promise<string | null> {
   const mine = wordsOf(text);
   let best: { id: string; n: number } | null = null;
-  for (const p of space.get().pages.filter((p) => p.typeId === "project")) {
+  for (const p of pages.filter((p) => p.typeId === "project")) {
     const theirs = wordsOf(`${p.title} ${docText(await contentOf(p.id))}`);
     const n = [...mine].filter((w) => theirs.has(w)).length;
     if (n > (best?.n ?? 0)) best = { id: p.id, n };
@@ -119,103 +132,218 @@ async function guessProject(text: string): Promise<string | null> {
 
 // For the capture box: whether its words read as a task, and the project they seem to be for.
 export async function readCapture(text: string): Promise<{ task: boolean; project: string | null }> {
-  if (!running || !taskLike(text)) return { task: false, project: null };
+  if (!chips() || !taskLike(text)) return { task: false, project: null };
   return { task: true, project: await guessProject(text) };
 }
 
-// Today's lines, in this order, at most three.
+// What the word rules found, as sent to the model, and the line it makes with the model's slots
+// (none when a slot is wrong). The copy is docs/TAIL.md's, word for word.
+type Found = Candidate & { line: (s: Slots) => Line | undefined };
 
-async function leftMidSentence(pages: ObjectSummary[]): Promise<Line | undefined> {
+// Today's candidates, in this order; the model shows at most three.
+
+async function leftMidSentence(pages: ObjectSummary[]): Promise<Found | undefined> {
   const before = pages.filter((p) => listed(p) && p.title.trim() && p.updatedAt < midnight() && recent(p.updatedAt));
   for (const p of before.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)) {
-    if (!unfinished(docText(await contentOf(p.id)).split("\n").at(-1)!.trim())) continue;
+    const last = docText(await contentOf(p.id)).split("\n").at(-1)!.trim();
+    if (!unfinished(last)) continue;
     const when = dayOf(p.updatedAt);
-    return { id: `left:${p.id}`, where: TODAY, words: ["You left ", name(p), ` mid-sentence ${when === "yesterday" ? when : `on ${when}`}.`], nod: "Open", act: async () => openBeside(p.id) };
+    const id = `left:${p.id}`;
+    return {
+      id,
+      kind: "left",
+      pages: [p.id],
+      facts: { last: last.slice(-200), when },
+      line: () => ({ id, where: TODAY, words: ["You left ", name(p), ` mid-sentence ${when === "yesterday" ? when : `on ${when}`}.`], nod: "Open", act: async () => openBeside(p.id) }),
+    };
   }
 }
 
-async function ideasToFile(pages: ObjectSummary[]): Promise<Line | undefined> {
-  const ideas = pages.filter((p) => p.typeId === IDEA && !(p.properties["idea-project"] as string[] | undefined)?.length && recent(p.createdAt)).sort((a, b) => a.createdAt - b.createdAt);
+// Not yet filed, as the capture inbox has it: no project and not reviewed (DECISIONS 28).
+const unfiled = (p: ObjectSummary) =>
+  p.typeId === IDEA && !captureOf(p)?.reviewedAt && !Object.values(p.properties).some((v) => Array.isArray(v) && v.some((id) => pageOf(id)?.typeId === "project"));
+
+async function ideasToFile(pages: ObjectSummary[]): Promise<Found | undefined> {
+  const ideas = pages.filter((p) => unfiled(p) && recent(p.createdAt)).sort((a, b) => a.createdAt - b.createdAt);
   if (ideas.length < 2) return;
-  const guesses = await Promise.all(ideas.map((i) => (taskLike(i.title) ? guessProject(i.title) : null)));
+  const guesses = await Promise.all(ideas.map((i) => (taskLike(i.title) ? guessProject(i.title, pages) : null)));
   const by = new Map<string, ObjectSummary[]>();
   ideas.forEach((idea, i) => {
     const g = guesses[i];
     if (g) by.set(g, [...(by.get(g) ?? []), idea]);
   });
   const top = [...by].sort((a, b) => b[1].length - a[1].length)[0];
-  const p = top && pageOf(top[0]);
-  if (!p) return;
-  const tasks = top[1];
+  if (!top) return;
+  const [guess, tasks] = top;
   const one = tasks.length === 1;
+  const since = dayOf(ideas[0].createdAt);
+  const id = `ideas:${guess}`;
   return {
-    id: `ideas:${p.id}`,
-    where: TODAY,
-    words: [`${ideas.length} ideas since ${dayOf(ideas[0].createdAt)}. ${one ? "1 looks like a task" : `${tasks.length} look like tasks`} for `, name(p), "."],
-    nod: one ? "File it" : "File them",
-    act: async () => {
-      const was = tasks.map((t) => pageOf(t.id) ?? t);
-      for (const t of was) await retype(t.id, "task", ({ "idea-project": _, ...rest }) => ({ ...rest, "task-project": [p.id] }));
+    id,
+    kind: "ideas",
+    pages: tasks.map((t) => t.id),
+    facts: { ideas: ideas.length, since },
+    guess: { project: guess },
+    line: ({ project }) => {
+      const p = project ? pageOf(project) : undefined;
+      if (!p) return;
       return {
-        words: [`Filed ${one ? "1 as a task" : `${tasks.length} as tasks`} in `, name(p), "."],
-        undo: async () => {
-          for (const t of was) await retype(t.id, t.typeId, () => t.properties);
+        id,
+        where: TODAY,
+        words: [`${ideas.length} ideas since ${since}. ${one ? "1 looks like a task" : `${tasks.length} look like tasks`} for `, name(p), "."],
+        nod: one ? "File it" : "File them",
+        act: async () => {
+          const was = tasks.map((t) => pageOf(t.id) ?? t);
+          for (const t of was) await retype(t.id, "task", ({ "idea-project": _, ...rest }) => ({ ...rest, "task-project": [p.id] }));
+          return {
+            words: [`Filed ${one ? "1 as a task" : `${tasks.length} as tasks`} in `, name(p), "."],
+            undo: async () => {
+              for (const t of was) await retype(t.id, t.typeId, () => t.properties);
+            },
+          };
         },
       };
     },
   };
 }
 
-function taskWithoutDay(pages: ObjectSummary[]): Line | undefined {
+function taskWithoutDay(pages: ObjectSummary[]): Found | undefined {
   const t = pages.filter((p) => isTask(p) && p.properties.done !== true && !p.properties.due && DAY.test(p.title)).sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  const day = t && dayIn(t.title);
-  if (!t || !day) return;
+  const guess = t && dayIn(t.title);
+  if (!t || !guess) return;
   // Named without its day: "Call Sam about the invoice before Friday" has no day.
   const short = pageLabel(t.title).replace(new RegExp(`\\s+((before|by|on|until|this|next)\\s+)?${DAY.source}.*$`, "i"), "");
+  const id = `day:${t.id}`;
   return {
-    id: `day:${t.id}`,
-    where: TODAY,
-    words: [{ text: short, page: t.id }, " has no day."],
-    nod: `Set ${day.word}`,
-    act: async () => {
-      await editPage(t.id, { properties: (props) => ({ ...props, due: { start: day.start } }) });
-      return { words: [`Due ${day.word}.`], undo: () => editPage(t.id, { properties: ({ due: _, ...rest }) => rest }) };
+    id,
+    kind: "day",
+    pages: [t.id],
+    guess: { day: guess.word },
+    line: ({ day: word }) => {
+      const day = word ? dayIn(word) : undefined;
+      if (!day) return;
+      return {
+        id,
+        where: TODAY,
+        words: [{ text: short, page: t.id }, " has no day."],
+        nod: `Set ${day.word}`,
+        act: async () => {
+          await editPage(t.id, { properties: (props) => ({ ...props, due: { start: day.start } }) });
+          return { words: [`Due ${day.word}.`], undo: () => editPage(t.id, { properties: ({ due: _, ...rest }) => rest }) };
+        },
+      };
     },
   };
 }
 
-async function untitled(pages: ObjectSummary[]): Promise<Line | undefined> {
+async function untitled(pages: ObjectSummary[]): Promise<Found | undefined> {
   const old = pages.filter((p) => listed(p) && !p.title.trim() && p.createdAt < midnight() && recent(p.createdAt));
   for (const p of old.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)) {
     const text = docText(await contentOf(p.id)).split("\n")[0].trim();
     if (!text) continue;
-    const title = text.split(/\s+/).slice(0, 5).join(" ").replace(/[^\p{L}\p{N}]+$/u, "");
+    const start = text.split(/\s+/).slice(0, 5).join(" ").replace(/[^\p{L}\p{N}]+$/u, "");
+    const id = `untitled:${p.id}`;
     return {
-      id: `untitled:${p.id}`,
-      where: TODAY,
-      words: [`An untitled page from ${dayOf(p.createdAt)} starts "`, { text: text.split(/\s+/).length > 5 ? `${title}…` : title, page: p.id }, '".'],
-      nod: "Name it",
-      act: async () => {
-        await editPage(p.id, { title });
-        return { words: ["Named ", { text: title, page: p.id }, "."], undo: () => editPage(p.id, { title: "" }) };
-      },
+      id,
+      kind: "untitled",
+      pages: [p.id],
+      facts: { first: text.slice(0, 200), from: dayOf(p.createdAt) },
+      guess: { title: start },
+      line: ({ title }) =>
+        title
+          ? {
+              id,
+              where: TODAY,
+              words: [`An untitled page from ${dayOf(p.createdAt)} starts "`, { text: text.split(/\s+/).length > 5 ? `${start}…` : start, page: p.id }, '".'],
+              nod: "Name it",
+              act: async () => {
+                await editPage(p.id, { title });
+                return { words: ["Named ", { text: title, page: p.id }, "."], undo: () => editPage(p.id, { title: "" }) };
+              },
+            }
+          : undefined,
     };
   }
 }
 
+// Tail's threads (docs/TAIL.md, "What it remembers"): the day's for the beat, a page's for four
+// hours. Each keeps its session and what it was sent, as ids and times, never words.
+type Thread = { model: string; session?: string; seen: Seen; at: number };
+type Memory = { last: number; threads: Record<string, Thread> };
+const KEPT = "ll.tail.threads";
+const memory: Memory = (() => {
+  try {
+    return { last: 0, threads: {}, ...JSON.parse(localStorage.getItem(KEPT) ?? "{}") };
+  } catch {
+    return { last: 0, threads: {} };
+  }
+})();
+const current = (key: string, t: Thread) => (key.startsWith("beat:") ? key === `beat:${isoDay(new Date())}` : Date.now() - t.at < 4 * 3_600_000);
+const threadFor = (key: string, model: string): Thread => {
+  const t = memory.threads[key];
+  return t?.model === model && current(key, t) ? t : { model, seen: {}, at: Date.now() };
+};
+function keep(key: string, t: Thread) {
+  memory.threads = Object.fromEntries(Object.entries({ ...memory.threads, [key]: t }).filter(([k, x]) => current(k, x)));
+  try {
+    localStorage.setItem(KEPT, JSON.stringify(memory));
+  } catch {
+    // Lost, the next turn sends everything again.
+  }
+}
+
+// A tail turn: the model picks which of what the app found to show, in order, and fills the
+// slots; the app writes each line. A failed, empty or wrong answer is silence.
+async function choose(trigger: Trigger, key: string, found: Found[], pages: ObjectSummary[], since = 0): Promise<Line[]> {
+  const { model, effort } = tailPrefs();
+  const started = Date.now();
+  const turn = async (t: Thread) => {
+    const text = async (id: string) => docText(await contentOf(id));
+    const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, text, candidates: found });
+    const got = await tailTurn({ prompt: d.message, system: TAIL, model, effort, resume: t.session });
+    return got && { ...d, ...got };
+  };
+  let thread = threadFor(key, model);
+  let got = await turn(thread);
+  // A thread the tool no longer has: once more on a new one, sent everything again.
+  if (!got && thread.session) got = await turn((thread = { model, seen: {}, at: Date.now() }));
+  if (!got) return [];
+  if (trigger === "beat") memory.last = started;
+  keep(key, { ...thread, session: got.session, seen: got.seen });
+  const picks = parseAnswer(got.text, { refs: got.refs, candidates: found, max: trigger === "beat" ? 3 : 1, isProject: (id) => pageOf(id)?.typeId === "project" });
+  return picks.map((c) => found.find((f) => f.id === c.id)?.line(c.slots)).filter((l) => l !== undefined);
+}
+
 // Today's lines are made again from the records: what is no longer true goes, nothing piles up.
-// A quiet beat never redraws Today in front of the person: it waits for them to look away.
+// A quiet beat never redraws Today in front of the person: it waits for them to look away. One
+// beat at a time, so two turns never share a thread; one asked for meanwhile runs after.
 let beats = 0;
 let waiting: Line[] | null = null;
+let queue = Promise.resolve();
+let queued: boolean | null = null;
 const onToday = () => document.hasFocus() && focusedPage() === dayShown(today());
-export async function beat(quiet = false) {
-  if (!running) return;
+export function beat(quiet = false): Promise<void> {
+  if (queued !== null) {
+    queued &&= quiet;
+    return queue;
+  }
+  queued = quiet;
+  return (queue = queue.then(() => {
+    const q = queued!;
+    queued = null;
+    return beatNow(q).catch(console.error);
+  }));
+}
+async function beatNow(quiet: boolean) {
+  if (mode() === "off") return;
   const at = ++beats;
-  const { pages } = space.get();
-  const found = (await Promise.all([leftMidSentence(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)])).filter((l) => l !== undefined);
+  const pages = space.get().pages.filter(readable);
+  const found = (await Promise.all([leftMidSentence(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)])).filter((f) => f !== undefined);
+  // Bodies changed since the last beat, or since yesterday began when there was none.
+  const lines = found.length ? await choose("beat", `beat:${isoDay(new Date())}`, found, space.get().pages, memory.last || midnight() - DAY_MS) : [];
   if (at !== beats) return;
-  if (quiet && onToday()) waiting = found;
-  else showToday(found);
+  if (quiet && onToday()) waiting = lines;
+  else showToday(lines);
 }
 function showToday(found: Line[]) {
   waiting = null;
@@ -276,6 +404,7 @@ function mention(page: string, index: number, block: EditorDoc): Line | undefine
 }
 
 function paused(page: string) {
+  if (!chips() || !readable(pageOf(page))) return;
   const ed = liveEditor(page);
   const index = ed?.cursorBlock() ?? -1;
   const block = ed?.getJSON().content?.[index];
@@ -286,18 +415,25 @@ function paused(page: string) {
   later(line.id, ms("chip"), () => drop((l) => l.id === line.id));
 }
 
-// Back on a page after a while: where you stopped, when that was mid-sentence.
-type Seen = { at: number; block?: number };
-const seen = new Map<string, Seen>();
-function comeBack(page: string, doc: EditorDoc) {
+// Back on a page after a while: where you stopped, when that was mid-sentence, if the model,
+// sent the page, thinks it worth saying.
+type Visit = { at: number; block?: number };
+const seen = new Map<string, Visit>();
+const asking = new Set<string>();
+async function comeBack(page: string, doc: EditorDoc) {
   const was = seen.get(page);
-  if (!running || Date.now() - (was?.at ?? pageOf(page)?.updatedAt ?? Date.now()) < ms("away")) return;
+  if (mode() === "off" || asking.has(page) || !readable(pageOf(page)) || Date.now() - (was?.at ?? pageOf(page)?.updatedAt ?? Date.now()) < ms("away")) return;
   const blocks = doc.content ?? [];
   const lineOf = (b?: EditorDoc) => (b ? docText({ type: "doc", content: [b] }).split("\n").at(-1)!.trim() : "");
   const text = lineOf(was?.block !== undefined ? blocks[was.block] : [...blocks].reverse().find((b) => lineOf(b)));
   if (!unfinished(text)) return;
   const quote = text.split(/\s+/).slice(-4).join(" ");
-  put({ id: `stopped:${page}`, where: page, words: ['You stopped at "', { text: quote, page }, '".'], nod: "Show", act: async () => lightWords(page, quote) });
+  const id = `stopped:${page}`;
+  const found: Found = { id, kind: "stopped", pages: [page], facts: { line: text.slice(-200), quote }, line: () => ({ id, where: page, words: ['You stopped at "', { text: quote, page }, '".'], nod: "Show", act: async () => lightWords(page, quote) }) };
+  asking.add(page);
+  const lines = await choose("page", `page:${page}`, [found], [pageOf(page)!]).finally(() => asking.delete(page));
+  // An edit, or the page left, while the model thought: the moment has passed.
+  if (seen.get(page) === was && isLive(page)) lines.forEach(put);
 }
 
 // While a page is open. Any edit takes its line away ("you stopped at" leaves on the first edit,
@@ -309,13 +445,13 @@ export function follow(page: string) {
   const back = closing.has(page);
   clearTimeout(closing.get(page));
   closing.delete(page);
-  if (!back) whenLive(page, (live) => comeBack(page, live.content()));
+  if (!back) whenLive(page, (live) => void comeBack(page, live.content()));
   const off = watchLive(page, () => {
-    if (!running || acting) return;
+    if (mode() === "off" || acting) return;
     drop((l) => l.where === page);
     seen.set(page, { at: Date.now(), block: liveEditor(page)?.cursorBlock() });
     clearTimeout(pauses.get(page));
-    pauses.set(page, setTimeout(() => paused(page), ms("pause")));
+    if (chips()) pauses.set(page, setTimeout(() => paused(page), ms("pause")));
   });
   return () => {
     off();
@@ -371,7 +507,7 @@ export function nodFront() {
 let started = false;
 export async function startTail() {
   await isNative;
-  if (!running || started) return;
+  if (mode() === "off" || started) return;
   started = true;
   void beat();
   setInterval(() => void beat(true), ms("beat"));
@@ -415,11 +551,18 @@ async function seed() {
   await beat();
 }
 
+// Starts over: no lines, no threads, an empty log.
 function reset() {
   for (const t of [...timers.values(), ...pauses.values()]) clearTimeout(t);
   seen.clear();
   waiting = null;
+  beats++;
+  Object.assign(memory, { last: 0, threads: {} });
+  localStorage.removeItem(KEPT);
+  log.length = 0;
   tail.set([]);
 }
 
-if (import.meta.env.DEV) (window as unknown as { __tail: unknown }).__tail = { seed, beat, reset };
+// The stand-in (lib/agent-standin.ts) adds each tail turn's message and answer to log.
+const log: object[] = [];
+if (import.meta.env.DEV) (window as unknown as { __tail: unknown }).__tail = { seed, beat, reset, log };

@@ -52,6 +52,9 @@ pub struct Ask {
     // "codex" for GPT models; Claude otherwise.
     #[serde(default)]
     provider: String,
+    // A tail turn (lib/tail.ts): no tools at all, since the app acts on a nod, never the model.
+    #[serde(default)]
+    tail: bool,
 }
 
 // Reading needs no asking; the rest follows the access the person chose. Anything unknown asks.
@@ -133,15 +136,24 @@ pub async fn agent_ask(app: AppHandle, agents: State<'_, Agents>, ask: Ask, on_e
     let codex = ask.provider == "codex";
     let name = if codex { "Codex" } else { "Claude Code" };
     let mut c = if codex {
-        crate::clis::codex_server(&crate::clis::find("codex").ok_or("Codex is not installed")?)
+        let mut c = crate::clis::codex_server(&crate::clis::find("codex").ok_or("Codex is not installed")?);
+        // The app passes a tail thread no tools; this takes web search away too.
+        if ask.tail {
+            c.args(["-c", "web_search=\"disabled\""]);
+        }
+        c
     } else {
         let bin = binary().ok_or("Claude Code is not installed")?;
         let mcp = json!({ "mcpServers": { "notes": { "type": "sdk", "name": "notes" } } }).to_string();
         let mut c = command(&bin);
-        c.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"])
-            .args(["--setting-sources", "", "--permission-prompt-tool", "stdio", "--strict-mcp-config", "--mcp-config", &mcp, "--allowedTools", READS])
-            .args(access(&ask.access))
-            .args(["--system-prompt", &ask.system, "--model", &ask.model, "--effort", &ask.effort]);
+        if ask.tail {
+            c.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--setting-sources", "", "--strict-mcp-config", "--tools", ""]);
+        } else {
+            c.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages"])
+                .args(["--setting-sources", "", "--permission-prompt-tool", "stdio", "--strict-mcp-config", "--mcp-config", &mcp, "--allowedTools", READS])
+                .args(access(&ask.access));
+        }
+        c.args(["--system-prompt", &ask.system, "--model", &ask.model, "--effort", &ask.effort]);
         if let Some(session) = &ask.resume {
             c.args(["--resume", session]);
         }
@@ -214,7 +226,8 @@ pub async fn agent_ask(app: AppHandle, agents: State<'_, Agents>, ask: Ask, on_e
         return write_line(&agents, &id, &json!({ "method": "initialized" }));
     }
     // The page tools are served from the webview; the question goes in as a message, never a flag.
-    let init = json!({ "type": "control_request", "request_id": "init", "request": { "subtype": "initialize", "sdkMcpServers": ["notes"] } });
+    let servers = if ask.tail { json!([]) } else { json!(["notes"]) };
+    let init = json!({ "type": "control_request", "request_id": "init", "request": { "subtype": "initialize", "sdkMcpServers": servers } });
     let user = json!({ "type": "user", "session_id": "", "parent_tool_use_id": null, "message": { "role": "user", "content": ask.prompt } });
     write_line(&agents, &id, &init)?;
     write_line(&agents, &id, &user)

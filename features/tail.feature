@@ -142,6 +142,11 @@ Feature: Tail
     Then the stand-in's log shows a summary line per page and the body of the two that changed only
     And the same page's body is not sent again at the next beat unless it changed
 
+  Scenario: A wrong answer is silence
+    Given the browser build is opened with ?tail=garbled, so the stand-in answers in words, not JSON
+    When I open Today
+    Then no tail row shows and no error shows, and the stand-in's log holds the beat that was sent
+
   Scenario: Ignored twice, quiet
     Given a Link chip on a Meeting page that I ignored, and another on a second Meeting page
     When I write an unlinked name on a third Meeting page and stop

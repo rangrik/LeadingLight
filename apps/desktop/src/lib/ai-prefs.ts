@@ -5,7 +5,11 @@ import { localPrefs } from "~/lib/local-prefs";
 export type Corner = "br" | "bl" | "tr" | "tl";
 export type Side = "left" | "right";
 export type Access = "ask" | "auto" | "full";
-export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; pinned: Side | null; corner: Corner; panelW: number; panelH: number };
+export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; pinned: Side | null; corner: Corner; panelW: number; panelH: number; tail: Partial<TailPrefs> };
+// Tail (docs/TAIL.md): Off, Quiet or Normal, its own model and effort, and Reads on, the types
+// where the person chose other than Writing's Use on. Set here until Settings has it.
+export type TailPrefs = { mode: "off" | "quiet" | "normal"; model: string; effort: string; readsOn: Record<string, boolean> };
+const TAIL: TailPrefs = { mode: "normal", model: "gpt-6.1-sol", effort: "high", readsOn: {} };
 
 export const MODELS: { value: string; label: string }[] = [
   { value: "fable", label: "Fable" },
@@ -36,7 +40,7 @@ export const GPT_ACCESS: Record<Access, string> = {
 export const labelOf = (list: { value: string; label: string }[], value: string) => list.find((x) => x.value === value)?.label ?? value;
 export const isClaude = (model: string) => MODELS.some((m) => m.value === model);
 
-const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, pinned: "right", corner: "br", panelW: 400, panelH: 540 });
+const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, pinned: "right", corner: "br", panelW: 400, panelH: 540, tail: {} });
 
 // The floating panel's box in the page area, as agent-panel.tsx places it (12 px in, top corners
 // under the header band), so the pages under it can make room (pane-area.tsx).
@@ -50,3 +54,4 @@ export function floatBox(p: AiPrefs, area: { w: number; h: number }, header: num
 export const aiPrefs = prefs.get;
 export const setAiPrefs = prefs.set;
 export const useAiPrefs = prefs.use;
+export const tailPrefs = (): TailPrefs => ({ ...TAIL, ...prefs.get().tail });

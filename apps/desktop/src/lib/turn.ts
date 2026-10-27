@@ -87,6 +87,56 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   }).catch((err: unknown) => finish(id, "failed", err instanceof Error ? err.message : String(err)));
 }
 
+// A tail turn (docs/TAIL.md): tail's role as the system prompt, one message, no tools, no thread
+// items. Gives the answer's text and the session to resume, or null when the turn failed.
+export function tailTurn(o: { prompt: string; system: string; model: string; effort: string; resume?: string }): Promise<{ text: string; session?: string } | null> {
+  const id = crypto.randomUUID();
+  const provider: Provider = isClaude(o.model) ? "claude" : "codex";
+  const effort = effortFor(o.model, o.effort);
+  let text = "";
+  let session = o.resume;
+  return new Promise((resolve) => {
+    let over = false;
+    const end = (ok: boolean) => {
+      if (over) return;
+      over = true;
+      clearTimeout(timer);
+      if (!ok) void cancel(id);
+      resolve(ok ? { text, session } : null);
+    };
+    const timer = setTimeout(() => end(false), 120_000);
+    const send = (method: string, rid: number, params: object) => reply(id, { method, id: rid, params });
+    const start = () =>
+      o.resume
+        ? send("thread/resume", 1, { threadId: o.resume, approvalPolicy: "never", sandbox: "read-only" })
+        : send("thread/start", 1, { model: o.model, approvalPolicy: "never", sandbox: "read-only", developerInstructions: o.system });
+    const onCodex = (l: Line) => {
+      const p = l.params ?? {};
+      if (!l.method) {
+        if (l.id === 0) void start();
+        else if (l.error) end(false);
+        else if (l.id === 1) {
+          session = l.result?.thread?.id;
+          void send("turn/start", 2, { threadId: session, input: [{ type: "text", text: o.prompt, text_elements: [] }], model: o.model, effort });
+        }
+      } else if (l.id !== undefined) void reply(id, { id: l.id, error: { code: -32601, message: "Not supported here" } });
+      else if (l.method === "item/completed" && p.item?.type === "agentMessage") text = p.item.text ?? text;
+      else if (l.method === "turn/completed") end(p.turn?.status === "completed");
+    };
+    const onClaude = (l: Line) => {
+      if (l.type === "control_request") void reply(id, { type: "control_response", response: { subtype: "error", request_id: l.request_id, error: "Not supported here" } });
+      else if (l.type === "result") {
+        text = typeof l.result === "string" ? l.result : "";
+        session = l.session_id ?? session;
+        end(!l.is_error);
+      }
+    };
+    void ask({ id, prompt: o.prompt, system: o.system, model: o.model, effort, access: "ask", resume: o.resume, provider, tail: true }, (e) =>
+      e.type === "error" ? end(false) : provider === "codex" ? onCodex(e.line) : onClaude(e.line),
+    ).catch(() => end(false));
+  });
+}
+
 function onLine(id: string, line: Line) {
   const t = turns.get(id);
   // A subagent's own lines stay inside its step.
