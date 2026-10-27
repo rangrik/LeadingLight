@@ -137,3 +137,5 @@ Each of these passed every check here and still failed for the user, or cost hou
 - Write plain English. If a word needs a definition, use a simpler word.
 - Watch the diff size. Removing code is the goal; every added line needs a reason.
 - Commit only when asked.
+- Use conventional commit and squash-PR titles (`feat:`, `fix:`, `perf:`) so release notes and
+  version bumps work. Let the release bot change versions; see `docs/RELEASING.md`.
