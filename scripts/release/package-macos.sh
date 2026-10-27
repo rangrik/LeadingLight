@@ -8,7 +8,7 @@ test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Cont
 test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")" = com.leadinglight.app
 for binary in leadinglight-desktop berthd tmux leadinglight-transcribe; do
   test -x "$app/Contents/MacOS/$binary"
-  lipo -verify_arch arm64 "$app/Contents/MacOS/$binary"
+  lipo "$app/Contents/MacOS/$binary" -verify_arch arm64
   codesign --verify --strict "$app/Contents/MacOS/$binary"
 done
 test -d "$app/Contents/Resources/licenses/tmux"
