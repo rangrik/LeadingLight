@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDigest, parseAnswer, stillTrue } from "./tail-prompt.ts";
+import { buildDigest, noteIn, parseAnswer, stillTrue } from "./tail-prompt.ts";
 
 const page = (id: string, typeId: string, title: string, properties: Record<string, unknown> = {}) => ({ id, typeId, title, properties, createdAt: 1, updatedAt: 10 });
 
@@ -28,14 +28,16 @@ test("a beat sends summaries and changed bodies, never what tail may not read", 
   assert.doesNotMatch(again.message, /Beans/);
 });
 
-// The same seam for a chip and the capture guess: no body at all, and no candidate naming a page
-// of a type Reads on leaves out.
-test("a pause or a capture sends no body and no page tail may not read", async () => {
-  const pages = [page("A", "page", "Garden plan"), page("S", "person", "Sam")];
+// The same seam for a chip and the capture guess: no body at all. Reads on governs words, not
+// names: a pause may name a Person page by its title, but never offer a line written on one.
+test("a pause names every page but sends no body; a capture nothing tail may not read", async () => {
+  const pages = [page("A", "page", "Garden plan"), page("S", "person", "Sam", { description: "Grows beans" })];
   const input = { now: 20, pages, readsOn: (t: string) => t !== "person", typeName: (t: string) => t, since: 0, seen: {}, text: async () => "Beans along the south fence" };
-  const pause = await buildDigest({ ...input, trigger: "pause", candidates: [{ id: "task:A", kind: "task", pages: ["A"] }, { id: "mention:A", kind: "mention", pages: ["A", "S"] }] });
-  assert.deepEqual(JSON.parse(pause.message).candidates.map((c: { kind: string }) => c.kind), ["task"]);
-  assert.doesNotMatch(pause.message, /Sam|Beans/);
+  const pause = await buildDigest({ ...input, trigger: "pause", candidates: [{ id: "mention:A", kind: "mention", pages: ["A", "S"] }, { id: "task:S", kind: "task", pages: ["S"] }] });
+  const m = JSON.parse(pause.message);
+  assert.deepEqual(m.candidates.map((c: { kind: string }) => c.kind), ["mention"]);
+  assert.deepEqual(m.pages.find((p: { title: string }) => p.title === "Sam"), { ref: "p2", title: "Sam", type: "person" });
+  assert.doesNotMatch(pause.message, /Beans/);
   const capture = await buildDigest({ ...input, trigger: "capture", candidates: [{ id: "capture", kind: "capture", pages: [], guess: { project: "S" } }] });
   assert.equal(JSON.parse(capture.message).candidates.length, 0);
 });
@@ -61,4 +63,12 @@ test("a wrong answer is silence; a right one keeps its slots", () => {
   // A slot left empty is the model's to fill; left empty, there is no line.
   assert.deepEqual(parseAnswer('{"show":[{"id":"c3"}]}', o), []);
   assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2"}]}', o), [{ id: "capture", slots: { project: "H" } }]);
+});
+
+// The seam: what the model may write on the page about the person. Anything but one plain
+// sentence of at most twelve words must be dropped, never written.
+test("a note is one plain sentence, else none", () => {
+  assert.equal(noteIn('{"show":[],"note":"Most ideas go to Garden."}'), "Most ideas go to Garden.");
+  for (const note of ["Ideas go to Garden. Tasks wait.", "**Ideas** go to Garden.", "Ideas go to Garden!", "one two three four five six seven eight nine ten eleven twelve thirteen.", "Ideas\ngo.", 3])
+    assert.equal(noteIn(JSON.stringify({ show: [], note })), undefined, String(note));
 });

@@ -11,6 +11,7 @@ import { Kbd } from "@leadinglight/ui/components/kbd";
 import { Switch } from "@leadinglight/ui/components/switch";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
+import type { TypeDef } from "~/lib/catalog";
 import { space } from "~/lib/space";
 import { type Tool, setWritingPrefs, suggested, toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -108,24 +109,31 @@ export function WritingSection() {
           }
           label="Use the tools on"
         >
-          <Choices
-            all={types.map((t) => t.id)}
-            columns={3}
-            label={(id) => {
-              const t = types.find((x) => x.id === id)!;
-              return (
-                <>
-                  <RowIcon icon={t.icon} />
-                  {t.plural}
-                </>
-              );
-            }}
-            onChange={useOn}
-            value={usedOn}
-          />
+          <TypeChoices onChange={useOn} types={types} value={usedOn} />
         </SettingsRow>
       </SettingsGroup>
     </SettingsPage>
+  );
+}
+
+// Pages chosen by their type, here and in Settings › AI › Tail's Reads on.
+export function TypeChoices({ types, value, onChange }: { types: TypeDef[]; value: string[]; onChange(ids: string[]): void }) {
+  return (
+    <Choices
+      all={types.map((t) => t.id)}
+      columns={3}
+      label={(id) => {
+        const t = types.find((x) => x.id === id)!;
+        return (
+          <>
+            <RowIcon icon={t.icon} />
+            {t.plural}
+          </>
+        );
+      }}
+      onChange={onChange}
+      value={value}
+    />
   );
 }
 

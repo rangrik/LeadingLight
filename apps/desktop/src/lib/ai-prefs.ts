@@ -7,7 +7,7 @@ export type Side = "left" | "right";
 export type Access = "ask" | "auto" | "full";
 export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; pinned: Side | null; corner: Corner; panelW: number; panelH: number; tail: Partial<TailPrefs> };
 // Tail (docs/TAIL.md): Off, Quiet or Normal, its own model and effort, and Reads on, the types
-// where the person chose other than Writing's Use on. Set here until Settings has it.
+// where the person chose other than Writing's Use on (Settings › AI › Tail).
 export type TailPrefs = { mode: "off" | "quiet" | "normal"; model: string; effort: string; readsOn: Record<string, boolean> };
 const TAIL: TailPrefs = { mode: "normal", model: "gpt-6.1-sol", effort: "high", readsOn: {} };
 
@@ -54,4 +54,6 @@ export function floatBox(p: AiPrefs, area: { w: number; h: number }, header: num
 export const aiPrefs = prefs.get;
 export const setAiPrefs = prefs.set;
 export const useAiPrefs = prefs.use;
+export const onAiPrefs = prefs.subscribe;
 export const tailPrefs = (): TailPrefs => ({ ...TAIL, ...prefs.get().tail });
+export const setTailPrefs = (patch: Partial<TailPrefs>) => prefs.set({ tail: { ...prefs.get().tail, ...patch } });

@@ -46,8 +46,9 @@ The key: ⌃↩ nods the chip or row on the page in front, the first row on Toda
 shortcuts table, so it can be changed.
 
 Settings › AI › Tail: Off, Quiet (Today's rows and the return row only; no chips, no capture
-guess) or Normal; the model and effort, as Ask has them; Reads on; and a link to the page about
-you (below). Tail's spend shows in the usage meter at the bottom of the sidebar, beside Ask's.
+guess) or Normal; the model and effort, as Ask has them; Reads on; a link to the page about you
+(below); and the last beat, when it ran and how many lines it gave or why it didn't go, with Run
+now. Tail's spend shows in the usage meter at the bottom of the sidebar, beside Ask's.
 
 ## What it says
 
@@ -139,14 +140,12 @@ shows exactly what would have been sent.
 
 ## The prototype on this branch
 
-`lib/tail.ts` and `components/tail.tsx` hold the store, the triggers, the word rules, expiry,
-nod and undo, and the four surfaces; `__tail.seed()` fills a browser build with the pages the
-scenes use, `__tail.beat()` runs a beat now, `__tail.log` holds each turn the stand-in answered.
-Every line, and the capture box's guess, now comes from a tail turn (`lib/tail-prompt.ts`,
-`tailTurn` in `lib/turn.ts`), in the Mac app too, with the real timings there: the word rules
-only find what to offer, and the model picks or stays silent. The guess runs in the browser build
-and the in-window box; the Mac panel's is in Later. `ll.ai`'s `tail` key holds the mode, model,
-effort and Reads on until Settings has them.
+Real now: every line and the capture box's guess come from a tail turn (`lib/tail-prompt.ts`,
+`tailTurn` in `lib/turn.ts`), in the Mac app with the real timings; the nod ledger, the page about
+how you work and the quieting (`lib/tail-memory.ts`); and Settings › AI › Tail, whose Last beat row
+is the Mac app's one view of it. Not yet: the word rules still find every candidate, the model only
+picks; the Mac panel's guess; the rest in DEFERRED. In a browser `__tail.seed()`, `.beat()`,
+`.reset()` and `.log` drive the scenes, and the stand-in plays the model.
 
 ## Later, not in this project
 

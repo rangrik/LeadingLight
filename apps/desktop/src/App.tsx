@@ -57,6 +57,7 @@ import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { startTail } from "~/lib/tail";
+import { ABOUT } from "~/lib/tail-memory";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -324,8 +325,9 @@ export default function App() {
         }),
       };
     });
-  // The app's own types (agents, reports, feedback) are listed once there is one of them.
-  const navTypes = types.filter((t) => !t.made || pages.some((p) => p.typeId === t.id)).map((t) => ({
+  // The app's own types (agents, reports, feedback) are listed once there is one of them; tail's
+  // page about you is reached from Settings and search, so tail never adds a row here.
+  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).map((t) => ({
     id: t.id,
     name: t.plural,
     icon: <RowIcon icon={t.icon} />,

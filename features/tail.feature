@@ -7,6 +7,8 @@ Feature: Tail
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
   - the nod: the button, or ⌃↩ on the page in front
   - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under them
+  - ignored: a line that left with no nod: a chip that expired, or whose page I left or wrote on
+    elsewhere, or a row I saw on Today that a beat no longer shows
   - "Garden plan": a page with three paragraphs, the last unfinished, edited yesterday
   - seeded: `__tail.seed()` has made Garden (a project), Sam (a person), "Garden plan", three ideas
     tagged in-the-middle from Tuesday to Thursday with no project, a task "Call Sam about the invoice
@@ -187,9 +189,17 @@ Feature: Tail
     Then the next filing offer names House
     And the page never shows in New, and search finds it
 
+  Scenario: The last beat, in Settings
+    When I open Settings › AI › Tail
+    Then the Last beat row says when the last beat ran and how many lines it gave, as "10:32, 3 lines"
+    When I press Run now
+    Then a beat runs at once, and the row gives its time
+    Given the browser build is opened with ?tail=garbled
+    Then the row reads "Didn't go: the answer wasn't JSON" with the time
+
   Scenario: Off, Quiet, Normal
     Given Settings › AI › Tail is Off
-    Then nothing from tail shows anywhere, and no beat runs
+    Then nothing from tail shows anywhere, and no beat runs, without a reload
     Given it is Quiet
     Then Today's rows and the "you stopped at" row show, and no chip or capture guess does
     Given it is Normal

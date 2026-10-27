@@ -87,9 +87,17 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   }).catch((err: unknown) => finish(id, "failed", err instanceof Error ? err.message : String(err)));
 }
 
+// Why a tail turn didn't go, in plain words for Settings › AI › Tail.
+const why = (message: string, provider: Provider) =>
+  /log ?in|sign(ed)? ?in|auth|401/i.test(message)
+    ? "not signed in"
+    : /os error 2|no such file|command not found/i.test(message)
+      ? `${provider === "codex" ? "Codex" : "Claude Code"} isn't installed`
+      : message.split("\n")[0].slice(0, 120);
+
 // A tail turn (docs/TAIL.md): tail's role as the system prompt, one message, no tools, no thread
-// items. Gives the answer's text and the session to resume, or null when the turn failed.
-export function tailTurn(o: { prompt: string; system: string; model: string; effort: string; resume?: string }): Promise<{ text: string; session?: string } | null> {
+// items. Gives the answer's text and the session to resume, or why the turn failed.
+export function tailTurn(o: { prompt: string; system: string; model: string; effort: string; resume?: string }): Promise<{ text: string; session?: string; error?: string }> {
   const id = crypto.randomUUID();
   const provider: Provider = isClaude(o.model) ? "claude" : "codex";
   const effort = effortFor(o.model, o.effort);
@@ -97,14 +105,14 @@ export function tailTurn(o: { prompt: string; system: string; model: string; eff
   let session = o.resume;
   return new Promise((resolve) => {
     let over = false;
-    const end = (ok: boolean) => {
+    const end = (error?: string) => {
       if (over) return;
       over = true;
       clearTimeout(timer);
-      if (!ok) void cancel(id);
-      resolve(ok ? { text, session } : null);
+      if (error) void cancel(id);
+      resolve({ text, session, ...(error && { error: why(error, provider) }) });
     };
-    const timer = setTimeout(() => end(false), 120_000);
+    const timer = setTimeout(() => end("the model didn't answer"), 120_000);
     const send = (method: string, rid: number, params: object) => reply(id, { method, id: rid, params });
     const start = () =>
       o.resume
@@ -114,26 +122,26 @@ export function tailTurn(o: { prompt: string; system: string; model: string; eff
       const p = l.params ?? {};
       if (!l.method) {
         if (l.id === 0) void start();
-        else if (l.error) end(false);
+        else if (l.error) end(l.error.message || "Codex couldn't start the turn");
         else if (l.id === 1) {
           session = l.result?.thread?.id;
           void send("turn/start", 2, { threadId: session, input: [{ type: "text", text: o.prompt, text_elements: [] }], model: o.model, effort });
         }
       } else if (l.id !== undefined) void reply(id, { id: l.id, error: { code: -32601, message: "Not supported here" } });
       else if (l.method === "item/completed" && p.item?.type === "agentMessage") text = p.item.text ?? text;
-      else if (l.method === "turn/completed") end(p.turn?.status === "completed");
+      else if (l.method === "turn/completed") end(p.turn?.status === "completed" ? undefined : p.turn?.error?.message || "the model didn't finish");
     };
     const onClaude = (l: Line) => {
       if (l.type === "control_request") void reply(id, { type: "control_response", response: { subtype: "error", request_id: l.request_id, error: "Not supported here" } });
       else if (l.type === "result") {
         text = typeof l.result === "string" ? l.result : "";
         session = l.session_id ?? session;
-        end(!l.is_error);
+        end(l.is_error ? text || "Claude Code reported an error" : undefined);
       }
     };
     void ask({ id, prompt: o.prompt, system: o.system, model: o.model, effort, access: "ask", resume: o.resume, provider, tail: true }, (e) =>
-      e.type === "error" ? end(false) : provider === "codex" ? onCodex(e.line) : onClaude(e.line),
-    ).catch(() => end(false));
+      e.type === "error" ? end(e.message || "the model didn't answer") : provider === "codex" ? onCodex(e.line) : onClaude(e.line),
+    ).catch((err: unknown) => end(err instanceof Error ? err.message : String(err)));
   });
 }
 

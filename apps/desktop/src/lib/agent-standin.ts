@@ -154,15 +154,18 @@ async function codex(req: AskRequest, run: Run, answer: typeof play) {
 }
 
 // A tail turn: the prototype's word rules found the candidates and guessed their slots, so the
-// stand-in shows the first few as guessed; ?tail=garbled answers words, not JSON. In a dev build
-// each turn's message and answer go to __tail.log: what would have left the app.
+// stand-in shows the first few as guessed, filing ideas where the page about the person says most
+// go; ?tail=garbled answers words, not JSON. In a dev build each turn's message and answer go to
+// __tail.log: what would have left the app.
 async function tail(req: AskRequest, _run: Run, d: Dialect) {
   let answer = "";
   let trigger = "";
   try {
-    const m = JSON.parse(req.prompt) as { trigger: string; candidates: { id: string; guess?: object }[] };
+    const m = JSON.parse(req.prompt) as { trigger: string; about?: string[]; pages: { ref: string; title: string }[]; candidates: { id: string; kind: string; guess?: object }[] };
     trigger = m.trigger;
-    const show = m.candidates.slice(0, trigger === "beat" ? 3 : 1).map((c) => ({ id: c.id, ...c.guess }));
+    const most = m.about?.map((s) => / Most ideas go to (.+)\.$/.exec(` ${s}`)?.[1]).find(Boolean);
+    const project = most && m.pages.find((p) => p.title === most)?.ref;
+    const show = m.candidates.slice(0, trigger === "beat" ? 3 : 1).map((c) => ({ id: c.id, ...c.guess, ...(c.kind === "ideas" && project && { project }) }));
     answer = new URLSearchParams(location.search).get("tail") === "garbled" ? "Here are a few things worth a look." : JSON.stringify({ show });
   } catch {
     // Not a message tail sends: no answer.
