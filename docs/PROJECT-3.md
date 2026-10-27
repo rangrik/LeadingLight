@@ -1,7 +1,7 @@
 # Project 3 — Tail, a peer that reads along
 
 2026-10-26. The design is [TAIL.md](TAIL.md), the contract `features/tail.feature`, the why
-DECISIONS 28. A prototype on the branch `worktree-tail-design` built every surface with word rules
+DECISIONS 29. A prototype on the branch `worktree-tail-design` built every surface with word rules
 in place of the model (`lib/tail.ts`, `components/tail.tsx`); its frames are the design's
 walkthrough. This brief is for the implementing session. The user authorized implementation,
 developer-owned QA and the dev app on 2026-10-26; merge and install wait for their word that it works.

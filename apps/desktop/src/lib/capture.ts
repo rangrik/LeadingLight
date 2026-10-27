@@ -10,6 +10,7 @@ import { openBeside } from "./panes";
 import { isNative } from "./platform";
 import { createPage, pageOf, patchSummary, retype, savePage, space } from "./space";
 import { PAGE_TYPE } from "./store";
+import { captureProperties } from "./capture-inbox";
 import { newPage } from "./templates";
 
 // Idea capture (features/capture.feature): what the box holds becomes an Idea page, tagged
@@ -53,7 +54,7 @@ async function saveIdea(draft: Draft): Promise<string | null> {
   }
   if (!title) return null;
   const body = docText(draft.body).trim() ? { content: draft.body } : {};
-  return (await newPage(IDEA, { title, ...body, properties: withProject({ tags: [await ensureTag(TAG)] }, draft.project) })).id;
+  return (await newPage(IDEA, { title, ...body, properties: withProject({ ...captureProperties("idea"), tags: [await ensureTag(TAG)] }, draft.project) })).id;
 }
 
 // ⇧⌘↩: the idea opens beside the page in view, the cursor at the end of its body. Settings

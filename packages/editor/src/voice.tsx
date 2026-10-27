@@ -7,6 +7,8 @@ import { Button } from "@leadinglight/ui/components/button";
 import type { Asset, AssetStore } from "./assets";
 import { Player } from "./player";
 
+type VoiceOptions = { assets: AssetStore; onSaved?: () => void };
+
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const microphoneErrors: Record<string, string> = {
@@ -16,7 +18,8 @@ const microphoneErrors: Record<string, string> = {
 };
 
 function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeViewProps) {
-  const assets = (extension.options as { assets: AssetStore }).assets;
+  const options = extension.options as VoiceOptions;
+  const assets = options.assets;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
   const [seconds, setSeconds] = useState(0);
@@ -80,6 +83,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       if (!alive.current) return;
       updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime });
       pending.current = null;
+      options.onSaved?.();
       await transcribe(asset);
     } catch (cause) {
       if (alive.current) {
@@ -187,7 +191,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   );
 }
 
-export const VoiceRecording = Node.create<{ assets: AssetStore }>({
+export const VoiceRecording = Node.create<VoiceOptions>({
   name: "voiceRecording",
   group: "block",
   atom: true,

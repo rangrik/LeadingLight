@@ -399,7 +399,14 @@ Voice blocks save audio through the same asset store before transcribing. A bund
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
 
-## 28. Tail offers one line; it reads by trigger and remembers in the open
+## 28. Captures stay pages; review state is metadata
+
+The inbox reads capture kind, date and reviewed date from page properties. Reviewing never
+moves or deletes a page. Older captures are recognized by their source fields or capture tag;
+older saved recordings are discovered once per session. Property changes persist before the
+open page is told, so failed saves do not remove a capture from view.
+
+## 29. Tail offers one line; it reads by trigger and remembers in the open
 
 Tail (`docs/TAIL.md`) is a watcher, not a third agent system. It guesses what the person meant
 and offers one line with one verb; the nod runs through what exists: a page's open editor (9),

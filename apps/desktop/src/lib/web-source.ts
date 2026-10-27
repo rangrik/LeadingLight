@@ -1,3 +1,4 @@
+import { captureProperties } from "./capture-inbox";
 import { Readability } from "@mozilla/readability";
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import type { Asset } from "@leadinglight/editor/assets";
@@ -200,6 +201,6 @@ export async function saveWebSource(value: string, mode: SourceMode, options: { 
   }
   signal?.throwIfAborted();
   options.onCommit?.();
-  const page = await createPage({ title, properties: { sourceUrl: url, capturedAt: new Date().toISOString(), sourceMode: mode }, content: { type: "doc", content: [link(url, url), ...content, paragraph("")] } });
+  const page = await createPage({ title, properties: { ...captureProperties("web"), sourceUrl: url, capturedAt: new Date().toISOString(), sourceMode: mode }, content: { type: "doc", content: [link(url, url), ...content, paragraph("")] } });
   return { page, missing };
 }

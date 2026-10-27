@@ -5,7 +5,7 @@ meant, and offers one line you can nod at. It never asks a question and never wr
 your words until you nod. Silence is an answer.
 
 This file is the design. `features/tail.feature` is the contract, `PROJECT-3.md` the build
-brief, and DECISIONS 28 the why. A prototype on the branch `worktree-tail-design` built every
+brief, and DECISIONS 29 the why. A prototype on the branch `worktree-tail-design` built every
 surface with word rules in place of the model, so the feel was judged first.
 
 ## Rules
