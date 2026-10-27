@@ -8,6 +8,7 @@ import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
+import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
 // The keys in lib/shortcuts.json, by id, as changed in Settings (lib/keymap.ts). In the Mac app
@@ -40,6 +41,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return openAsk();
         case "feed":
           return actions.toggleFeed();
+        case "nod":
+          return nodFront();
         case "shortcuts":
           return toggleShortcuts();
         case "focus":
@@ -53,7 +56,9 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     const onKey = (e: KeyboardEvent) => {
       // The editor's own keys (⌘B, ⌘/ for the block menu) are handled before this. A held key
       // runs once: its repeats would make page after page, or run keys just recorded in Settings.
-      const accel = e.defaultPrevented || e.repeat ? undefined : accelOf(e);
+      // ProseMirror prevents every Enter, though it does nothing with ⌃↩ (tail's nod).
+      const editorEnter = e.key === "Enter" && (e.target as Element | null)?.closest?.(".ProseMirror");
+      const accel = (e.defaultPrevented && !editorEnter) || e.repeat ? undefined : accelOf(e);
       if (!accel) return;
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
       const find = (a: string) => SHORTCUTS.find((s) => s.accel === a)?.id;

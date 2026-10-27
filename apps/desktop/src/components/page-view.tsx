@@ -35,6 +35,8 @@ import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 import { contentWidth, usePageLayout } from "~/lib/page-layout";
 import { TurnIntoPage } from "~/components/turn-into-page";
+import { TailPage, TailToday } from "~/components/tail";
+import { today } from "~/lib/daily";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
@@ -67,6 +69,7 @@ export function PageView({ page }: { page: LLObject }) {
   const [margins, setMargins] = useState({ notes: false, toc: false });
   const [inBody, setInBody] = useState(false);
   const [turnInto, setTurnInto] = useState<PageSelection | null>(null);
+  const [tailRow, setTailRow] = useState(false);
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
   const counting = tools && writing.count;
@@ -271,7 +274,7 @@ export function PageView({ page }: { page: LLObject }) {
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
           Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
       <div className="ll-page pb-8" data-page-notes={margins.notes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
-        <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")}>
+        <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")} data-tail={tailRow || undefined}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
               <button
@@ -284,9 +287,10 @@ export function PageView({ page }: { page: LLObject }) {
             </IconPicker>
           )}
           <div className="relative">
-            {/* Shown on hover, sitting in the space above the title so nothing moves. */}
+            {/* Shown on hover, sitting in the space above the title so nothing moves. A tail row
+                takes that space while it shows. */}
             <div
-              className="absolute bottom-full -ms-2 mb-1 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/head:opacity-100 has-data-popup-open:opacity-100 data-[report]:hidden"
+              className="absolute bottom-full -ms-2 mb-1 flex gap-1 opacity-0 transition-opacity duration-150 focus-within:opacity-100 group-hover/head:opacity-100 has-data-popup-open:opacity-100 group-data-[tail]/head:hidden data-[report]:hidden"
               data-report={report || undefined}
             >
               {!icon && (
@@ -328,6 +332,7 @@ export function PageView({ page }: { page: LLObject }) {
               {/* Its words only where there is room for them beside the others. */}
               <LinkFolderButton label={<span className="hidden @3xl/page-title:inline">Link folder</span>} pageId={page.id} />
             </div>
+            {!report && <TailPage body={bodyRef} onRow={setTailRow} pageId={page.id} />}
             <textarea
               aria-label="Title"
               className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[2.25rem] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"
@@ -377,6 +382,7 @@ export function PageView({ page }: { page: LLObject }) {
           values={props}
         />}
         {day && <DailyBar day={day} />}
+        {day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
           <BlockEditor

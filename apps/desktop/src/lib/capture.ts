@@ -8,7 +8,7 @@ import { editPage, whenLive } from "./live";
 import { docText } from "./objects";
 import { openBeside } from "./panes";
 import { isNative } from "./platform";
-import { createPage, pageOf, patchSummary, savePage, space } from "./space";
+import { createPage, pageOf, patchSummary, retype, savePage, space } from "./space";
 import { PAGE_TYPE } from "./store";
 import { newPage } from "./templates";
 
@@ -19,7 +19,8 @@ import { newPage } from "./templates";
 export const IDEA = "idea";
 export const TAG = "in-the-middle";
 const PROJECT = "idea-project";
-export type Draft = { id: string | null; title: string; body: EditorDoc | null; project: string | null };
+// task: ⌃↩ saves it as a task in the project instead (docs/TAIL.md).
+export type Draft = { id: string | null; title: string; body: EditorDoc | null; project: string | null; task?: boolean };
 
 // The title line, else the body's first line, as Apple Notes does.
 const titleOf = ({ title, body }: Draft) => title.trim() || firstLineText(body, (id) => pageLabel(pageOf(id)?.title ?? ""));
@@ -28,14 +29,20 @@ const projectOf = (id: string) => (pageOf(id)?.properties[PROJECT] as string[] |
 const withProject = ({ [PROJECT]: _, ...rest }: Record<string, unknown>, project: string | null) => (project ? { ...rest, [PROJECT]: [project] } : rest);
 
 // The tag every captured idea gets, made the first time.
-async function ensureTag(name: string): Promise<string> {
+export async function ensureTag(name: string): Promise<string> {
   const found = space.get().pages.find((p) => p.typeId === "tag" && pageLabel(p.title).toLowerCase() === name);
   return found ? found.id : (await createPage({ title: name, typeId: "tag" })).id;
 }
 
+export async function saveCapture(draft: Draft): Promise<string | null> {
+  const id = await saveIdea(draft);
+  if (id && draft.task) await retype(id, "task", (props) => ({ ...withProject(props, null), "task-project": draft.project ? [draft.project] : [] }));
+  return id;
+}
+
 // The first save with any text makes the Idea page; later saves update it. Gives the page's
 // id; an empty box saves nothing.
-export async function saveCapture(draft: Draft): Promise<string | null> {
+async function saveIdea(draft: Draft): Promise<string | null> {
   const title = titleOf(draft);
   if (draft.id) {
     patchSummary(draft.id, { title });

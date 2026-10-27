@@ -27,6 +27,7 @@ import { type Count, countText, OFF, onFound, type Writing, writingKey } from ".
 export type { NotesStore } from "./sidenotes";
 export type { PageSelection } from "./page-selection";
 export { citesIn } from "./anchors";
+export { baselineOffset, GUTTER, NOTE_FONT } from "./sidenotes";
 
 export type EditorDoc = JSONContent;
 
@@ -77,6 +78,10 @@ export type BlockEditorHandle = {
   replaceRange: (from: number, to: number, html: string) => void;
   // Pastes at the top of the page, as its own blocks (a page pasted into the title).
   paste: (text: string, html?: string) => void;
+  // The top-level block holding the cursor, and one put in another's place as its own undo
+  // step: how tail reads the line being written and nods at it (docs/TAIL.md).
+  cursorBlock: () => number;
+  setBlock: (index: number, block: EditorDoc) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -492,6 +497,19 @@ export function BlockEditor({
         editor.commands.setTextSelection(1);
         editor.view.focus();
         pasteText(editor.view, text, html);
+      },
+      cursorBlock: () => editor.state.selection.$from.index(0),
+      setBlock: (index, block) => {
+        const { doc } = editor.state;
+        if (index >= doc.childCount) return;
+        let from = 0;
+        for (let i = 0; i < index; i++) from += doc.child(i).nodeSize;
+        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, from + doc.child(index).nodeSize, editor.schema.nodeFromJSON(block))));
+        // A link put where the cursor was leaves it on the line after, as "@" alone on a line does.
+        const { selection } = editor.state;
+        const tr = closeHistory(editor.state.tr);
+        if (selection instanceof NodeSelection && selection.from === from) tr.setSelection(Selection.near(tr.doc.resolve(selection.to), 1));
+        editor.view.dispatch(tr);
       },
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),

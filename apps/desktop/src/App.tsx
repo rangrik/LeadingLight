@@ -56,6 +56,7 @@ import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
+import { startTail } from "~/lib/tail";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -177,6 +178,7 @@ export default function App() {
       .then(async (list) => {
         await foldDescriptions().catch(console.error);
         setLoaded(true);
+        void startTail();
         // The top of Recent (which leaves tasks out), in the order chosen.
         showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })

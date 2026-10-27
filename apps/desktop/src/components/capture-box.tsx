@@ -9,9 +9,11 @@ import { RowIcon } from "~/components/page-icon";
 import { PagePicker } from "~/components/property-value";
 import { assets } from "~/lib/assets";
 import { type Draft, TAG } from "~/lib/capture";
+import { isKey, useKeysFor } from "~/lib/keymap";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
+import { readCapture } from "~/lib/tail";
 
 // Where the box sends what is typed: lib/capture.ts in the main window, called directly in a
 // browser, or over Tauri's events from the panel (capture.tsx). links is what "@" offers there,
@@ -39,12 +41,15 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const [hasBody, setHasBody] = useState(false);
   const [project, setProject] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // Tail's read of the words (docs/TAIL.md): a task, and the project it seems to be for.
+  const [guess, setGuess] = useState<{ task: boolean; project: string | null }>({ task: false, project: null });
+  const keysFor = useKeysFor();
   const titleRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
   // Saves run one after another: the first names the page the rest update. The body is read
   // only when a save runs.
   const id = useRef<string | null>(null);
-  const draft = useRef<{ title: string; body: (() => EditorDoc) | null; project: string | null }>({ title: "", body: null, project: null });
+  const draft = useRef<{ title: string; body: (() => EditorDoc) | null; project: string | null; task?: boolean }>({ title: "", body: null, project: null });
   const version = useRef(0);
   const savedVersion = useRef(0);
   const chain = useRef(Promise.resolve());
@@ -74,7 +79,10 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const touched = () => {
     version.current++;
     clearTimeout(timer.current);
-    timer.current = setTimeout(save, SAVE_DELAY_MS);
+    timer.current = setTimeout(() => {
+      void save();
+      void readCapture(`${draft.current.title}\n${editorRef.current?.text() ?? ""}`).then(setGuess);
+    }, SAVE_DELAY_MS);
   };
   const pick = (next: string | null) => {
     draft.current.project = next;
@@ -97,6 +105,14 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       e.preventDefault();
       e.stopPropagation();
       close();
+    } else if (isKey(e.nativeEvent, "nod")) {
+      // ⌃↩ is the box's own: a task in the project, when tail offers one.
+      e.preventDefault();
+      e.stopPropagation();
+      if (!offer) return;
+      draft.current = { ...draft.current, project: offer, task: true };
+      version.current++;
+      close();
     } else if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
@@ -117,6 +133,9 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   };
   const empty = !title.trim() && !hasBody;
   const picked = project ? pageOf(project) : undefined;
+  // The person's pick wins over the guess.
+  const guessed = !picked && guess.task && guess.project ? pageOf(guess.project) : undefined;
+  const offer = guess.task ? (project ?? guess.project) : null;
 
   return (
     <div aria-label="New idea" className={cn(SURFACE, "flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role="dialog">
@@ -141,7 +160,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
             trigger={
               <Button aria-label="Project" className={cn("-me-2 min-w-0 shrink gap-2 font-normal text-[13px] sm:text-[13px]", !picked && "text-muted-foreground")} size="xs" variant="ghost">
                 {picked ? <RowIcon icon={iconFor(picked)} /> : <Folder className="size-4" />}
-                <span className="truncate">{picked ? pageLabel(picked.title) : "No project"}</span>
+                <span className="truncate">{picked ? pageLabel(picked.title) : guessed ? `${pageLabel(guessed.title)}?` : "No project"}</span>
               </Button>
             }
             typeId="project"
@@ -193,6 +212,12 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
           <span className="ms-auto flex items-center gap-3">
             {!empty && (
               <>
+                {offer && (
+                  <span className="flex items-center gap-1.5">
+                    <Kbd>{keysFor("nod")}</Kbd>
+                    Task in {pageLabel(pageOf(offer)?.title ?? "")}
+                  </span>
+                )}
                 <span className="flex items-center gap-1.5">
                   <Kbd>⇧⌘↩</Kbd>
                   Open beside

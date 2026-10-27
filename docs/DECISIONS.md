@@ -398,3 +398,32 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+
+## 28. Tail offers one line; it reads by trigger and remembers in the open
+
+Tail (`docs/TAIL.md`) is a watcher, not a third agent system. It guesses what the person meant
+and offers one line with one verb; the nod runs through what exists: a page's open editor (9),
+a new page, a property, or Assign (21). So every result stays inside rules already trusted and
+the build stays small. It never asks a question: a question costs attention, which is the one
+thing it must not spend. It speaks only at a pause, a page opening, a return or a new day, after
+Horvitz's rule that an agent acts only when the value beats the cost of interrupting; silence is
+the common case, as in heartbeat agents. Lines expire so nothing piles up.
+
+Nothing moves: Today's rows come at open, a page's row sits in the band above the title where
+the hover controls already live, and the chip is placed with the sidenote math (11) without the
+sidenote's room-making. A chip that has no room waits rather than narrowing the text.
+
+Context is scoped by the trigger with a budget each, not a dump of the space: the block and the
+index for a chip, a digest of changes for the beat, bodies only of what changed and only once per
+thread. Sidenotes and pages reached through a tag or a daily note are never read (19), and a
+per-type Reads on, after Writing's Use on, is the person's control over what the beat may see,
+since the beat reads pages they did not point at.
+
+Memory is three plain things on this Mac: a nod ledger that quiets a kind after two ignores, a
+page in sentences about how the person works that tail rewrites and the person can edit, and
+short-lived threads. The page is a page because the tool's picture of the person must be theirs
+to read and correct, never a hidden profile.
+
+The model is GPT-6.1 Sol at high through the Codex app server, the GPT path Ask already has (7),
+with Claude as the switch. The surfaces were built first with word rules in place of the model,
+on the branch `worktree-tail-design`, so the feel was judged before anything was spent on it.

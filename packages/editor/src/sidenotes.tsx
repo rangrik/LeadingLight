@@ -27,12 +27,12 @@ export type NotesStore = {
 export const GUTTER = 32;
 const STACK_GAP = 12;
 // Notes are 13px on a 19.5px line (editor.css).
-const NOTE_FONT = { size: "13px", line: "19.5px" };
+export const NOTE_FONT = { size: "13px", line: "19.5px" };
 
 // How far below the top of its glyph box (or of its line, given a line height) text sits on its
 // baseline, measured once per font off screen: a 0-height inline-block rests on the baseline.
 const baselines = new Map<string, number>();
-function baselineOffset(s: { fontStyle: string; fontWeight: string; fontSize: string; fontFamily: string }, line?: string) {
+export function baselineOffset(s: { fontStyle: string; fontWeight: string; fontSize: string; fontFamily: string }, line?: string) {
   const font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
   const key = `${font}/${line}`;
   let at = baselines.get(key);
