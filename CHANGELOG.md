@@ -2,6 +2,13 @@
 
 ## [0.2.0](https://github.com/rangrik/LeadingLight/compare/v0.1.0...v0.2.0) (2026-10-27)
 
+This is the first downloadable preview of LeadingLight for Apple Silicon Macs.
+It includes local notes with typed objects and a block editor, capture tools,
+and Unsplash covers that work without a personal API key.
+
+Releases now get automatic version bumps, reviewed release notes, a DMG and app
+ZIP, and SHA-256 checksums. Builds are verified before their draft is published.
+
 
 ### Features
 
