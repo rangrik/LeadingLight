@@ -38,6 +38,7 @@ export function watchLive(id: string, fn: () => void) {
 export const touchLive = (id: string) => watchers.get(id)?.forEach((fn) => fn());
 // What an open page holds right now, edits not yet saved included, and its editor.
 export const liveContent = (id: string) => live.get(id)?.content();
+export const liveProperties = (id: string) => live.get(id)?.properties();
 export const liveEditor = (id: string) => live.get(id)?.editor() ?? null;
 
 // Runs fn with the page's editor now if it is open, else as soon as it opens.

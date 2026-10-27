@@ -3,6 +3,8 @@ import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { toastManager } from "@leadinglight/ui/components/toast";
+import { markCapture } from "~/lib/capture-inbox";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
 import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
@@ -384,6 +386,7 @@ export function PageView({ page }: { page: LLObject }) {
             content={page.content}
             onAsk={openAsk}
             onTurnInto={report ? undefined : setTurnInto}
+            onVoiceSaved={report ? undefined : () => { void markCapture(page.id, "voice").catch(() => toastManager.add({ type: "error", title: "Recording saved", description: "It could not be added to the inbox. Your audio is still in this page." })); }}
             askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });

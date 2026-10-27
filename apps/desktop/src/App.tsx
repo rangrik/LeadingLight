@@ -50,7 +50,7 @@ import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
-import { createPage, FEED_VIEW, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { createPage, FEED_VIEW, INBOX_VIEW, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useAiPrefs } from "~/lib/ai-prefs";
@@ -353,6 +353,7 @@ export default function App() {
         <AppSidebar
           onCreate={create}
           feed={projectsOn ? { open: lane || !!(root && leaves(root).some((l) => l.page === FEED_VIEW)), toggle: toggleFeed } : undefined}
+          inbox={{ open: current === INBOX_VIEW, onSelect: opener(INBOX_VIEW) }}
           onNewIdea={toggleCapture}
           onSaveWebpage={() => setSaveWebpage(true)}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}

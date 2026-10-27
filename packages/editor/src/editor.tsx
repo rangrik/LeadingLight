@@ -208,6 +208,7 @@ export function BlockEditor({
   annotate,
   onAsk,
   onTurnInto,
+  onVoiceSaved,
   askKeys,
   style = "plain",
   notes,
@@ -239,6 +240,7 @@ export function BlockEditor({
   // Given, the selection toolbar offers Ask with the selected words.
   onAsk?: (selected: Selected) => void;
   onTurnInto?: (selection: PageSelection) => void;
+  onVoiceSaved?: () => void;
   askKeys?: string;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
@@ -263,6 +265,8 @@ export function BlockEditor({
   const onExitTopRef = useRef(onExitTop);
   const notesRef = useRef(notes);
   const openRef = useRef(open);
+  const voiceSavedRef = useRef(onVoiceSaved);
+  voiceSavedRef.current = onVoiceSaved;
   onChangeRef.current = onChange;
   onExitTopRef.current = onExitTop;
   notesRef.current = notes;
@@ -292,7 +296,9 @@ export function BlockEditor({
           setNewNote(id);
           return true;
         },
-      }),
+      }).map((extension) => extension.name === "voiceRecording" ? extension.configure({
+        onSaved: !readOnly && !annotate && onVoiceSaved ? () => voiceSavedRef.current?.() : undefined,
+      }) : extension),
     // The store is a module-level singleton in the app.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

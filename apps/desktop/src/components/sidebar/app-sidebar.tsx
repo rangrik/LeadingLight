@@ -64,6 +64,7 @@ export function AppSidebar({
   onToday,
   onNewIdea,
   onSaveWebpage,
+  inbox,
   todayActive,
   feed,
   ...props
@@ -71,6 +72,7 @@ export function AppSidebar({
   onToday: (e: React.MouseEvent) => void;
   onNewIdea: () => void;
   onSaveWebpage: () => void;
+  inbox: { open: boolean; onSelect: (e: React.MouseEvent) => void };
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
   pages: React.ComponentProps<typeof NavProjects>["projects"];
@@ -99,6 +101,12 @@ export function AppSidebar({
                 <Lightbulb />
                 <span>New idea</span>
                 <Kbd className="ml-auto opacity-0 transition-opacity duration-150 group-hover/menu-item:opacity-100">{keysFor("new-idea")}</Kbd>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton aria-current={inbox.open ? "page" : undefined} isActive={inbox.open} onClick={inbox.onSelect}>
+                <Inbox />
+                <span>Capture inbox</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             {feed && <FeedButton feed={feed} />}

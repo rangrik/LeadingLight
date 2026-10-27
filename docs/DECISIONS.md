@@ -398,3 +398,10 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+
+## 28. Captures stay pages; review state is metadata
+
+The inbox reads capture kind, date and reviewed date from page properties. Reviewing never
+moves or deletes a page. Older captures are recognized by their source fields or capture tag;
+older saved recordings are discovered once per session. Property changes persist before the
+open page is told, so failed saves do not remove a capture from view.
