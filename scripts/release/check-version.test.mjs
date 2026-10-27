@@ -9,7 +9,7 @@ test('accepts one version and refuses each source of drift', () => {
   const version = checkVersions(read);
   assert.equal(checkVersions(read, `v${version}`), version);
   assert.throws(() => checkVersions(read, 'v999.0.0'));
-  for (const path of ['apps/desktop/package.json', 'apps/desktop/src-tauri/tauri.conf.json',
+  for (const path of ['version.txt', 'apps/desktop/package.json', 'apps/desktop/src-tauri/tauri.conf.json',
     '.release-please-manifest.json', 'apps/desktop/src-tauri/Cargo.toml', 'Cargo.lock']) {
     assert.throws(() => checkVersions((p) => p === path ? read(p).replaceAll(version, '999.0.0') : read(p)));
   }

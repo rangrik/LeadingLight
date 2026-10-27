@@ -6,6 +6,7 @@ export function checkVersions(read, tag) {
   const json = (path) => JSON.parse(read(path));
   const version = json('apps/desktop/package.json').version;
   assert.match(version, /^\d+\.\d+\.\d+$/);
+  assert.equal(read('version.txt').trim(), version, 'Version file differs');
   assert.equal(json('apps/desktop/src-tauri/tauri.conf.json').version, version, 'Tauri version differs');
   assert.equal(json('.release-please-manifest.json')['.'], version, 'Release manifest differs');
   const cargo = read('apps/desktop/src-tauri/Cargo.toml').match(/^version = "([^"]+)"/m)?.[1];

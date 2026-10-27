@@ -3,13 +3,15 @@
   "bootstrap-sha": "c34e6dec30686660296d57f45d08f912fe560921",
   "packages": {
     ".": {
-      "release-type": "rust",
+      "release-type": "simple",
       "package-name": "LeadingLight",
       "include-component-in-tag": false,
       "bump-minor-pre-major": true,
       "draft": true,
       "force-tag-creation": true,
       "extra-files": [
+        { "type": "toml", "path": "apps/desktop/src-tauri/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(@.name=='leadinglight-desktop')].version" },
         { "type": "json", "path": "apps/desktop/package.json", "jsonpath": "$.version" },
         { "type": "json", "path": "apps/desktop/src-tauri/tauri.conf.json", "jsonpath": "$.version" }
       ],

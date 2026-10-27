@@ -18,7 +18,7 @@ free for this public repository. No personal access token or paid service is nee
    that exact commit, then builds and checks the app. It uploads a DMG, ZIP and
    `SHA256SUMS.txt` before publishing. Until every step succeeds, the draft stays private.
 
-Release Please updates the Rust workspace and `Cargo.lock`, plus the desktop
+Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.
 To request a specific version, add `Release-As: 0.3.0` to a conventional commit body.
 
