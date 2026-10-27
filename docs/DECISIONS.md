@@ -441,3 +441,12 @@ People should not need a developer account to choose a cover. A small Vercel
 Function holds the key, caches searches, and reports selections with signed
 tokens. Only its URL ships in the app. Notes stay local and photos load from
 Unsplash. Forks can point to their own service with `VITE_IMAGE_SERVICE_URL`.
+
+## GitHub releases are prepared in a PR, then built before publication
+
+Release Please keeps one version across Cargo, Tauri and the desktop package, with
+notes from conventional commits. Merging its PR creates a draft; GitHub Actions
+checks and builds that exact commit, verifies helpers and licenses, and uploads
+downloads before publishing. Failed builds stay drafts and can be retried by tag.
+The first distribution is an unsigned Apple Silicon preview, matching the runtime
+we can build today. No personal token or signing secret is needed for that path.

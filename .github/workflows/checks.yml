@@ -1,0 +1,46 @@
+name: Checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.21.1'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/release/check-version.mjs
+      - run: node --test scripts/release/*.test.mjs
+      - run: pnpm typecheck
+      - run: pnpm check:themes
+      - run: pnpm --filter @leadinglight/desktop test
+      - run: pnpm --filter @leadinglight/image-service test
+      - run: pnpm --filter @leadinglight/desktop build
+      - run: pnpm --filter @leadinglight/desktop exec playwright install --with-deps chromium
+      - name: Browser smoke
+        run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa smoke.spec.ts saving.spec.ts unsplash.spec.ts
+      - name: Keep failure evidence
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-failure-${{ github.run_id }}
+          path: apps/desktop/qa/.results
+          retention-days: 7

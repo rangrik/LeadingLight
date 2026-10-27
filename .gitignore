@@ -29,6 +29,7 @@ dist-ssr
 
 # Rust
 /target/
+/release-assets/
 
 # The Berth agent browser's scratch files
 .berth/browser/

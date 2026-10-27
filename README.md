@@ -6,6 +6,10 @@ in a block editor. Built with Tauri 2, React 19, and TipTap.
 Early development: expect rough edges. Notes stay on your device; optional image
 search sends search terms and photo selections to the shared Unsplash service.
 
+[Download previews](https://github.com/rangrik/LeadingLight/releases) for Apple Silicon.
+Builds are currently unsigned and not notarized by Apple. Version bumps, release
+notes, checks and downloads are managed by [GitHub Actions](docs/RELEASING.md).
+
 ## Layout
 
 - `apps/desktop`: the desktop app (Tauri 2 + React + Vite)
@@ -22,6 +26,7 @@ Needs Node 22+, pnpm 10, and Rust (stable).
 
 ```sh
 pnpm install
+pnpm runtime:build # prepare the bundled helpers on an Apple Silicon Mac
 pnpm dev        # run the desktop app
 pnpm build      # bundle the desktop app
 pnpm typecheck

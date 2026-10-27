@@ -1,0 +1,115 @@
+name: Publish release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing draft tag to retry, for example v0.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.draft.outputs.sha }}
+    steps:
+      - name: Resolve the draft's exact commit
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release view "$TAG" --json isDraft,targetCommitish > release.json
+          jq -e '.isDraft == true' release.json
+          sha=$(jq -r .targetCommitish release.json)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  checks:
+    needs: draft
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ needs.draft.outputs.sha }}
+
+  macos:
+    needs: [draft, checks]
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ needs.draft.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release identity
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          test "$(git rev-parse "$TAG^{commit}")" = "$(git rev-parse HEAD)"
+          node scripts/release/check-version.mjs "$TAG"
+          test "$(uname -m)" = arm64
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.21.1'
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.96.0'
+      - uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
+        with:
+          shared-key: release-macos-arm64
+      - run: pnpm install --frozen-lockfile
+      - name: Build pinned runtime and tmux
+        run: pnpm runtime:build
+      - name: Build the app and disk image
+        run: pnpm --filter @leadinglight/desktop tauri build --bundles app,dmg -- --locked
+      - name: Verify and package downloads
+        run: scripts/release/package-macos.sh "$TAG"
+      - name: Preserve build artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: LeadingLight-${{ inputs.tag }}-macos-arm64
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload and publish the complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release view "$TAG" --json isDraft --jq .isDraft | grep -qx true
+          gh release upload "$TAG" release-assets/* --clobber
+          gh release view "$TAG" --json body --jq .body > "$RUNNER_TEMP/release-notes.md"
+          cat >> "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+
+          ### Download
+          Apple Silicon (M-series), macOS 13 or later. Voice transcription requires macOS 26.
+          Use the DMG to install, or the ZIP for the app bundle. SHA256SUMS.txt verifies either download.
+
+          **Unsigned preview:** this build is ad-hoc signed, without an Apple Developer ID or notarization.
+          macOS may block it or require approval in Privacy & Security. It is intended for early testing.
+          NOTES
+          gh release edit "$TAG" --title "LeadingLight $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --draft=false --prerelease --latest=false
+          gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
