@@ -5,7 +5,7 @@ Feature: Tail
 
   Names used below:
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
-  - the nod: the button, or ⌃↩ on the page in front
+  - the nod: the button, or ⌃↩ on the page in front, never under Settings, a dialog or a menu
   - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under them
   - ignored: a line that left with no nod: a chip that expired, or whose page I left or wrote on
     elsewhere, or a row I saw on Today that a beat no longer shows
@@ -83,6 +83,7 @@ Feature: Tail
     Then the line becomes a link to a new task "Call Sam about the invoice before Friday" with a checkbox
     And the task's due date is this Friday, and it is linked to Sam
     And the chip reads "Made a task, due Friday." with Undo, then leaves after eight seconds
+    And typing on keeps it and its Undo for those eight seconds, and Undo keeps what I typed since
     When I press Undo while it shows
     Then the page is exactly as it was before the nod, and the task page is gone
 
@@ -179,9 +180,12 @@ Feature: Tail
     And the page about how I work has a dated line "Links on Meeting pages are quiet."
     When I delete that line
     Then the next unlinked name on a Meeting page gets its chip again
+    Given Today showed "You left Garden plan mid-sentence yesterday." on two days and I nodded at neither
+    Then the next beat leaves out that row, not its kind, and the page has a dated line
+      "Not asking again about Garden plan for now." until Garden plan is edited or I delete the line
 
   Scenario: The page about how I work
-    Given I have pressed File them for Garden on three days
+    Given I have pressed File them for Garden three times
     When I open the page from Settings › AI › Tail
     Then it holds dated sentences, among them one like "Most ideas go to Garden."
     And it never exceeds about forty lines

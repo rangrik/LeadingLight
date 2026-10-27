@@ -2,7 +2,6 @@ import { keysFor } from "@/lib/shortcuts";
 import { Segmented } from "@/views/settings/controls";
 import { SettingsGroup, SettingsPage, SettingsRow, useSettingsRow } from "@/views/settings/rows";
 import { type Check, CHECKS, type Part, PARTS } from "@leadinglight/editor/writing";
-import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { CheckboxGroup } from "@leadinglight/ui/components/checkbox-group";
 import { Field, FieldItem, FieldLabel } from "@leadinglight/ui/components/field";
@@ -100,11 +99,7 @@ export function WritingSection() {
           description={
             <>
               Suggested: on for pages you write in, off for records such as people and books.{" "}
-              {Object.keys(p.types).length > 0 && (
-                <Button className="h-auto p-0 text-desc" onClick={() => setWritingPrefs({ types: {} })} size="sm" variant="link">
-                  Use suggestions
-                </Button>
-              )}
+              {Object.keys(p.types).length > 0 && <UseSuggestions onClick={() => setWritingPrefs({ types: {} })} />}
             </>
           }
           label="Use the tools on"
@@ -115,6 +110,13 @@ export function WritingSection() {
     </SettingsPage>
   );
 }
+
+// Back to the suggested types: a link in the description's own type, as Settings' other links are.
+export const UseSuggestions = ({ onClick }: { onClick(): void }) => (
+  <button className="underline" onClick={onClick} type="button">
+    Use suggestions
+  </button>
+);
 
 // Pages chosen by their type, here and in Settings › AI › Tail's Reads on.
 export function TypeChoices({ types, value, onChange }: { types: TypeDef[]; value: string[]; onChange(ids: string[]): void }) {

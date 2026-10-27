@@ -16,7 +16,7 @@ import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
 import { isNative } from "./platform";
 import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
-import { ABOUT, appLine, counts, dated, type Entry, factOf, isQuiet, MAX_LINES, type Place, quietLine, record, sentenceOf } from "./tail-memory";
+import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietLine, record, seenOn, sentenceOf, type Shown } from "./tail-memory";
 import { answerOf, buildDigest, type Candidate, mayRead, named, noteIn, parseAnswer, type Slots, stillTrue, TAIL, type Trigger } from "./tail-prompt";
 import { newPage } from "./templates";
 import { tailTurn } from "./turn";
@@ -54,9 +54,11 @@ export type Line = {
   // A chip: the top-level block it sits beside.
   block?: number;
   done?: Done;
-  // Where it was, for the nod ledger; on Today, whether the person has had it in front of them.
+  // Where it was, for the nod ledger; on Today, whether the person has had it in front of them,
+  // and its pages as they were, so a row shown day after day can stay out until they change.
   place?: Place;
   seen?: boolean;
+  state?: string;
 };
 export const TODAY = "today";
 export const tail = createStore<Line[]>([]);
@@ -96,10 +98,11 @@ const unfinished = (text: string) => text.split(/\s+/).length >= 3 && !/[.!?…:
 const STOP = new Set("about after also and any are before but can for from has have into its just like more not now off our out over some than that the then them they this was what when will with your".split(" "));
 const wordsOf = (text: string) => new Set((text.toLowerCase().match(/\p{L}+/gu) ?? []).filter((w) => w.length > 2 && !STOP.has(w)));
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Whether the words name a page, as a whole word.
+const says = (text: string, p: ObjectSummary) => !!p.title.trim() && new RegExp(`(^|[^\\p{L}\\p{N}])${escape(p.title.trim())}($|[^\\p{L}\\p{N}])`, "u").test(text);
 // People, projects and books whose name is in the words as written: any of them, since Reads on
 // governs words, not names.
-const namesIn = (text: string, except: string) =>
-  space.get().pages.filter((p) => ["person", "project", "book"].includes(p.typeId) && p.id !== except && p.title.trim() && named(p) && new RegExp(`(^|[^\\p{L}\\p{N}])${escape(p.title.trim())}($|[^\\p{L}\\p{N}])`, "u").test(text));
+const namesIn = (text: string, except: string) => space.get().pages.filter((p) => ["person", "project", "book"].includes(p.typeId) && p.id !== except && named(p) && says(text, p));
 
 const DAY_MS = 86_400_000;
 const midnight = (at = Date.now()) => new Date(at).setHours(0, 0, 0, 0);
@@ -158,6 +161,8 @@ export async function readCapture(text: string, opened: number): Promise<{ task:
   } = await choose("capture", `capture:${opened}`, [found], [...projects, ...captures.slice(0, 5)]);
   return pick ? { task: true, project: pick.slots.project ?? null } : none;
 }
+// The capture box's ⌃↩ is a nod at its guess, as a capture's place has it.
+export const tookCapture = (project: string) => remember({ kind: "capture", type: "", project }, true);
 
 // What the word rules found, as sent to the model, and the line it makes with the model's slots
 // (none when a slot is wrong). The copy is docs/TAIL.md's, word for word.
@@ -170,10 +175,12 @@ function placeOf(f: Found, slots: Slots = {}): Place {
   const project = slots.project || f.guess?.project || projectOf(pageOf(f.pages[0]));
   return { kind: f.kind, type: pageOf(f.pages[0])?.typeId ?? "", ...(project && { project }) };
 }
+// Its pages as they are: an edit, a filing or a day set changes it.
+const stateOf = (f: Found) => JSON.stringify(f.pages.map((id) => [id, pageOf(id)?.updatedAt]));
 const linesOf = (picks: Pick[]) =>
   picks.flatMap((p) => {
     const line = p.found.line?.(p.slots);
-    return line ? [{ ...line, place: placeOf(p.found, p.slots) }] : [];
+    return line ? [{ ...line, place: placeOf(p.found, p.slots), state: stateOf(p.found) }] : [];
   });
 
 // Today's candidates, in this order; the model shows at most three.
@@ -330,8 +337,9 @@ function keep(key: string, t: Thread) {
 }
 
 // The nod ledger (docs/TAIL.md, "What it remembers"): what was taken and ignored, by kind and
-// place, for thirty days, on this Mac. Its effect shows as sentences on the page about you.
-const ledger = localPrefs<{ entries: Entry[] }>("ll.tail.ledger", { entries: [] });
+// place, for thirty days, on this Mac, and Today's rows seen. Its effect shows as sentences on the
+// page about you.
+const ledger = localPrefs<{ entries: Entry[]; shown: Record<string, Shown> }>("ll.tail.ledger", { entries: [], shown: {} });
 
 // The page about how you work: one per space, of the app's own type, found by its id.
 const aboutPage = () => space.get().pages.find((p) => p.typeId === ABOUT);
@@ -361,12 +369,12 @@ const spoken = (p: Place) => [p.kind, typeOf(p.type).name, p.project ? pageLabel
 
 // A line taken or let go, and what the ledger can now say: a kind quiet there, or lifted by a nod,
 // or a habit such as where ideas go.
-function remember(line: Line, took: boolean) {
-  if (!line.place || mode() === "off") return;
-  const entry = { ...line.place, took, at: Date.now() };
+function remember(place: Place | undefined, took: boolean) {
+  if (!place || mode() === "off") return;
+  const entry = { ...place, took, at: Date.now() };
   const { entries, change } = record(ledger.get().entries, entry);
   ledger.set({ entries });
-  const quiet = quietLine(...spoken(line.place));
+  const quiet = quietLine(...spoken(place));
   if (change === "quiet") void rewrite(quiet);
   if (change === "lift") void rewrite(undefined, (s) => s === quiet);
   const fact = factOf(entries, entry, (id) => pageLabel(pageOf(id)?.title ?? ""));
@@ -374,7 +382,7 @@ function remember(line: Line, took: boolean) {
 }
 // Lines that leave without a nod were ignored; a nodded one was taken already.
 function letGo(test: (l: Line) => boolean) {
-  for (const l of tail.get()) if (test(l) && !l.done) remember(l, false);
+  for (const l of tail.get()) if (test(l) && !l.done) remember(l.place, false);
   drop(test);
 }
 
@@ -394,9 +402,11 @@ async function turnOn(trigger: Trigger, key: string, all: Found[], pages: Object
   const about = await aboutLines();
   const found = all.filter((f) => !isQuiet(about, ...spoken(placeOf(f))));
   if (!found.length) return { picks: [] };
+  // A capture's guess stays small and quick: only the lines that name a project, ten at most.
+  const told = trigger === "capture" ? about.filter((l) => pages.some((p) => p.typeId === "project" && says(sentenceOf(l), p))).slice(-10) : about;
   const turn = async (t: Thread) => {
     const text = async (id: string) => markdown((await contentOf(id))?.content ?? []);
-    const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, text, candidates: found, about, ledger: counts(ledger.get().entries) });
+    const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, text, candidates: found, about: told, ledger: counts(ledger.get().entries) });
     return { ...d, ...(await tailTurn({ prompt: d.message, system: TAIL, model, effort, resume: t.session })) };
   };
   let thread = threadFor(key, model);
@@ -427,7 +437,22 @@ const todayShown = () => {
   const root = panes.get().root;
   return !!root && leaves(root).some((l) => l.page === dayShown(today()));
 };
-const todayFinds = (pages: ObjectSummary[]) => Promise.all([leftMidSentence(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)]).then((f) => f.filter((x) => x !== undefined));
+// What the records find for Today, less the rows that stay out (seenOn). The rest are forgotten,
+// their sentence with them, once their pages change or the records no longer find them.
+async function todayFinds(pages: ObjectSummary[]) {
+  const found = (await Promise.all([leftMidSentence(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)])).filter((x) => x !== undefined);
+  await writing;
+  const about = await aboutLines();
+  const { shown } = ledger.get();
+  const kept: Record<string, Shown> = {};
+  for (const f of found) {
+    const s = shown[f.id];
+    if (s?.state === stateOf(f) && (!s.said || isOut(s, s.state, about))) kept[f.id] = s;
+  }
+  for (const [id, s] of Object.entries(shown)) if (s.said && !kept[id]) void rewrite(undefined, (x) => x === s.said);
+  ledger.set({ shown: kept });
+  return found.filter((f) => !isOut(kept[f.id], stateOf(f), about));
+}
 export function beat(quiet = false): Promise<void> {
   if (queued !== null) {
     queued &&= quiet;
@@ -465,15 +490,30 @@ async function showWaiting() {
 function showToday(found: Line[]) {
   // A done row keeps its moment, where it was; once its Undo has gone, the beat takes it away.
   const shown = tail.get().filter((l) => l.where === TODAY);
-  // A row the person saw that this beat doesn't show again was ignored.
-  for (const s of shown) if (s.seen && !s.done && !found.some((l) => l.id === s.id)) remember(s, false);
+  // A row the person saw that this beat doesn't show again was ignored, unless only it stays out.
+  for (const s of shown) if (s.seen && !s.done && !found.some((l) => l.id === s.id) && !ledger.get().shown[s.id]?.said) remember(s.place, false);
   const next: Line[] = found.filter((l) => !shown.some((s) => s.id === l.id && s.done?.undo)).map((l) => ({ ...l, seen: shown.some((s) => s.id === l.id && s.seen) }));
   shown.forEach((s, i) => s.done?.undo && next.splice(i, 0, s));
   tail.set([...tail.get().filter((l) => l.where !== TODAY), ...next.slice(0, 3)]);
   sawToday();
 }
-// Today's rows count as seen once Today is open in a pane.
-const sawToday = () => todayShown() && tail.get().forEach((l) => l.where === TODAY && (l.seen = true));
+// Today's rows count as seen once Today is open in a pane, and the day each was seen is kept: one
+// seen again on a later day is said to be out.
+function sawToday() {
+  if (!todayShown()) return;
+  const { shown } = ledger.get();
+  let next = shown;
+  for (const l of tail.get()) {
+    if (l.where !== TODAY || l.done || !l.state) continue;
+    l.seen = true;
+    const called = l.words.find((w) => typeof w !== "string")?.text ?? "";
+    const s = seenOn(shown[l.id], isoDay(new Date()), l.state, called);
+    if (s === shown[l.id]) continue;
+    next = { ...next, [l.id]: s };
+    if (s.said && !shown[l.id]?.said) void rewrite(s.said);
+  }
+  if (next !== shown) ledger.set({ shown: next });
+}
 
 // The chip, after a pause in typing: for a line that reads as a task, or names a page.
 
@@ -508,12 +548,16 @@ function asTask(page: string, index: number, blocks: EditorDoc[]): Found | undef
           const count = () => liveEditor(page)?.getJSON().content?.length ?? 0;
           const before = count();
           liveEditor(page)?.setBlock(index, { type: "pageLink", attrs: { id: task.id } });
-          // A link as the last block gets an empty line after it; Undo takes that away too.
+          // A link as the last block gets an empty line after it; Undo takes that away too, unless
+          // words were typed in it since.
           const added = count() - before;
           return {
             words: [day ? `Made a task, due ${day.word}.` : "Made a task."],
             undo: async () => {
-              liveEditor(page)?.setBlock(index, block, 1 + added);
+              const blocks = liveEditor(page)?.getJSON().content ?? [];
+              const at = blocks.findIndex((b) => b.type === "pageLink" && b.attrs?.id === task.id);
+              const blank = added && blocks[at + 1]?.type === "paragraph" && !blocks[at + 1].content?.length;
+              if (at >= 0) liveEditor(page)?.setBlock(at, block, blank ? 2 : 1);
               removePage(task.id);
             },
           };
@@ -542,7 +586,9 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
       nod: "Link",
       act: async () => {
         liveEditor(page)?.setBlock(index, linkFirst(block, p.title.trim(), p.id));
-        return { words: ["Linked."], undo: async () => liveEditor(page)?.setBlock(index, block) };
+        // Back to the name's words, keeping any typed on the line since.
+        const unlink = (b: EditorDoc) => ({ ...b, content: b.content?.map((n) => (n.type === "mention" && n.attrs?.id === p.id ?{ type: "text", text: p.title.trim() } : n)) });
+        return { words: ["Linked."], undo: async () => liveEditor(page)?.setBlock(index, unlink(liveEditor(page)?.getJSON().content?.[index] ?? block)) };
       },
     }),
   };
@@ -550,7 +596,8 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
 
 // The page's thread, as for coming back; the model picks one or stays silent.
 async function paused(page: string) {
-  if (!chips() || !readable(pageOf(page))) return;
+  // A done line keeps its moment; the next offer waits for it.
+  if (!chips() || !readable(pageOf(page)) || tail.get().some((l) => l.where === page && l.done)) return;
   const ed = liveEditor(page);
   const index = ed?.cursorBlock() ?? -1;
   const blocks = ed?.getJSON().content ?? [];
@@ -588,8 +635,8 @@ async function comeBack(page: string, doc: EditorDoc) {
   if (seen.get(page) === was && isLive(page)) lines.forEach(put);
 }
 
-// While a page is open. Any edit takes its line away ("you stopped at" leaves on the first edit,
-// a chip when its words change), and a pause after it may bring a chip.
+// While a page is open. Any edit takes its line away, unless it is done ("you stopped at" leaves
+// on the first edit, a chip when its words change), and a pause after it may bring a chip.
 const pauses = new Map<string, ReturnType<typeof setTimeout>>();
 const closing = new Map<string, ReturnType<typeof setTimeout>>();
 export function follow(page: string) {
@@ -600,10 +647,10 @@ export function follow(page: string) {
   if (!back) whenLive(page, (live) => void comeBack(page, live.content()));
   const off = watchLive(page, () => {
     if (mode() === "off" || acting) return;
-    // Writing on elsewhere lets a line go; a chip whose own words change was not ignored.
     const block = liveEditor(page)?.cursorBlock();
-    letGo((l) => l.where === page && l.block !== block);
-    drop((l) => l.where === page);
+    const { gone, ignored } = edited(tail.get(), page, block);
+    for (const l of ignored) remember(l.place, false);
+    drop((l) => gone.includes(l));
     seen.set(page, { at: Date.now(), block });
     clearTimeout(pauses.get(page));
     if (chips()) pauses.set(page, setTimeout(() => void paused(page), ms("pause")));
@@ -632,13 +679,16 @@ export async function nod(line: Line) {
     acting = false;
   }
   nodded = Date.now();
+  // A nod on Today starts its days seen again.
+  const { [line.id]: _, ...shown } = ledger.get().shown;
+  ledger.set({ shown });
   if (!done) return;
   const { words } = done;
   update(line.id, { done });
   // Taken once Undo has gone. A chip in the margin just leaves; a row on Today keeps its words,
   // so the rows under it stay.
   later(line.id, ms("done"), () => {
-    remember(line, true);
+    remember(line.place, true);
     if (line.where === TODAY && todayShown()) update(line.id, { done: { words } });
     else drop((l) => l.id === line.id);
   });
@@ -740,7 +790,7 @@ function reset() {
   beats++;
   Object.assign(memory, { last: 0, threads: {} });
   localStorage.removeItem(KEPT);
-  ledger.set({ entries: [] });
+  ledger.set({ entries: [], shown: {} });
   lastBeat.set(null);
   if (aboutPage()) void rewrite(undefined, appLine);
   log.length = 0;

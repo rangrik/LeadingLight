@@ -53,7 +53,30 @@ const Words = ({ parts, where, fit }: { parts: Part[]; where: string; fit?: bool
     );
   });
 
+const ruler = document.createElement("canvas").getContext("2d");
+// The width a name needs to show its first letters and an ellipsis in room, ending where the
+// ellipsis does so the words after it sit flush. None below about four letters.
+function cut(name: HTMLElement, room: number) {
+  const text = name.firstChild;
+  if (!(text instanceof Text) || !ruler) return;
+  const s = getComputedStyle(name);
+  ruler.font = `${s.fontStyle} ${s.fontWeight} ${s.fontSize} ${s.fontFamily}`;
+  const dots = ruler.measureText("…").width;
+  const left = name.getBoundingClientRect().left;
+  const range = document.createRange();
+  range.setStart(text, 0);
+  const end = (i: number) => {
+    range.setEnd(text, i);
+    return range.getBoundingClientRect().right - left;
+  };
+  let k = text.length;
+  while (k > 0 && (end(k) + dots > Math.floor(room) || /\s/.test(text.data[k - 1]))) k--;
+  if (k < (text.data.match(/^(\s*\S){4}/)?.[0].length ?? Infinity)) return;
+  return Math.ceil(end(k) + dots);
+}
+
 // The widest name takes only the room the other words leave, so the words after it still show.
+// When that would leave it under four letters, the whole sentence ends in one ellipsis instead.
 function useFit(words: Part[]) {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
@@ -61,12 +84,16 @@ function useFit(words: Part[]) {
     if (!el) return;
     const fit = () => {
       const names = [...el.querySelectorAll<HTMLElement>("[data-name]")];
-      for (const n of names) n.style.maxWidth = "";
+      for (const n of names) Object.assign(n.style, { maxWidth: "", display: "" });
       const all = document.createRange();
       all.selectNodeContents(el);
       const over = all.getBoundingClientRect().width - el.getBoundingClientRect().width;
-      const wide = names.sort((a, b) => b.offsetWidth - a.offsetWidth)[0];
-      if (over > 0 && wide) wide.style.maxWidth = `${Math.max(0, Math.floor(wide.getBoundingClientRect().width - over))}px`;
+      if (over <= 0) return;
+      const wide = names.reduce<HTMLElement | undefined>((a, n) => (a && a.offsetWidth > n.offsetWidth ? a : n), undefined);
+      const width = wide && cut(wide, wide.getBoundingClientRect().width - over);
+      // Else the names flow as plain words, so the sentence's own ellipsis cuts through them.
+      if (wide && width) wide.style.maxWidth = `${width}px`;
+      else for (const n of names) n.style.display = "contents";
     };
     fit();
     const ro = new ResizeObserver(fit);

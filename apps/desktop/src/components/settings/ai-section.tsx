@@ -14,7 +14,7 @@ import { Select, SelectGroup, SelectGroupLabel, SelectItem, SelectPopup, SelectP
 import { ACCESS, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, setTailPrefs, type TailPrefs, tailPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { codex, effortFor, effortsFor, loadCodex } from "~/lib/codex";
 import { closeUpdateToast } from "~/components/cli-updates";
-import { TypeChoices } from "~/components/settings/writing-section";
+import { TypeChoices, UseSuggestions } from "~/components/settings/writing-section";
 import { behind, cliPrefs, commandOf, INSTALL, loadTools, SOURCE, type Tool, tools, updateTool } from "~/lib/clis";
 import { openLink } from "~/lib/links";
 import { isNative } from "~/lib/platform";
@@ -289,7 +289,7 @@ function TailGroup() {
   const lines = (n: number) => (n ? `${n} ${n === 1 ? "line" : "lines"}` : "nothing to show");
   return (
     <SettingsGroup title="Tail" description="Reads along and offers one line you can nod at. It never asks, and never writes into your words until you nod.">
-      <SettingsRow label="Tail" description={MODES.find((m) => m.value === t.mode)?.description}>
+      <SettingsRow label="Offers" description={MODES.find((m) => m.value === t.mode)?.description}>
         <Segmented value={t.mode} options={MODES} onChange={(mode) => setTailPrefs({ mode })} />
       </SettingsRow>
       <SettingsRow label="Model" description="Claude's through Claude Code; GPT's through Codex.">
@@ -303,11 +303,7 @@ function TailGroup() {
         description={
           <>
             Tail reads the summaries and words of these; the titles of all pages, so a name can still be linked. Suggested: as Writing's, and tasks.{" "}
-            {Object.keys(t.readsOn).length > 0 && (
-              <Button className="h-auto p-0 text-desc" onClick={() => setTailPrefs({ readsOn: {} })} size="sm" variant="link">
-                Use suggestions
-              </Button>
-            )}
+            {Object.keys(t.readsOn).length > 0 && <UseSuggestions onClick={() => setTailPrefs({ readsOn: {} })} />}
           </>
         }
         label="Reads on"

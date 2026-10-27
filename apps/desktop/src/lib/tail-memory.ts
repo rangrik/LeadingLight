@@ -37,13 +37,33 @@ const LABEL: Record<string, string> = {
   mention: "Links",
 };
 export const quietLine = (kind: string, type: string, project?: string) => `${LABEL[kind] ?? kind} on ${type === "Page" ? "" : `${type} `}pages${project ? ` in ${project}` : ""} are quiet.`;
-export const appLine = (s: string) => / pages( in .+)? are quiet\.$|^Most ideas go to |^Tasks get their day on /.test(s);
+export const notAgain = (name: string) => `Not asking again about ${name} for now.`;
+export const appLine = (s: string) => / pages( in .+)? are quiet\.$|^Most ideas go to |^Tasks get their day on |^Not asking again about .+ for now\.$/.test(s);
 
 // One paragraph per sentence, dated.
 export const dated = (day: string, sentence: string) => `${day} · ${sentence}`;
 export const sentenceOf = (line: string) => line.replace(/^\d{4}-\d{2}-\d{2} · /, "").trim();
 // Quiet while the page says so, so deleting the sentence lifts it.
 export const isQuiet = (lines: string[], kind: string, type: string, project?: string) => lines.some((l) => sentenceOf(l) === quietLine(kind, type, project));
+
+// An edit on a page takes its lines away, but never a done one, which keeps its moment. A chip
+// beside the line being written was not ignored; any other line was.
+export function edited<L extends { where: string; block?: number; done?: object }>(lines: L[], page: string, block?: number) {
+  const gone = lines.filter((l) => l.where === page && !l.done);
+  return { gone, ignored: gone.filter((l) => l.block !== block) };
+}
+
+// A row on Today by its candidate: the day it was first seen, its pages as they were then, and
+// the sentence that keeps it out.
+export type Shown = { day: string; state: string; said?: string };
+// Seen again on a later day, unchanged and with no nod between, it was ignored twice: that row,
+// not its kind, is said to be out.
+export function seenOn(was: Shown | undefined, day: string, state: string, name: string): Shown {
+  if (was?.state !== state) return { day, state };
+  return was.said || was.day === day ? was : { ...was, said: notAgain(name) };
+}
+// Out while its sentence stands and its pages are unchanged; a deleted sentence brings it back.
+export const isOut = (s: Shown | undefined, state: string, lines: string[]) => !!s?.said && s.state === state && lines.some((l) => sentenceOf(l) === s.said);
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 

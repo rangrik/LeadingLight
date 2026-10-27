@@ -102,7 +102,9 @@ Three plain things, all on this Mac, all readable.
 
 1. **The nod ledger.** What you took and ignored, by kind, page type and project, for thirty
    days. It quiets a kind after two ignores in the same place and ranks the rest. Small, local,
-   never shown as a list; its effect shows as a sentence on the page about you.
+   never shown as a list; its effect shows as a sentence on the page about you. A Today row
+   shown on two days without a nod stays out, that row only, until its record changes: "Not
+   asking again about *Garden plan* for now."
 2. **The page about how you work.** One page per space, of a system type the app makes (as
    Agent and Report are, DECISIONS 20), never offered in New. Tail rewrites it in sentences,
    each dated: "Most ideas go to Garden." "Tasks get their day on Fridays." "Links on Meeting

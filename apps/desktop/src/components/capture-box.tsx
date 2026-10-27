@@ -13,7 +13,7 @@ import { isKey, useKeysFor } from "~/lib/keymap";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
-import { readCapture } from "~/lib/tail";
+import { readCapture, tookCapture } from "~/lib/tail";
 
 // Where the box sends what is typed: lib/capture.ts in the main window, called directly in a
 // browser, or over Tauri's events from the panel (capture.tsx). links is what "@" offers there,
@@ -119,6 +119,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       e.preventDefault();
       e.stopPropagation();
       if (!offer) return;
+      tookCapture(offer);
       draft.current = { ...draft.current, project: offer, task: true };
       version.current++;
       close();

@@ -4,12 +4,16 @@ import { SHORTCUTS } from "@/lib/shortcuts";
 import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
+import { POPUP } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
+
+// A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
+const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
 
 // The keys in lib/shortcuts.json, by id, as changed in Settings (lib/keymap.ts). In the Mac app
 // the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
@@ -42,6 +46,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "feed":
           return actions.toggleFeed();
         case "nod":
+          // Only at a page in front: never under Settings, a dialog or a menu, or another window.
+          if (useStore.getState().view.kind === "settings" || !document.hasFocus() || document.querySelector(COVERS)) return;
           return nodFront();
         case "shortcuts":
           return toggleShortcuts();
