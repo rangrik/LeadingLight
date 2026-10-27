@@ -7,8 +7,8 @@ Feature: Tail
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
   - the nod: the button, or ⌃↩ on the page in front, never under Settings, a dialog or a menu
   - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under them
-  - ignored: a line that left with no nod: a chip that expired, or whose page I left or wrote on
-    elsewhere, or a row I saw on Today that a beat no longer shows
+  - ignored: a line that left with no nod: a chip whose page I left, the row above a page's title
+    once I wrote, or a row I saw on Today that a beat no longer shows
   - "Garden plan": a page with three paragraphs, the last unfinished, edited yesterday
   - seeded: `__tail.seed()` has made Garden (a project), Sam (a person), "Garden plan", three ideas
     tagged in-the-middle from Tuesday to Thursday with no project, a task "Call Sam about the invoice
@@ -69,10 +69,16 @@ Feature: Tail
     When I stop for three seconds
     Then a chip appears in the margin, level with that line: "Make this a task?" over a "Make task" button and ⌃↩
     And the text did not narrow, the sidebar did not collapse, and nothing scrolled
+    When I press Enter after the line, write "The shed roof leaks again." below it, and stop for a minute
+    Then the chip is where it was, beside that line, and nothing counts as ignored
     When I type again on the same line
-    Then the chip leaves
+    Then the chip leaves, and nothing counts as ignored
     When I stop again for three seconds
     Then the chip is back
+    When I write "Email Sam the soil order before Monday." on a new line, press Enter after it and stop
+    Then a chip for that line, beside it, takes the first one's place, and nothing counts as ignored
+    When I open another page
+    Then the chip is gone, and counts as ignored
 
   Scenario: A line that only looks like a task
     Given "Garden plan" is open
@@ -120,13 +126,22 @@ Feature: Tail
     And the footer offers "⌃↩ Task in Garden" before "⌘↩ Save"
     When I press ⌃↩
     Then the box closes, and Today lists "fix the gate latch before the weekend" as a task in Garden
-    When I open New idea, type "a book about soil microbes" and press ⌘↩
+    When I open New idea and type "a book about soil microbes"
+    Then the project button reads "Garden?" and the footer offers "⌃↩ In Garden", since it is not a task
+    When I press ⌃↩
+    Then the box closes, and it is saved as an idea in Garden; this and the task each count as a nod
+    When I open New idea, type "a recipe for lentil soup" and press ⌘↩
     Then it is saved as an idea with no project, as before, and nothing from tail shows
+    When I open New idea and type "Grammar notes"
+    Then the log holds no capture turn, since the guess waits for three words
 
   Scenario: The guess yields to my choice
     Given New idea is open with "fix the gate latch" typed and "Garden?" showing
     When I pick the project "House" myself
     Then the button reads "House" with no "?", and the footer's ⌃↩ offer says "Task in House"
+    Given New idea is open with "a book about soil microbes" typed and "Garden?" showing
+    When I pick the project "House" myself
+    Then the footer shows no ⌃↩ line, since ⌘↩ already saves it in House
 
   Scenario: Quiet
     Given a page with three paragraphs of prose and no task-like line or unlinked name
@@ -162,6 +177,7 @@ Feature: Tail
     Then the stand-in's log shows a summary line per page and the body of the two that changed only
     And a body keeps the names of the pages it mentions, as "@Sam"
     And the same page's body is not sent again at the next beat unless it changed
+    And each beat starts a new thread: the log shows it resumes none
 
   Scenario: A chip and the guess come from a tail turn
     When I write "Need to call Sam about the invoice before Friday." on "Garden plan" and stop
@@ -170,6 +186,7 @@ Feature: Tail
     When I open New idea and type "fix the gate latch before the weekend"
     Then 600 ms after I stop, the log holds a capture turn: those words, the projects and the
       last few captures, and "Garden?" shows only once it has answered
+    And both turns ask for low effort, while a beat asks for the effort set in Settings
 
   Scenario: A wrong answer is silence
     Given the browser build is opened with ?tail=garbled, so the stand-in answers in words, not JSON
@@ -216,7 +233,9 @@ Feature: Tail
     Given the Mac app with Codex signed in and Settings › AI › Tail on GPT-6.1 Sol at high
     When a beat runs
     Then the rows come from the model, each still one line with one verb
-    And a task-like line, after twenty seconds without typing, gets its chip from the model
+    And a task-like line, after ten seconds without typing, gets its chip from the model
+    And an Enter, or words in another paragraph, while the model thinks still brings that chip
+    But typing on that line while the model thinks brings none
     And the usage meter at the bottom of the sidebar moves for Codex
     Given Claude is chosen instead
     Then the beat runs through Claude Code the same way

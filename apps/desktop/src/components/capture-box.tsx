@@ -24,7 +24,7 @@ export type CaptureHost = {
   links: LinkHost;
   create?: (title: string, typeId: string) => Promise<string>;
   guess: (text: string, opened: number) => Promise<Guess>;
-  // ⌃↩'s nod at the guess. The panel has none: its task is counted where it is saved.
+  // ⌃↩'s nod at the guess. The panel has none: its nod is counted where it is saved.
   took?: (project: string) => void;
 };
 
@@ -53,7 +53,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   // Saves run one after another: the first names the page the rest update. The body is read
   // only when a save runs.
   const id = useRef<string | null>(null);
-  const draft = useRef<{ title: string; body: (() => EditorDoc) | null; project: string | null; task?: boolean }>({ title: "", body: null, project: null });
+  const draft = useRef<{ title: string; body: (() => EditorDoc) | null; project: string | null; task?: boolean; took?: boolean }>({ title: "", body: null, project: null });
   const version = useRef(0);
   const savedVersion = useRef(0);
   const chain = useRef(Promise.resolve());
@@ -117,12 +117,12 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       e.stopPropagation();
       close();
     } else if (isKey(e.nativeEvent, "nod")) {
-      // ⌃↩ is the box's own: a task in the project, when tail offers one.
+      // ⌃↩ is the box's own: tail's guess taken, a task or an idea in the project.
       e.preventDefault();
       e.stopPropagation();
       if (!offer) return;
       host.took?.(offer);
-      draft.current = { ...draft.current, project: offer, task: true };
+      draft.current = { ...draft.current, project: offer, task: guess.task, took: true };
       version.current++;
       close();
     } else if (e.key === "Enter" && e.metaKey) {
@@ -146,8 +146,9 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const empty = !title.trim() && !hasBody;
   const picked = project ? pageOf(project) : undefined;
   // The person's pick wins over the guess.
-  const guessed = !picked && guess.task && guess.project ? pageOf(guess.project) : undefined;
-  const offer = guess.task ? (project ?? guess.project) : null;
+  const guessed = !picked && guess.project ? pageOf(guess.project) : undefined;
+  // A project picked for an idea that isn't a task leaves nothing to nod at: ⌘↩ saves it there.
+  const offer = guess.project && (guess.task || !project) ? (project ?? guess.project) : null;
 
   return (
     <div aria-label="New idea" className={cn(SURFACE, "flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role="dialog">
@@ -227,7 +228,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
                 {offer && (
                   <span className="flex items-center gap-1.5">
                     <Kbd>{keysFor("nod")}</Kbd>
-                    Task in {pageLabel(pageOf(offer)?.title ?? "")}
+                    {guess.task ? "Task in" : "In"} {pageLabel(pageOf(offer)?.title ?? "")}
                   </span>
                 )}
                 <span className="flex items-center gap-1.5">

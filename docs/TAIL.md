@@ -16,8 +16,9 @@ surface with word rules in place of the model, so the feel was judged first.
 - Nothing moves. Tail never narrows the text, collapses the sidebar, scrolls, or opens a popup.
   No toast, sound, badge or count.
 - Everything a nod does is undoable, and the line says what it did, with Undo, for a moment.
-- Lines expire: a chip when its words change or after a while, Today's lines at the next beat.
-  Nothing piles up. A beat never redraws Today while you are on it; it waits until you are back.
+- Lines expire: a chip when its line's words change or you leave the page, Today's lines at the
+  next beat. Nothing piles up. A beat never redraws Today while you are on it; it waits until you
+  are back.
 - Every line names what it read. "You left *Garden plan* mid-sentence" says which page tail
   opened, and the name opens it. There is no separate screen of what tail saw.
 - Tail acts through what exists: a page's open editor, a new page, a property, Assign. Never a
@@ -38,9 +39,15 @@ the nod a `Button size="xs" variant="outline"`. It fades in and out over 150 ms.
 3. **The line you just wrote.** A chip in the margin, placed like a sidenote (13 px on 19.5 px,
    level with the first baseline, 32 px right of the text, at most 224 px wide): the sentence,
    then the nod with its key. Shown only when the margin fits beside the text as it is; else
-   the row above the title, quoting the words. One chip per page at a time.
-4. **The capture box.** The project button shows the guess, muted, with a trailing "?", and the
-   footer offers `⌃↩ Task in Garden`. ⌘↩ still saves an idea, as before.
+   the row above the title, quoting the words. It stays while its line stands: an Enter after
+   the line, or writing elsewhere on the page, even while the model thinks, leaves it where it
+   is. One chip per page at a time; a newer offer takes its place. A pause on the empty line an
+   Enter made reads the line before it. Changing the line's words takes the chip away; only
+   leaving the page without a nod counts as ignored.
+4. **The capture box.** For an idea of three words or more, the project button shows the guess,
+   muted, with a trailing "?", and the footer offers `⌃↩ Task in Garden` when the words read as
+   a task, else `⌃↩ In Garden`, which files the idea there and keeps it an idea; once you pick
+   the project yourself, only the task offer stays. ⌘↩ still saves an idea, as before.
 
 The key: ⌃↩ nods the chip or row on the page in front, the first row on Today. It is in the
 shortcuts table, so it can be changed.
@@ -68,6 +75,7 @@ too: it opens the list of those pages.
 | A line that reads as a task | Make this a task? | Make task | Made a task, due Friday. Undo |
 | A word that is a page's name | *Sam* has a page. | Link | Linked. Undo |
 | Capture text that reads as a task for a project | (project button) Garden? | ⌃↩ Task in Garden | saved as a task, box closes |
+| Capture text for a project, not a task | (project button) Garden? | ⌃↩ In Garden | saved as an idea in Garden, box closes |
 
 ## What it sees
 
@@ -112,10 +120,11 @@ Three plain things, all on this Mac, all readable.
    can edit or delete any line and tail follows: delete the quiet line and that kind comes
    back. Tail reads this page at the start of every turn. It is reached from Settings › AI ›
    Tail and by search.
-3. **Threads.** One resumed thread per day for the beat, one per page for chips and the return
-   row, and one per opening of the capture box, as Ask threads work, carrying what tail already
-   saw so nothing is re-sent. The day's thread ends with the day, a page's after four hours, a
-   capture box's after ten minutes.
+3. **Threads.** A new thread for every beat, so it never grows, keeping the day's record of the
+   bodies sent, so a body goes again only once its page changes; one resumed thread per page for
+   chips and the return row, and one per opening of the capture box, as Ask threads work,
+   carrying what tail already saw so nothing is re-sent. The day's record ends with the day, a
+   page's thread after four hours, a capture box's after ten minutes.
 
 Tail never keeps your words beyond a thread, never keeps a sidenote, and never keeps anything
 from a page it was not allowed to read.
@@ -126,17 +135,20 @@ Design mode was the prototype's; the real values go with the model.
 
 | | Design | Real |
 |---|---|---|
-| Pause before a chip | 3 s | 20 s |
+| Pause before a chip | 3 s | 10 s |
 | Away before "you stopped at" and a beat | 10 s | 15 min |
 | Beat while the app is open | 2 min | 30 min |
-| A chip's life | 60 s | 10 min |
 | A done row | 8 s | 8 s |
+| Effort of a pause or capture turn | low | low |
+
+A chip has no timer: it stays while its line stands.
 
 ## The model
 
 GPT-6.1 Sol at high by default, through the Codex app server exactly as Ask runs GPT models
 (DECISIONS 7), with Claude as the switch. Sol is not in ChatGPT itself, only the API and Codex,
-so this is the one path. The browser build's stand-in (`lib/agent-standin.ts`) plays the model
+so this is the one path. Pause and capture turns run at low whatever the setting, since the
+choice is small; beats and the return row keep the chosen effort. The browser build's stand-in (`lib/agent-standin.ts`) plays the model
 with the prototype's word rules, so every scenario runs headless without Codex, and its log
 shows exactly what would have been sent.
 

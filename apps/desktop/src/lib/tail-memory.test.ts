@@ -23,12 +23,17 @@ test("two ignores quiet a kind in one place; a nod or a deleted sentence lifts i
   assert.ok(!isQuiet(["2026-10-26 · Links on Meeting pages are fine."], "mention", "Meeting"));
 });
 
-// The seam: typing after a nod, or on Today. A done line must keep its Undo, and Today's rows must
-// stay, neither counted as ignored.
-test("an edit never lets a done line or a Today row go", () => {
-  const lines = [{ where: "p", block: 2, done: {} }, { where: "p", block: 2 }, { where: "p", block: 3 }, { where: "q" }];
-  assert.deepEqual(edited(lines, "p", 2), { gone: [lines[1], lines[2]], ignored: [lines[2]] });
-  assert.deepEqual(edited([{ where: TODAY }], TODAY), { gone: [], ignored: [] });
+// The seam: writing on a page with a chip. An Enter or words elsewhere must keep it; its own words
+// changed must drop it uncounted; only leaving the page is a no. A done line keeps its Undo.
+test("an edit elsewhere never drops or ignores a chip; leaving the page does", () => {
+  const chip = { where: "p", block: 1, text: "Call Sam" };
+  const row = { where: "p" };
+  const done = { where: "p", block: 0, text: "Sam", done: {} };
+  const lines = [chip, row, done, { where: TODAY }];
+  assert.deepEqual(edited(lines, "p", ["Beans", "Call Sam", "", "more"]), { gone: [row], ignored: [row], moved: [] });
+  assert.deepEqual(edited([chip], "p", ["", "Beans", "Call Sam"]).moved, [[chip, 2]]);
+  assert.deepEqual(edited([chip], "p", ["Beans", "Call Sam about"]), { gone: [chip], ignored: [], moved: [] });
+  assert.deepEqual(edited(lines, "p"), { gone: [chip, row, done], ignored: [chip, row], moved: [] });
 });
 
 // The seam: a Today row shown day after day. Seen on a second day unchanged, it must stay out

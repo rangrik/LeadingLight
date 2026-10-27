@@ -9,15 +9,15 @@ import { ABOUT } from "./tail-memory.ts";
 export const TAIL = [
   "You are tail, in LeadingLight, a notes app on this Mac. From offers the app found, you choose the few worth one line now; the person takes a line with one press or ignores it. Showing nothing is often right.",
   'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to, "pause" for a line beside the line they just wrote, "capture" for the box where they type an idea), the time now, pages (a summary of each, by ref), text (a page\'s words, only when new to you or changed), and candidates.',
-  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page), task (the line just written, with the blocks around it, reads as a task; the pages are its page and those it names), mention (a word in the line is a page's title and not linked), capture (the words typed in the box read as a task).",
+  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page), task (the line just written, with the blocks around it, reads as a task; the pages are its page and those it names), mention (a word in the line is a page's title and not linked), capture (an idea typed in the box, worth showing only when a project fits it).",
   "Two more, when they hold anything: about, the page about how the person works, dated sentences they read and edit, which you follow; and ledger, how many lines of each kind they took and ignored lately.",
   "Choose the candidates worth showing, most useful first: at most three for a beat, at most one otherwise. Leave out any the pages make untrue or pointless, and any line that only looks like a task: about the past, a thing, or a day, not something to do.",
-  'Keep or change each slot in the guess, and fill one left empty: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words.',
+  'Keep or change each slot in the guess, and fill one left empty: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words; task is true when the words are something to do, else false.',
   'Answer with JSON only, no other words: {"show":[{"id":"c1","project":"p2"}]}, with only the slots its guess has, or {"show":[]}. After a beat you may add "note": one plain sentence for the page about the person, at most twelve words, a habit the records show that the page does not say yet.',
 ].join("\n");
 
 export type Trigger = "beat" | "page" | "pause" | "capture";
-export type Slots = { project?: string; day?: string; title?: string };
+export type Slots = { project?: string; day?: string; title?: string; task?: boolean };
 // Something worth a line: the pages it is about, words from them, and the app's guess at its slots.
 export type Candidate = { id: string; kind: string; pages: string[]; facts?: Record<string, string | number>; guess?: Slots };
 
@@ -115,6 +115,17 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
   return { message, seen, refs };
 }
 
+// Tail's threads (docs/TAIL.md, "What it remembers"): a session and what it was sent, as ids and
+// times, never words. The day's for the beat, a page's for four hours, a box's for ten minutes.
+export type Thread = { model: string; session?: string; seen: Seen; at: number };
+export const current = (key: string, t: Thread, now: number) => (key.startsWith("beat:") ? key === `beat:${when(now).slice(0, 10)}` : now - t.at < (key.startsWith("capture:") ? 10 * 60_000 : 4 * 3_600_000));
+// A beat starts a new session each time, so the day's never grows, but keeps the day's seen map.
+export function threadFor(threads: Record<string, Thread>, key: string, model: string, now: number): Thread {
+  const t = threads[key];
+  if (t?.model !== model || !current(key, t, now)) return { model, seen: {}, at: now };
+  return key.startsWith("beat:") ? { ...t, session: undefined } : t;
+}
+
 const DAY = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)$/i;
 
 // The JSON object in an answer, if there is one.
@@ -153,8 +164,9 @@ export function parseAnswer(text: string, o: { refs: Record<string, string>; can
       const t = word(item.title).replace(/[.!?…:;,]+$/, "");
       slots.title = t && !t.includes("\n") && t.length <= 80 && t.split(/\s+/).length <= 8 ? t : undefined;
     }
-    // A slot the model got wrong: no line rather than a guess.
-    if (Object.keys(c.guess ?? {}).some((k) => !slots[k as keyof Slots])) continue;
+    if (c.guess?.task !== undefined && item.task !== undefined) slots.task = typeof item.task === "boolean" ? item.task : undefined;
+    // A slot the model got wrong: no line rather than a guess. A task of false is an answer.
+    if (Object.keys(c.guess ?? {}).some((k) => !slots[k as keyof Slots] && slots[k as keyof Slots] !== false)) continue;
     out.push({ id: c.id, slots });
   }
   return out;

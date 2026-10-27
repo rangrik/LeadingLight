@@ -49,11 +49,21 @@ export const isQuiet = (lines: string[], kind: string, type: string, project?: s
 // Where Today's rows are; they change only on a nod, a beat, or leaving Today.
 export const TODAY = "today";
 
-// An edit on a page takes its lines away, but never a done one, which keeps its moment, nor
-// Today's rows. A chip beside the line being written was not ignored; any other line was.
-export function edited<L extends { where: string; block?: number; done?: object }>(lines: L[], page: string, block?: number) {
-  const gone = lines.filter((l) => l.where === page && l.where !== TODAY && !l.done);
-  return { gone, ignored: gone.filter((l) => l.block !== block) };
+// The block nearest where a chip was that still holds its line's words, else -1.
+const lineAt = (texts: string[], text: string | undefined, was: number) => texts.reduce((k, t, i) => (t === text && (k < 0 || Math.abs(i - was) < Math.abs(k - was)) ? i : k), -1);
+
+// A page's lines after an edit (texts: its blocks' words now) or once it is left (none). The row
+// above the title leaves at any edit, a chip once its line changes, which is not a no.
+export function edited<L extends { where: string; block?: number; text?: string; done?: object }>(lines: L[], page: string, texts?: string[]) {
+  const gone: L[] = [];
+  const moved: [L, number][] = [];
+  for (const l of lines) {
+    if (l.where !== page || l.where === TODAY || (texts && l.done)) continue;
+    const at = texts && l.block !== undefined ? lineAt(texts, l.text, l.block) : -1;
+    if (at < 0) gone.push(l);
+    else if (at !== l.block) moved.push([l, at]);
+  }
+  return { gone, ignored: gone.filter((l) => !l.done && !(texts && l.block !== undefined)), moved };
 }
 
 // A row on Today by its candidate: the day it was first seen, its pages as they were then, and

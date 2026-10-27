@@ -170,7 +170,7 @@ async function tail(req: AskRequest, _run: Run, d: Dialect) {
   } catch {
     // Not a message tail sends: no answer.
   }
-  if (import.meta.env.DEV) (window as unknown as { __tail?: { log?: object[] } }).__tail?.log?.push({ trigger, model: req.model, resume: req.resume ?? null, system: req.system, message: req.prompt, answer });
+  if (import.meta.env.DEV) (window as unknown as { __tail?: { log?: object[] } }).__tail?.log?.push({ trigger, model: req.model, effort: req.effort, resume: req.resume ?? null, system: req.system, message: req.prompt, answer });
   await d.stream("text", answer);
   d.end(undefined, answer);
 }

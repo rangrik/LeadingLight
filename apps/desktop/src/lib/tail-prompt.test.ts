@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDigest, noteIn, parseAnswer, stillTrue } from "./tail-prompt.ts";
+import { buildDigest, noteIn, parseAnswer, stillTrue, threadFor } from "./tail-prompt.ts";
 
 const page = (id: string, typeId: string, title: string, properties: Record<string, unknown> = {}) => ({ id, typeId, title, properties, createdAt: 1, updatedAt: 10 });
 
@@ -54,7 +54,7 @@ test("a held choice keeps only what is still found", () => {
 // The seam: the model's answer. Words that aren't JSON, an unknown id or a wrong slot must be
 // silence for that line, never a crash or a line built on a bad slot.
 test("a wrong answer is silence; a right one keeps its slots", () => {
-  const candidates = [{ id: "ideas:G", kind: "ideas", pages: ["I"], guess: { project: "G" } }, { id: "day:K", kind: "day", pages: ["K"], guess: { day: "Friday" } }, { id: "capture", kind: "capture", pages: [], guess: { project: "" } }];
+  const candidates = [{ id: "ideas:G", kind: "ideas", pages: ["I"], guess: { project: "G" } }, { id: "day:K", kind: "day", pages: ["K"], guess: { day: "Friday" } }, { id: "capture", kind: "capture", pages: [], guess: { project: "", task: true } }];
   const o = { refs: { c1: "ideas:G", c2: "day:K", c3: "capture", p1: "G", p2: "H", p3: "I" }, candidates, max: 3, isProject: (id: string) => id === "G" || id === "H" };
   assert.deepEqual(parseAnswer("Here are a few things worth a look.", o), []);
   assert.deepEqual(parseAnswer('{"show":"c1"}', o), []);
@@ -62,7 +62,22 @@ test("a wrong answer is silence; a right one keeps its slots", () => {
   assert.deepEqual(parseAnswer('{"show":[{"id":"c1","project":"p3"},{"id":"c2"}]}', o), [{ id: "day:K", slots: { day: "Friday" } }]);
   // A slot left empty is the model's to fill; left empty, there is no line.
   assert.deepEqual(parseAnswer('{"show":[{"id":"c3"}]}', o), []);
-  assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2"}]}', o), [{ id: "capture", slots: { project: "H" } }]);
+  assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2"}]}', o), [{ id: "capture", slots: { project: "H", task: true } }]);
+  // A capture's task is true or false; false is an answer, anything else silence.
+  assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2","task":false}]}', o), [{ id: "capture", slots: { project: "H", task: false } }]);
+  assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2","task":"yes"}]}', o), []);
+});
+
+// The seam: the day's thread. Each beat must start a new session, so input never grows, and
+// keep the day's seen map, so an unchanged body is not sent again; a page's thread resumes.
+test("a fresh beat thread keeps the day's seen map", () => {
+  const now = new Date(2026, 9, 27, 12).getTime();
+  const threads = { "beat:2026-10-27": { model: "m", session: "s1", seen: { A: "10" }, at: now - 3_600_000 }, "page:P": { model: "m", session: "s2", seen: {}, at: now - 60_000 } };
+  const beat = threadFor(threads, "beat:2026-10-27", "m", now);
+  assert.equal(beat.session, undefined);
+  assert.deepEqual(beat.seen, { A: "10" });
+  assert.equal(threadFor(threads, "page:P", "m", now).session, "s2");
+  assert.deepEqual(threadFor(threads, "beat:2026-10-27", "m", now + 86_400_000).seen, {});
 });
 
 // The seam: what the model may write on the page about the person. Anything but one plain

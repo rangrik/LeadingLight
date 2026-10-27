@@ -20,9 +20,9 @@ import { newPage } from "./templates";
 export const IDEA = "idea";
 export const TAG = "in-the-middle";
 const PROJECT = "idea-project";
-// task: ⌃↩ saves it as a task in the project instead (docs/TAIL.md).
-export type Draft = { id: string | null; title: string; body: EditorDoc | null; project: string | null; task?: boolean };
-// Tail's read of the words: a task, and the project it seems to be for.
+// task: ⌃↩ saves it as a task in the project instead (docs/TAIL.md); took: ⌃↩ took tail's guess.
+export type Draft = { id: string | null; title: string; body: EditorDoc | null; project: string | null; task?: boolean; took?: boolean };
+// Tail's read of the words: the project they seem to be for, and whether they are a task.
 export type Guess = { task: boolean; project: string | null };
 
 // The title line, else the body's first line, as Apple Notes does.
@@ -78,8 +78,8 @@ export async function hostCapture(tail: { guess: (text: string, opened: number) 
   const offs = await Promise.all([
     listen<{ seq: number; draft: Draft }>("ll:capture", async (e) => {
       const { seq, draft } = e.payload;
-      // ⌃↩ there saves the task tail guessed: the nod.
-      if (draft.task && draft.project) tail.took(draft.project);
+      // ⌃↩ there saves what tail guessed: the nod.
+      if (draft.took && draft.project) tail.took(draft.project);
       const id = await saveCapture(draft).catch((err) => (console.error(err), null));
       await emitTo("capture", "ll:capture-saved", { seq, id });
     }),
