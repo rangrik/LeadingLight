@@ -17,6 +17,6 @@ export function checkVersions(read, tag) {
   return version;
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   console.log(checkVersions((path) => readFileSync(path, 'utf8'), process.argv[2]));
 }
