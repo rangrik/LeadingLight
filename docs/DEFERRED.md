@@ -5,6 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-10-27 | Durable retry of Unsplash selection reports | A selection is sent once; a lost response cannot tell us whether Unsplash counted it. Blind retries may double-count. | Before wider release, add a durable queue with deduplication. |
+| 2026-10-27 | Higher Unsplash quota and stronger public-service abuse limits | This development service uses the shared 50-request/hour Demo quota and caches searches. Selection tokens stop arbitrary upstream requests but can be replayed. | Before wider release, obtain Production approval and add durable rate limits. |
 | 2026-10-22 | Virtualized or paged editing for very long pages | A keystroke on a 2000-paragraph page takes 8–11 ms (the first about 13 ms), inside a 16 ms frame. Rendering part of a page needs a new editor architecture and tends to break browser find, cross-block selection and copy. | Someone finds typing slow. To check: fill a page with 2000 paragraphs (`__editor.commands.setContent`), type 30 keys, time each from keydown to its transaction; the budget is 16 ms. |
 | 2026-10-22 | Block menu items Notion has beyond Turn into, Duplicate and Delete: whole-block colours, copy link to block, move to another page, comments | Colours need a new block attribute and a palette that reads in light and dark. Links, moves and comments need block ids and links between pages. | Colours when asked; the rest with M2. |
 | 2026-10-22 | Math blocks | Left out of the block set on request. | When asked. |

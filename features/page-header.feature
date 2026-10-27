@@ -132,6 +132,9 @@ Feature: Page icon, cover and description
     Then the tab says "Unsplash's hourly limit is used up. Try again later."
     When a search finds nothing
     Then the tab says "No photos found"
+    When the service sends a malformed result
+    Then the tab says "Photo search is temporarily unavailable. Try again later."
+    And the search remains usable
 
   Scenario: The shared key stays on the image service
     When I search and select a cover

@@ -5,6 +5,7 @@ import { Input } from "@leadinglight/ui/components/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { Toolbar, ToolbarButton, ToolbarLink } from "@leadinglight/ui/components/toolbar";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ImageDrop } from "~/components/page-icon";
 import { openLink } from "~/lib/links";
@@ -234,19 +235,21 @@ function LinkField({ onImage }: { onImage: (url: string) => void }) {
   );
 }
 
-const Credit = ({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) => (
-  <ToolbarLink
-    className={cn("text-foreground outline-none hover:underline", className)}
-    title={title}
-    href={tagged(href)}
-    onClick={(e) => {
-      e.preventDefault();
-      openLink(e.currentTarget.href);
-    }}
-  >
-    {children}
-  </ToolbarLink>
-);
+const Credit = ({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) => {
+  const link = (
+    <ToolbarLink
+      className={cn("text-foreground outline-none hover:underline", className)}
+      href={tagged(href)}
+      onClick={(e) => {
+        e.preventDefault();
+        openLink(e.currentTarget.href);
+      }}
+    >
+      {children}
+    </ToolbarLink>
+  );
+  return title ? <Tooltip><TooltipTrigger render={link} /><TooltipPopup>{title}</TooltipPopup></Tooltip> : link;
+};
 
 const FAILURES: Record<Failure, string> = {
   unavailable: "Photo search is temporarily unavailable. Try again later.",
@@ -281,7 +284,7 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
 
   return (
     <>
-      <Input aria-label="Search Unsplash" autoFocus onChange={(e) => setQuery(e.currentTarget.value)} placeholder="Search Unsplash" size="sm" type="search" value={query} />
+      <Input aria-label="Search Unsplash" autoFocus maxLength={200} onChange={(e) => setQuery(e.currentTarget.value)} placeholder="Search Unsplash" size="sm" type="search" value={query} />
       {typeof found === "string" ? (
         <p className="text-destructive-foreground text-sm" role="alert">
           {FAILURES[found]}
@@ -294,7 +297,7 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
         <div className="grid min-h-0 grid-cols-3 gap-2 overflow-y-auto">
           {found?.map((p) => (
             <div className="min-w-0" key={p.url}>
-              <Button aria-label={`Photo by ${p.name}`} className="h-auto w-full overflow-hidden p-0" onClick={() => onPhoto(p)} variant="ghost">
+              <Button aria-label={`Photo by ${p.name}`} className="h-auto w-full overflow-hidden p-0 transition-opacity duration-150 hover:opacity-80 focus-visible:opacity-80 sm:h-auto" onClick={() => onPhoto(p)} variant="ghost">
                 <img alt="" className="aspect-3/2 w-full rounded-md object-cover" src={p.thumb} />
               </Button>
               <PhotoCredit href={p.profile}>{p.name}</PhotoCredit>
@@ -309,7 +312,7 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
 
 function PhotoCredit({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Button className="h-auto min-w-0 max-w-full justify-start px-0 text-muted-foreground" render={<a href={tagged(href)} />} size="xs" variant="link" onClick={(e) => {
+    <Button className="h-auto min-w-0 max-w-full justify-start px-0 text-muted-foreground focus-visible:underline sm:h-auto" render={<a href={tagged(href)} />} size="xs" variant="link" onClick={(e) => {
       e.preventDefault();
       openLink(tagged(href));
     }}>

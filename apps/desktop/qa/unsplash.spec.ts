@@ -30,7 +30,10 @@ test("Unsplash works without setup and reports a cover with its credit", async (
   await expect(page.getByRole("textbox", { name: "Access key" })).toHaveCount(0);
   await page.getByRole("searchbox", { name: "Search Unsplash" }).fill("mountain");
   await expect(page.getByRole("link", { name: "Ann Lee" })).toHaveAttribute("href", "https://unsplash.com/@ann?utm_source=leadinglight&utm_medium=referral");
-  await page.getByRole("button", { name: "Photo by Ann Lee" }).click();
+  const thumbnail = page.getByRole("button", { name: "Photo by Ann Lee" });
+  // COSS's responsive button height must not crop the image to a strip.
+  await expect.poll(() => thumbnail.evaluate((el) => el.clientWidth / el.clientHeight)).toBeCloseTo(1.5, 1);
+  await thumbnail.click();
   await expect.poll(() => used).toEqual(["signed-selection"]);
   await page.waitForTimeout(700);
   await page.reload();
@@ -52,4 +55,9 @@ test("Unsplash handles unavailable service, limits, empty results and offline se
     await search.fill(`search ${code}`);
     await expect(page.getByText(message, { exact: true })).toBeVisible();
   }
+  await page.unroute(service);
+  await page.route(service, (r) => r.fulfill({ headers: cors, contentType: "application/json", body: "{}" }));
+  await search.fill("malformed result");
+  await expect(page.getByRole("alert")).toHaveText("Photo search is temporarily unavailable. Try again later.");
+  await expect(search).toBeVisible();
 });
