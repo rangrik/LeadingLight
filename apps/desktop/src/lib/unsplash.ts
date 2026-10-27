@@ -8,11 +8,22 @@ export const tagged = (link: string) => `${link}${link.includes("?") ? "&" : "?"
 export type Photo = { thumb: string; url: string; name: string; profile: string; used: string };
 export type Failure = "unavailable" | "limit" | "offline";
 
+function hostedAt(value: string, hosts: string[]) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && hosts.includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function searchPhotos(query: string): Promise<Photo[]> {
   const res = await fetch(`${SERVICE}?${new URLSearchParams({ query })}`).catch(() => null);
   if (res?.ok) {
     const photos: unknown = await res.json().catch(() => null);
-    if (Array.isArray(photos) && photos.every((p) => p && ["thumb", "url", "name", "profile", "used"].every((k) => typeof p[k] === "string"))) return photos;
+    if (Array.isArray(photos) && photos.every((p) => p && ["thumb", "url", "name", "profile", "used"].every((k) => typeof p[k] === "string")
+      && hostedAt(p.profile, ["unsplash.com", "www.unsplash.com"])
+      && [p.url, p.thumb].every((url) => hostedAt(url, ["images.unsplash.com", "plus.unsplash.com"])))) return photos;
     throw "unavailable" satisfies Failure;
   }
   throw (res?.status === 429 ? "limit" : res ? "unavailable" : "offline") satisfies Failure;

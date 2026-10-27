@@ -102,6 +102,10 @@ Feature: Page icon, cover and description
     When I open the "Unsplash" tab and type "mountain"
     Then the image service is asked for landscape photos of "mountain", without a key from the app
     And all 24 show in a grid of even 3:2 thumbnails that scrolls, each named "Photo by <photographer>"
+    And the photographer and Unsplash links show a visible keyboard focus cue
+    When I scroll the grid and search for "forest"
+    Then the new results start at the first photo
+    And the Unsplash credit stays at the bottom in empty, error and results states
     When I click "Photo by Ann Lee"
     Then the photo fills the cover band and the picker closes
     And the image service reports the selected photo to Unsplash using its private key

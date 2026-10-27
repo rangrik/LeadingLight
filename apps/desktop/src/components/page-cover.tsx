@@ -175,7 +175,7 @@ export function CoverPicker({ cover, onChange, children }: { cover?: PageCover; 
               </button>
             ))}
           </TabsPanel>
-          <TabsPanel className="flex h-52 flex-none flex-col gap-2" value="unsplash">
+          <TabsPanel className="flex h-72 flex-none flex-col gap-2" value="unsplash">
             <UnsplashSearch
               onPhoto={(p) => {
                 markUsed(p);
@@ -260,6 +260,9 @@ const FAILURES: Record<Failure, string> = {
 function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Photo[] | Failure>();
+  const results = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { results.current?.scrollTo(0, 0); }, [found]);
 
   useEffect(() => {
     const q = query.trim();
@@ -285,26 +288,28 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
   return (
     <>
       <Input aria-label="Search Unsplash" autoFocus maxLength={200} onChange={(e) => setQuery(e.currentTarget.value)} placeholder="Search Unsplash" size="sm" type="search" value={query} />
-      {typeof found === "string" ? (
-        <p className="text-destructive-foreground text-sm" role="alert">
-          {FAILURES[found]}
-        </p>
-      ) : found?.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No photos found</p>
-      ) : !found ? (
-        <p className="mt-auto text-muted-foreground text-sm">Search for a photo to use as your cover.</p>
-      ) : (
-        <div className="grid min-h-0 grid-cols-3 gap-2 overflow-y-auto">
-          {found?.map((p) => (
-            <div className="min-w-0" key={p.url}>
-              <Button aria-label={`Photo by ${p.name}`} className="h-auto w-full overflow-hidden p-0 transition-opacity duration-150 hover:opacity-80 focus-visible:opacity-80 sm:h-auto" onClick={() => onPhoto(p)} variant="ghost">
-                <img alt="" className="aspect-3/2 w-full rounded-md object-cover" src={p.thumb} />
-              </Button>
-              <PhotoCredit href={p.profile}>{p.name}</PhotoCredit>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col">
+        {typeof found === "string" ? (
+          <p className="text-destructive-foreground text-sm" role="alert">
+            {FAILURES[found]}
+          </p>
+        ) : found?.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No photos found</p>
+        ) : !found ? (
+          <p className="mt-auto text-muted-foreground text-sm">Search for a photo to use as your cover.</p>
+        ) : (
+          <div className="grid min-h-0 grid-cols-3 gap-2 overflow-y-auto" ref={results}>
+            {found?.map((p) => (
+              <div className="min-w-0" key={p.url}>
+                <Button aria-label={`Photo by ${p.name}`} className="h-auto w-full overflow-hidden border-0 p-0 transition-opacity duration-150 hover:opacity-80 focus-visible:opacity-80 sm:h-auto" onClick={() => onPhoto(p)} variant="ghost">
+                  <img alt="" className="aspect-3/2 w-full rounded-md object-cover" src={p.thumb} />
+                </Button>
+                <PhotoCredit href={p.profile}>{p.name}</PhotoCredit>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <PhotoCredit href="https://unsplash.com/">Photos from Unsplash</PhotoCredit>
     </>
   );
@@ -312,11 +317,11 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
 
 function PhotoCredit({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <Button className="h-auto min-w-0 max-w-full justify-start px-0 text-muted-foreground focus-visible:underline sm:h-auto" render={<a href={tagged(href)} />} size="xs" variant="link" onClick={(e) => {
+    <Button className="h-auto min-w-0 max-w-full justify-start border-0 px-0 text-muted-foreground hover:[&>span]:underline focus-visible:[&>span]:underline sm:h-auto" render={<a href={tagged(href)} />} size="xs" variant="link" onClick={(e) => {
       e.preventDefault();
       openLink(tagged(href));
     }}>
-      <span className="truncate">{children}</span>
+      <span className="truncate pb-0.5">{children}</span>
     </Button>
   );
 }
