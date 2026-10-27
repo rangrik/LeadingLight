@@ -434,3 +434,10 @@ to read and correct, never a hidden profile.
 The model is GPT-6.1 Sol at high through the Codex app server, the GPT path Ask already has (7),
 with Claude as the switch. The surfaces were built first with word rules in place of the model,
 on the branch `worktree-tail-design`, so the feel was judged before anything was spent on it.
+
+## Unsplash covers use a shared service
+
+People should not need a developer account to choose a cover. A small Vercel
+Function holds the key, caches searches, and reports selections with signed
+tokens. Only its URL ships in the app. Notes stay local and photos load from
+Unsplash. Forks can point to their own service with `VITE_IMAGE_SERVICE_URL`.
