@@ -63,11 +63,14 @@ export function AiSection() {
           <ModelSelect onChange={(model) => setAiPrefs({ model, effort: effortFor(model, prefs.effort) })} value={prefs.model} />
         </SettingsRow>
         <SettingsRow label="Effort" description="How long the model thinks before answering.">
-          <Segmented
-            value={effortFor(prefs.model, prefs.effort)}
-            options={effortsFor(prefs.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))}
-            onChange={(effort) => setAiPrefs({ effort })}
-          />
+          {/* Nothing until Codex's list is in: an empty group draws as a stray dot. */}
+          {effortsFor(prefs.model).length > 0 && (
+            <Segmented
+              value={effortFor(prefs.model, prefs.effort)}
+              options={effortsFor(prefs.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))}
+              onChange={(effort) => setAiPrefs({ effort })}
+            />
+          )}
         </SettingsRow>
         <SettingsRow label="Access" description={isClaude(prefs.model) ? ACCESS.find((a) => a.value === prefs.access)?.description : GPT_ACCESS[prefs.access]}>
           <Segmented value={prefs.access} options={ACCESS} onChange={(access) => setAiPrefs({ access })} />
@@ -298,7 +301,9 @@ function TailGroup() {
         <ModelSelect onChange={(model) => setTailPrefs({ model, effort: effortFor(model, t.effort) })} value={t.model} />
       </SettingsRow>
       <SettingsRow label="Effort" description="How long the model thinks before answering.">
-        <Segmented value={effortFor(t.model, t.effort)} options={effortsFor(t.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))} onChange={(effort) => setTailPrefs({ effort })} />
+        {effortsFor(t.model).length > 0 && (
+          <Segmented value={effortFor(t.model, t.effort)} options={effortsFor(t.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))} onChange={(effort) => setTailPrefs({ effort })} />
+        )}
       </SettingsRow>
       <SettingsRow
         className="flex-col items-stretch gap-3"
