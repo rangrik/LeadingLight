@@ -27,6 +27,8 @@ export type CaptureHost = {
 };
 
 const SAVE_DELAY_MS = 300;
+// Tail's guess waits for a pause in typing, since each one is a model turn.
+const GUESS_DELAY_MS = 600;
 // COSS's popup surface (packages/editor/src/ui.tsx), at the box's 14 px radius.
 const SURFACE =
   "relative rounded-[14px] border bg-popover not-dark:bg-clip-padding text-popover-foreground before:pointer-events-none before:absolute before:inset-0 before:rounded-[13px] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]";
@@ -54,6 +56,8 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const savedVersion = useRef(0);
   const chain = useRef(Promise.resolve());
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // The words last sent for a guess; an answer about older words is dropped.
+  const asked = useRef({ text: "", timer: undefined as ReturnType<typeof setTimeout> | undefined, opened: Date.now() });
 
   useEffect(() => titleRef.current?.focus(), []);
 
@@ -79,10 +83,15 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const touched = () => {
     version.current++;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      void save();
-      void readCapture(`${draft.current.title}\n${editorRef.current?.text() ?? ""}`).then(setGuess);
-    }, SAVE_DELAY_MS);
+    timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
+    const a = asked.current;
+    clearTimeout(a.timer);
+    a.timer = setTimeout(() => {
+      const text = `${draft.current.title}\n${editorRef.current?.text() ?? ""}`;
+      if (text === a.text) return;
+      a.text = text;
+      void readCapture(text, a.opened).then((g) => a.text === text && setGuess(g));
+    }, GUESS_DELAY_MS);
   };
   const pick = (next: string | null) => {
     draft.current.project = next;

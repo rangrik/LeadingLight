@@ -78,10 +78,10 @@ export type BlockEditorHandle = {
   replaceRange: (from: number, to: number, html: string) => void;
   // Pastes at the top of the page, as its own blocks (a page pasted into the title).
   paste: (text: string, html?: string) => void;
-  // The top-level block holding the cursor, and one put in another's place as its own undo
-  // step: how tail reads the line being written and nods at it (docs/TAIL.md).
+  // The top-level block holding the cursor, and one put in the place of count blocks as its own
+  // undo step: how tail reads the line being written and nods at it (docs/TAIL.md).
   cursorBlock: () => number;
-  setBlock: (index: number, block: EditorDoc) => void;
+  setBlock: (index: number, block: EditorDoc, count?: number) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -505,12 +505,14 @@ export function BlockEditor({
         pasteText(editor.view, text, html);
       },
       cursorBlock: () => editor.state.selection.$from.index(0),
-      setBlock: (index, block) => {
+      setBlock: (index, block, count = 1) => {
         const { doc } = editor.state;
-        if (index >= doc.childCount) return;
+        if (index + count > doc.childCount) return;
         let from = 0;
         for (let i = 0; i < index; i++) from += doc.child(i).nodeSize;
-        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, from + doc.child(index).nodeSize, editor.schema.nodeFromJSON(block))));
+        let to = from;
+        for (let i = index; i < index + count; i++) to += doc.child(i).nodeSize;
+        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, to, editor.schema.nodeFromJSON(block))));
         // A link put where the cursor was leaves it on the line after, as "@" alone on a line does.
         const { selection } = editor.state;
         const tr = closeHistory(editor.state.tr);

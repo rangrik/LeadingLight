@@ -1,7 +1,7 @@
 Feature: Tail
   Tail reads along and offers one line I can nod at. It never asks, never writes into my words
-  until I nod, and never moves anything. These scenes are the design prototype: the guesses are
-  word rules, the timings are design mode (docs/TAIL.md).
+  until I nod, and never moves anything. In a browser the stand-in plays the model and answers
+  with the prototype's word rules; the timings are design mode (docs/TAIL.md).
 
   Names used below:
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
@@ -22,6 +22,7 @@ Feature: Tail
       | 3 ideas since Tuesday. 2 look like tasks for Garden.            | File them |
       | Call Sam about the invoice has no day.                          | Set Friday |
     And the rows are muted, the names in the foreground, each on one line
+    And a name too long for the row ends in an ellipsis, and the words after it still show
     And the body placeholder sits below them, and nothing else on the page changed
     And no count shows in the sidebar
 
@@ -34,7 +35,9 @@ Feature: Tail
     When I press Undo
     Then the two are ideas again with no project, and the row reads as it first did
     When I press File them and wait eight seconds
-    Then the row is gone, and the other two rows are where they were
+    Then Undo is gone and the row still reads "Filed 2 as tasks in Garden.", so the other two rows have not moved
+    When I leave Today and come back, or the next beat runs
+    Then the done row is gone
 
   Scenario: A nod sets the day
     When I press Set Friday on Today
@@ -52,6 +55,8 @@ Feature: Tail
     And while I stay on Today, a beat changes nothing in front of me
     When I have named the untitled page and filed the ideas myself
     Then the next beat shows only what is still true
+    When a beat was held while I was on Today, and I then press File them
+    Then leaving the window and coming back never brings "3 ideas since Tuesday" back
 
   Scenario: A chip beside the line, after a pause, never while typing
     Given "Garden plan" is open with the sidebar open
@@ -65,6 +70,11 @@ Feature: Tail
     When I stop again for three seconds
     Then the chip is back
 
+  Scenario: A line that only looks like a task
+    Given "Garden plan" is open
+    When I type "Friday was warm and the beans came up." and stop for three seconds
+    Then nothing appears, and the stand-in's log holds no pause turn
+
   Scenario: Nodding the chip makes the task
     Given the chip "Make this a task?" shows beside the line
     When I press ⌃↩
@@ -72,10 +82,10 @@ Feature: Tail
     And the task's due date is this Friday, and it is linked to Sam
     And the chip reads "Made a task, due Friday." with Undo, then leaves after eight seconds
     When I press Undo while it shows
-    Then the line is my words again and the task page is gone
+    Then the page is exactly as it was before the nod, and the task page is gone
 
   Scenario: A word that is a page's name
-    Given "Garden plan" is open
+    Given "Garden plan" is open, with People off in Reads on as it is by default
     When I type "Sam says the beans want more wind cover." and stop for three seconds
     Then the chip reads "Sam has a page." over Link
     When I press Link
@@ -93,7 +103,8 @@ Feature: Tail
     Then a tail row above its title reads: You stopped at "ask Sam whether the". with a Show button
     And the title and the words are where they always are, and Add icon and Add cover wait while it shows
     When I press Show
-    Then the page scrolls to that paragraph and it is lit for a moment
+    Then the page scrolls to that paragraph and it is lit for a moment, even when an earlier
+      paragraph ends in the same words
     When I type anything in the body
     Then the row leaves, and the words do not move
 
@@ -122,13 +133,16 @@ Feature: Tail
   Scenario: Every line names what it read
     When Today shows its rows
     Then each row names the page it read, in the foreground, and clicking the name opens that page
+    And a count such as "3 ideas" is a name too: clicking it opens the list of those pages
     And no row refers to a page that isn't named in it
 
   Scenario: Tail reads only the types I tick
     Given Settings › AI › Tail › Reads on has People unticked
     When I write "Need to call Sam about the invoice before Friday." on Sam's page and stop
     Then no chip appears
-    And the next beat names no Person page, and the stand-in's log holds no Person page's words
+    When I write "Sam says the beans want more wind cover." on "Garden plan" and stop
+    Then "Sam has a page." still shows, since a title is what I type to link and the sidebar shows it anyway
+    And the next beat sends no Person page's summary or words, and the stand-in's log holds none
 
   Scenario: Sidenotes stay private
     Given "Garden plan" has a sidenote "Is gravel really needed?" that was never sent as feedback
@@ -140,7 +154,16 @@ Feature: Tail
     Given twenty pages, of which two changed since the last beat
     When a beat runs
     Then the stand-in's log shows a summary line per page and the body of the two that changed only
+    And a body keeps the names of the pages it mentions, as "@Sam"
     And the same page's body is not sent again at the next beat unless it changed
+
+  Scenario: A chip and the guess come from a tail turn
+    When I write "Need to call Sam about the invoice before Friday." on "Garden plan" and stop
+    Then the stand-in's log holds a pause turn: that line, the blocks around it, the page's
+      title, type and properties, and the titles and types of pages tail may read, and no body
+    When I open New idea and type "fix the gate latch before the weekend"
+    Then 600 ms after I stop, the log holds a capture turn: those words, the projects and the
+      last few captures, and "Garden?" shows only once it has answered
 
   Scenario: A wrong answer is silence
     Given the browser build is opened with ?tail=garbled, so the stand-in answers in words, not JSON
@@ -176,6 +199,7 @@ Feature: Tail
     Given the Mac app with Codex signed in and Settings › AI › Tail on GPT-6.1 Sol at high
     When a beat runs
     Then the rows come from the model, each still one line with one verb
+    And a task-like line, after twenty seconds without typing, gets its chip from the model
     And the usage meter at the bottom of the sidebar moves for Codex
     Given Claude is chosen instead
     Then the beat runs through Claude Code the same way

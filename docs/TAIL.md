@@ -52,7 +52,10 @@ you (below). Tail's spend shows in the usage meter at the bottom of the sidebar,
 ## What it says
 
 Present tense, plain words, no "I", no exclamation. The verb on the button says what the nod
-does. After a nod, the same row in the past tense, with Undo, for eight seconds.
+does. After a nod, the same row in the past tense, with Undo for eight seconds. On Today the
+sentence then stays, without Undo, until you leave the page or the next beat, so the rows under
+it never move; a chip, which is in the margin, just leaves. A count such as "3 ideas" is a name
+too: it opens the list of those pages.
 
 | When | Line | Nod | After |
 |---|---|---|---|
@@ -80,7 +83,9 @@ Never: sidenotes and Thoughts pages, unless sent as feedback; pages reached only
 or a daily note, which nearly every page shares (DECISIONS 19); pages of a type not ticked in
 **Reads on**. Reads on is Settings › AI › Tail › Reads on, per type, the same control and the
 same defaults as Settings › Writing › Use on: on for pages written in, off for records, except
-tasks, which the beat reads as open tasks.
+tasks, which the beat reads as open tasks. Reads on governs a page's summary and words. The index
+of titles, types and aliases covers every page, so a name can still be linked: a title is what
+you type to link, and the sidebar shows it anyway.
 
 A thread sends a page's text once and again only when it changed, as Ask does (the Seen map in
 `lib/turn.ts`). The beat sends summaries from the `space` store, which already keeps every
@@ -104,9 +109,10 @@ Three plain things, all on this Mac, all readable.
    can edit or delete any line and tail follows: delete the quiet line and that kind comes
    back. Tail reads this page at the start of every turn. It is reached from Settings › AI ›
    Tail and by search.
-3. **Threads.** One resumed thread per day for the beat and one per page for chips, as Ask
-   threads work, carrying what tail already saw so nothing is re-sent. The day's thread ends
-   with the day; a page's after four hours.
+3. **Threads.** One resumed thread per day for the beat, one per page for chips and the return
+   row, and one per opening of the capture box, as Ask threads work, carrying what tail already
+   saw so nothing is re-sent. The day's thread ends with the day, a page's after four hours, a
+   capture box's after ten minutes.
 
 Tail never keeps your words beyond a thread, never keeps a sidenote, and never keeps anything
 from a page it was not allowed to read.
@@ -136,10 +142,11 @@ shows exactly what would have been sent.
 `lib/tail.ts` and `components/tail.tsx` hold the store, the triggers, the word rules, expiry,
 nod and undo, and the four surfaces; `__tail.seed()` fills a browser build with the pages the
 scenes use, `__tail.beat()` runs a beat now, `__tail.log` holds each turn the stand-in answered.
-Since Release A, Today's rows and the return row come from a tail turn (`lib/tail-prompt.ts`,
-`tailTurn` in `lib/turn.ts`), in the Mac app too, with the real timings there; the chip and the
-capture guess are still word rules and stay in the browser build. `ll.ai`'s `tail` key holds the
-mode, model, effort and Reads on until Settings has them.
+Every line, and the capture box's guess, now comes from a tail turn (`lib/tail-prompt.ts`,
+`tailTurn` in `lib/turn.ts`), in the Mac app too, with the real timings there: the word rules
+only find what to offer, and the model picks or stays silent. The guess runs in the browser build
+and the in-window box; the Mac panel's is in Later. `ll.ai`'s `tail` key holds the mode, model,
+effort and Reads on until Settings has them.
 
 ## Later, not in this project
 

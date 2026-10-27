@@ -7,20 +7,21 @@ import type { ObjectSummary } from "./store";
 
 export const TAIL = [
   "You are tail, in LeadingLight, a notes app on this Mac. From offers the app found, you choose the few worth one line now; the person takes a line with one press or ignores it. Showing nothing is often right.",
-  'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to), the time now, pages (a summary of each, by ref), text (a page\'s words, only when new to you or changed), and candidates.',
-  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page).",
-  "Choose the candidates worth showing, most useful first: at most three for a beat, at most one for a page. Leave out any the pages make untrue or pointless.",
-  'Keep or change each slot in the guess: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words.',
+  'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to, "pause" for a line beside the line they just wrote, "capture" for the box where they type an idea), the time now, pages (a summary of each, by ref), text (a page\'s words, only when new to you or changed), and candidates.',
+  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page), task (the line just written, with the blocks around it, reads as a task; the pages are its page and those it names), mention (a word in the line is a page's title and not linked), capture (the words typed in the box read as a task).",
+  "Choose the candidates worth showing, most useful first: at most three for a beat, at most one otherwise. Leave out any the pages make untrue or pointless, and any line that only looks like a task: about the past, a thing, or a day, not something to do.",
+  'Keep or change each slot in the guess, and fill one left empty: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words.',
   'Answer with JSON only, no other words: {"show":[{"id":"c1","project":"p2"}]}, with only the slots its guess has, or {"show":[]}.',
 ].join("\n");
 
-export type Trigger = "beat" | "page";
+export type Trigger = "beat" | "page" | "pause" | "capture";
 export type Slots = { project?: string; day?: string; title?: string };
 // Something worth a line: the pages it is about, words from them, and the app's guess at its slots.
 export type Candidate = { id: string; kind: string; pages: string[]; facts?: Record<string, string | number>; guess?: Slots };
 
-// About 8k tokens for a beat and 4k for a page, at four characters a token, and one body's most.
-const BUDGET = { beat: { all: 32_000, body: 3_000 }, page: { all: 16_000, body: 12_000 } };
+// About 8k tokens for a beat, 4k for a page, 2k for a pause and 1k for a capture, at four
+// characters a token, and one body's most. A pause and a capture send no bodies.
+const BUDGET = { beat: { all: 32_000, body: 3_000 }, page: { all: 16_000, body: 12_000 }, pause: { all: 8_000, body: 0 }, capture: { all: 4_000, body: 0 } };
 
 // Never sent: templates, Thoughts pages (sidenotes; one sent as feedback is a page of its own) and
 // types Reads on leaves out.
@@ -67,11 +68,15 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
     ...c.facts,
     ...(c.guess && { guess: { ...c.guess, ...(c.guess.project && { project: ref.get(c.guess.project) }) } }),
   }));
+  // A pause's index is titles, types and aliases; its own page and the others get the rest too.
   const summary = (p: ObjectSummary) => {
+    const aliases = typeof p.properties.aliases === "string" ? p.properties.aliases.trim().slice(0, 120) : "";
+    const base = { ref: ref.get(p.id), title: p.title.trim() || "Untitled", type: o.typeName(p.typeId), ...(aliases && { aliases }) };
+    if (o.trigger === "pause" && !first.has(p.id)) return base;
     const line = typeof p.properties.description === "string" ? p.properties.description.trim().slice(0, 160) : "";
     const due = (p.properties.due as { start?: string } | undefined)?.start;
     const project = Object.values(p.properties).flatMap((v) => (Array.isArray(v) ? v : [])).filter((id) => byId.get(id)?.typeId === "project").map((id) => ref.get(id));
-    return { ref: ref.get(p.id), title: p.title.trim() || "Untitled", type: o.typeName(p.typeId), updated: when(p.updatedAt), ...(line && { line }), ...(typeof p.properties.done === "boolean" && { done: p.properties.done }), ...(due && { due }), ...(project.length && { project }) };
+    return { ...base, updated: when(p.updatedAt), ...(line && { line }), ...(typeof p.properties.done === "boolean" && { done: p.properties.done }), ...(due && { due }), ...(project.length && { project }) };
   };
   const pages: ReturnType<typeof summary>[] = [];
   let room = budget.all * 0.6 - size(sent);
@@ -86,7 +91,7 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
   const text: { ref?: string; text: string }[] = [];
   for (const p of order.slice(0, pages.length).sort((a, b) => b.updatedAt - a.updatedAt)) {
     const at = String(p.updatedAt);
-    if (p.updatedAt <= o.since || seen[p.id] === at) continue;
+    if (!budget.body || p.updatedAt <= o.since || seen[p.id] === at) continue;
     const words = (await o.text(p.id)).slice(0, budget.body);
     if (words.trim() && size(words) > room) continue;
     if (words.trim()) text.push({ ref: ref.get(p.id), text: words });
@@ -117,9 +122,9 @@ export function parseAnswer(text: string, o: { refs: Record<string, string>; can
     if (out.length >= o.max) break;
     const slots: Slots = { ...c.guess };
     const word = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-    if (c.guess?.project && item.project !== undefined) slots.project = o.isProject(o.refs[word(item.project)] ?? "") ? o.refs[word(item.project)] : undefined;
-    if (c.guess?.day && item.day !== undefined) slots.day = DAY.test(word(item.day)) ? word(item.day)[0].toUpperCase() + word(item.day).slice(1).toLowerCase() : undefined;
-    if (c.guess?.title && item.title !== undefined) {
+    if (c.guess?.project !== undefined && item.project !== undefined) slots.project = o.isProject(o.refs[word(item.project)] ?? "") ? o.refs[word(item.project)] : undefined;
+    if (c.guess?.day !== undefined && item.day !== undefined) slots.day = DAY.test(word(item.day)) ? word(item.day)[0].toUpperCase() + word(item.day).slice(1).toLowerCase() : undefined;
+    if (c.guess?.title !== undefined && item.title !== undefined) {
       const t = word(item.title).replace(/[.!?…:;,]+$/, "");
       slots.title = t && !t.includes("\n") && t.length <= 80 && t.split(/\s+/).length <= 8 ? t : undefined;
     }
@@ -128,4 +133,11 @@ export function parseAnswer(text: string, o: { refs: Record<string, string>; can
     out.push({ id: c.id, slots });
   }
   return out;
+}
+
+// A choice held for later, made again from what the app finds now: a candidate gone or changed
+// since (an idea filed, a page edited) is dropped.
+export function stillTrue<C extends Candidate>(held: { found: C; slots: Slots }[], now: C[]) {
+  const key = (c: Candidate) => JSON.stringify([c.id, c.pages, c.facts]);
+  return held.flatMap(({ found, slots }) => now.filter((c) => key(c) === key(found)).map((c) => ({ found: c, slots })));
 }

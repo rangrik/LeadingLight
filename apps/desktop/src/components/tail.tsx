@@ -1,6 +1,6 @@
 import { baselineOffset, GUTTER, NOTE_FONT } from "@leadinglight/editor/editor";
 import { MessageSquareDashed } from "lucide-react";
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@leadinglight/ui/components/button";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -36,21 +36,45 @@ const useLines = (where: string) => {
   return useFading(useMemo(() => all.filter((l) => l.where === where), [all, where]));
 };
 
-// Names and quoted words in the foreground; they open their page, unless it is this one.
-const Words = ({ parts, where }: { parts: Part[]; where: string }) =>
-  parts.map((p, i) =>
-    typeof p === "string" ? (
-      p
-    ) : p.page === where ? (
-      <span className="text-foreground" key={i}>
+// Names and quoted words in the foreground; they open their page, unless it is this one. In a
+// row (fit) a name is a box of its own, so a long one can end in an ellipsis.
+const Words = ({ parts, where, fit }: { parts: Part[]; where: string; fit?: boolean }) =>
+  parts.map((p, i) => {
+    if (typeof p === "string") return p;
+    const name = cn("text-foreground", fit && "inline-block truncate align-top");
+    return p.page === where ? (
+      <span className={name} data-name key={i}>
         {p.text}
       </span>
     ) : (
-      <button className="text-foreground underline-offset-2 hover:underline" key={i} onClick={(e) => visit(p.page, e)} type="button">
+      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => visit(p.page, e)} type="button">
         {p.text}
       </button>
-    ),
-  );
+    );
+  });
+
+// The widest name takes only the room the other words leave, so the words after it still show.
+function useFit(words: Part[]) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const fit = () => {
+      const names = [...el.querySelectorAll<HTMLElement>("[data-name]")];
+      for (const n of names) n.style.maxWidth = "";
+      const all = document.createRange();
+      all.selectNodeContents(el);
+      const over = all.getBoundingClientRect().width - el.getBoundingClientRect().width;
+      const wide = names.sort((a, b) => b.offsetWidth - a.offsetWidth)[0];
+      if (over > 0 && wide) wide.style.maxWidth = `${Math.max(0, Math.floor(wide.getBoundingClientRect().width - over))}px`;
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [words]);
+  return ref;
+}
 
 // The nod, or Undo once nodded: the same button, so nothing jumps.
 const Nod = ({ line }: { line: Line }) => (
@@ -60,13 +84,15 @@ const Nod = ({ line }: { line: Line }) => (
 );
 
 function TailRow({ line, leaving }: { line: Line; leaving: boolean }) {
+  const words = line.done?.words ?? line.row ?? line.words;
   return (
     <Row className={FADE} data-leaving={leaving || undefined}>
       <MessageSquareDashed className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-        <Words parts={line.done?.words ?? line.row ?? line.words} where={line.where} />
+      <span className="min-w-0 flex-1 truncate text-muted-foreground" ref={useFit(words)}>
+        <Words fit parts={words} where={line.where} />
       </span>
-      <Nod line={line} />
+      {/* A done row on Today keeps its words after Undo has gone. */}
+      {(!line.done || line.done.undo) && <Nod line={line} />}
     </Row>
   );
 }
