@@ -89,15 +89,21 @@ export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
 // any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
 export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
-// The Feed in a pane, when the window is too narrow for its lane (features/feed.feature).
+// The bar's views in a pane, when the window is too narrow for its panel (lib/bar.ts).
 export const FEED_VIEW = "feed:";
 export const INBOX_VIEW = "inbox:";
-export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && view !== FEED_VIEW && view !== INBOX_VIEW;
+export const ASK_VIEW = "ask:";
+export const SUGGESTIONS_VIEW = "suggestions:";
+const VIEWS = [FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+// An empty view is a tab with no page yet.
+export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
   if (view === INBOX_VIEW) return { title: "Capture inbox" };
   if (view === FEED_VIEW) return { title: "Feed" };
+  if (view === ASK_VIEW) return { title: "Ask" };
+  if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };

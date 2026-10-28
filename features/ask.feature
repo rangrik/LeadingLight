@@ -13,8 +13,7 @@ Feature: Ask Claude, an agent on every page
     the card in front and the others on hover ("Ask GPT" while a GPT model is chosen, as is the
     ask bar); it asks about its own card's page, and gives way in a card too narrow for it and
     the whole title, where ⌘J still asks
-  - the agent panel: region "Agent", pinned beside the pages as a card of its own, or floating
-    in a corner of the page area
+  - the agent panel: region "Agent", the bar's Ask (features/bar.feature), beside the pages
   - the composer: the field "Question" at the bottom of the panel (features/composer.feature)
   - a turn: one question and everything Claude does to answer it
   - the stand-in (browser build only): reads the page on every turn; with words quoted, a
@@ -30,7 +29,7 @@ Feature: Ask Claude, an agent on every page
     Then the Ask button shows a sparkles icon, 16 px, centred in a button the size of the
       Writing menu's beside it, and its tooltip reads "Ask Claude ⌘J"
     When I click the Ask button
-    Then the agent panel opens pinned on the right with the composer focused
+    Then the bar opens on Ask with the composer focused
     And with no thread yet it reads "What should we do with “Cells”?"
     When I click the Ask button again
     Then the panel closes
@@ -181,91 +180,19 @@ Feature: Ask Claude, an agent on every page
     Then the step reads "Edited “Cells”" marked failed, its details say the words were not
       found, and the page is unchanged
 
-  Scenario: Pinned beside the page
+  Scenario: Beside the page, following it
     When I press Meta+J
-    Then the panel is a full-height card right of the page card, 8 px apart, 400 px wide
-    And the page card narrows to make room, so no words sit under the panel
-    And the panel's header is as tall as the page's, its title on the crumbs' line, with no
-      line under it
-    And its header has "Unpin" (a pin-off icon) and "Close", each with a tooltip
-    When I drag the gap between the two cards to the left by 60 px
-    Then the panel is 460 px wide and the page narrower by as much
-    And it is never narrower than 280 px, nor wider than half the room right of the sidebar, nor so
-      wide that the page gets less than the 520 px it needs (832 with sidenotes): it narrows first
-    When I close and reopen the panel
-    Then it is pinned at the same width
+    Then Ask opens in the bar's panel and the page card narrows to make room, so no words sit under it
     When I open another page from the sidebar, or make a new one
-    Then the panel stays open with that page's thread, and the keyboard stays in the page
+    Then Ask stays open with that page's thread, and the keyboard stays in the page
     When I press Meta+J in the page
     Then the composer takes the keyboard
     When I open a list such as "Pages"
-    Then the panel keeps its place, its card reading "Open a page to ask Claude about it." after a
-      moment, and shows the page's thread again when I open a page
-    And switching pages never makes the page card jump wider and back while the next page loads
-
-  Scenario: No room to pin
-    Given the panel is pinned on the right, at 1280x800 with the sidebar open
-    When I open a second page beside the first
-    Then the panel floats in the bottom-right corner instead, and the two pages share the width,
-      as pinned, even at 280 px, it would leave them less than the 520 px each needs
-    And its button still reads "Unpin", its tooltip saying it floats while the pages need the room
-    When I close the second page
-    Then it is pinned on the right again
-    And a window too narrow for one page beside it (under about 1070 px with the sidebar open) floats
-      it too, and folding the sidebar there pins it once the sidebar has slid away, not on the way
-    And resizing the pinned panel never unpins it, and resizing the floating one never pins it
-    When it floats for room and I drag it to the top-left corner, then close the second page
-    Then it pins on the left
-    When I open the second page again and click "Unpin" while the panel floats for room
-    Then it stays where it is, now unpinned, and the button reads "Pin to the left"
-    And clicking it then pins it, its tooltip saying it waits for the pages to have room
-
-  Scenario: Unpinned, it floats and the page makes room
-    Given the panel is pinned on the right
-    When I click "Unpin"
-    Then it floats in the bottom-right corner of the page area, a rounded card with a shadow
-    And the page card goes back to full width, and its words end before the panel's left edge
-    And the button reads "Pin to the right" with a pin icon
-    And the corner facing the page shows a resize mark; dragging it resizes the panel, no
-      smaller than 280 by 240, and the page's words follow its edge
-    And it closes when another page comes to the front, as before
-
-  Scenario: Dragging the floating panel to a corner
-    Given the panel floats in the bottom-right corner
-    When I drag it by its header toward the top-left and let go nearer that corner than any other
-    Then it settles into the top-left corner in 200 ms, its top just under the page's header
-      band, so the crumbs and the page's title stay in sight
-    And the page's words start right of the panel, and the page's header is not covered
-    And it stays in that corner when I reopen it
-    When I drag it so its middle is a little right of the page area's middle and above it, and let go
-    Then it settles into the top-right corner, the nearest one
-    When I press its header and let go without moving
-    Then it stays where it was
-    And pressing the thread menu or a button in the header never drags it
-
-  Scenario: Pinning again goes to the panel's side
-    Given the panel floats in the top-left corner
-    When I click "Pin to the left"
-    Then it is pinned left of the page card, full height, and the page narrows from the left
-    When I click "Unpin"
-    Then it floats in the top-left corner again
-    When I drag it to the bottom-right corner and click "Pin to the right"
-    Then it is pinned on the right
-
-  Scenario: Pinned left in the app with the sidebar folded
-    Given the Mac app with the sidebar folded and the panel pinned left
-    Then the panel's header starts after the traffic lights and the sidebar button
-    And the page card's header no longer leaves that room, as it is not at the window's edge
-
-  Scenario: Panes side by side
+    Then Ask reads "Open a page to ask Claude about it." after a moment, and shows the page's
+      thread again when I open a page
     Given two pages side by side
-    When the panel is pinned
-    Then both page cards narrow to make room
     When I click into the other page, or its Ask button
-    Then the panel stays and shows that page's thread; the Ask button also gives it the keyboard
-    When it floats in the bottom-right corner
-    Then only the right page's words move away from it; the left page is unchanged
-    But a page never gets narrower than 360 px for it; past that the panel covers its edge
+    Then Ask shows that page's thread; the Ask button also gives it the keyboard
 
   Scenario: Closing and reopening
     Given an answer has arrived

@@ -20,8 +20,8 @@ Feature: Idea capture
   - footer: 13 px muted. On the left "Saved" with a check once the idea is saved. On the right
     "⇧⌘↩" "Open beside" and "⌘↩" "Save" once anything is typed, and "esc" "Close" always.
   - in-the-middle: the tag every captured idea gets, a tag page made the first time
-  - "New idea" row: button "New idea" in the sidebar, right under "Today", with a lightbulb
-    and "⌃⌥I" at its right end while the pointer is over it
+  - "New idea" row: the bar's Quick capture button (features/bar.feature), a plus, its tooltip
+    showing "⌃⌥I"; "click New idea" below means it, until Quick capture merges the boxes
   - Today: the daily note for the current day (features/everyday-objects.feature), whose
     "Created this day" list shows what was made that day
   - the app: the Mac app, where the box is a floating panel of its own. The browser build has
@@ -31,8 +31,8 @@ Feature: Idea capture
   Background:
     Given the app is open in a browser at 1280x800 with no stored data
 
-  Scenario: Opening the box from the sidebar
-    When I click "New idea" in the sidebar
+  Scenario: Opening the box from the bar
+    When I click "New idea"
     Then the capture box shows, 640 px wide, centred, its top about 15% down the window
     And the header bar reads "New idea · In Today · # in-the-middle", with "No project" at its right end
     And the title line is focused and empty, with the placeholder "Type your idea"
@@ -166,7 +166,7 @@ Feature: Idea capture
   Scenario: Escape closes the box and gives focus back
     Given a page is open and its body has focus
     When I click "New idea", type "Call Sam" and press Escape
-    Then the box is gone and the page body has focus again, not the sidebar row
+    Then the box is gone and the page body has focus again, not the button that opened it
     And the same holds when the box was opened with Control+Alt+I
     # In the app: the keyboard goes back to the app that was in front (see the last scenarios).
 

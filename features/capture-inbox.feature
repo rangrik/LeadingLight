@@ -4,11 +4,11 @@ Feature: Capture inbox
   Scenario: Find captured material without copying it
     Given I have captured an idea, saved a webpage, and saved a voice recording
     And I have an ordinary page and an idea made outside capture
-    When I open "Capture inbox" from the sidebar
+    When I open Captures in the bar (features/bar.feature)
     Then "To review" lists the three captured pages once, newest capture first
     And it does not list the ordinary page or the manually made idea
     And older ideas tagged "in-the-middle" and saved webpage sources are included
-    And the sidebar shows no unread count or urgency badge
+    And the sidebar shows no row, count or urgency badge for it; the bar's Captures icon counts what waits
     When I open a captured page
     Then its existing page opens, with its body and audio unchanged
 

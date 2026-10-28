@@ -4,9 +4,10 @@ test.use({ launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-
 
 // Seam: new audio must notify the inbox after its one-time scan has finished.
 test("saving another recording returns the same reviewed page to the inbox", async ({ page }) => {
-  const inbox = page.getByRole("region", { name: "Capture inbox", exact: true });
+  const inbox = page.getByRole("complementary", { name: "Captures", exact: true });
   const row = inbox.getByRole("row").filter({ has: page.getByRole("button", { name: "Recorded thought", exact: true }) });
-  const openInbox = () => page.getByRole("button", { name: "Capture inbox", exact: true }).click();
+  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  const openInbox = async () => (await toggle.getAttribute("aria-pressed")) !== "true" && (await toggle.click());
   await page.goto("/");
   await openInbox();
   await expect(inbox.getByText("Nothing waiting here")).toBeVisible();
@@ -23,6 +24,8 @@ test("saving another recording returns the same reviewed page to the inbox", asy
     await expect(page.locator('[data-media="voice"] audio')).toHaveCount(take + 1);
     await expect(page.getByRole("alert").last()).toContainText("Your audio is saved");
     await openInbox();
+    // The panel stays on the tab it showed, as it stays open beside the page.
+    await inbox.getByRole("tab", { name: "To review", exact: true }).click();
     await expect(row).toHaveCount(1);
     if (take === 0) {
       await row.getByRole("button", { name: "Mark reviewed" }).click();

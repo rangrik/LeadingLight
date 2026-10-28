@@ -29,7 +29,7 @@ const TABS: Record<string, (() => void) | undefined> = {
 // the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
 // browser the page reads the keys itself. ⌃⌥I is the Mac app's global shortcut (capture.rs),
 // which takes the key before the menu sees it; the menu item and a browser's key come through here.
-export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleFeed(): void }) {
+export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(view: "feed" | "captures" | "suggestions"): void }) {
   useEffect(() => {
     const run = (id: string) => {
       // Tabs and history act on the panes, so not while Settings covers them.
@@ -57,7 +57,9 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "ask":
           return openAsk();
         case "feed":
-          return actions.toggleFeed();
+        case "captures":
+        case "suggestions":
+          return actions.toggleView(id);
         case "nod":
           // Only at a page in front: never under Settings, a dialog or a menu, or another window.
           if (useStore.getState().view.kind === "settings" || !document.hasFocus() || document.querySelector(COVERS)) return;

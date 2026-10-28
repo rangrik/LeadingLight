@@ -7,8 +7,8 @@ Feature: The Feed
   is enough, and an answered question never comes back. Routine steps never show here.
 
   Names used below:
-  - Feed: the row under New idea in the sidebar, with how many items need me; ⌥⌘F does the same
-  - lane: the Feed beside the sidebar, before the pages, with All projects or one project, and Close
+  - Feed: the bar's Feed icon (features/bar.feature), with how many items need me; ⌥⌘F does the same
+  - lane: the Feed's panel in the bar, beside the pages, with All projects or one project
   - "Write the summary": an assigned task in "Research" (features/assign.feature)
   - "Plan": a page of "Research" with the paragraph "We ship in May"
 
