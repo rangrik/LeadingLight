@@ -9,13 +9,13 @@ import { useStore } from "@/lib/store";
 import { CaptureBox, type CaptureHost } from "~/components/capture-box";
 import { makeLinkHost } from "~/components/link-views";
 import { setVisit } from "~/components/property-value";
-import type { Draft, Guess } from "~/lib/capture";
+import type { Draft, Guess, WebSaved } from "~/lib/capture";
 import { loadSpace } from "~/lib/space";
 import "./styles.css";
 
-// The capture panel's page (capture.rs). A view only: drafts go to the main window, which
-// saves and answers (lib/capture.ts, hostCapture), and so do the pages its link menu and
-// project picker make.
+// The capture panel's page (capture.rs). A view only: drafts and webpages go to the main window,
+// which saves and answers (lib/capture.ts, hostCapture), and so do the pages its link menu and
+// project picker make. A recording runs here, in this webview, and is saved with the draft.
 // "@" searches this window's own copy of the space, read from the store each time the box
 // shows. An answer that never comes (the main window still loading) stops waiting after a
 // while, so the box can still close.
@@ -47,8 +47,21 @@ void listen<Guess & { seq: number }>("ll:capture-guessed", ({ payload: { seq: n,
   guesses.get(n)?.(guess);
   guesses.delete(n);
 });
+// A webpage takes as long as its website does, so it waits for its answer; Escape stops it there.
+const webs = new Map<number, (saved: WebSaved) => void>();
+void listen<WebSaved & { seq: number }>("ll:capture-web-saved", ({ payload: { seq: n, ...saved } }) => {
+  webs.get(n)?.(saved);
+  webs.delete(n);
+});
 const host: CaptureHost = {
   save: (draft: Draft) => ask("ll:capture", { draft }, draft.id),
+  saveWeb: (url, mode, project, signal) =>
+    new Promise((resolve) => {
+      const n = ++seq;
+      webs.set(n, resolve);
+      signal.addEventListener("abort", () => void emitTo("main", "ll:capture-web-cancel", n));
+      void emitTo("main", "ll:capture-web", { seq: n, url, mode, project });
+    }),
   open: (id) => void invoke("capture_open", { id }),
   close: () => void invoke("capture_hide"),
   links: makeLinkHost({ create, day: (day) => made({ kind: "day", day }) }),
@@ -74,16 +87,20 @@ addEventListener("storage", (e) => (e.key === "berth.ui" || e.key === "berth.pre
 
 function Panel() {
   useApplyTheme();
-  // Each time the panel is shown, a fresh idea and a fresh copy of the space.
+  // Each time the panel is shown, a fresh idea and a fresh copy of the space. Hidden, the box goes,
+  // so a recording in it stops, as leaving a page does.
   const [shown, setShown] = useState(0);
   useEffect(() => {
     void loadSpace().catch(console.error);
-    const off = listen("capture://show", () => {
-      readTheme();
-      void loadSpace().catch(console.error);
-      setShown((n) => n + 1);
-    });
-    return () => void off.then((f) => f());
+    const offs = [
+      listen("capture://show", () => {
+        readTheme();
+        void loadSpace().catch(console.error);
+        setShown((n) => n + 1);
+      }),
+      listen("capture://hide", () => setShown((n) => n + 1)),
+    ];
+    return () => offs.forEach((off) => void off.then((f) => f()));
   }, []);
   // The window is the box plus room for its shadow (capture.rs turns macOS's off). A click in
   // that room keeps the keyboard where it was.

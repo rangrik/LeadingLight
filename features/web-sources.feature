@@ -1,11 +1,12 @@
 Feature: Keep a webpage as a source
-  A source keeps its address and, when requested, a readable copy in the space.
+  A source keeps its address and, when requested, a readable copy in the space. It is saved from
+  the capture box, where a lone address turns the box into Webpage (quick-capture.feature):
+  ⌘↩ saves it and closes the box, ⇧⌘↩ saves it and opens it beside.
 
   Scenario: Save just a link without fetching the website
-    When I choose "Save webpage" in the bar's Captures header
-    And enter "https://example.com/article" and choose "Link only"
-    And press "Save source"
-    Then a page opens with a clickable source address
+    When I press Quick capture, paste "https://example.com/article" and choose "Link only"
+    And press ⇧⌘↩
+    Then a page opens beside with a clickable source address
     And it remains after a reload
     And the website has not been fetched
 
@@ -35,7 +36,7 @@ Feature: Keep a webpage as a source
   Scenario: A website cannot be copied
     Given a website returns an error, requires sign-in, or refuses the browser request
     When I try to save its text
-    Then the dialog explains the failure and offers saving the link instead
+    Then the box explains the failure and offers saving the link instead
     And no empty source page is created
 
   Scenario: Some media cannot be copied
@@ -43,12 +44,12 @@ Feature: Keep a webpage as a source
     When I save it with "Text and media"
     Then its text is kept
     And the missing media is kept as a link labelled "Media not saved"
-    And a notice says how many media files could not be saved
+    And the box stays open with a notice of how many media files could not be saved, until Escape or ⌘↩
 
   Scenario: Cancel a slow capture
     Given the website or one of its media downloads has not finished
-    When I cancel Save webpage or press Escape
-    Then the dialog closes immediately and no source page is created
+    When I press Escape
+    Then the box closes immediately and no source page is created
     And pending browser downloads stop and no further media downloads start
     And I can save another source without waiting for the cancelled request
 
@@ -60,6 +61,7 @@ Feature: Keep a webpage as a source
     And the notice counts that missing image
 
   Scenario: Refuse an unsafe address
-    When I enter a javascript, data, file, or credential-bearing URL
+    When I paste a javascript, data, file, or credential-bearing URL and press ⌘↩
     Then saving is refused with an explanation
     And no page is created
+    # Among words, such an address is plain text in an idea, never a link.

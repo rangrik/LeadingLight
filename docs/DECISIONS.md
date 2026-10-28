@@ -218,6 +218,10 @@ An idea is not written into the day's note. It shows there because it was made t
 Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
 the page in view, never in its place.
 
+The same box takes a lone web address as a webpage (27), fetched and saved by the main window,
+and its mic adds a voice block to the body. The recording runs in the panel's own webview, since
+audio only needs the asset store; hiding the panel drops the box, so a recording never runs unseen.
+
 ## 15. Changed shortcuts are written into the table, kept on this Mac
 
 Settings › Shortcuts can change any key in `lib/shortcuts.json`. Only the changed ones are kept

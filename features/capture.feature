@@ -17,11 +17,13 @@ Feature: Idea capture
     "Create project “<typed>”" when nothing matches exactly.
   - body: the block editor itself (textbox "Notes", 15 px): the slash menu, lists, to-dos,
     links and the rest of editor.feature, without the block handle (there is no gutter for it)
-  - footer: 13 px muted. On the left "Saved" with a check once the idea is saved. On the right
-    "⇧⌘↩" "Open beside" and "⌘↩" "Save" once anything is typed, and "esc" "Close" always.
+  - footer: 13 px muted. On the left the mic (quick-capture.feature), then "Saved" with a check
+    once the idea is saved. On the right "⇧⌘↩" "Open beside" and "⌘↩" "Save" once anything is
+    typed, and "esc" "Close" always.
   - in-the-middle: the tag every captured idea gets, a tag page made the first time
-  - "New idea" row: the bar's Quick capture button (features/bar.feature), a plus, its tooltip
-    showing "⌃⌥I"; "click New idea" below means it, until Quick capture merges the boxes
+  - "New idea": the bar's Quick capture button (features/bar.feature), a plus, its tooltip
+    showing "⌃⌥I"; "click New idea" below means it. The same box takes addresses and recordings
+    (quick-capture.feature)
   - Today: the daily note for the current day (features/everyday-objects.feature), whose
     "Created this day" list shows what was made that day
   - the app: the Mac app, where the box is a floating panel of its own. The browser build has
@@ -37,7 +39,7 @@ Feature: Idea capture
     And the header bar reads "New idea · In Today · # in-the-middle", with "No project" at its right end
     And the title line is focused and empty, with the placeholder "Type your idea"
     And the body shows the placeholder "It saves as you go and shows up in Today."
-    And the footer shows only "esc" "Close", on the right
+    And the footer shows the mic on the left and only "esc" "Close" on the right
     And the page behind it is unchanged
 
   Scenario: The shortcut toggles the box while the window has focus

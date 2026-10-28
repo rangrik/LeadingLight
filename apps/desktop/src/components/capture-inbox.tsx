@@ -1,5 +1,5 @@
 // COSS p-tabs-1 and p-table-1, with the app's existing page and property pickers.
-import { Check, Folder, Globe, Inbox, RotateCcw } from "lucide-react";
+import { Check, Folder, Inbox, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
@@ -16,18 +16,6 @@ import { iconFor, pageOf, space } from "~/lib/space";
 const labels = { idea: "Captured idea", web: "Saved webpage", voice: "Voice recording" };
 const date = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const ids = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-
-// Save webpage, by the inbox it saves into (App.tsx opens the dialog).
-export function SaveWebpageButton() {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<Button aria-label="Save webpage" className="size-7 sm:size-7" onClick={() => window.dispatchEvent(new Event("ll:save-webpage"))} size="icon-sm" variant="ghost" />}>
-        <Globe />
-      </TooltipTrigger>
-      <TooltipPopup>Save webpage</TooltipPopup>
-    </Tooltip>
-  );
-}
 
 // panel: in the bar, under its header, with the ticks as icons.
 export function CaptureInbox({ panel = false }: { panel?: boolean }) {
@@ -58,10 +46,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
   return (
     <div className={panel ? "px-4 pb-6" : "w-full max-w-[1000px] px-6 pt-10 pb-24 @sm:px-12"}>
       {!panel && <>
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">Capture inbox</h1>
-          <SaveWebpageButton />
-        </div>
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">Capture inbox</h1>
         <p className="mt-2 mb-6 text-sm text-muted-foreground">A place for what you save. Organise it when you are ready.</p>
       </>}
       {undone && <div className={panel ? "mb-3 flex items-center gap-2 text-sm" : "mb-3 flex flex-wrap items-center gap-2 text-sm"} role="status">
@@ -88,7 +73,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
           </> : loading ? <p className="py-10 text-sm text-muted-foreground" role="status">Looking for saved recordings…</p> : error ? <p className="py-10 text-sm text-muted-foreground">Try loading again to check for older recordings.</p> : <Empty className="py-12">
             <EmptyHeader><EmptyMedia variant="icon"><Inbox /></EmptyMedia>
               <EmptyTitle>{tab === "reviewed" ? "No reviewed captures yet" : "Nothing waiting here"}</EmptyTitle>
-              <EmptyDescription>{tab === "reviewed" ? "Mark a capture reviewed when you are ready. Its page stays where it is." : "Ideas from New idea, saved webpages, and recordings appear here. Nothing needs doing right now."}</EmptyDescription>
+              <EmptyDescription>{tab === "reviewed" ? "Mark a capture reviewed when you are ready. Its page stays where it is." : "Ideas, webpages, and recordings from Quick capture appear here. Nothing needs doing right now."}</EmptyDescription>
             </EmptyHeader>
           </Empty>)}
         </TabsPanel>)}
