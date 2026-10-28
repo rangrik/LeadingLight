@@ -11,7 +11,8 @@ Feature: Suggestions
   - "On this page" / "Elsewhere": the panel's two groups; Elsewhere holds offers about other pages and
     the day's rows, each opening its page beside when clicked. On Today, the day's rows are under the
     day bar and not in the panel, so On this page holds only offers about the note's own blocks
-  - seen: a suggestion the panel has shown while open; counts are of unseen ones
+  - seen: a suggestion the panel has shown while open; counts are of unseen ones, and the day's rows
+    count too until Today or the panel has shown them
   - the daily card: on Today, once a day, when earlier days left suggestions or unreviewed captures:
     "Yesterday left 4 things." when all are from yesterday, else "Left over: 5 things.", with Go
     through, Dismiss all and Hand off
@@ -20,7 +21,7 @@ Feature: Suggestions
     Given the app is open in a browser at 1440x900, seeded as in tail.feature
 
   Scenario: A finished block is read once
-    Given "Garden plan" is open and the panel is collapsed
+    Given Today has been opened once, and "Garden plan" is open with the panel collapsed
     When I type "Need to call Sam about the invoice before Friday." and press Enter
     Then within a moment the Suggestions icon shows 1 and nothing in the text changes
     When I open Suggestions
@@ -51,6 +52,11 @@ Feature: Suggestions
     When I open Today and write "Call Sam before Friday." in its body and press Enter
     Then "On this page" lists only "Make this a task?", and the day's three rows show under the day
       bar and nowhere in the panel
+    When I press Make task and then Undo
+    Then the row fades out over 150 ms, and only then does the panel say "Nothing yet."
+    Given no page is open at all
+    When I open Suggestions
+    Then "Elsewhere" lists the day's three rows, and the count on the icon goes
     When the window is 1000 px wide and Suggestions is a pane
     Then its group labels and rows start under the pane's title
 
@@ -62,6 +68,8 @@ Feature: Suggestions
     Given seeded, with its three ideas from last week unreviewed
     When I open Today
     Then under the day bar a card reads "Left over: 3 things." with Go through, Dismiss all and Hand off
+    When Today's pane is 320 or 260 px wide
+    Then the buttons wrap onto more lines at the card's end, and none crosses its border
     Given yesterday left two suggestions and two unreviewed captures, and nothing older waits
     When I open Today
     Then the card reads "Yesterday left 4 things."

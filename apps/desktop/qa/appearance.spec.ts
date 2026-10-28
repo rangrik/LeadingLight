@@ -38,6 +38,19 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await expect(pages(page)).toBeVisible();
 });
 
+// Seam: shown() in components/capture-box.tsx. Base UI keeps a closed Select's list mounted but
+// hidden; counted as open, it once kept Escape from closing Settings and stopped ⌃↩.
+test("Escape closes Settings after a menu there was used", async ({ page }) => {
+  await openAppearance(page);
+  await page.getByRole("combobox", { name: "Theme by day" }).click();
+  await expect(page.getByRole("listbox")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("listbox")).toBeHidden();
+  await expect(settingsNav(page)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settingsNav(page)).toBeHidden();
+});
+
 // The seam: Settings lies over the page shell, which stays mounted and inert.
 // What it catches: a remount showing stale content, then saving it over the
 // page (QA, 2026-10-22), and keys reaching the page while Settings is open.

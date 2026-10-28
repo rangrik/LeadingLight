@@ -16,6 +16,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { shown } from "~/components/capture-box";
 import { PanelHeader } from "~/components/panel-header";
 import { AboutSection } from "~/components/settings/about-section";
 import { AiSection } from "~/components/settings/ai-section";
@@ -27,6 +28,7 @@ import { ShortcutsSection } from "~/components/settings/shortcuts-section";
 import { TypesSection } from "~/components/settings/types-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
+import { COVERS } from "~/lib/use-shortcuts";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
 // one. Shipyard's sections about agents, machines and its own General stay out until there is ours.
@@ -59,7 +61,7 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
       if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest("input, textarea, select, [contenteditable=true], [role=dialog], [role=menu], [role=listbox]")) return;
-      if (document.querySelector("[role=dialog], [role=alertdialog]")) return;
+      if (shown(COVERS)) return;
       closeSettings();
     };
     window.addEventListener("keydown", onKey);

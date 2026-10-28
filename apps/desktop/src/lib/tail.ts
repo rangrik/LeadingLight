@@ -249,7 +249,7 @@ async function ideasToFile(pages: ObjectSummary[]): Promise<Found | undefined> {
       return {
         id,
         where: TODAY,
-        // The count is a name too: it opens the capture inbox, where the ideas wait.
+        // The count is a name too: it opens Captures in the bar, where the ideas wait.
         words: [{ text: `${ideas.length} ideas`, page: INBOX_VIEW }, ` since ${since}. ${one ? "1 looks like a task" : `${tasks.length} look like tasks`} for `, name(p), "."],
         nod: one ? "File it" : "File them",
         act: async () => {

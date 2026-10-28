@@ -44,6 +44,8 @@ const SURFACE =
 // Something open over the editor (a menu, a picker): it takes Escape first, and a click in it
 // is not a click outside the box. These mount outside the box's DOM; one fading out is closed.
 export const POPUP = ":is([role=listbox], [role=menu], [data-slot=popover-popup], [data-slot=menu-popup]):not([data-closed])";
+// The first match on screen: a closed Select keeps its list mounted inside a hidden box.
+export const shown = (selector: string) => [...document.querySelectorAll(selector)].find((el) => el.getClientRects().length > 0);
 // What Save webpage offered (web-sources.feature).
 const MODES: [SourceMode, string][] = [["link", "Link only"], ["text", "Text only"], ["media", "Text and media"]];
 
@@ -197,7 +199,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const onKeyDownCapture = (e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
     if (e.key === "Escape") {
-      if (document.querySelector(POPUP) || target.closest("[role=toolbar]")) return;
+      if (shown(POPUP) || target.closest("[role=toolbar]")) return;
       e.preventDefault();
       e.stopPropagation();
       close();

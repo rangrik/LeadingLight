@@ -81,8 +81,8 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   // Narrow, Captures is a pane beside the page.
   await page.setViewportSize({ width: 520, height: 800 });
   await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true }).click();
-  const pane = page.getByRole("region", { name: "Capture inbox", exact: true });
-  await expect(pane.getByRole("heading", { name: "Capture inbox" })).toBeVisible();
+  const pane = page.getByRole("region", { name: "Captures", exact: true });
+  await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-inbox-narrow.png" });
   expect(await pane.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
 });

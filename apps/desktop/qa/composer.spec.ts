@@ -69,6 +69,9 @@ test("Escape leaves the bar for the text", async ({ page }) => {
 // editor redraws on losing focus.
 test("The bar opens again, and follows the page as it scrolls", async ({ page }) => {
   await pageWith(page, "First line to ask about.");
+  // The last key's caret scroll (editor's caret-scroll.ts) runs a frame later, at the caret then;
+  // inserted before it, the caret is 80 lines down and the page follows it there.
+  await page.evaluate(() => new Promise(requestAnimationFrame));
   await page.evaluate(() => {
     const ed = (window as unknown as { __editor: { commands: { insertContentAt(pos: number, html: string, options: { updateSelection: boolean }): boolean } } }).__editor;
     // Seeding must not move the caret to the end and queue a scroll past the selected words.

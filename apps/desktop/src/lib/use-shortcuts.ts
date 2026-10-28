@@ -4,7 +4,7 @@ import { SHORTCUTS } from "@/lib/shortcuts";
 import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
-import { POPUP } from "~/components/capture-box";
+import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
@@ -14,7 +14,7 @@ import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
-const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
@@ -66,7 +66,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return actions.toggleView(id);
         case "nod":
           // Only at a page in front: never under Settings, a dialog or a menu, or another window.
-          if (useStore.getState().view.kind === "settings" || !document.hasFocus() || document.querySelector(COVERS)) return;
+          if (useStore.getState().view.kind === "settings" || !document.hasFocus() || shown(COVERS)) return;
           return nodFront();
         case "shortcuts":
           return toggleShortcuts();
