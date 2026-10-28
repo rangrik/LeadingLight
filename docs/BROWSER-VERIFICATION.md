@@ -16,7 +16,8 @@ are recorded in decision 31 in `DECISIONS.md`; remaining gaps are in `DEFERRED.m
 | --- | --- |
 | Workspace typecheck | Passed |
 | Desktop unit tests | 30 passed |
-| Full headless app suite | 118 passed in the final clean run (6.6 minutes) |
+| Native Rust unit tests | 8 passed after integrating main, including the idle-runtime Quit check |
+| Full headless app suite | 119 passed after integrating main (8.0 minutes) |
 | Browser UI regressions | 15 passed, including startup races, shared-chat context, permissions, element feedback and two panes sharing a tab |
 | Packaged agent browser probe | All five checks passed using the installed app's runtime `v0.3.30-ll.26+9cfe1f46` |
 | Packaged-runtime UI smoke | Passed with real Chromium: input, navigation, dialogs, upload, exact download bytes, popups, feedback, viewport modes and profile clearing |
@@ -27,7 +28,7 @@ are recorded in decision 31 in `DECISIONS.md`; remaining gaps are in `DEFERRED.m
 | Independent Sonnet 5.5 QA | Earlier navigation, permission and layout failures resolved; all three feedback rechecks passed on the final runtime |
 | Long note | 2,000 paragraphs, 165 keys; every editor transaction under 16 ms, p95 2.8–3.0 ms |
 | Production frontend build | Passed |
-| Isolated macOS app build | Built and installed as `LeadingLight Dev a60fb8`; native UI checks remain manual |
+| Isolated macOS app build | Passed; native UI checks remain manual |
 
 The runtime checks cover profile persistence and clearing, agent cookie isolation,
 slow navigation, Stop, popups, Command/middle-click tabs, permission boundaries, dialogs, chooser identity, upload
@@ -45,9 +46,24 @@ behavior was changed to satisfy those fixtures.
 Independent Sonnet 5.5 QA uses the browser build and records screenshots under
 `apps/desktop/qa/report/sonnet-browser/`. Native windows are never automated.
 
-## Native checks for the isolated development app
+## Merge validation
 
-Use **LeadingLight Dev a60fb8**, which has its own data. These checks remain manual
+On 2026-10-28 the user authorized merging after automated testing. Main through
+`734e055` was integrated, preserving its layout, shortcut and idle-runtime Quit fixes.
+The deferred log keeps both branches' entries; the composer fixture keeps both its
+frame wait and the option that prevents seeding from moving the selection.
+
+The combined source passed typecheck, 30 desktop unit tests, eight Rust tests and
+all 119 headless scenarios, including the 15 browser regressions. The real Chromium
+UI smoke also passed. Its first run clicked during a viewport change; the harness
+now waits for the viewport and live frame before picking. No product change was needed.
+The runtime patch hash remains `9cfe1f46`, matching the earlier agent and race checks.
+Native menu and file-dialog checks remain manual; merge approval does not count as
+having tested them. The release build and installation follow from main.
+
+## Native checks for the macOS app
+
+Use **LeadingLight** after installing the merged build. These checks remain manual
 because a headless Chromium test cannot prove WebKit's OS menu and file-dialog behavior.
 
 1. Open Browser and visit a site with a text field. Click the page's field and try
@@ -57,7 +73,7 @@ because a headless Chromium test cannot prove WebKit's OS menu and file-dialog b
 2. Use **Browser menu → Save screenshot**, then **Downloads → Save…** for a
    completed download. Cancel one save, then choose a destination. Only the chosen
    file should be written, and it should open correctly.
-3. Sign in to a site you choose, quit and reopen the dev app, and restore its tab.
+3. Sign in to a site you choose, quit and reopen the app, and restore its tab.
    The sign-in should remain. **Clear browsing data** should explain what it removes;
    Cancel should preserve everything, and confirming should sign out this workspace
    while retaining bookmarks and downloaded files.
