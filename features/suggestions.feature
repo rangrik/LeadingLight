@@ -11,7 +11,8 @@ Feature: Suggestions
   - "On this page" / "Elsewhere": the panel's two groups; Elsewhere holds offers about other pages and
     the day's rows, each opening its page beside when clicked. On Today, the day's rows are under the
     day bar and not in the panel, so On this page holds only offers about the note's own blocks
-  - seen: a suggestion the panel has shown while open; counts are of unseen ones
+  - seen: a suggestion the panel has shown while open; counts are of unseen ones, and the day's rows
+    count too until Today or the panel has shown them
   - the daily card: on Today, once a day, when earlier days left suggestions or unreviewed captures:
     "Yesterday left 4 things." when all are from yesterday, else "Left over: 5 things.", with Go
     through, Dismiss all and Hand off
@@ -20,7 +21,7 @@ Feature: Suggestions
     Given the app is open in a browser at 1440x900, seeded as in tail.feature
 
   Scenario: A finished block is read once
-    Given "Garden plan" is open and the panel is collapsed
+    Given Today has been opened once, and "Garden plan" is open with the panel collapsed
     When I type "Need to call Sam about the invoice before Friday." and press Enter
     Then within a moment the Suggestions icon shows 1 and nothing in the text changes
     When I open Suggestions

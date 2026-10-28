@@ -46,7 +46,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
   return (
     <div className={panel ? "px-4 pb-6" : "w-full max-w-[1000px] px-6 pt-10 pb-24 @sm:px-12"}>
       {!panel && <>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">Capture inbox</h1>
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">Captures</h1>
         <p className="mt-2 mb-6 text-sm text-muted-foreground">A place for what you save. Organise it when you are ready.</p>
       </>}
       {undone && <div className={panel ? "mb-3 flex items-center gap-2 text-sm" : "mb-3 flex flex-wrap items-center gap-2 text-sm"} role="status">

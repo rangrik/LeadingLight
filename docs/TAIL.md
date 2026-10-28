@@ -71,7 +71,7 @@ Present tense, plain words, no "I", no exclamation. The verb on the button says 
 does. After a nod, the same row in the past tense, with Undo for eight seconds. On Today the
 sentence then stays, without Undo, until you leave the page or the next beat, so the rows under
 it never move; a suggestion just leaves. A count such as "3 ideas" is a name
-too: it opens the list of those pages.
+too: it opens Captures in the bar, where those ideas wait.
 
 | When | Line | Nod | After |
 |---|---|---|---|

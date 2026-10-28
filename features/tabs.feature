@@ -42,7 +42,8 @@ Feature: Tabs and history
   Scenario: A tab dragged to another pane, or to an edge
     Given two panes side by side, the left with tabs "Garden plan" and "Sam"
     When I drag "Sam" onto the right pane's tab row
-    Then "Sam" is a tab of the right pane and the left pane has one tab, so its tab row goes
+    Then while it is over a header with no tab row, an "Add as a tab · Sam" box covers that header, and none of the header shows through or beside it
+    And once dropped, "Sam" is a tab of the right pane and the left pane has one tab, so its tab row goes
     When I drag "Garden plan" to the window's right edge
     Then a new pane opens with it, as a split, and the pane it left closes if empty
 

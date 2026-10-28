@@ -215,7 +215,7 @@ test("Settings › AI shows the account and keeps the model", async ({ page }) =
   await page.keyboard.press("Meta+,");
   await page.getByTestId("settings-nav-ai").click();
   const section = page.getByTestId("settings-ai");
-  await expect(section.getByRole("heading", { name: "AI" })).toBeVisible();
+  await expect(section.getByRole("heading", { name: "AI", exact: true })).toBeVisible();
   await expect(section).toContainText("Signed in as you@example.com");
   await section.getByRole("combobox").filter({ hasText: "Opus" }).click();
   await page.getByRole("option", { name: "Haiku", exact: true }).click();

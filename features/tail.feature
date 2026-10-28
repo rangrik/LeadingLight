@@ -31,6 +31,8 @@ Feature: Tail
     And no count shows in the sidebar
     When I write in Today's body
     Then the three rows stay where they are, and none counts as ignored
+    When I click "3 ideas"
+    Then the bar opens on Captures, and Today stays in its pane
 
   Scenario: A nod files the ideas, and Undo takes it back
     Given Today shows its three rows
@@ -117,6 +119,8 @@ Feature: Tail
       paragraph ends in the same words
     When I type anything in the body
     Then the row leaves, and the words do not move
+    When I open another page and come back three times without typing
+    Then the row shows each time, and nothing counts as ignored
 
   Scenario: The capture box guesses
     When I open New idea and type "fix the gate latch before the weekend"

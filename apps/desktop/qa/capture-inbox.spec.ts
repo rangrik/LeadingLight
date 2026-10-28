@@ -81,8 +81,8 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   // Narrow, Captures is a pane beside the page.
   await page.setViewportSize({ width: 520, height: 800 });
   await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true }).click();
-  const pane = page.getByRole("region", { name: "Capture inbox", exact: true });
-  await expect(pane.getByRole("heading", { name: "Capture inbox" })).toBeVisible();
+  const pane = page.getByRole("region", { name: "Captures", exact: true });
+  await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-inbox-narrow.png" });
   expect(await pane.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
 });
@@ -131,7 +131,7 @@ test("Reviewing beside an open page keeps its words and empty states stay calm",
   await expect(row(page, "Garden lights")).toHaveCount(0);
   await page.reload();
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Garden lights", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("More words.");
+  await expect(page.getByRole("region", { name: "Garden lights", exact: true }).getByRole("textbox", { name: "Page body" })).toContainText("More words.");
   await openInbox(page);
   await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();
   await expect(row(page, "Garden lights")).toBeVisible();

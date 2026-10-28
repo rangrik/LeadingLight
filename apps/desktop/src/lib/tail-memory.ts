@@ -43,7 +43,7 @@ export const appLine = (s: string) => quietForm(s) || /^Most ideas go to |^Tasks
 
 // The ledger's version. An older build's ignores came partly from its bugs, so they go, and with
 // them the quiet they set (tail.ts takes those sentences off the page).
-export const LEDGER = 2;
+export const LEDGER = 3;
 export const upgraded = <L extends { v?: number; entries: Entry[] }>(l: L): L => (l.v === LEDGER ? l : { ...l, v: LEDGER, entries: [] });
 
 // One paragraph per sentence, dated.
@@ -62,8 +62,8 @@ export const lineAt = (texts: string[], text: string | undefined, was: number) =
 export const LOOKED = 30_000;
 
 // A page's lines after an edit (texts: its blocks' words now) or once it is left (none). The row
-// above the title leaves at either, as a no; a suggestion once its block's words change, which is
-// not one. Left, a suggestion stays for Elsewhere, a no once if the panel showed it thirty seconds.
+// above the title leaves at either, a no only on an edit; a suggestion once its block's words change,
+// which is not one. Left, a suggestion stays for Elsewhere, a no once if the panel showed it 30 s.
 export function edited<L extends { where: string; block?: number; text?: string; done?: object; seen?: number; ignored?: boolean }>(lines: L[], page: string, texts?: string[], now = Date.now()) {
   const gone: L[] = [];
   const ignored: L[] = [];
@@ -72,7 +72,7 @@ export function edited<L extends { where: string; block?: number; text?: string;
     if (l.where !== page || l.where === TODAY) continue;
     if (l.block === undefined) {
       gone.push(l);
-      if (!l.done) ignored.push(l);
+      if (!l.done && texts) ignored.push(l);
     } else if (!texts) {
       if (!l.done && !l.ignored && now - (l.seen ?? now) >= LOOKED) ignored.push(l);
     } else if (!l.done) {

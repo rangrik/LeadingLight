@@ -14,7 +14,7 @@ import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
-const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
