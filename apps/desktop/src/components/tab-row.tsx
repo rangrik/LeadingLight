@@ -52,8 +52,8 @@ export function TabRow({ leaf, inset }: { leaf: Leaf; inset: boolean }) {
       onValueChange={(id) => showTab(leaf.id, String(id))}
       value={leaf.active}
     >
-      {/* The underline is left out: the front tab reads by its colour alone. */}
-      <TabsList className="min-w-0 *:data-[slot=tab-indicator]:hidden" variant="underline">
+      {/* The front tab carries COSS's underline: its colour alone was too faint to tell. */}
+      <TabsList className="min-w-0" variant="underline">
         {leaf.tabs.map((t) => (
           <TabItem key={t.id} pane={leaf.id} tab={t} />
         ))}
