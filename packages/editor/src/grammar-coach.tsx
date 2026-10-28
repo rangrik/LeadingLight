@@ -27,7 +27,7 @@ function Listen({ text }: { text: string }) {
     setSpeaking(false);
   }, [text]);
   if (!voice) return <p className="text-xs text-muted-foreground">Listen needs a local English system voice.</p>;
-  return <Button size="sm" variant="ghost" onClick={() => {
+  return <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => {
     window.speechSynthesis.cancel();
     if (speaking) { setSpeaking(false); return; }
     const speech = new SpeechSynthesisUtterance(text);

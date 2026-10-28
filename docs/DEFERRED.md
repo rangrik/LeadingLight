@@ -144,3 +144,21 @@ notarization need the owner's Apple membership and certificate; enable them befo
 promoting stable downloads. Intel needs separately built runtime helpers and a full
 Intel smoke test. In-app updates need their own signing keys and an update flow;
 add that when the downloadable preview distribution is proven.
+
+## 2026-10-28 — Upstream Shipyard test fixtures
+
+The optional all-workspace unit run passes 564 of 568 vendored tests. Three depend
+on upstream `internal/` fixtures absent from our vendored subset (devtools, doctor,
+and screen). One expects distinct berth-dark syntax colors but sees `#fafafa` for
+all three. The vendored tree is identical to the merged main version and cannot be
+edited here. Revisit with the next Shipyard sync and its test-fixture manifest;
+LeadingLight's desktop, image-service, and release tests are run separately.
+
+## 2026-10-28 — Update toast over a narrow review sheet
+
+At a 520 px browser width, main's "Codex update available" toast can cover Listen
+in the grammar sheet for its 15-second lifetime. Independent QA reproduced this
+with a fresh browser profile. The toast is unrelated to this merge; changing its
+layer affects every modal, so notification placement needs a separate fix. Revisit
+before the next narrow-window polish pass. Screenshot:
+`apps/desktop/qa/report/mi-shots/x-update-toast-over-sheet-520.png`.

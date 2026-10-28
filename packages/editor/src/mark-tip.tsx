@@ -7,7 +7,7 @@ import { Tooltip, TooltipPopup } from "@leadinglight/ui/components/tooltip";
 const DELAY_MS = 300;
 const GRACE_MS = 500;
 
-type At = { el: HTMLElement; anchor: { getBoundingClientRect: () => DOMRect } };
+type At = { el: HTMLElement; text: string; anchor: { getBoundingClientRect: () => DOMRect } };
 
 // Why a word is underlined or struck through (writing.ts puts it in data-tip), in COSS's tooltip
 // on pointing at the word. One per editor, moved to whichever word is under the pointer.
@@ -25,10 +25,11 @@ export function MarkTip({ editor }: { editor: Editor }) {
       if (!el) return setAt(null);
       // A mark that wraps is one box over two lines: point at the line under the pointer.
       const line = [...el.getClientRects()].findIndex((r) => y >= r.top && y <= r.bottom);
-      setAt({ el, anchor: { getBoundingClientRect: () => el.getClientRects()[line] ?? el.getBoundingClientRect() } });
+      const text = el.dataset.tip ?? (dom.closest("[data-annotate]") ? "Click to open" : `${/Mac/.test(navigator.platform) ? "⌘" : "Ctrl"}-click to open`);
+      setAt({ el, text, anchor: { getBoundingClientRect: () => el.getClientRects()[line] ?? el.getBoundingClientRect() } });
     };
     const point = (e: PointerEvent) => {
-      const el = (e.target as HTMLElement).closest<HTMLElement>("[data-tip]");
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-tip], a[href^="ll:"]');
       if (el === shown || (el && el === pending)) return;
       clearTimeout(timer);
       pending = null;
@@ -60,7 +61,7 @@ export function MarkTip({ editor }: { editor: Editor }) {
   }, [editor]);
   return (
     <Tooltip onOpenChange={(open) => !open && setAt(null)} open={Boolean(at)}>
-      <TooltipPopup anchor={at?.anchor}>{at?.el.dataset.tip}</TooltipPopup>
+      <TooltipPopup anchor={at?.anchor}>{at?.text}</TooltipPopup>
     </Tooltip>
   );
 }

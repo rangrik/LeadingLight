@@ -34,6 +34,7 @@ Feature: Writing help that leaves room to think
     And I can remove it
     And no streak, countdown, reminder, or mastery claim appears
     And only generic tips are kept, not a history of my sentences
+    And Listen is a compact control aligned with the other tip actions
 
   Scenario: Read aloud instead of reading more
     Given a local English speech voice is available
@@ -49,6 +50,9 @@ Feature: Writing help that leaves room to think
     Then the word stays unchanged and is no longer flagged after reload
     And I can remove it from "My words"
     And a failed save explains that the word was not remembered
+    And the suggestion remains available without changing my words
+    When storage is available and I choose "Remember word" again
+    Then the word is remembered and the earlier error disappears
 
   Scenario: Opt into help by the words
     When I choose "While I write" in Writing settings
@@ -68,5 +72,16 @@ Feature: Writing help that leaves room to think
     When checking is still running or fails
     Then the review says so and offers Retry for a failure
     And it does not say there are no suggestions before checking finishes
+    When the checker is available again and I choose Retry
+    Then the review shows suggestions without a reload and leaves my words unchanged
     When checking finishes without suggestions
     Then it says "No suggestions from this check" rather than grading my writing
+
+  Scenario: Review the active tab while Tail is available
+    Given two pages with different spelling slips are open through a sidebar Command-click
+    And help is set to "When I ask" and the Suggestions panel is open
+    When I choose Review writing from the active page's Writing menu and apply a correction
+    Then only that page changes
+    When I switch to the other tab and review its writing
+    Then its own suggestion is shown
+    And neither page gains grammar underlines or an automatic grammar popup while drafting

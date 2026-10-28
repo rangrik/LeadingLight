@@ -10,8 +10,6 @@ import { captureVoiceReview, type VoiceReview } from "./voice-review";
 
 type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void };
 
-type VoiceOptions = { assets: AssetStore; onSaved?: () => void };
-
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const microphoneErrors: Record<string, string> = {

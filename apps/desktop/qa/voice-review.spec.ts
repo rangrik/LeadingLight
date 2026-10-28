@@ -9,6 +9,24 @@ const records = (page: Page) => page.evaluate(async () => {
   return Promise.all((await objects.list()).map((p: any) => objects.get(p.id)));
 });
 
+// Seam: the link hint must match reports' existing plain-click navigation.
+test("report source links still open with a plain click", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Quick capture", exact: true }).waitFor();
+  await page.evaluate(async () => {
+    const { createPage } = await import(String("/src/lib/space.ts"));
+    const { openPage } = await import(String("/src/lib/panes.ts"));
+    const source = await createPage({ title: "Source note" });
+    const report = await createPage({ title: "Recording report", typeId: "report", properties: { report: { by: "qa", session: "qa", to: source.id, at: Date.now(), command: "Review" } }, content: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Source recording", marks: [{ type: "link", attrs: { href: `ll:${source.id}` } }] }] }] } });
+    openPage(report.id);
+  });
+  const link = page.getByRole("link", { name: "Source recording", exact: true });
+  await link.hover();
+  await expect(page.locator('[data-slot="tooltip-popup"]')).toHaveText("Click to open");
+  await link.click();
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Source note");
+});
+
 async function record(page: Page) {
   await page.goto("/");
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
@@ -80,12 +98,58 @@ test("a selected voice passage becomes a project task without consuming the tran
   await page.reload();
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice source", exact: true }).click();
   await page.locator(".ll-page-link").getByRole("button", { name: "Ask Sam", exact: true }).click();
-  await page.getByRole("link", { name: "Source recording", exact: true }).click({ modifiers: ["Meta"] });
+  const sourceLink = page.getByRole("link", { name: "Source recording", exact: true });
+  await sourceLink.hover();
+  await expect(page.locator('[data-slot="tooltip-popup"]')).toHaveText(/(?:⌘|Ctrl)-click to open/);
+  await sourceLink.click({ modifiers: ["Meta"] });
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Voice source");
   await expect(page.locator('[data-media="voice"]')).toBeInViewport();
   await page.getByRole("button", { name: "Review transcript", exact: true }).click();
   await expect(review(page).getByRole("textbox", { name: "Original transcript" })).toHaveValue(transcript);
   await page.screenshot({ path: "qa/report/voice-review.png" });
+});
+
+// Seam: capture's autosave must carry the original snapshot and recording id into the opened page.
+test("Quick capture autostarts once and keeps the original transcript for page review", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Quick capture", exact: true }).click();
+  const box = page.getByRole("dialog", { name: "New idea", exact: true });
+  await box.getByRole("textbox", { name: "Idea", exact: true }).fill("Captured voice");
+  await page.evaluate((text) => {
+    (window as any).__editor.extensionManager.extensions.find((e: any) => e.name === "voiceRecording").options.assets.transcribe = async () => text;
+    const getMedia = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    (window as any).__microphoneStarts = 0;
+    navigator.mediaDevices.getUserMedia = (...args) => { (window as any).__microphoneStarts++; return getMedia(...args); };
+  }, transcript);
+  await box.getByRole("button", { name: "Record a voice note", exact: true }).click();
+  await expect(box.getByText(/Recording ·/)).toBeVisible();
+  await page.waitForTimeout(1100);
+  await box.getByRole("button", { name: "Stop and transcribe" }).click();
+  await expect(box.getByRole("textbox", { name: "Notes" })).toContainText(transcript);
+  expect(await page.evaluate(() => (window as any).__microphoneStarts)).toBe(1);
+  await box.getByRole("textbox", { name: "Idea", exact: true }).press("Escape");
+  await expect(box).toBeHidden();
+  await expect.poll(async () => {
+    const saved = (await records(page)).find((p: any) => p.title === "Captured voice");
+    return saved?.content?.content?.find((n: any) => n.type === "voiceRecording")?.attrs.transcript;
+  }).toBe(transcript);
+  await page.reload();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Captured voice", exact: true }).click();
+  const audio = await page.locator('[data-media="voice"] audio').getAttribute("src");
+  await page.getByRole("textbox", { name: "Page body" }).locator("p").filter({ hasText: transcript }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Edited later.");
+  await page.getByRole("button", { name: "Review transcript", exact: true }).click();
+  await expect(review(page).getByRole("textbox", { name: "Original transcript" })).toHaveValue(transcript);
+  await review(page).getByRole("button", { name: "Use whole transcript" }).click();
+  await review(page).getByRole("button", { name: "Create from selection" }).click();
+  await create(page).getByRole("button", { name: "Create idea", exact: true }).click();
+  await expect(create(page)).toBeHidden();
+  await expect(page.locator('[data-media="voice"] audio')).toHaveAttribute("src", audio!);
+  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("Edited later.");
+  const ideas = (await records(page)).filter((p: any) => p.typeId === "idea");
+  expect(ideas).toHaveLength(2);
+  expect(ideas.find((p: any) => p.title === "Paint the porch.").content.content[0].content[0].text).toBe(transcript);
 });
 
 // Seam: cancellation and create retries must not lose the immutable source or duplicate a page.

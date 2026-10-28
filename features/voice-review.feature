@@ -11,8 +11,18 @@ Feature: Turn a recording into ideas and tasks
     When I choose Task, enter "Ask Sam", choose a project, and press "Create task"
     Then a Task has "Ask Sam about colors" as its body and the chosen project
     And the Task links to the original recording in its source page
+    And hovering its source link shows the key to open the recording
     And the source has a link to the Task beside the recording
     And its audio and full transcript are unchanged after a reload
+
+  Scenario: Review a recording made in Quick capture
+    When I open Quick capture and press "Record a voice note"
+    Then recording starts once without pressing Record again
+    When I stop recording and transcription succeeds
+    And close Quick capture and reload the app
+    Then the saved capture opens as a page with its audio and original transcript
+    And "Review transcript" offers the original words even after I edit the page's text
+    And creating an Idea from those words keeps the recording intact
 
   Scenario: Keep a whole transcript as an idea
     Given a saved recording has a transcript
