@@ -18,6 +18,9 @@ Feature: Appearance and settings
     And Meta+\ folds and unfolds the sidebar as it does on a page
     When I press Escape
     Then the pages are shown again, on the page that was open
+    When I open Settings › Appearance, open the theme menu and press Escape
+    Then only the menu closes, and Escape again closes Settings, with or without a click on a blank spot first
+    And Escape in a Settings text field leaves Settings open
 
   Scenario: Settings never touches the page's edits
     Given I have typed "first words" into the body

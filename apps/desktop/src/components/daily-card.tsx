@@ -29,10 +29,10 @@ export function DailyCard() {
     <div className="mt-3 flex flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-sm" data-testid="daily-card">
       <Row>
         <MessageSquareDashed className="size-4 shrink-0 text-muted-foreground" />
-        {/* Its own width first, so the buttons wrap under it, at the end, before it is cut. */}
+        {/* Its own width first: the buttons wrap under it before it is cut, then among themselves, at the end. */}
         <span className="min-w-0 flex-auto truncate text-muted-foreground">{c.task ? "Handed to an agent." : saying(items)}</span>
         {!c.task && (
-          <span className="ms-auto flex gap-1">
+          <span className="ms-auto flex flex-wrap justify-end gap-1">
             <Button onClick={() => goThrough(items)} size="xs" variant="outline">
               Go through
             </Button>

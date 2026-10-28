@@ -16,6 +16,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { shown } from "~/components/capture-box";
 import { PanelHeader } from "~/components/panel-header";
 import { AboutSection } from "~/components/settings/about-section";
 import { AiSection } from "~/components/settings/ai-section";
@@ -60,7 +61,7 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
       if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest("input, textarea, select, [contenteditable=true], [role=dialog], [role=menu], [role=listbox]")) return;
-      if (document.querySelector(COVERS)) return;
+      if (shown(COVERS)) return;
       closeSettings();
     };
     window.addEventListener("keydown", onKey);

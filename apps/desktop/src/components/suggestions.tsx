@@ -11,24 +11,24 @@ export function Suggestions({ pane }: { pane?: boolean }) {
   const all = tail.use();
   const front = useFront();
   const day = dayShown(today());
-  const lines = useMemo(() => all.filter((l) => inPanel(l) && !(l.where === TODAY && front === day)), [all, front, day]);
-  const [here, elsewhere] = useMemo(() => [lines.filter((l) => l.where === front), lines.filter((l) => l.where !== front)], [lines, front]);
+  const lines = useMemo(() => all.filter((l) => inPanel(l) && !(l.where === TODAY && day && front === day)), [all, front, day]);
+  // Faded here, so the panel is empty only once the last row has gone.
+  const rows = useFading(lines);
   useEffect(() => saw(lines.map((l) => l.id)), [lines]);
   useEffect(() => () => light(), []);
   const ref = useUnderTitle(pane);
-  if (!lines.length) return <p className="m-auto px-6 py-10 text-center text-muted-foreground text-sm">Nothing yet.</p>;
+  if (!rows.length) return <p className="m-auto px-6 py-10 text-center text-muted-foreground text-sm">Nothing yet.</p>;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-sm" ref={ref}>
-      <Group front={front} lines={here} lit title="On this page" />
-      <Group front={front} lines={elsewhere} title="Elsewhere" />
+      <Group front={front} lit rows={rows.filter((r) => r.line.where === front)} title="On this page" />
+      <Group front={front} rows={rows.filter((r) => r.line.where !== front)} title="Elsewhere" />
     </div>
   );
 }
 
 // On this page a row lights its block's words while hovered or holding the keyboard; elsewhere it
 // quotes them, and a name opens its page beside the one in front.
-function Group({ title, lines, front, lit }: { title: string; lines: Line[]; front?: string; lit?: boolean }) {
-  const rows = useFading(lines);
+function Group({ title, rows, front, lit }: { title: string; rows: ReturnType<typeof useFading>; front?: string; lit?: boolean }) {
   if (!rows.length) return null;
   return (
     <section aria-label={title}>

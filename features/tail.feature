@@ -55,6 +55,10 @@ Feature: Tail
   Scenario: Open goes beside
     When I press Open on the first row
     Then "Garden plan" opens beside Today, and Today stays where it was
+    Given Today alone again, with its Type menu opened and closed with Escape
+    When I press ⌃↩
+    Then "Garden plan" opens beside Today the same way
+    And while a menu, a dialog or the Type menu is still open, ⌃↩ does nothing
 
   Scenario: The lines expire at the next beat
     Given Today shows its three rows and I press nothing
@@ -63,6 +67,7 @@ Feature: Tail
     And while I stay on Today, a beat changes nothing in front of me
     When I have named the untitled page and filed the ideas myself
     Then the next beat shows only what is still true
+    And a row that goes fades out over 150 ms, the last one too, before the room it took closes
     When a beat was held while I was on Today, and I then press File them
     Then leaving the window and coming back never brings "3 ideas since Tuesday" back
 
