@@ -46,7 +46,9 @@ const Dot = ({ part }: { part: Part }) => <span className="size-2 shrink-0 round
 // the parts of speech, and none at all when even the first won't; a click shows them all.
 export function PageStats({ id }: { id: string }) {
   const stats = usePageStats(id);
-  const on = useWritingPrefs().count;
+  const prefs = useWritingPrefs();
+  const on = prefs.count;
+  const showGrammar = prefs.grammarMode === "inline";
   const back = useBackToPage();
   const box = useRef<HTMLDivElement>(null);
   const [fit, setFit] = useState(Infinity);
@@ -72,8 +74,8 @@ export function PageStats({ id }: { id: string }) {
   const items: { key: string; node: ReactNode }[] = [
     { key: "words", node: sel ? `${n(sel.words)} of ${of(stats.page.words, ["word", "words"])}` : of(c.words, ["word", "words"]) },
     { key: "time", node: `${minutes(c)} min read` },
-    ...(mistakes(c, true) ? [{ key: "spelling", node: of(mistakes(c, true), ["misspelling", "misspellings"]) }] : []),
-    ...(mistakes(c, false) ? [{ key: "grammar", node: of(mistakes(c, false), ["grammar issue", "grammar issues"]) }] : []),
+    ...(showGrammar && mistakes(c, true) ? [{ key: "spelling", node: of(mistakes(c, true), ["misspelling", "misspellings"]) }] : []),
+    ...(showGrammar && mistakes(c, false) ? [{ key: "grammar", node: of(mistakes(c, false), ["grammar issue", "grammar issues"]) }] : []),
     ...(c.parts
       ? PARTS.filter((p) => c.parts![p]).map((p) => ({
           key: p,

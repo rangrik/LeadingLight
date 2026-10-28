@@ -4,7 +4,8 @@ Feature: Writing tools
   beside the page's name. All run on this Mac; grammar comes from Harper. They only change how
   the page looks to you: nothing in the page is changed or saved because of them. Each is a
   setting for the whole app, kept on this Mac, and holds after a reload. Grammar check and
-  Counts are on to begin with; the rest are off.
+  Counts are on to begin with; the rest are off. Grammar help starts at When I ask
+  (grammar-coach.feature); the underline scenarios below opt into While I write.
 
   Names used below:
   - the Writing menu: button "Writing" at the right of each page card's header (with pages side
@@ -20,7 +21,8 @@ Feature: Writing tools
   - dimmed: drawn at low opacity, 150–200 ms ease-out to change
 
   Background:
-    Given the app is open in a browser at 1280x800 with a page whose body reads
+    Given Grammar help is set to While I write
+    And the app is open in a browser at 1280x800 with a page whose body reads
       | Basically, the quick fox jumps. It sleeps now. |
       | A second paragraph.                            |
       | - a list item                                  |

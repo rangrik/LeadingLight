@@ -3,6 +3,7 @@ import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { liveEditor } from "~/lib/live";
 import { useKeysFor } from "~/lib/keymap";
 import { type Tool, toggleTool, useBackToPage, useWritingPrefs } from "~/lib/writing";
 
@@ -15,7 +16,7 @@ const TOOLS: { id: Tool; label: string }[] = [
 ];
 
 // The writing tools at the page panel's top right, like iA Writer's Focus menu in its title bar.
-export function WritingMenu({ className }: { className?: string }) {
+export function WritingMenu({ className, pageId }: { className?: string; pageId: string }) {
   const prefs = useWritingPrefs();
   const back = useBackToPage();
   const keysFor = useKeysFor();
@@ -25,6 +26,8 @@ export function WritingMenu({ className }: { className?: string }) {
         <Focus />
       </MenuTrigger>
       <MenuPopup align="end" className="w-60" finalFocus={back.finalFocus}>
+        <MenuItem onClick={() => liveEditor(pageId)?.reviewWriting()}>Review writing</MenuItem>
+        <MenuSeparator />
         {TOOLS.map((t) => (
           <MenuCheckboxItem checked={prefs[t.id]} closeOnClick key={t.id} onCheckedChange={() => toggleTool(t.id)}>
             <span className="flex items-center">

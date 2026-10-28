@@ -21,11 +21,12 @@ import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
 import { BrowserPane } from "~/components/agent-browser";
 import { ProjectChat } from "~/components/project-chat";
-import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -192,7 +193,7 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
                 {isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
-                  <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />
+                  <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
                 {split && (
                   <Button
@@ -214,7 +215,9 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
                 key={leaf.page}
                 style={ai.corner.endsWith("l") ? { paddingLeft: aside } : { paddingRight: aside }}
               >
-                {leaf.page === FEED_VIEW ? (
+                {leaf.page === INBOX_VIEW ? (
+                  <CaptureInbox />
+                ) : leaf.page === FEED_VIEW ? (
                   <FeedView paneId={leaf.id} />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />

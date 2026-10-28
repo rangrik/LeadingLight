@@ -398,3 +398,25 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+
+## 28. Captures stay pages; review state is metadata
+
+The inbox reads capture kind, date and reviewed date from page properties. Reviewing never
+moves or deletes a page. Older captures are recognized by their source fields or capture tag;
+older saved recordings are discovered once per session. Property changes persist before the
+open page is told, so failed saves do not remove a capture from view.
+
+Voice review keeps a snapshot of the original transcript beside its recording id. Creating an
+Idea or Task copies chosen words, appends a page link beside the recording, and links back to
+that recording. The editable transcript and audio are unchanged; undo removes only the link.
+
+## 29. Writing review is quiet, local, and chosen
+
+Grammar help defaults to review on request. Inline underlines are optional. Harper provides
+actual suggestions; applying one preserves marks, has its own undo step, and refuses stale
+text. Keep wording remembers that occurrence for the current page session, not a universal rule.
+
+Short lessons are authored for named rules, with optional practice. Saved tips store rule ids,
+not a mistake history. Dictionary words stay on this device. Listening uses only local English
+system voices. Neither the checker nor practice assigns a score or claims someone has learned
+something. See WRITING-COACH.md for the scenarios and questions to test with the writer.

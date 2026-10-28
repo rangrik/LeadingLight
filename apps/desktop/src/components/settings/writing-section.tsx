@@ -44,7 +44,7 @@ export function WritingSection() {
     setWritingPrefs({ types: Object.fromEntries(types.filter((t) => ids.includes(t.id) !== suggested(t.id)).map((t) => [t.id, ids.includes(t.id)])) });
 
   return (
-    <SettingsPage title="Writing" description="Aids for writing, after iA Writer. They change how a page looks to you, never what it says.">
+    <SettingsPage title="Writing" description="Help with focus, language, and review. Your words change only when you choose.">
       <SettingsGroup title="Tools">
         <SettingsRow className={HAS_CHOICE} label="Focus mode" description="Keeps the line you are writing in the middle of the page.">
           <ToolSwitch on={p.focus} tool="focus" />
@@ -86,8 +86,11 @@ export function WritingSection() {
         <SettingsRow className={UNDER} label="Strike through">
           <Choices all={CHECKS} disabled={!p.style} label={(check) => CHECK_LABEL[check]} onChange={(checks) => setWritingPrefs({ checks })} value={p.checks} />
         </SettingsRow>
-        <SettingsRow label="Grammar check" description="Underlines misspellings in red and grammar in green, found on this Mac by Harper.">
+        <SettingsRow label="Grammar check" description="Checks English on this device. Review one suggestion at a time from the page’s Writing menu.">
           <ToolSwitch on={p.grammar} tool="grammar" />
+        </SettingsRow>
+        <SettingsRow className={STACK} label="Grammar help" description="Keep drafting quiet, or show underlines you can click. Nothing is corrected automatically.">
+          <Segmented value={p.grammarMode} options={[{ value: "review", label: "When I ask" }, { value: "inline", label: "While I write" }]} onChange={(grammarMode) => setWritingPrefs({ grammarMode })} />
         </SettingsRow>
         <SettingsRow label="Counts" description="Words, reading time, parts of speech, style and grammar beside the page's name.">
           <ToolSwitch on={p.count} tool="count" />

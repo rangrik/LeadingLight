@@ -90,9 +90,11 @@ export const BROWSER_VIEW = "browser:";
 export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
 // The Feed in a pane, when the window is too narrow for its lane (features/feed.feature).
 export const FEED_VIEW = "feed:";
-export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && view !== FEED_VIEW;
+export const INBOX_VIEW = "inbox:";
+export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && view !== FEED_VIEW && view !== INBOX_VIEW;
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
+  if (view === INBOX_VIEW) return { title: "Capture inbox" };
   if (view === FEED_VIEW) return { title: "Feed" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
