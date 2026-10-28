@@ -7,6 +7,7 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
+import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
@@ -14,6 +15,15 @@ import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
 const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+const TABS: Record<string, (() => void) | undefined> = {
+  "new-tab": () => newTab(),
+  "close-tab": () => closeTab(),
+  "reopen-tab": reopenTab,
+  back: () => travel(-1),
+  forward: () => travel(1),
+  "next-tab": () => cycleTab(1),
+  "previous-tab": () => cycleTab(-1),
+};
 
 // The keys in lib/shortcuts.json, by id, as changed in Settings (lib/keymap.ts). In the Mac app
 // the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
@@ -22,6 +32,9 @@ const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=al
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleFeed(): void }) {
   useEffect(() => {
     const run = (id: string) => {
+      // Tabs and history act on the panes, so not while Settings covers them.
+      const tabKey = TABS[id];
+      if (tabKey) return useStore.getState().view.kind === "settings" ? undefined : tabKey();
       switch (id) {
         case "new-page":
           // A new page is made to be written in: Settings goes first.

@@ -30,7 +30,7 @@ import { pageLabel } from "~/lib/labels";
 import { openLink } from "~/lib/links";
 import type { ObjectSummary } from "~/lib/objects";
 import { COLORS, type Color } from "~/lib/page-meta";
-import { openBeside, openPage } from "~/lib/panes";
+import { openFrom } from "~/lib/panes";
 import { createPage, iconFor, pageOf, putProp, space, typeOf } from "~/lib/space";
 
 export const KIND_ICONS: Record<Kind, LucideIcon> = {
@@ -51,9 +51,9 @@ const asIds = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => t
 const asFile = (v: unknown) => (v && typeof v === "object" && typeof (v as FileValue).url === "string" ? (v as FileValue) : undefined);
 const empty = <span className="text-muted-foreground/60">Empty</span>;
 
-// Opens the page; with Shift, beside the one in view.
+// Opens the page; with Shift, beside the one in view; with ⌘, in a new tab.
 // Where a click on a page goes: a pane here, or, from the capture panel, the main window.
-let opener = (id: string, e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
+let opener = (id: string, e: React.MouseEvent) => openFrom(id, e);
 export const setVisit = (fn: typeof opener) => void (opener = fn);
 export const visit = (id: string, e: React.MouseEvent) => opener(id, e);
 

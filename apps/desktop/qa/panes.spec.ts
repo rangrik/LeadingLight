@@ -29,10 +29,9 @@ test("Two pages side by side each keep their own edits", async ({ page }) => {
   await body(page, "Right").click();
   await page.keyboard.type("east");
   await page.reload();
-  await nav(page).getByRole("button", { name: "Left", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("west");
-  await nav(page).getByRole("button", { name: "Right", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("east");
+  // Both come back side by side (features/tabs.feature keeps the layout).
+  await expect(body(page, "Left")).toHaveText("west");
+  await expect(body(page, "Right")).toHaveText("east");
 });
 
 // Seam: the sidebar row's click, with Shift, against the panes. Catches Shift-click replacing the

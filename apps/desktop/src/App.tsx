@@ -42,7 +42,7 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { closePane, focusedPage, leaves, openBeside, openPage, panes, showOnly } from "~/lib/panes";
+import { closePane, focusedPage, leaves, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
 import { feedPrefs, wantFocus } from "~/lib/feed";
 import { FEED_W, FeedLane } from "~/components/feed";
 import { isNative } from "~/lib/platform";
@@ -58,6 +58,7 @@ import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
+import { BROWSER_VIEW, isPageView } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -180,8 +181,10 @@ export default function App() {
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
-        // The top of Recent (which leaves tasks out), in the order chosen.
-        showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
+        // The panes left open last time, less pages gone since and live browsers; else the top of
+        // Recent (which leaves tasks out), in the order chosen.
+        const exists = (id: string) => (isPageView(id) ? list.some((p) => p.id === id) : !id.startsWith(BROWSER_VIEW));
+        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
@@ -255,7 +258,7 @@ export default function App() {
     void isNative.then(async (native) => {
       if (!native) return;
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
-      // Tauri waits for this before closing the window (⌘W, the close button and ⌘Q). A
+      // Tauri waits for this before closing the window (Close window, the close button and ⌘Q). A
       // throw here would leave the window unable to close, so errors are only logged.
       unlisten = await getCurrentWindow().onCloseRequested(async () => {
         await flushAll().catch(console.error);
@@ -276,8 +279,8 @@ export default function App() {
     return () => window.removeEventListener("ll:make-room", fold);
   }, []);
 
-  // A row opens its page; Shift opens it beside the one in front, as Shift on a link does.
-  const opener = (id: string) => (e: React.MouseEvent) => (e.shiftKey ? openBeside(id) : openPage(id));
+  // A row opens its page; Shift opens it beside the one in front, as Shift on a link does; ⌘ in a new tab.
+  const opener = (id: string) => (e: React.MouseEvent) => openFrom(id, e);
 
   // Nothing on screen shows a copied link, so a toast says so.
   const copyLink = (id: string, name: string) => () =>

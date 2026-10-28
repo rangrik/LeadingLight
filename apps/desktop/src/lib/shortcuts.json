@@ -2,8 +2,11 @@
   "_": "LeadingLight's keyboard shortcuts, in Shipyard's shape (vendor/shipyard/app/src/lib/shortcuts.ts reads it through an alias; src-tauri/src/menu.rs builds the Mac menu bar from it). group is the menu an item is in; accel, when set, puts it there with that accelerator, so macOS cannot take the key first. Never give ⌘C, ⌘V, ⌘A or ⌘F an accelerator: text fields need them. The editor's own keys (⌘B, ⌘I, ⌘/ for the block menu, …) stay out: its toolbar shows them. Settings › Shortcuts can change any key here (lib/keymap.ts).",
   "shortcuts": [
     { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N" },
+    { "id": "new-tab", "group": "File", "label": "New tab", "keys": "⌘T", "accel": "CmdOrCtrl+T" },
     { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },
-    { "id": "save", "group": "File", "label": "Save", "keys": "⌘S", "accel": "CmdOrCtrl+S", "what": "Save now" },
+    { "id": "close-tab", "group": "File", "label": "Close tab", "keys": "⌘W", "accel": "CmdOrCtrl+W", "sep": true },
+    { "id": "reopen-tab", "group": "File", "label": "Reopen closed tab", "keys": "⇧⌘T", "accel": "CmdOrCtrl+Shift+T" },
+    { "id": "save", "group": "File", "label": "Save", "keys": "⌘S", "accel": "CmdOrCtrl+S", "what": "Save now", "sep": true },
     { "id": "sidebar", "group": "View", "label": "Show or hide the sidebar", "keys": "⌘\\", "accel": "CmdOrCtrl+\\" },
     { "id": "zoom-in", "group": "View", "label": "Zoom in", "keys": "⌘+", "accel": "CmdOrCtrl+=", "sep": true },
     { "id": "zoom-out", "group": "View", "label": "Zoom out", "keys": "⌘−", "accel": "CmdOrCtrl+-" },
@@ -16,6 +19,10 @@
     { "id": "ask", "group": "Go", "label": "Ask about this…", "keys": "⌘J", "accel": "CmdOrCtrl+J", "what": "Ask Claude about the selected words, or the page" },
     { "id": "feed", "group": "Go", "label": "Feed", "keys": "⌥⌘F", "accel": "CmdOrCtrl+Alt+F", "what": "Show or hide what agents need from you" },
     { "id": "nod", "group": "Go", "label": "Nod", "keys": "⌃↩", "accel": "Ctrl+Enter", "what": "Do what tail's line offers on the page in front" },
+    { "id": "back", "group": "Go", "label": "Back", "keys": "⌘[", "accel": "CmdOrCtrl+[", "sep": true, "what": "The tab's previous page" },
+    { "id": "forward", "group": "Go", "label": "Forward", "keys": "⌘]", "accel": "CmdOrCtrl+]", "what": "The tab's next page" },
+    { "id": "next-tab", "group": "Go", "label": "Next tab", "keys": "⌃⇥", "accel": "Ctrl+Tab" },
+    { "id": "previous-tab", "group": "Go", "label": "Previous tab", "keys": "⌃⇧⇥", "accel": "Ctrl+Shift+Tab" },
     { "id": "settings", "group": "Go", "label": "Settings…", "keys": "⌘,", "accel": "CmdOrCtrl+,", "sep": true },
     { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘⌥/", "accel": "CmdOrCtrl+Alt+/" }
   ]
