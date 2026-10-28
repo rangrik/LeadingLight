@@ -27,6 +27,10 @@ export function captureOf(page: ObjectSummary): Capture | undefined {
   if (page.typeId === "idea" && tags.some((id) => captureTags.has(id))) return { kind: "idea", capturedAt: page.createdAt };
 }
 
+// The inbox lists these, and the bar counts the ones to review, so the two never disagree.
+export const captured = (pages: ObjectSummary[]) => pages.filter((page) => !page.properties.templateOf && captureOf(page));
+export const toReview = (pages: ObjectSummary[]) => captured(pages).filter((page) => !captureOf(page)!.reviewedAt);
+
 // Save the metadata first, then tell an open editor so its next autosave keeps the change.
 export async function setCaptureProperty(id: string, key: string, value: unknown) {
   await flushAll();

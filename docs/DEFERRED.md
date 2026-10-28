@@ -5,6 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-10-27 | The bar following the page in a narrow window | At 1000 px or less the bar's view is a pane with no pin, so a page with suggestions does not switch it. | Slice 3, if Suggestions should take that pane over. |
+| 2026-10-27 | The Feed scrolling a long page to its words | Opened beside, a 40-paragraph page scrolls before it has its final height and stops short; the words are lit off screen. Seen with and without the bar, in `lib/feed.ts`'s reveal. | Someone misses the words, or the reveal is next touched. |
 | 2026-10-27 | Durable retry of Unsplash selection reports | A selection is sent once; a lost response cannot tell us whether Unsplash counted it. Blind retries may double-count. | Before wider release, add a durable queue with deduplication. |
 | 2026-10-27 | Higher Unsplash quota and stronger public-service abuse limits | This development service uses the shared 50-request/hour Demo quota and caches searches. Selection tokens stop arbitrary upstream requests but can be replayed. | Before wider release, obtain Production approval and add durable rate limits. |
 | 2026-10-22 | Virtualized or paged editing for very long pages | A keystroke on a 2000-paragraph page takes 8–11 ms (the first about 13 ms), inside a 16 ms frame. Rendering part of a page needs a new editor architecture and tends to break browser find, cross-block selection and copy. | Someone finds typing slow. To check: fill a page with 2000 paragraphs (`__editor.commands.setContent`), type 30 keys, time each from keydown to its transaction; the budget is 16 ms. |

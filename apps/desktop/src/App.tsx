@@ -1,5 +1,5 @@
 import { FileText, Plus } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
 import { ToastProvider as ShipyardToasts } from "@/components/ui/toast";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -20,14 +20,14 @@ import {
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider, toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { AgentPanel } from "~/components/agent-panel";
 import { AskBar } from "~/components/ask-bar";
+import { BarPanel, BarStrip, toggleView } from "~/components/bar";
 import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
 import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { makeLinkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
-import { CARD, PaneArea, widthNeeded } from "~/components/pane-area";
+import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
@@ -42,18 +42,15 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { closePane, focusedPage, leaves, openBeside, openPage, panes, showOnly } from "~/lib/panes";
-import { feedPrefs, wantFocus } from "~/lib/feed";
-import { FEED_W, FeedLane } from "~/components/feed";
+import { focusedPage, openBeside, openPage, panes, showOnly } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
-import { createPage, FEED_VIEW, INBOX_VIEW, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
-import { useAiPrefs } from "~/lib/ai-prefs";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
@@ -86,7 +83,6 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const view = useStore((s) => s.view);
-  const { corner, pinned } = useAiPrefs();
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
@@ -98,7 +94,7 @@ export default function App() {
     const onFocus = (e: FocusEvent) => {
       const t = e.target instanceof HTMLElement ? e.target : null;
       if (t && !t.closest(".ll-settings")) lastFocus.current = t;
-      if (t && !t.closest(".ll-settings, [data-slot=sidebar], [role=dialog]")) captureFrom.current = t;
+      if (t && !t.closest(".ll-settings, [data-slot=sidebar], [data-bar], [role=dialog]")) captureFrom.current = t;
     };
     document.addEventListener("focusin", onFocus);
     return () => document.removeEventListener("focusin", onFocus);
@@ -122,45 +118,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
-  // Pinned, the panel takes what the pages beside it don't need (pane-area.tsx), up to half the
-  // row they share; with less than its 280 px left it floats until there is room again.
-  const row = useRef<HTMLDivElement>(null);
-  const [rowW, setRowW] = useState(0);
-  // Measured once the sidebar has slid, so the panel isn't placed for a width on the way.
-  const sliding = useRef(false);
-  useLayoutEffect(() => {
-    const el = row.current;
-    if (!el) return;
-    setRowW(el.clientWidth);
-    const observer = new ResizeObserver(() => !sliding.current && setRowW(el.clientWidth));
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [!!root]);
-  useEffect(() => {
-    sliding.current = true;
-    const t = window.setTimeout(() => {
-      sliding.current = false;
-      if (row.current) setRowW(row.current.clientWidth);
-    }, 220);
-    return () => window.clearTimeout(t);
-  }, [sidebarOpen]);
   const { enabled: projectsOn } = projectPrefs.use();
-  // The Feed's lane (features/feed.feature) while there is room for it beside a page; in a narrower
-  // window the Feed is a pane, as any page is.
-  const feed = feedPrefs.use();
-  const lane = projectsOn && feed.open && rowW >= FEED_W + 8 + 480;
-  const paneW = rowW - (lane ? FEED_W + 8 : 0);
-  const fit = root && rowW ? Math.min(paneW / 2, paneW - 8 - widthNeeded(root)) : Infinity;
-  const toggleFeed = useCallback(() => {
-    if (!projectPrefs.get().enabled) return;
-    const narrow = (row.current?.clientWidth ?? 0) < FEED_W + 8 + 480;
-    const open = panes.get().root && leaves(panes.get().root!).find((l) => l.page === FEED_VIEW);
-    wantFocus.now = !feedPrefs.get().open;
-    if (!narrow) return feedPrefs.set({ open: !feedPrefs.get().open });
-    if (open) closePane(open.id);
-    else openBeside(FEED_VIEW);
-  }, []);
-  const dock = pinned && fit >= 280 ? pinned : null;
 
   useEffect(() => void isNative.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
@@ -232,17 +190,24 @@ export default function App() {
       off?.();
     };
   }, []);
-  // A click anywhere else closes the box, as the panel does; the editor's menus count as inside.
+  // A click anywhere else closes the box, as the panel does; the editor's menus count as inside,
+  // and the bar's button that opened it closes it itself.
   useEffect(() => {
     if (!capture) return;
-    const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest(`[role=dialog], ${POPUP}`) && closeCapture();
+    const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest(`[role=dialog], ${POPUP}, [data-quick-capture]`) && closeCapture();
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
   }, [capture, closeCapture]);
 
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
-  useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleFeed }), [create, toggleCapture, toggleSidebar, toggleFeed]));
+  useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleView }), [create, toggleCapture, toggleSidebar]));
+  // Save webpage is the Captures header's (capture-inbox.tsx); the dialog is the window's.
+  useEffect(() => {
+    const open = () => setSaveWebpage(true);
+    window.addEventListener("ll:save-webpage", open);
+    return () => window.removeEventListener("ll:save-webpage", open);
+  }, []);
 
   // Save pending edits whenever the app might be about to go away.
   useEffect(() => {
@@ -358,10 +323,6 @@ export default function App() {
         <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
         <AppSidebar
           onCreate={create}
-          feed={projectsOn ? { open: lane || !!(root && leaves(root).some((l) => l.page === FEED_VIEW)), toggle: toggleFeed } : undefined}
-          inbox={{ open: current === INBOX_VIEW, onSelect: opener(INBOX_VIEW) }}
-          onNewIdea={toggleCapture}
-          onSaveWebpage={() => setSaveWebpage(true)}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}
@@ -369,36 +330,36 @@ export default function App() {
           types={navTypes}
         />
         <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
-          {/* A pinned agent panel is a card beside the pages; a floating one sits over them. */}
-          {root ? (
-            <div className="flex min-h-0 flex-1" ref={row}>
-              {lane && <FeedLane sidebarOpen={sidebarOpen} windowToggle={mac} />}
-              <PaneArea dock={dock} lead={!lane} windowToggle={mac} />
-              <AgentPanel dock={dock} fit={fit} windowToggle={mac} />
-            </div>
-          ) : (
-            <div className={cn("flex min-h-0 flex-1 flex-col", CARD)}>
-              <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
-              <Empty className="min-h-0 flex-1">
-                <EmptyHeader>
-                  <EmptyMedia variant="icon">
-                    <FileText />
-                  </EmptyMedia>
-                  <EmptyTitle>No page open</EmptyTitle>
-                  <EmptyDescription>Create a page to start writing.</EmptyDescription>
-                </EmptyHeader>
-                <EmptyContent>
-                  <Button onClick={create}>
-                    <Plus />
-                    New page
-                  </Button>
-                </EmptyContent>
-              </Empty>
-            </div>
-          )}
+          {/* The bar's panel is a card beside the pages, never over them. */}
+          <div className="flex min-h-0 flex-1">
+            {root ? (
+              <PaneArea windowToggle={mac} />
+            ) : (
+              <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", CARD)}>
+                <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
+                <Empty className="min-h-0 flex-1">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <FileText />
+                    </EmptyMedia>
+                    <EmptyTitle>No page open</EmptyTitle>
+                    <EmptyDescription>Create a page to start writing.</EmptyDescription>
+                  </EmptyHeader>
+                  <EmptyContent>
+                    <Button onClick={create}>
+                      <Plus />
+                      New page
+                    </Button>
+                  </EmptyContent>
+                </Empty>
+              </div>
+            )}
+            <BarPanel />
+          </div>
           {/* The ask bar sits by the selected words. */}
           {root && <AskBar />}
         </SidebarInset>
+        <BarStrip onCapture={toggleCapture} />
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
           onConfirm={(id) => {
@@ -411,8 +372,8 @@ export default function App() {
     );
 
   return (
-    // Toasts sit in the bottom corner across from the Ask panel, so they never cover it.
-    <ToastProvider position={(dock ?? (corner.endsWith("l") ? "left" : "right")) === "left" ? "bottom-right" : "bottom-left"}>
+    // Toasts sit in the bottom corner across from the bar, so they never cover it.
+    <ToastProvider position="bottom-left">
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}

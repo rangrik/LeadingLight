@@ -2,7 +2,7 @@ Feature: Keep a webpage as a source
   A source keeps its address and, when requested, a readable copy in the space.
 
   Scenario: Save just a link without fetching the website
-    When I choose "Save webpage" in the sidebar
+    When I choose "Save webpage" in the bar's Captures header
     And enter "https://example.com/article" and choose "Link only"
     And press "Save source"
     Then a page opens with a clickable source address

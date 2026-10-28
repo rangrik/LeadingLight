@@ -6,6 +6,9 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
 async function dialog(page: import("@playwright/test").Page) {
   await page.goto("/");
+  // Save webpage is in the Captures panel's header; the bar keeps it open across a reload.
+  const captures = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  if ((await captures.getAttribute("aria-pressed")) !== "true") await captures.click();
   await page.getByRole("button", { name: "Save webpage", exact: true }).click();
   await page.getByRole("textbox", { name: "Web address" }).fill(url);
 }

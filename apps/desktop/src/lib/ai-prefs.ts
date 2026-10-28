@@ -1,11 +1,9 @@
 import { localPrefs } from "~/lib/local-prefs";
 
-// Settings › AI and the agent panel's place, kept on this Mac. A model is one of Claude Code's
-// aliases, which follow the newest of each, or a GPT model Codex offers (lib/codex.ts).
-export type Corner = "br" | "bl" | "tr" | "tl";
-export type Side = "left" | "right";
+// Settings › AI, kept on this Mac. A model is one of Claude Code's aliases, which follow the
+// newest of each, or a GPT model Codex offers (lib/codex.ts).
 export type Access = "ask" | "auto" | "full";
-export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; pinned: Side | null; corner: Corner; panelW: number; panelH: number; tail: Partial<TailPrefs> };
+export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; tail: Partial<TailPrefs> };
 // Tail (docs/TAIL.md): Off, Quiet or Normal, its own model and effort, and Reads on, the types
 // where the person chose other than Writing's Use on (Settings › AI › Tail).
 export type TailPrefs = { mode: "off" | "quiet" | "normal"; model: string; effort: string; readsOn: Record<string, boolean> };
@@ -40,16 +38,7 @@ export const GPT_ACCESS: Record<Access, string> = {
 export const labelOf = (list: { value: string; label: string }[], value: string) => list.find((x) => x.value === value)?.label ?? value;
 export const isClaude = (model: string) => MODELS.some((m) => m.value === model);
 
-const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, pinned: "right", corner: "br", panelW: 400, panelH: 540, tail: {} });
-
-// The floating panel's box in the page area, as agent-panel.tsx places it (12 px in, top corners
-// under the header band), so the pages under it can make room (pane-area.tsx).
-const EDGE = 12;
-export function floatBox(p: AiPrefs, area: { w: number; h: number }, header: number) {
-  const width = Math.min(p.panelW, area.w - 2 * EDGE);
-  const height = Math.min(p.panelH, area.h - header - EDGE);
-  return { left: p.corner.endsWith("l") ? EDGE : area.w - EDGE - width, top: p.corner.startsWith("t") ? header : area.h - EDGE - height, width, height };
-}
+const prefs = localPrefs<AiPrefs>("ll.ai", { model: "opus", effort: "medium", access: "ask", plan: false, tail: {} });
 
 export const aiPrefs = prefs.get;
 export const setAiPrefs = prefs.set;
