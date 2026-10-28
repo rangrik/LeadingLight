@@ -155,5 +155,9 @@ pub fn run() {
                     let _ = main.set_focus();
                 }
             }
+            // Every way of quitting (⌘Q, the Dock) ends here, after the windows have closed.
+            if matches!(event, RunEvent::Exit) {
+                runtime::quit(app);
+            }
         });
 }
