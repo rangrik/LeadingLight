@@ -186,7 +186,7 @@ const OpenLinks = Extension.create<{ open: (href: string) => void }>({
   name: "openLinks",
   addOptions: () => ({ open: () => {} }),
   addProseMirrorPlugins() {
-    const chip = (e: Event) => (e.target as HTMLElement).closest("[data-href], [data-note-chip]");
+    const chip = (e: Event) => (e.target as HTMLElement).closest("[data-href], [data-note-chip], [data-tail-chip]");
     return [
       new Plugin({
         key: new PluginKey("openLinks"),

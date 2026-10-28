@@ -38,16 +38,26 @@ the nod a `Button size="xs" variant="outline"`. It fades in and out over 150 ms.
    It says where you stopped and leaves on the first edit.
 3. **The line you just wrote.** A chip in the margin, placed like a sidenote (13 px on 19.5 px,
    level with the first baseline, 32 px right of the text, at most 224 px wide): the sentence,
-   then the nod with its key. Shown only when the margin fits beside the text as it is; else
-   the row above the title, quoting the words. It stays while its line stands: an Enter after
+   then the nod with its key. When the margin has no room beside the text as it is, the chip
+   sits at the end of its line, after the last word, placed as a sidenote's number is (drawn,
+   never stored, nothing moved): the sentence and the nod's key in one small muted chip,
+   "Make this a task? ⌃↩", which nods on a click. Only when that line has no room left for it
+   does it fall back to the row above the title, quoting the words. After a nod it reads what
+   the nod did, with Undo; a line that became a task's link has no words to sit after, so the
+   row says it. It stays while its line stands: an Enter after
    the line, or writing elsewhere on the page, even while the model thinks, leaves it where it
    is. One chip per page at a time; a newer offer takes its place. A pause on the empty line an
    Enter made reads the line before it. Changing the line's words takes the chip away; only
-   leaving the page without a nod counts as ignored.
+   leaving the page without a nod, once the chip has been on screen thirty seconds, counts as
+   ignored.
 4. **The capture box.** For an idea of three words or more, the project button shows the guess,
    muted, with a trailing "?", and the footer offers `⌃↩ Task in Garden` when the words read as
    a task, else `⌃↩ In Garden`, which files the idea there and keeps it an idea; once you pick
-   the project yourself, only the task offer stays. ⌘↩ still saves an idea, as before.
+   the project yourself, only the task offer stays. ⌘↩ still saves an idea, as before. One turn
+   runs at a time per opening of the box: the first after three words and a one-second pause,
+   the next only once three or more words changed since the words the last one answered, again
+   after a pause. An answer shows when it comes, whatever you typed meanwhile, unless the box
+   closed or you picked the project; each one replaces the guess shown.
 
 The key: ⌃↩ nods the chip or row on the page in front, the first row on Today. It is in the
 shortcuts table, so it can be changed.
@@ -62,7 +72,7 @@ now. Tail's spend shows in the usage meter at the bottom of the sidebar, beside 
 Present tense, plain words, no "I", no exclamation. The verb on the button says what the nod
 does. After a nod, the same row in the past tense, with Undo for eight seconds. On Today the
 sentence then stays, without Undo, until you leave the page or the next beat, so the rows under
-it never move; a chip, which is in the margin, just leaves. A count such as "3 ideas" is a name
+it never move; a chip, which is beside the words, just leaves. A count such as "3 ideas" is a name
 too: it opens the list of those pages.
 
 | When | Line | Nod | After |
@@ -109,8 +119,11 @@ model calls themselves, exactly as with Ask.
 Three plain things, all on this Mac, all readable.
 
 1. **The nod ledger.** What you took and ignored, by kind, page type and project, for thirty
-   days. It quiets a kind after two ignores in the same place and ranks the rest. Small, local,
-   never shown as a list; its effect shows as a sentence on the page about you. A Today row
+   days. It quiets a kind after three ignores in the same place and ranks the rest; a chip is
+   ignored only if it was on screen thirty seconds before you left its page. Small, local,
+   never shown as a list; its effect shows as a sentence on the page about you. It has a
+   version: a build that changes it starts the ledger over and takes tail's own quiet sentences
+   off the page, so a quiet that an older build's bug set lifts. A Today row
    shown on two days without a nod stays out, that row only, until its record changes: "Not
    asking again about *Garden plan* for now."
 2. **The page about how you work.** One page per space, of a system type the app makes (as
@@ -120,10 +133,11 @@ Three plain things, all on this Mac, all readable.
    can edit or delete any line and tail follows: delete the quiet line and that kind comes
    back. Tail reads this page at the start of every turn. It is reached from Settings › AI ›
    Tail and by search.
-3. **Threads.** A new thread for every beat, so it never grows, keeping the day's record of the
-   bodies sent, so a body goes again only once its page changes; one resumed thread per page for
-   chips and the return row, and one per opening of the capture box, as Ask threads work,
-   carrying what tail already saw so nothing is re-sent. The day's record ends with the day, a
+3. **Threads.** A new thread for every beat and every pause, so neither grows. A beat keeps the
+   day's record of the bodies sent, so a body goes again only once its page changes; a pause
+   sends no body and leaves the page's record as it was. One resumed thread per page for the
+   return row, and one per opening of the capture box, as Ask threads work, carrying what tail
+   already saw so nothing is re-sent. The day's record ends with the day, a
    page's thread after four hours, a capture box's after ten minutes.
 
 Tail never keeps your words beyond a thread, never keeps a sidenote, and never keeps anything
@@ -139,6 +153,8 @@ Design mode was the prototype's; the real values go with the model.
 | Away before "you stopped at" and a beat | 10 s | 15 min |
 | Beat while the app is open | 2 min | 30 min |
 | A done row | 8 s | 8 s |
+| Pause before a capture turn | 1 s | 1 s |
+| A chip on screen before leaving it is ignored | 30 s | 30 s |
 | Effort of a pause or capture turn | low | low |
 
 A chip has no timer: it stays while its line stands.

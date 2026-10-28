@@ -418,7 +418,8 @@ the common case, as in heartbeat agents. Lines expire so nothing piles up.
 
 Nothing moves: Today's rows come at open, a page's row sits in the band above the title where
 the hover controls already live, and the chip is placed with the sidenote math (11) without the
-sidenote's room-making. A chip that has no room waits rather than narrowing the text.
+sidenote's room-making. A chip with no margin room sits after its line's last words, as a
+sidenote's number does, or else in the row above the title, rather than narrowing the text.
 
 Context is scoped by the trigger with a budget each, not a dump of the space: the block and the
 index for a chip, a digest of changes for the beat, bodies only of what changed and only once per
@@ -426,7 +427,7 @@ thread. Sidenotes and pages reached through a tag or a daily note are never read
 per-type Reads on, after Writing's Use on, is the person's control over what the beat may see,
 since the beat reads pages they did not point at.
 
-Memory is three plain things on this Mac: a nod ledger that quiets a kind after two ignores, a
+Memory is three plain things on this Mac: a nod ledger that quiets a kind after three ignores, a
 page in sentences about how the person works that tail rewrites and the person can edit, and
 short-lived threads. The page is a page because the tool's picture of the person must be theirs
 to read and correct, never a hidden profile.

@@ -7,7 +7,7 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
-import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
+import { anchors, newId, setEndChip, setLiveQuotes, trimmed } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { pasteText } from "./markdown";
@@ -82,6 +82,8 @@ export type BlockEditorHandle = {
   // undo step: how tail reads the line being written and nods at it (docs/TAIL.md).
   cursorBlock: () => number;
   setBlock: (index: number, block: EditorDoc, count?: number) => void;
+  // Tail's chip after a top-level block's last words, or none: drawn, never stored.
+  chipAfter: (at: { index: number; text: string } | null) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -519,6 +521,7 @@ export function BlockEditor({
         if (selection instanceof NodeSelection && selection.from === from) tr.setSelection(Selection.near(tr.doc.resolve(selection.to), 1));
         editor.view.dispatch(tr);
       },
+      chipAfter: (at) => void (!editor.isDestroyed && editor.view.dispatch(setEndChip(editor.state.tr, at))),
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),
       placeAt: (x, y) => placeAt(editor, x, y),

@@ -6,9 +6,11 @@ Feature: Tail
   Names used below:
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
   - the nod: the button, or ⌃↩ on the page in front, never under Settings, a dialog or a menu
-  - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under them
-  - ignored: a line that left with no nod: a chip whose page I left, the row above a page's title
-    once I wrote, or a row I saw on Today that a beat no longer shows
+  - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under
+    them; or, with no margin room, one small muted chip after the line's last word
+  - ignored: a line that left with no nod: a chip whose page I left once it had been on screen
+    thirty seconds, the row above a page's title once I wrote, or a row I saw on Today that a beat
+    no longer shows
   - "Garden plan": a page with three paragraphs, the last unfinished, edited yesterday
   - seeded: `__tail.seed()` has made Garden (a project), Sam (a person), "Garden plan", three ideas
     tagged in-the-middle from Tuesday to Thursday with no project, a task "Call Sam about the invoice
@@ -77,7 +79,9 @@ Feature: Tail
     Then the chip is back
     When I write "Email Sam the soil order before Monday." on a new line, press Enter after it and stop
     Then a chip for that line, beside it, takes the first one's place, and nothing counts as ignored
-    When I open another page
+    When I open another page at once
+    Then the chip is gone, and does not count as ignored, since it showed under thirty seconds
+    When a chip has stood thirty seconds and I open another page
     Then the chip is gone, and counts as ignored
 
   Scenario: A line that only looks like a task
@@ -103,11 +107,20 @@ Feature: Tail
     When I press Link
     Then "Sam" in that line is a link to the person, and the chip reads "Linked." with Undo
 
-  Scenario: Only one chip, and a narrow pane uses the row
+  Scenario: Only one chip, and a narrow pane puts it after the words
     Given "Garden plan" is open beside Today, so neither pane has margin room
-    When I type a task-like line and stop
-    Then no chip appears in the margin; instead a tail row above the title quotes the line and offers Make task
-    And the text column is as wide as before, and the words did not move
+    When I type "Call Sam before Friday." on a new line and stop
+    Then no chip appears in the margin; instead one small muted chip right after "Friday." reads
+      "Make this a task? ⌃↩", on the line's baseline
+    And the text column is as wide as before, the line is as tall, and the words did not move
+    When I click the chip
+    Then the line becomes a link to the new task, and a tail row above the title reads
+      "Made a task, due Friday." with Undo, since the link has no words to sit after
+    When I type "Sam says the beans want more wind cover." on a new line and stop
+    Then the chip after it reads "Sam has a page. ⌃↩", and a click links Sam and reads "Linked. Undo"
+    When I type "Need to call Sam about the invoice before Friday and the soil." on a new line
+      and stop, so its last row has no room left for the chip
+    Then a tail row above the title quotes the line and offers Make task, and no chip shows in the line
 
   Scenario: Coming back to a page
     Given "Garden plan" was last edited at "ask Sam whether the"
@@ -134,6 +147,17 @@ Feature: Tail
     Then it is saved as an idea with no project, as before, and nothing from tail shows
     When I open New idea and type "Grammar notes"
     Then the log holds no capture turn, since the guess waits for three words
+
+  Scenario: The guess lands while I type
+    Given the model takes two seconds to answer
+    When I open New idea, type "fix the gate latch" and stop for a second
+    Then the log holds one capture turn, for those words
+    When I type " before the weekend" while it thinks and stop
+    Then no second turn starts while the first runs
+    And when the first answers, "Garden?" shows, though the words changed since
+    And then a second turn asks about "fix the gate latch before the weekend", since three words changed
+    When I add one word and stop
+    Then no turn starts, since fewer than three words changed
 
   Scenario: The guess yields to my choice
     Given New idea is open with "fix the gate latch" typed and "Garden?" showing
@@ -184,18 +208,19 @@ Feature: Tail
     Then the stand-in's log holds a pause turn: that line, the blocks around it, the page's
       title, type and properties, and the titles and types of pages tail may read, and no body
     When I open New idea and type "fix the gate latch before the weekend"
-    Then 600 ms after I stop, the log holds a capture turn: those words, the projects and the
+    Then a second after I stop, the log holds a capture turn: those words, the projects and the
       last few captures, and "Garden?" shows only once it has answered
     And both turns ask for low effort, while a beat asks for the effort set in Settings
+    And each pause turn starts a new thread: the log shows it resumes none
 
   Scenario: A wrong answer is silence
     Given the browser build is opened with ?tail=garbled, so the stand-in answers in words, not JSON
     When I open Today
     Then no tail row shows and no error shows, and the stand-in's log holds the beat that was sent
 
-  Scenario: Ignored twice, quiet
-    Given a Link chip on a Meeting page that I ignored, and another on a second Meeting page
-    When I write an unlinked name on a third Meeting page and stop
+  Scenario: Ignored three times, quiet
+    Given a Link chip on each of three Meeting pages, each on screen thirty seconds before I left it
+    When I write an unlinked name on a fourth Meeting page and stop
     Then no chip appears
     And the page about how I work has a dated line "Links on Meeting pages are quiet."
     When I delete that line
@@ -203,6 +228,13 @@ Feature: Tail
     Given Today showed "You left Garden plan mid-sentence yesterday." on two days and I nodded at neither
     Then the next beat leaves out that row, not its kind, and the page has a dated line
       "Not asking again about Garden plan for now." until Garden plan is edited or I delete the line
+
+  Scenario: A new ledger lifts an older build's quiet
+    Given an older build's ledger, and the page about how I work has "Offers to make a task on Daily
+      note pages are quiet." beside "Most ideas go to Garden." and a line I wrote myself
+    When this build starts
+    Then the ledger holds no entries, the quiet line is gone, and the other two lines stay
+    And a task-like line on Today gets its chip again
 
   Scenario: The page about how I work
     Given I have pressed File them for Garden three times

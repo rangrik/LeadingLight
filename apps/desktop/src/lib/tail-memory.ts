@@ -13,15 +13,15 @@ export type Entry = Place & { took: boolean; at: number; spent?: boolean };
 const MONTH = 30 * 86_400_000;
 const here = (a: Place, b: Place) => a.kind === b.kind && a.type === b.type && (a.project ?? "") === (b.project ?? "");
 
-// A line taken or ignored, kept thirty days. Two ignores of a kind in one place with no nod between
-// quiet it and are spent, so a deleted quiet sentence takes two more; a nod there lifts it.
+// A line taken or ignored, kept thirty days. Three ignores of a kind in one place with no nod
+// between quiet it and are spent, so a deleted quiet sentence takes three more; a nod lifts it.
 export function record(entries: Entry[], e: Entry): { entries: Entry[]; change?: "quiet" | "lift" } {
   const kept = [...entries.filter((x) => x.at > e.at - MONTH), e];
   const there = kept.filter((x) => x !== e && here(x, e));
   const since = there.slice(there.reduce((k, x, i) => (x.took ? i + 1 : k), 0));
   if (e.took) return { entries: kept, ...(since.some((x) => x.spent) && { change: "lift" as const }) };
   const ignored = [...since.filter((x) => !x.spent), e];
-  if (ignored.length < 2) return { entries: kept };
+  if (ignored.length < 3) return { entries: kept };
   return { entries: kept.map((x) => (ignored.includes(x) ? { ...x, spent: true } : x)), change: "quiet" };
 }
 
@@ -38,7 +38,13 @@ const LABEL: Record<string, string> = {
 };
 export const quietLine = (kind: string, type: string, project?: string) => `${LABEL[kind] ?? kind} on ${type === "Page" ? "" : `${type} `}pages${project ? ` in ${project}` : ""} are quiet.`;
 export const notAgain = (name: string) => `Not asking again about ${name} for now.`;
-export const appLine = (s: string) => / pages( in .+)? are quiet\.$|^Most ideas go to |^Tasks get their day on |^Not asking again about .+ for now\.$/.test(s);
+export const quietForm = (s: string) => / pages( in .+)? are quiet\.$/.test(s);
+export const appLine = (s: string) => quietForm(s) || /^Most ideas go to |^Tasks get their day on |^Not asking again about .+ for now\.$/.test(s);
+
+// The ledger's version. An older build's ignores came partly from its bugs, so they go, and with
+// them the quiet they set (tail.ts takes those sentences off the page).
+export const LEDGER = 2;
+export const upgraded = <L extends { v?: number; entries: Entry[] }>(l: L): L => (l.v === LEDGER ? l : { ...l, v: LEDGER, entries: [] });
 
 // One paragraph per sentence, dated.
 export const dated = (day: string, sentence: string) => `${day} · ${sentence}`;
@@ -52,9 +58,13 @@ export const TODAY = "today";
 // The block nearest where a chip was that still holds its line's words, else -1.
 const lineAt = (texts: string[], text: string | undefined, was: number) => texts.reduce((k, t, i) => (t === text && (k < 0 || Math.abs(i - was) < Math.abs(k - was)) ? i : k), -1);
 
+// How long a chip must have been on screen before leaving its page counts as a no.
+export const LOOKED = 30_000;
+
 // A page's lines after an edit (texts: its blocks' words now) or once it is left (none). The row
-// above the title leaves at any edit, a chip once its line changes, which is not a no.
-export function edited<L extends { where: string; block?: number; text?: string; done?: object }>(lines: L[], page: string, texts?: string[]) {
+// above the title leaves at any edit, a chip once its line changes, which is not a no; a chip
+// left before it had stood thirty seconds is not one either (since: when it showed).
+export function edited<L extends { where: string; block?: number; text?: string; done?: object; since?: number }>(lines: L[], page: string, texts?: string[], now = Date.now()) {
   const gone: L[] = [];
   const moved: [L, number][] = [];
   for (const l of lines) {
@@ -63,7 +73,8 @@ export function edited<L extends { where: string; block?: number; text?: string;
     if (at < 0) gone.push(l);
     else if (at !== l.block) moved.push([l, at]);
   }
-  return { gone, ignored: gone.filter((l) => !l.done && !(texts && l.block !== undefined)), moved };
+  const no = (l: L) => !l.done && (l.block === undefined || (!texts && now - (l.since ?? now) >= LOOKED));
+  return { gone, ignored: gone.filter(no), moved };
 }
 
 // A row on Today by its candidate: the day it was first seen, its pages as they were then, and

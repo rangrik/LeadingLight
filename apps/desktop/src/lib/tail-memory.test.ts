@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { dated, edited, type Entry, isOut, isQuiet, quietLine, record, seenOn, TODAY } from "./tail-memory.ts";
+import { dated, edited, type Entry, isOut, isQuiet, LEDGER, quietLine, record, seenOn, TODAY, upgraded } from "./tail-memory.ts";
 
-// The seam: when tail goes quiet. Two ignores in one place must quiet a kind there and nowhere
-// else; a nod lifts it; once its sentence is deleted, one more ignore must not quiet it again.
-test("two ignores quiet a kind in one place; a nod or a deleted sentence lifts it", () => {
+// The seam: when tail goes quiet. Three ignores in one place must quiet a kind there and nowhere
+// else; a nod lifts it; once its sentence is deleted, it takes three more.
+test("three ignores quiet a kind in one place; a nod or a deleted sentence lifts it", () => {
   const link = { kind: "mention", type: "meeting" };
   const add = (entries: Entry[], e: Partial<Entry>, at: number) => record(entries, { ...link, took: false, ...e, at });
-  const one = add([], {}, 1);
-  assert.equal(one.change, undefined);
-  const two = add(one.entries, {}, 2);
-  assert.equal(two.change, "quiet");
-  assert.equal(add(one.entries, { type: "page" }, 2).change, undefined);
-  assert.equal(add(two.entries, { took: true }, 3).change, "lift");
-  const after = add(two.entries, {}, 3);
+  const two = add(add([], {}, 1).entries, {}, 2);
+  assert.equal(two.change, undefined);
+  const three = add(two.entries, {}, 3);
+  assert.equal(three.change, "quiet");
+  assert.equal(add(two.entries, { type: "page" }, 3).change, undefined);
+  assert.equal(add(three.entries, { took: true }, 4).change, "lift");
+  const after = add(add(three.entries, {}, 4).entries, {}, 5);
   assert.equal(after.change, undefined);
-  assert.equal(add(after.entries, {}, 4).change, "quiet");
+  assert.equal(add(after.entries, {}, 6).change, "quiet");
   assert.equal(add(two.entries, {}, 31 * 86_400_000).change, undefined);
   // Quiet is the page's sentence: deleted or edited, the kind is back.
   assert.ok(isQuiet([dated("2026-10-26", quietLine("mention", "Meeting"))], "mention", "Meeting"));
@@ -23,17 +23,26 @@ test("two ignores quiet a kind in one place; a nod or a deleted sentence lifts i
   assert.ok(!isQuiet(["2026-10-26 · Links on Meeting pages are fine."], "mention", "Meeting"));
 });
 
+// The seam: the ledger an older build left. Its entries must go, once; what Today's rows keep stays.
+test("a new ledger version clears the old entries", () => {
+  const old = { entries: [{ kind: "task", type: "daily", took: false, at: 1 }], shown: { a: { day: "d", state: "s" } } };
+  const now = upgraded(old);
+  assert.deepEqual(now, { ...old, v: LEDGER, entries: [] });
+  assert.equal(upgraded({ ...now, entries: old.entries }).entries.length, 1);
+});
+
 // The seam: writing on a page with a chip. An Enter or words elsewhere must keep it; its own words
-// changed must drop it uncounted; only leaving the page is a no. A done line keeps its Undo.
-test("an edit elsewhere never drops or ignores a chip; leaving the page does", () => {
-  const chip = { where: "p", block: 1, text: "Call Sam" };
+// changed must drop it uncounted; only leaving the page is a no, once it stood thirty seconds.
+test("an edit elsewhere never drops or ignores a chip; leaving the page after 30 s does", () => {
+  const chip = { where: "p", block: 1, text: "Call Sam", since: 0 };
   const row = { where: "p" };
   const done = { where: "p", block: 0, text: "Sam", done: {} };
   const lines = [chip, row, done, { where: TODAY }];
-  assert.deepEqual(edited(lines, "p", ["Beans", "Call Sam", "", "more"]), { gone: [row], ignored: [row], moved: [] });
+  assert.deepEqual(edited(lines, "p", ["Beans", "Call Sam", "", "more"], 40_000), { gone: [row], ignored: [row], moved: [] });
   assert.deepEqual(edited([chip], "p", ["", "Beans", "Call Sam"]).moved, [[chip, 2]]);
-  assert.deepEqual(edited([chip], "p", ["Beans", "Call Sam about"]), { gone: [chip], ignored: [], moved: [] });
-  assert.deepEqual(edited(lines, "p"), { gone: [chip, row, done], ignored: [chip, row], moved: [] });
+  assert.deepEqual(edited([chip], "p", ["Beans", "Call Sam about"], 40_000), { gone: [chip], ignored: [], moved: [] });
+  assert.deepEqual(edited(lines, "p", undefined, 30_000), { gone: [chip, row, done], ignored: [chip, row], moved: [] });
+  assert.deepEqual(edited([chip], "p", undefined, 29_000).ignored, []);
 });
 
 // The seam: a Today row shown day after day. Seen on a second day unchanged, it must stay out

@@ -40,8 +40,8 @@ const made = async (request: object) => {
   return id;
 };
 const create = (title: string, typeId: string) => made({ kind: "create", title, typeId });
-// Tail's guess is a model turn in the main window, so it has no time limit; the box drops one
-// about older words.
+// Tail's guess is a model turn in the main window, which gives up after two minutes; one never
+// answered (the main window still loading) stops waiting a little after, so the next can go.
 const guesses = new Map<number, (guess: Guess) => void>();
 void listen<Guess & { seq: number }>("ll:capture-guessed", ({ payload: { seq: n, ...guess } }) => {
   guesses.get(n)?.(guess);
@@ -54,9 +54,10 @@ const host: CaptureHost = {
   links: makeLinkHost({ create, day: (day) => made({ kind: "day", day }) }),
   create,
   guess: (text, opened) =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const n = ++seq;
       guesses.set(n, resolve);
+      setTimeout(() => guesses.delete(n) && reject(new Error("no guess")), 130_000);
       void emitTo("main", "ll:capture-guess", { seq: n, text, opened });
     }),
 };

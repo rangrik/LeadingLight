@@ -8,11 +8,12 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { visit } from "~/components/property-value";
 import { Row } from "~/components/work-panel";
 import { useKeysFor } from "~/lib/keymap";
-import { watchLive } from "~/lib/live";
+import { liveEditor, watchLive } from "~/lib/live";
 import { follow, type Line, nod, type Part, tail, TODAY, undo } from "~/lib/tail";
 
 // Tail's lines (docs/TAIL.md): rows like the work panel's, on Today and under a page's title, and
-// a chip in the margin beside the line just written. Each fades in and out over 150 ms.
+// a chip in the margin beside the line just written, or after its last words. Each fades in and
+// out over 150 ms.
 
 const FADE = "transition-opacity duration-150 ease-out starting:opacity-0 data-leaving:opacity-0";
 
@@ -138,15 +139,44 @@ export const TailToday = () => <Rows className="mt-2" rows={useLines(TODAY)} />;
 
 type Spot = { root: HTMLElement; top: number; edge: number; mid: number };
 
-// Where a chip sits beside a block, placed as a sidenote is (sidenotes.tsx). None when the margin
-// beside the text, as it is, has no room: tail never narrows the text or folds the sidebar.
-function useSpot(pageId: string, body: RefObject<HTMLDivElement | null>, block: number | undefined) {
-  const [spot, setSpot] = useState<Spot | null>(null);
+// Where a chip sits: beside its block, placed as a sidenote is (sidenotes.tsx), when the margin
+// beside the text as it is has room; else after its line's last words, as a sidenote's number is,
+// when that line has room (inline); else none, and it is the row above the title. Tail never
+// narrows the text, folds the sidebar or moves a word. say: the inline chip's words.
+function useSpot(pageId: string, body: RefObject<HTMLDivElement | null>, block: number | undefined, say: string, leaving: boolean) {
+  const [spot, setSpot] = useState<Spot | "inline" | null>(null);
   useLayoutEffect(() => {
     const root = body.current?.querySelector<HTMLElement>(".ll-editor-root");
     const text = root?.querySelector<HTMLElement>(".ll-editor");
     const scroller = root?.closest<HTMLElement>("[data-page-scroller]");
-    if (block === undefined || !root || !text || !scroller) return setSpot(null);
+    // The inline chip changes only when it must: each change redraws its line.
+    const draw = (at: { index: number; text: string } | null) => {
+      const drawn = text?.querySelector<HTMLElement>("[data-tail-chip]");
+      if (at ? drawn?.getAttribute("aria-label") !== at.text || !text?.children[at.index]?.contains(drawn) : drawn) liveEditor(pageId)?.chipAfter(at);
+    };
+    if (block === undefined || !root || !text || !scroller) {
+      draw(null);
+      return setSpot(null);
+    }
+    // After the last words when the line's last row has room for the chip, measured without it.
+    const fits = (el: Element) => {
+      if (!(el instanceof HTMLParagraphElement)) return false;
+      draw({ index: block, text: say });
+      const chip = el.querySelector<HTMLElement>("[data-tail-chip]");
+      const pill = chip?.lastElementChild;
+      if (!chip || !pill) return false;
+      chip.style.display = "none";
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const rects = [...range.getClientRects()].filter((r) => r.width || r.height);
+      chip.style.display = "";
+      const last = rects.reduce<DOMRect | undefined>((a, r) => (a && a.bottom >= r.bottom ? a : r), undefined);
+      if (!last) return false;
+      const end = Math.max(...rects.filter((r) => r.top < last.bottom - 1 && r.bottom > last.top + 1).map((r) => r.right));
+      const s = getComputedStyle(pill);
+      const need = pill.getBoundingClientRect().width + parseFloat(s.marginLeft) + parseFloat(s.marginRight);
+      return Math.ceil(need) <= Math.floor(el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight) - end);
+    };
     const measure = () => {
       // The line's first words: a paragraph's, or the title of the task link a nod made of it.
       const el = text.children[block];
@@ -156,7 +186,14 @@ function useSpot(pageId: string, body: RefObject<HTMLDivElement | null>, block: 
       const words = first?.parentElement && range.getClientRects()[0];
       const right = text.getBoundingClientRect().right;
       const free = scroller.getBoundingClientRect().right - parseFloat(getComputedStyle(scroller).paddingRight) - right;
-      if (!words || free < GUTTER + 256 || root.dataset.notes) return setSpot(null);
+      if (!words || free < GUTTER + 256 || root.dataset.notes) {
+        // A chip leaving keeps its place, fading.
+        if (leaving) return text.querySelector("[data-tail-chip]")?.setAttribute("data-leaving", "");
+        const inline = !!el && fits(el);
+        if (!inline) draw(null);
+        return setSpot(inline ? "inline" : null);
+      }
+      draw(null);
       const box = root.getBoundingClientRect();
       const note = baselineOffset({ fontStyle: "normal", fontWeight: "400", fontSize: NOTE_FONT.size, fontFamily: getComputedStyle(text).fontFamily }, NOTE_FONT.line);
       // Its first baseline on the line's first baseline.
@@ -175,7 +212,7 @@ function useSpot(pageId: string, body: RefObject<HTMLDivElement | null>, block: 
       off();
       cancelAnimationFrame(frame);
     };
-  }, [pageId, body, block]);
+  }, [pageId, body, block, say, leaving]);
   return spot;
 }
 
@@ -214,19 +251,35 @@ function Chip({ line, spot, leaving }: { line: Line; spot: Spot; leaving: boolea
   );
 }
 
+const plain = (parts: Part[]) => parts.map((p) => (typeof p === "string" ? p : p.text)).join("");
+
 // In the band above a page's title, where its hover controls sit, so nothing moves: where you
-// stopped, or the chip's line when the margin has no room for it. onRow hides those controls.
+// stopped, or the chip's line when neither the margin nor the line has room for it. onRow hides
+// those controls.
 export function TailPage({ pageId, body, onRow }: { pageId: string; body: RefObject<HTMLDivElement | null>; onRow: (shown: boolean) => void }) {
   useEffect(() => follow(pageId), [pageId]);
+  const keysFor = useKeysFor();
   const shown = useLines(pageId);
   const chip = shown.find((s) => s.line.block !== undefined);
-  const spot = useSpot(pageId, body, chip?.line.block);
+  // Inline, the sentence and the nod's key in one chip, or what the nod did and Undo.
+  const say = chip ? (chip.line.done ? `${plain(chip.line.done.words)} Undo` : `${plain(chip.line.words)} ${keysFor("nod")}`) : "";
+  const spot = useSpot(pageId, body, chip?.line.block, say, !!chip?.leaving);
   const rows = shown.filter((s) => s !== chip || !spot);
   useLayoutEffect(() => onRow(rows.length > 0), [onRow, rows.length]);
+  // A click on the inline chip is its nod, or its Undo.
+  useEffect(() => {
+    const el = body.current;
+    const click = (e: MouseEvent) => {
+      const line = (e.target as HTMLElement).closest("[data-tail-chip]") && tail.get().find((l) => l.where === pageId && l.block !== undefined);
+      if (line) void (line.done ? undo(line) : nod(line));
+    };
+    el?.addEventListener("click", click);
+    return () => el?.removeEventListener("click", click);
+  }, [pageId, body]);
   return (
     <>
       <Rows className="absolute inset-x-0 bottom-full mb-1" rows={rows} />
-      {chip && spot && createPortal(<Chip leaving={chip.leaving} line={chip.line} spot={spot} />, spot.root)}
+      {chip && spot && spot !== "inline" && createPortal(<Chip leaving={chip.leaving} line={chip.line} spot={spot} />, spot.root)}
     </>
   );
 }

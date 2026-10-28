@@ -13,6 +13,7 @@ import { isKey, useKeysFor } from "~/lib/keymap";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
+import { captureTurns } from "~/lib/tail-prompt";
 
 // Where the box sends what is typed: lib/capture.ts in the main window, called directly in a
 // browser, or over Tauri's events from the panel (capture.tsx). links is what "@" offers there,
@@ -30,7 +31,7 @@ export type CaptureHost = {
 
 const SAVE_DELAY_MS = 300;
 // Tail's guess waits for a pause in typing, since each one is a model turn.
-const GUESS_DELAY_MS = 600;
+const GUESS_DELAY_MS = 1000;
 // COSS's popup surface (packages/editor/src/ui.tsx), at the box's 14 px radius.
 const SURFACE =
   "relative rounded-[14px] border bg-popover not-dark:bg-clip-padding text-popover-foreground before:pointer-events-none before:absolute before:inset-0 before:rounded-[13px] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]";
@@ -58,8 +59,24 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const savedVersion = useRef(0);
   const chain = useRef(Promise.resolve());
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  // The words last sent for a guess; an answer about older words is dropped.
-  const asked = useRef({ text: "", timer: undefined as ReturnType<typeof setTimeout> | undefined, opened: Date.now() });
+  // Tail's turns for this opening of the box; an answer shows while it is open and no project is picked.
+  const pause = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const alive = useRef(true);
+  const [paused] = useState(() => {
+    const opened = Date.now();
+    return captureTurns({
+      words: () => `${draft.current.title}\n${editorRef.current?.text() ?? ""}`,
+      ask: (text) => host.guess(text, opened),
+      show: (g) => alive.current && !draft.current.project && setGuess(g),
+    });
+  });
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      clearTimeout(pause.current);
+    };
+  }, []);
 
   useEffect(() => titleRef.current?.focus(), []);
 
@@ -86,14 +103,8 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     version.current++;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
-    const a = asked.current;
-    clearTimeout(a.timer);
-    a.timer = setTimeout(() => {
-      const text = `${draft.current.title}\n${editorRef.current?.text() ?? ""}`;
-      if (text === a.text) return;
-      a.text = text;
-      void host.guess(text, a.opened).then((g) => a.text === text && setGuess(g));
-    }, GUESS_DELAY_MS);
+    clearTimeout(pause.current);
+    pause.current = setTimeout(() => !draft.current.project && paused(), GUESS_DELAY_MS);
   };
   const pick = (next: string | null) => {
     draft.current.project = next;

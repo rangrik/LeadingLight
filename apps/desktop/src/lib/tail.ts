@@ -15,7 +15,7 @@ import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
 import { isNative } from "./platform";
 import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
-import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietLine, record, seenOn, sentenceOf, type Shown, TODAY } from "./tail-memory";
+import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietForm, quietLine, record, seenOn, sentenceOf, type Shown, TODAY, upgraded } from "./tail-memory";
 import { answerOf, buildDigest, type Candidate, current, mayRead, named, noteIn, parseAnswer, type Slots, stillTrue, TAIL, type Thread, threadFor, type Trigger } from "./tail-prompt";
 import { newPage } from "./templates";
 import { tailTurn } from "./turn";
@@ -50,9 +50,11 @@ export type Line = {
   nod: string;
   // block: where a chip's line is now, which edits above it move.
   act: (block?: number) => Promise<Done | void>;
-  // A chip: the top-level block it sits beside, and that line's words, which it stays for.
+  // A chip: the top-level block it sits beside, that line's words, which it stays for, and when it
+  // showed.
   block?: number;
   text?: string;
+  since?: number;
   done?: Done;
   // Where it was, for the nod ledger; on Today, whether the person has had it in front of them,
   // and its pages as they were, so a row shown day after day can stay out until they change.
@@ -331,7 +333,7 @@ function keep(key: string, t: Thread) {
 // The nod ledger (docs/TAIL.md, "What it remembers"): what was taken and ignored, by kind and
 // place, for thirty days, on this Mac, and Today's rows seen. Its effect shows as sentences on the
 // page about you.
-const ledger = localPrefs<{ entries: Entry[]; shown: Record<string, Shown> }>("ll.tail.ledger", { entries: [], shown: {} });
+const ledger = localPrefs<{ v?: number; entries: Entry[]; shown: Record<string, Shown> }>("ll.tail.ledger", { entries: [], shown: {} });
 
 // The page about how you work: one per space, of the app's own type, found by its id.
 const aboutPage = () => space.get().pages.find((p) => p.typeId === ABOUT);
@@ -405,13 +407,14 @@ async function turnOn(trigger: Trigger, key: string, all: Found[], pages: Object
     const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, text, candidates: found, about: told, ledger: counts(ledger.get().entries) });
     return { ...d, ...(await tailTurn({ prompt: d.message, system: TAIL, model, effort, resume: t.session })) };
   };
-  let thread = threadFor(memory.threads, key, model, started);
+  let thread = threadFor(memory.threads, key, model, started, trigger === "beat" || trigger === "pause");
   let got = await turn(thread);
   // A thread the tool no longer has: once more on a new one, sent everything again.
   if (got.error && thread.session) got = await turn((thread = { model, seen: {}, at: Date.now() }));
   if (got.error) return { picks: [], error: got.error };
   if (trigger === "beat") memory.last = started;
-  keep(key, { ...thread, session: got.session, seen: got.seen });
+  // A pause sends no body, so the page's thread stays as it was, for the return row.
+  if (trigger !== "pause") keep(key, { ...thread, session: got.session, seen: got.seen });
   if (!answerOf(got.text)) return { picks: [], error: "the answer wasn't JSON" };
   const note = trigger === "beat" && noteIn(got.text);
   if (note) void rewrite(note);
@@ -608,7 +611,7 @@ async function paused(page: string) {
   const [line] = linesOf((await choose("pause", `page:${page}`, found, space.get().pages)).picks);
   if (!line || !isLive(page) || waits()) return;
   // An edit while the model thought keeps the offer, wherever its line went, unless it changed it.
-  const chip = { ...line, text: textOf(blocks[index]) };
+  const chip = { ...line, text: textOf(blocks[index]), since: Date.now() };
   const { gone, moved } = edited([chip], page, (liveEditor(page)?.getJSON().content ?? []).map((b) => textOf(b)));
   if (!gone.length) put(moved.length ? { ...chip, block: moved[0][1] } : chip);
 }
@@ -726,6 +729,12 @@ export function nodFront() {
 let started = false;
 export async function startTail() {
   await isNative;
+  // An older ledger's ignores go, and the quiet sentences they set with them.
+  const old = ledger.get();
+  if (upgraded(old) !== old) {
+    ledger.set(upgraded(old));
+    if (aboutPage()) void rewrite(undefined, quietForm);
+  }
   if (mode() === "off" || started) return;
   started = true;
   void beat();

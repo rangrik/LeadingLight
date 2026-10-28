@@ -119,11 +119,51 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
 // times, never words. The day's for the beat, a page's for four hours, a box's for ten minutes.
 export type Thread = { model: string; session?: string; seen: Seen; at: number };
 export const current = (key: string, t: Thread, now: number) => (key.startsWith("beat:") ? key === `beat:${when(now).slice(0, 10)}` : now - t.at < (key.startsWith("capture:") ? 10 * 60_000 : 4 * 3_600_000));
-// A beat starts a new session each time, so the day's never grows, but keeps the day's seen map.
-export function threadFor(threads: Record<string, Thread>, key: string, model: string, now: number): Thread {
+// A beat or a pause starts a new session each time (fresh), so its input never grows, but keeps
+// the thread's seen map; the return row resumes the page's thread.
+export function threadFor(threads: Record<string, Thread>, key: string, model: string, now: number, fresh: boolean): Thread {
   const t = threads[key];
   if (t?.model !== model || !current(key, t, now)) return { model, seen: {}, at: now };
-  return key.startsWith("beat:") ? { ...t, session: undefined } : t;
+  return fresh ? { ...t, session: undefined } : t;
+}
+
+// How many words differ between two texts, as added or taken away, whichever is more.
+export function wordsChanged(a: string, b: string) {
+  const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  const left = new Map<string, number>();
+  for (const w of words(a)) left.set(w, (left.get(w) ?? 0) + 1);
+  let added = 0;
+  for (const w of words(b)) {
+    const n = left.get(w) ?? 0;
+    if (n) left.set(w, n - 1);
+    else added++;
+  }
+  return Math.max(added, [...left.values()].reduce((n, k) => n + k, 0));
+}
+
+// The capture box's turns (docs/TAIL.md, 4), one at a time per opening, called at each pause: the
+// first once there are three words, the next once three changed since the last one's words. An
+// answer is shown whatever was typed meanwhile; a pause during a turn is taken once it ends.
+export function captureTurns<G>(o: { words: () => string; ask: (text: string) => Promise<G>; show: (guess: G) => void }) {
+  let busy = false;
+  let asked = "";
+  let again = false;
+  const paused = (): void => {
+    if (busy) return void (again = true);
+    again = false;
+    const text = o.words();
+    if (wordsChanged(asked, text) < 3) return;
+    busy = true;
+    asked = text;
+    void o
+      .ask(text)
+      .then(o.show, () => {})
+      .finally(() => {
+        busy = false;
+        if (again) paused();
+      });
+  };
+  return paused;
 }
 
 const DAY = /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)$/i;

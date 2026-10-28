@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildDigest, noteIn, parseAnswer, stillTrue, threadFor } from "./tail-prompt.ts";
+import { buildDigest, captureTurns, noteIn, parseAnswer, stillTrue, threadFor } from "./tail-prompt.ts";
 
 const page = (id: string, typeId: string, title: string, properties: Record<string, unknown> = {}) => ({ id, typeId, title, properties, createdAt: 1, updatedAt: 10 });
 
@@ -68,16 +68,44 @@ test("a wrong answer is silence; a right one keeps its slots", () => {
   assert.deepEqual(parseAnswer('{"show":[{"id":"c3","project":"p2","task":"yes"}]}', o), []);
 });
 
-// The seam: the day's thread. Each beat must start a new session, so input never grows, and
-// keep the day's seen map, so an unchanged body is not sent again; a page's thread resumes.
-test("a fresh beat thread keeps the day's seen map", () => {
+// The seam: the day's thread. Each beat and pause must start a new session, so input never grows,
+// and keep the seen map, so an unchanged body is not sent again; the return row resumes.
+test("a fresh thread keeps the seen map", () => {
   const now = new Date(2026, 9, 27, 12).getTime();
-  const threads = { "beat:2026-10-27": { model: "m", session: "s1", seen: { A: "10" }, at: now - 3_600_000 }, "page:P": { model: "m", session: "s2", seen: {}, at: now - 60_000 } };
-  const beat = threadFor(threads, "beat:2026-10-27", "m", now);
+  const threads = { "beat:2026-10-27": { model: "m", session: "s1", seen: { A: "10" }, at: now - 3_600_000 }, "page:P": { model: "m", session: "s2", seen: { P: "9" }, at: now - 60_000 } };
+  const beat = threadFor(threads, "beat:2026-10-27", "m", now, true);
   assert.equal(beat.session, undefined);
   assert.deepEqual(beat.seen, { A: "10" });
-  assert.equal(threadFor(threads, "page:P", "m", now).session, "s2");
-  assert.deepEqual(threadFor(threads, "beat:2026-10-27", "m", now + 86_400_000).seen, {});
+  assert.deepEqual(threadFor(threads, "page:P", "m", now, true), { ...threads["page:P"], session: undefined });
+  assert.equal(threadFor(threads, "page:P", "m", now, false).session, "s2");
+  assert.deepEqual(threadFor(threads, "beat:2026-10-27", "m", now + 86_400_000, true).seen, {});
+});
+
+// The seam: the capture box's turns. An answer must show though typing went on (it was dropped
+// before), one turn runs at a time, and fewer than three words changed asks nothing.
+test("a capture answer shows whatever was typed since; a small change asks nothing", async () => {
+  let words = "fix the";
+  const asked: string[] = [];
+  const shown: string[] = [];
+  let answer = () => {};
+  const paused = captureTurns({ words: () => words, ask: (t) => (asked.push(t), new Promise<string>((r) => (answer = () => r(t)))), show: (g) => shown.push(g) });
+  const settle = () => new Promise((r) => setTimeout(r));
+  paused();
+  words = "fix the gate";
+  paused();
+  words = "fix the gate latch before the weekend";
+  paused();
+  assert.deepEqual(asked, ["fix the gate"]);
+  answer();
+  await settle();
+  assert.deepEqual(shown, ["fix the gate"]);
+  // The pause that came during the turn is taken as it ends.
+  assert.deepEqual(asked, ["fix the gate", "fix the gate latch before the weekend"]);
+  answer();
+  await settle();
+  words = "fix the gate latch before the weekend, Sam";
+  paused();
+  assert.equal(asked.length, 2);
 });
 
 // The seam: what the model may write on the page about the person. Anything but one plain
