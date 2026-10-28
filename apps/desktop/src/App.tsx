@@ -138,9 +138,11 @@ export default function App() {
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
-        // The panes left open last time, less pages gone since and live browsers; else the top of
-        // Recent (which leaves tasks out), in the order chosen.
-        const exists = (id: string) => (isPageView(id) ? list.some((p) => p.id === id) : !id.startsWith(BROWSER_VIEW));
+        // Browser tabs restore on demand; a browser belonging to a deleted page does not.
+        const exists = (id: string) => {
+          const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
+          return !page || list.some((p) => p.id === page);
+        };
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);

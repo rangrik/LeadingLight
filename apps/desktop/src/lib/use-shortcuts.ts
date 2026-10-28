@@ -32,6 +32,10 @@ const TABS: Record<string, (() => void) | undefined> = {
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(view: "feed" | "captures" | "suggestions"): void }) {
   useEffect(() => {
     const run = (id: string) => {
+      if (useStore.getState().view.kind !== "settings") {
+        const browser = new CustomEvent("ll:browser-shortcut", { detail: id, cancelable: true });
+        if (!window.dispatchEvent(browser)) return;
+      }
       // Tabs and history act on the panes, so not while Settings covers them.
       const tabKey = TABS[id];
       if (tabKey) return useStore.getState().view.kind === "settings" ? undefined : tabKey();

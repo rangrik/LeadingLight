@@ -1,4 +1,5 @@
 import { type Access, type AiPrefs, isClaude } from "~/lib/ai-prefs";
+import { appendBrowserContext, stripBrowserContext } from "~/lib/browser-context";
 import { folders, refresh as refreshFolders } from "~/lib/project-runtime/folders";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
 import { type Answer, type Delivery, type Draft, mergeRequests, reconcile, restoreDraft, type RuntimeRequest, sendAnswer } from "~/lib/project-runtime/requests";
@@ -75,7 +76,7 @@ export const accessOf = (mode: string | undefined, agent: Agent) => ({
 // them with the conversation, out of the folder.
 const ATTACHED = "\n\nAttached:\n";
 export const splitAttached = (text: string) => {
-  const [said, list] = text.split(ATTACHED);
+  const [said, list] = stripBrowserContext(text).split(ATTACHED);
   return { said, files: list ? list.split("\n").filter(Boolean) : [] };
 };
 const base64 = async (f: File) => {
@@ -209,7 +210,7 @@ export function watch(key: string, conv: Conversation, { reply = true } = {}): (
 
 // Sends text: a new chat starts its agent in the folder; an ended one is resumed first. Each
 // message carries a key of its own, so a send repeated after a lost answer is one message.
-export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = []): Promise<Conversation> {
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = [], context = ""): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
@@ -218,14 +219,14 @@ export async function send(key: string, location: string, text: string, prefs: P
     await refreshFolders();
     if ([...folders.get().values()].some((f) => f.folder.location === location && f.missing)) throw new Error("The folder isn't there any more.");
     let conv = chatOf(key).get().conv;
-    const full = async (session: string) => (files.length ? `${text}${ATTACHED}${(await upload(session, files)).join("\n")}` : text);
+    const full = async (session: string) => appendBrowserContext(files.length ? `${text}${ATTACHED}${(await upload(session, files)).join("\n")}` : text, context);
     if (!conv) {
       const name = `chat-${crypto.randomUUID().slice(0, 8)}`;
       const agent = agentOf(prefs.model);
       // Its own branch: a worktree the runtime keeps, so the checkout is left as it is.
       const where = prefs.branch ? `${location}/${(await ask<{ name: string }>("POST", `/v1/locations/${location}/worktrees`, { name, branch: `ll/${name}` })).name}` : location;
       // With files the agent starts without a prompt, so they are there before the message naming them.
-      await ask("POST", "/v1/sessions", { name, location: where, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, title: text.split("\n")[0], ...(!files.length && { prompt: text }) });
+      await ask("POST", "/v1/sessions", { name, location: where, agent, driver: agent, mode: modeFor(prefs, agent), model: prefs.model, effort: prefs.effort, title: text.split("\n")[0], ...(!files.length && { prompt: appendBrowserContext(text, context) }) });
       conv = (await listChats(location)).find((c) => c.session === name) ?? null;
       if (!conv) throw new Error("The runtime didn't keep the chat.");
       if (files.length) await ask("POST", `/v1/sessions/${name}/send`, { text: await full(name), when: "now", idem_key: id });

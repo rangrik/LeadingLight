@@ -1,4 +1,4 @@
-import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus, Square } from "lucide-react";
+import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus, Square, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
@@ -6,8 +6,8 @@ import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, M
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
 import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
 import { toastManager } from "@leadinglight/ui/components/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { useBrowserTabs, useWorkspace } from "~/components/agent-browser";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { WorkerCard, type WorkerRow } from "~/components/worker-card";
 import { type ChatSettings, type Command, Composer } from "~/components/composer";
@@ -15,6 +15,7 @@ import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
+import { bindBrowserContext, browserContextPrompt, detachBrowser, useBrowserContext } from "~/lib/browser-context";
 import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { said as saidIn, type TranscriptItem } from "~/lib/project-runtime/transcript";
@@ -109,11 +110,13 @@ function turnsOf(chat: Chat): Shown[] {
   return out;
 }
 
-export function ProjectChat({ pageId }: { pageId: string }) {
-  const state = useFolder(pageId);
+export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; browserWorkspace?: { location: string; worktree: string; port?: number } }) {
+  const folder = useFolder(pageId);
+  const state = browserWorkspace ? { folder: { location: browserWorkspace.location, path: "" }, missing: false, repo: false } : folder;
   const location = state?.folder.location;
   const prefs = useAiPrefs();
   const [list, setList] = useState<Conversation[]>([]);
+  const [listLoaded, setListLoaded] = useState(false);
   const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
   const [file, setFile] = useState<Written | null>(null);
   // A file an answer links to opens as it is now. One handler, so finished turns don't redraw.
@@ -133,22 +136,32 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const [fresh, setFresh] = useState(defaults);
   const key = current ?? `new:${pageId}`;
   const chat = chatOf(key).use();
+  const attachment = useBrowserContext(pageId);
+  const browser = attachment?.chat === key ? attachment : undefined;
+  useEffect(() => {
+    if (!attachment || attachment.chat) return;
+    if (attachment.session) {
+      const target = list.find((c) => c.session === attachment.session);
+      if (!target && !listLoaded) return;
+      bindBrowserContext(pageId, target?.id ?? `new:${pageId}`);
+      setCurrent(target?.id ?? null);
+      if (!target) { setFresh(defaults()); setBranch(false); }
+    } else bindBrowserContext(pageId, key);
+  }, [attachment, key, list, listLoaded, pageId]);
   // Files and words in the composer are this chat's: another chat starts without them.
   useEffect(() => setAttached([]), [key]);
   const cx = codex.use();
-  // The workspace's browser, while the agent has one open there (features/agent-browser.feature).
+  // The browser opens in this chat's workspace, even before an agent opens a tab.
   const own = (chat.conv ?? list.find((c) => c.id === current))?.location?.split("/")[1];
-  const ws = useWorkspace(pageId, own);
-  const tabs = useBrowserTabs(ws?.location, ws?.worktree);
   const field = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
   const log = useRef<HTMLDivElement>(null);
   // Follows the newest words while the person is at the bottom, not while they read back.
   const stuck = useRef(true);
-  const title = pageOf(pageId)?.title.trim() || "this project";
+  const title = browserWorkspace ? "Browser" : pageOf(pageId)?.title.trim() || "this project";
 
   const refresh = () => {
-    if (location) void listChats(location).then((l) => setList(l.sort((a, b) => Date.parse(b.updated ?? b.created) - Date.parse(a.updated ?? a.created))), () => {});
+    if (location) void listChats(location).then((l) => { setList(l.sort((a, b) => Date.parse(b.updated ?? b.created) - Date.parse(a.updated ?? a.created))); setListLoaded(true); }, () => {});
   };
   useEffect(refresh, [location]);
   useEffect(() => void (current ? localStorage.setItem(CHOSEN(pageId), current) : localStorage.removeItem(CHOSEN(pageId))), [current]);
@@ -232,10 +245,12 @@ export function ProjectChat({ pageId }: { pageId: string }) {
   const go = (text: string) => {
     stuck.current = true;
     const files = attached;
-    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files).then((c) => {
+    const context = browser ? browserContextPrompt(browser) : "";
+    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files, context).then((c) => {
       setAttached((a) => a.filter((f) => !files.includes(f)));
       if (!current) {
         adopt(key, c.id);
+        bindBrowserContext(pageId, c.id, key);
         setCurrent(c.id);
       }
       refresh();
@@ -299,15 +314,13 @@ export function ProjectChat({ pageId }: { pageId: string }) {
             )}
           </MenuPopup>
         </Menu>
-        {!!live && tabs.some((t) => t.name === live) && (
           <Button className="ms-auto h-7 gap-1.5 px-1.5 sm:h-7" onClick={() => openBeside(browserView(pageId, own, live ?? ""))} size="sm" variant="ghost">
             <Globe className="size-4" />
             Browser
           </Button>
-        )}
         {/* A chat on its own branch says which; its worktree is the runtime's (slice 6). */}
         {started?.location?.includes("/") && (
-          <span className={cn("flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs", !(live && tabs.some((t) => t.name === live)) && "ms-auto")}>
+          <span className="flex min-w-0 shrink items-center gap-1 text-muted-foreground text-xs">
             <GitBranch className="size-4 shrink-0" />
             <span className="truncate">ll/{started.location.split("/")[1]}</span>
           </span>
@@ -323,8 +336,8 @@ export function ProjectChat({ pageId }: { pageId: string }) {
         {turns.length === 0 && waitingOn.length === 0 && !started && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />
-            <p className="text-balance text-lg">What should we do in {state.folder.path.split("/").at(-1)}?</p>
-            <p className="text-balance text-muted-foreground text-xs">{NAME[agent]} works in this folder: it reads and changes its files and runs commands there.</p>
+            <p className="text-balance text-lg">{browserWorkspace ? "What would you like to do in the browser?" : `What should we do in ${state.folder.path.split("/").at(-1)}?`}</p>
+            <p className="text-balance text-muted-foreground text-xs">{browserWorkspace ? "Choose Ask about page in a browser tab to share that page with this chat." : `${NAME[agent]} works in this folder: it reads and changes its files and runs commands there.`}</p>
           </div>
         )}
         {turns.map((t, k) => (
@@ -416,6 +429,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
         {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
+        {browser && <div className="mx-3 mb-2 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs" data-testid="browser-chat-context"><Globe className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{browser.title || browser.url}</p><p className="truncate text-muted-foreground">{browser.url}</p>{browser.annotation && <p className="line-clamp-2 break-words text-muted-foreground">Element feedback: {browser.annotation.comment || "Style preview"}</p>}</div><Tooltip><TooltipTrigger render={<Button aria-label="Remove browser page" onClick={() => detachBrowser(pageId)} size="icon-xs" variant="ghost" />}><X className="size-4" /></TooltipTrigger><TooltipPopup>Remove browser page</TooltipPopup></Tooltip></div>}
         <Composer
           agents={[]}
           key={key}
@@ -434,7 +448,7 @@ export function ProjectChat({ pageId }: { pageId: string }) {
           onSend={(q) => go(q)}
           onStop={() => void stop(key)}
           pages={[]}
-          placeholder={`Ask ${NAME[agent]} to work in the folder…`}
+          placeholder={browserWorkspace || browser ? `Ask ${NAME[agent]} about the page…` : `Ask ${NAME[agent]} to work in the folder…`}
           ready
           restore={chat.restore}
           settings={settings}

@@ -106,10 +106,12 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
+    if (!id) return { title: "Browser chat" };
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(BROWSER_VIEW)) {
     const id = view.slice(BROWSER_VIEW.length).split("/")[0];
+    if (!id) return { title: "Browser" };
     return { title: "Browser", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(TYPE_VIEW)) {
