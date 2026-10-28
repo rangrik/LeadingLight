@@ -43,7 +43,7 @@ export const appLine = (s: string) => quietForm(s) || /^Most ideas go to |^Tasks
 
 // The ledger's version. An older build's ignores came partly from its bugs, so they go, and with
 // them the quiet they set (tail.ts takes those sentences off the page).
-export const LEDGER = 3;
+export const LEDGER = 2;
 export const upgraded = <L extends { v?: number; entries: Entry[] }>(l: L): L => (l.v === LEDGER ? l : { ...l, v: LEDGER, entries: [] });
 
 // One paragraph per sentence, dated.
