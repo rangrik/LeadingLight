@@ -6,11 +6,10 @@ Feature: Tail
   Names used below:
   - tail row: an icon, a muted sentence with names in the foreground, and one small verb button
   - the nod: the button, or ⌃↩ on the page in front, never under Settings, a dialog or a menu
-  - chip: a tail row's words placed in the margin beside a line, like a sidenote, with the nod under
-    them; or, with no margin room, one small muted chip after the line's last word
-  - ignored: a line that left with no nod: a chip whose page I left once it had been on screen
-    thirty seconds, the row above a page's title once I wrote, or a row I saw on Today that a beat
-    no longer shows
+  - suggestion: a tail row in the bar's Suggestions panel about a block I wrote (suggestions.feature)
+  - ignored: a line that left with no nod: a suggestion whose page I left once the open panel had
+    shown it thirty seconds (counted once; it stays under Elsewhere), the row above a page's title
+    once I wrote, or a row I saw on Today that a beat no longer shows
   - "Garden plan": a page with three paragraphs, the last unfinished, edited yesterday
   - seeded: `__tail.seed()` has made Garden (a project), Sam (a person), "Garden plan", three ideas
     tagged in-the-middle from Tuesday to Thursday with no project, a task "Call Sam about the invoice
@@ -21,7 +20,8 @@ Feature: Tail
 
   Scenario: Three lines at day start
     When I open Today
-    Then under the day bar there are three tail rows and nothing else new:
+    Then under the day bar, below the daily card for the three ideas (suggestions.feature), there
+      are three tail rows and nothing else new:
       | You left Garden plan mid-sentence yesterday.                    | Open      |
       | 3 ideas since Tuesday. 2 look like tasks for Garden.            | File them |
       | Call Sam about the invoice has no day.                          | Set Friday |
@@ -64,63 +64,48 @@ Feature: Tail
     When a beat was held while I was on Today, and I then press File them
     Then leaving the window and coming back never brings "3 ideas since Tuesday" back
 
-  Scenario: A chip beside the line, after a pause, never while typing
-    Given "Garden plan" is open with the sidebar open
+  Scenario: A suggestion after a pause, never while typing
+    Given "Garden plan" is open with the sidebar and the Suggestions panel open
     When I type "Need to call Sam about the invoice before Friday." on a new line and keep typing
     Then nothing appears
     When I stop for three seconds
-    Then a chip appears in the margin, level with that line: "Make this a task?" over a "Make task" button and ⌃↩
-    And the text did not narrow, the sidebar did not collapse, and nothing scrolled
+    Then "On this page" lists "Make this a task?" with Make task
+    And nothing appeared in the text, the text did not narrow, the sidebar did not collapse, and nothing scrolled
     When I press Enter after the line, write "The shed roof leaks again." below it, and stop for a minute
-    Then the chip is where it was, beside that line, and nothing counts as ignored
+    Then the row is still there, and nothing counts as ignored
     When I type again on the same line
-    Then the chip leaves, and nothing counts as ignored
+    Then the row leaves, and nothing counts as ignored
     When I stop again for three seconds
-    Then the chip is back
-    When I write "Email Sam the soil order before Monday." on a new line, press Enter after it and stop
-    Then a chip for that line, beside it, takes the first one's place, and nothing counts as ignored
+    Then the row is back, since those are new words
+    When I write "Email Sam the soil order before Monday." on a new line and press Enter after it
+    Then a second row, for that line, shows at once under the first
     When I open another page at once
-    Then the chip is gone, and does not count as ignored, since it showed under thirty seconds
-    When a chip has stood thirty seconds and I open another page
-    Then the chip is gone, and counts as ignored
+    Then both rows are under Elsewhere, and neither counts as ignored, since the panel showed them under thirty seconds
+    When the panel has shown a row thirty seconds and I open another page
+    Then it is under Elsewhere and counts as ignored, once
 
   Scenario: A line that only looks like a task
     Given "Garden plan" is open
     When I type "Friday was warm and the beans came up." and stop for three seconds
     Then nothing appears, and the stand-in's log holds no pause turn
 
-  Scenario: Nodding the chip makes the task
-    Given the chip "Make this a task?" shows beside the line
+  Scenario: Nodding makes the task
+    Given "Make this a task?" shows under On this page for the line
     When I press ⌃↩
     Then the line becomes a link to a new task "Call Sam about the invoice before Friday" with a checkbox
     And the task's due date is this Friday, and it is linked to Sam
-    And the chip reads "Made a task, due Friday." with Undo, then leaves after eight seconds
+    And the row reads "Made a task, due Friday." with Undo, then leaves after eight seconds
     And typing on keeps it and its Undo for those eight seconds, and Undo keeps what I typed since
     When I press Undo while it shows
     Then the page is exactly as it was before the nod, and the task page is gone
-    And the chip leaves, and that line gets no offer again until its words change
+    And the row leaves, and that line gets no offer again until its words change
 
   Scenario: A word that is a page's name
     Given "Garden plan" is open, with People off in Reads on as it is by default
     When I type "Sam says the beans want more wind cover." and stop for three seconds
-    Then the chip reads "Sam has a page." over Link
+    Then the panel lists "Sam has a page." with Link
     When I press Link
-    Then "Sam" in that line is a link to the person, and the chip reads "Linked." with Undo
-
-  Scenario: Only one chip, and a narrow pane puts it after the words
-    Given "Garden plan" is open beside Today, so neither pane has margin room
-    When I type "Call Sam before Friday." on a new line and stop
-    Then no chip appears in the margin; instead one small muted chip right after "Friday." reads
-      "Make this a task? ⌃↩", on the line's baseline
-    And the text column is as wide as before, the line is as tall, and the words did not move
-    When I click the chip
-    Then the line becomes a link to the new task, and a tail row above the title reads
-      "Made a task, due Friday." with Undo, since the link has no words to sit after
-    When I type "Sam says the beans want more wind cover." on a new line and stop
-    Then the chip after it reads "Sam has a page. ⌃↩", and a click links Sam and reads "Linked. Undo"
-    When I type "Need to call Sam about the invoice before Friday and the soil." on a new line
-      and stop, so its last row has no room left for the chip
-    Then a tail row above the title quotes the line and offers Make task, and no chip shows in the line
+    Then "Sam" in that line is a link to the person, and the row reads "Linked." with Undo
 
   Scenario: Coming back to a page
     Given "Garden plan" was last edited at "ask Sam whether the"
@@ -184,14 +169,14 @@ Feature: Tail
   Scenario: Tail reads only the types I tick
     Given Settings › AI › Tail › Reads on has People unticked
     When I write "Need to call Sam about the invoice before Friday." on Sam's page and stop
-    Then no chip appears
+    Then no suggestion shows
     When I write "Sam says the beans want more wind cover." on "Garden plan" and stop
     Then "Sam has a page." still shows, since a title is what I type to link and the sidebar shows it anyway
     And the next beat sends no Person page's summary or words, and the stand-in's log holds none
 
   Scenario: Sidenotes stay private
     Given "Garden plan" has a sidenote "Is gravel really needed?" that was never sent as feedback
-    When a beat runs and a chip is offered on that page
+    When a beat runs and a suggestion is offered on that page
     Then no line quotes or refers to the note
     And the stand-in's log holds the page's words but not the note's
 
@@ -203,15 +188,16 @@ Feature: Tail
     And the same page's body is not sent again at the next beat unless it changed
     And each beat starts a new thread: the log shows it resumes none
 
-  Scenario: A chip and the guess come from a tail turn
+  Scenario: A suggestion and the guess come from a tail turn
     When I write "Need to call Sam about the invoice before Friday." on "Garden plan" and stop
     Then the stand-in's log holds a pause turn: that line, the blocks around it, the page's
-      title, type and properties, and the titles and types of pages tail may read, and no body
+      title, type and properties, and the titles and types of every page, as the page's first; no body
     When I open New idea and type "fix the gate latch before the weekend"
     Then a second after I stop, the log holds a capture turn: those words, the projects and the
       last few captures, and "Garden?" shows only once it has answered
     And both turns ask for low effort, while a beat asks for the effort set in Settings
-    And each pause turn starts a new thread: the log shows it resumes none
+    And a page's turns share one thread, each resuming the one before, and the titles of every
+      page go in its first turn only, then only those that changed
 
   Scenario: A wrong answer is silence
     Given the browser build is opened with ?tail=garbled, so the stand-in answers in words, not JSON
@@ -219,12 +205,13 @@ Feature: Tail
     Then no tail row shows and no error shows, and the stand-in's log holds the beat that was sent
 
   Scenario: Ignored three times, quiet
-    Given a Link chip on each of three Meeting pages, each on screen thirty seconds before I left it
+    Given a Link suggestion on each of three Meeting pages, each shown in the open panel thirty
+      seconds before I left its page
     When I write an unlinked name on a fourth Meeting page and stop
-    Then no chip appears
+    Then no suggestion comes
     And the page about how I work has a dated line "Links on Meeting pages are quiet."
     When I delete that line
-    Then the next unlinked name on a Meeting page gets its chip again
+    Then the next unlinked name on a Meeting page gets its suggestion again
     Given Today showed "You left Garden plan mid-sentence yesterday." on two days and I nodded at neither
     Then the next beat leaves out that row, not its kind, and the page has a dated line
       "Not asking again about Garden plan for now." until Garden plan is edited or I delete the line
@@ -234,7 +221,7 @@ Feature: Tail
       note pages are quiet." beside "Most ideas go to Garden." and a line I wrote myself
     When this build starts
     Then the ledger holds no entries, the quiet line is gone, and the other two lines stay
-    And a task-like line on Today gets its chip again
+    And a task-like line on Today gets its suggestion again
 
   Scenario: The page about how I work
     Given I have pressed File them for Garden three times
@@ -257,7 +244,7 @@ Feature: Tail
     Given Settings › AI › Tail is Off
     Then nothing from tail shows anywhere, and no beat runs, without a reload
     Given it is Quiet
-    Then Today's rows and the "you stopped at" row show, and no chip or capture guess does
+    Then Today's rows and the "you stopped at" row show, and no suggestion or capture guess does
     Given it is Normal
     Then all four surfaces work
 
@@ -265,9 +252,9 @@ Feature: Tail
     Given the Mac app with Codex signed in and Settings › AI › Tail on GPT-6.1 Sol at high
     When a beat runs
     Then the rows come from the model, each still one line with one verb
-    And a task-like line, after ten seconds without typing, gets its chip from the model
-    And an Enter, or words in another paragraph, while the model thinks still brings that chip
-    But typing on that line while the model thinks brings none
+    And a task-like line, on Enter at its end or ten seconds after its full stop, gets its suggestion from the model
+    And an Enter, or words in another paragraph, while the model thinks still brings it
+    But changing that line's words while the model thinks brings none
     And the usage meter at the bottom of the sidebar moves for Codex
     Given Claude is chosen instead
     Then the beat runs through Claude Code the same way

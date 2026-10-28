@@ -221,7 +221,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 ) : leaf.page === ASK_VIEW ? (
                   <AskView />
                 ) : leaf.page === SUGGESTIONS_VIEW ? (
-                  <Suggestions />
+                  <Suggestions pane />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (

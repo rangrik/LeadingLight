@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { localPrefs } from "~/lib/local-prefs";
-import { closePane, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
-import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, SUGGESTIONS_VIEW } from "~/lib/space";
+import { closePane, focusedPage, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
+import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
 
 // The bar (features/bar.feature): the strip at the window's right edge and the panel beside it.
 // In a window 1000 px wide or less, its views open as panes beside the page instead.
@@ -53,3 +53,12 @@ export function hideBar(view: BarView) {
 }
 
 export const toggleBar = (view: BarView) => (showing(view) ? hideBar(view) : showBar(view));
+
+// The page in front, kept while a view of the bar has the keyboard, as its pane does when narrow.
+let front: string | undefined;
+const page = () => {
+  const now = focusedPage();
+  return now && isPageView(now) ? (front = now) : front;
+};
+panes.subscribe(page);
+export const useFront = () => (panes.use(), page());

@@ -155,11 +155,12 @@ async function codex(req: AskRequest, run: Run, answer: typeof play) {
 
 // A tail turn: the prototype's word rules found the candidates and guessed their slots, so the
 // stand-in shows the first few as guessed, filing ideas where the page about the person says most
-// go; ?tail=garbled answers words, not JSON. In a dev build each turn's message and answer go to
-// __tail.log: what would have left the app.
+// go; ?tail=garbled answers words, not JSON, and ?tail=slow after two seconds. In a dev build each
+// turn's message and answer go to __tail.log: what would have left the app.
 async function tail(req: AskRequest, _run: Run, d: Dialect) {
   let answer = "";
   let trigger = "";
+  if (new URLSearchParams(location.search).get("tail") === "slow") await pause(2000);
   try {
     const m = JSON.parse(req.prompt) as { trigger: string; about?: string[]; pages: { ref: string; title: string }[]; candidates: { id: string; kind: string; guess?: object }[] };
     trigger = m.trigger;

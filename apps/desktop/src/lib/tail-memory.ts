@@ -55,26 +55,33 @@ export const isQuiet = (lines: string[], kind: string, type: string, project?: s
 // Where Today's rows are; they change only on a nod, a beat, or leaving Today.
 export const TODAY = "today";
 
-// The block nearest where a chip was that still holds its line's words, else -1.
-const lineAt = (texts: string[], text: string | undefined, was: number) => texts.reduce((k, t, i) => (t === text && (k < 0 || Math.abs(i - was) < Math.abs(k - was)) ? i : k), -1);
+// The block nearest where a suggestion was that still holds its block's words, else -1.
+export const lineAt = (texts: string[], text: string | undefined, was: number) => texts.reduce((k, t, i) => (t === text && (k < 0 || Math.abs(i - was) < Math.abs(k - was)) ? i : k), -1);
 
-// How long a chip must have been on screen before leaving its page counts as a no.
+// How long the panel must have shown a suggestion before leaving its page counts as a no.
 export const LOOKED = 30_000;
 
 // A page's lines after an edit (texts: its blocks' words now) or once it is left (none). The row
-// above the title leaves at any edit, a chip once its line changes, which is not a no; a chip
-// left before it had stood thirty seconds is not one either (since: when it showed).
-export function edited<L extends { where: string; block?: number; text?: string; done?: object; since?: number }>(lines: L[], page: string, texts?: string[], now = Date.now()) {
+// above the title leaves at either, as a no; a suggestion once its block's words change, which is
+// not one. Left, a suggestion stays for Elsewhere, a no once if the panel showed it thirty seconds.
+export function edited<L extends { where: string; block?: number; text?: string; done?: object; seen?: number; ignored?: boolean }>(lines: L[], page: string, texts?: string[], now = Date.now()) {
   const gone: L[] = [];
+  const ignored: L[] = [];
   const moved: [L, number][] = [];
   for (const l of lines) {
-    if (l.where !== page || l.where === TODAY || (texts && l.done)) continue;
-    const at = texts && l.block !== undefined ? lineAt(texts, l.text, l.block) : -1;
-    if (at < 0) gone.push(l);
-    else if (at !== l.block) moved.push([l, at]);
+    if (l.where !== page || l.where === TODAY) continue;
+    if (l.block === undefined) {
+      gone.push(l);
+      if (!l.done) ignored.push(l);
+    } else if (!texts) {
+      if (!l.done && !l.ignored && now - (l.seen ?? now) >= LOOKED) ignored.push(l);
+    } else if (!l.done) {
+      const at = lineAt(texts, l.text, l.block);
+      if (at < 0) gone.push(l);
+      else if (at !== l.block) moved.push([l, at]);
+    }
   }
-  const no = (l: L) => !l.done && (l.block === undefined || (!texts && now - (l.since ?? now) >= LOOKED));
-  return { gone, ignored: gone.filter(no), moved };
+  return { gone, ignored, moved };
 }
 
 // A row on Today by its candidate: the day it was first seen, its pages as they were then, and

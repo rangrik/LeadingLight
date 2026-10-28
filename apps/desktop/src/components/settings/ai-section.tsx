@@ -4,6 +4,7 @@ import { Segmented } from "@/views/settings/controls";
 import { closeSettings } from "@/views/settings/open";
 import { Code, SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
+import { Input } from "@leadinglight/ui/components/input";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Switch } from "@leadinglight/ui/components/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -21,7 +22,7 @@ import { isNative } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transport";
 import { space } from "~/lib/space";
-import { beat, lastBeat, openAbout, readsOn, readsOnByDefault } from "~/lib/tail";
+import { beat, lastBeat, openAbout, readAfter, readsOn, readsOnByDefault } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
@@ -272,8 +273,8 @@ function CodexAccount() {
 
 const MODES: { value: TailPrefs["mode"]; label: string; description: string }[] = [
   { value: "off", label: "Off", description: "Nothing from tail shows anywhere, and no beat runs." },
-  { value: "quiet", label: "Quiet", description: "Today's lines and where you stopped on a page; no chip beside a line, no guess in the capture box." },
-  { value: "normal", label: "Normal", description: "Today's lines, where you stopped, a chip beside the line you wrote, and the capture box's guess." },
+  { value: "quiet", label: "Quiet", description: "Today's lines and where you stopped on a page; no suggestions from what you write, no guess in the capture box." },
+  { value: "normal", label: "Normal", description: "Today's lines, where you stopped, suggestions from what you write, and the capture box's guess." },
 ];
 const clock = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
 
@@ -296,6 +297,14 @@ function TailGroup() {
     <SettingsGroup title="Tail" description="Reads along and offers one line you can nod at. It never asks, and never writes into your words until you nod.">
       <SettingsRow label="Offers" description={MODES.find((m) => m.value === t.mode)?.description}>
         <Segmented value={t.mode} options={MODES} onChange={(mode) => setTailPrefs({ mode })} />
+      </SettingsRow>
+      <SettingsRow label="Read a block after" description="Seconds of quiet after a full stop, and in any case. Enter at a block's end reads it at once.">
+        <span className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Seconds label="Seconds after a full stop" onChange={(stop) => setTailPrefs({ stop })} value={readAfter().stop} />
+          and
+          <Seconds label="Seconds in any case" onChange={(quiet) => setTailPrefs({ quiet })} value={readAfter().quiet} />
+          seconds
+        </span>
       </SettingsRow>
       <SettingsRow label="Model" description="Claude's through Claude Code; GPT's through Codex.">
         <ModelSelect onChange={(model) => setTailPrefs({ model, effort: effortFor(model, t.effort) })} value={t.model} />
@@ -340,6 +349,18 @@ function TailGroup() {
       </SettingsRow>
     </SettingsGroup>
   );
+}
+
+// Whole seconds, kept once they are 1 to 600; a field left half typed shows the kept value again.
+function Seconds({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const type = (t: string) => {
+    setText(t);
+    const n = Number(t);
+    if (Number.isInteger(n) && n >= 1 && n <= 600) onChange(n);
+  };
+  return <Input aria-label={label} className="w-14" inputMode="numeric" onBlur={() => setText(String(value))} onChange={(e) => type(e.currentTarget.value)} size="sm" value={text} />;
 }
 
 // Every model, Claude's then GPT's, in one list.

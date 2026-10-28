@@ -1,18 +1,20 @@
 Feature: Suggestions
   Tail's offers live in the bar's Suggestions panel, not in the text. Tail reads a block when I finish
   it: Enter at its end, a full stop followed by ten seconds of quiet, or twenty seconds of quiet in any
-  case; the three numbers are in Settings › AI › Tail. A block is judged once per wording and never
-  sent again while its words stand. A new offer raises the count on the Suggestions icon and moves
+  case; both numbers are in Settings › AI › Tail, and a browser's design mode starts them at three and
+  five. A block is judged once per wording and never sent again while its words stand. A new offer raises the count on the Suggestions icon and moves
   nothing in the text. Today's rows and the daily card are on Today itself.
 
   Names used below:
   - a suggestion row: tail's row (tail.feature), with the words it is about in the foreground; hovering or
     selecting it lights those words in the page; the nod is on the row, and Undo after it
   - "On this page" / "Elsewhere": the panel's two groups; Elsewhere holds offers about other pages and
-    the day's rows, each opening its page beside when clicked
+    the day's rows, each opening its page beside when clicked. On Today, the day's rows are under the
+    day bar and not in the panel, so On this page holds only offers about the note's own blocks
   - seen: a suggestion the panel has shown while open; counts are of unseen ones
-  - the daily card: on Today, once a day, when yesterday left suggestions or unreviewed captures:
-    "Yesterday left 4 things." with Go through, Dismiss all and Hand off
+  - the daily card: on Today, once a day, when earlier days left suggestions or unreviewed captures:
+    "Yesterday left 4 things." when all are from yesterday, else "Left over: 5 things.", with Go
+    through, Dismiss all and Hand off
 
   Background:
     Given the app is open in a browser at 1440x900, seeded as in tail.feature
@@ -46,15 +48,23 @@ Feature: Suggestions
     Given Today's beat left "You left Garden plan mid-sentence yesterday." and I am on "Sam"
     When I open Suggestions
     Then "Elsewhere" lists that row with Open, and clicking the name opens "Garden plan" beside "Sam"
+    When I open Today and write "Call Sam before Friday." in its body and press Enter
+    Then "On this page" lists only "Make this a task?", and the day's three rows show under the day
+      bar and nowhere in the panel
+    When the window is 1000 px wide and Suggestions is a pane
+    Then its group labels and rows start under the pane's title
 
   Scenario: Chips are gone
     When a block is read and judged worth a line
     Then no chip appears beside it in the margin or after its words, and the row above the title is not used
 
   Scenario: The daily card
-    Given yesterday left two suggestions and two unreviewed captures
+    Given seeded, with its three ideas from last week unreviewed
     When I open Today
-    Then under the day bar a card reads "Yesterday left 4 things." with Go through, Dismiss all and Hand off
+    Then under the day bar a card reads "Left over: 3 things." with Go through, Dismiss all and Hand off
+    Given yesterday left two suggestions and two unreviewed captures, and nothing older waits
+    When I open Today
+    Then the card reads "Yesterday left 4 things."
     When I press Dismiss all
     Then the captures are reviewed, the suggestions are gone, nothing is counted as ignored, and the card leaves
     When the card shows again another day and I press Go through

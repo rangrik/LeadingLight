@@ -15,8 +15,9 @@ import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
 import { isNative } from "./platform";
 import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
-import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, MAX_LINES, type Place, quietForm, quietLine, record, seenOn, sentenceOf, type Shown, TODAY, upgraded } from "./tail-memory";
+import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, lineAt, MAX_LINES, type Place, quietForm, quietLine, record, seenOn, sentenceOf, type Shown, TODAY, upgraded } from "./tail-memory";
 import { answerOf, buildDigest, type Candidate, current, mayRead, named, noteIn, parseAnswer, type Slots, stillTrue, TAIL, type Thread, threadFor, type Trigger } from "./tail-prompt";
+import { fingerprint, nextRead, reader } from "./tail-read";
 import { newPage } from "./templates";
 import { tailTurn } from "./turn";
 import { suggested } from "./writing";
@@ -27,7 +28,6 @@ import { suggested } from "./writing";
 
 // Design values in the browser build, the real ones in the Mac app (docs/TAIL.md, Timing).
 const TIMES = {
-  pause: [3_000, 10_000],
   away: [10_000, 15 * 60_000],
   beat: [2 * 60_000, 30 * 60_000],
   done: [8_000, 8_000],
@@ -35,6 +35,8 @@ const TIMES = {
 let browser = false;
 void isNative.then((native) => (browser = !native));
 const ms = (k: keyof typeof TIMES) => TIMES[k][browser ? 0 : 1];
+// Seconds of quiet before a block is read: after a full stop, and in any case (Settings › AI › Tail).
+export const readAfter = () => ({ stop: tailPrefs().stop ?? (browser ? 3 : 10), quiet: tailPrefs().quiet ?? (browser ? 5 : 20) });
 
 // Words, and names or quoted words shown in the foreground that open their page.
 export type Part = string | { text: string; page: string };
@@ -42,24 +44,28 @@ export type Part = string | { text: string; page: string };
 type Done = { words: Part[]; undo?: () => Promise<unknown> };
 export type Line = {
   id: string;
-  // TODAY, or the page whose row or chip it is.
+  // TODAY, or the page whose row or suggestion it is.
   where: string;
   words: Part[];
-  // A chip's words when the margin has no room and it shows as a row, quoting the line.
+  // A suggestion's words under Elsewhere, quoting its block.
   row?: Part[];
   nod: string;
-  // block: where a chip's line is now, which edits above it move.
+  // block: where a suggestion's block is now, which edits above it move.
   act: (block?: number) => Promise<Done | void>;
-  // A chip: the top-level block it sits beside, that line's words, which it stays for, and when it
-  // showed.
+  // A suggestion: the top-level block it is about, that block's words, which it stays for, when it
+  // came, the pages it is about, and the model's slots, so it can be made again at the next start.
   block?: number;
+  pages?: string[];
   text?: string;
-  since?: number;
+  at?: number;
+  slots?: Slots;
   done?: Done;
-  // Where it was, for the nod ledger; on Today, whether the person has had it in front of them,
-  // and its pages as they were, so a row shown day after day can stay out until they change.
+  // Where it was, for the nod ledger; when the person first had it in front of them, and whether
+  // leaving its page counted as a no; on Today, its pages as they were, so a row shown day after
+  // day can stay out until they change.
   place?: Place;
-  seen?: boolean;
+  seen?: number;
+  ignored?: boolean;
   state?: string;
 };
 export { TODAY };
@@ -67,9 +73,9 @@ export const tail = createStore<Line[]>([]);
 // The last beat, for Settings › AI › Tail: when, how many lines it gave, or why it didn't go.
 export const lastBeat = createStore<{ at: number; lines: number; error?: string } | null>(null);
 
-// Off, Quiet or Normal (Settings › AI › Tail). Quiet keeps the chip and the capture guess off.
+// Off, Quiet or Normal (Settings › AI › Tail). Quiet keeps suggestions and the capture guess off.
 const mode = () => tailPrefs().mode;
-const chips = () => mode() === "normal";
+const normal = () => mode() === "normal";
 // Reads on, else Writing's Use on; tasks too, since the beat reads open tasks (docs/TAIL.md).
 export const readsOnByDefault = (typeId: string) => suggested(typeId) || typeId === "task";
 export const readsOn = (typeId: string) => tailPrefs().readsOn[typeId] ?? readsOnByDefault(typeId);
@@ -87,8 +93,17 @@ function drop(test: (l: Line) => boolean) {
   const next = tail.get().filter((l) => !test(l));
   if (next.length < tail.get().length) tail.set(next);
 }
-// One line per page at a time.
-const put = (line: Line) => tail.set([...tail.get().filter((l) => l.where !== line.where), line]);
+const put = (line: Line) => tail.set([...tail.get().filter((l) => l.id !== line.id), line]);
+
+// The bar's Suggestions (features/suggestions.feature): suggestions about blocks, and the day's
+// rows. The "you stopped at" row stays above its page's title.
+export const inPanel = (l: Line) => l.where === TODAY || l.block !== undefined;
+export const suggestionsOn = (page?: string) => tail.get().filter((l) => l.where === page && l.block !== undefined && !l.done);
+// Shown in the open panel: seen, so the count on its icon goes.
+export function saw(ids: string[]) {
+  const at = Date.now();
+  if (tail.get().some((l) => ids.includes(l.id) && !l.seen)) tail.set(tail.get().map((l) => (ids.includes(l.id) && !l.seen ? { ...l, seen: at } : l)));
+}
 
 // The word rules.
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -152,7 +167,7 @@ async function guessProject(text: string, pages: ObjectSummary[]): Promise<strin
 export async function readCapture(text: string, opened: number): Promise<Guess> {
   const none = { task: false, project: null };
   const words = text.trim();
-  if (!started || !chips() || words.split(/\s+/).length < 3) return none;
+  if (!started || !normal() || words.split(/\s+/).length < 3) return none;
   const pages = space.get().pages.filter(readable);
   const projects = pages.filter((p) => p.typeId === "project");
   const captures = pages.filter((p) => p.createdAt < opened && captureOf(p)).sort((a, b) => b.createdAt - a.createdAt);
@@ -182,7 +197,7 @@ const stateOf = (f: Found) => JSON.stringify(f.pages.map((id) => [id, pageOf(id)
 const linesOf = (picks: Pick[]) =>
   picks.flatMap((p) => {
     const line = p.found.line?.(p.slots);
-    return line ? [{ ...line, place: placeOf(p.found, p.slots), state: stateOf(p.found) }] : [];
+    return line ? [{ ...line, slots: p.slots, pages: p.found.pages, place: placeOf(p.found, p.slots), state: stateOf(p.found) }] : [];
   });
 
 // Today's candidates, in this order; the model shows at most three.
@@ -311,23 +326,31 @@ async function untitled(pages: ObjectSummary[]): Promise<Found | undefined> {
   }
 }
 
-// Tail's threads (lib/tail-prompt.ts), kept on this Mac.
-type Memory = { last: number; threads: Record<string, Thread> };
+// Tail's threads (lib/tail-prompt.ts), kept on this Mac, and the wordings sent from each page,
+// which outlive its thread so that none goes twice.
+type Memory = { last: number; threads: Record<string, Thread>; sent: Record<string, string[]> };
 const KEPT = "ll.tail.threads";
 const memory: Memory = (() => {
   try {
-    return { last: 0, threads: {}, ...JSON.parse(localStorage.getItem(KEPT) ?? "{}") };
+    return { last: 0, threads: {}, sent: {}, ...JSON.parse(localStorage.getItem(KEPT) ?? "{}") };
   } catch {
-    return { last: 0, threads: {} };
+    return { last: 0, threads: {}, sent: {} };
   }
 })();
-function keep(key: string, t: Thread) {
-  memory.threads = Object.fromEntries(Object.entries({ ...memory.threads, [key]: t }).filter(([k, x]) => current(k, x, Date.now())));
+function save() {
   try {
     localStorage.setItem(KEPT, JSON.stringify(memory));
   } catch {
     // Lost, the next turn sends everything again.
   }
+}
+function keep(key: string, t: Thread) {
+  memory.threads = Object.fromEntries(Object.entries({ ...memory.threads, [key]: t }).filter(([k, x]) => current(k, x, Date.now())));
+  save();
+}
+function sent(page: string, fp: string) {
+  memory.sent = { ...memory.sent, [page]: [...(memory.sent[page] ?? []), fp].slice(-500) };
+  save();
 }
 
 // The nod ledger (docs/TAIL.md, "What it remembers"): what was taken and ignored, by kind and
@@ -378,6 +401,7 @@ function remember(place: Place | undefined, took: boolean) {
 function settle(page: string, texts?: string[]) {
   const { gone, ignored, moved } = edited(tail.get(), page, texts);
   for (const l of ignored) remember(l.place, false);
+  for (const l of ignored) if (l.block !== undefined) update(l.id, { ignored: true });
   for (const [l, block] of moved) update(l.id, { block });
   drop((l) => gone.some((g) => g.id === l.id));
 }
@@ -393,7 +417,7 @@ function choose(trigger: Trigger, key: string, found: Found[], pages: ObjectSumm
 }
 async function turnOn(trigger: Trigger, key: string, all: Found[], pages: ObjectSummary[], since: number): Promise<Turned> {
   const { model, effort: chosen } = tailPrefs();
-  // A chip's or the box's choice is small, so it runs at low whatever the setting.
+  // A suggestion's or the box's choice is small, so it runs at low whatever the setting.
   const effort = trigger === "pause" || trigger === "capture" ? "low" : chosen;
   const started = Date.now();
   // The page about you, read at the start of every turn. A kind quiet there spends no turn.
@@ -404,17 +428,16 @@ async function turnOn(trigger: Trigger, key: string, all: Found[], pages: Object
   const told = trigger === "capture" ? about.filter((l) => pages.some((p) => p.typeId === "project" && says(sentenceOf(l), p))).slice(-10) : about;
   const turn = async (t: Thread) => {
     const text = async (id: string) => markdown((await contentOf(id))?.content ?? []);
-    const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, text, candidates: found, about: told, ledger: counts(ledger.get().entries) });
+    const d = await buildDigest({ trigger, now: started, pages, readsOn, typeName: (id) => typeOf(id).name, since, seen: t.seen, index: t.index, text, candidates: found, about: told, ledger: counts(ledger.get().entries) });
     return { ...d, ...(await tailTurn({ prompt: d.message, system: TAIL, model, effort, resume: t.session })) };
   };
-  let thread = threadFor(memory.threads, key, model, started, trigger === "beat" || trigger === "pause");
+  let thread = threadFor(memory.threads, key, model, started, trigger === "beat");
   let got = await turn(thread);
   // A thread the tool no longer has: once more on a new one, sent everything again.
   if (got.error && thread.session) got = await turn((thread = { model, seen: {}, at: Date.now() }));
   if (got.error) return { picks: [], error: got.error };
   if (trigger === "beat") memory.last = started;
-  // A pause sends no body, so the page's thread stays as it was, for the return row.
-  if (trigger !== "pause") keep(key, { ...thread, session: got.session, seen: got.seen });
+  keep(key, { ...thread, session: got.session, seen: got.seen, index: got.index });
   if (!answerOf(got.text)) return { picks: [], error: "the answer wasn't JSON" };
   const note = trigger === "beat" && noteIn(got.text);
   if (note) void rewrite(note);
@@ -491,7 +514,7 @@ function showToday(found: Line[]) {
   const shown = tail.get().filter((l) => l.where === TODAY);
   // A row the person saw that this beat doesn't show again was ignored, unless only it stays out.
   for (const s of shown) if (s.seen && !s.done && !found.some((l) => l.id === s.id) && !ledger.get().shown[s.id]?.said) remember(s.place, false);
-  const next: Line[] = found.filter((l) => !shown.some((s) => s.id === l.id && s.done?.undo)).map((l) => ({ ...l, seen: shown.some((s) => s.id === l.id && s.seen) }));
+  const next: Line[] = found.filter((l) => !shown.some((s) => s.id === l.id && s.done?.undo)).map((l) => ({ ...l, seen: shown.find((s) => s.id === l.id)?.seen }));
   shown.forEach((s, i) => s.done?.undo && next.splice(i, 0, s));
   tail.set([...tail.get().filter((l) => l.where !== TODAY), ...next.slice(0, 3)]);
   sawToday();
@@ -502,9 +525,9 @@ function sawToday() {
   if (!todayShown()) return;
   const { shown } = ledger.get();
   let next = shown;
+  saw(tail.get().filter((l) => l.where === TODAY).map((l) => l.id));
   for (const l of tail.get()) {
     if (l.where !== TODAY || l.done || !l.state) continue;
-    l.seen = true;
     const called = l.words.find((w) => typeof w !== "string")?.text ?? "";
     const s = seenOn(shown[l.id], isoDay(new Date()), l.state, called);
     if (s === shown[l.id]) continue;
@@ -514,7 +537,7 @@ function sawToday() {
   if (next !== shown) ledger.set({ shown: next });
 }
 
-// The chip, after a pause in typing: for a line that reads as a task, or names a page.
+// A suggestion about a finished block: one that reads as a task, or names a page.
 
 function asTask(page: string, index: number, blocks: EditorDoc[]): Found | undefined {
   const block = blocks[index];
@@ -534,7 +557,7 @@ function asTask(page: string, index: number, blocks: EditorDoc[]): Found | undef
     line: ({ day: word }) => {
       const day = word ? dayIn(word) : undefined;
       return {
-        id: `chip:${page}`,
+        id: `offer:${page}:${fingerprint(text)}`,
         where: page,
         block: index,
         words: ["Make this a task?"],
@@ -578,7 +601,7 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
     pages: [page, p.id],
     facts: { line: markdown([block]).slice(0, 500), name: p.title.trim() },
     line: () => ({
-      id: `chip:${page}`,
+      id: `offer:${page}:${fingerprint(textOf(block))}`,
       where: page,
       block: index,
       words: [name(p), " has a page."],
@@ -594,26 +617,53 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
   };
 }
 
-// The page's thread, as for coming back; the model picks one or stays silent.
-const declined = new Map<string, string>();
-async function paused(page: string) {
-  const ed = liveEditor(page);
-  const blocks = ed?.getJSON().content ?? [];
-  const at = ed?.cursorBlock() ?? -1;
-  // On the empty line an Enter just made, the line just written is the one before.
-  const index = at > 0 && blocks[at]?.type === "paragraph" && !blocks[at].content?.length ? at - 1 : at;
-  // A done line keeps its moment, and a chip on this line stands; a newer offer elsewhere wins.
-  const waits = () => tail.get().some((l) => l.where === page && (l.done || l.block === index));
-  if (!chips() || !readable(pageOf(page)) || waits()) return;
-  if (blocks[index]?.type !== "paragraph" || declined.get(page) === textOf(blocks[index])) return;
-  const found = [asTask(page, index, blocks), mention(page, index, blocks)].filter((f) => f !== undefined);
+// A finished block, sent once per wording, one turn per page at a time (lib/tail-read.ts), on the
+// page's thread. The word rules say whether it is worth a turn; the model picks, or stays silent.
+const readers = new Map<string, (fp: string) => void>();
+function read(page: string, index: number) {
+  const block = liveEditor(page)?.blockAt(index);
+  const fp = block?.type === "paragraph" ? fingerprint(textOf(block)) : "";
+  if (!fp || !normal() || !readable(pageOf(page))) return;
+  if (!readers.has(page)) readers.set(page, reader({ sent: (f) => !!memory.sent[page]?.includes(f), go: (f) => suggest(page, f) }));
+  readers.get(page)!(fp);
+}
+async function suggest(page: string, fp: string) {
+  const blocks = (await contentOf(page))?.content ?? [];
+  const texts = blocks.map((b) => textOf(b));
+  // Changed or gone while it waited: not new any more.
+  const index = blocks.findIndex((b, i) => b.type === "paragraph" && fingerprint(texts[i]) === fp);
+  const found = index < 0 || !normal() ? [] : [asTask(page, index, blocks), mention(page, index, blocks)].filter((f) => f !== undefined);
   if (!found.length) return;
-  const [line] = linesOf((await choose("pause", `page:${page}`, found, space.get().pages)).picks);
-  if (!line || !isLive(page) || waits()) return;
-  // An edit while the model thought keeps the offer, wherever its line went, unless it changed it.
-  const chip = { ...line, text: textOf(blocks[index]), since: Date.now() };
-  const { gone, moved } = edited([chip], page, (liveEditor(page)?.getJSON().content ?? []).map((b) => textOf(b)));
-  if (!gone.length) put(moved.length ? { ...chip, block: moved[0][1] } : chip);
+  sent(page, fp);
+  // The page written on, even while it is a draft not yet stored (a new day's note).
+  const { pages } = space.get();
+  const [line] = linesOf((await choose("pause", `page:${page}`, found, pages.some((p) => p.id === page) ? pages : [...pages, pageOf(page)!])).picks);
+  // Where its block is now, unless its words changed while the model thought.
+  const at = line ? lineAt(((await contentOf(page))?.content ?? []).map((b) => textOf(b)), texts[index], index) : -1;
+  if (line && at >= 0 && normal()) put({ ...line, block: at, text: texts[index], at: Date.now() });
+}
+
+// Suggestions stay until nodded or their words change, so they are kept on this Mac and made again
+// from their pages at the next start; the daily card counts yesterday's.
+type Kept = Omit<Line, "words" | "row" | "nod" | "act" | "pages" | "done" | "state">;
+export const kept = localPrefs<{ offers: Kept[] }>("ll.tail.offers", { offers: [] });
+let revived = false;
+async function revive() {
+  if (revived) return;
+  revived = true;
+  const lines: Line[] = [];
+  for (const k of kept.get().offers.filter((k) => readable(pageOf(k.where)))) {
+    const blocks = (await contentOf(k.where))?.content ?? [];
+    const index = lineAt(blocks.map((b) => textOf(b)), k.text, k.block ?? 0);
+    const found = index < 0 ? undefined : (k.place?.kind === "task" ? asTask : mention)(k.where, index, blocks);
+    const line = found?.line?.(k.slots ?? {});
+    if (line && found) lines.push({ ...line, ...k, block: index, pages: found.pages });
+  }
+  tail.set([...tail.get(), ...lines.filter((l) => !tail.get().some((x) => x.id === l.id))]);
+  tail.subscribe(() => {
+    const offers = tail.get().flatMap(({ id, where, block, text, at, slots, place, seen, ignored, done }) => (block === undefined || done ? [] : [{ id, where, block, text, at, slots, place, seen, ignored }]));
+    if (JSON.stringify(offers) !== JSON.stringify(kept.get().offers)) kept.set({ offers });
+  });
 }
 
 // Back on a page after a while: where you stopped, when that was mid-sentence, if the model,
@@ -639,10 +689,12 @@ async function comeBack(page: string, doc: EditorDoc) {
   if (seen.get(page) === was && isLive(page)) lines.forEach(put);
 }
 
-// While a page is open. An edit takes "you stopped at" away, and a chip once its line's words
-// change; a pause after it may bring a chip. Leaving the page takes both.
+// While a page is open. An edit takes "you stopped at" away, and a suggestion once its block's
+// words change; a finished block is read. Leaving takes the first; suggestions stay, for Elsewhere.
 const pauses = new Map<string, ReturnType<typeof setTimeout>>();
 const closing = new Map<string, ReturnType<typeof setTimeout>>();
+// The block each page's last edit was in, so an Enter at a block's end is known.
+const edits = new Map<string, number>();
 export function follow(page: string) {
   // Mounted again at once (React's second mount in dev): it never left.
   const back = closing.has(page);
@@ -652,13 +704,19 @@ export function follow(page: string) {
   const off = watchLive(page, () => {
     if (mode() === "off" || acting) return;
     const ed = liveEditor(page);
-    const block = ed?.cursorBlock();
-    // Every block's words are read only while a chip stands, since that costs on a long page.
-    const chip = tail.get().some((l) => l.where === page && l.block !== undefined && !l.done);
-    settle(page, chip ? (ed?.getJSON().content ?? []).map((b) => textOf(b)) : []);
-    seen.set(page, { at: Date.now(), block });
+    const at = ed?.cursorBlock() ?? -1;
+    // Every block's words are read only while a suggestion stands, since that costs on a long page.
+    const offers = suggestionsOn(page).length > 0;
+    settle(page, offers ? (ed?.getJSON().content ?? []).map((b) => textOf(b)) : []);
+    seen.set(page, { at: Date.now(), block: at });
     clearTimeout(pauses.get(page));
-    if (chips()) pauses.set(page, setTimeout(() => void paused(page), ms("pause")));
+    const was = edits.get(page);
+    edits.set(page, at);
+    const block = ed?.blockAt(at);
+    const { stop, quiet } = readAfter();
+    const next = normal() && block ? nextRead(was, at, textOf(block), !block.content?.length, { stop: stop * 1000, quiet: quiet * 1000 }) : null;
+    // An Enter's read goes now: the next key would clear a timer before it fired.
+    if (next) next.wait ? pauses.set(page, setTimeout(() => read(page, next.block), next.wait)) : read(page, next.block);
   });
   return () => {
     off();
@@ -667,6 +725,7 @@ export function follow(page: string) {
       page,
       setTimeout(() => {
         closing.delete(page);
+        edits.delete(page);
         seen.set(page, { ...seen.get(page), at: Date.now() });
         settle(page);
       }),
@@ -676,10 +735,15 @@ export function follow(page: string) {
 
 export async function nod(line: Line) {
   if (line.done || acting) return;
+  // A suggestion about a page not open: it opens beside, and the nod acts there once it has drawn.
+  if (line.block !== undefined && !isLive(line.where)) {
+    openBeside(line.where);
+    await new Promise<void>((r) => whenLive(line.where, () => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+  }
   acting = true;
   let done: Done | void;
   try {
-    done = await line.act(line.block);
+    done = await line.act(tail.get().find((l) => l.id === line.id)?.block ?? line.block);
   } finally {
     acting = false;
   }
@@ -690,8 +754,8 @@ export async function nod(line: Line) {
   if (!done) return;
   const { words } = done;
   update(line.id, { done });
-  // Taken once Undo has gone. A chip in the margin just leaves; a row on Today keeps its words,
-  // so the rows under it stay.
+  // Taken once Undo has gone. A suggestion just leaves; a row on Today keeps its words, so the
+  // rows under it stay.
   later(line.id, ms("done"), () => {
     remember(line.place, true);
     if (line.where === TODAY && todayShown()) update(line.id, { done: { words } });
@@ -711,13 +775,11 @@ export async function undo(line: Line) {
   }
   nodded = Date.now();
   if (line.where === TODAY) return update(line.id, { done: undefined });
-  // An undone chip is a no for its line until the line's words change.
-  const block = line.block === undefined ? undefined : liveEditor(line.where)?.getJSON().content?.[line.block];
-  if (block) declined.set(line.where, textOf(block));
+  // An undone suggestion is a no for its block until its words change, as they were sent.
   drop((l) => l.id === line.id);
 }
 
-// ⌃↩: the chip or row on the page in front, or on Today its first row.
+// ⌃↩: the first suggestion or row on the page in front, or on Today its first row.
 export function nodFront() {
   const page = focusedPage();
   const open = tail.get().filter((l) => !l.done);
@@ -737,6 +799,7 @@ export async function startTail() {
   }
   if (mode() === "off" || started) return;
   started = true;
+  if (normal()) void revive();
   void beat();
   setInterval(() => void beat(true), ms("beat"));
   let away = 0;
@@ -755,8 +818,8 @@ export async function startTail() {
   });
 }
 
-// A change in Settings takes effect at once: Off takes every line away, Quiet the chips, and on
-// again tail starts or beats.
+// A change in Settings takes effect at once: Off takes every line away, Quiet the suggestions, and
+// on again tail starts or beats.
 let was = mode();
 onAiPrefs(() => {
   const now = mode();
@@ -764,6 +827,7 @@ onAiPrefs(() => {
   was = now;
   if (now === "off") drop(() => true);
   if (now === "quiet") drop((l) => l.block !== undefined);
+  if (now === "normal" && started) void revive();
   if (now !== "off") void (started ? beat() : startTail());
 });
 
@@ -800,16 +864,18 @@ async function seed() {
 function reset() {
   for (const t of [...timers.values(), ...pauses.values()]) clearTimeout(t);
   seen.clear();
-  declined.clear();
+  readers.clear();
+  edits.clear();
   waiting = null;
   beats++;
-  Object.assign(memory, { last: 0, threads: {} });
+  Object.assign(memory, { last: 0, threads: {}, sent: {} });
   localStorage.removeItem(KEPT);
   ledger.set({ entries: [], shown: {} });
   lastBeat.set(null);
   if (aboutPage()) void rewrite(undefined, appLine);
   log.length = 0;
   tail.set([]);
+  kept.set({ offers: [] });
 }
 
 // The stand-in (lib/agent-standin.ts) adds each tail turn's message and answer to log.

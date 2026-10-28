@@ -7,7 +7,7 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
-import { anchors, newId, setEndChip, setLiveQuotes, trimmed } from "./anchors";
+import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
 import type { AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { pasteText } from "./markdown";
@@ -27,7 +27,6 @@ import { type Count, countText, OFF, onFound, type Writing, writingKey } from ".
 export type { NotesStore } from "./sidenotes";
 export type { PageSelection } from "./page-selection";
 export { citesIn } from "./anchors";
-export { baselineOffset, GUTTER, NOTE_FONT } from "./sidenotes";
 
 export type EditorDoc = JSONContent;
 
@@ -78,12 +77,11 @@ export type BlockEditorHandle = {
   replaceRange: (from: number, to: number, html: string) => void;
   // Pastes at the top of the page, as its own blocks (a page pasted into the title).
   paste: (text: string, html?: string) => void;
-  // The top-level block holding the cursor, and one put in the place of count blocks as its own
-  // undo step: how tail reads the line being written and nods at it (docs/TAIL.md).
+  // The top-level block holding the cursor, one by its index, and one put in the place of count
+  // blocks as its own undo step: how tail reads the block being written and nods at it (docs/TAIL.md).
   cursorBlock: () => number;
+  blockAt: (index: number) => EditorDoc | undefined;
   setBlock: (index: number, block: EditorDoc, count?: number) => void;
-  // Tail's chip after a top-level block's last words, or none: drawn, never stored.
-  chipAfter: (at: { index: number; text: string } | null) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -507,6 +505,7 @@ export function BlockEditor({
         pasteText(editor.view, text, html);
       },
       cursorBlock: () => editor.state.selection.$from.index(0),
+      blockAt: (index) => editor.state.doc.maybeChild(index)?.toJSON(),
       setBlock: (index, block, count = 1) => {
         const { doc } = editor.state;
         if (index + count > doc.childCount) return;
@@ -521,7 +520,6 @@ export function BlockEditor({
         if (selection instanceof NodeSelection && selection.from === from) tr.setSelection(Selection.near(tr.doc.resolve(selection.to), 1));
         editor.view.dispatch(tr);
       },
-      chipAfter: (at) => void (!editor.isDestroyed && editor.view.dispatch(setEndChip(editor.state.tr, at))),
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),
       placeAt: (x, y) => placeAt(editor, x, y),

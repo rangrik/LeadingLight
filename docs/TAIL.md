@@ -12,12 +12,13 @@ surface with word rules in place of the model, so the feel was judged first.
 
 - One line, under twelve words, with one verb button: the nod. If it would need a choice,
   it is not a tail line.
-- Never while you type. Only at a pause, when a page opens, when you come back, at day start.
+- Never while you type. Only when a block is finished, when a page opens, when you come back,
+  at day start.
 - Nothing moves. Tail never narrows the text, collapses the sidebar, scrolls, or opens a popup.
-  No toast, sound, badge or count.
+  No toast or sound. The one count is on the bar's Suggestions icon: offers the panel has not shown.
 - Everything a nod does is undoable, and the line says what it did, with Undo, for a moment.
-- Lines expire: a chip when its line's words change or you leave the page, Today's lines at the
-  next beat. Nothing piles up. A beat never redraws Today while you are on it; it waits until you
+- Lines expire: a suggestion when its block's words change, a nod, or the daily card's Dismiss
+  all; Today's lines at the next beat. Nothing piles up. A beat never redraws Today while you are on it; it waits until you
   are back.
 - Every line names what it read. "You left *Garden plan* mid-sentence" says which page tail
   opened, and the name opens it. There is no separate screen of what tail saw.
@@ -36,20 +37,17 @@ the nod a `Button size="xs" variant="outline"`. It fades in and out over 150 ms.
 2. **A page you come back to.** One row in the band above the title, where the hover controls
    (Add icon, Add cover) already sit so that nothing moves; they wait while the row is there.
    It says where you stopped and leaves on the first edit.
-3. **The line you just wrote.** A chip in the margin, placed like a sidenote (13 px on 19.5 px,
-   level with the first baseline, 32 px right of the text, at most 224 px wide): the sentence,
-   then the nod with its key. When the margin has no room beside the text as it is, the chip
-   sits at the end of its line, after the last word, placed as a sidenote's number is (drawn,
-   never stored, nothing moved): the sentence and the nod's key in one small muted chip,
-   "Make this a task? ⌃↩", which nods on a click. Only when that line has no room left for it
-   does it fall back to the row above the title, quoting the words. After a nod it reads what
-   the nod did, with Undo; a line that became a task's link has no words to sit after, so the
-   row says it. It stays while its line stands: an Enter after
-   the line, or writing elsewhere on the page, even while the model thinks, leaves it where it
-   is. One chip per page at a time; a newer offer takes its place. A pause on the empty line an
-   Enter made reads the line before it. Changing the line's words takes the chip away; only
-   leaving the page without a nod, once the chip has been on screen thirty seconds, counts as
-   ignored.
+3. **The bar's Suggestions** (`components/suggestions.tsx`, features/suggestions.feature). What
+   tail offers about a block you wrote is a row in the panel, never in the text: no chip, no
+   margin, nothing moved. Two groups, each shown only with rows: On this page, where hovering or
+   tabbing to a row lights its block's words as Show does and the nod acts in place; and
+   Elsewhere, offers about other pages, quoting their words, and the day's rows (not on Today,
+   which shows them under its day bar), each name
+   opening its page beside the one in front (a nod there opens it first). A new offer raises the
+   count on the icon; rows the open panel shows are seen. An offer stays while its block's words
+   stand, across pages and restarts; leaving its page once the panel has shown it thirty seconds
+   counts as ignored, once. A page coming to the front with offers turns an unpinned panel to
+   Suggestions.
 4. **The capture box.** For an idea of three words or more, the project button shows the guess,
    muted, with a trailing "?", and the footer offers `⌃↩ Task in Garden` when the words read as
    a task, else `⌃↩ In Garden`, which files the idea there and keeps it an idea; once you pick
@@ -59,11 +57,11 @@ the nod a `Button size="xs" variant="outline"`. It fades in and out over 150 ms.
    after a pause. An answer shows when it comes, whatever you typed meanwhile, unless the box
    closed or you picked the project; each one replaces the guess shown.
 
-The key: ⌃↩ nods the chip or row on the page in front, the first row on Today. It is in the
+The key: ⌃↩ nods the first offer or row on the page in front, the first row on Today. It is in the
 shortcuts table, so it can be changed.
 
-Settings › AI › Tail: Off, Quiet (Today's rows and the return row only; no chips, no capture
-guess) or Normal; the model and effort, as Ask has them; Reads on; a link to the page about you
+Settings › AI › Tail: Off, Quiet (Today's rows and the return row only; no suggestions, no
+capture guess) or Normal; Read a block after, the two waits below; the model and effort, as Ask has them; Reads on; a link to the page about you
 (below); and the last beat, when it ran and how many lines it gave or why it didn't go, with Run
 now. Tail's spend shows in the usage meter at the bottom of the sidebar, beside Ask's.
 
@@ -72,7 +70,7 @@ now. Tail's spend shows in the usage meter at the bottom of the sidebar, beside 
 Present tense, plain words, no "I", no exclamation. The verb on the button says what the nod
 does. After a nod, the same row in the past tense, with Undo for eight seconds. On Today the
 sentence then stays, without Undo, until you leave the page or the next beat, so the rows under
-it never move; a chip, which is beside the words, just leaves. A count such as "3 ideas" is a name
+it never move; a suggestion just leaves. A count such as "3 ideas" is a name
 too: it opens the list of those pages.
 
 | When | Line | Nod | After |
@@ -87,13 +85,30 @@ too: it opens the list of those pages.
 | Capture text that reads as a task for a project | (project button) Garden? | ⌃↩ Task in Garden | saved as a task, box closes |
 | Capture text for a project, not a task | (project button) Garden? | ⌃↩ In Garden | saved as an idea in Garden, box closes |
 
+## When it reads
+
+A block is read when it is finished: at once on Enter at its end (the block just ended, not the
+empty line the cursor is on); after a full stop at its end and ten seconds of quiet; or after
+twenty seconds of quiet in any case (`lib/tail-read.ts`). The word rules still decide whether a
+finished block is worth a turn. Each wording goes once: the app keeps, per page, a fingerprint of
+every block it sent (its words trimmed and lowercased), kept beside the page's thread and outliving
+it, and never sends those words again on that page. One turn per page at a time; a block finished
+meanwhile waits and goes only if its words still stand and are still unsent.
+
+The daily card on Today, once a day, when earlier days left offers or captures not reviewed:
+"Yesterday left 4 things." when all are from yesterday, else "Left over: 5 things.", with Go through (the first beside Today, in the panel that answers it;
+the card counts down), Dismiss all (captures reviewed, offers gone, nothing counted as ignored)
+and Hand off (a task "Review yesterday's leftovers", its brief naming each item and its pages,
+assigned through `lib/assign.ts`; the card reads "Handed to an agent." until its report comes
+back; it needs Projects on).
+
 ## What it sees
 
 Context is scoped by the trigger, never a dump of the space. Each trigger has a budget.
 
 | Trigger | Sees | Budget |
 |---|---|---|
-| A pause on a page | The block you are on and a few around it; the page's title, type and properties; the index: every page's title, type and aliases, no bodies | about 2k tokens |
+| A finished block | The block and a few around it; the page's title, type and properties; the index (every page's title, type and aliases, no bodies) once per page thread, then only entries new or changed, kept as a hash per page with its ref | about 2k tokens |
 | Coming back | The page's text, which block was edited last, and when | about 4k |
 | The beat | A digest of what changed since the last beat: title, type, updated time, first line, done, due, project. Bodies only of changed pages, capped. Captures since; open tasks; reports not accepted | about 8k |
 | Capture | The words typed, the project titles, the last few captures | about 1k |
@@ -119,8 +134,8 @@ model calls themselves, exactly as with Ask.
 Three plain things, all on this Mac, all readable.
 
 1. **The nod ledger.** What you took and ignored, by kind, page type and project, for thirty
-   days. It quiets a kind after three ignores in the same place and ranks the rest; a chip is
-   ignored only if it was on screen thirty seconds before you left its page. Small, local,
+   days. It quiets a kind after three ignores in the same place and ranks the rest; a suggestion is
+   ignored only if the panel showed it thirty seconds before you left its page. Small, local,
    never shown as a list; its effect shows as a sentence on the page about you. It has a
    version: a build that changes it starts the ledger over and takes tail's own quiet sentences
    off the page, so a quiet that an older build's bug set lifts. A Today row
@@ -133,10 +148,10 @@ Three plain things, all on this Mac, all readable.
    can edit or delete any line and tail follows: delete the quiet line and that kind comes
    back. Tail reads this page at the start of every turn. It is reached from Settings › AI ›
    Tail and by search.
-3. **Threads.** A new thread for every beat and every pause, so neither grows. A beat keeps the
-   day's record of the bodies sent, so a body goes again only once its page changes; a pause
-   sends no body and leaves the page's record as it was. One resumed thread per page for the
-   return row, and one per opening of the capture box, as Ask threads work, carrying what tail
+3. **Threads.** A new thread for every beat, so it never grows; the beat keeps the day's record of
+   the bodies sent, so a body goes again only once its page changes. One resumed thread per page
+   for its suggestions and the return row, which sends the index once and a block once, and one
+   per opening of the capture box, as Ask threads work, carrying what tail
    already saw so nothing is re-sent. The day's record ends with the day, a
    page's thread after four hours, a capture box's after ten minutes.
 
@@ -149,15 +164,17 @@ Design mode was the prototype's; the real values go with the model.
 
 | | Design | Real |
 |---|---|---|
-| Pause before a chip | 3 s | 10 s |
+| Quiet after a full stop before a block is read | 3 s | 10 s |
+| Quiet before a block is read in any case | 5 s | 20 s |
 | Away before "you stopped at" and a beat | 10 s | 15 min |
 | Beat while the app is open | 2 min | 30 min |
 | A done row | 8 s | 8 s |
 | Pause before a capture turn | 1 s | 1 s |
-| A chip on screen before leaving it is ignored | 30 s | 30 s |
-| Effort of a pause or capture turn | low | low |
+| A suggestion shown in the panel before leaving its page is ignored | 30 s | 30 s |
+| Effort of a suggestion or capture turn | low | low |
 
-A chip has no timer: it stays while its line stands.
+A suggestion has no timer: it stays while its block's words stand. The two read waits are in
+Settings › AI › Tail; a value set there holds in both builds.
 
 ## The model
 

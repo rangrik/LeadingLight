@@ -4,9 +4,9 @@ import { localPrefs } from "~/lib/local-prefs";
 // newest of each, or a GPT model Codex offers (lib/codex.ts).
 export type Access = "ask" | "auto" | "full";
 export type AiPrefs = { model: string; effort: string; access: Access; plan: boolean; tail: Partial<TailPrefs> };
-// Tail (docs/TAIL.md): Off, Quiet or Normal, its own model and effort, and Reads on, the types
-// where the person chose other than Writing's Use on (Settings › AI › Tail).
-export type TailPrefs = { mode: "off" | "quiet" | "normal"; model: string; effort: string; readsOn: Record<string, boolean> };
+// Tail (docs/TAIL.md): Off, Quiet or Normal, its own model and effort, Reads on, the types where
+// the person chose other than Writing's Use on, and the seconds before a block is read, when set.
+export type TailPrefs = { mode: "off" | "quiet" | "normal"; model: string; effort: string; readsOn: Record<string, boolean>; stop?: number; quiet?: number };
 const TAIL: TailPrefs = { mode: "normal", model: "gpt-6.1-sol", effort: "high", readsOn: {} };
 
 export const MODELS: { value: string; label: string }[] = [

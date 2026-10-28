@@ -8,8 +8,8 @@ import { ABOUT } from "./tail-memory.ts";
 
 export const TAIL = [
   "You are tail, in LeadingLight, a notes app on this Mac. From offers the app found, you choose the few worth one line now; the person takes a line with one press or ignores it. Showing nothing is often right.",
-  'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to, "pause" for a line beside the line they just wrote, "capture" for the box where they type an idea), the time now, pages (a summary of each, by ref), text (a page\'s words, only when new to you or changed), and candidates.',
-  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page), task (the line just written, with the blocks around it, reads as a task; the pages are its page and those it names), mention (a word in the line is a page's title and not linked), capture (an idea typed in the box, worth showing only when a project fits it).",
+  'Each message is one JSON object: the trigger ("beat" for the lines on Today, "page" for the line above a page the person came back to, "pause" for a suggestion about a block they just finished writing, "capture" for the box where they type an idea), the time now, pages (a summary of each, by ref; in a thread that goes on, only pages new or changed since, the refs staying), text (a page\'s words, only when new to you or changed), and candidates.',
+  "A candidate has an id, a kind, the refs of the pages it is about, its facts, and the app's guess at its slots. Kinds: left (a page left mid-sentence), ideas (ideas not filed; the pages are those that read as tasks), day (a task whose title names a day but has no due date), untitled (a page with words and no title), stopped (where the person stopped on this page), task (the block just finished, with the blocks around it, reads as a task; the pages are its page and those it names), mention (a word in the block is a page's title and not linked), capture (an idea typed in the box, worth showing only when a project fits it).",
   "Two more, when they hold anything: about, the page about how the person works, dated sentences they read and edit, which you follow; and ledger, how many lines of each kind they took and ignored lately.",
   "Choose the candidates worth showing, most useful first: at most three for a beat, at most one otherwise. Leave out any the pages make untrue or pointless, and any line that only looks like a task: about the past, a thing, or a day, not something to do.",
   'Keep or change each slot in the guess, and fill one left empty: project is the ref of a project page; day is a weekday or "tomorrow", as the task\'s words name it; title is a short title, at most six words, from the page\'s own words; task is true when the words are something to do, else false.',
@@ -52,11 +52,15 @@ export type DigestInput = {
   // The page about how the person works, and the ledger in a few words.
   about?: string[];
   ledger?: string;
+  // What the thread was sent of the index, by page: its ref and a hash of its entry.
+  index?: Index;
 };
+export type Index = Record<string, string>;
+const hash = (s: string) => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) | 0, 7).toString(36);
 
 // Summaries from memory, candidates' pages and projects first, then the newest; bodies only of
 // pages that changed, read only then. Pages are sent by short refs, which the answer uses.
-export async function buildDigest(o: DigestInput): Promise<{ message: string; seen: Seen; refs: Record<string, string> }> {
+export async function buildDigest(o: DigestInput): Promise<{ message: string; seen: Seen; refs: Record<string, string>; index: Index }> {
   const budget = BUDGET[o.trigger];
   const reads = (p?: ObjectSummary) => !!p && mayRead(p, o.readsOn);
   // A pause's index is every page, since a title is what one types to link.
@@ -68,7 +72,10 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
   const first = new Set(candidates.flatMap(about));
   const rank = (p: ObjectSummary) => (first.has(p.id) ? 0 : p.typeId === "project" ? 1 : 2);
   const order = [...byId.values()].sort((a, b) => rank(a) - rank(b) || b.updatedAt - a.updatedAt);
-  const ref = new Map(order.map((p, i) => [p.id, `p${i + 1}`]));
+  // A thread keeps its refs, so a page sent before is named as it was.
+  const had = o.index ?? {};
+  let n = Math.max(0, ...Object.values(had).map((v) => Number(v.split(" ")[0].slice(1))));
+  const ref = new Map(order.map((p) => [p.id, had[p.id]?.split(" ")[0] ?? `p${++n}`]));
 
   const sent = candidates.map((c, i) => ({
     id: `c${i + 1}`,
@@ -90,17 +97,22 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
   };
   const extra = { ...(o.about?.length && { about: o.about }), ...(o.ledger && { ledger: o.ledger }) };
   const pages: ReturnType<typeof summary>[] = [];
+  const index = { ...had };
   let room = budget.all * 0.6 - size(sent) - size(extra);
   for (const p of order) {
     const s = summary(p);
+    const mark = `${ref.get(p.id)} ${hash(JSON.stringify(s))}`;
+    // The index once per thread, then only what changed; a candidate's pages every time.
+    if (rank(p) > 0 && had[p.id] === mark) continue;
     if (rank(p) > 0 && size(s) > room) break;
     pages.push(s);
+    index[p.id] = mark;
     room -= size(s);
   }
   room = budget.all - size({ sent, pages });
   const seen = { ...o.seen };
   const text: { ref?: string; text: string }[] = [];
-  for (const p of order.slice(0, pages.length).sort((a, b) => b.updatedAt - a.updatedAt)) {
+  for (const p of order.filter((p) => index[p.id]).sort((a, b) => b.updatedAt - a.updatedAt)) {
     const at = String(p.updatedAt);
     if (!budget.body || p.updatedAt <= o.since || seen[p.id] === at) continue;
     const words = (await o.text(p.id)).slice(0, budget.body);
@@ -112,19 +124,20 @@ export async function buildDigest(o: DigestInput): Promise<{ message: string; se
   const now = new Date(o.now);
   const message = JSON.stringify({ trigger: o.trigger, now: `${WEEKDAYS[now.getDay()]} ${when(o.now)}`, ...extra, pages, ...(text.length && { text }), candidates: sent });
   const refs = Object.fromEntries([...[...ref].map(([id, r]) => [r, id]), ...candidates.map((c, i) => [`c${i + 1}`, c.id])]);
-  return { message, seen, refs };
+  return { message, seen, refs, index };
 }
 
-// Tail's threads (docs/TAIL.md, "What it remembers"): a session and what it was sent, as ids and
-// times, never words. The day's for the beat, a page's for four hours, a box's for ten minutes.
-export type Thread = { model: string; session?: string; seen: Seen; at: number };
+// Tail's threads (docs/TAIL.md, "What it remembers"): a session and what it was sent, as ids,
+// times and hashes, never words. The day's for the beat, a page's for four hours, a box's for ten minutes.
+export type Thread = { model: string; session?: string; seen: Seen; at: number; index?: Index };
 export const current = (key: string, t: Thread, now: number) => (key.startsWith("beat:") ? key === `beat:${when(now).slice(0, 10)}` : now - t.at < (key.startsWith("capture:") ? 10 * 60_000 : 4 * 3_600_000));
-// A beat or a pause starts a new session each time (fresh), so its input never grows, but keeps
-// the thread's seen map; the return row resumes the page's thread.
+// A beat starts a new session each time (fresh), so its input never grows, but keeps the thread's
+// seen map; a page's suggestions and its return row resume the page's thread.
 export function threadFor(threads: Record<string, Thread>, key: string, model: string, now: number, fresh: boolean): Thread {
   const t = threads[key];
   if (t?.model !== model || !current(key, t, now)) return { model, seen: {}, at: now };
-  return fresh ? { ...t, session: undefined } : t;
+  const { index: _, ...rest } = t;
+  return fresh ? { ...rest, session: undefined } : t;
 }
 
 // How many words differ between two texts, as added or taken away, whichever is more.
