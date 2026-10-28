@@ -334,7 +334,7 @@ export function PageView({ page }: { page: LLObject }) {
               {/* Its words only where there is room for them beside the others. */}
               <LinkFolderButton label={<span className="hidden @3xl/page-title:inline">Link folder</span>} pageId={page.id} />
             </div>
-            {!report && <TailPage body={bodyRef} onRow={setTailRow} pageId={page.id} />}
+            {!report && <TailPage onRow={setTailRow} pageId={page.id} />}
             <textarea
               aria-label="Title"
               className="block w-full resize-none overflow-hidden bg-transparent font-bold font-heading text-[2.25rem] leading-[1.2] tracking-tight outline-none placeholder:text-muted-foreground/60"

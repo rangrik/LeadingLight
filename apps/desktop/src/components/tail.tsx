@@ -1,24 +1,19 @@
-import { baselineOffset, GUTTER, NOTE_FONT } from "@leadinglight/editor/editor";
 import { MessageSquareDashed } from "lucide-react";
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Kbd } from "@leadinglight/ui/components/kbd";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { DailyCard } from "~/components/daily-card";
 import { visit } from "~/components/property-value";
 import { Row } from "~/components/work-panel";
-import { useKeysFor } from "~/lib/keymap";
-import { liveEditor, watchLive } from "~/lib/live";
 import { follow, type Line, nod, type Part, tail, TODAY, undo } from "~/lib/tail";
 
-// Tail's lines (docs/TAIL.md): rows like the work panel's, on Today and under a page's title, and
-// a chip in the margin beside the line just written, or after its last words. Each fades in and
-// out over 150 ms.
+// Tail's lines (docs/TAIL.md): rows like the work panel's, on Today, under a page's title and in
+// the bar's Suggestions. Each fades in and out over 150 ms.
 
 const FADE = "transition-opacity duration-150 ease-out starting:opacity-0 data-leaving:opacity-0";
 
 // Lines that leave stay a moment where they were, fading out.
-function useFading(lines: Line[]) {
+export function useFading(lines: Line[]) {
   const [shown, setShown] = useState(() => lines.map((line) => ({ line, leaving: false })));
   useEffect(() => {
     setShown((was) => {
@@ -32,23 +27,25 @@ function useFading(lines: Line[]) {
   return shown;
 }
 
+// The row above a page's title is the one without a block; a suggestion's is in the bar.
 const useLines = (where: string) => {
   const all = tail.use();
-  return useFading(useMemo(() => all.filter((l) => l.where === where), [all, where]));
+  return useFading(useMemo(() => all.filter((l) => l.where === where && l.block === undefined), [all, where]));
 };
 
 // Names and quoted words in the foreground; they open their page, unless it is this one. In a
 // row (fit) a name is a box of its own, so a long one can end in an ellipsis.
-const Words = ({ parts, where, fit }: { parts: Part[]; where: string; fit?: boolean }) =>
+const Words = ({ parts, where, fit, open }: { parts: Part[]; where?: string; fit?: boolean; open?: (page: string) => void }) =>
   parts.map((p, i) => {
     if (typeof p === "string") return p;
-    const name = cn("text-foreground", fit && "inline-block truncate align-top");
+    // Wrapped in the panel, a long name breaks as a box: its lines start at the left, as words do.
+    const name = cn("text-start text-foreground", fit && "inline-block truncate align-top");
     return p.page === where ? (
       <span className={name} data-name key={i}>
         {p.text}
       </span>
     ) : (
-      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => visit(p.page, e)} type="button">
+      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => (open ? open(p.page) : visit(p.page, e))} type="button">
         {p.text}
       </button>
     );
@@ -78,11 +75,11 @@ function cut(name: HTMLElement, room: number) {
 
 // The widest name takes only the room the other words leave, so the words after it still show.
 // When that would leave it under four letters, the whole sentence ends in one ellipsis instead.
-function useFit(words: Part[]) {
+function useFit(words: Part[], on: boolean) {
   const ref = useRef<HTMLSpanElement>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || !on) return;
     const fit = () => {
       const names = [...el.querySelectorAll<HTMLElement>("[data-name]")];
       for (const n of names) Object.assign(n.style, { maxWidth: "", display: "" });
@@ -100,7 +97,7 @@ function useFit(words: Part[]) {
     const ro = new ResizeObserver(fit);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [words]);
+  }, [words, on]);
   return ref;
 }
 
@@ -111,13 +108,15 @@ const Nod = ({ line }: { line: Line }) => (
   </Button>
 );
 
-function TailRow({ line, leaving }: { line: Line; leaving: boolean }) {
-  const words = line.done?.words ?? line.row ?? line.words;
+// One line; in the bar's narrow panel (open: where a name goes) as many as its words need.
+type RowProps = { line: Line; leaving: boolean; words?: Part[]; here?: string; open?: (page: string) => void } & React.HTMLAttributes<HTMLDivElement>;
+export function TailRow({ line, leaving, words = line.done?.words ?? line.words, here = line.where, open, ...rest }: RowProps) {
+  const ref = useFit(words, !open);
   return (
-    <Row className={FADE} data-leaving={leaving || undefined}>
-      <MessageSquareDashed className="size-4 shrink-0 text-muted-foreground" />
-      <span className="min-w-0 flex-1 truncate text-muted-foreground" ref={useFit(words)}>
-        <Words fit parts={words} where={line.where} />
+    <Row className={cn(FADE, open && "flex-nowrap items-start")} data-leaving={leaving || undefined} {...rest}>
+      <MessageSquareDashed className={cn("size-4 shrink-0 text-muted-foreground", open && "mt-1")} />
+      <span className={cn("min-w-0 flex-1 text-muted-foreground", open ? "leading-6" : "truncate")} ref={ref}>
+        <Words fit={!open} open={open} parts={words} where={here} />
       </span>
       {/* A done row on Today keeps its words after Undo has gone. */}
       {(!line.done || line.done.undo) && <Nod line={line} />}
@@ -134,152 +133,19 @@ const Rows = ({ rows, className }: { rows: { line: Line; leaving: boolean }[]; c
     </div>
   );
 
-// Under Today's day bar: up to three rows from the records, never stored in the note.
-export const TailToday = () => <Rows className="mt-2" rows={useLines(TODAY)} />;
-
-type Spot = { root: HTMLElement; top: number; edge: number; mid: number };
-
-// Where a chip sits: beside its block, placed as a sidenote is (sidenotes.tsx), when the margin
-// beside the text as it is has room; else after its line's last words, as a sidenote's number is,
-// when that line has room (inline); else none, and it is the row above the title. Tail never
-// narrows the text, folds the sidebar or moves a word. say: the inline chip's words.
-function useSpot(pageId: string, body: RefObject<HTMLDivElement | null>, block: number | undefined, say: string, leaving: boolean) {
-  const [spot, setSpot] = useState<Spot | "inline" | null>(null);
-  useLayoutEffect(() => {
-    const root = body.current?.querySelector<HTMLElement>(".ll-editor-root");
-    const text = root?.querySelector<HTMLElement>(".ll-editor");
-    const scroller = root?.closest<HTMLElement>("[data-page-scroller]");
-    // The inline chip changes only when it must: each change redraws its line.
-    const draw = (at: { index: number; text: string } | null) => {
-      const drawn = text?.querySelector<HTMLElement>("[data-tail-chip]");
-      if (at ? drawn?.getAttribute("aria-label") !== at.text || !text?.children[at.index]?.contains(drawn) : drawn) liveEditor(pageId)?.chipAfter(at);
-    };
-    if (block === undefined || !root || !text || !scroller) {
-      draw(null);
-      return setSpot(null);
-    }
-    // After the last words when the line's last row has room for the chip, measured without it.
-    const fits = (el: Element) => {
-      if (!(el instanceof HTMLParagraphElement)) return false;
-      draw({ index: block, text: say });
-      const chip = el.querySelector<HTMLElement>("[data-tail-chip]");
-      const pill = chip?.lastElementChild;
-      if (!chip || !pill) return false;
-      chip.style.display = "none";
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const rects = [...range.getClientRects()].filter((r) => r.width || r.height);
-      chip.style.display = "";
-      const last = rects.reduce<DOMRect | undefined>((a, r) => (a && a.bottom >= r.bottom ? a : r), undefined);
-      if (!last) return false;
-      const end = Math.max(...rects.filter((r) => r.top < last.bottom - 1 && r.bottom > last.top + 1).map((r) => r.right));
-      const s = getComputedStyle(pill);
-      const need = pill.getBoundingClientRect().width + parseFloat(s.marginLeft) + parseFloat(s.marginRight);
-      return Math.ceil(need) <= Math.floor(el.getBoundingClientRect().right - parseFloat(getComputedStyle(el).paddingRight) - end);
-    };
-    const measure = () => {
-      // The line's first words: a paragraph's, or the title of the task link a nod made of it.
-      const el = text.children[block];
-      const first = el && document.createTreeWalker(el, NodeFilter.SHOW_TEXT, (n) => (n.textContent?.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP)).nextNode();
-      const range = document.createRange();
-      if (first) range.selectNodeContents(first);
-      const words = first?.parentElement && range.getClientRects()[0];
-      const right = text.getBoundingClientRect().right;
-      const free = scroller.getBoundingClientRect().right - parseFloat(getComputedStyle(scroller).paddingRight) - right;
-      if (!words || free < GUTTER + 256 || root.dataset.notes) {
-        // A chip leaving keeps its place, fading.
-        if (leaving) return text.querySelector("[data-tail-chip]")?.setAttribute("data-leaving", "");
-        const inline = !!el && fits(el);
-        if (!inline) draw(null);
-        return setSpot(inline ? "inline" : null);
-      }
-      draw(null);
-      const box = root.getBoundingClientRect();
-      const note = baselineOffset({ fontStyle: "normal", fontWeight: "400", fontSize: NOTE_FONT.size, fontFamily: getComputedStyle(text).fontFamily }, NOTE_FONT.line);
-      // Its first baseline on the line's first baseline.
-      setSpot({ root, top: words.top - box.top + baselineOffset(getComputedStyle(first.parentElement)) - note, edge: right - box.left, mid: words.top - box.top + words.height / 2 });
-    };
-    let frame = 0;
-    const schedule = () => (frame ||= requestAnimationFrame(() => ((frame = 0), measure())));
-    measure();
-    const ro = new ResizeObserver(schedule);
-    ro.observe(root);
-    ro.observe(scroller);
-    // A link's own view draws a moment after the edit that made it.
-    const off = watchLive(pageId, schedule);
-    return () => {
-      ro.disconnect();
-      off();
-      cancelAnimationFrame(frame);
-    };
-  }, [pageId, body, block, say, leaving]);
-  return spot;
-}
-
-// The sentence, then the nod with its key; a hairline to the line on hover, as a sidenote has.
-function Chip({ line, spot, leaving }: { line: Line; spot: Spot; leaving: boolean }) {
-  const keysFor = useKeysFor();
-  const [hover, setHover] = useState(false);
-  const bend = spot.edge + GUTTER * 0.45;
-  const end = spot.top + 10;
-  return (
-    <>
-      {hover && (
-        <svg aria-hidden className="ll-note-line">
-          <path d={`M ${spot.edge} ${spot.mid} C ${bend} ${spot.mid} ${bend} ${end} ${spot.edge + GUTTER - 6} ${end}`} strokeWidth={1} />
-        </svg>
-      )}
-      <aside
-        className={cn("ll-note text-[13px] leading-[19.5px]", FADE)}
-        data-leaving={leaving || undefined}
-        onPointerEnter={() => setHover(true)}
-        onPointerLeave={() => setHover(false)}
-        style={{ top: spot.top, left: spot.edge + GUTTER }}
-      >
-        <MessageSquareDashed className="mt-[1.75px] size-4 text-muted-foreground" />
-        <div className="flex min-w-0 flex-col items-start gap-1.5">
-          <p className="text-muted-foreground">
-            <Words parts={line.done?.words ?? line.words} where={line.where} />
-          </p>
-          <span className="flex items-center gap-1.5">
-            <Nod line={line} />
-            {!line.done && <Kbd>{keysFor("nod")}</Kbd>}
-          </span>
-        </div>
-      </aside>
-    </>
-  );
-}
-
-const plain = (parts: Part[]) => parts.map((p) => (typeof p === "string" ? p : p.text)).join("");
+// Under Today's day bar: the daily card, then up to three rows from the records, never stored in the note.
+export const TailToday = () => (
+  <>
+    <DailyCard />
+    <Rows className="mt-2" rows={useLines(TODAY)} />
+  </>
+);
 
 // In the band above a page's title, where its hover controls sit, so nothing moves: where you
-// stopped, or the chip's line when neither the margin nor the line has room for it. onRow hides
-// those controls.
-export function TailPage({ pageId, body, onRow }: { pageId: string; body: RefObject<HTMLDivElement | null>; onRow: (shown: boolean) => void }) {
+// stopped. onRow hides those controls.
+export function TailPage({ pageId, onRow }: { pageId: string; onRow: (shown: boolean) => void }) {
   useEffect(() => follow(pageId), [pageId]);
-  const keysFor = useKeysFor();
-  const shown = useLines(pageId);
-  const chip = shown.find((s) => s.line.block !== undefined);
-  // Inline, the sentence and the nod's key in one chip, or what the nod did and Undo.
-  const say = chip ? (chip.line.done ? `${plain(chip.line.done.words)} Undo` : `${plain(chip.line.words)} ${keysFor("nod")}`) : "";
-  const spot = useSpot(pageId, body, chip?.line.block, say, !!chip?.leaving);
-  const rows = shown.filter((s) => s !== chip || !spot);
+  const rows = useLines(pageId);
   useLayoutEffect(() => onRow(rows.length > 0), [onRow, rows.length]);
-  // A click on the inline chip is its nod, or its Undo.
-  useEffect(() => {
-    const el = body.current;
-    const click = (e: MouseEvent) => {
-      const line = (e.target as HTMLElement).closest("[data-tail-chip]") && tail.get().find((l) => l.where === pageId && l.block !== undefined);
-      if (line) void (line.done ? undo(line) : nod(line));
-    };
-    el?.addEventListener("click", click);
-    return () => el?.removeEventListener("click", click);
-  }, [pageId, body]);
-  return (
-    <>
-      <Rows className="absolute inset-x-0 bottom-full mb-1" rows={rows} />
-      {chip && spot && spot !== "inline" && createPortal(<Chip leaving={chip.leaving} line={chip.line} spot={spot} />, spot.root)}
-    </>
-  );
+  return <Rows className="absolute inset-x-0 bottom-full mb-1" rows={rows} />;
 }

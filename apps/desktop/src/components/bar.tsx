@@ -20,7 +20,7 @@ import { useKeysFor } from "~/lib/keymap";
 import { focusedPage, panes } from "~/lib/panes";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { isPageView, space } from "~/lib/space";
-import { tail } from "~/lib/tail";
+import { inPanel, suggestionsOn, tail } from "~/lib/tail";
 
 // The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
 // beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
@@ -57,6 +57,11 @@ function CapturesCount() {
   return <Count n={toReview(pages).length} view="captures" />;
 }
 
+// What tail offers that the panel has not shown yet.
+function SuggestionsCount() {
+  return <Count n={tail.use().filter((l) => inPanel(l) && !l.seen && !l.done).length} view="suggestions" />;
+}
+
 function StripButton({ view }: { view: BarView }) {
   const on = useShowing(view);
   const keys = useKeysFor()(view);
@@ -68,6 +73,7 @@ function StripButton({ view }: { view: BarView }) {
         <Icon />
         {view === "feed" && projectsOn && <FeedCount />}
         {view === "captures" && <CapturesCount />}
+        {view === "suggestions" && <SuggestionsCount />}
       </TooltipTrigger>
       <TooltipPopup side="left">
         {NAMES[view]} <Kbd>{keys}</Kbd>
@@ -78,7 +84,7 @@ function StripButton({ view }: { view: BarView }) {
 
 export function BarStrip({ onCapture }: { onCapture: () => void }) {
   const keys = useKeysFor()("new-idea");
-  // Following: a page coming to the front with tail's lines for it shows Suggestions, unless pinned.
+  // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
   useEffect(() => {
     let front = focusedPage();
     return panes.subscribe(() => {
@@ -86,7 +92,7 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
       if (now === front) return;
       front = now;
       const { open, pinned } = bar.get();
-      if (now && open && !pinned && !narrow() && isPageView(now) && tail.get().some((l) => l.where === now)) bar.set({ view: "suggestions" });
+      if (now && open && !pinned && !narrow() && isPageView(now) && suggestionsOn(now).length) bar.set({ view: "suggestions" });
     });
   }, []);
   return (

@@ -57,43 +57,6 @@ function chip(className: string, attrs: Record<string, string>, text: string) {
   return el;
 }
 
-// Tail's offer after a line's last words, where the margin has no room (docs/TAIL.md): drawn as a
-// note's chip is, never stored. The app sets it by top-level block; an edit to that block ends it.
-type EndChip = { pos: number; text: string } | null;
-const endChip = new PluginKey<EndChip>("endChip");
-export const setEndChip = (tr: Transaction, at: { index: number; text: string } | null) => tr.setMeta(endChip, at);
-
-function endChipPlugin() {
-  return new Plugin<EndChip>({
-    key: endChip,
-    state: {
-      init: () => null,
-      apply: (tr, prev, before) => {
-        const at = tr.getMeta(endChip) as { index: number; text: string } | null | undefined;
-        if (at !== undefined) {
-          if (!at || at.index >= tr.doc.childCount) return null;
-          let pos = 0;
-          for (let i = 0; i < at.index; i++) pos += tr.doc.child(i).nodeSize;
-          return { pos, text: at.text };
-        }
-        if (!prev || !tr.docChanged) return prev;
-        const was = before.doc.nodeAt(prev.pos);
-        const now = tr.mapping.mapResult(prev.pos, 1);
-        return was && !now.deleted && tr.doc.nodeAt(now.pos)?.eq(was) ? { ...prev, pos: now.pos } : null;
-      },
-    },
-    props: {
-      decorations: (state) => {
-        const at = endChip.getState(state);
-        const node = at && state.doc.nodeAt(at.pos);
-        if (!at || !node?.isTextblock || !node.content.size) return null;
-        const el = () => chip("ll-note-chip ll-tail-chip", { "data-tail-chip": "", "aria-label": at.text }, at.text);
-        return DecorationSet.create(state.doc, [Decoration.widget(at.pos + 1 + node.content.size, el, { side: 1, marks: [], key: `tail-${at.text}`, ignoreSelection: true })]);
-      },
-    },
-  });
-}
-
 // Numbers after noted sentences, and for quoted ones an underline and a quote mark. A chip sticks
 // to the text before it, so typing right after an anchor goes after the chip. Quoted words show
 // as quoted only while the essay still holds their quote; `live` is null until that is known.
@@ -156,7 +119,7 @@ export const Note = Mark.create<{ onAdd: ((id: string, quote: string, existing?:
   addAttributes: () => ({ id: dataAttr("id", "note") }),
   parseHTML: () => [{ tag: "span[data-note]" }],
   renderHTML: ({ HTMLAttributes }) => ["span", { ...HTMLAttributes, class: "ll-noted" }, 0],
-  addProseMirrorPlugins: () => [chipPlugin(), endChipPlugin()],
+  addProseMirrorPlugins: () => [chipPlugin()],
   addCommands() {
     return {
       addSidenote:
