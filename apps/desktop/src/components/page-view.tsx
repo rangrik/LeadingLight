@@ -209,13 +209,13 @@ export function PageView({ page }: { page: LLObject }) {
 
   useLayoutEffect(() => fit(titleRef.current), [title]);
   useLayoutEffect(() => fit(descriptionRef.current), [description]);
-  // They wrap again when the pane changes width.
+  // They wrap again when the pane changes width; not in a tab behind, which has none.
   useLayoutEffect(() => {
     const el = titleRef.current;
     if (!el) return;
     let width = el.offsetWidth;
     const ro = new ResizeObserver(() => {
-      if (el.offsetWidth === width) return;
+      if (!el.offsetWidth || el.offsetWidth === width) return;
       width = el.offsetWidth;
       fit(el);
       fit(descriptionRef.current);
