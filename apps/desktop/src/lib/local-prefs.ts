@@ -19,10 +19,7 @@ export function localPrefs<T extends object>(key: string, defaults: T) {
     }
     listeners.forEach((l) => l());
   };
-  const use = () =>
-    useSyncExternalStore(
-      (l) => (listeners.add(l), () => void listeners.delete(l)),
-      get,
-    );
-  return { get, set, use };
+  const subscribe = (l: () => void) => (listeners.add(l), () => void listeners.delete(l));
+  const use = () => useSyncExternalStore(subscribe, get);
+  return { get, set, use, subscribe };
 }

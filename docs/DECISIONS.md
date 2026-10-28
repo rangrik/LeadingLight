@@ -197,7 +197,7 @@ the panel left the app inactive, the keyboard back in the other app. `NSApp.isAc
 true while the panel is key; that is the key-window flag only.
 
 The box's webview is a view and nothing more: it sends what was typed to the main window and
-hears back when it is saved. Saving runs in the main window, where the space, the open panes
+hears back when it is saved, and what tail guesses of it. Saving runs in the main window, where the space, the open panes
 and `editPage` live, so a daily note open in a pane gets its new line through its own editor
 (see 9) and every list already knows the new page. In a browser the same box sits inside the
 window and calls the same code directly. For that the main window must exist, so closing it
@@ -217,6 +217,10 @@ An idea is not written into the day's note. It shows there because it was made t
 ("Created this day"), like any page, so a busy day's note stays the person's own writing.
 Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
 the page in view, never in its place.
+
+The same box takes a lone web address as a webpage (27), fetched and saved by the main window,
+and its mic adds a voice block to the body. The recording runs in the panel's own webview, since
+audio only needs the asset store; hiding the panel drops the box, so a recording never runs unseen.
 
 ## 15. Changed shortcuts are written into the table, kept on this Mac
 
@@ -406,11 +410,73 @@ moves or deletes a page. Older captures are recognized by their source fields or
 older saved recordings are discovered once per session. Property changes persist before the
 open page is told, so failed saves do not remove a capture from view.
 
-Voice review keeps a snapshot of the original transcript beside its recording id. Creating an
-Idea or Task copies chosen words, appends a page link beside the recording, and links back to
-that recording. The editable transcript and audio are unchanged; undo removes only the link.
+## 29. Tail offers one line; it reads by trigger and remembers in the open
 
-## 29. Writing review is quiet, local, and chosen
+Tail (`docs/TAIL.md`) is a watcher, not a third agent system. It guesses what the person meant
+and offers one line with one verb; the nod runs through what exists: a page's open editor (9),
+a new page, a property, or Assign (21). So every result stays inside rules already trusted and
+the build stays small. It never asks a question: a question costs attention, which is the one
+thing it must not spend. It speaks only at a pause, a page opening, a return or a new day, after
+Horvitz's rule that an agent acts only when the value beats the cost of interrupting; silence is
+the common case, as in heartbeat agents. Lines expire so nothing piles up.
+
+Nothing moves: Today's rows come at open, a page's row sits in the band above the title where
+the hover controls already live, and the chip is placed with the sidenote math (11) without the
+sidenote's room-making. A chip with no margin room sits after its line's last words, as a
+sidenote's number does, or else in the row above the title, rather than narrowing the text.
+
+Context is scoped by the trigger with a budget each, not a dump of the space: the block and the
+index for a chip, a digest of changes for the beat, bodies only of what changed and only once per
+thread. Sidenotes and pages reached through a tag or a daily note are never read (19), and a
+per-type Reads on, after Writing's Use on, is the person's control over what the beat may see,
+since the beat reads pages they did not point at.
+
+Memory is three plain things on this Mac: a nod ledger that quiets a kind after three ignores, a
+page in sentences about how the person works that tail rewrites and the person can edit, and
+short-lived threads. The page is a page because the tool's picture of the person must be theirs
+to read and correct, never a hidden profile.
+
+The model is GPT-6.1 Sol at high through the Codex app server, the GPT path Ask already has (7),
+with Claude as the switch. The surfaces were built first with word rules in place of the model,
+on the branch `worktree-tail-design`, so the feel was judged before anything was spent on it.
+
+## Unsplash covers use a shared service
+
+People should not need a developer account to choose a cover. A small Vercel
+Function holds the key, caches searches, and reports selections with signed
+tokens. Only its URL ships in the app. Notes stay local and photos load from
+Unsplash. Forks can point to their own service with `VITE_IMAGE_SERVICE_URL`.
+
+## GitHub releases are prepared in a PR, then built before publication
+
+Release Please keeps one version across Cargo, Tauri and the desktop package, with
+notes from conventional commits. Merging its PR creates a draft; GitHub Actions
+checks and builds that exact commit, verifies helpers and licenses, and uploads
+downloads before publishing. Failed builds stay drafts and can be retried by tag.
+The first distribution is an unsigned Apple Silicon preview, matching the runtime
+we can build today. No personal token or signing secret is needed for that path.
+
+## 30. One bar for what wants a glance; tabs inside panes; one box for capture
+
+Agent asks, captures to review, tail's offers and the Ask thread were four surfaces: a lane on the
+left, a sidebar row, chips in the text and a card on the right. They are now panels of one strip at
+the window's right edge, after the activity bar of code editors rather than Xcode's inspector tabs,
+because the person works that way all day. A count sits on an icon only when something waits, so
+the strip never pulls the eye for nothing. Tail's offers moved out of the text into the Suggestions
+panel: a chip at the line was the right moment but the wrong place to find again, and real use
+showed offers going unseen or counted as a no. Tail now reads a block when it is finished, on Enter
+or after a full stop and a short quiet, and keeps a fingerprint per wording so nothing is sent twice;
+the count rises quietly and the text never moves. Today keeps its rows and gets a once-a-day card for
+what earlier days left, with Dismiss all as the pressure valve that keeps a persistent list from
+becoming a pile.
+
+Tabs are a layer inside a pane, not a new window model: the split stays the split, a tab keeps its
+own back and forward, and the row shows only with two or more tabs so one page looks as it did.
+Panes, tabs and the active tab are restored on launch. Quick capture is one box because what comes
+in from outside is one habit: words, an address or a voice note all land in Captures, and the box
+saves whatever was typed on close so a capture can never be lost.
+
+## 31. Writing review is quiet, local, and chosen
 
 Grammar help defaults to review on request. Inline underlines are optional. Harper provides
 actual suggestions; applying one preserves marks, has its own undo step, and refuses stale

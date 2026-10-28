@@ -1,10 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
 
-const inbox = (page: Page) => page.getByRole("region", { name: "Capture inbox", exact: true });
+const inbox = (page: Page) => page.getByRole("complementary", { name: "Captures", exact: true });
 const row = (page: Page, title: string) => inbox(page).getByRole("row").filter({ has: page.getByRole("button", { name: title, exact: true }) });
+// The bar keeps its panel open across a reload, so it is opened only when it isn't.
 async function openInbox(page: Page) {
-  await page.getByRole("button", { name: "Capture inbox", exact: true }).click();
-  await expect(inbox(page).getByRole("heading", { name: "Capture inbox" })).toBeVisible();
+  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
+  await expect(inbox(page).getByRole("tab", { name: "To review" })).toBeVisible();
 }
 async function seed(page: Page) {
   await page.goto("/");
@@ -29,7 +31,7 @@ async function seed(page: Page) {
 // Seam: old/new capture sources must not copy pages or pull every idea into the queue.
 test("Inbox includes captured material and keeps review state across undo and reload", async ({ page }) => {
   await seed(page);
-  await page.getByRole("button", { name: /^New idea/ }).click();
+  await page.getByRole("button", { name: "Quick capture" }).click();
   const capture = page.getByRole("dialog", { name: "New idea" });
   await capture.getByRole("textbox", { name: "Idea", exact: true }).fill("Quick thought");
   await capture.getByRole("textbox", { name: "Idea", exact: true }).press("Meta+Enter");
@@ -76,9 +78,13 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   const saved = await page.evaluate(async (id) => (await import(String("/src/lib/objects.ts"))).objects.get(id), id);
   expect(saved.properties.custom).toBe("kept");
   expect(saved.content.content[0].content[0].text).toBe("Keep these words.");
+  // Narrow, Captures is a pane beside the page.
   await page.setViewportSize({ width: 520, height: 800 });
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true }).click();
+  const pane = page.getByRole("region", { name: "Captures", exact: true });
+  await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-inbox-narrow.png" });
-  expect(await inbox(page).evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
+  expect(await pane.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
 });
 
 // Seam: a rejected write cannot remove a capture from its queue or discard its retry.
@@ -125,7 +131,7 @@ test("Reviewing beside an open page keeps its words and empty states stay calm",
   await expect(row(page, "Garden lights")).toHaveCount(0);
   await page.reload();
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Garden lights", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("More words.");
+  await expect(page.getByRole("region", { name: "Garden lights", exact: true }).getByRole("textbox", { name: "Page body" })).toContainText("More words.");
   await openInbox(page);
   await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();
   await expect(row(page, "Garden lights")).toBeVisible();

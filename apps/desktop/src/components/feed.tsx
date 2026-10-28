@@ -1,28 +1,26 @@
-import { CircleCheck, Inbox, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion, X } from "lucide-react";
+import { CircleCheck, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Input } from "@leadinglight/ui/components/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
-import { CARD } from "~/components/pane-area";
-import { PanelHeader } from "~/components/panel-header";
 import { accept } from "~/lib/assign";
 import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
+import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { pageOf, space } from "~/lib/space";
 import type { Target } from "~/lib/work";
 import { sessions, watchWork } from "~/lib/work-watch";
 
-// The Feed (features/feed.feature): a lane between the sidebar and the pages, or a pane of its own
+// The Feed (features/feed.feature): a panel of the bar (components/bar.tsx), or a pane of its own
 // in a narrow window. Selecting an item opens what it is about beside it; a question or an
 // approval is answered in the item, as in its chat, through the same receipts.
 
-export const FEED_W = 320;
 const ICON = { question: MessageCircleQuestion, approval: ShieldQuestion, review: CircleCheck, answer: MessageSquareReply, notice: Info };
 const title = (id?: string) => (id ? pageLabel(pageOf(id)?.title ?? "") : "");
 
@@ -146,10 +144,11 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
   );
 }
 
-// The list, its project filter, and keys: ↑ and ↓ move, Enter opens.
-function FeedList({ paneId }: { paneId?: string }) {
+// The list, its project filter, and keys: ↑ and ↓ move, Enter opens. Only while projects are on.
+export function FeedList({ paneId }: { paneId?: string }) {
   const items = useFeed();
   const prefs = feedPrefs.use();
+  const { enabled } = projectPrefs.use();
   const all = folders.use();
   const [selected, setSelected] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
@@ -174,6 +173,8 @@ function FeedList({ paneId }: { paneId?: string }) {
     rows[Math.max(0, Math.min(rows.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
     e.preventDefault();
   };
+  const none = <p className="m-auto px-6 text-center text-muted-foreground text-sm">Nothing needs you. Questions, approvals and work ready for review show here.</p>;
+  if (!enabled) return none;
   return (
     <div className="flex min-h-0 flex-1 flex-col" ref={root}>
       <div className="px-2 pb-2">
@@ -192,7 +193,7 @@ function FeedList({ paneId }: { paneId?: string }) {
         </Select>
       </div>
       {items.length === 0 ? (
-        <p className="m-auto px-6 text-center text-muted-foreground text-sm">Nothing needs you. Questions, approvals and work ready for review show here.</p>
+        none
       ) : (
         <ul aria-label="Feed items" className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2" onKeyDown={onKey} ref={list}>
           {items.map((item) => (
@@ -201,20 +202,6 @@ function FeedList({ paneId }: { paneId?: string }) {
         </ul>
       )}
     </div>
-  );
-}
-
-// Beside the sidebar, while the window has room for it and a page.
-export function FeedLane({ windowToggle, sidebarOpen }: { windowToggle: boolean; sidebarOpen: boolean }) {
-  return (
-    <aside aria-label="Feed" className={cn(CARD, "me-2 flex shrink-0 flex-col overflow-hidden")} data-testid="feed" style={{ width: FEED_W }}>
-      <PanelHeader current="Feed" icon={<Inbox className="size-4" />} sidebarOpen={sidebarOpen} toggle={!windowToggle}>
-        <Button aria-label="Close the Feed" onClick={() => feedPrefs.set({ open: false })} size="icon-xs" variant="ghost">
-          <X className="size-4" />
-        </Button>
-      </PanelHeader>
-      <FeedList />
-    </aside>
   );
 }
 

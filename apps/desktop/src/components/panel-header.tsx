@@ -14,8 +14,11 @@ import type { ReactNode } from "react";
 // The inset panel's top band, from sidebar-08's page.tsx: the sidebar trigger and the crumbs.
 // A window drag area. Each page's card has one; only the first (lead) makes room for the traffic
 // lights when the sidebar is away, and holds the sidebar button unless the window does (toggle).
-// after sits beside the crumbs (the page's counts), children at the far end.
+// after sits beside the crumbs (the page's counts), children at the far end, nav before the crumbs.
+// under: a tab row is above it and makes the room for the lights instead.
 type Props = {
+  nav?: ReactNode;
+  under?: boolean;
   sidebarOpen: boolean;
   root?: string;
   onRoot?: (e: React.MouseEvent) => void;
@@ -30,14 +33,14 @@ type Props = {
   children?: ReactNode;
 };
 
-export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children }: Props) {
+export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
   return (
     <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region>
       <div
         className={cn(
           "flex min-w-0 items-center gap-2 overflow-hidden px-4 transition-[padding] duration-200 ease-linear",
           // Past the lights, or past the lights and the window's sidebar button (12 px after it).
-          lead && !sidebarOpen && (toggle ? "ps-[calc(var(--traffic-left)_+_1rem)]" : "ps-[calc(var(--traffic-left)_+_50px)]"),
+          lead && !sidebarOpen && !under && (toggle ? "ps-[calc(var(--traffic-left)_+_1rem)]" : "ps-[calc(var(--traffic-left)_+_50px)]"),
         )}
         onPointerDown={onGrab}
       >
@@ -48,6 +51,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
             <Separator className="mr-2 h-4" orientation="vertical" />
           </>
         )}
+        {nav}
         {/* One line in any card: the counts give way first, then the page's title, with an
             ellipsis. On one baseline, so the counts' smaller text sits on the crumbs' line. */}
         <div className="flex min-w-0 flex-1 items-baseline">

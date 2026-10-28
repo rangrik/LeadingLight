@@ -20,7 +20,7 @@ export function sourceUrl(value: string, base?: string): string {
 
 const text = (value: string, marks?: EditorDoc["marks"]): EditorDoc => ({ type: "text", text: value, ...(marks?.length ? { marks } : {}) });
 const paragraph = (value: string): EditorDoc => ({ type: "paragraph", content: value ? [text(value)] : [] });
-const link = (label: string, href: string): EditorDoc => ({ type: "paragraph", content: [text(label, [{ type: "link", attrs: { href, target: "_blank", rel: "noopener noreferrer" } }])] });
+export const link = (label: string, href: string): EditorDoc => ({ type: "paragraph", content: [text(label, [{ type: "link", attrs: { href, target: "_blank", rel: "noopener noreferrer" } }])] });
 
 // Only known editor nodes cross this boundary; website HTML never enters the live document.
 export function readArticle(html: string, address: string) {

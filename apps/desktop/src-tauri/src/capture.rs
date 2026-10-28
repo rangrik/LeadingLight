@@ -37,10 +37,12 @@ pub fn setup(app: &AppHandle) -> Result<(), Box<dyn Error>> {
     // A click anywhere else closes the box, as Spotlight does.
     let events = CaptureEvents::new();
     let weak = std::sync::Arc::downgrade(&panel);
+    let handle = app.clone();
     events.window_did_resign_key(move |_| {
         if let Some(panel) = weak.upgrade() {
             if panel.is_visible() {
                 panel.hide();
+                let _ = handle.emit_to(LABEL, "capture://hide", ());
             }
         }
     });
@@ -90,11 +92,13 @@ pub fn show(app: &AppHandle) {
     });
 }
 
+// The page hears it, so the box goes with it and a recording in it stops.
 pub fn hide(app: &AppHandle) {
     on_main(app, |app| {
         if let Ok(panel) = app.get_webview_panel(LABEL) {
             if panel.is_visible() {
                 panel.hide();
+                let _ = app.emit_to(LABEL, "capture://hide", ());
             }
         }
     });

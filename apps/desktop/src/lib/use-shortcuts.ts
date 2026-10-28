@@ -4,19 +4,37 @@ import { SHORTCUTS } from "@/lib/shortcuts";
 import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
+import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
+import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
 import { isNative } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
+import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
+
+// A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
+export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+const TABS: Record<string, (() => void) | undefined> = {
+  "new-tab": () => newTab(),
+  "close-tab": () => closeTab(),
+  "reopen-tab": reopenTab,
+  back: () => travel(-1),
+  forward: () => travel(1),
+  "next-tab": () => cycleTab(1),
+  "previous-tab": () => cycleTab(-1),
+};
 
 // The keys in lib/shortcuts.json, by id, as changed in Settings (lib/keymap.ts). In the Mac app
 // the menu bar takes each key first and says which one (menu.rs emits berth://menu); in a
 // browser the page reads the keys itself. ⌃⌥I is the Mac app's global shortcut (capture.rs),
 // which takes the key before the menu sees it; the menu item and a browser's key come through here.
-export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleFeed(): void }) {
+export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(view: "feed" | "captures" | "suggestions"): void }) {
   useEffect(() => {
     const run = (id: string) => {
+      // Tabs and history act on the panes, so not while Settings covers them.
+      const tabKey = TABS[id];
+      if (tabKey) return useStore.getState().view.kind === "settings" ? undefined : tabKey();
       switch (id) {
         case "new-page":
           // A new page is made to be written in: Settings goes first.
@@ -39,7 +57,13 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "ask":
           return openAsk();
         case "feed":
-          return actions.toggleFeed();
+        case "captures":
+        case "suggestions":
+          return actions.toggleView(id);
+        case "nod":
+          // Only at a page in front: never under Settings, a dialog or a menu, or another window.
+          if (useStore.getState().view.kind === "settings" || !document.hasFocus() || shown(COVERS)) return;
+          return nodFront();
         case "shortcuts":
           return toggleShortcuts();
         case "focus":
@@ -53,7 +77,9 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     const onKey = (e: KeyboardEvent) => {
       // The editor's own keys (⌘B, ⌘/ for the block menu) are handled before this. A held key
       // runs once: its repeats would make page after page, or run keys just recorded in Settings.
-      const accel = e.defaultPrevented || e.repeat ? undefined : accelOf(e);
+      // ProseMirror prevents every Enter, though it does nothing with ⌃↩ (tail's nod).
+      const editorEnter = e.key === "Enter" && (e.target as Element | null)?.closest?.(".ProseMirror");
+      const accel = (e.defaultPrevented && !editorEnter) || e.repeat ? undefined : accelOf(e);
       if (!accel) return;
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
       const find = (a: string) => SHORTCUTS.find((s) => s.accel === a)?.id;

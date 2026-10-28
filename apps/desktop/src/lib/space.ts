@@ -4,11 +4,12 @@ import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "./
 import { type PageIcon, readIcon } from "./page-meta";
 import { editPage } from "./live";
 import { reportSaveError } from "./saving";
-import { closePane, leaves, panes, showOnly } from "./panes";
+import { dropPage } from "./panes";
 import { unlinkFolder } from "./project-runtime/folders";
 import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
+import { ABOUT } from "./tail-memory";
 
 // Every page's summary, every type and every property, kept in memory: lists, cards, links and
 // pickers read from here instead of asking the store. Writes go to the store and here together.
@@ -88,14 +89,21 @@ export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
 // any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
 export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
-// The Feed in a pane, when the window is too narrow for its lane (features/feed.feature).
+// The bar's views in a pane, when the window is too narrow for its panel (lib/bar.ts).
 export const FEED_VIEW = "feed:";
 export const INBOX_VIEW = "inbox:";
-export const isPageView = (view: string) => !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && view !== FEED_VIEW && view !== INBOX_VIEW;
+export const ASK_VIEW = "ask:";
+export const SUGGESTIONS_VIEW = "suggestions:";
+const VIEWS = [FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+// An empty view is a tab with no page yet.
+export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
-  if (view === INBOX_VIEW) return { title: "Capture inbox" };
+  if (!view) return { title: "New tab" }; // a tab with no page yet
+  if (view === INBOX_VIEW) return { title: "Captures" };
   if (view === FEED_VIEW) return { title: "Feed" };
+  if (view === ASK_VIEW) return { title: "Ask" };
+  if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
@@ -125,6 +133,13 @@ export function savePage(id: string, patch: ObjectPatch): Promise<void> {
   }, reportSaveError);
 }
 
+// A page made another type (an idea filed as a task); its properties go through its open editor.
+export async function retype(id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>) {
+  patchSummary(id, { typeId });
+  await savePage(id, { typeId });
+  await editPage(id, { properties });
+}
+
 export function patchSummary(id: string, patch: Partial<ObjectSummary>) {
   set({ pages: space.get().pages.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
 }
@@ -139,11 +154,11 @@ export function forgetPage(id: string) {
   set({ pages: space.get().pages.filter((p) => p.id !== id) });
 }
 
-// What the sidebar's Pages list shows: tags and daily notes have their own places, and
-// templates show in their type's settings.
-export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && !p.properties.templateOf;
+// What the sidebar's Pages list shows: tags and daily notes have their own places, templates
+// show in their type's settings, and the page about how you work in Settings › AI › Tail.
+export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "daily" && p.typeId !== ABOUT && !p.properties.templateOf;
 
-// A deleted page's pane closes; when it was the only one, the next page takes its place. A deleted
+// A deleted page leaves its tabs (lib/panes.ts); with nothing left open, the next page takes its place. A deleted
 // Thoughts page or essay is unlinked from its page, which can then make a new one (DECISIONS.md, 11).
 export function removePage(id: string) {
   const { parent, role } = pageOf(id)?.properties ?? {};
@@ -155,11 +170,7 @@ export function removePage(id: string) {
   forgetPage(id);
   // A deleted default template is no longer the default.
   for (const t of space.get().types.filter((t) => t.template === id)) void putType({ ...t, template: undefined });
-  const { root } = panes.get();
-  const open = root && leaves(root).find((l) => l.page === id);
-  if (!open) return;
-  if (root.kind === "split") closePane(open.id);
-  else showOnly(space.get().pages.find(listed)?.id ?? null);
+  dropPage(id, space.get().pages.find(listed)?.id ?? null);
 }
 
 export const markSaved = () => set({ saved: space.get().saved + 1 });

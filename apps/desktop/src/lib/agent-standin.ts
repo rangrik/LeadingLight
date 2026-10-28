@@ -14,7 +14,8 @@ const words = (text: string) => text.split(/(?<=\s)/);
 export function ask(req: AskRequest, onEvent: (e: AgentEvent) => void) {
   const run: Run = { emit: (line) => void (run.stopped || onEvent({ type: "line", line })), waiting: new Map(), asked: () => {}, stopped: false };
   runs.set(req.id, run);
-  void (req.provider === "codex" ? codex(req, run) : play(req, run, claude(req, run))).finally(() => runs.delete(req.id));
+  const turn = req.tail ? tail : play;
+  void (req.provider === "codex" ? codex(req, run, turn) : turn(req, run, claude(req, run))).finally(() => runs.delete(req.id));
 }
 
 // The app's message: an answer to a request the stand-in made, or (Codex) a request of its own.
@@ -48,7 +49,8 @@ type Dialect = {
   stream: (kind: "text" | "thinking", text: string) => Promise<void>;
   tool: (name: string, input: object, change?: boolean) => Promise<boolean>;
   plan: () => Promise<void>;
-  end: (status?: string) => void;
+  // text: the answer as a whole, which Claude Code's result line carries.
+  end: (status?: string, text?: string) => void;
 };
 
 function claude(req: AskRequest, run: Run): Dialect {
@@ -88,15 +90,15 @@ function claude(req: AskRequest, run: Run): Dialect {
     async plan() {
       await ask({ subtype: "can_use_tool", tool_name: "ExitPlanMode", input: {}, tool_use_id: `toolu_${++n}` });
     },
-    end() {
-      run.emit({ type: "result", subtype: "success", is_error: false, duration_ms: Date.now() - start, session_id: req.resume ?? `stand-in-${++n}` });
+    end(_status, text) {
+      run.emit({ type: "result", subtype: "success", is_error: false, duration_ms: Date.now() - start, session_id: req.resume ?? `stand-in-${++n}`, ...(text !== undefined && { result: text }) });
     },
   };
 }
 
 // Codex: answers the app's initialize, thread and turn requests, then plays the turn. The app
 // runs and gates the page tools itself; web search happens on Codex's side, unasked.
-async function codex(req: AskRequest, run: Run) {
+async function codex(req: AskRequest, run: Run, answer: typeof play) {
   const thread = req.resume ?? `stand-in-thread-${++n}`;
   const turn = `stand-in-turn-${++n}`;
   let interrupted = false;
@@ -148,7 +150,30 @@ async function codex(req: AskRequest, run: Run) {
       note("turn/completed", { turn: { id: turn, status: interrupted ? "interrupted" : status, error: null, durationMs: 0 } });
     },
   };
-  await play(req, run, d);
+  await answer(req, run, d);
+}
+
+// A tail turn: the prototype's word rules found the candidates and guessed their slots, so the
+// stand-in shows the first few as guessed, filing ideas where the page about the person says most
+// go; ?tail=garbled answers words, not JSON, and ?tail=slow after two seconds. In a dev build each
+// turn's message and answer go to __tail.log: what would have left the app.
+async function tail(req: AskRequest, _run: Run, d: Dialect) {
+  let answer = "";
+  let trigger = "";
+  if (new URLSearchParams(location.search).get("tail") === "slow") await pause(2000);
+  try {
+    const m = JSON.parse(req.prompt) as { trigger: string; about?: string[]; pages: { ref: string; title: string }[]; candidates: { id: string; kind: string; guess?: object }[] };
+    trigger = m.trigger;
+    const most = m.about?.map((s) => / Most ideas go to (.+)\.$/.exec(` ${s}`)?.[1]).find(Boolean);
+    const project = most && m.pages.find((p) => p.title === most)?.ref;
+    const show = m.candidates.slice(0, trigger === "beat" ? 3 : 1).map((c) => ({ id: c.id, ...c.guess, ...(c.kind === "ideas" && project && { project }) }));
+    answer = new URLSearchParams(location.search).get("tail") === "garbled" ? "Here are a few things worth a look." : JSON.stringify({ show });
+  } catch {
+    // Not a message tail sends: no answer.
+  }
+  if (import.meta.env.DEV) (window as unknown as { __tail?: { log?: object[] } }).__tail?.log?.push({ trigger, model: req.model, effort: req.effort, resume: req.resume ?? null, system: req.system, message: req.prompt, answer });
+  await d.stream("text", answer);
+  d.end(undefined, answer);
 }
 
 async function play(req: AskRequest, run: Run, d: Dialect) {

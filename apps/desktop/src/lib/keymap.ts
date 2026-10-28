@@ -6,7 +6,7 @@ import { isNative } from "~/lib/platform";
 // lib/shortcuts.json's. They are written into the table itself, so Shipyard's sheet shows them too.
 const prefs = localPrefs<{ keys: Record<string, string> }>("ll.shortcuts", { keys: {} });
 // Damaged storage is dropped, not trusted: a bad key would stop the app from starting.
-const ACCEL = /^(?=.*Ctrl\+)(Ctrl\+)?(CmdOrCtrl\+)?(Alt\+)?(Shift\+)?[A-Z0-9/\\,.=\-[\];']$/;
+const ACCEL = /^(?=.*Ctrl\+)(Ctrl\+)?(CmdOrCtrl\+)?(Alt\+)?(Shift\+)?([A-Z0-9/\\,.=\-[\];']|Enter|Tab)$/;
 const stored: unknown = prefs.get().keys;
 if (!stored || typeof stored !== "object" || !Object.values(stored).every((v) => ACCEL.test(v))) prefs.set({ keys: {} });
 const DEFAULTS = new Map(SHORTCUTS.map((s) => [s.id, { accel: s.accel, keys: s.keys }]));
@@ -15,7 +15,7 @@ const SIGNS: [string, string][] = [["Ctrl", "⌃"], ["Alt", "⌥"], ["Shift", "�
 // An accelerator as a Mac menu writes it.
 export const keysOf = (accel: string) => {
   const parts = accel.split("+");
-  return SIGNS.filter(([m]) => parts.includes(m)).map(([, sign]) => sign).join("") + parts[parts.length - 1];
+  return SIGNS.filter(([m]) => parts.includes(m)).map(([, sign]) => sign).join("") + parts[parts.length - 1].replace(/^Enter$/, "↩").replace(/^Tab$/, "⇥");
 };
 
 function apply(keys: Record<string, string>) {
@@ -31,6 +31,7 @@ apply(prefs.get().keys);
 // Punctuation keys as accelerators name them; keys not here can't be a shortcut.
 const CODES: Record<string, string | undefined> = {
   Slash: "/", Backslash: "\\", Comma: ",", Period: ".", Equal: "=", Minus: "-", BracketLeft: "[", BracketRight: "]", Semicolon: ";", Quote: "'",
+  Enter: "Enter", Tab: "Tab",
 };
 
 // The accelerator a key press spells, by physical key so Option and Shift (which change e.key) still match.
@@ -39,11 +40,14 @@ export function accelOf(e: KeyboardEvent): string | undefined {
   if (!key || !(e.metaKey || e.ctrlKey)) return;
   return [e.ctrlKey && "Ctrl", e.metaKey && "CmdOrCtrl", e.altKey && "Alt", e.shiftKey && "Shift", key].filter(Boolean).join("+");
 }
+// For a box that takes a key before the window's handler does (the capture box's ⌃↩).
+export const isKey = (e: KeyboardEvent, id: string) => accelOf(e) === SHORTCUTS.find((s) => s.id === id)?.accel;
 
 // What macOS and the editor do with a key. In the Mac app a menu key beats the editor's, so these stay theirs.
+// ⌘W is the table's Close tab, so it isn't here; the editor has no ⌘[, ⌘] or ⌃⇥ either.
 const TAKEN: Record<string, string> = {
   "⌘C": "Copy", "⌘V": "Paste", "⌘X": "Cut", "⌘A": "Select all", "⌘Z": "Undo", "⇧⌘Z": "Redo", "⌘Y": "Redo", "⌘F": "Find",
-  "⌘Q": "Quit", "⌘H": "Hide", "⌥⌘H": "Hide others", "⌘M": "Minimize", "⌘W": "Close", "⌃⌘F": "Full screen",
+  "⌘Q": "Quit", "⌘H": "Hide", "⌥⌘H": "Hide others", "⌘M": "Minimize", "⌃⌘F": "Full screen",
   "⌘B": "Bold", "⌘I": "Italic", "⌘U": "Underline", "⇧⌘S": "Strikethrough", "⌘E": "Code", "⇧⌘H": "Highlight", "⇧⌘M": "Add sidenote",
   "⌘D": "Duplicate", "⌘G": "Group", "⌘/": "Block menu", "⇧⌘B": "Quote", "⇧⌘7": "Numbered list", "⇧⌘8": "Bulleted list", "⇧⌘9": "To-do list",
   "⌥⌘C": "Code block", "⌥⌘0": "Text", ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [`⌥⌘${n}`, `Heading ${n}`])),

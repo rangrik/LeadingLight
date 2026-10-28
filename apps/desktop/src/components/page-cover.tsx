@@ -5,11 +5,12 @@ import { Input } from "@leadinglight/ui/components/input";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { Toolbar, ToolbarButton, ToolbarLink } from "@leadinglight/ui/components/toolbar";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ImageDrop } from "~/components/page-icon";
 import { openLink } from "~/lib/links";
 import { type Color, COLORS, type PageCover } from "~/lib/page-meta";
-import { type Failure, markUsed, type Photo, searchPhotos, tagged, unsplashKey } from "~/lib/unsplash";
+import { type Failure, markUsed, type Photo, searchPhotos, tagged } from "~/lib/unsplash";
 
 // object-cover scales the image to fill the band; only the height beyond the band can move.
 const spareOf = (el: HTMLImageElement | null) => {
@@ -174,7 +175,7 @@ export function CoverPicker({ cover, onChange, children }: { cover?: PageCover; 
               </button>
             ))}
           </TabsPanel>
-          <TabsPanel className="flex h-52 flex-none flex-col gap-2" value="unsplash">
+          <TabsPanel className="flex h-72 flex-none flex-col gap-2" value="unsplash">
             <UnsplashSearch
               onPhoto={(p) => {
                 markUsed(p);
@@ -234,34 +235,37 @@ function LinkField({ onImage }: { onImage: (url: string) => void }) {
   );
 }
 
-const Credit = ({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) => (
-  <ToolbarLink
-    className={cn("text-foreground outline-none hover:underline", className)}
-    title={title}
-    href={tagged(href)}
-    onClick={(e) => {
-      e.preventDefault();
-      openLink(e.currentTarget.href);
-    }}
-  >
-    {children}
-  </ToolbarLink>
-);
+const Credit = ({ href, className, title, children }: { href: string; className?: string; title?: string; children: ReactNode }) => {
+  const link = (
+    <ToolbarLink
+      className={cn("text-foreground outline-none hover:underline", className)}
+      href={tagged(href)}
+      onClick={(e) => {
+        e.preventDefault();
+        openLink(e.currentTarget.href);
+      }}
+    >
+      {children}
+    </ToolbarLink>
+  );
+  return title ? <Tooltip><TooltipTrigger render={link} /><TooltipPopup>{title}</TooltipPopup></Tooltip> : link;
+};
 
 const FAILURES: Record<Failure, string> = {
-  key: "Unsplash didn't accept that key",
+  unavailable: "Photo search is temporarily unavailable. Try again later.",
   limit: "Unsplash's hourly limit is used up. Try again later.",
   offline: "Couldn't reach Unsplash",
 };
 
 function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
-  const [key, setKey] = useState(unsplashKey.get);
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Photo[] | Failure>();
+  const results = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { results.current?.scrollTo(0, 0); }, [found]);
 
   useEffect(() => {
     const q = query.trim();
-    if (!key) return;
     if (!q) return setFound(undefined);
     let live = true;
     // Waits for a pause in typing; a free key allows only 50 searches an hour.
@@ -270,11 +274,7 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
         (photos) => live && setFound(photos),
         (e: unknown) => {
           if (!live) return;
-          const why: Failure = e === "key" || e === "limit" ? e : "offline"; // a bad answer reads as unreachable
-          if (why === "key") {
-            unsplashKey.set("");
-            setKey("");
-          }
+          const why: Failure = e === "unavailable" || e === "limit" ? e : "offline";
           setFound(why);
         },
       );
@@ -283,95 +283,45 @@ function UnsplashSearch({ onPhoto }: { onPhoto: (photo: Photo) => void }) {
       live = false;
       clearTimeout(wait);
     };
-  }, [key, query]);
+  }, [query]);
 
-  if (!key) {
-    return (
-      <KeyForm
-        error={found === "key" ? FAILURES.key : ""}
-        onKey={(k) => {
-          unsplashKey.set(k);
-          setKey(k);
-          setFound(undefined);
-        }}
-      />
-    );
-  }
   return (
     <>
-      <Input aria-label="Search Unsplash" autoFocus onChange={(e) => setQuery(e.currentTarget.value)} placeholder="Search Unsplash" size="sm" type="search" value={query} />
-      {typeof found === "string" ? (
-        <p className="text-destructive-foreground text-sm" role="alert">
-          {FAILURES[found]}
-        </p>
-      ) : found?.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No photos found</p>
-      ) : !found ? (
-        <p className="mt-auto text-muted-foreground text-sm">
-          Your Unsplash key is saved on this device.{" "}
-          <button
-            className="text-foreground underline underline-offset-2"
-            onClick={() => setKey("")}
-            type="button"
-          >
-            Change key
-          </button>
-        </p>
-      ) : (
-        <div className="grid min-h-0 grid-cols-3 gap-2 overflow-y-auto">
-          {found?.map((p) => (
-            <button
-              aria-label={`Photo by ${p.name}`}
-              className="transition-opacity duration-150 hover:opacity-80 focus-visible:opacity-80"
-              key={p.url}
-              onClick={() => onPhoto(p)}
-              title={`Photo by ${p.name}`}
-              type="button"
-            >
-              <img alt="" className="aspect-3/2 w-full rounded-md object-cover" src={p.thumb} />
-            </button>
-          ))}
-        </div>
-      )}
+      <Input aria-label="Search Unsplash" autoFocus maxLength={200} onChange={(e) => setQuery(e.currentTarget.value)} placeholder="Search Unsplash" size="sm" type="search" value={query} />
+      <div className="flex min-h-0 flex-1 flex-col">
+        {typeof found === "string" ? (
+          <p className="text-destructive-foreground text-sm" role="alert">
+            {FAILURES[found]}
+          </p>
+        ) : found?.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No photos found</p>
+        ) : !found ? (
+          <p className="mt-auto text-muted-foreground text-sm">Search for a photo to use as your cover.</p>
+        ) : (
+          <div className="grid min-h-0 grid-cols-3 gap-2 overflow-y-auto" ref={results}>
+            {found?.map((p) => (
+              <div className="min-w-0" key={p.url}>
+                <Button aria-label={`Photo by ${p.name}`} className="h-auto w-full overflow-hidden border-0 p-0 transition-opacity duration-150 hover:opacity-80 focus-visible:opacity-80 sm:h-auto" onClick={() => onPhoto(p)} variant="ghost">
+                  <img alt="" className="aspect-3/2 w-full rounded-md object-cover" src={p.thumb} />
+                </Button>
+                <PhotoCredit href={p.profile}>{p.name}</PhotoCredit>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <PhotoCredit href="https://unsplash.com/">Photos from Unsplash</PhotoCredit>
     </>
   );
 }
 
-const DEVELOPERS = "https://unsplash.com/developers";
-
-function KeyForm({ error, onKey }: { error: string; onKey: (key: string) => void }) {
-  const [draft, setDraft] = useState("");
+function PhotoCredit({ href, children }: { href: string; children: ReactNode }) {
   return (
-    <form
-      className="flex flex-col gap-2"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onKey(draft.trim());
-      }}
-    >
-      <p className="text-muted-foreground text-sm">
-        Unsplash photos need a free access key.{" "}
-        <a
-          className="text-foreground underline underline-offset-2"
-          href={DEVELOPERS}
-          onClick={(e) => {
-            e.preventDefault();
-            openLink(DEVELOPERS);
-          }}
-        >
-          Get one
-        </a>
-        , then paste it here.
-      </p>
-      <Input aria-label="Access key" autoFocus onChange={(e) => setDraft(e.currentTarget.value)} placeholder="Access key" size="sm" value={draft} />
-      <Button disabled={!draft.trim()} size="sm" type="submit">
-        Save key
-      </Button>
-      {error && (
-        <p className="text-destructive-foreground text-sm" role="alert">
-          {error}
-        </p>
-      )}
-    </form>
+    <Button className="h-auto min-w-0 max-w-full justify-start border-0 px-0 text-muted-foreground hover:[&>span]:underline focus-visible:[&>span]:underline sm:h-auto" render={<a href={tagged(href)} />} size="xs" variant="link" onClick={(e) => {
+      e.preventDefault();
+      openLink(tagged(href));
+    }}>
+      <span className="truncate pb-0.5">{children}</span>
+    </Button>
   );
 }

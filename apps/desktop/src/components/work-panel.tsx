@@ -20,7 +20,7 @@ import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 // being read never move.
 
 const name = (id: string) => pageLabel(pageOf(id)?.title ?? "");
-const Row = ({ children, className, ...rest }: { children: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) => (
+export const Row = ({ children, className, ...rest }: { children: React.ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("flex min-h-6 min-w-0 flex-wrap items-center gap-x-2 gap-y-1", className)} {...rest}>
     {children}
   </div>

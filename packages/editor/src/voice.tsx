@@ -10,6 +10,8 @@ import { captureVoiceReview, type VoiceReview } from "./voice-review";
 
 type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void };
 
+type VoiceOptions = { assets: AssetStore; onSaved?: () => void };
+
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const microphoneErrors: Record<string, string> = {
@@ -41,6 +43,16 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       if (recorder.current?.state !== "inactive") recorder.current?.stop();
       stream.current?.getTracks().forEach((track) => track.stop());
     };
+  }, []);
+  // Added by the capture box's mic: it records at once, and only the once. A timer, so React's
+  // dev double mount starts it a single time.
+  useEffect(() => {
+    if (!node.attrs.autostart) return;
+    const timer = window.setTimeout(() => {
+      updateAttributes({ autostart: false });
+      void start();
+    });
+    return () => window.clearTimeout(timer);
   }, []);
   useEffect(() => {
     if (phase !== "recording") return;
@@ -203,7 +215,7 @@ export const VoiceRecording = Node.create<VoiceOptions>({
   atom: true,
   draggable: true,
   addOptions: () => ({ assets: null as unknown as AssetStore }),
-  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, recordingId: { default: null }, transcript: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" } }),
+  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, recordingId: { default: null }, transcript: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" }, autostart: { default: false, rendered: false } }),
   parseHTML: () => [{ tag: 'div[data-voice-recording]' }],
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-voice-recording": "" }), ["audio", { src: HTMLAttributes.src, controls: "" }]],
   addNodeView: () => ReactNodeViewRenderer(VoiceView, { stopEvent: ({ event }) => !!(event.target as Element)?.closest?.("[data-controls]") }),

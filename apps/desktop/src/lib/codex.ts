@@ -15,10 +15,11 @@ export const codex = createStore<CodexState>({ state: "checking", models: [] });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 
+const efforts = (ultra: boolean) => ["low", "medium", "high", "xhigh", "max", ...(ultra ? ["ultra"] : [])].map((reasoningEffort) => ({ reasoningEffort }));
+
 const standIn = (): Json => {
   const mode = new URLSearchParams(location.search).get("codex");
   if (mode === "missing") throw new Error("Codex is not installed");
-  const efforts = (ultra: boolean) => ["low", "medium", "high", "xhigh", "max", ...(ultra ? ["ultra"] : [])].map((reasoningEffort) => ({ reasoningEffort }));
   return {
     account: { result: { account: mode === "signed-out" ? null : { type: "chatgpt", email: "you@example.com", planType: "pro" } } },
     models: {
@@ -52,9 +53,10 @@ export function loadCodex(fresh = false): Promise<void> {
       return;
     }
     const account = r?.account?.result?.account;
+    // Codex 0.164 lists some models with no efforts; the standard ones keep the control there.
     const models: GptModel[] = (r?.models?.result?.data ?? [])
       .filter((m: Json) => !m.hidden)
-      .map((m: Json) => ({ id: m.id, name: m.displayName ?? m.id, description: m.description ?? "", effort: m.defaultReasoningEffort, efforts: (m.supportedReasoningEfforts ?? []).map((e: Json) => e.reasoningEffort) }));
+      .map((m: Json) => ({ id: m.id, name: m.displayName ?? m.id, description: m.description ?? "", effort: m.defaultReasoningEffort, efforts: (m.supportedReasoningEfforts?.length ? m.supportedReasoningEfforts : efforts(false)).map((e: Json) => e.reasoningEffort) }));
     codex.set({ state: account ? "ready" : "signed-out", email: account?.email, plan: account?.planType, models });
   })();
   return loading;

@@ -166,8 +166,13 @@ function reveal(t: Target, byAnchor: (anchor: string) => void) {
       for (const v of document.querySelectorAll<HTMLVideoElement>(`[data-pane-page="${t.page}"] .ll-editor > :nth-child(${t.block}) video`)) v.currentTime = t.at;
     return;
   }
-  const ed = liveEditor(t.page);
-  const hit = t.quote ? ed?.find(t.quote, 0) : null;
+  if (t.quote) lightWords(t.page, t.quote);
+}
+
+// Scrolls an open page to the words and lights them for a moment (tail's Show nods too).
+export function lightWords(page: string, quote: string) {
+  const ed = liveEditor(page);
+  const hit = ed?.find(quote, 0);
   const range = hit && ed?.domRange(hit.from, hit.to);
   if (!range) return;
   range.startContainer.parentElement?.scrollIntoView({ block: "center" });

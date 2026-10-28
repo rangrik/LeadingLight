@@ -50,6 +50,7 @@
 .ll-capture .ll-editor > * { padding-block: 3px; }
 .ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 8px; }
 .ll-capture .ll-handle { display: none; }
+.ll-capture[data-web] .is-empty::before { content: none; }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {

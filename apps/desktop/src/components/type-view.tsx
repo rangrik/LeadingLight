@@ -39,7 +39,7 @@ const ABOUT: Record<string, string> = {
   meeting: "Meetings, with when they were, who came and their project.",
   project: "Projects you're working on, with their status and due date.",
   task: "Things to do, ticked off where they're written. Type /task in a page to add one.",
-  idea: "Ideas as they come. New idea, in the sidebar or by its key, catches one from any app.",
+  idea: "Ideas as they come. Quick capture, at the foot of the bar or by its key, catches one from any app.",
   collection: "Collections gather pages into a list of their own.",
 };
 

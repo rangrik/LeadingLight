@@ -6,12 +6,14 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { closeAsk, openAsk, useAsk } from "~/lib/ask";
+import { useShowing } from "~/lib/bar";
 import { useKeysFor } from "~/lib/keymap";
 import { liveEditor } from "~/lib/live";
 
 // The Ask button in a page card's header, beside its Writing menu: Claude or GPT for that page.
 export function AskButton({ page, className }: { page: string; className?: string }) {
-  const { open, page: asked } = useAsk();
+  const { page: asked } = useAsk();
+  const open = useShowing("ask");
   const who = isClaude(useAiPrefs().model) ? "Claude" : "GPT";
   const keys = useKeysFor()("ask");
   const mine = open && asked?.id === page;

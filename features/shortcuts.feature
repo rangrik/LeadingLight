@@ -11,7 +11,7 @@ Feature: Changing keyboard shortcuts
     beside the label moves or changes height when it or the reset button shows
   - taken keys: what macOS or the editor already does with a key: Copy (⌘C), Paste (⌘V), Cut (⌘X),
     Select all (⌘A), Undo (⌘Z), Redo (⇧⌘Z, ⌘Y), Find (⌘F), Quit (⌘Q), Hide (⌘H, ⌥⌘H), Minimize (⌘M),
-    Close (⌘W), Full screen (⌃⌘F), Bold (⌘B), Italic (⌘I), Underline (⌘U), Strikethrough (⇧⌘S),
+    Full screen (⌃⌘F), Bold (⌘B), Italic (⌘I), Underline (⌘U), Strikethrough (⇧⌘S),
     Code (⌘E), Highlight (⇧⌘H), Add sidenote (⇧⌘M), Duplicate (⌘D), Group (⌘G), Block menu (⌘/),
     Quote (⇧⌘B), lists (⇧⌘7, ⇧⌘8, ⇧⌘9), Code block (⌥⌘C), headings (⌥⌘0 to ⌥⌘6)
 

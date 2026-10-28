@@ -10,7 +10,7 @@ const pane = (page: Page, name: string) => page.getByRole("region", { name, exac
 // lost project or tag, Escape closing the box under an open menu, and ⇧⌘↩ replacing the page in view.
 test("A captured idea keeps its project, shows in Today and opens beside", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "New idea" }).click();
+  await page.getByRole("button", { name: "Quick capture" }).click();
   const title = box(page).getByRole("textbox", { name: "Idea" });
   const picker = box(page).getByRole("button", { name: "Project" });
   await expect(title).toBeFocused();
@@ -47,12 +47,12 @@ test("A captured idea keeps its project, shows in Today and opens beside", async
 
   // ⌘↩ saves and gives the keyboard back; ⇧⌘↩ opens the idea beside, Today staying in view.
   await body(page).click();
-  await page.getByRole("button", { name: "New idea" }).click();
+  await page.getByRole("button", { name: "Quick capture" }).click();
   await box(page).getByRole("textbox", { name: "Idea" }).pressSequentially("Second");
   await page.keyboard.press("Meta+Enter");
   await expect(box(page)).toHaveCount(0);
   await expect(body(page)).toBeFocused();
-  await page.getByRole("button", { name: "New idea" }).click();
+  await page.getByRole("button", { name: "Quick capture" }).click();
   await box(page).getByRole("textbox", { name: "Idea" }).pressSequentially("Third");
   await page.keyboard.press("Shift+Meta+Enter");
   await expect(pane(page, "Third").getByRole("textbox", { name: "Page body" })).toBeFocused();

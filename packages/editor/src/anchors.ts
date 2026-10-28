@@ -44,7 +44,7 @@ const dataAttr = (attr: string, name: string) => ({
 // A chip sits outside the words' marks, so their underline stops at the words. It is inline text
 // joined to the word before by U+2060: browsers may break before any inline box (an SVG, an
 // inline-flex pill) even after a joiner, so the pill is a plain inline and the quote mark is text.
-function chip(className: string, attrs: Record<string, string>, html: string) {
+function chip(className: string, attrs: Record<string, string>, text: string) {
   const el = document.createElement("span");
   el.className = "ll-chip";
   el.contentEditable = "false";
@@ -52,7 +52,7 @@ function chip(className: string, attrs: Record<string, string>, html: string) {
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   const pill = document.createElement("span");
   pill.className = className;
-  pill.innerHTML = html;
+  pill.textContent = text;
   el.append("\u2060", pill);
   return el;
 }

@@ -65,7 +65,7 @@ written into the code. Why: `DECISIONS.md` 8. Reference: https://docs.capacities
 Every page
 - Icon: any emoji, a lucide icon in a theme colour, or an uploaded image.
 - Cover: upload, paste, link, a theme colour, or an Unsplash photo with its credit. Drag to
-  reposition. Unsplash needs each person's own free key, and its photos don't show offline.
+  reposition. Unsplash uses the shared image service; its photos don't show offline.
 - Description, tags, aliases, created and updated dates.
 - Any property, whatever the page's type.
 
@@ -155,6 +155,14 @@ and flexible delegation. All four releases reported merged and installed on 2026
 retained evidence; task assignment, live widgets and a contextual Feed; selected sidenotes sent as
 one feedback batch, one new linked response, and user acceptance of the main task. All nine slices
 built, checked and merged; see [what shipped and its limits](PROJECT-2-STATUS.md).
+
+[Project 3 — Tail](PROJECT-3.md): a peer that reads along and offers one line to nod at. Design in
+[TAIL.md](TAIL.md). Built, installed, and tuned over two days of use; its offers moved into the bar
+with Project 4.
+
+[Project 4 — The bar, tabs, and quick capture](PROJECT-4.md): one strip at the right edge with
+Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
+for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
 ## Later
 

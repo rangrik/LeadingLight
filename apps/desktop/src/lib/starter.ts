@@ -69,6 +69,8 @@ const TYPES: Seed<TypeDef>[] = [
   { ...type("agent", "Agent", "Agents", "bot", "purple", ["agent-profile", "agent-task", "agent-parent"]), system: true, made: "app" },
   { ...type("report", "Report", "Reports", "scroll-text", "blue", ["report-by"]), system: true, made: "app" },
   { ...type("feedback", "Feedback", "Feedback", "message-square-quote", "orange", ["feedback-to"]), system: true, made: "app" },
+  // The page about how you work, which tail writes (docs/TAIL.md).
+  { ...type("how-you-work", "How you work", "How you work", "message-square-dashed", "gray", []), system: true, made: "app" },
 ];
 
 // Everything to add to a space that hasn't been given the starter set yet.
@@ -103,6 +105,8 @@ function later(catalog: Catalog, now: number): Catalog {
     prop("feedback-to");
     if (!catalog.types.some((t) => t.id === "feedback")) added.types.push({ ...TYPES.find((t) => t.id === "feedback")!, createdAt: now });
   }
+  // It brings no property; a system type can't be deleted, so its id says whether it was given.
+  if (!catalog.types.some((t) => t.id === "how-you-work")) added.types.push({ ...TYPES.find((t) => t.id === "how-you-work")!, createdAt: now });
   if (missing("idea-project")) {
     prop("idea-project");
     const idea = catalog.types.find((t) => t.id === "idea");

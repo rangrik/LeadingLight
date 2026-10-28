@@ -1,8 +1,10 @@
 import { ChevronDown, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Segmented } from "@/views/settings/controls";
+import { closeSettings } from "@/views/settings/open";
 import { Code, SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
+import { Input } from "@leadinglight/ui/components/input";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Switch } from "@leadinglight/ui/components/switch";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -10,18 +12,24 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { type AgentStatus, agentStatus } from "~/lib/agent";
 import { type Agent, BUILT_IN, listAgents, showAgentsFolder } from "~/lib/agents";
 import { Select, SelectGroup, SelectGroupLabel, SelectItem, SelectPopup, SelectPrimitive } from "@leadinglight/ui/components/select";
-import { ACCESS, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
+import { ACCESS, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, setTailPrefs, type TailPrefs, tailPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { codex, effortFor, effortsFor, loadCodex } from "~/lib/codex";
 import { closeUpdateToast } from "~/components/cli-updates";
+import { TypeChoices, UseSuggestions } from "~/components/settings/writing-section";
 import { behind, cliPrefs, commandOf, INSTALL, loadTools, SOURCE, type Tool, tools, updateTool } from "~/lib/clis";
 import { openLink } from "~/lib/links";
 import { isNative } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transport";
+import { space } from "~/lib/space";
+import { beat, lastBeat, openAbout, readAfter, readsOn, readsOnByDefault } from "~/lib/tail";
+import { ABOUT } from "~/lib/tail-memory";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
   const prefs = useAiPrefs();
+  // The Effort rows read Codex's list, which comes in after the page opens.
+  codex.use();
   const [status, setStatus] = useState<AgentStatus | "checking">("checking");
   const check = () => {
     setStatus("checking");
@@ -53,19 +61,23 @@ export function AiSection() {
       <RuntimeGroup />
       <SettingsGroup title="Answers">
         <SettingsRow label="Model" description="Claude's through Claude Code; GPT's through Codex.">
-          <ModelSelect />
+          <ModelSelect onChange={(model) => setAiPrefs({ model, effort: effortFor(model, prefs.effort) })} value={prefs.model} />
         </SettingsRow>
         <SettingsRow label="Effort" description="How long the model thinks before answering.">
-          <Segmented
-            value={effortFor(prefs.model, prefs.effort)}
-            options={effortsFor(prefs.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))}
-            onChange={(effort) => setAiPrefs({ effort })}
-          />
+          {/* Nothing until Codex's list is in: an empty group draws as a stray dot. */}
+          {effortsFor(prefs.model).length > 0 && (
+            <Segmented
+              value={effortFor(prefs.model, prefs.effort)}
+              options={effortsFor(prefs.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))}
+              onChange={(effort) => setAiPrefs({ effort })}
+            />
+          )}
         </SettingsRow>
         <SettingsRow label="Access" description={isClaude(prefs.model) ? ACCESS.find((a) => a.value === prefs.access)?.description : GPT_ACCESS[prefs.access]}>
           <Segmented value={prefs.access} options={ACCESS} onChange={(access) => setAiPrefs({ access })} />
         </SettingsRow>
       </SettingsGroup>
+      <TailGroup />
       <SettingsGroup
         title="Agents"
         description="Mention one with @ in the panel. Each is a Claude Code agent file: name, description and model in its front matter, the prompt below. Yours go in the app's agents folder or ~/.claude/agents."
@@ -87,7 +99,7 @@ export function AiSection() {
         ))}
       </SettingsGroup>
       <SettingsGroup title="Privacy">
-        <SettingsRow label="What leaves this Mac" description="Notes stay here. Only your question, the page you ask from, and pages the model reads or you mention leave this Mac, and only when you ask: to Anthropic for Claude, to OpenAI for GPT. In a project chat, the agent also reads files in the folder you linked as it works, and what it reads goes to them too." />
+        <SettingsRow label="What leaves this Mac" description="Notes stay here. Only your question, the page you ask from, and pages the model reads or you mention leave this Mac, and only when you ask: to Anthropic for Claude, to OpenAI for GPT. In a project chat, the agent also reads files in the folder you linked as it works, and what it reads goes to them too. Tail, unasked, sends the titles of your pages, and the summaries and changed words of those it reads on." />
       </SettingsGroup>
     </SettingsPage>
   );
@@ -259,15 +271,106 @@ function CodexAccount() {
   );
 }
 
+const MODES: { value: TailPrefs["mode"]; label: string; description: string }[] = [
+  { value: "off", label: "Off", description: "Nothing from tail shows anywhere, and no beat runs." },
+  { value: "quiet", label: "Quiet", description: "Today's lines and where you stopped on a page; no suggestions from what you write, no guess in the capture box." },
+  { value: "normal", label: "Normal", description: "Today's lines, where you stopped, suggestions from what you write, and the capture box's guess." },
+];
+const clock = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+
+// Settings › AI › Tail (docs/TAIL.md). Its last beat is all the Mac app shows of it, so it says
+// when that ran and what came of it, or why it didn't go.
+function TailGroup() {
+  useAiPrefs();
+  const t = tailPrefs();
+  const types = space.use().types.filter((x) => x.id !== ABOUT);
+  const last = lastBeat.use();
+  const [running, setRunning] = useState(false);
+  const run = () => {
+    setRunning(true);
+    void beat().finally(() => setRunning(false));
+  };
+  // Only what differs from the suggestion is kept, as in Writing.
+  const readOn = (ids: string[]) => setTailPrefs({ readsOn: Object.fromEntries(types.filter((x) => ids.includes(x.id) !== readsOnByDefault(x.id)).map((x) => [x.id, ids.includes(x.id)])) });
+  const lines = (n: number) => (n ? `${n} ${n === 1 ? "line" : "lines"}` : "nothing to show");
+  return (
+    <SettingsGroup title="Tail" description="Reads along and offers one line you can nod at. It never asks, and never writes into your words until you nod.">
+      <SettingsRow label="Offers" description={MODES.find((m) => m.value === t.mode)?.description}>
+        <Segmented value={t.mode} options={MODES} onChange={(mode) => setTailPrefs({ mode })} />
+      </SettingsRow>
+      <SettingsRow label="Read a block after" description="Seconds of quiet after a full stop, and in any case. Enter at a block's end reads it at once.">
+        <span className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Seconds label="Seconds after a full stop" onChange={(stop) => setTailPrefs({ stop })} value={readAfter().stop} />
+          and
+          <Seconds label="Seconds in any case" onChange={(quiet) => setTailPrefs({ quiet })} value={readAfter().quiet} />
+          seconds
+        </span>
+      </SettingsRow>
+      <SettingsRow label="Model" description="Claude's through Claude Code; GPT's through Codex.">
+        <ModelSelect onChange={(model) => setTailPrefs({ model, effort: effortFor(model, t.effort) })} value={t.model} />
+      </SettingsRow>
+      <SettingsRow label="Effort" description="How long the model thinks before answering.">
+        {effortsFor(t.model).length > 0 && (
+          <Segmented value={effortFor(t.model, t.effort)} options={effortsFor(t.model).map((value) => ({ value, label: labelOf(EFFORTS, value) }))} onChange={(effort) => setTailPrefs({ effort })} />
+        )}
+      </SettingsRow>
+      <SettingsRow
+        className="flex-col items-stretch gap-3"
+        description={
+          <>
+            Tail reads the summaries and words of these; the titles of all pages, so a name can still be linked. Suggested: as Writing's, and tasks.{" "}
+            {Object.keys(t.readsOn).length > 0 && <UseSuggestions onClick={() => setTailPrefs({ readsOn: {} })} />}
+          </>
+        }
+        label="Reads on"
+      >
+        <TypeChoices onChange={readOn} types={types} value={types.filter((x) => readsOn(x.id)).map((x) => x.id)} />
+      </SettingsRow>
+      <SettingsRow label="How you work" description="Dated sentences tail keeps about how you work, and reads at every turn. Edit or delete any; tail follows.">
+        <Button
+          onClick={() => {
+            closeSettings();
+            void openAbout();
+          }}
+          size="sm"
+          variant="outline"
+        >
+          Open
+        </Button>
+      </SettingsRow>
+      <SettingsRow
+        label="Last beat"
+        description={t.mode === "off" ? "Tail is off." : !last ? "No beat yet." : last.error ? `Didn't go: ${last.error} (${clock.format(last.at)})` : `${clock.format(last.at)}, ${lines(last.lines)}`}
+      >
+        <Button disabled={running || t.mode === "off"} onClick={run} size="sm" variant="outline">
+          {running && <Spinner />}
+          Run now
+        </Button>
+      </SettingsRow>
+    </SettingsGroup>
+  );
+}
+
+// Whole seconds, kept once they are 1 to 600; a field left half typed shows the kept value again.
+function Seconds({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const type = (t: string) => {
+    setText(t);
+    const n = Number(t);
+    if (Number.isInteger(n) && n >= 1 && n <= 600) onChange(n);
+  };
+  return <Input aria-label={label} className="w-14" inputMode="numeric" onBlur={() => setText(String(value))} onChange={(e) => type(e.currentTarget.value)} size="sm" value={text} />;
+}
+
 // Every model, Claude's then GPT's, in one list.
-function ModelSelect() {
-  const prefs = useAiPrefs();
+function ModelSelect({ value, onChange }: { value: string; onChange(model: string): void }) {
   const cx = codex.use();
   const all = [...MODELS, ...cx.models.map((m) => ({ value: m.id, label: m.name }))];
   return (
-    <Select items={Object.fromEntries(all.map((m) => [m.value, m.label]))} onValueChange={(v) => setAiPrefs({ model: v as string, effort: effortFor(v as string, prefs.effort) })} value={prefs.model}>
+    <Select items={Object.fromEntries(all.map((m) => [m.value, m.label]))} onValueChange={(v) => onChange(v as string)} value={value}>
       <SelectPrimitive.Trigger render={<Button size="sm" variant="outline" />}>
-        {labelOf(all, prefs.model)}
+        {labelOf(all, value)}
         <ChevronDown className="size-3.5 opacity-60" />
       </SelectPrimitive.Trigger>
       <SelectPopup alignItemWithTrigger={false}>

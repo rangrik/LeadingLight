@@ -76,12 +76,19 @@ export type BlockEditorHandle = {
   domRange: (from: number, to: number) => Range | null;
   // The page as plain text, for an assistant's context.
   text: () => string;
+  // The capture box's mic: a voice block at the end that records at once.
+  record: () => void;
   // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
   // takes focus: the panel that inserts keeps the keyboard.
   insertAfter: (pos: number, html: string) => void;
   replaceRange: (from: number, to: number, html: string) => void;
   // Pastes at the top of the page, as its own blocks (a page pasted into the title).
   paste: (text: string, html?: string) => void;
+  // The top-level block holding the cursor, one by its index, and one put in the place of count
+  // blocks as its own undo step: how tail reads the block being written and nods at it (docs/TAIL.md).
+  cursorBlock: () => number;
+  blockAt: (index: number) => EditorDoc | undefined;
+  setBlock: (index: number, block: EditorDoc, count?: number) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -508,6 +515,12 @@ export function BlockEditor({
         }
       },
       text: () => editor.getText(),
+      record: () => {
+        const { doc } = editor.state;
+        const from = isEmptyLine(doc.lastChild) ? doc.content.size - doc.lastChild!.nodeSize : doc.content.size;
+        // A line after it holds the cursor, so the block isn't left selected.
+        editor.commands.insertContentAt({ from, to: doc.content.size }, [{ type: "voiceRecording", attrs: { autostart: true } }, { type: "paragraph" }]);
+      },
       insertAfter: (pos, html) => {
         const doc = editor.state.doc;
         const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));
@@ -523,6 +536,22 @@ export function BlockEditor({
         editor.commands.setTextSelection(1);
         editor.view.focus();
         pasteText(editor.view, text, html);
+      },
+      cursorBlock: () => editor.state.selection.$from.index(0),
+      blockAt: (index) => editor.state.doc.maybeChild(index)?.toJSON(),
+      setBlock: (index, block, count = 1) => {
+        const { doc } = editor.state;
+        if (index + count > doc.childCount) return;
+        let from = 0;
+        for (let i = 0; i < index; i++) from += doc.child(i).nodeSize;
+        let to = from;
+        for (let i = index; i < index + count; i++) to += doc.child(i).nodeSize;
+        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, to, editor.schema.nodeFromJSON(block))));
+        // A link put where the cursor was leaves it on the line after, as "@" alone on a line does.
+        const { selection } = editor.state;
+        const tr = closeHistory(editor.state.tr);
+        if (selection instanceof NodeSelection && selection.from === from) tr.setSelection(Selection.near(tr.doc.resolve(selection.to), 1));
+        editor.view.dispatch(tr);
       },
       // Focus in the editor's own toolbars (the link field) counts too.
       hasFocus: () => editor.view.hasFocus() || Boolean(editor.view.dom.closest(".ll-editor-root")?.contains(document.activeElement)),

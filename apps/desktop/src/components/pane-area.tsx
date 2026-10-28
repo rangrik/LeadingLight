@@ -1,6 +1,6 @@
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
-// with its own header (crumbs and a close button), no Compare tabs, no tabs kept mounted while hidden.
+// with its own header (crumbs and a close button) and tab row (tab-row.tsx), no Compare tabs.
 import { X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -16,17 +16,18 @@ import { PanelHeader } from "~/components/panel-header";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
-import { floatBox, type Side, useAiPrefs } from "~/lib/ai-prefs";
-import { useAsk } from "~/lib/ask";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
-import { closePane, type Divider, focusPane, layout, type PaneNode, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
 import { BrowserPane } from "~/components/agent-browser";
+import { AskView } from "~/components/agent-panel";
+import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
-import { BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
+import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -87,19 +88,19 @@ function balance(n: PaneNode) {
   balance(n.b);
 }
 
-// Panes are one flat list keyed by pane id and kept in id order, so a pane that moves or
-// splits is never remounted: its editor, unsaved edits and scroll stay.
-export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: boolean; dock: Side | null; lead?: boolean }) {
+// Tabs shown once stay mounted while they are behind (display: none), so their scroll and
+// unsaved words stay; the browser puts the scroll back when the card shows again.
+const mounted = new Set<string>();
+
+// Cards are one flat list, a card per tab, keyed by tab id and kept in id order, so a tab that
+// moves pane or splits off is never remounted: its editor, unsaved edits and scroll stay.
+export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean; lead?: boolean }) {
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
   const { open: sidebarOpen } = useSidebar();
   space.use(); // titles and icons follow edits
   const writing = useWritingPrefs();
-  const ai = useAiPrefs();
-  // Pinned, the panel keeps its card with no page in front; floating, it shows only with one.
-  const ask = useAsk();
-  const asking = ask.open && (!!ask.page || !!dock);
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -131,36 +132,30 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
     const left = i * (STRIP + GAP) + (i > at ? wide - STRIP : 0);
     return { left, top: 0, width: i === at ? wide : STRIP, height: size.h };
   };
-  // A floating agent panel pushes aside the words of the pages under it, from the side it is on,
-  // but leaves each page 360 px, so a narrow pane stays readable.
-  const float = asking && !dock && size.w ? floatBox(ai, size, size.header) : null;
-  const room = (b: ReturnType<typeof place>) => {
-    if (!float) return 0;
-    const across = Math.min(b.left + b.width, float.left + float.width) - Math.max(b.left, float.left);
-    const down = Math.min(b.top + b.height, float.top + float.height) - Math.max(b.top + size.header, float.top);
-    if (across <= 0 || down <= 0) return 0;
-    return Math.max(0, Math.min(b.width - 360, ai.corner.endsWith("l") ? float.left + float.width - b.left : b.left + b.width - float.left));
-  };
-  // In the app, a panel pinned left holds the window's left edge, and the room for the traffic lights.
-  const edge = lead && !(windowToggle && asking && dock === "left");
   return (
     // The stage's colour, so the gaps show where narrow windows drop the cards' corners.
     <div className="relative min-h-0 min-w-0 flex-1 bg-sidebar" data-pane-area ref={area}>
-      {[...leaves]
-        .sort((a, b) => (a.leaf.id < b.leaf.id ? -1 : 1))
-        .map(({ leaf, rect }) => {
+      {leaves
+        .flatMap(({ leaf, rect }) => leaf.tabs.filter((t) => t.id === leaf.active || mounted.has(t.id)).map((tab) => ({ pane: leaf, rect, tab })))
+        .sort((a, b) => (a.tab.id < b.tab.id ? -1 : 1))
+        .map(({ pane, rect, tab }) => {
+          const front = tab.id === pane.active;
+          if (front) mounted.add(tab.id);
+          const tabbed = pane.tabs.length > 1;
+          // The pane as this tab shows it; "" is a new tab.
+          const leaf = { ...pane, page: pageIn(tab), back: front ? pane.back : undefined };
           // Opened from the Feed in its place (a narrow window): its crumb goes back there.
           const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
-          const folded = folding && order.indexOf(leaf.id) !== at;
+          const folded = front && folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
-          const aside = room(b);
           return (
             <section
               aria-label={shown.title}
-              className={cn("group/card absolute flex flex-col overflow-hidden", CARD)}
+              className={cn("group/card absolute flex flex-col overflow-hidden", CARD, !front && "hidden")}
               data-folded={folded || undefined}
+              data-pane={front ? leaf.id : undefined}
               data-pane-page={leaf.page}
-              key={leaf.id}
+              key={tab.id}
               onFocusCapture={() => focusPane(leaf.id)}
               onPointerDownCapture={() => focusPane(leaf.id)}
               style={b}
@@ -174,15 +169,18 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
                   <span className="max-h-full truncate [writing-mode:vertical-rl]">{shown.title}</span>
                 </button>
               )}
+              {!folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
               {!folded && (
               <PanelHeader
                 after={<PageStats id={leaf.page} />}
-                current={shown.title}
+                current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
-                lead={edge && rect.x < EPS && rect.y < EPS}
+                lead={lead && rect.x < EPS && rect.y < EPS}
+                nav={<History pane={leaf.id} tab={tab} />}
+                under={tabbed}
                 toggle={!windowToggle}
                 muted={split && leaf.id !== focus}
-                onGrab={split ? (e) => armDrag(e, { page: leaf.page, label: shown.title }) : undefined}
+                onGrab={split || tabbed ? (e) => armDrag(e, { page: leaf.page, label: shown.title, tab: tab.id }) : undefined}
                 onRoot={(e) => shown.parent && (leaf.back ? showIn(leaf.id, leaf.back) : visit(shown.parent.view, e))}
                 root={shown.parent?.title}
                 sidebarOpen={sidebarOpen}
@@ -199,7 +197,7 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
                   <Button
                     aria-label="Close page"
                     className={cn(leaf.id !== focus && BACK_CARD)}
-                    onClick={() => closePane(leaf.id)}
+                    onClick={() => closeTab(leaf.id)}
                     size="icon-xs"
                     variant="ghost"
                   >
@@ -210,15 +208,20 @@ export function PaneArea({ windowToggle, dock, lead = true }: { windowToggle: bo
               )}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
-                className={cn("@container min-h-0 flex-1 overflow-y-auto transition-[padding] duration-200 ease-out", folded && "hidden")}
+                className={cn("@container min-h-0 flex-1 overflow-y-auto", folded && "hidden")}
                 data-page-scroller
                 key={leaf.page}
-                style={ai.corner.endsWith("l") ? { paddingLeft: aside } : { paddingRight: aside }}
               >
-                {leaf.page === INBOX_VIEW ? (
+                {!leaf.page ? (
+                  <NoPage className="h-full" />
+                ) : leaf.page === INBOX_VIEW ? (
                   <CaptureInbox />
                 ) : leaf.page === FEED_VIEW ? (
                   <FeedView paneId={leaf.id} />
+                ) : leaf.page === ASK_VIEW ? (
+                  <AskView />
+                ) : leaf.page === SUGGESTIONS_VIEW ? (
+                  <Suggestions pane />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (

@@ -4,16 +4,16 @@ Feature: Capture inbox
   Scenario: Find captured material without copying it
     Given I have captured an idea, saved a webpage, and saved a voice recording
     And I have an ordinary page and an idea made outside capture
-    When I open "Capture inbox" from the sidebar
+    When I open Captures in the bar (features/bar.feature)
     Then "To review" lists the three captured pages once, newest capture first
     And it does not list the ordinary page or the manually made idea
     And older ideas tagged "in-the-middle" and saved webpage sources are included
-    And the sidebar shows no unread count or urgency badge
+    And the sidebar shows no row, count or urgency badge for it; the bar's Captures icon counts what waits
     When I open a captured page
     Then its existing page opens, with its body and audio unchanged
 
   Scenario: Organise a capture without opening it
-    Given an idea "Garden lights" is in Capture inbox
+    Given an idea "Garden lights" is in Captures
     When I choose Project "Garden" and add the tag "Outside" on its row
     Then the existing idea has that project and tag
     And its other properties and body are unchanged
@@ -47,7 +47,7 @@ Feature: Capture inbox
 
   Scenario: Empty inbox and narrow panes
     Given there are no captures to review
-    When I open Capture inbox
+    When I open Captures
     Then it says "Nothing waiting here"
     And it explains that ideas, webpages, and recordings appear here
     When I open Reviewed with no reviewed captures
@@ -55,7 +55,7 @@ Feature: Capture inbox
     And at 520 pixels the title, tabs, row actions, and property controls stay inside the pane
 
   Scenario: Reviewing does not fight an open editor
-    Given a captured idea is also open beside Capture inbox
+    Given a captured idea is also open beside Captures
     When I type in the idea and mark it reviewed from the inbox
     Then its latest text and review state both remain after reloading
     And changing its project from the inbox updates the open page too
