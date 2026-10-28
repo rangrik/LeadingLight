@@ -455,3 +455,23 @@ checks and builds that exact commit, verifies helpers and licenses, and uploads
 downloads before publishing. Failed builds stay drafts and can be retried by tag.
 The first distribution is an unsigned Apple Silicon preview, matching the runtime
 we can build today. No personal token or signing secret is needed for that path.
+
+## 30. One bar for what wants a glance; tabs inside panes; one box for capture
+
+Agent asks, captures to review, tail's offers and the Ask thread were four surfaces: a lane on the
+left, a sidebar row, chips in the text and a card on the right. They are now panels of one strip at
+the window's right edge, after the activity bar of code editors rather than Xcode's inspector tabs,
+because the person works that way all day. A count sits on an icon only when something waits, so
+the strip never pulls the eye for nothing. Tail's offers moved out of the text into the Suggestions
+panel: a chip at the line was the right moment but the wrong place to find again, and real use
+showed offers going unseen or counted as a no. Tail now reads a block when it is finished, on Enter
+or after a full stop and a short quiet, and keeps a fingerprint per wording so nothing is sent twice;
+the count rises quietly and the text never moves. Today keeps its rows and gets a once-a-day card for
+what earlier days left, with Dismiss all as the pressure valve that keeps a persistent list from
+becoming a pile.
+
+Tabs are a layer inside a pane, not a new window model: the split stays the split, a tab keeps its
+own back and forward, and the row shows only with two or more tabs so one page looks as it did.
+Panes, tabs and the active tab are restored on launch. Quick capture is one box because what comes
+in from outside is one habit: words, an address or a voice note all land in Captures, and the box
+saves whatever was typed on close so a capture can never be lost.

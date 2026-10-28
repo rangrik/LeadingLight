@@ -156,9 +156,13 @@ retained evidence; task assignment, live widgets and a contextual Feed; selected
 one feedback batch, one new linked response, and user acceptance of the main task. All nine slices
 built, checked and merged; see [what shipped and its limits](PROJECT-2-STATUS.md).
 
-[Project 3 — Tail](PROJECT-3.md): a peer that reads along and offers one line to nod at, on Today,
-beside the line just written, above a page's title and in the capture box. Design in [TAIL.md](TAIL.md),
-prototype with word rules on `worktree-tail-design`. Building.
+[Project 3 — Tail](PROJECT-3.md): a peer that reads along and offers one line to nod at. Design in
+[TAIL.md](TAIL.md). Built, installed, and tuned over two days of use; its offers moved into the bar
+with Project 4.
+
+[Project 4 — The bar, tabs, and quick capture](PROJECT-4.md): one strip at the right edge with
+Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
+for words, addresses and voice notes. Four slices built and merged; QA and install in progress.
 
 ## Later
 
