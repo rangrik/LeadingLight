@@ -162,7 +162,7 @@ with Project 4.
 
 [Project 4 — The bar, tabs, and quick capture](PROJECT-4.md): one strip at the right edge with
 Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
-for words, addresses and voice notes. Four slices built and merged; QA and install in progress.
+for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
 ## Later
 
