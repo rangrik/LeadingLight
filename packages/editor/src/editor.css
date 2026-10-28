@@ -440,7 +440,13 @@
 .ll-editor :is(.ll-note-chip, .ll-cited-chip):hover { background: color-mix(in srgb, var(--foreground) 15%, transparent); }
 /* Tail's offer after a line, when the margin has no room: a note's chip, muted, fading in. It holds
    words, so they sit on the line's baseline rather than lifted like a number. */
-.ll-editor .ll-tail-chip { top: 0; color: var(--muted-foreground); transition: opacity 150ms ease-out, background-color 150ms ease-out; }
+.ll-editor .ll-tail-chip {
+  top: 0;
+  margin-left: 0.3em;
+  /* Muted, a touch stronger: on the chip's tint plain muted text falls just under 4.5:1 in dark themes. */
+  color: color-mix(in srgb, var(--muted-foreground) 70%, var(--foreground));
+  transition: opacity 150ms ease-out, background-color 150ms ease-out;
+}
 @starting-style { .ll-editor .ll-tail-chip { opacity: 0; } }
 .ll-editor [data-leaving] .ll-tail-chip { opacity: 0; }
 /* Words quoted into an essay: a quiet underline and a quote mark after them. */

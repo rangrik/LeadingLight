@@ -127,6 +127,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-26 | Tail: the model can decline a line but not find one | The word rules find the candidates and the model picks among them, so context stays small and each line can be checked. A line the rules don't see never shows. | Real beats show the rules missing what matters; then let the model propose a kind from the digest. |
 | 2026-10-26 | Tail: chips on list items and headings | A pause is read only on a top-level paragraph, the block the chip's placement and the nod's edit know. | Someone writes tasks in lists and misses the chip. |
 | 2026-10-26 | Tail's memory: what it does not count yet | A quiet sentence names its type and project as they were, so renaming either brings the kind back. The last beat is kept in memory only; a beat runs when the app opens. | Real use shows tail too loud, too quiet, or wrong about a habit. |
+| 2026-10-27 | ⌘Z after a tail nod undoes the editor's half only | The editor's undo puts the words back but the task page the nod made stays, and the chip's Undo is gone. Tail's Undo is the one that reverts both. | Someone reaches for ⌘Z after a nod; the editor's history would need to carry tail's undo. |
 
 ## 2026-10-27 — Signed releases, Intel builds and in-app updates
 
