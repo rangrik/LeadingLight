@@ -5,6 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-10-27 | Durable retry of Unsplash selection reports | A selection is sent once; a lost response cannot tell us whether Unsplash counted it. Blind retries may double-count. | Before wider release, add a durable queue with deduplication. |
+| 2026-10-27 | Higher Unsplash quota and stronger public-service abuse limits | This development service uses the shared 50-request/hour Demo quota and caches searches. Selection tokens stop arbitrary upstream requests but can be replayed. | Before wider release, obtain Production approval and add durable rate limits. |
 | 2026-10-22 | Virtualized or paged editing for very long pages | A keystroke on a 2000-paragraph page takes 8–11 ms (the first about 13 ms), inside a 16 ms frame. Rendering part of a page needs a new editor architecture and tends to break browser find, cross-block selection and copy. | Someone finds typing slow. To check: fill a page with 2000 paragraphs (`__editor.commands.setContent`), type 30 keys, time each from keydown to its transaction; the budget is 16 ms. |
 | 2026-10-22 | Block menu items Notion has beyond Turn into, Duplicate and Delete: whole-block colours, copy link to block, move to another page, comments | Colours need a new block attribute and a palette that reads in light and dark. Links, moves and comments need block ids and links between pages. | Colours when asked; the rest with M2. |
 | 2026-10-22 | Math blocks | Left out of the block set on request. | When asked. |
@@ -125,3 +127,11 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-26 | Tail: the model can decline a line but not find one | The word rules find the candidates and the model picks among them, so context stays small and each line can be checked. A line the rules don't see never shows. | Real beats show the rules missing what matters; then let the model propose a kind from the digest. |
 | 2026-10-26 | Tail: chips on list items and headings | A pause is read only on a top-level paragraph, the block the chip's placement and the nod's edit know. | Someone writes tasks in lists and misses the chip. |
 | 2026-10-26 | Tail's memory: what it does not count yet | A quiet sentence names its type and project as they were, so renaming either brings the kind back. The last beat is kept in memory only; a beat runs when the app opens. | Real use shows tail too loud, too quiet, or wrong about a habit. |
+
+## 2026-10-27 — Signed releases, Intel builds and in-app updates
+
+GitHub publishes ad-hoc signed Apple Silicon previews. Developer ID signing and
+notarization need the owner's Apple membership and certificate; enable them before
+promoting stable downloads. Intel needs separately built runtime helpers and a full
+Intel smoke test. In-app updates need their own signing keys and an update flow;
+add that when the downloadable preview distribution is proven.

@@ -65,7 +65,7 @@ written into the code. Why: `DECISIONS.md` 8. Reference: https://docs.capacities
 Every page
 - Icon: any emoji, a lucide icon in a theme colour, or an uploaded image.
 - Cover: upload, paste, link, a theme colour, or an Unsplash photo with its credit. Drag to
-  reposition. Unsplash needs each person's own free key, and its photos don't show offline.
+  reposition. Unsplash uses the shared image service; its photos don't show offline.
 - Description, tags, aliases, created and updated dates.
 - Any property, whatever the page's type.
 

@@ -1,12 +1,21 @@
 # LeadingLight
 
-A space for life in general. This is the main monorepo.
+A local-first notes app for macOS. Every note is an object with a type, written
+in a block editor. Built with Tauri 2, React 19, and TipTap.
+
+Early development: expect rough edges. Notes stay on your device; optional image
+search sends search terms and photo selections to the shared Unsplash service.
+
+[Download previews](https://github.com/rangrik/LeadingLight/releases) for Apple Silicon.
+Builds are currently unsigned and not notarized by Apple. Version bumps, release
+notes, checks and downloads are managed by [GitHub Actions](docs/RELEASING.md).
 
 ## Layout
 
 - `apps/desktop`: the desktop app (Tauri 2 + React + Vite)
 - `packages/ui`: shared UI, built on [COSS UI](https://coss.com/ui/docs/get-started)
 - `packages/editor`: the block editor (TipTap/ProseMirror with our own UI)
+- `apps/image-service`: the small Vercel service for Unsplash covers
 - More apps (website, docs) will go in `apps/`.
 
 pnpm workspaces handle the JS side. A Cargo workspace (root `Cargo.toml`) handles Rust.
@@ -17,6 +26,7 @@ Needs Node 22+, pnpm 10, and Rust (stable).
 
 ```sh
 pnpm install
+pnpm runtime:build # prepare the bundled helpers on an Apple Silicon Mac
 pnpm dev        # run the desktop app
 pnpm build      # bundle the desktop app
 pnpm typecheck
@@ -48,3 +58,10 @@ cd packages/ui && pnpm dlx shadcn@latest add @coss/<component>
 ```
 
 Apps import them as `@leadinglight/ui/components/<name>`.
+
+## License
+
+LeadingLight's own code is [MIT licensed](LICENSE). Vendored code and bundled
+dependencies retain their licenses and notices in `vendor/shipyard`,
+`apps/desktop/licenses`, and `runtime/tmux/licenses`. Unsplash images are subject
+to Unsplash's license and API terms, not this repository's MIT license.

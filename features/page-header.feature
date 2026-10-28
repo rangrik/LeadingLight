@@ -13,7 +13,7 @@ Feature: Page icon, cover and description
   - cover: the band across the top of the pane, with buttons "Change cover" and "Reposition"
     showing while the pointer is over it
   - cover picker: popover "Cover" with tabs "Colour", "Unsplash", "Upload", "Link" and a "Remove" button
-  - Unsplash: the photo site api.unsplash.com. Tests answer for it, since the test browser is offline.
+  - Unsplash: the shared image service. Tests answer for it, since the test browser is offline.
   - description: textbox "Description" under the title
 
   Background:
@@ -92,24 +92,23 @@ Feature: Page icon, cover and description
     When I open "Change cover", the "Link" tab, and enter "https://example.com/not-an-image"
     Then the picker says "That link didn't load as an image" and the cover is unchanged
 
-  Scenario: Unsplash asks for a key once
+  Scenario: Unsplash works without account setup
     When I click "Add cover" and open the "Unsplash" tab
-    Then it says Unsplash needs a free access key, with a "Get one" link to Unsplash's developer page
-    When I enter "test-key" in "Access key" and click "Save key"
     Then the tab shows the searchbox "Search Unsplash", focused
-    And after a reload the "Unsplash" tab still shows the search, not the key form
-    When I click "Change key" under the empty search
-    Then the key form shows again
-    And closing the picker without saving keeps the old key
+    And no access key or Unsplash account is requested
+    And after a reload the "Unsplash" tab still shows the search
 
   Scenario: A cover from Unsplash, with credit
-    Given an Unsplash key is saved
     When I open the "Unsplash" tab and type "mountain"
-    Then Unsplash is asked for landscape photos of "mountain", with the key
+    Then the image service is asked for landscape photos of "mountain", without a key from the app
     And all 24 show in a grid of even 3:2 thumbnails that scrolls, each named "Photo by <photographer>"
+    And the photographer and Unsplash links show a visible keyboard focus cue
+    When I scroll the grid and search for "forest"
+    Then the new results start at the first photo
+    And the Unsplash credit stays at the bottom in empty, error and results states
     When I click "Photo by Ann Lee"
     Then the photo fills the cover band and the picker closes
-    And the photo's download link is requested with the key, as Unsplash asks
+    And the image service reports the selected photo to Unsplash using its private key
     When I hover the cover
     Then the cover's top right reads "Photo by Ann Lee on Unsplash"
     And "Ann Lee" opens the photographer's Unsplash profile and "Unsplash" opens unsplash.com,
@@ -129,15 +128,24 @@ Feature: Page icon, cover and description
     Then "Photo by" is left out, so the name keeps room: "Eve … on Unsplash"
 
   Scenario: Unsplash failures
-    Given an Unsplash key is saved
-    When Unsplash refuses the key and I search
-    Then the tab says "Unsplash didn't accept that key" and shows the key form again
+    When the image service is not configured and I search
+    Then the tab says "Photo search is temporarily unavailable. Try again later."
     When Unsplash can't be reached and I search
     Then the tab says "Couldn't reach Unsplash" and the cover is unchanged
     When Unsplash answers 403 for the hourly limit and I search
     Then the tab says "Unsplash's hourly limit is used up. Try again later."
     When a search finds nothing
     Then the tab says "No photos found"
+    When the service sends a malformed result
+    Then the tab says "Photo search is temporarily unavailable. Try again later."
+    And the search remains usable
+
+  Scenario: The shared key stays on the image service
+    When I search and select a cover
+    Then no Unsplash key is sent to the app
+    And only search and signed photo-selection requests are accepted by the service
+    And an altered or expired photo-selection token is refused without contacting Unsplash
+    And the service never fetches an address supplied by a client without checking its signature
 
   Scenario: An Unsplash cover offline
     Given the page has an Unsplash cover

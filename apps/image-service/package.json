@@ -1,0 +1,10 @@
+{
+  "name": "@leadinglight/image-service",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "22.x" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "node --check api/photos.mjs"
+  }
+}
