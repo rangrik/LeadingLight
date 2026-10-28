@@ -33,7 +33,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
-import { hostCapture, openIdea, saveCapture } from "~/lib/capture";
+import { hostCapture, openIdea, saveCapture, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
@@ -62,7 +62,6 @@ const WIDTH_KEY = "ll.sidebar.width";
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
-const SaveWebpage = lazy(() => import("~/components/save-webpage").then((m) => ({ default: m.SaveWebpage })));
 
 // Room for the macOS traffic lights, which tauri.conf.json centres on the panel header's
 // middle line (y 26; they span x 18-78). Measured from AppKit's frames: centre = position.y - 2.
@@ -157,7 +156,6 @@ export default function App() {
   // whose drafts are saved here; in a browser the same box inside the window, which gives the
   // keyboard back to where it was when it closes.
   const [capture, setCapture] = useState(false);
-  const [saveWebpage, setSaveWebpage] = useState(false);
   const closeCapture = useCallback(() => {
     setCapture(false);
     if (captureFrom.current?.isConnected) captureFrom.current.focus();
@@ -172,6 +170,7 @@ export default function App() {
   const captureHost = useMemo<CaptureHost>(
     () => ({
       save: saveCapture,
+      saveWeb: saveWebpage,
       open: (id) => {
         setCapture(false);
         openIdea(id);
@@ -205,12 +204,6 @@ export default function App() {
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
   const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
   useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleView }), [create, toggleCapture, toggleSidebar]));
-  // Save webpage is the Captures header's (capture-inbox.tsx); the dialog is the window's.
-  useEffect(() => {
-    const open = () => setSaveWebpage(true);
-    window.addEventListener("ll:save-webpage", open);
-    return () => window.removeEventListener("ll:save-webpage", open);
-  }, []);
 
   // Save pending edits whenever the app might be about to go away.
   useEffect(() => {
@@ -394,7 +387,6 @@ export default function App() {
             </div>
           )}
           <ShortcutsSheet />
-          {saveWebpage && <Suspense fallback={null}><SaveWebpage open onOpenChange={setSaveWebpage} /></Suspense>}
           <CliUpdates />
           <ZoomHud />
         </TooltipProvider>

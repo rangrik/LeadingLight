@@ -72,6 +72,8 @@ export type BlockEditorHandle = {
   domRange: (from: number, to: number) => Range | null;
   // The page as plain text, for an assistant's context.
   text: () => string;
+  // The capture box's mic: a voice block at the end that records at once.
+  record: () => void;
   // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
   // takes focus: the panel that inserts keeps the keyboard.
   insertAfter: (pos: number, html: string) => void;
@@ -490,6 +492,12 @@ export function BlockEditor({
         }
       },
       text: () => editor.getText(),
+      record: () => {
+        const { doc } = editor.state;
+        const from = isEmptyLine(doc.lastChild) ? doc.content.size - doc.lastChild!.nodeSize : doc.content.size;
+        // A line after it holds the cursor, so the block isn't left selected.
+        editor.commands.insertContentAt({ from, to: doc.content.size }, [{ type: "voiceRecording", attrs: { autostart: true } }, { type: "paragraph" }]);
+      },
       insertAfter: (pos, html) => {
         const doc = editor.state.doc;
         const $pos = doc.resolve(Math.max(0, Math.min(pos, doc.content.size)));

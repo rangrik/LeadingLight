@@ -7,7 +7,7 @@ import { Toggle } from "@leadinglight/ui/components/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AskView } from "~/components/agent-panel";
-import { CaptureInbox, SaveWebpageButton } from "~/components/capture-inbox";
+import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedList, useFeed } from "~/components/feed";
 import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
@@ -180,7 +180,7 @@ export function BarPanel() {
           <AskView head={(menu) => <BarHeader after={<div className="ms-1 flex min-w-0">{menu}</div>} view="ask" />} />
         ) : (
           <>
-            <BarHeader view={view}>{view === "captures" && <SaveWebpageButton />}</BarHeader>
+            <BarHeader view={view} />
             <div className="flex min-h-0 flex-1 flex-col">
               {view === "feed" ? (
                 <FeedList />
