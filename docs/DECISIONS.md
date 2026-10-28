@@ -293,6 +293,9 @@ worker, keep one at a check, and use the browser; Shipyard's sessions, notificat
 runs do the rest, and a worker started by an agent with full access gets it too. A restart loses no
 send: the turn ledger is written before berthd exits.
 
+Since 2026-10-28, Quit stops the runtime when no agent is in a turn and no run is active, since
+nothing should keep running for no reason; a turn or run going keeps it, and agents wait in tmux.
+
 
 ## 19. A project's agents reach LeadingLight through the runtime, as tools
 
