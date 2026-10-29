@@ -120,7 +120,7 @@ test("Browser settings search, remove and reopen history without enabling native
   await open(page); await menu(page, "Browser settings");
   const settings = page.getByTestId("settings-browser");
   await expect(settings.getByRole("button", { name: "Choose folder…" })).toBeDisabled();
-  await expect(settings.getByRole("switch", { name: "Ask where to save downloads" })).toBeChecked();
+  await expect(settings.getByRole("switch", { name: "Ask where to save downloads" })).not.toBeChecked();
   await settings.getByRole("textbox", { name: "Search browser history" }).fill("old");
   await settings.getByRole("button", { name: "Remove history Useful old", exact: true }).click();
   await expect(settings.getByText("No matching pages.")).toBeVisible();

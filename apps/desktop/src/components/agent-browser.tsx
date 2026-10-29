@@ -20,7 +20,7 @@ import { useFolder } from "~/components/project-folder";
 import { agentBrowserInstructions, browserAddress, clearBrowserHistory, personalTab, rememberVisit, safeBrowserURL, type BrowserEntry } from "~/lib/browser-data";
 import { browserOpening } from "~/lib/browser-opening";
 import { useNativeBrowserDownloads } from "~/lib/browser-preferences";
-import { openSection } from "~/components/settings/settings-view";
+import { useStore } from "@/lib/store";
 import { saveBrowserFile } from "~/lib/browser-files";
 import { browserBase, browserError, tabRoute, useBrowserData, useBrowserState, useBrowserTabs, type BrowserTab } from "~/lib/project-runtime/browser";
 import { ask } from "~/lib/project-runtime/transport";
@@ -136,7 +136,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   }, automatic), [base, selected, viewportOwner.resize]);
   const title = state?.title || current?.title || (safeBrowserURL(url) ? new URL(url).hostname : "New tab");
   const known: BrowserTab[] = [...tabs, ...data.tabs.filter((t) => !tabs.some((x) => x.name === t.name)), ...blank.filter((name) => !tabs.some((t) => t.name === name) && !data.tabs.some((t) => t.name === name)).map((name) => ({ name, title: "New tab" }))];
-  const tabTitle = (tab: BrowserTab) => tab.name === selected && pendingURL && (!tab.url || tab.url === "about:blank") && (!tab.title || tab.title === "New tab") ? new URL(pendingURL).hostname : tab.title || (tab.url && safeBrowserURL(tab.url) ? new URL(tab.url).hostname : personalTab(tab.name) ? "New tab" : tab.name === session ? "This chat’s agent" : "Agent tab");
+  const tabTitle = (tab: BrowserTab) => tab.name === selected && pendingURL && (!tab.url || tab.url === "about:blank") && (!tab.title || tab.title === "New tab" || tab.title === "about:blank") ? new URL(pendingURL).hostname : tab.title || (tab.url && safeBrowserURL(tab.url) ? new URL(tab.url).hostname : personalTab(tab.name) ? "New tab" : tab.name === session ? "This chat’s agent" : "Agent tab");
   const marked = data.bookmarks.some((e) => e.url === url);
   const currentError = error || downloadError || tabsError || stateError || state?.error || "";
   const blockedSite = !!refused.length && currentError.includes("ERR_TUNNEL_CONNECTION_FAILED");
@@ -407,7 +407,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
         <MenuItem onClick={() => show("permissions")}><ShieldCheck />Site permissions</MenuItem><MenuItem disabled={!running} onClick={() => void copyAgent()}>{copied ? <Check /> : <Copy />}Copy agent instructions</MenuItem>
         <MenuItem disabled={!safeBrowserURL(url)} onClick={() => void run(async () => { if (await isNative) await (await import("@tauri-apps/plugin-opener")).openUrl(url); else window.open(url, "_blank", "noopener,noreferrer"); })}><ExternalLink />Open in default browser</MenuItem>
         <MenuItem disabled={!running} onClick={() => show("developer")}>Developer tools</MenuItem>
-        <MenuSeparator /><MenuItem onClick={() => openSection("browser")}>Browser settings</MenuItem><MenuItem onClick={() => { setClearError(""); setClearing(true); }}>Clear browsing data…</MenuItem>
+        <MenuSeparator /><MenuItem onClick={() => useStore.getState().setView({ kind: "settings", section: "browser" })}>Browser settings</MenuItem><MenuItem onClick={() => { setClearError(""); setClearing(true); }}>Clear browsing data…</MenuItem>
       </MenuPopup></Menu>
     </div>
     {find !== null && <form className="flex shrink-0 items-center gap-1 border-b px-3 py-2" onSubmit={(e) => { e.preventDefault(); void search(); }}><Input aria-label="Find in page" autoFocus className="min-w-0 flex-1" onChange={(e) => { setFind(e.currentTarget.value); setMatch(null); }} size="sm" value={find} /><span className="text-xs text-muted-foreground" role="status">{match === false ? "No match" : match ? "Found" : ""}</span><Tool disabled={!find || busy} label="Previous match" onClick={() => void search(true)}><ChevronUp className="size-4" /></Tool><Tool disabled={!find || busy} label="Next match" onClick={() => void search()}><ChevronDown className="size-4" /></Tool><Tool label="Close find" onClick={() => setFind(null)}><X className="size-4" /></Tool></form>}

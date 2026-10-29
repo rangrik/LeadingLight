@@ -48,7 +48,7 @@ export function BrowserSection() {
         <div className="flex flex-wrap gap-2"><Button disabled={!native || busy || !prefs} onClick={() => void choose()} size="sm" variant="outline">Choose folder…</Button><Button disabled={!native || busy || !prefs || prefs.directory === prefs.defaultDirectory} onClick={() => void change(() => updateBrowserDownloadPreferences({ directory: "" }))} size="sm" variant="ghost">Reset to Downloads</Button></div>
         </div>
       </SettingsRow>
-      <SettingsRow label="Ask where to save downloads" description="Choose a destination when each personal download finishes. Cancelled saves remain in Downloads."><Switch aria-label="Ask where to save downloads" checked={!native || prefs?.ask || false} disabled={!native || busy || !prefs} onCheckedChange={(checked) => void change(() => updateBrowserDownloadPreferences({ ask: checked }))} /></SettingsRow>
+      <SettingsRow label="Ask where to save downloads" description={native ? "Choose a destination when each personal download finishes. Cancelled saves remain in the browser’s Downloads list." : "Change this in the Mac app. This browser uses its own download settings."}><Switch aria-label="Ask where to save downloads" checked={prefs?.ask ?? false} disabled={!native || busy || !prefs} onCheckedChange={(checked) => void change(() => updateBrowserDownloadPreferences({ ask: checked }))} /></SettingsRow>
     </SettingsGroup>
     <BrowserDeveloperSetting />
     <BrowserCommentSettings />
