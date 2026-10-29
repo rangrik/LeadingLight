@@ -107,7 +107,12 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
         return;
       }
       const pos = getPos();
-      if (pos === undefined || editor.state.doc.nodeAt(pos)?.attrs.recordingId !== committed.current) return;
+      if (pos === undefined || editor.state.doc.nodeAt(pos)?.attrs.recordingId !== committed.current) {
+        pending.current = null;
+        busy.current = false;
+        setPhase("idle");
+        return;
+      }
       updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, recordingId: committed.current });
       pending.current = null;
       options.onSaved?.();

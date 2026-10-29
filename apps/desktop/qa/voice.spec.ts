@@ -19,6 +19,17 @@ async function addVoice(page: Page, words?: string) {
   await expect(page.getByRole("button", { name: "Record", exact: true })).toBeVisible();
 }
 
+async function holdVoiceSave(page: Page) {
+  await page.evaluate(() => {
+    const assets = (window as any).__editor.extensionManager.extensions.find((e: any) => e.name === "voiceRecording").options.assets;
+    const put = assets.put.bind(assets);
+    assets.put = async (file: File) => {
+      await new Promise<void>((resolve) => { (window as any).__resumeVoiceSave = resolve; });
+      return put(file);
+    };
+  });
+}
+
 // Seam: MediaRecorder's asynchronous stop and asset persistence; catches lost audio on transcription failure.
 test("voice audio survives unavailable transcription and reload", async ({ page }) => {
   await addVoice(page);
@@ -108,21 +119,23 @@ test("voice retries saving the same audio after storage fails", async ({ page })
 });
 
 // Seam: a stopped take outlives its editor, without replacing words written after it closes.
-for (const from of ["page", "capture"] as const) test(`stopped audio survives leaving the ${from} during saving`, async ({ page }) => {
-  if (from === "page") await addVoice(page, "Earlier paragraph.");
+for (const from of ["page", "closed page", "capture"] as const) test(`stopped audio survives leaving the ${from} during saving`, async ({ page }) => {
+  if (from !== "capture") await addVoice(page, "Earlier paragraph.");
   else {
     await page.goto("/");
     await page.getByRole("button", { name: "Quick capture", exact: true }).click();
   }
-  await page.evaluate(() => {
-    const assets = (window as any).__editor.extensionManager.extensions.find((e: any) => e.name === "voiceRecording").options.assets;
-    const put = assets.put.bind(assets);
-    assets.put = async (file: File) => {
-      await new Promise<void>((resolve) => { (window as any).__resumeVoiceSave = resolve; });
-      return put(file);
+  await holdVoiceSave(page);
+  if (from === "closed page") await page.evaluate(async () => {
+    // @ts-expect-error Vite serves this source module to the regression browser.
+    const { objects } = await import("/src/lib/objects.ts");
+    const update = objects.update.bind(objects);
+    objects.update = async (id: string, patch: any) => {
+      if (patch.content) await new Promise((resolve) => setTimeout(resolve, 1000));
+      return update(id, patch);
     };
   });
-  await page.getByRole("button", { name: from === "page" ? "Record" : "Record a voice note", exact: true }).click();
+  await page.getByRole("button", { name: from === "capture" ? "Record a voice note" : "Record", exact: true }).click();
   await expect(page.getByText(/Recording ·/)).toBeVisible();
   await page.waitForTimeout(1200);
   await page.getByRole("button", { name: "Stop and transcribe" }).click();
@@ -138,11 +151,24 @@ for (const from of ["page", "capture"] as const) test(`stopped audio survives le
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowRight");
     await expect.poll(() => page.evaluate(() => (window as any).__editor.state.selection.from)).toBe(6);
     caret = await page.evaluate(() => (window as any).__editor.state.selection.from);
+  } else if (from === "closed page") {
+    await page.getByRole("button", { name: "Today", exact: true }).click();
   } else {
     await page.getByRole("dialog", { name: "New idea", exact: true }).getByRole("textbox", { name: "Idea", exact: true }).press("Escape");
     await expect(page.getByRole("dialog", { name: "New idea", exact: true })).toBeHidden();
   }
   await page.evaluate(() => (window as any).__resumeVoiceSave());
+  if (from === "closed page") {
+    await expect.poll(() => page.evaluate(async () => {
+      // @ts-expect-error Vite serves this source module to the regression browser.
+      const { space } = await import("/src/lib/space.ts");
+      // @ts-expect-error Vite serves this source module to the regression browser.
+      const { objects } = await import("/src/lib/objects.ts");
+      const id = space.get().pages.find((p: any) => p.title === "Voice QA").id;
+      return (await objects.get(id)).content?.content?.find((node: any) => node.type === "voiceRecording")?.attrs?.src;
+    })).toMatch(/^data:audio\//);
+    await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice QA", exact: true }).click();
+  }
   if (from === "capture") await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice recording", exact: true }).click();
   await expect(page.locator('[data-media="voice"] audio')).toHaveAttribute("src", /^data:audio\//);
   await expect(page.getByRole("button", { name: "Retry transcription", exact: true })).toBeVisible();
@@ -156,6 +182,28 @@ for (const from of ["page", "capture"] as const) test(`stopped audio survives le
     await page.keyboard.press("Meta+z");
     await expect(page.locator('[data-media="voice"] audio')).toHaveAttribute("src", /^data:audio\//);
   }
+});
+
+// Seam: replacing a mounted take during its save must drop the old file and release its controls.
+test("a replaced recording returns to idle without attaching the old audio", async ({ page }) => {
+  await addVoice(page);
+  await holdVoiceSave(page);
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await expect(page.getByText(/Recording ·/)).toBeVisible();
+  await page.waitForTimeout(1200);
+  await page.getByRole("button", { name: "Stop and transcribe" }).click();
+  await expect.poll(() => page.evaluate(() => typeof (window as any).__resumeVoiceSave)).toBe("function");
+  await page.evaluate(() => {
+    const editor = (window as any).__editor;
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(0, undefined, { ...editor.state.doc.firstChild.attrs, recordingId: "replacement" }));
+    (window as any).__resumeVoiceSave();
+  });
+  await expect(page.getByRole("button", { name: "Record", exact: true })).toBeVisible();
+  await expect(page.locator('[data-media="voice"] audio')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save recording", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Record", exact: true }).click();
+  await expect(page.getByText(/Recording ·/)).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
 });
 
 // Seam: overlapping closed-page reads must not let one recording overwrite another's audio.
