@@ -190,7 +190,6 @@ pub fn run() {
             if event.id() == "quit" {
                 QUITTING.store(true, Ordering::Relaxed);
                 capture::release(app);
-                agent::stop_all(app);
                 for window in app.webview_windows().values() {
                     let _ = window.close();
                 }

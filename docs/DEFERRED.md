@@ -213,11 +213,23 @@ with Apple or adopt a compatible SQLite integration, then check the final binary
 
 ## 2026-10-28 — Cloud preview
 
+Detached voice saves still need a failure probe where the page save fails while
+the user leaves it (reviewed 2026-10-29). The audio file may be saved without being
+attached to its block. Slow writes, failed audio writes and ordinary detached saves
+pass; recovery from both failures together is outside this pairing merge. Revisit
+before claiming full recording recovery from disk failures.
+
+On 2026-10-29, the combined browser run also lost the audio block while the capture
+review test clicked its transcript and typed; the review button then timed out.
+Four isolated reruns passed unchanged. Keep the failing trace in
+`/tmp/leadinglight-main-merge-playwright`; investigate selection/layout timing if
+this recurs or before broad voice acceptance. It is not claimed fixed.
+
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
 | 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
 | 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
-| 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing type/property definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
+| 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing definitions and adopts desktop changes to untouched starter definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
 | 2026-10-29 | Remote project agents and isolated cloud runners | Browser pairing currently grants page-agent access to the existing Mac runtime. Project folders and terminals need a separate grant. Shared API keys and usage billing are rejected, not deferred. | Design scoped project access, or validate user-authorized CLI login in a sandbox service such as E2B. Preserve approvals and isolation; measure hosting costs separately from model usage. |
 | 2026-10-29 | Remote turns continuing after browser closure | The browser owns page tools and approvals. Reloading or closing interrupts the turn and keeps its partial transcript; automatic replay could repeat an edit. | Move tool execution to a durable workspace with replay-safe mutations before offering unattended remote work. |
 | 2026-10-29 | Recovering a pairing after unrecoverable delivery/storage failure | Normal received events clear from the relay, but a local queue overflow, invalid delivery or failed durable save stops work and revokes the grant. Re-pairing is the explicit recovery path. | Add replay-safe stream recovery and backpressure if real workloads hit these failures; do not silently resume uncertain edits. |

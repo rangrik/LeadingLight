@@ -1,8 +1,36 @@
 # History, authorship and cloud web QA — 2026-10-28
 
+## Main integration — 2026-10-29
+
+Integrated main at `188123a`, preserving its browser, writing and voice work.
+Conflict review and independent Sonnet 5.5/xhigh QA confirm the voice attachment,
+serialized saves, authorship and Stop/account guards remain intact. Its four
+focused voice/pairing checks pass. Page-agent cleanup now uses the common quit
+handler, including the Dock path. All 18 Rust, 36 desktop and seven PostgreSQL
+tests pass, along with workspace typechecking.
+
+The combined browser run found a grammar assertion that omitted the new human
+authorship mark and a real narrow-pane title regression from the History button.
+The assertion now checks attribution as well as bold formatting. Narrow headers
+hide the parent breadcrumb first; titles, whole counts and History remain usable.
+Both targeted retests pass. Independent QA reran the narrow-pane check and
+inspected its screenshot. A settled 390px authorship screenshot is also clear.
+
+The 128-scenario Chromium/WebKit run finished with 125 passes and three failures.
+The grammar and narrow-header failures above pass after correction. Quick capture's
+transcript-review case timed out once after its typing step removed the audio block;
+it then passed four consecutive isolated runs without a source change. Its trace
+is retained under `/tmp/leadinglight-main-merge-playwright`. This intermittent
+failure remains recorded in DEFERRED rather than claimed fixed. All other voice,
+paired approval, cancellation, account-switch, sync and offline scenarios pass.
+
+A fresh 2,000-paragraph probe measured 24 text edits in each engine: Chromium
+transaction dispatch median 2.3 ms, p95 2.8 ms, max 4.3 ms; WebKit median 2 ms,
+p95/max 4 ms. These are transaction times, not total input-to-paint latency.
+
 ## Browser-to-Mac pairing — 2026-10-29
 
-Decision 33 adds an encrypted page-agent relay while preserving the local CLI
+Decision 36 adds an encrypted page-agent relay while preserving the local CLI
 runtime. This section describes the current pairing work; the older sections
 below retain evidence from earlier implementations.
 
@@ -43,7 +71,7 @@ Google/GitHub and no hosted agents. The live Chromium Ask smoke also passes.
 
 `LeadingLight Dev bc9e3f` is installed with its own bundle ID and data. Its bundle
 signature verifies. Native acceptance is complete as described below; browser
-fixtures alone were not treated as proof. No source commit has been made.
+fixtures alone were not treated as proof.
 
 The user then explicitly requested automated native acceptance, overriding the
 repository's manual-only rule. Computer use paired Safari with the installed dev
@@ -87,7 +115,7 @@ Built against `features/history.feature`, `features/authorship.feature` and
 `leadinglight-cloud-qa`. Model responses and signed-in identities were fixtures.
 This first round used no live model spending or native UI automation. Production
 deployment checks are recorded below. The fixture cloud-generation and worker checks describe
-the earlier implementation, retired by decision 32 on 2026-10-29; they are not current product features.
+the earlier implementation, retired by decision 35 on 2026-10-29; they are not current product features.
 
 Independent QA used Claude CLI Sonnet 5.5 at xhigh in three rounds. Berth was
 unavailable, so it drove headless Playwright instead. Its final review found three
@@ -153,7 +181,7 @@ redacted. The normal build command is restored after initialization.
 
 Physical iPhone/iPad Safari and native account/attachment handoff remain unverified.
 Paid model execution was never enabled and has since been removed. The private allowlist stays enabled.
-See `apps/cloud/README.md`, decision 31 and `docs/DEFERRED.md` before inviting users.
+See `apps/cloud/README.md`, decision 34 and `docs/DEFERRED.md` before inviting users.
 
 ## OAuth setup follow-up
 
@@ -177,7 +205,7 @@ one pass and no defects. Desktop typecheck and production build pass.
 
 ## Local agents correction — 2026-10-29
 
-Decision 32 replaces the earlier hosted model implementation. Provider adapters,
+Decision 35 replaces the earlier hosted model implementation. Provider adapters,
 queue execution, cron and browser task/outbox code are removed. The legacy jobs
 schema remains untouched; no model API keys or usage billing are required.
 

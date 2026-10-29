@@ -90,6 +90,8 @@ Feature: Run page agents through a paired Mac
     Then new commands are refused immediately
     And its remote turns stop on the next check or within the connection lease
     And the browser explains when a stop cannot yet be confirmed
+    When I quit LeadingLight from its menu or the Dock
+    Then its page-agent processes stop and the browser reports the Mac offline
 
   Scenario: Stop blocks late page tools immediately
     Given Claude or Codex is running with approval or full access
