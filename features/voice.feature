@@ -40,6 +40,32 @@ Feature: Voice recordings
     Then the block offers "Save recording" to retry the same audio
     And transcription does not start until the audio is saved
 
+  Scenario: Leave after stopping while the audio is saving
+    Given a voice block is recording and saving its audio or page content is slow
+    When I click "Stop and transcribe" and immediately leave the page
+    Then the stopped take finishes saving in its original voice block
+    And reopening the page offers playback and "Retry transcription"
+    And any later edits to other blocks are kept
+    But deleting the voice block before saving finishes does not bring it back
+
+  Scenario: A different recording replaces a take while it saves
+    Given I stopped a recording and its audio is still saving
+    When an outside edit gives its block a different recording identity
+    Then the old audio is not attached to the replacement
+    And the replacement returns to idle with recording controls available
+
+  Scenario: Resume writing before a stopped take finishes saving
+    Given I stopped a recording, left its page, and reopened it while saving is slow
+    When I place the cursor in an earlier paragraph and the audio finishes saving
+    Then the cursor stays in the same place
+    And typing and undoing my next edit does not remove the saved audio
+
+  Scenario: Two stopped takes finish saving after their page closes
+    Given two stopped recordings belong to the same closed page
+    When both audio saves finish together
+    Then reopening the page keeps both recordings playable
+    And the page's latest words are kept
+
   Scenario: Undo a quickly completed transcript
     Given my recording was saved and transcribed immediately
     When I press Command-Z in the page body

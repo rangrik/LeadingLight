@@ -55,6 +55,9 @@ void listen<WebSaved & { seq: number }>("ll:capture-web-saved", ({ payload: { se
 });
 const host: CaptureHost = {
   save: (draft: Draft) => ask("ll:capture", { draft }, draft.id),
+  saveVoice: async (id, recordingId, asset) => {
+    if (!(await ask("ll:capture-voice", { id, recordingId, asset }))) throw new Error("The stopped recording could not be attached to its page.");
+  },
   saveWeb: (url, mode, project, signal) =>
     new Promise((resolve) => {
       const n = ++seq;
