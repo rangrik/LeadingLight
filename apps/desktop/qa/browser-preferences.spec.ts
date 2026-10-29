@@ -53,6 +53,55 @@ async function open(page: Page) { await page.goto("/"); await page.getByRole("bu
 async function menu(page: Page, name: string) { await pane(page).getByRole("button", { name: "Browser menu", exact: true }).click(); await page.getByRole("menuitem", { name, exact: true }).click(); }
 const saved = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key);
 
+// Seam: toolbar flex sizing must follow its pane, including a narrow split inside a larger window.
+test("Browser toolbar keeps a full address and every action in narrow panes", async ({ page, runtime }, info) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page", exact: true }).click();
+  await page.getByRole("textbox", { name: "Title", exact: true }).fill("Beside Browser");
+  await page.getByRole("button", { name: "Browser", exact: true }).click();
+  await address(page).fill("localhost:1420/wide"); await address(page).press("Enter");
+  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  const layout = async (twoRows: boolean) => {
+    const toolbar = pane(page).getByTestId("browser-toolbar");
+    const outer = (await toolbar.boundingBox())!, input = (await address(page).boundingBox())!;
+    const controls = await toolbar.getByRole("button").all();
+    expect(controls).toHaveLength(6);
+    expect(input.width).toBeGreaterThan(160);
+    const boxes = [input];
+    for (const control of controls) {
+      await expect(control).toBeVisible();
+      const box = (await control.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(outer.x); expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
+      if (twoRows) expect(box.y).toBeGreaterThanOrEqual(input.y + input.height);
+      else expect(Math.abs(box.y + box.height / 2 - input.y - input.height / 2)).toBeLessThan(2);
+      for (const other of boxes) expect(box.x + box.width <= other.x + 1 || other.x + other.width <= box.x + 1 || box.y + box.height <= other.y + 1 || other.y + other.height <= box.y + 1).toBe(true);
+      boxes.push(box);
+    }
+    expect(await toolbar.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+  };
+  await layout(false);
+  await page.screenshot({ path: info.outputPath("toolbar-wide-1280.png"), animations: "disabled" });
+  await page.setViewportSize({ width: 520, height: 800 });
+  await expect.poll(async () => (await pane(page).boundingBox())!.width).toBeLessThan(260);
+  await layout(true);
+  await address(page).fill("localhost:1420/narrow"); await address(page).press("Enter");
+  await expect.poll(() => runtime.calls.filter((call) => call.action === "navigate").at(-1)?.body.url).toBe("http://localhost:1420/narrow");
+  await pane(page).getByRole("button", { name: "Bookmark this page", exact: true }).click();
+  await expect(pane(page).getByRole("button", { name: "Remove bookmark", exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath("toolbar-split-520.png"), animations: "disabled" });
+  await pane(page).getByRole("button", { name: "Enter full view", exact: true }).click();
+  await page.setViewportSize({ width: 320, height: 720 });
+  await layout(true);
+  await pane(page).getByRole("button", { name: "Browser menu", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "History", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.mouse.move(1, 1);
+  await expect(page.locator("[data-slot=tooltip-popup]").filter({ hasText: "Browser menu" })).toBeHidden();
+  await page.screenshot({ path: info.outputPath("toolbar-full-320.png"), animations: "disabled" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await layout(false);
+});
+
 // Seam: the global comment quota must remain recoverable after its pages or workspaces are forgotten.
 test("Saved feedback can be removed across workspaces after confirmation", async ({ page, runtime }) => {
   void runtime;

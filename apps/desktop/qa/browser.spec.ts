@@ -160,6 +160,28 @@ test("A delayed initial tab list preserves an address being typed", async ({ pag
   await expect(address(page)).toHaveValue("http://localhost:1420/draft");
 });
 
+// Seam: identical pasted input still supersedes a pending tab-close response.
+test("A closing tab preserves an address pasted with the same value", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  const oldTab = [...runtime.tabs.keys()][0];
+  let arrive!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/__runtime/v1/worktrees/personal/main/browser/close?*", async (route) => { arrive(); await held; return route.fallback(); });
+  try {
+    await pane(page).getByRole("button", { name: "Close Alpha", exact: true }).click();
+    await arrived;
+    await address(page).fill("http://localhost:1420/alpha");
+    release();
+    await expect(tabList(page).getByRole("tab")).toHaveCount(0);
+    await expect(address(page)).toHaveValue("http://localhost:1420/alpha");
+    await address(page).press("Enter");
+    await expect(tabList(page).getByRole("tab", { name: "Alpha", exact: true })).toBeVisible();
+    expect([...runtime.tabs.keys()]).not.toContain(oldTab);
+    expect(runtime.calls.filter((call) => call.action === "open").at(-1)?.body.url).toBe("http://localhost:1420/alpha");
+  } finally { release(); }
+});
+
 test("Navigation, personal tabs and reopening keep actions on the selected tab", async ({ page, runtime }) => {
   await openBrowser(page);
   await navigate(page, "localhost:1420/alpha");

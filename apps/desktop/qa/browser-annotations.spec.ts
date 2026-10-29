@@ -95,6 +95,35 @@ test("A saved comment stays single when preview reset fails and is retried", asy
   expect(runtime.calls.filter((call) => call.action === "area")).toHaveLength(1);
 });
 
+// Seam: nested popup dismissal must not discard its parent feedback draft or preview.
+test("Escape closes the Style menu before the feedback draft and resets previews only on closing feedback", async ({ page, runtime }) => {
+  await open(page); await annotate(page);
+  await browser(page).getByTestId("browser-frame").click({ position: { x: 50, y: 40 } });
+  const feedback = page.getByTestId("browser-feedback");
+  const comment = feedback.getByRole("textbox", { name: "Your feedback", exact: true });
+  await comment.fill("Keep this draft while choosing a style.");
+  await feedback.getByRole("textbox", { name: "Value", exact: true }).fill("navy");
+  await feedback.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(feedback.getByText("1 style change previewed.")).toBeVisible();
+  const style = feedback.getByRole("combobox", { name: "Style", exact: true });
+  await style.click();
+  await expect(page.getByRole("option", { name: "Padding", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("option", { name: "Padding", exact: true })).toBeHidden();
+  await expect(style).toBeFocused();
+  await expect(comment).toHaveValue("Keep this draft while choosing a style.");
+  await expect(feedback.getByText("1 style change previewed.")).toBeVisible();
+  expect(runtime.calls.filter((call) => call.action === "reset")).toHaveLength(0);
+  await page.keyboard.press("Escape");
+  await expect(feedback).toHaveCount(0);
+  await expect.poll(() => runtime.calls.filter((call) => call.action === "reset").length).toBe(1);
+  await browser(page).getByRole("button", { name: "Enter full view" }).click();
+  await browser(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(browser(page).getByRole("button", { name: "Enter full view" })).toBeVisible();
+});
+
 // Seam: the storage writer and loader share a size budget; a successful save must survive reload.
 test("A full comment store rejects another save without replacing existing evidence", async ({ page, runtime }) => {
   await page.addInitScript(() => {

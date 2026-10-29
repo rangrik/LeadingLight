@@ -366,8 +366,13 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     return () => window.removeEventListener("ll:browser-shortcut", on);
   });
 
-  const content = <div className={cn("flex h-full min-h-0 min-w-0 flex-col bg-background text-sm outline-none", full && "fixed inset-x-3 bottom-3 top-10 z-40 h-auto overflow-hidden rounded-xl border shadow-lg")} data-testid="agent-browser" onFocusCapture={viewportOwner.claim} onPointerDownCapture={viewportOwner.claim} ref={root} tabIndex={-1} onKeyDownCapture={(e) => {
-    if (e.key === "Escape") { if (document.querySelector("[data-browser-address-popup]")) return; if (picking) { pickSequence.current++; setPicking(false); } else if (area) setArea(null); else if (inspection) setInspection(null); else if (find !== null) setFind(null); else if (view) setView(null); else if (full) toggleFull(); else return; e.preventDefault(); e.stopPropagation(); return; }
+  const content = <div className={cn("@container/browser flex h-full min-h-0 min-w-0 flex-col bg-background text-sm outline-none", full && "fixed inset-x-3 bottom-3 top-10 z-40 h-auto overflow-hidden rounded-xl border shadow-lg")} data-testid="agent-browser" onFocusCapture={viewportOwner.claim} onPointerDownCapture={viewportOwner.claim} ref={root} tabIndex={-1} onKeyDownCapture={(e) => {
+    if (e.key === "Escape") {
+      // Portaled popups and expanded triggers dismiss before the containing browser pane.
+      if (!e.currentTarget.contains(e.target as Node) || (e.target as Element).closest('[aria-haspopup][aria-expanded="true"]')) return;
+      if (picking) { pickSequence.current++; setPicking(false); } else if (area) setArea(null); else if (inspection) setInspection(null); else if (find !== null) setFind(null); else if (view) setView(null); else if (full) toggleFull(); else return;
+      e.preventDefault(); e.stopPropagation(); return;
+    }
     if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
     const key = e.key.toLowerCase();
     if (key === "l") { field.current?.focus(); field.current?.select(); }
@@ -389,11 +394,12 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
       <Tool label="New browser tab" onClick={fresh}><Plus className="size-4" /></Tool>
       <Tool label={full ? "Return to split view" : "Enter full view"} onClick={toggleFull}>{full ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</Tool>
     </div>
-    <div className="flex min-h-11 shrink-0 items-center gap-0.5 border-b px-2 py-1.5">
+    <div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-0.5 gap-y-1 border-b px-2 py-1.5 @min-[420px]/browser:flex-nowrap" data-testid="browser-toolbar">
       <Tool disabled={!state?.canGoBack || busy} label="Back" onClick={() => void action("back")}><ArrowLeft className="size-4" /></Tool>
       <Tool disabled={!state?.canGoForward || busy} label="Forward" onClick={() => void action("forward")}><ArrowRight className="size-4" /></Tool>
       <Tool disabled={!running} label={state?.loading ? "Stop loading" : "Reload"} onClick={() => void action(state?.loading ? "stop" : "reload")}>{state?.loading ? <Square className="size-4" /> : <RotateCw className="size-4" />}</Tool>
-      <BrowserAddress history={data.history} inputRef={field} onChange={(value) => { addressRevision.current++; addressDraft.current = true; interacted.current = true; setAddress(value); }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
+      <BrowserAddress history={data.history} inputRef={field} onChange={setAddress} onEdit={() => { addressRevision.current++; addressDraft.current = true; interacted.current = true; }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
+      <span aria-hidden="true" className="flex-1 @min-[420px]/browser:hidden" />
       <Tool disabled={!safeBrowserURL(url)} label={marked ? "Remove bookmark" : "Bookmark this page"} onClick={toggleBookmark}><Bookmark className={cn("size-4", marked && "fill-current")} /></Tool>
       <Tool disabled={!running} label="Ask about page" onClick={() => void run(() => askAboutPage())}><MessagesSquare className="size-4" /></Tool>
       <Menu onOpenChange={setMenuOpen} open={menuOpen}><Tooltip><TooltipTrigger render={<MenuTrigger render={<Button aria-label="Browser menu" size="icon-sm" variant="ghost" />} />}><Ellipsis className="size-4" /></TooltipTrigger><TooltipPopup>Browser menu</TooltipPopup></Tooltip><MenuPopup align="end">

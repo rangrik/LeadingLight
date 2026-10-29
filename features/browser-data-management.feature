@@ -9,6 +9,17 @@ Feature: Browser preferences and browsing data
     Then the current browser tab opens that exact address
     And Escape dismisses suggestions without navigating
 
+  Scenario: Browse in a narrow split pane
+    Given Browser is beside a note in a 520 pixel window
+    When its pane is narrower than 420 pixels
+    Then Address has its own full-width row
+    And navigation, Bookmark, Ask about page and Browser menu fit below it without overlap
+    And I can type and navigate from Address
+    When I enter full view in a 320 pixel window
+    Then Address and every toolbar action remain visible without horizontal scrolling
+    When the pane becomes at least 420 pixels wide
+    Then Address and its actions return to one row
+
   Scenario: Remove selected history without changing the page
     Given this workspace has visits from today and last week
     When I clear history from the last hour
@@ -22,9 +33,11 @@ Feature: Browser preferences and browsing data
 
   Scenario: Clear selected site data without clearing history
     Given this workspace has saved sign-ins and a visited-page history
-    When I choose Cookies and site data in Clear browsing data
+    When I open Clear browsing data
+    And I uncheck Browsing history
+    And I keep Cookies, website data and cache checked
     Then the dialog explains that site data is removed for all time
-    And history is not selected automatically
+    And Browsing history remains unchecked
     When I confirm
     Then personal tabs close and this workspace is signed out
     And its history, bookmarks and downloaded files remain

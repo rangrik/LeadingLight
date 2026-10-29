@@ -29,6 +29,12 @@ Feature: Inspect the shared browser with explicit developer access
     And an old approval request cannot grant access to the new page
     And stopping access stops a CPU profile started by developer tools
 
+  Scenario: A failed command never shows an earlier result
+    Given a developer command has returned a result
+    When I run another command with invalid parameters or a refused method
+    Then I see the new error
+    And the earlier command result is removed
+
   Scenario: Approved access stays inside its tab
     Given I approved developer access for one page
     When a command names another session, target or browser context

@@ -612,3 +612,10 @@ Keep the current engine for this pass. Synthetic-device probes worked in full Ch
 returned NotSupportedError in headless-shell. Camera/microphone need a deliberate permission
 flow and macOS checks. Removing the mute flag would play sound on the runtime host without an
 audio transport or per-tab control, so it is not an audio implementation.
+
+Below a 420 px browser pane, Address gets its own row and all actions stay visible
+below it. The pane width controls this layout, so narrow splits work in wide windows.
+Nested popups handle Escape before feedback closes; a failed developer command clears
+the earlier result so the displayed method and output cannot imply a false success.
+Raw address input marks a draft even when the pasted value is unchanged, so an
+unfinished tab close cannot erase it; merely focusing still permits redirect updates.

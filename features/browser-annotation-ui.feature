@@ -39,6 +39,14 @@ Feature: Browser comments on elements and areas
     When I close the tab and reopen the same page in this workspace
     Then its comments remain available with their original screenshots
 
+  Scenario: Escape closes the style menu before element feedback
+    Given element feedback has a typed comment and a temporary style preview
+    When I open the Style property menu and press Escape
+    Then only the menu closes
+    And the feedback panel keeps my comment and preview
+    When I press Escape again
+    Then element feedback closes and its temporary preview is reset
+
   Scenario: Send frozen comments to one chat
     Given a page has an element comment and an area comment with screenshot evidence
     When I choose Ask about comments

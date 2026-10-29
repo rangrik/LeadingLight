@@ -5,10 +5,6 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-10-28 | Browser previews after an abrupt viewer exit | Normal panel close resets previews, but a closed or crashed viewer cannot finish that request. Reloading the page removes them. Reliable cleanup needs a runtime lease for each viewer. | Add viewer leases with abrupt-close and reconnect tests. |
-| 2026-10-28 | Highlighting an element before clicking in the browser picker | Clicking selects and highlights the element. The current inspect operation creates a handle; calling it on every pointer move would create unnecessary state. | Add a bounded, read-only hover hit test. |
-| 2026-10-28 | A newly denied browser tab is titled New tab | The runtime has no loaded document title yet. The permission notice and address identify the destination. | Add a destination label that cannot replace the title of a previously loaded page after a failed navigation. |
-| 2026-10-28 | Browser element feedback inside frames, and freehand area comments | The current opaque element handles operate on the top document; frames return an explicit error. Frame transforms and origin changes need their own coordinate and lifetime checks. | Add frame-aware selection and screenshot-area references, with nested/zoomed frame tests. |
 | 2026-10-28 | Browser audio, camera/microphone prompts and a native page accessibility tree | The transport carries images and input. Synthetic devices work in full Chromium but fail in current headless-shell; removing the mute flag provides neither audio transport nor per-tab controls. A text snapshot is not a native accessibility tree. | Validate a full-engine/transport and native permission design with macOS media and assistive tools. |
 | 2026-10-28 | Unrestricted browser-wide CDP, extension attachment, profile import and cloud browsing | Page-scoped developer commands now have separate approval. Browser-wide process/profile access and attaching to an existing browser need a distinct permission and lifecycle model; cloud browsing needs a service. | Build and test the separate integration rather than widening a page grant. |
 | 2026-10-28 | Annotation text replacement and rotated/skewed/mirrored frames | CSS previews restore styles safely; text replacement can destroy child nodes. Positive axis-aligned frame transforms are supported, other transforms fail explicitly. | Add a reversible DOM editing model and accurate transform/hit-testing tests. |
@@ -181,13 +177,3 @@ A custom grammar-only trap would duplicate shared focus handling, so it is not a
 Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
 Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 `engine-focus-control.mjs`. Native behavior has not been tested.
-
-## 2026-10-28 — Browser address field in a narrow split
-
-Independent delivery QA found that opening Browser beside a note at a 520 px window
-leaves its roughly 236 px pane with a sliver of an Address field and an overlapping
-globe/bookmark icon. This arrives unchanged from the shared-browser branch. Note
-editing and navigation back still work. Leave toolbar adaptation to the browser's
-responsive pass; revisit before recommending side-by-side browsing in small windows.
-Evidence: `apps/desktop/qa/report/writing-coach-delivery-2026-10-28/`
-`delivery-independent/j1-520-5-browser-zoom.png`.

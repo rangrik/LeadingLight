@@ -29,7 +29,11 @@ const test = base.extend<{ developer: { calls: { tab: string; method?: string; a
         if (action === "developer") { if (req.method() === "DELETE") grants.delete(tab); return reply(status()); }
         if (action === "request") { grants.set(tab, { state: "pending", id: `${tab}-request`, reason: String(body?.reason) }); return reply(status()); }
         if (action === "decide") { calls.push({ tab, allow: !!body?.allow }); const grant = grants.get(tab)!; grant.state = body?.allow ? "allowed" : "denied"; return reply(status()); }
-        if (action === "cdp") { calls.push({ tab, method: String(body?.method) }); return reply({ result: { root: { nodeName: "#document", nodeId: 1 } } }); }
+        if (action === "cdp") {
+          calls.push({ tab, method: String(body?.method) });
+          if (body?.method === "Browser.getVersion") return route.fulfill({ status: 403, json: { error: "Browser-wide commands are not allowed." } });
+          return reply({ result: { root: { nodeName: "#document", nodeId: 1 } } });
+        }
         if (action === "events") return reply({ events: [{ sequence: 1, method: "Runtime.consoleAPICalled", params: { text: "Fixture console" } }], sequence: 1, dropped: 0 });
       }
       if (action === "events" || action === "screencast") return route.continue({ url: `http://127.0.0.1:${port}/${action === "events" ? "events" : "frames"}${url.search}` });
@@ -77,6 +81,16 @@ test("Developer access requires its setting and a separate page approval", async
   expect(new Set(developer.calls.map((call) => call.tab)).size).toBe(1);
   await expect(panel).toContainText("Fixture console");
   await page.screenshot({ path: testInfo.outputPath("developer-approved.png") });
+  await panel.getByRole("textbox", { name: "JSON parameters", exact: true }).fill("{");
+  await panel.getByRole("button", { name: "Run command", exact: true }).click();
+  await expect(panel.getByRole("alert")).toHaveText("Parameters must be valid JSON.");
+  await expect(panel.getByRole("textbox", { name: "Command result", exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "DOM", exact: true }).click();
+  await expect(panel.getByRole("textbox", { name: "Command result", exact: true })).toHaveValue(/#document/);
+  await panel.getByRole("textbox", { name: "CDP method", exact: true }).fill("Browser.getVersion");
+  await panel.getByRole("button", { name: "Run command", exact: true }).click();
+  await expect(panel.getByRole("alert")).toContainText("Browser-wide commands are not allowed.");
+  await expect(panel.getByRole("textbox", { name: "Command result", exact: true })).toHaveCount(0);
   await panel.getByRole("button", { name: "Revoke access", exact: true }).click();
   await expect(panel.getByRole("textbox", { name: "Command result", exact: true })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Run command", exact: true })).toHaveCount(0);

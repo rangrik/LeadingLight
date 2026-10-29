@@ -105,6 +105,7 @@ function Developer({ base, tab, onClose }: { base: string; tab: string; onClose:
     finally { if (live.current) setBusy(false); }
   };
   const call = async (name: string, argumentsJSON: string) => {
+    setResult("");
     const id = scope.current;
     if (!id) return;
     let argumentsValue: unknown;

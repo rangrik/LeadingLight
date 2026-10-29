@@ -135,9 +135,9 @@ another agent framework while upstream APIs and runtimes are migrating.
 | Permissions | List and revoke allowed sites; preserve workspace network restrictions | Passed: proxy, private-address and revocation tests |
 | Downloads and dialogs | Track/cancel/save downloads; answer page alert/confirm/prompt | Passed: real download bytes/dialogs and native export harness; native save dialog awaits manual check |
 | Chat layout | Full/split view and browser-scoped keyboard shortcuts | Passed: 360px, light/dark and shortcut regressions; native Edit menu awaits manual check |
-| Annotation and style feedback | Saved element/area comments, frozen screenshots, batch chat attachments and reversible previews | Next pass: nested cross-origin frames, viewer leases and additional font/spacing/opacity controls; see verification record |
-| Developer mode | Separate setting and approval for DOM, CSS, runtime, network and profiling | Next pass implements page-scoped CDP with expiring document grants; unrestricted browser-wide CDP remains a deliberate gap |
-| Browser preferences | Address history suggestions, searchable/removable history, selective clearing and download destinations | Next pass implements these; website data clearing is explicitly all-time, while history supports time ranges |
+| Annotation and style feedback | Saved element/area comments, frozen screenshots, batch chat attachments and reversible previews | Implemented: nested cross-origin frames, viewer leases and additional font/spacing/opacity controls; see verification record |
+| Developer mode | Separate setting and approval for DOM, CSS, runtime, network and profiling | Implemented: page-scoped CDP with expiring document grants; unrestricted browser-wide CDP remains a deliberate gap |
+| Browser preferences | Address history suggestions, searchable/removable history, selective clearing and download destinations | Implemented: website data clearing is explicitly all-time, while history supports time ranges |
 | Other browser integrations | Extension attachment, profile import, cloud browsing and password handling | Outside the selected local-runtime architecture |
 | Media and accessibility | Sound, device permission prompts, and a semantic page for assistive tools | Gap: the current transport sends images and input, not audio or a native page accessibility tree |
 
