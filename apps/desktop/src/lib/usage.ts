@@ -75,6 +75,7 @@ function standIn(): Json[] {
 async function read(): Promise<Plan[]> {
   if (await isMobile) return [];
   if (!(await isDesktop)) {
+    if (!import.meta.env.DEV) return [];
     const [c, x] = standIn();
     return [claudePlan(c), x ? codexPlan(x) : { id: "codex", name: "Codex", plan: null, limits: [], state: "missing", note: "Codex is not installed." }];
   }

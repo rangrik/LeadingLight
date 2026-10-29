@@ -1,6 +1,8 @@
+import { searchable } from "./store";
 import Database from "@tauri-apps/plugin-sql";
 import type { PropDef, TypeDef } from "./catalog";
 import { readIcon } from "./page-meta";
+import { conflict, type HistoryEntry } from "./history-types";
 import { asDoc, type LLObject, newObject, type ObjectStore, PAGE_TYPE, type ProjectFolder } from "./store";
 
 // Must match DB_URL in src-tauri/src/lib.rs.
@@ -14,6 +16,7 @@ type Row = {
   properties: string;
   created_at: number;
   updated_at: number;
+  revision?: string;
 };
 
 let dbPromise: Promise<Database> | undefined;
@@ -40,6 +43,7 @@ function fromRow(r: Row): LLObject {
     properties: parse(r.properties, {}),
     createdAt: r.created_at,
     updatedAt: r.updated_at,
+    revision: r.revision ?? undefined,
   };
 }
 
@@ -47,9 +51,21 @@ function fromRow(r: Row): LLObject {
 const like = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 export const sqliteStore: ObjectStore = {
+  async history() {
+    const rows = await (await db()).select<{ entry: string }[]>("SELECT entry FROM page_history ORDER BY at");
+    return rows.map((r) => JSON.parse(r.entry) as HistoryEntry);
+  },
+  async commit(entry) {
+    try {
+      await (await db()).execute("INSERT INTO page_history (id, at, entry) VALUES ($1, $2, $3) ON CONFLICT(id) DO NOTHING", [entry.id, entry.at, JSON.stringify(entry)]);
+    } catch (error) {
+      if (String(error).includes("history_conflict")) throw conflict();
+      throw error;
+    }
+  },
   async list() {
     const rows = await (await db()).select<Row[]>(
-      "SELECT id, type_id, title, properties, created_at, updated_at FROM objects WHERE deleted_at IS NULL ORDER BY created_at DESC",
+      "SELECT id, type_id, title, properties, created_at, updated_at, revision FROM objects WHERE deleted_at IS NULL ORDER BY created_at DESC",
     );
     return rows.map((r) => ({
       id: r.id,
@@ -58,6 +74,7 @@ export const sqliteStore: ObjectStore = {
       properties: parse(r.properties, {}),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      revision: r.revision ?? undefined,
     }));
   },
 
@@ -99,7 +116,7 @@ export const sqliteStore: ObjectStore = {
       "SELECT * FROM objects WHERE deleted_at IS NULL AND (content LIKE $1 ESCAPE '\\' OR properties LIKE $1 ESCAPE '\\')",
       [like(text)],
     );
-    return rows.map(fromRow);
+    return rows.map(fromRow).filter((page) => searchable(page).includes(text.toLowerCase()));
   },
 
   async catalog() {

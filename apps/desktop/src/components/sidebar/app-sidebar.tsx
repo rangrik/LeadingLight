@@ -17,6 +17,7 @@ import {
 } from "@leadinglight/ui/components/sidebar";
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
+import { CloudButton } from "~/components/cloud-settings";
 import { UsageButton } from "~/components/usage-button";
 import { openBeside } from "~/lib/panes";
 import { browserView } from "~/lib/space";
@@ -113,6 +114,7 @@ export function AppSidebar({
           <NavProjects label="Recent" onCreate={() => { onCreate(); if (isMobile) setOpenMobile(false); }} projects={navigable(pages)} sortable />
         </nav>
       </SidebarContent>
+      <CloudButton />
       <SidebarFooter>
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>

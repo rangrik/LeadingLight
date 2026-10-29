@@ -4,17 +4,23 @@ import { isNative } from "./platform";
 import type { ObjectStore } from "./store";
 import { localStore } from "./store-local";
 import { sqliteStore } from "./store-sqlite";
+import { withHistory } from "./history-store";
+import type { HistoryEntry } from "./history-types";
 
 export type { LLObject, ObjectPatch, ObjectSummary, ProjectFolder } from "./store";
 
-const store = isNative.then((native) => (native ? sqliteStore : localStore));
+const listeners = new Set<(entry: HistoryEntry) => void>();
+export const onHistory = (fn: (entry: HistoryEntry) => void) => (listeners.add(fn), () => { listeners.delete(fn); });
+const store = isNative.then((native) => withHistory(native ? sqliteStore : localStore, (entry) => listeners.forEach((fn) => fn(entry))));
 
 export const objects: ObjectStore = {
   list: async () => resolveAssetUrls(await (await store).list()),
   get: async (id) => resolveAssetUrls(await (await store).get(id)),
-  create: async (init) => resolveAssetUrls(await (await store).create(init)),
-  update: async (id, patch) => (await store).update(id, patch),
-  remove: async (id) => (await store).remove(id),
+  create: async (init, context) => resolveAssetUrls(await (await store).create(init, context)),
+  update: async (id, patch, context) => (await store).update(id, patch, context),
+  remove: async (id, context) => (await store).remove(id, context),
+  history: async () => resolveAssetUrls(await (await store).history()),
+  commit: async (entry) => (await store).commit(entry),
   containing: async (text) => resolveAssetUrls(await (await store).containing(text)),
   catalog: async () => resolveAssetUrls(await (await store).catalog()),
   putType: async (type) => (await store).putType(type),

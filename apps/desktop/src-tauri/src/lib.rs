@@ -12,6 +12,8 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 #[cfg(target_os = "macos")]
 mod agent;
 #[cfg(target_os = "macos")]
+mod agent_guard;
+#[cfg(target_os = "macos")]
 mod browser_menu;
 #[cfg(target_os = "macos")]
 mod capture;
@@ -21,6 +23,8 @@ mod clis;
 mod menu;
 #[cfg(target_os = "macos")]
 mod runtime;
+#[cfg(target_os = "macos")]
+mod relay;
 #[cfg(target_os = "macos")]
 mod voice;
 mod web;
@@ -54,6 +58,12 @@ fn migrations() -> Vec<Migration> {
             version: 3,
             description: "pages linked to folders",
             sql: include_str!("../migrations/003_project_folders.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "atomic page history",
+            sql: include_str!("../migrations/004_history.sql"),
             kind: MigrationKind::Up,
         },
     ]
@@ -121,6 +131,7 @@ pub fn run() {
         .manage(agent::Agents::default())
         .manage(browser_menu::BrowserMenu::default())
         .manage(runtime::Runtime::default())
+        .manage(relay::Relay::default())
         .invoke_handler(tauri::generate_handler![
             native_platform,
             agent::agent_status,
@@ -130,6 +141,10 @@ pub fn run() {
             agent::agent_cancel,
             agent::agent_list,
             agent::agent_folder,
+            relay::relay_list,
+            relay::relay_preview,
+            relay::relay_approve,
+            relay::relay_revoke,
             clis::cli_info,
             clis::cli_update,
             clis::codex_usage,
@@ -153,6 +168,7 @@ pub fn run() {
             browser_menu::setup(app.handle())?;
             capture::setup(app.handle())?;
             runtime::setup(app.handle());
+            relay::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -170,6 +186,7 @@ pub fn run() {
             if event.id() == "quit" {
                 QUITTING.store(true, Ordering::Relaxed);
                 capture::release(app);
+                agent::stop_all(app);
                 for window in app.webview_windows().values() {
                     let _ = window.close();
                 }
@@ -193,6 +210,7 @@ pub fn run() {
                 }
                 // Every way of quitting (⌘Q, the Dock) ends here, after the windows have closed.
                 if matches!(event, RunEvent::Exit) {
+                    agent::stop_all(app);
                     runtime::quit(app);
                 }
             }

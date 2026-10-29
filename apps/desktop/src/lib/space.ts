@@ -2,7 +2,7 @@ import type { PropDef, TypeDef } from "./catalog";
 import { pageLabel } from "./labels";
 import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "./objects";
 import { type PageIcon, readIcon } from "./page-meta";
-import { editPage } from "./live";
+import { discardLive, editPage, flushLive } from "./live";
 import { reportSaveError } from "./saving";
 import { dropPage } from "./panes";
 import { unlinkFolder } from "./project-runtime/folders";
@@ -10,6 +10,7 @@ import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
 import { ABOUT } from "./tail-memory";
+import type { ChangeContext } from "./history-types";
 
 // Every page's summary, every type and every property, kept in memory: lists, cards, links and
 // pickers read from here instead of asking the store. Writes go to the store and here together.
@@ -49,13 +50,13 @@ export const draft = (obj: LLObject) => (drafts.set(obj.id, obj), obj.id);
 export const draftOf = (id: string) => drafts.get(id);
 export const findDraft = (test: (p: LLObject) => boolean) => [...drafts.values()].find(test);
 // Stores a draft (with the edit that stores it); later saves wait until it is in.
-export function storeDraft(id: string, patch: ObjectPatch = {}): Promise<unknown> {
+export function storeDraft(id: string, patch: ObjectPatch = {}, context?: ChangeContext): Promise<unknown> {
   const obj = drafts.get(id);
   if (!obj) return storing.get(id) ?? Promise.resolve();
   drafts.delete(id);
-  const made = createPage({ ...obj, ...patch });
+  const made = createPage({ ...obj, ...patch }, context);
   storing.set(id, made);
-  void made.finally(() => storing.delete(id));
+  void made.then(() => storing.delete(id), () => { storing.delete(id); drafts.set(id, obj); });
   return made;
 }
 
@@ -127,27 +128,27 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   return { title, icon: page && iconFor(page), parent: owner ? { title: pageLabel(owner.title), view: owner.id } : { title: type.plural, view: typeView(type.id) } };
 }
 
-export function savePage(id: string, patch: ObjectPatch): Promise<void> {
-  const write = drafts.has(id) ? storeDraft(id, patch) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch));
+export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext): Promise<void> {
+  const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
     patchSummary(id, { updatedAt: Date.now() });
     markSaved();
-  }, reportSaveError);
+  }, (error) => { reportSaveError(error); throw error; });
 }
 
 // A page made another type (an idea filed as a task); its properties go through its open editor.
-export async function retype(id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>) {
+export async function retype(id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>, context?: ChangeContext) {
   patchSummary(id, { typeId });
-  await savePage(id, { typeId });
-  await editPage(id, { properties });
+  await savePage(id, { typeId }, context);
+  await editPage(id, { properties }, context);
 }
 
 export function patchSummary(id: string, patch: Partial<ObjectSummary>) {
   set({ pages: space.get().pages.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
 }
 
-export async function createPage(init?: Partial<LLObject>): Promise<LLObject> {
-  const obj = await objects.create(init);
+export async function createPage(init?: Partial<LLObject>, context?: ChangeContext): Promise<LLObject> {
+  const obj = await objects.create(init, context);
   set({ pages: [summarize(obj), ...space.get().pages] });
   return obj;
 }
@@ -162,11 +163,15 @@ export const listed = (p: ObjectSummary) => p.typeId !== "tag" && p.typeId !== "
 
 // A deleted page leaves its tabs (lib/panes.ts); with nothing left open, the next page takes its place. A deleted
 // Thoughts page or essay is unlinked from its page, which can then make a new one (DECISIONS.md, 11).
-export function removePage(id: string) {
+export async function removePage(id: string) {
+  try {
+    await flushLive(id);
+    await objects.remove(id);
+  } catch (error) { reportSaveError(error); return; }
+  discardLive(id);
   const { parent, role } = pageOf(id)?.properties ?? {};
   drafts.delete(id);
   if (typeof parent === "string" && typeof role === "string") void editPage(parent, { properties: ({ [role]: _, ...rest }) => rest });
-  objects.remove(id).catch(console.error);
   // Its folder is free again for another page.
   unlinkFolder(id).catch(console.error);
   forgetPage(id);

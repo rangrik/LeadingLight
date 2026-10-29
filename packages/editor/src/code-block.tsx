@@ -160,6 +160,7 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
 }
 
 export const CodeBlock = CodeBlockLowlight.extend({
+  marks: "origin",
   // Pasted code often names its language as a file would ("ts"); the menu knows it as "typescript".
   addAttributes() {
     const parent: Attributes = this.parent?.() ?? {};

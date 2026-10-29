@@ -5,8 +5,9 @@ Feature: Ask Claude, an agent on every page
   on this Mac, or, for GPT models, the Codex you signed into (your subscriptions); the app holds
   no key. The panel's look follows synara: your
   messages on the right, Claude's work folded under one line per turn, approvals where the
-  composer was. In a browser build, where there is no Claude Code, a stand-in plays Claude's
-  part through the same steps, so every surface can be tried and tested.
+  composer was. Only the development browser build uses a stand-in for these QA scenarios.
+  The shipped web app opens the installed-Mac-app explanation instead of a question composer
+  and never starts an agent; see features/cloud-web.feature.
 
   Names used below:
   - the Ask button: button "Ask Claude" in each page card's header, beside its Writing menu, on
@@ -16,13 +17,13 @@ Feature: Ask Claude, an agent on every page
   - the agent panel: region "Agent", the bar's Ask (features/bar.feature), beside the pages
   - the composer: the field "Question" at the bottom of the panel (features/composer.feature)
   - a turn: one question and everything Claude does to answer it
-  - the stand-in (browser build only): reads the page on every turn; with words quoted, a
+  - the stand-in (development browser build only): reads the page on every turn; with words quoted, a
     question with "change" or "bold" edits them; "new page" creates one; "search" searches
     pages; "web" searches the web; in Plan mode it writes a plan and asks to go ahead. It speaks
     Claude Code's protocol for Claude models and Codex's app-server protocol for GPT models
 
   Background:
-    Given the app is open in a browser at 1280x800 with a page "Cells" whose body reads
+    Given the development app is open in a browser at 1280x800 with a page "Cells" whose body reads
       "The mitochondria is the powerhouse of the cell."
 
   Scenario: The Ask button and ⌘J open the panel
@@ -130,6 +131,16 @@ Feature: Ask Claude, an agent on every page
     Then GPT answers in the same thread, having been sent the note afresh
     When I pick Claude again and ask
     Then Claude continues its own session in that thread
+
+  Scenario: Codex commentary and final answers keep their own messages
+    Given Codex streams commentary and an answer with different message ids
+    When more commentary arrives after the answer has started
+    Then each delta updates only its own message
+    And the completed message replaces its streamed draft
+    And partial answers and the final answer stay visible outside the folded work
+    And Copy and Insert use the final answer, never commentary or an empty message
+    When I reload the page
+    Then the same final answer remains visible
 
   Scenario: Codex is missing or signed out
     Given ?codex=missing

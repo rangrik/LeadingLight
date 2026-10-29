@@ -100,3 +100,12 @@ html[data-ipad] {
   [data-slot="sidebar-menu-button"] { min-height: 44px; }
   [data-tab] [aria-label="Close tab"], [data-slot="sidebar-menu-action"] { opacity: 1; }
 }
+
+html[data-authorship="true"] .ll-editor [data-origin="agent"] {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--info) 55%, transparent);
+}
+html[data-authorship="true"] .ll-editor [data-origin="human"] {
+  text-decoration: underline dotted color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  text-underline-offset: 3px;
+}

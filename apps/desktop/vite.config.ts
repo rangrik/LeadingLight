@@ -5,6 +5,7 @@ import process from "node:process";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { offlineBuild } from "./offline-build";
 import { projectRuntime } from "./runtime-dev";
 
 const host = process.env.TAURI_DEV_HOST;
@@ -36,7 +37,7 @@ function noShikiWasm(): Plugin {
 
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss(), noShikiWasm(), projectRuntime()],
+  plugins: [react(), tailwindcss(), noShikiWasm(), projectRuntime(), offlineBuild()],
   worker: { format: "es" as const, plugins: () => [noShikiWasm()] },
   // Two pages: the app, and the capture box's panel (src-tauri/src/capture.rs).
   build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html") } } },
@@ -65,6 +66,7 @@ export default defineConfig(() => ({
   clearScreen: false,
   server: {
     port: 1420,
+    proxy: { "/api": "http://127.0.0.1:8787" },
     strictPort: true,
     // IPv4 so the Berth proxy can reach it; Tauri loads it by the same address.
     host: host || "127.0.0.1",

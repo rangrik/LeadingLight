@@ -1,10 +1,18 @@
 import type { BlockEditorHandle, EditorDoc } from "@leadinglight/editor/editor";
 import { objects } from "./objects";
 import { markSaved, patchSummary } from "./space";
+import { authored } from "@leadinglight/editor/authorship";
+import type { ChangeContext } from "./history-types";
+import type { LLObject } from "./store";
 
 // Pages open in a pane. A change to one of them from elsewhere (linking a mention, merging a
 // tag, Claude's edits) must go through its editor, or the pane would save its own copy over it.
 type Live = {
+  flush: () => Promise<void>;
+  dirty: () => boolean;
+  discard: () => void;
+  snapshot: () => Partial<LLObject>;
+  restore: (page: LLObject) => void;
   editor: () => BlockEditorHandle | null;
   content: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
@@ -40,6 +48,11 @@ export const touchLive = (id: string) => watchers.get(id)?.forEach((fn) => fn())
 export const liveContent = (id: string) => live.get(id)?.content();
 export const liveProperties = (id: string) => live.get(id)?.properties();
 export const liveEditor = (id: string) => live.get(id)?.editor() ?? null;
+export const flushLive = (id: string) => live.get(id)?.flush() ?? Promise.resolve();
+export const liveSnapshot = (id: string) => live.get(id)?.snapshot();
+export const discardLive = (id: string) => live.get(id)?.discard();
+export const dirtyLive = (id: string) => live.get(id)?.dirty() ?? false;
+export const restoreLive = (page: LLObject) => { if (!dirtyLive(page.id)) live.get(page.id)?.restore(page); };
 
 // Runs fn with the page's editor now if it is open, else as soon as it opens.
 export function whenLive(id: string, fn: (page: Live) => void) {
@@ -50,13 +63,18 @@ export function whenLive(id: string, fn: (page: Live) => void) {
 
 type Change = { title?: string; content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };
 
-export async function editPage(id: string, change: Change) {
+export async function editPage(id: string, change: Change, context?: ChangeContext) {
   const { title } = change;
   const open = live.get(id);
   if (open) {
-    if (title !== undefined) open.setTitle(title);
-    if (change.content) open.setContent(change.content(open.content()));
-    if (change.properties) open.setProperties(change.properties(open.properties()));
+    await open.flush();
+    const apply = () => {
+      if (title !== undefined) open.setTitle(title);
+      if (change.content) open.setContent(change.content(open.content()));
+      if (change.properties) open.setProperties(change.properties(open.properties()));
+    };
+    if (context) authored(context, apply); else apply();
+    await open.flush();
     return;
   }
   const obj = await objects.get(id);
@@ -64,7 +82,7 @@ export async function editPage(id: string, change: Change) {
   // A page never written in has no body yet; the change starts one.
   const content = change.content?.(obj.content ?? { type: "doc", content: [] });
   const properties = change.properties?.(obj.properties);
-  await objects.update(id, { ...(title !== undefined && { title }), ...(content && { content }), ...(properties && { properties }) });
+  await objects.update(id, { ...(title !== undefined && { title }), ...(content && { content }), ...(properties && { properties }) }, context);
   patchSummary(id, { ...(title !== undefined && { title }), ...(properties && { properties }) });
   markSaved();
 }

@@ -1,9 +1,12 @@
 import { isDesktop, isMobile } from "~/lib/platform";
+import { remoteAsk, remoteCancel, remoteReply, remoteStatus, selectedPair } from "~/lib/remote";
 
 // Claude, through the Claude Code signed in on this Mac, or GPT through Codex's app server
 // (src-tauri/src/agent.rs). A turn is one process: its JSON lines come to onEvent, and its
 // requests (a page tool, an approval) are answered with reply(). In a browser build a stand-in
 // plays both (lib/agent-standin.ts); ?agent=signed-out and ?agent=missing show Claude's states.
+
+export const LOCAL_AGENTS_MESSAGE = "Agents run in the installed Mac app using your existing Claude Code or Codex sign-in.";
 
 export type AgentStatus = {
   installed: boolean;
@@ -25,6 +28,7 @@ export type AskRequest = { id: string; prompt: string; system: string; model: st
 
 const fakeMode = () => new URLSearchParams(location.search).get("agent");
 const standIn = () => import("~/lib/agent-standin");
+const remoteRuns = new Set<string>();
 
 export async function agentStatus(): Promise<AgentStatus> {
   if (await isMobile) return { installed: false, logged_in: false, error: "Local agents require the Mac app." };
@@ -32,6 +36,8 @@ export async function agentStatus(): Promise<AgentStatus> {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<AgentStatus>("agent_status");
   }
+  if (selectedPair()) return remoteStatus();
+  if (!import.meta.env.DEV) return { installed: false, logged_in: false, error: LOCAL_AGENTS_MESSAGE };
   const mode = fakeMode();
   if (mode === "missing") return { installed: false, logged_in: false };
   if (mode === "signed-out") return { installed: true, logged_in: false, version: "browser build" };
@@ -41,7 +47,11 @@ export async function agentStatus(): Promise<AgentStatus> {
 // Starts a turn; resolves once it is on its way.
 export async function ask(req: AskRequest, onEvent: (e: AgentEvent) => void): Promise<void> {
   if (await isMobile) throw new Error("Local agents require the Mac app.");
-  if (!(await isDesktop)) return (await standIn()).ask(req, onEvent);
+  if (!(await isDesktop)) {
+    if (selectedPair()) { remoteRuns.add(req.id); return remoteAsk(req, onEvent); }
+    if (!import.meta.env.DEV) throw new Error(LOCAL_AGENTS_MESSAGE);
+    return (await standIn()).ask(req, onEvent);
+  }
   const { Channel, invoke } = await import("@tauri-apps/api/core");
   const channel = new Channel<AgentEvent>();
   channel.onmessage = onEvent;
@@ -50,14 +60,22 @@ export async function ask(req: AskRequest, onEvent: (e: AgentEvent) => void): Pr
 
 export async function reply(id: string, message: object): Promise<void> {
   if (await isMobile) throw new Error("Local agents require the Mac app.");
-  if (!(await isDesktop)) return (await standIn()).reply(id, message);
+  if (remoteRuns.has(id)) return remoteReply(id, message);
+  if (!(await isDesktop)) {
+    if (!import.meta.env.DEV || selectedPair()) throw new Error("This agent turn is no longer connected.");
+    return (await standIn()).reply(id, message);
+  }
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("agent_reply", { id, message });
 }
 
 export async function cancel(id: string): Promise<void> {
   if (await isMobile) return;
-  if (!(await isDesktop)) return (await standIn()).cancel(id);
+  if (remoteRuns.has(id)) return remoteCancel(id);
+  if (!(await isDesktop)) {
+    if (!import.meta.env.DEV || selectedPair()) throw new Error("This agent turn is no longer connected.");
+    return (await standIn()).cancel(id);
+  }
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("agent_cancel", { id });
 }

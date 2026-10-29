@@ -1,5 +1,6 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import { fromBlockNote } from "./blocknote";
+import type { ChangeContext, JournalStore } from "./history-types";
 import type { Catalog, PropDef, TypeDef } from "./catalog";
 
 export const PAGE_TYPE = "page";
@@ -12,6 +13,7 @@ export type ObjectSummary = {
   properties: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
+  revision?: string;
 };
 
 export type LLObject = ObjectSummary & { content: EditorDoc | null };
@@ -24,12 +26,12 @@ export type ObjectPatch = Partial<Pick<LLObject, "title" | "content" | "properti
 // the folder as location; folderId is the folder's own identity, so another path to it matches.
 export type ProjectFolder = { pageId: string; path: string; folderId: string; location: string; createdAt: number; updatedAt: number };
 
-export interface ObjectStore {
+export interface ObjectStore extends JournalStore {
   list(): Promise<ObjectSummary[]>;
   get(id: string): Promise<LLObject | null>;
-  create(init?: Partial<LLObject>): Promise<LLObject>;
-  update(id: string, patch: ObjectPatch): Promise<void>;
-  remove(id: string): Promise<void>;
+  create(init?: Partial<LLObject>, context?: ChangeContext): Promise<LLObject>;
+  update(id: string, patch: ObjectPatch, context?: ChangeContext): Promise<void>;
+  remove(id: string, context?: ChangeContext): Promise<void>;
   // Pages whose body or properties mention the text: ids for backlinks, titles for mentions.
   containing(text: string): Promise<LLObject[]>;
   catalog(): Promise<Catalog>;
@@ -65,3 +67,6 @@ export function asDoc(value: unknown): EditorDoc | null {
   const doc = value as EditorDoc | null;
   return doc && typeof doc === "object" && doc.type === "doc" ? doc : null;
 }
+
+// Search content and links, without treating author names as words on the page.
+export const searchable = (page: LLObject) => JSON.stringify([page.content, page.properties], (key, value) => key === "marks" && Array.isArray(value) ? value.filter((m) => m.type !== "origin") : value).toLowerCase();

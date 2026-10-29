@@ -1,3 +1,4 @@
+import { CloudSettings } from "~/components/cloud-settings";
 import { FileText, Plus } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
@@ -371,6 +372,7 @@ export default function App() {
           }}
           page={pendingDelete}
         />
+        <CloudSettings />
       </SidebarProvider>
     );
 

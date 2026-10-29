@@ -8,6 +8,7 @@
   },
   "exports": {
     "./editor": "./src/editor.tsx",
+    "./authorship": "./src/authorship.ts",
     "./assets": "./src/assets.ts",
     "./emoji": "./src/emoji-grid.tsx",
     "./links": "./src/page-links.tsx",

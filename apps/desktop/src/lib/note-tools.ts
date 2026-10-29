@@ -3,10 +3,13 @@ import { markdownHtml } from "@/lib/markdown-html";
 import { liveContent, liveEditor } from "~/lib/live";
 import { docText, objects } from "~/lib/objects";
 import { docMarkdown, plainWords } from "~/lib/page-markdown";
-import { pageOf, space } from "~/lib/space";
+import { createPage, pageOf, space } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
-import { newPage } from "~/lib/templates";
+import { pageInit } from "~/lib/templates";
 import { isReport } from "~/lib/work";
+import { authored, stampDoc } from "@leadinglight/editor/authorship";
+import { action, type ChangeContext } from "~/lib/history-types";
+import { flushAll } from "~/lib/saving";
 
 // The page tools Claude and GPT work with, run here in the webview: an MCP server over Claude
 // Code's control protocol, and Codex's dynamic tools (lib/turn.ts). Reading never asks; changes go
@@ -74,7 +77,16 @@ const findPage = (ref: string) => {
 };
 const bodyOf = async (id: string) => liveContent(id) ?? (await objects.get(id))?.content ?? null;
 
-export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>): Promise<Result> {
+export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>, context = action("Agent edited page", { kind: "agent", name: "Agent" }), canChange?: () => boolean): Promise<Result> {
+  if (name === "read_page" || name === "search_pages") return executeTool(pageId, name, a, context);
+  await flushAll();
+  if (canChange && !canChange()) return fail("This turn stopped before the page could be changed.");
+  const result = await authored(context, () => executeTool(pageId, name, a, context, canChange));
+  await flushAll();
+  return result;
+}
+
+async function executeTool(pageId: string, name: string, a: Record<string, string | undefined>, context: ChangeContext, canChange?: () => boolean): Promise<Result> {
   if (name === "read_page") {
     const id = a.page ? findPage(a.page) : pageId;
     if (!id) return fail(`No page is called "${a.page}". search_pages finds pages by their words.`);
@@ -94,7 +106,9 @@ export async function runTool(pageId: string, name: string, a: Record<string, st
   }
   if (name === "create_page") {
     const title = a.title?.trim() || "Untitled";
-    const obj = await newPage(PAGE_TYPE, { title, ...(a.markdown?.trim() && { content: htmlDoc(html(a.markdown)) }) });
+    const init = await pageInit(PAGE_TYPE, { title, ...(a.markdown?.trim() && { content: htmlDoc(html(a.markdown)) }) });
+    if (canChange && !canChange()) return fail("This turn stopped before the page could be created.");
+    const obj = await createPage(init, context);
     return ok(`Created ${quoted(obj.id)} (id: ${obj.id}).`);
   }
 
@@ -118,7 +132,7 @@ export async function runTool(pageId: string, name: string, a: Record<string, st
     return ok(`Added to ${quoted(pageId)}${after ? ` after "${after.text}"` : " at the end"}.`);
   }
   if (name === "write_page") {
-    ed.setContent(htmlDoc(html(a.markdown ?? "")));
+    ed.setContent(stampDoc(htmlDoc(html(a.markdown ?? "")), context.author)!);
     return ok(`Rewrote ${quoted(pageId)}.`);
   }
   return fail(`There is no tool called ${name}.`);
@@ -127,14 +141,14 @@ export async function runTool(pageId: string, name: string, a: Record<string, st
 type Rpc = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: { protocolVersion?: string; name?: string; arguments?: Record<string, string> } };
 
 // One MCP message from Claude Code; notifications get the empty answer the Agent SDK gives.
-export async function serve(pageId: string, msg: Rpc): Promise<object> {
+export async function serve(pageId: string, msg: Rpc, context?: ChangeContext, canChange?: () => boolean): Promise<object> {
   const answer = (result: object) => ({ jsonrpc: "2.0", id: msg.id, result });
   if (msg.id === undefined) return { jsonrpc: "2.0", id: 0, result: {} };
   if (msg.method === "initialize") return answer({ protocolVersion: msg.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "notes", version: "1" } });
   if (msg.method === "tools/list") return answer({ tools: TOOLS });
   if (msg.method === "ping") return answer({});
   if (msg.method === "tools/call") {
-    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
+    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}, context, canChange).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
     return answer(result);
   }
   return { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `No method ${msg.method}` } };

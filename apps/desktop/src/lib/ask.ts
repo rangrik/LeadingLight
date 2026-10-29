@@ -1,7 +1,8 @@
 import type { BlockEditorHandle } from "@leadinglight/editor/editor";
 import { useSyncExternalStore } from "react";
-import { platform } from "~/lib/platform";
+import { isDesktop, platform } from "~/lib/platform";
 import { hideBar, showBar, showing } from "~/lib/bar";
+import { remoteReady, selectedPair } from "~/lib/remote";
 
 // What asking is about: the page in front, the words selected when Ask was pressed, and
 // which surface has them. Words selected get the ask bar beside them (Shipyard's pattern);
@@ -50,6 +51,15 @@ export const askEditor = () => editor;
 // ⌘J from inside Ask closes it, as the Ask button does.
 export function openAsk(quote?: Quote | null) {
   if (!["macos", "browser"].includes(platform.get())) return;
+  if (import.meta.env.DEV && !selectedPair()) return openLocalAsk(quote);
+  void isDesktop.then((desktop) => {
+    if (desktop || remoteReady()) return openLocalAsk(quote);
+    set({ quote: null, bar: null, askNow: null, asked: state.asked + 1 });
+    showBar("ask");
+  });
+}
+
+function openLocalAsk(quote?: Quote | null) {
   if (!state.page) return;
   if (showing("ask") && quote === undefined && document.activeElement?.closest("[data-testid=agent-panel]")) return closeAsk();
   const q = quote === undefined ? (editor?.selection() ?? null) : quote;
