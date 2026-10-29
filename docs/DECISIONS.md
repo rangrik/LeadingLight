@@ -554,6 +554,19 @@ remain diagnostic data rather than prompts on unrelated pages.
 Revocation blocks new network requests, not cached page display. The permissions view says so;
 removing cached content and sign-ins remains the separate Clear browsing data action.
 
+## 32. Writing review is quiet, local, and chosen
+
+Grammar help defaults to review on request. Inline underlines are optional. Harper provides
+actual suggestions; applying one preserves marks, has its own undo step, and refuses stale
+text. Keep wording remembers that occurrence for the current page session, not a universal rule.
+A text selection bounds the review; Apply pauses on its result until Next suggestion.
+Quiet word counts do not start grammar checks.
+
+Short lessons are authored for named rules, with optional practice. Saved tips store rule ids,
+not a mistake history. Dictionary words stay on this device. Listening uses only local English
+system voices. Neither the checker nor practice assigns a score or claims someone has learned
+something. See WRITING-COACH.md for the scenarios and questions to test with the writer.
+
 ## 33. Browser feedback keeps evidence; developer access belongs to a page
 
 2026-10-28. Saved browser comments carry a frozen image of the selected area and quoted

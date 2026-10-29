@@ -79,7 +79,6 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Checkmarks on the writing tools in the Mac menu bar | The View menu's items toggle but don't show their state; the Writing menu at the panel's top right does. Showing it means check items kept in step from the webview. | When asked. |
 | 2026-10-22 | "Find a setting" finds nothing in Writing, Types, Properties, Objects, Capture or AI | Its index is Shipyard's own list of sections (vendor/shipyard/.../settings/find.tsx), which we don't edit; it still names Terminal, Boxes and the rest. | With the designer's Settings pass (the brief), or when Settings gets a find of our own. |
 | 2026-10-22 | Syntax highlight in Solarized Light: adjectives and conjunctions are both olive | The colours are the theme's own yellow and green, made readable on the page; Solarized's two are close. Every other theme checked tells them apart. | Someone uses Syntax with Solarized Light, or themes get colours of their own for it. |
-| 2026-10-22 | Fixing a grammar mistake from its underline, ignoring one, or adding a word Harper doesn't know | Harper offers suggestions, ignores and a word list; each needs a menu on the underline and a place to keep what was ignored. Pointing at a mistake shows its reason. | Someone fixes many mistakes by hand, or a correct word keeps being underlined. |
 | 2026-10-22 | A word still being typed can get a red underline when typing pauses mid-word ("te" on the way to "teh") | Telling a finished word from an unfinished one needs the cursor in the check; the next pause after the word is done puts it right. | It gets in the way of writing. |
 | 2026-10-23 | synara's Goal, Debug and Fast modes, auto-compact, and follow-ups queued or steered into a running turn | Plan mode covers "think first" for notes; Fast mode is Opus-only and billed as extra usage; a turn here is short, so Send waits for it. | When turns run long enough that waiting to say more gets in the way. |
 | 2026-10-23 | Claude Code's file and shell tools (Read, Edit, Bash) for the agent | It works on notes and the web; reaching the rest of the Mac needs a different trust story than Ask for approval. | When a note's task needs a file on the Mac. |
@@ -139,6 +138,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-24 | Codex adds each Git checkout it works in to ~/.codex/config.toml as trusted | Codex writes it itself when a project agent runs in a checkout (Project 1's acceptance clone is listed too); the runtime changes none of the person's settings. | Someone minds the entries, or Codex gains a way to run a thread without recording trust. |
 | 2026-10-26 | Web capture of content behind sign-in, generated only by page scripts, or streamed media | Save webpage keeps the downloaded readable HTML and bounded media files; it does not run a website or borrow browser cookies. Missing media stays as a labelled link. | Add a browser extension or a capture flow for an already signed-in browser when these sources are needed. |
 | 2026-10-26 | Imported webpage table grids and inline data images | Table cell text is kept in reading order as paragraphs; media without an http address gets a counted placeholder. Preserving grids and decoding inline images need their own conversion checks. | Sources need faithful table layout or contain useful inline images. |
+| 2026-10-26 | Original transcript review for older voice blocks | Older recordings did not store a transcript snapshot or recording id. Guessing from neighboring paragraphs could misattribute edited text. Their audio and editable text remain available; new recordings and retried transcriptions carry snapshots. | A user needs to import or explicitly attach an older transcript to its recording. |
 | 2026-10-26 | Tail: a small gap between the ellipsis and the words after a truncated name, in a split | A row's widest name is cut to the room the other words leave, rounded down to a whole pixel, so in a narrow pane a sliver shows between "…" and the words after it. The words still show, which was the point. | The designer's pass on tail's rows, or someone notices it. |
 | 2026-10-26 | Tail: the model can decline a line but not find one | The word rules find the candidates and the model picks among them, so context stays small and each line can be checked. A line the rules don't see never shows. | Real beats show the rules missing what matters; then let the model propose a kind from the digest. |
 | 2026-10-26 | Tail: chips on list items and headings | A pause is read only on a top-level paragraph, the block the chip's placement and the nod's edit know. | Someone writes tasks in lists and misses the chip. |
@@ -152,3 +152,42 @@ notarization need the owner's Apple membership and certificate; enable them befo
 promoting stable downloads. Intel needs separately built runtime helpers and a full
 Intel smoke test. In-app updates need their own signing keys and an update flow;
 add that when the downloadable preview distribution is proven.
+
+## 2026-10-28 — Upstream Shipyard test fixtures
+
+The optional all-workspace unit run passes 564 of 568 vendored tests. Three depend
+on upstream `internal/` fixtures absent from our vendored subset (devtools, doctor,
+and screen). One expects distinct berth-dark syntax colors but sees `#fafafa` for
+all three. The vendored tree is identical to the merged main version and cannot be
+edited here. Revisit with the next Shipyard sync and its test-fixture manifest;
+LeadingLight's desktop, image-service, and release tests are run separately.
+
+## 2026-10-28 — Update toast over a narrow review sheet
+
+At a 520 px browser width, main's "Codex update available" toast can cover Listen
+in the grammar sheet for its 15-second lifetime. Independent QA reproduced this
+with a fresh browser profile. The toast is unrelated to this merge; changing its
+layer affects every modal, so notification placement needs a separate fix. Revisit
+before the next narrow-window polish pass. Screenshot:
+`apps/desktop/qa/report/mi-shots/x-update-toast-over-sheet-520.png`.
+
+## 2026-10-28 — Very rapid Tab repeat across dialog edges
+
+Base UI 1.9 moves focus from its hidden dialog guards on the next animation frame.
+Several Tab presses before that frame can briefly reach the background in Chromium;
+focus then returns inside. This also reproduces in the unchanged Delete page dialog.
+At 200 ms between keys, forward and backward focus stay contained at 1280 and 520 px.
+A custom grammar-only trap would duplicate shared focus handling, so it is not added.
+Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
+Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
+`engine-focus-control.mjs`. Native behavior has not been tested.
+
+## 2026-10-28 — Browser address field in a narrow split
+
+Independent delivery QA found that opening Browser beside a note at a 520 px window
+leaves its roughly 236 px pane with a sliver of an Address field and an overlapping
+globe/bookmark icon. This arrives unchanged from the shared-browser branch. Note
+editing and navigation back still work. Leave toolbar adaptation to the browser's
+responsive pass; revisit before recommending side-by-side browsing in small windows.
+Evidence: `apps/desktop/qa/report/writing-coach-delivery-2026-10-28/`
+`delivery-independent/j1-520-5-browser-zoom.png`.

@@ -13,6 +13,7 @@ export type WritingPrefs = {
   style: boolean;
   checks: Check[];
   grammar: boolean;
+  grammarMode: "review" | "inline";
   count: boolean;
   // Types whose pages get the tools, where the person chose other than suggested.
   types: Record<string, boolean>;
@@ -27,6 +28,7 @@ const prefs = localPrefs<WritingPrefs>("ll.writing", {
   style: false,
   checks: CHECKS,
   grammar: true,
+  grammarMode: "review",
   count: true,
   types: {},
 });
@@ -44,7 +46,7 @@ export const toggleTool = (tool: Tool) => prefs.set({ [tool]: !prefs.get()[tool]
 // What the editor is asked to show, on a page of this type.
 export const editorWriting = (p: WritingPrefs, typeId: string): Writing =>
   toolsOn(p, typeId)
-    ? { focus: p.focus ? p.focusOn : null, syntax: p.syntax ? p.parts : [], style: p.style ? p.checks : [], grammar: p.grammar }
+    ? { focus: p.focus ? p.focusOn : null, syntax: p.syntax ? p.parts : [], style: p.style ? p.checks : [], grammar: p.grammar && p.grammarMode === "inline", quiet: p.grammar && p.grammarMode !== "inline" }
     : OFF;
 
 // A writing tool's menu or popover gives the keyboard back to the page it was opened from, so

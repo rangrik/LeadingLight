@@ -1,4 +1,4 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection } from "@leadinglight/editor/editor";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -37,6 +37,7 @@ import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 import { contentWidth, usePageLayout } from "~/lib/page-layout";
 import { TurnIntoPage } from "~/components/turn-into-page";
+import { VoiceReviewDialog } from "~/components/voice-review";
 import { TailPage, TailToday } from "~/components/tail";
 import { today } from "~/lib/daily";
 
@@ -71,6 +72,7 @@ export function PageView({ page }: { page: LLObject }) {
   const [margins, setMargins] = useState({ notes: false, toc: false });
   const [inBody, setInBody] = useState(false);
   const [turnInto, setTurnInto] = useState<PageSelection | null>(null);
+  const [voiceReview, setVoiceReview] = useState<VoiceReview | null>(null);
   const [tailRow, setTailRow] = useState(false);
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
@@ -392,6 +394,7 @@ export function PageView({ page }: { page: LLObject }) {
             content={page.content}
             onAsk={openAsk}
             onTurnInto={report ? undefined : setTurnInto}
+            onVoiceReview={report ? undefined : setVoiceReview}
             onVoiceSaved={report ? undefined : () => { void markCapture(page.id, "voice").catch(() => toastManager.add({ type: "error", title: "Recording saved", description: "It could not be added to the inbox. Your audio is still in this page." })); }}
             askKeys={keysFor("ask")}
             onChange={(read) => {
@@ -420,6 +423,7 @@ export function PageView({ page }: { page: LLObject }) {
         {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
+      {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
       {turnInto && <TurnIntoPage selection={turnInto} onClose={() => setTurnInto(null)} />}
     </div>
   );

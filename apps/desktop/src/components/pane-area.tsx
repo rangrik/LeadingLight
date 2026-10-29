@@ -192,7 +192,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
-                  <WritingMenu className={cn(split && leaf.id !== focus && BACK_CARD)} />
+                  <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
                 {split && (
                   <Button

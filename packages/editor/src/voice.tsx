@@ -6,8 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import type { Asset, AssetStore } from "./assets";
 import { Player } from "./player";
+import { captureVoiceReview, type VoiceReview } from "./voice-review";
 
-type VoiceOptions = { assets: AssetStore; onSaved?: () => void };
+type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void };
 
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -71,7 +72,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       const paragraphs = text.split(/\n+/).filter(Boolean).map((line) => editor.schema.nodes.paragraph.create(null, editor.schema.text(line)));
       // Undoing the transcript must keep the saved audio, even when recognition finishes at once.
       editor.view.dispatch(closeHistory(editor.state.tr)
-        .setNodeMarkup(pos, undefined, { ...current.attrs, transcribed: true })
+        .setNodeMarkup(pos, undefined, { ...current.attrs, transcribed: true, transcript: text })
         .insert(pos + current.nodeSize, paragraphs));
       editor.view.dispatch(closeHistory(editor.state.tr));
     } catch (cause) {
@@ -91,7 +92,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     try {
       const asset = await assets.put(file);
       if (!alive.current) return;
-      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime });
+      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, recordingId: crypto.randomUUID() });
       pending.current = null;
       options.onSaved?.();
       await transcribe(asset);
@@ -171,7 +172,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   };
 
   return (
-    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" contentEditable={false}>
+    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" data-voice-id={node.attrs.recordingId ? `voice-${node.attrs.recordingId}` : undefined} contentEditable={false}>
       {node.attrs.src && <Player kind="audio" src={node.attrs.src} onError={() => setError("The saved recording cannot be played. The audio file may have been moved or deleted.")} />}
       {editable && <div className="ll-row flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-sm" data-controls>
         <Mic className="size-4 shrink-0 text-muted-foreground" />
@@ -195,6 +196,11 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
           setError("");
           void transcribe({ url: node.attrs.src, name: node.attrs.name, size: node.attrs.size, mime: node.attrs.mime });
         }}>Retry transcription</Button>}
+        {phase === "idle" && node.attrs.transcript && options.onReview && <Button size="xs" variant="outline" onClick={() => {
+          const pos = getPos();
+          const review = pos === undefined ? null : captureVoiceReview(editor, pos);
+          if (review) options.onReview?.(review);
+        }}>Review transcript</Button>}
       </div>}
       {error && <p className="text-muted-foreground text-sm" role="alert">{error}</p>}
     </NodeViewWrapper>
@@ -207,7 +213,7 @@ export const VoiceRecording = Node.create<VoiceOptions>({
   atom: true,
   draggable: true,
   addOptions: () => ({ assets: null as unknown as AssetStore }),
-  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" }, autostart: { default: false, rendered: false } }),
+  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, recordingId: { default: null }, transcript: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" }, autostart: { default: false, rendered: false } }),
   parseHTML: () => [{ tag: 'div[data-voice-recording]' }],
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-voice-recording": "" }), ["audio", { src: HTMLAttributes.src, controls: "" }]],
   addNodeView: () => ReactNodeViewRenderer(VoiceView, { stopEvent: ({ event }) => !!(event.target as Element)?.closest?.("[data-controls]") }),

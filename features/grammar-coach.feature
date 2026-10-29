@@ -1,0 +1,127 @@
+Feature: Writing help that leaves room to think
+  The writer chooses when to review and what to change. Learning is optional and local.
+
+  Scenario: Draft without interruptions
+    Given Grammar check is on and help is set to "When I ask"
+    When I write "I recieved a apple." and pause
+    Then no spelling or grammar underlines, error totals, or correction popups appear
+    And the text is unchanged
+    And visible word counts do not start a background grammar check
+    When I choose "Review writing" from the page's Writing menu
+    Then one suggestion is shown with the original words and a proposed change
+    And the review can be closed at any time without changing text
+
+  Scenario: Fix a slip quickly without rewriting my voice
+    Given the review offers "received" for my bold word "recieved"
+    When I press Apply
+    Then only that word changes and its bold formatting remains
+    And Undo restores that change without undoing earlier writing
+    And no other suggestion is applied automatically
+    And a choice called "Keep this wording" leaves my words unchanged
+
+  Scenario: Learn one small thing
+    Given a suggestion has a supported lesson
+    When I choose "Why?"
+    Then I see a short explanation and one example
+    And I may save the tip or try one two-choice practice
+    And practice never edits my page
+    And either answer explains the choice without a score or a failure label
+    And I can move on without answering
+
+  Scenario: Come back to learning when I want
+    Given I saved a tip
+    When I reopen the app and choose "Saved tips" in the review
+    Then I can reread the tip or try its practice
+    And I can remove it
+    And no streak, countdown, reminder, or mastery claim appears
+    And only generic tips are kept, not a history of my sentences
+    And Listen is a compact control aligned with the other tip actions
+
+  Scenario: Read aloud instead of reading more
+    Given a local English speech voice is available
+    When I choose "Listen" in the review
+    Then the displayed words are spoken only after my request
+    And Stop or closing the review stops speech
+    And no remote speech voice is selected
+    And when no local voice is available the review explains that Listen is unavailable
+
+  Scenario: My specialist words belong here
+    Given a spelling suggestion flags a word I use
+    When I choose "Remember word"
+    Then the word stays unchanged and is no longer flagged after reload
+    And I can remove it from "My words"
+    And a failed save explains that the word was not remembered
+    And the suggestion remains available without changing my words
+    When storage is available and I choose "Remember word" again
+    Then the word is remembered and the earlier error disappears
+
+  Scenario: Opt into help by the words
+    When I choose "While I write" in Writing settings
+    Then grammar underlines are available
+    And clicking an underline opens its suggestion
+    And the Writing menu offers the same review using only the keyboard
+    And no correction is made without my choice
+
+  Scenario: A review never changes stale or protected text
+    Given a suggestion is open
+    When the source changes before I apply it
+    Then unrelated text is not changed and the review refreshes
+    And code, page links, and attributed quotations are excluded
+    And read-only reports cannot be corrected
+
+  Scenario: The checker has limits
+    When checking is still running or fails
+    Then the review says so and offers Retry for a failure
+    And it does not say there are no suggestions before checking finishes
+    When the checker is available again and I choose Retry
+    Then the review shows suggestions without a reload and leaves my words unchanged
+    When checking finishes without suggestions
+    Then it says "No suggestions from this check" rather than grading my writing
+
+  Scenario: Review the active tab while Tail is available
+    Given two pages with different spelling slips are open through a sidebar Command-click
+    And help is set to "When I ask" and the Suggestions panel is open
+    When I choose Review writing from the active page's Writing menu and apply a correction
+    Then only that page changes
+    When I switch to the other tab and review its writing
+    Then its own suggestion is shown
+    And neither page gains grammar underlines or an automatic grammar popup while drafting
+
+  Scenario: Review only the passage I chose
+    Given a page has spelling slips in two paragraphs
+    When I select words in the second paragraph and choose Review writing
+    Then the review says "Selected text"
+    And it offers only corrections fully inside those words
+    And Apply and Undo never change the first paragraph
+    And a partly selected word is not offered
+    When I close the review, clear the selection and choose Review writing
+    Then the review says "Whole page" and can offer the first paragraph's slip
+
+  Scenario: Take a breath after a correction
+    Given the review has more than one suggestion
+    When I choose Apply
+    Then it shows the change I chose and Undo
+    And the next suggestion does not appear until I choose "Next suggestion"
+    And "Why?" still explains the change I just made
+    And I can save that tip or try one practice without changing more text
+    And Undo stays visible in the footer with Done for now while the lesson scrolls
+    When I choose Undo
+    Then my wording returns and I can review it again
+    When the page changes elsewhere while this result is open
+    Then Undo does not undo someone else's edit
+
+  Scenario: A suggestion stays still while other paragraphs finish checking
+    Given I have already reviewed the second paragraph
+    And the first paragraph has not been checked yet
+    When I open a whole-page review and see a suggestion
+    Then that suggestion stays visible while other results arrive
+    And moving on is still my choice
+    And Undo returns to the correction I just made
+
+  Scenario: A double-click does not choose a second action
+    Given the review offers more than one suggestion
+    When I double-click Apply
+    Then only the chosen correction is applied
+    And the result stays open and nothing is read aloud
+    When I double-click Keep this wording on another review
+    Then only that suggestion is kept and the next suggestion remains available

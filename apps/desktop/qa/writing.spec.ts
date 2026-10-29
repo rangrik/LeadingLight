@@ -38,7 +38,7 @@ test("Focus mode keeps the line being written in the middle", async ({ page }) =
 // Seam: Harper's wasm and worker load through the bundler and report back to the editor and header,
 // and the reason reaches COSS's tooltip. Catches grammar that never arrives, or the slow native tip.
 test("Grammar check underlines, explains and counts a misspelling", async ({ page }) => {
-  await open(page, {});
+  await open(page, { grammarMode: "inline" });
   await page.keyboard.type("I recieved it.");
   const word = page.getByRole("textbox", { name: "Page body" }).locator(".ll-spelling");
   await expect(word).toHaveText("recieved", { timeout: 15000 });
