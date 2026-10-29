@@ -168,3 +168,35 @@ That folder also keeps the final build and install logs.
 The capture shortcut belongs to whichever app copy started first; quit other dev
 copies if they intercept it. Browser's separate native menu and file-dialog checks
 are in `BROWSER-VERIFICATION.md`. No native window was automated.
+
+## Native recording follow-up — 2026-10-28
+
+At the user's request, native controls were exercised directly. Real microphone
+recordings saved as AAC/M4A, played to the end, and survived closing Quick capture.
+The no-speech path kept the audio and offered Retry transcription. A known speech
+file passed native transcription, original-transcript review, project-linked Task
+creation and the link back to its source recording. The Task's body, type and project
+were also checked in SQLite. Only notes named `Native QA …` were changed.
+
+Speech played through the Mac's own speakers was not recognized in the microphone
+take. Its original audio is preserved separately from the speech fixture. These
+checks establish native recording and recognition separately, not the accuracy of
+live spoken transcription. Playback was checked by media state and advancing time.
+
+Fix `5ceefb9` keeps a stopped recording when its page closes before saving finishes.
+Late attachments preserve the current words, cursor and Undo; saves to one closed
+page run in order. Deleted or replaced takes stay deleted. Follow-up `e7caac7`
+also releases the controls when an outside edit replaces a saving take. Typecheck,
+31 desktop unit tests and twelve focused browser regressions pass. Recovery when storage fails
+after leaving is still deferred; retry while the recorder stays open is covered.
+Detailed native evidence is in `apps/desktop/qa/report/native-voice-2026-10-28/`.
+
+The full isolated browser run passed all 147 scenarios; the two added edge cases
+passed separately in the twelve-test voice run. The original full run's sole failure
+was a trace-file collision between runners, not a failed app assertion.
+
+Main `e7caac7` was built and installed; its executable matches the built bundle.
+The updated app opens the saved recording and its transcript, but a fresh capture
+waits for microphone access. The computer-use tool blocks macOS's permission dialog,
+so final-build recording remains pending the user's permission click. The earlier
+native passes above are not claimed as verification of this updated build.
