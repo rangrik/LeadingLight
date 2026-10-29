@@ -188,7 +188,7 @@ export async function relayRequest({ request, sql, user, allowed, readBody }) {
         require(recent(p.browser_seen, 60), 409, 'This browser connection expired. Choose Use this Mac again.');
         await clearConsumed(tx, p.id, controller, after);
         const [updated] = await tx`UPDATE relay_pairs SET browser_seen=now() WHERE id=${p.id} RETURNING *`;
-        const rows = await tx`SELECT seq::text,id,controller,turn,kind,envelope FROM relay_events WHERE pair_id=${p.id} AND controller=${controller} AND seq>${after} AND envelope IS NOT NULL ORDER BY seq LIMIT 100`;
+        const rows = await tx`SELECT seq::text,id,controller,turn,kind,envelope FROM relay_events WHERE pair_id=${p.id} AND controller=${controller} AND seq>${after} AND envelope IS NOT NULL ORDER BY relay_events.seq LIMIT 100`;
         const events = []; let size = 0;
         for (const event of rows) { if (events.length && size + bytes(event) > 1024 * 1024) break; events.push(event); size += bytes(event); }
         return json({ events, pair: view(updated) });

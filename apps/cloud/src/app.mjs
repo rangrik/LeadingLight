@@ -38,7 +38,7 @@ export function application({ env, sql, auth }) {
       if (path === '/api/sync' && request.method === 'GET') {
         const after = url.searchParams.get('after') ?? '0';
         if (!/^\d{1,18}$/.test(after)) return json({ error: 'Invalid cursor.' }, 400);
-        const rows = await sql`SELECT seq::text,id,envelope FROM sync_events WHERE owner=${user.id} AND seq>${after} AND coalesce(envelope->>'kind','event') != 'part' ORDER BY seq LIMIT 50`;
+        const rows = await sql`SELECT seq::text,id,envelope FROM sync_events WHERE owner=${user.id} AND seq>${after} AND coalesce(envelope->>'kind','event') != 'part' ORDER BY sync_events.seq LIMIT 50`;
         const events = []; let bytes = 0;
         for (const row of rows) {
           const size = Buffer.byteLength(JSON.stringify(row));

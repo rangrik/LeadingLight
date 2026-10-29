@@ -138,3 +138,9 @@ Feature: Run page agents through a paired Mac
     Then local session identifiers are never sent to the other Mac
     And its next question includes fresh page context
     And changing Macs while mentioned pages load fails the pending question visibly without sending it
+
+  Scenario: Agent replies cross multiple event pages in numeric order
+    Given the paired Mac has produced 121 encrypted reply events
+    When the browser fetches pages of at most 100 events
+    Then all 121 event IDs arrive exactly once in numeric sequence order
+    And acknowledging a page never discards a reply that was not delivered

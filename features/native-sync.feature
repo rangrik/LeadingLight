@@ -41,3 +41,10 @@ Feature: Connect the installed app to the same encrypted workspace
     Then the server revokes that session and the Keychain credential is removed
     And that credential cannot read synced notes again
     And the local notes remain available
+
+  Scenario: Initial sync crosses multiple history pages without missing notes
+    Given the account has 121 encrypted history events numbered 1 through 121
+    When a new device fetches them in pages of at most 50 events
+    Then each page is ordered by the numeric sequence
+    And all 121 event IDs arrive exactly once
+    And advancing the cursor never skips events 6 through 9
