@@ -3,10 +3,15 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "@leadinglight/ui/components/empty";
+import { isNative } from "~/lib/platform";
+import { refreshPairs, remoteReady, selectedPair, useRemote } from "~/lib/remote";
+import { useCloud } from "~/lib/cloud";
+import { openPairingSettings, RemoteAgentConnection } from "~/components/pairing-settings";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Composer, type Mention } from "~/components/composer";
 import { ApprovalCard, Turn } from "~/components/thread-view";
-import { type AgentStatus, agentStatus } from "~/lib/agent";
+import { type AgentStatus, agentStatus, LOCAL_AGENTS_MESSAGE } from "~/lib/agent";
 import { type Agent, BUILT_IN, listAgents } from "~/lib/agents";
 import { isClaude, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
 import { askEditor, closeAsk, type Quote, takeAskNow, useAsk } from "~/lib/ask";
@@ -19,8 +24,11 @@ import { inlineHtml } from "~/lib/note-tools";
 import { docMarkdown } from "~/lib/page-markdown";
 import { pageOf } from "~/lib/space";
 import { isReport } from "~/lib/work";
-import { type Item, newThread, patchThread, pickThread, setPending, usePageThreads } from "~/lib/threads";
+import { type Item, newThread, patchThread, pickThread, setPending, turnContent, usePageThreads } from "~/lib/threads";
 import { answer, sendTurn, stopTurn } from "~/lib/turn";
+import { authored } from "@leadinglight/editor/authorship";
+import { action } from "~/lib/history-types";
+import { flushAll } from "~/lib/saving";
 
 // The bar's Ask, where Claude answers about the page in front and works on it. Each page keeps its
 // threads (lib/threads.ts). head puts the thread menu in the bar's header; in a pane it tops the thread.
@@ -48,8 +56,27 @@ const turnsOf = (items: Item[]) => items.reduce<Item[][]>((turns, i) => (i.kind 
 let took = 0;
 
 // In a pane the menu's words start 16 px in, under the pane's title (9 px, then its own 7).
-export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 pt-2">{menu}</div> }: { head?: (menu: ReactNode) => ReactNode }) {
+type AskViewProps = { head?: (menu: ReactNode) => ReactNode };
+export function AskView(props: AskViewProps) {
+  const [native, setNative] = useState<boolean | null>(null);
+  const cloud = useCloud();
+  const remote = useRemote(), pair = selectedPair();
+  useEffect(() => { void isNative.then((value) => { setNative(value); if (!value) void refreshPairs(); }); }, []);
+  if (native === null || !native && (!cloud.initialized || !remote.initialized)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
+    {props.head?.(null)}<Empty><EmptyDescription role="status">Loading your Mac connection…</EmptyDescription></Empty>
+  </section>;
+  if (native !== true && !(pair?.state === "active" && pair.localKey) && !(import.meta.env.DEV && !remote.selected)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
+    {props.head?.(null)}
+    <Empty><EmptyHeader><EmptyTitle>Agents work on your Mac</EmptyTitle><EmptyDescription>{LOCAL_AGENTS_MESSAGE}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={openPairingSettings}>Connect a Mac</Button><p className="text-xs text-muted-foreground">Pair this browser with your Mac to use its agents here.</p></EmptyContent></Empty>
+  </section>;
+  return <LocalAskView {...props} />;
+}
+
+function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 pt-2">{menu}</div> }: AskViewProps) {
   const { quote, page, pages, askNow, asked } = useAsk();
+  const remote = useRemote(), pair = selectedPair();
+  const readiness = JSON.stringify(pair?.status ?? null);
+  const available = !pair || remoteReady();
   const prefs = useAiPrefs();
   const pageId = page?.id;
   const threads = usePageThreads(pageId);
@@ -89,13 +116,13 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
   const gpt = !isClaude(prefs.model);
   const check = () => {
     setStatus(null);
-    void agentStatus().then(setStatus);
+    void agentStatus().then(setStatus).catch((e) => setStatus({ installed: false, logged_in: false, error: String(e) }));
     void loadCodex(true);
   };
   useEffect(() => {
     check();
     void listAgents().then(setAgents);
-  }, []);
+  }, [pair?.id, pair?.online, readiness, remote.connected]);
   useEffect(() => {
     if (pinned.current) log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [thread?.items, threads?.pending, thread?.approval]);
@@ -104,7 +131,7 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
   }, [thread?.id, thread?.busy]);
 
   // Ready when the provider the chosen model needs is there and signed in.
-  const ready = gpt ? cx.state === "ready" && !!gptModel(prefs.model) : !!status?.installed && !!status.logged_in;
+  const ready = available && (gpt ? cx.state === "ready" && !!gptModel(prefs.model) : !!status?.installed && !!status.logged_in);
 
   // The words come from the panel, or straight from the ask bar: its question can arrive in
   // the same render that sets them, before the panel has them.
@@ -127,6 +154,7 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
     return (
       <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
         {head(null)}
+        {pair && <RemoteAgentConnection />}
         <p className="m-auto px-6 text-balance text-center text-muted-foreground text-sm transition-opacity delay-300 duration-150 starting:opacity-0">
           Open a page to ask {gpt ? "GPT" : "Claude"} about it.
         </p>
@@ -137,17 +165,24 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
   const items = thread.items;
   const lastTurn = turnsOf(items).at(-1) ?? [];
   // The last turn's answer, which Insert, Replace and Copy act on; a plan is not one.
-  const final = !thread.busy && lastTurn.some((i) => i.kind === "end" && i.how === "done" && !i.plan) ? lastTurn.filter((i) => i.kind === "text").at(-1) : undefined;
+  const final = !thread.busy && lastTurn.some((i) => i.kind === "end" && i.how === "done" && !i.plan) ? turnContent(lastTurn).answer.at(-1) : undefined;
 
   const target = () => {
     const editor = askEditor();
     return editor && thread.quote ? editor.find(thread.quote.text, thread.quote.from) : null;
   };
-  const insert = () => {
+  const applyAnswer = async (fn: () => void) => {
+    try {
+      await flushAll();
+      authored(action("Added agent answer", { kind: "agent", name: gpt ? "GPT" : "Claude", model: prefs.model, run: thread.id }), fn);
+      await flushAll();
+    } catch (error) { patchThread(id, thread.id, (t) => ({ ...t, note: error instanceof Error ? error.message : String(error) })); }
+  };
+  const insert = () => void applyAnswer(() => {
     const editor = askEditor();
     if (editor && final) editor.insertAfter(target()?.to ?? editor.selection().to, markdownHtml(final.text).html);
-  };
-  const replace = () => {
+  });
+  const replace = () => void applyAnswer(() => {
     const editor = askEditor();
     if (!editor || !final) return;
     const hit = target();
@@ -155,7 +190,7 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
     editor.replaceRange(hit.from, hit.to, inlineHtml(final.text));
     // Replaced once: the words are gone, so the next insert goes below instead.
     patchThread(id, thread.id, (t) => ({ ...t, quote: null }));
-  };
+  });
   const copy = () => {
     if (!final) return;
     navigator.clipboard
@@ -231,6 +266,7 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
       }}
     >
       {head(menu)}
+      {pair && <RemoteAgentConnection />}
       <div
         className="min-h-0 flex-1 overflow-y-auto px-3 py-3 text-sm"
         onScroll={(e) => {
@@ -239,20 +275,20 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
         }}
         ref={log}
       >
-        {gpt && !ready && (
+        {available && gpt && !ready && (
           <div className="space-y-2 text-muted-foreground">
             {cx.state === "checking" ? (
               <p>Checking Codex…</p>
             ) : cx.state === "missing" ? (
               <p>
-                Codex is not installed. Get it from{" "}
+                Codex is not installed{pair ? ` on ${pair.macName || "your Mac"}` : ""}. Get it from{" "}
                 <button className="underline" onClick={() => openLink(INSTALL.codex)} type="button">
                   OpenAI
                 </button>
                 , sign in with {code("codex login")}, then check again.
               </p>
             ) : cx.state === "signed-out" ? (
-              <p>Codex is installed but not signed in. Run {code("codex login")} in Terminal, then check again.</p>
+              <p>Codex is not signed in{pair ? ` on ${pair.macName || "your Mac"}` : ""}. Run {code("codex login")} in Terminal on that Mac, then check again.</p>
             ) : (
               <p>Your Codex doesn't offer this model. Pick another in the model menu below.</p>
             )}
@@ -263,14 +299,14 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
             )}
           </div>
         )}
-        {!gpt && !status && <p className="text-muted-foreground">Checking Claude Code…</p>}
-        {!gpt && status && !ready && (
+        {available && !gpt && !status && <p className="text-muted-foreground">Checking Claude Code…</p>}
+        {available && !gpt && status && !ready && (
           <div className="space-y-2 text-muted-foreground">
             {status.installed ? (
-              <p>Claude Code is installed but not signed in. Run {code("claude auth login")} in Terminal, then check again.</p>
+              <p>Claude Code is not signed in{pair ? ` on ${pair.macName || "your Mac"}` : ""}. Run {code("claude auth login")} in Terminal on that Mac, then check again.</p>
             ) : (
               <p>
-                Claude Code is not installed. Get it from <span className="whitespace-nowrap">{install},</span> sign in with {code("claude auth login")}, then check again.
+                Claude Code is not installed{pair ? ` on ${pair.macName || "your Mac"}` : ""}. Get it from <span className="whitespace-nowrap">{install},</span> sign in with {code("claude auth login")}, then check again.
               </p>
             )}
             {status.error && <p className="text-xs">{status.error}</p>}
@@ -337,9 +373,10 @@ export function AskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-
         <Composer
           agents={agents}
           busy={!!thread.busy}
+          stopping={!!thread.stopping}
           fieldRef={field}
           onSend={(q, m) => send(q, m)}
-          onStop={() => stopTurn(id, thread.id)}
+          onStop={() => void stopTurn(id, thread.id)}
           pages={pages.filter((p) => p.id !== id)}
           placeholder={threads.pending ? "Ask about the selection…" : "Ask about this page…"}
           ready={ready}

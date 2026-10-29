@@ -148,7 +148,7 @@ export const BlockDrop = Extension.create({
       const content = wrap ? Fragment.from($from.parent.type.create($from.parent.attrs, slice.content)) : slice.content;
       tr.insert(at, content);
       tr.setSelection(new BlockSelection(tr.doc.resolve(at), tr.doc.resolve(at + content.size)));
-      view.dispatch(tr.scrollIntoView());
+      view.dispatch(tr.scrollIntoView().setMeta("preserveOrigin", true));
       view.focus();
       return true;
     };

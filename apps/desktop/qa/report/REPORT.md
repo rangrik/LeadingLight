@@ -72,3 +72,51 @@ from it); the usage stand-in ignoring ?codex; "Ask Claude" names while GPT is ch
 
 `qa/ask.spec.ts` (now with a GPT run through the Codex stand-in), `qa/composer.spec.ts`,
 `qa/usage.spec.ts`: 59 specs pass across the suite.
+
+## 2026-10-28 — History, authorship and cloud web preview
+
+Built against `features/history.feature`, `features/authorship.feature` and
+`features/cloud-web.feature`. Browser QA used localhost 1431, production preview
+1432, and PostgreSQL 17 in the isolated OrbStack Compose project
+`leadinglight-cloud-qa`. Model responses and signed-in identities were fixtures.
+No live model spending, production deployment or native UI automation occurred.
+
+Independent QA used Claude CLI Sonnet 5.5 at xhigh in three rounds. Berth was
+unavailable, so it drove headless Playwright instead. Its final review found three
+remaining defects: the first replacement character inherited agent authorship,
+a production CLI stand-in showed an update toast, and replacing a recovery key
+could erase the working key. All three were fixed and their failed paths rerun.
+
+| Scenario | Result |
+|---|---|
+| Autosave, milestones, preview, restore and retained history | Pass in Chromium and WebKit |
+| Human insertion and selected-word replacement within agent text | Pass in both engines; every replacement character belongs to You |
+| Whole-action undo, overlapping edits and human work between agent steps | Pass; rejected undo changes no page |
+| Delete immediately after typing, then restore the deleted snapshot | Pass in both engines |
+| Reload immediately after typing; legacy storage and unknown fields | Pass in both engines |
+| Separate browser databases sync ciphertext and preserve offline conflicts | Pass in both engines |
+| Wrong recovery key and server failure preserve the saved key | Pass in both engines |
+| Large encrypted history uploads in parts and a following small page arrives | Pass; separate browser contexts and real PostgreSQL |
+| Cloud result survives browser closure, rejects stale replacement, keeps an attributed new page | Pass in both engines with fixture providers |
+| Account isolation, durable jobs, duplicate requests, provider failure and private access | Pass against PostgreSQL |
+| Accepted model drafts do not load external media | Pass; independent QA exercised nine media vectors |
+| Phone 390px and iPad 820px editor, history and account navigation | Pass in both engines; screenshots inspected |
+| Production offline reload, editing, history and no fake CLI update toast | Pass in both engines |
+| Native SQLite multi-page commit, stale-write rollback, delete and restore | Pass using an in-memory SQLite probe; native runtime not exercised |
+
+Final checks: workspace typecheck and production build pass; 25 existing unit tests
+pass; the PostgreSQL integration test passes. The final targeted browser runs cover
+45 cases. One existing Markdown clipboard test failed once before the title was
+ready, then passed three repeats; an explicit focus expectation was added and all
+five editor scenarios passed again. The earlier broader editor/pages/links/tables/
+Ask regression run passed 40 cases. Build output retains bundle-size warnings.
+
+A 2,000-paragraph probe measured editor transaction dispatch at median 3.5 ms,
+p95 4 ms and max 5.8 ms. Independent end-to-end key handling measured about 24 ms
+with and without authorship; this does not establish a 16 ms total typing budget.
+
+Screenshots are generated under `qa/report/`; failure traces use ignored
+`qa/.results-*` directories. Real OAuth callbacks, provider accounts, Vercel runtime
+and cron, physical iPhone/iPad Safari, and native account/attachment handoff remain
+unverified. See `apps/cloud/README.md`, decision 31 and `docs/DEFERRED.md` before
+inviting users to a hosted preview.

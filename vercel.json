@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @leadinglight/desktop build",
+  "outputDirectory": "apps/desktop/dist",
+  "regions": ["iad1"],
+  "functions": { "api/gateway.mjs": { "maxDuration": 180 } },
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/gateway?route=:path*" },
+    { "source": "/((?!assets/|sw.js|manifest.webmanifest|icon.svg|apple-touch-icon.png|builtin-plugins/).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
+    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "same-origin" }, { "key": "X-Frame-Options", "value": "DENY" }] }
+  ]
+}

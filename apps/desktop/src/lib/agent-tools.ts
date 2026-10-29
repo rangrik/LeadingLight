@@ -5,6 +5,7 @@ import type { PropDef } from "~/lib/catalog";
 import { pageLabel } from "~/lib/labels";
 import { parseHref, roleOf } from "~/lib/linked";
 import { editPage, liveContent } from "~/lib/live";
+import { action as historyAction } from "~/lib/history-types";
 import { docText, type LLObject, type ObjectSummary, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
 import { folders } from "~/lib/project-runtime/folders";
@@ -317,8 +318,8 @@ async function publish(c: Caller, a: Args, call: AgentCall) {
     ...(corrects && { corrects }),
     ...(ready && { ready }),
   };
-  const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content, properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } });
-  if (reply) await editPage(reply.batch, { properties: (p) => ({ ...p, batch: { ...(p.batch as Batch), response: report.id } }) });
+  const report = await createPage({ typeId: REPORT, title: str(a.title).trim() || "Report", content, properties: { parent: to, role: "report", "report-by": [agent.id], report: meta } }, { ...historyAction("Published report", { kind: "agent", name: agent.title, run: c.session }), action: call.id });
+  if (reply) await editPage(reply.batch, { properties: (p) => ({ ...p, batch: { ...(p.batch as Batch), response: report.id } }) }, { ...historyAction("Published report", { kind: "agent", name: agent.title, run: c.session }), action: call.id });
   const missing = reply?.answers.filter((x) => x.missing).map((x) => x.point) ?? [];
   return {
     ...published(report),
@@ -348,7 +349,7 @@ async function task(c: Caller, a: Args, call: AgentCall) {
       title,
       properties: { "subtask-of": [main], madeBy: agent.id, command: call.id, ...(projectProp && { [projectProp]: parent.properties[projectProp] }) },
       ...(brief && { content: htmlDoc(markdownHtml(brief).html) }),
-    });
+    }, { ...historyAction("Created subtask", { kind: "agent", name: agent.title, run: c.session }), action: call.id });
     return { subtask: ref(made2.id), title };
   }
   if (action !== "done" && action !== "undo") throw new Refusal("action is create, done or undo.");
@@ -358,7 +359,7 @@ async function task(c: Caller, a: Args, call: AgentCall) {
   const lead = ids(agent.properties["agent-parent"])[0] ?? agent.id;
   const mine = [lead, ...workersOf(lead).map((w) => w.id)].includes(str(sub.properties.madeBy));
   if (!mine) throw new Refusal(`Only the person marks “${titleOf(id)}” done${id === main ? ": it is the task you were given. Publish a report with ready: true when it is ready for review" : ""}.`);
-  await editPage(id, { properties: (p) => ({ ...p, done: action === "done" }) });
+  await editPage(id, { properties: (p) => ({ ...p, done: action === "done" }) }, historyAction("Updated task", { kind: "agent", name: agent.title, run: c.session }));
   return { subtask: ref(id), done: action === "done" };
 }
 
@@ -371,7 +372,7 @@ async function status(c: Caller, a: Args) {
     ...(Array.isArray(a.checklist) && { checklist: list.filter((x) => str(x?.text).trim()).slice(0, 50).map((x) => ({ text: str(x.text).trim().slice(0, 200), ...(x.done === true && { done: true }) })) }),
     at: Date.now(),
   };
-  await editPage(agent.id, { properties: (p) => ({ ...p, work }) });
+  await editPage(agent.id, { properties: (p) => ({ ...p, work }) }, historyAction("Updated progress", { kind: "agent", name: agent.title, run: c.session }));
   return { shown: "on your task, in place of what you said before" };
 }
 
@@ -402,7 +403,7 @@ async function context(c: Caller, a: Args) {
   if (!about.length) throw new Refusal("Say what the question is about: a page with the words it concerns, or a report's evidence.");
   const agent = await agentFor(c);
   const asks = [...((agent.properties.asks as Ask[] | undefined) ?? []), { question, about, at: Date.now() }].slice(-20);
-  await editPage(agent.id, { properties: (p) => ({ ...p, asks }) });
+  await editPage(agent.id, { properties: (p) => ({ ...p, asks }) }, historyAction("Asked for input", { kind: "agent", name: agent.title, run: c.session }));
   return { kept: "It shows beside your question in LeadingLight. Now ask it with your question tool, in the same words." };
 }
 

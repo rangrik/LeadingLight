@@ -10,10 +10,12 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 // the webview as berth://menu, the idea capture box (capture.rs), and the project runtime
 // that project chats run in (runtime.rs).
 mod agent;
+mod agent_guard;
 mod capture;
 mod clis;
 mod menu;
 mod runtime;
+mod relay;
 mod web;
 mod voice;
 
@@ -40,6 +42,12 @@ fn migrations() -> Vec<Migration> {
             version: 3,
             description: "pages linked to folders",
             sql: include_str!("../migrations/003_project_folders.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "atomic page history",
+            sql: include_str!("../migrations/004_history.sql"),
             kind: MigrationKind::Up,
         },
     ]
@@ -95,6 +103,7 @@ pub fn run() {
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(agent::Agents::default())
         .manage(runtime::Runtime::default())
+        .manage(relay::Relay::default())
         .invoke_handler(tauri::generate_handler![
             agent::agent_status,
             agent::agent_ask,
@@ -103,6 +112,10 @@ pub fn run() {
             agent::agent_cancel,
             agent::agent_list,
             agent::agent_folder,
+            relay::relay_list,
+            relay::relay_preview,
+            relay::relay_approve,
+            relay::relay_revoke,
             clis::cli_info,
             clis::cli_update,
             clis::codex_usage,
@@ -124,6 +137,7 @@ pub fn run() {
             menu_bar(app)?;
             capture::setup(app.handle())?;
             runtime::setup(app.handle());
+            relay::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -138,6 +152,7 @@ pub fn run() {
             if event.id() == "quit" {
                 QUITTING.store(true, Ordering::Relaxed);
                 capture::release(app);
+                agent::stop_all(app);
                 for window in app.webview_windows().values() {
                     let _ = window.close();
                 }

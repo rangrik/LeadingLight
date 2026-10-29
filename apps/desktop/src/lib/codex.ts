@@ -1,5 +1,7 @@
+import { LOCAL_AGENTS_MESSAGE } from "~/lib/agent";
 import { CLAUDE_EFFORTS, isClaude } from "~/lib/ai-prefs";
 import { isNative } from "~/lib/platform";
+import { remoteCodex, remoteTarget, selectedPair } from "~/lib/remote";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { createStore } from "~/lib/state";
 
@@ -34,14 +36,20 @@ const standIn = (): Json => {
 };
 
 let loading: Promise<void> | null = null;
+let loadedTarget = "";
 export function loadCodex(fresh = false): Promise<void> {
-  if (loading && !fresh) return loading;
+  const target = remoteTarget();
+  if (loading && !fresh && target === loadedTarget) return loading;
+  loadedTarget = target;
+  codex.set({ state: "checking", models: [] });
   loading = (async () => {
     let r: Json;
     try {
       if (await isNative) {
         const { invoke } = await import("@tauri-apps/api/core");
         r = await invoke("codex_status");
+      } else if (selectedPair()) { r = await remoteCodex();
+      } else if (!import.meta.env.DEV) { throw new Error(LOCAL_AGENTS_MESSAGE);
       } else if (projectPrefs.get().enabled && !new URLSearchParams(location.search).has("codex")) {
         const res = await fetch("/__runtime/codex");
         r = await res.json();
@@ -49,9 +57,11 @@ export function loadCodex(fresh = false): Promise<void> {
       } else r = standIn();
     } catch (e) {
       const error = String(e);
+      if (loadedTarget !== target) return;
       codex.set({ state: /not installed/i.test(error) ? "missing" : "signed-out", models: [], error });
       return;
     }
+    if (loadedTarget !== target) return;
     const account = r?.account?.result?.account;
     // Codex 0.164 lists some models with no efforts; the standard ones keep the control there.
     const models: GptModel[] = (r?.models?.result?.data ?? [])

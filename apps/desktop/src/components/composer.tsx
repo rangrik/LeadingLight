@@ -71,6 +71,7 @@ const mentionsIn = (value: ComposerValue): Mention[] =>
 export function Composer({
   ready,
   busy,
+  stopping = false,
   placeholder,
   agents,
   pages,
@@ -84,6 +85,7 @@ export function Composer({
 }: {
   ready: boolean;
   busy: boolean;
+  stopping?: boolean;
   placeholder: string;
   agents: Agent[];
   pages: PageRef[];
@@ -172,7 +174,7 @@ export function Composer({
         <ComposerActionGroup align="end" className="min-w-0 flex-nowrap">
           <ModelPicker back={fieldRef} s={s} />
           {busy ? (
-            <Button aria-label="Stop" className={round} onClick={onStop} size="icon-sm" variant="outline">
+            <Button aria-label={stopping ? "Stopping" : "Stop"} disabled={stopping} className={round} onClick={onStop} size="icon-sm" variant="outline">
               <Square className="size-2.5 fill-current" />
             </Button>
           ) : (

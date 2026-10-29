@@ -40,7 +40,7 @@ const fakes = (): Cli[] => [
 ];
 
 async function info(): Promise<Cli[]> {
-  if (!(await isNative)) return fakes();
+  if (!(await isNative)) return import.meta.env.DEV ? fakes() : [];
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<Cli[]>("cli_info");
 }

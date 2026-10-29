@@ -470,7 +470,7 @@ export function BlockEditor({
         editor.view.focus();
       },
       getJSON: () => editor.getJSON(),
-      setContent: (doc) => editor.commands.setContent(doc),
+      setContent: (doc) => editor.chain().setMeta("preserveOrigin", true).setContent(doc).run(),
       // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
       // from a surface (the ask bar) opened in between.
       refocus: () => editor.view.focus(),
@@ -521,7 +521,7 @@ export function BlockEditor({
         for (let i = 0; i < index; i++) from += doc.child(i).nodeSize;
         let to = from;
         for (let i = index; i < index + count; i++) to += doc.child(i).nodeSize;
-        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, to, editor.schema.nodeFromJSON(block))));
+        editor.view.dispatch(closeHistory(editor.state.tr.replaceWith(from, to, editor.schema.nodeFromJSON(block))).setMeta("preserveOrigin", true));
         // A link put where the cursor was leaves it on the line after, as "@" alone on a line does.
         const { selection } = editor.state;
         const tr = closeHistory(editor.state.tr);

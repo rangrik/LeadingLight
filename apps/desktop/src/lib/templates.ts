@@ -1,6 +1,7 @@
 import type { LLObject } from "./objects";
 import { objects } from "./objects";
 import { createPage, space, typeOf } from "./space";
+import type { ChangeContext } from "./history-types";
 
 // A template is a page whose "templateOf" names its type. It is hidden from lists, links and
 // the sidebar, and edited like any page.
@@ -24,7 +25,7 @@ export async function pageInit(typeId: string, init: Partial<LLObject> = {}, tem
   };
 }
 
-export const newPage = async (typeId: string, init: Partial<LLObject> = {}, templateId?: string) => createPage(await pageInit(typeId, init, templateId));
+export const newPage = async (typeId: string, init: Partial<LLObject> = {}, templateId?: string, context?: ChangeContext) => createPage(await pageInit(typeId, init, templateId), context);
 
 export const newTemplate = (typeId: string) =>
   createPage({ typeId, title: `${typeOf(typeId).name} template`, properties: { templateOf: typeId } });

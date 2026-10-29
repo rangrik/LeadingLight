@@ -1,3 +1,4 @@
+import { toastManager } from "@leadinglight/ui/components/toast";
 import { MessageSquareDashed } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
@@ -103,7 +104,7 @@ function useFit(words: Part[], on: boolean) {
 
 // The nod, or Undo once nodded: the same button, so nothing jumps.
 const Nod = ({ line }: { line: Line }) => (
-  <Button onClick={() => void (line.done ? undo(line) : nod(line))} size="xs" variant="outline">
+  <Button onClick={() => void (line.done ? undo(line) : nod(line)).catch((error: unknown) => toastManager.add({ type: "error", title: "Couldn’t finish that action", description: String(error) }))} size="xs" variant="outline">
     {line.done ? "Undo" : line.nod}
   </Button>
 );

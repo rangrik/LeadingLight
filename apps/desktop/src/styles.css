@@ -77,3 +77,11 @@
 .ll-page[data-page-toc] { --toc: 60px; }
 @container (width >= 960px) { .ll-page[data-page-toc] { --toc: 200px; } }
 @container (width < 1168px) { .ll-page[data-page-notes][data-page-toc] { --toc: 60px; } }
+html[data-authorship="true"] .ll-editor [data-origin="agent"] {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--info) 55%, transparent);
+}
+html[data-authorship="true"] .ll-editor [data-origin="human"] {
+  text-decoration: underline dotted color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  text-underline-offset: 3px;
+}

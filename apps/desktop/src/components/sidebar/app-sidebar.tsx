@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { CloudButton } from "~/components/cloud-settings";
 import { UsageButton } from "~/components/usage-button";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
@@ -68,7 +69,8 @@ export function AppSidebar({
   types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
 }) {
-  const { isMobile, state } = useSidebar();
+  const { isMobile, state, setOpenMobile } = useSidebar();
+  const pick = <E,>(fn: (event: E) => void) => (event: E) => { fn(event); if (isMobile) setOpenMobile(false); };
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
       <AppSidebarHeader subtitle="Notes" />
@@ -76,7 +78,7 @@ export function AppSidebar({
         <SidebarGroup className="pb-0">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={onToday}>
+              <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={pick(onToday)}>
                 <CalendarDays />
                 <span>Today</span>
               </SidebarMenuButton>
@@ -84,17 +86,18 @@ export function AppSidebar({
           </SidebarMenu>
         </SidebarGroup>
         <nav aria-label="Types">
-          <NavTypes types={types} />
+          <NavTypes types={types.map((t) => ({ ...t, onSelect: pick(t.onSelect) }))} />
         </nav>
         {pinned.length > 0 && (
           <nav aria-label="Pinned">
-            <NavProjects label="Pinned" projects={pinned} />
+            <NavProjects label="Pinned" projects={pinned.map((p) => ({ ...p, onSelect: pick(p.onSelect) }))} />
           </nav>
         )}
         <nav aria-label="Recent">
-          <NavProjects label="Recent" onCreate={onCreate} projects={pages} sortable />
+          <NavProjects label="Recent" onCreate={() => { onCreate(); if (isMobile) setOpenMobile(false); }} projects={pages.map((p) => ({ ...p, onSelect: pick(p.onSelect) }))} sortable />
         </nav>
       </SidebarContent>
+      <CloudButton />
       <UsageButton />
     </Sidebar>
   );
