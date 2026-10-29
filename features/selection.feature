@@ -55,6 +55,12 @@ Feature: Selecting blocks
     When I select the block "two" and type "x"
     Then the body still contains "one", "two", "three", "four" unchanged
 
+  Scenario: Clicking text after a selected recording accepts the next key
+    Given a recording block is selected above a transcript paragraph
+    When I click the paragraph and immediately type " Edited later."
+    Then the words are inserted at the clicked cursor position
+    And the recording stays intact and is no longer selected
+
   Scenario: Pressing a handle again and again shows one steady highlight
     When I click the handle of "two" five times, slowly and quickly, and hold the last press
     Then "two" shows only the block tint the whole time: no text highlight appears on press,

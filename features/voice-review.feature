@@ -21,8 +21,11 @@ Feature: Turn a recording into ideas and tasks
     When I stop recording and transcription succeeds
     And close Quick capture and reload the app
     Then the saved capture opens as a page with its audio and original transcript
-    And "Review transcript" offers the original words even after I edit the page's text
+    When I click its transcript paragraph and immediately type " Edited later."
+    Then the new words appear in the page body
+    And "Review transcript" still offers only the original words
     And creating an Idea from those words keeps the recording intact
+    And the source page keeps "Edited later."
 
   Scenario: Keep a whole transcript as an idea
     Given a saved recording has a transcript

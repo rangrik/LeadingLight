@@ -1,5 +1,31 @@
 import { expect, test } from "@playwright/test";
 
+// Seam: a text click must clear a node selection before the browser reports selectionchange.
+// Otherwise the block-selection input guard drops the first typed keys.
+test("Clicking text after a selected recording accepts immediate typing", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  const title = page.getByRole("textbox", { name: "Title", exact: true });
+  await title.fill("Selection handoff");
+  await page.evaluate(() => {
+    const editor = (window as any).__editor;
+    editor.commands.setContent({ type: "doc", content: [{ type: "voiceRecording" }, { type: "paragraph", content: [{ type: "text", text: "Original transcript" }] }] });
+    editor.commands.setNodeSelection(0);
+    editor.view.focus();
+  });
+  const body = page.getByRole("textbox", { name: "Page body" });
+  await page.keyboard.type("x");
+  await expect(body.locator("p").first()).toHaveText("Original transcript");
+  await title.click();
+  await page.evaluate(() => document.addEventListener("selectionchange", (event) => event.stopImmediatePropagation(), true));
+  await body.locator("p").first().click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" Edited later.");
+  await expect(body.locator("p").first()).toHaveText("Original transcript Edited later.");
+  await expect(body.locator('[data-media="voice"]')).toHaveCount(1);
+  await expect(body.locator(".ll-selected")).toHaveCount(0);
+});
+
 // Seam: our block-selection keymap runs before TipTap's suggestion plugin.
 // Catches Escape in the slash menu selecting the block, so the next Backspace deletes it.
 test("Escape in the slash menu, then Backspace, only edits text", async ({ page }) => {

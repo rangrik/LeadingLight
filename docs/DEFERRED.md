@@ -179,3 +179,19 @@ A custom grammar-only trap would duplicate shared focus handling, so it is not a
 Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
 Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 `engine-focus-control.mjs`. Native behavior has not been tested.
+
+## 2026-10-29 — Computer Use background activation
+
+After background capture closes, automated mouse events can miss the main webview
+while LeadingLight is inactive. Opening the app through Finder before capture makes
+the same close-and-Play sequence pass. Keep that activation step in native QA; no
+capture focus change is justified. Revisit if a failure survives verified macOS
+activation. Evidence: [investigation](NATIVE-RECORDING-FOCUS.md).
+
+## 2026-10-29 — Occasional long-page typing samples over 16 ms
+
+On 2,000 paragraphs, baseline and fixed editor builds both have occasional 20–21 ms
+keydown-to-input samples, with averages around 11 ms and p95 around 15–16 ms. The
+selection fix does not run on typing and adds no measured cost. Revisit in a typing
+performance pass if the outliers persist without other local work running. Evidence:
+`apps/desktop/qa/report/native-focus-2026-10-29/agent-performance-results.json`.

@@ -244,6 +244,15 @@ export const BlockSelectionExtension = Extension.create({
       new Plugin({
         key,
         props: {
+          // The browser's selectionchange can arrive after the next typed key.
+          handleClick: (view, pos, event) => {
+            if (!view.editable || !selectedBlocks(view.state.selection) || event.button !== 0 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) return false;
+            if ((event.target as Element).closest("button, input, textarea, select, [contenteditable=false]")) return false;
+            if (!view.state.doc.resolve(pos).parent.inlineContent) return false;
+            view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pos)));
+            view.focus();
+            return true;
+          },
           // Typing over selected blocks does nothing, rather than replacing them.
           handleTextInput: (view) => selectedBlocks(view.state.selection) !== null,
           // The same for text from the emoji picker or dictation, which skips the key handlers.

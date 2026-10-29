@@ -139,6 +139,7 @@ test("Quick capture autostarts once and keeps the original transcript for page r
   await page.getByRole("textbox", { name: "Page body" }).locator("p").filter({ hasText: transcript }).click();
   await page.keyboard.press("End");
   await page.keyboard.type(" Edited later.");
+  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("Edited later.");
   await page.getByRole("button", { name: "Review transcript", exact: true }).click();
   await expect(review(page).getByRole("textbox", { name: "Original transcript" })).toHaveValue(transcript);
   await review(page).getByRole("button", { name: "Use whole transcript" }).click();
