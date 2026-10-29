@@ -195,8 +195,20 @@ The full isolated browser run passed all 147 scenarios; the two added edge cases
 passed separately in the twelve-test voice run. The original full run's sole failure
 was a trace-file collision between runners, not a failed app assertion.
 
-Main `e7caac7` was built and installed; its executable matches the built bundle.
-The updated app opens the saved recording and its transcript, but a fresh capture
-waits for microphone access. The computer-use tool blocks macOS's permission dialog,
-so final-build recording remains pending the user's permission click. The earlier
-native passes above are not claimed as verification of this updated build.
+Installed build `e7caac7` now passes the native recheck after the user allowed access.
+An 8.7-second microphone take survived Stop followed immediately by leaving the page.
+A 17-second capture-panel take survived Stop followed by Escape and a normal relaunch.
+Both native players reached the end. The user chose a speech fixture for recognition;
+the real take was preserved before substituting the fixture in only its QA asset.
+
+Native Retry transcription produced the fixture's words. Review played its 3.7-second
+audio, then created `Native QA final transcript task` in `Native QA garden project`.
+Its exact body, type, project and recording anchor passed SQLite assertions; following
+the source link reopened the retained audio, snapshot and linked Task. Evidence includes
+`final-saved-objects.json`, `final-panel-object.json` and both real microphone takes.
+
+CUA sometimes lost panel focus or failed to activate controls after permission/capture
+transitions. Normal relaunch restored them; a product cause was not established and
+the observation is in DEFERRED. This does not claim human listening or live-speech
+recognition accuracy. The newer browser bundle prepared from main was left uninstalled;
+these native results identify the installed `e7caac7` executable, not that newer bundle.
