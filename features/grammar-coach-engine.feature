@@ -40,3 +40,13 @@ Feature: Safe local grammar suggestions
     Then the review says that it is checking or could not finish
     And it does not claim that the writing has no suggestions
     And retry can check the same text again
+
+  Scenario: A selected passage stays bounded
+    Given review is limited to a range inside a paragraph
+    Then only suggestions fully inside that range are returned
+    And an empty range returns no suggestions
+    And paragraphs outside the range are not checked for this review
+    When a correction changes the passage length
+    Then its remaining words can still be reviewed without including neighboring words
+    When the selected words are deleted
+    Then the review does not widen to the whole page

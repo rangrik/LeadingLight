@@ -162,3 +162,14 @@ with a fresh browser profile. The toast is unrelated to this merge; changing its
 layer affects every modal, so notification placement needs a separate fix. Revisit
 before the next narrow-window polish pass. Screenshot:
 `apps/desktop/qa/report/mi-shots/x-update-toast-over-sheet-520.png`.
+
+## 2026-10-28 — Very rapid Tab repeat across dialog edges
+
+Base UI 1.9 moves focus from its hidden dialog guards on the next animation frame.
+Several Tab presses before that frame can briefly reach the background in Chromium;
+focus then returns inside. This also reproduces in the unchanged Delete page dialog.
+At 200 ms between keys, forward and backward focus stay contained at 1280 and 520 px.
+A custom grammar-only trap would duplicate shared focus handling, so it is not added.
+Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
+Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
+`engine-focus-control.mjs`. Native behavior has not been tested.

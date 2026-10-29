@@ -13,6 +13,7 @@ import { BlockHandle } from "./block-handle";
 import { pasteText } from "./markdown";
 import { MarkTip } from "./mark-tip";
 import { GrammarCoach } from "./grammar-coach";
+import type { GrammarRange } from "./grammar-review";
 import type { VoiceReview } from "./voice-review";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
@@ -289,7 +290,7 @@ export function BlockEditor({
   openRef.current = open;
   // The note just added, which opens with the cursor in it.
   const [newNote, setNewNote] = useState<string | null>(null);
-  const [grammarReview, setGrammarReview] = useState<{ at?: number } | null>(null);
+  const [grammarReview, setGrammarReview] = useState<{ at?: number; scope?: GrammarRange } | null>(null);
 
   const extensions = useMemo(
     () =>
@@ -401,6 +402,7 @@ export function BlockEditor({
   const onStatsRef = useRef(onStats);
   onStatsRef.current = onStats;
   const counting = Boolean(onStats);
+  const countGrammar = Boolean(writing?.grammar && !writing?.quiet);
   useEffect(() => {
     if (!counting) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -414,8 +416,8 @@ export function BlockEditor({
     const send = () => {
       const { doc, selection } = editor.state;
       const deadline = performance.now() + 20;
-      const page = countText(doc, 0, doc.content.size, deadline);
-      const selected = selection.empty ? null : countText(doc, selection.from, selection.to, deadline);
+      const page = countText(doc, 0, doc.content.size, deadline, countGrammar);
+      const selected = selection.empty ? null : countText(doc, selection.from, selection.to, deadline, countGrammar);
       const done = page.done && selected?.done !== false;
       if (done || performance.now() - sent > 1000) {
         sent = performance.now();
@@ -432,7 +434,7 @@ export function BlockEditor({
       editor.off("transaction", changed);
       off();
     };
-  }, [editor, counting]);
+  }, [editor, counting, countGrammar]);
 
   // Dev-only hook so QA scripts can read editor state.
   if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
@@ -493,7 +495,11 @@ export function BlockEditor({
         editor.commands.focus(position);
         editor.view.focus();
       },
-      reviewWriting: () => { if (!readOnly && !annotate && editor.isEditable) setGrammarReview({}); },
+      reviewWriting: () => {
+        if (readOnly || annotate || !editor.isEditable) return;
+        const { from, to, empty } = editor.state.selection;
+        setGrammarReview({ scope: !empty && editor.state.selection instanceof TextSelection ? { from, to } : undefined });
+      },
       getJSON: () => editor.getJSON(),
       setContent: (doc) => editor.commands.setContent(doc),
       // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
@@ -657,7 +663,7 @@ export function BlockEditor({
       />
       <TableToolbar editor={editor} />
       <MarkTip editor={editor} />
-      {!readOnly && !annotate && grammarReview && <GrammarCoach editor={editor} at={grammarReview.at} onClose={() => setGrammarReview(null)} />}
+      {!readOnly && !annotate && grammarReview && <GrammarCoach editor={editor} at={grammarReview.at} scope={grammarReview.scope} onClose={() => setGrammarReview(null)} />}
       <EmojiPicker editor={editor} />
     </div>
   );

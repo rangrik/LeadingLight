@@ -7,8 +7,8 @@ import { grammarMistakes, grammarText, mapGrammarKept } from "./grammar-prose";
 import { STYLE_WORDS } from "./style-words";
 
 export { isSpelling } from "./grammar";
-export { collectGrammarIssues, applyGrammarIssue, keepGrammarIssue, grammarIssueIsCurrent, onGrammarChange, addGrammarWord, grammarWords, removeGrammarWord, retryGrammarCheck } from "./grammar-review";
-export type { GrammarIssue, GrammarReview } from "./grammar-review";
+export { collectGrammarIssues, applyGrammarIssue, keepGrammarIssue, grammarIssueIsCurrent, onGrammarChange, addGrammarWord, grammarWords, removeGrammarWord, retryGrammarCheck, mapGrammarRange } from "./grammar-review";
+export type { GrammarIssue, GrammarReview, GrammarRange } from "./grammar-review";
 
 // iA Writer's editor aids (features/writing.feature). They only decorate: the page never changes.
 export type Part = "noun" | "verb" | "adjective" | "adverb" | "conjunction";
@@ -320,11 +320,11 @@ export type Count = Omit<ReturnType<typeof measure>, "filled"> & {
 };
 const zero = <K extends string>(keys: K[]) => Object.fromEntries(keys.map((k) => [k, 0])) as Record<K, number>;
 
-export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline = Infinity): { count: Count; done: boolean } {
+export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline = Infinity, checkGrammar = true): { count: Count; done: boolean } {
   if (!tag) loadTagger().catch(console.error);
   const c = { words: 0, characters: 0, sentences: 0, paragraphs: 0, parts: zero(PARTS), style: zero(CHECKS), grammar: {} as Record<string, number> };
   let parts = Boolean(tag);
-  let grammar = true;
+  let grammar = checkGrammar;
   let done = true;
   doc.nodesBetween(from, to, (node, pos) => {
     if (!node.isTextblock) return true;
@@ -341,8 +341,7 @@ export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline
     if (parts && !tagged) [parts, done] = [false, false];
     for (const t of tagged ?? []) if (inside(t)) c.parts[t.part]++;
     for (const f of a.style) if (inside(f)) c.style[f.check]++;
-    // Asked of every block, so Harper starts reading all of them at once.
-    const mistakes = mistakesOf(a, pos, doc);
+    const mistakes = checkGrammar ? mistakesOf(a, pos, doc) : [];
     if (!mistakes) grammar = false;
     for (const f of mistakes ?? []) if (inside(f)) c.grammar[f.kind] = (c.grammar[f.kind] ?? 0) + 1;
     return false;

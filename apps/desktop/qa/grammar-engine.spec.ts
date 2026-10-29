@@ -13,12 +13,12 @@ async function start(page: Page, inline = false) {
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await load(page);
 }
-async function ready(page: Page) {
-  await expect.poll(() => page.evaluate(() => {
+async function ready(page: Page, scope?: { from: number; to: number }) {
+  await expect.poll(() => page.evaluate((scope) => {
     const w = window as any;
-    const result = w.__grammar.collectGrammarIssues(w.__editor);
+    const result = w.__grammar.collectGrammarIssues(w.__editor, scope);
     return result.pending ? "pending" : result.error ?? "ready";
-  }), { timeout: 15000 }).toBe("ready");
+  }, scope), { timeout: 15000 }).toBe("ready");
 }
 
 // Seam: WASM ranges and replacements must match rich text, including emoji and undo.
@@ -89,4 +89,74 @@ test("Grammar review skips code and cited words", async ({ page }) => {
   ] }));
   await ready(page);
   expect(await page.evaluate(() => (window as any).__grammar.collectGrammarIssues((window as any).__editor).issues.filter((i: any) => i.original === "recieved"))).toHaveLength(1);
+});
+
+// Seam: quiet counts must not check outside a passage, and corrections must stay inside it.
+test("Passage review skips outside paragraphs and partly selected words", async ({ page }) => {
+  await start(page);
+  const ranges = await page.evaluate(() => {
+    const editor = (window as any).__editor;
+    editor.commands.setContent("<p>I definately agree.</p><p>I recieved a apple.</p><p>I accomodate guests.</p>");
+    const blocks: { from: number; to: number; text: string }[] = [];
+    editor.state.doc.forEach((block: any, pos: number) => blocks.push({ from: pos + 1, to: pos + 1 + block.content.size, text: block.textContent }));
+    return { blocks, scope: { from: blocks[1].from, to: blocks[2].from } };
+  });
+  await expect(page.getByRole("button", { name: "Counts", exact: true })).toContainText("10 words");
+  await ready(page, ranges.scope);
+  const result = await page.evaluate(async ({ blocks, scope, path }) => {
+    const w = window as any;
+    const grammar = await import(path.replace("grammar-review.ts", "grammar.ts"));
+    const outsideUncached = [blocks[0], blocks[2]].map(block => grammar.mistakesIn(block.text) === undefined);
+    const word = { from: blocks[1].from + 2, to: blocks[1].from + 10 };
+    return {
+      outsideUncached,
+      all: w.__grammar.collectGrammarIssues(w.__editor, scope).issues.map((i: any) => i.original),
+      word: w.__grammar.collectGrammarIssues(w.__editor, word).issues.map((i: any) => i.original),
+      partial: w.__grammar.collectGrammarIssues(w.__editor, { from: word.from + 1, to: word.to }).issues,
+      empty: w.__grammar.collectGrammarIssues(w.__editor, { from: word.from, to: word.from }),
+    };
+  }, { ...ranges, path: modulePath });
+  expect(result.outsideUncached).toEqual([true, true]);
+  expect(result.all).toContain("recieved");
+  expect(result.all).toContain("a");
+  expect(result.word).toEqual(["recieved"]);
+  expect(result.partial).toEqual([]);
+  expect(result.empty).toEqual({ issues: [], pending: false, error: null });
+});
+
+// Seam: mapping keeps correction insertions but excludes neighboring typing and deleted scopes.
+test("Passage mapping includes its correction and never widens after deletion", async ({ page }) => {
+  await start(page);
+  await page.evaluate(() => (window as any).__editor.commands.setContent("<p>I ate a apple.</p>"));
+  await ready(page, { from: 7, to: 8 });
+  const result = await page.evaluate(() => {
+    const w = window as any, editor = w.__editor, api = w.__grammar;
+    let scope = { from: 7, to: 8 };
+    const before = scope;
+    const track = ({ transaction }: any) => { scope = api.mapGrammarRange(scope, transaction); };
+    editor.on("transaction", track);
+    const issue = api.collectGrammarIssues(editor, scope).issues.find((i: any) => i.original === "a");
+    const applied = api.applyGrammarIssue(editor, issue, "an");
+    const corrected = { scope, text: editor.state.doc.textBetween(scope.from, scope.to) };
+    editor.commands.undo();
+    scope = before;
+    const undone = editor.state.doc.textBetween(scope.from, scope.to);
+    editor.view.dispatch(editor.state.tr.insertText("left ", scope.from));
+    editor.view.dispatch(editor.state.tr.insertText(" right", scope.to));
+    const boundaries = editor.state.doc.textBetween(scope.from, scope.to);
+    editor.view.dispatch(editor.state.tr.delete(scope.from, scope.to).insertText("outside", scope.from));
+    const deleted = scope;
+    const empty = api.collectGrammarIssues(editor, scope);
+    editor.view.dispatch(editor.state.tr.insertText("more", scope.from));
+    const stillEmpty = scope;
+    editor.off("transaction", track);
+    return { applied, corrected, undone, boundaries, deleted, empty, stillEmpty };
+  });
+  expect(result.applied).toBe(true);
+  expect(result.corrected).toEqual({ scope: { from: 7, to: 9 }, text: "an" });
+  expect(result.undone).toBe("a");
+  expect(result.boundaries).toBe("a");
+  expect(result.deleted.from).toBe(result.deleted.to);
+  expect(result.empty).toEqual({ issues: [], pending: false, error: null });
+  expect(result.stillEmpty.from).toBe(result.stillEmpty.to);
 });

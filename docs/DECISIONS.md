@@ -481,6 +481,8 @@ saves whatever was typed on close so a capture can never be lost.
 Grammar help defaults to review on request. Inline underlines are optional. Harper provides
 actual suggestions; applying one preserves marks, has its own undo step, and refuses stale
 text. Keep wording remembers that occurrence for the current page session, not a universal rule.
+A text selection bounds the review; Apply pauses on its result until Next suggestion.
+Quiet word counts do not start grammar checks.
 
 Short lessons are authored for named rules, with optional practice. Saved tips store rule ids,
 not a mistake history. Dictionary words stay on this device. Listening uses only local English

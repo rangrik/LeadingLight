@@ -6,6 +6,7 @@ Feature: Writing help that leaves room to think
     When I write "I recieved a apple." and pause
     Then no spelling or grammar underlines, error totals, or correction popups appear
     And the text is unchanged
+    And visible word counts do not start a background grammar check
     When I choose "Review writing" from the page's Writing menu
     Then one suggestion is shown with the original words and a proposed change
     And the review can be closed at any time without changing text
@@ -85,3 +86,42 @@ Feature: Writing help that leaves room to think
     When I switch to the other tab and review its writing
     Then its own suggestion is shown
     And neither page gains grammar underlines or an automatic grammar popup while drafting
+
+  Scenario: Review only the passage I chose
+    Given a page has spelling slips in two paragraphs
+    When I select words in the second paragraph and choose Review writing
+    Then the review says "Selected text"
+    And it offers only corrections fully inside those words
+    And Apply and Undo never change the first paragraph
+    And a partly selected word is not offered
+    When I close the review, clear the selection and choose Review writing
+    Then the review says "Whole page" and can offer the first paragraph's slip
+
+  Scenario: Take a breath after a correction
+    Given the review has more than one suggestion
+    When I choose Apply
+    Then it shows the change I chose and Undo
+    And the next suggestion does not appear until I choose "Next suggestion"
+    And "Why?" still explains the change I just made
+    And I can save that tip or try one practice without changing more text
+    And Undo stays visible in the footer with Done for now while the lesson scrolls
+    When I choose Undo
+    Then my wording returns and I can review it again
+    When the page changes elsewhere while this result is open
+    Then Undo does not undo someone else's edit
+
+  Scenario: A suggestion stays still while other paragraphs finish checking
+    Given I have already reviewed the second paragraph
+    And the first paragraph has not been checked yet
+    When I open a whole-page review and see a suggestion
+    Then that suggestion stays visible while other results arrive
+    And moving on is still my choice
+    And Undo returns to the correction I just made
+
+  Scenario: A double-click does not choose a second action
+    Given the review offers more than one suggestion
+    When I double-click Apply
+    Then only the chosen correction is applied
+    And the result stays open and nothing is read aloud
+    When I double-click Keep this wording on another review
+    Then only that suggestion is kept and the next suggestion remains available

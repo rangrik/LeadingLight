@@ -16,11 +16,15 @@ person using it, not a claim to treat ADHD or measure someone's ability.
 ## First version
 
 Review writing lives in each editable page's Writing menu. When I ask is the default;
-While I write enables underlines that open the same review. Quiet mode also hides grammar
-totals in the header. It does not silently rewrite, normalize tone, or expand sentences.
+While I write enables underlines that open the same review. Select a passage first to
+review only those words, or leave the cursor alone to review the page. Quiet mode hides
+grammar totals and word counts do not start a grammar check. It does not silently rewrite,
+normalize tone, or expand sentences.
 
 The review shows one suggestion, its original words and the proposed replacement. Why is
-collapsed. Supported rules have a short authored lesson and two-choice practice; other rules
+collapsed. After Apply, the chosen change stays visible with Undo; Next suggestion moves
+on when the person is ready. Why, saved tips, and practice still refer to that change.
+Supported rules have a short authored lesson and two-choice practice; other rules
 use Harper's explanation without inventing a lesson. Either answer explains the choice.
 
 Saved tips contain generic examples, never a log of the person's mistakes. No grades, streaks,
@@ -90,3 +94,46 @@ words and finishing the block sends one fresh turn. Evidence:
 The independent final runs passed 99 assertions with no page errors. One existing
 CLI-update toast can cover the narrow review sheet temporarily; it is recorded in
 DEFERRED with its screenshot. The remaining native checks above were not run.
+
+## Passage review and a slower pace — 2026-10-28
+
+The Writing menu keeps a text selection when it opens. Review checks its intersecting
+paragraphs and offers only corrections fully inside the selection; a partly selected
+word is excluded. Corrections move the range with their changed length. Neighboring
+typing stays outside it, and deleting the passage never switches to a whole-page review.
+Undo restores both the wording and the original range; a later edit hides that Undo.
+It stays visible in the footer while a long lesson scrolls.
+
+Apply holds the before/after words on screen. Next suggestion is an explicit choice.
+The optional explanation, practice, saved tip, and local Listen remain about the change
+just made. Later checker results do not replace a suggestion already on screen. A
+repeated pointer click after Apply or Keep cannot choose a second action as the card
+moves. Closing the sheet is always enough to return to writing. Quiet word counts
+now skip Harper entirely, so a selected review does not check every other paragraph.
+
+Verification: the new UI journeys and six engine checks pass on port 1447;
+inline underlines and grammar totals still work. Typecheck and 25 desktop unit tests
+pass. In the 2,000-paragraph probe, quiet counts settled in 1.72 seconds without grammar
+work; inline counts and grammar settled in 17.40 seconds. Thirty actual key presses in
+each mode took median 3.05/3.10 ms and max 8.6/7.5 ms from keydown to document change
+(quiet/inline), with none above 16 ms. These timings exclude paint and ran alongside
+browser QA. Evidence: `apps/desktop/qa/report/scope-performance.json`.
+
+The first full suite passed 125 scenarios. Independent Sonnet QA then caught a late
+result replacing the visible suggestion, Apply's second click hitting Listen, and
+Keep's second click dismissing an unread suggestion. Those three paths now have
+regressions that pass; repeated-click cases run at both 1280 and 520 px. The original report is retained at
+`apps/desktop/qa/report/scope-independent/report.md`; it describes the state before
+these fixes. The final independent recheck is recorded separately.
+
+Final verification: `QA_PORT=1447 pnpm qa` passed all 128 scenarios after the fixes.
+Typecheck, the production frontend build, and 25 desktop unit tests pass. Sonnet's
+final independent recheck passed 26 checks at each width (52 total), with no page
+errors: `apps/desktop/qa/report/scope-independent/recheck.md`. The original report
+stays as evidence of the bugs found, not the final state. Raw final logs are in
+`apps/desktop/qa/report/scope-verification/`.
+
+Real system speech and native WebKit still need a person in the Mac app. Broader
+authored lessons and learning outcomes still need feedback from use. This slice
+stays uncommitted in the worktree, following the commit-only-when-asked rule. Main
+was not edited, and no app was installed or pushed.
