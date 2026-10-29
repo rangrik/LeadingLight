@@ -66,6 +66,14 @@ Feature: Quick capture
     Then microphone capture stops and the recording is not kept, as leaving a page does; words
       typed stay saved
 
+  Scenario: Close after stopping while the audio is saving
+    Given the box is recording and saving its audio is slow
+    When I press "Stop and transcribe" and immediately close the box
+    Then the stopped take finishes saving in Captures, even without a typed title
+    And opening it offers playback and "Retry transcription"
+    And later edits to an already saved capture are kept
+    But deleting its voice block before saving finishes does not bring it back
+
   Scenario: The guess still shows
     Given the Project page "Garden" exists
     When I type "fix the gate latch before the weekend"

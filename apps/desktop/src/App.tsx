@@ -33,7 +33,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
-import { hostCapture, openIdea, saveCapture, saveWebpage } from "~/lib/capture";
+import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
@@ -176,6 +176,7 @@ export default function App() {
   const captureHost = useMemo<CaptureHost>(
     () => ({
       save: saveCapture,
+      saveVoice,
       saveWeb: saveWebpage,
       open: (id) => {
         setCapture(false);

@@ -1,4 +1,5 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import { attachVoiceAsset, BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import type { Asset } from "@leadinglight/editor/assets";
 import type { LinkHost } from "@leadinglight/editor/links";
 import { CalendarDays, Check, Folder, Globe, Hash, Lightbulb, Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -26,6 +27,7 @@ import type { SourceMode } from "~/lib/web-source";
 // create makes the picker's projects there, and guess asks tail (lib/tail.ts) there.
 export type CaptureHost = {
   save: (draft: Draft) => Promise<string | null>;
+  saveVoice: (id: string, recordingId: string, asset: Asset) => Promise<void>;
   saveWeb: (url: string, mode: SourceMode, project: string | null, signal: AbortSignal) => Promise<WebSaved>;
   open: (id: string) => void;
   close: () => void;
@@ -96,6 +98,8 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     return () => {
       alive.current = false;
       clearTimeout(pause.current);
+      const body = draft.current.body?.();
+      if (body) draft.current.body = () => body;
       gone.current();
     };
   }, []);
@@ -331,6 +335,17 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
               draft.current.voice = true;
               setVoice(true);
               touched();
+            }}
+            onVoiceDetached={async (recordingId, asset) => {
+              await chain.current;
+              if (id.current) return host.saveVoice(id.current, recordingId, asset);
+              const body = draft.current.body?.();
+              const next = body && attachVoiceAsset(body, recordingId, asset);
+              if (!next) return;
+              draft.current.body = () => next;
+              draft.current.voice = true;
+              version.current++;
+              await save();
             }}
             placeholder="It saves as you go and shows up in Today."
             ref={editorRef}

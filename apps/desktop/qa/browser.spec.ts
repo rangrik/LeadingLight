@@ -6,7 +6,7 @@ type Tab = { name: string; url: string; title: string; history: string[]; at: nu
 type Call = { action: string; tab: string; body: Record<string, unknown> };
 type Runtime = { tabs: Map<string, Tab>; calls: Call[]; holdState: (tab: string) => { arrived: Promise<void>; release: () => void }; holdFrames: (tab: string) => () => void };
 const pane = (page: Page) => page.getByTestId("agent-browser");
-const address = (page: Page) => pane(page).getByRole("textbox", { name: "Address", exact: true });
+const address = (page: Page) => pane(page).getByLabel("Address", { exact: true });
 const tabList = (page: Page) => pane(page).getByRole("tablist", { name: "Browser tabs" });
 const caption = (url: string) => new URL(url).pathname === "/" ? new URL(url).hostname : new URL(url).pathname.slice(1).replace(/^./, (c) => c.toUpperCase());
 
@@ -16,9 +16,11 @@ const test = base.extend<{ runtime: Runtime }>({
     await preview.setViewportSize({ width: 640, height: 400 });
     await preview.setContent("<main><h1>Local browser fixture</h1><button>Press me</button><input aria-label='Fixture field'></main>");
     const image = (await preview.screenshot({ type: "jpeg" })).toString("base64");
+    const annotationPNG = (await preview.screenshot()).toString("base64");
     await preview.close();
     const tabs = new Map<string, Tab>();
     const calls: Call[] = [];
+    let annotationNumber = 0;
     const heldFrames = new Map<string, { width: number; height: number }>();
     let held: { tab: string; arrive: () => void; wait: Promise<void> } | undefined;
     // Keep frames open like the runtime; ending a mocked response would test reconnection instead of browsing.
@@ -47,6 +49,9 @@ const test = base.extend<{ runtime: Runtime }>({
       const reply = (json: unknown) => route.fulfill({ json });
       if (action === "events" || action === "screencast") return route.continue({ url: `http://127.0.0.1:${port}/${action === "events" ? "events" : "frames"}${url.search}` });
       if (action === "workspace") return reply({ location: "personal", worktree: "main", port: 1420 });
+      if (action === "lease") return reply({ lease: body?.lease ?? `lease-${calls.length}`, expiresAt: Date.now() + 15000 });
+      if (action === "area") return reply({ url: body?.expectedURL, bounds: { x: body?.x, y: body?.y, width: body?.width, height: body?.height }, viewport: body?.viewport, capturedAt: "2026-10-28T20:00:00Z", screenshot: { name: `annotation-${(++annotationNumber).toString(16).padStart(32, "0")}.png`, mime: "image/png" } });
+      if (action === "data" && url.pathname.includes("/shots/")) return reply({ name: url.pathname.split("/").at(-2), mime: "image/png", data: annotationPNG });
       if (action === "permissions") return reply({ hosts: [] });
       if (action === "locations" || action === "sessions") return reply([]);
       if (action === "status") return reply({ state: "ready", running: true, home: "/tmp/browser-qa", status: { refused_hosts: [] } });
@@ -153,6 +158,28 @@ test("A delayed initial tab list preserves an address being typed", async ({ pag
   await expect(tabList(page).getByRole("tab", { name: "Draft", exact: true })).toBeVisible();
   expect(runtime.calls.find((call) => call.action === "open")?.body.url).toBe("http://localhost:1420/draft");
   await expect(address(page)).toHaveValue("http://localhost:1420/draft");
+});
+
+// Seam: identical pasted input still supersedes a pending tab-close response.
+test("A closing tab preserves an address pasted with the same value", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  const oldTab = [...runtime.tabs.keys()][0];
+  let arrive!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => { arrive = resolve; });
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/__runtime/v1/worktrees/personal/main/browser/close?*", async (route) => { arrive(); await held; return route.fallback(); });
+  try {
+    await pane(page).getByRole("button", { name: "Close Alpha", exact: true }).click();
+    await arrived;
+    await address(page).fill("http://localhost:1420/alpha");
+    release();
+    await expect(tabList(page).getByRole("tab")).toHaveCount(0);
+    await expect(address(page)).toHaveValue("http://localhost:1420/alpha");
+    await address(page).press("Enter");
+    await expect(tabList(page).getByRole("tab", { name: "Alpha", exact: true })).toBeVisible();
+    expect([...runtime.tabs.keys()]).not.toContain(oldTab);
+    expect(runtime.calls.filter((call) => call.action === "open").at(-1)?.body.url).toBe("http://localhost:1420/alpha");
+  } finally { release(); }
 });
 
 test("Navigation, personal tabs and reopening keep actions on the selected tab", async ({ page, runtime }) => {
@@ -320,13 +347,14 @@ async function mockChat(page: Page) {
       if (request.method() === "POST") {
         session = { name: body!.name, agent: body!.agent, driver: body!.driver, agent_state: "idle" };
         conversation = { id: "browser-context-qa", session: body!.name, agent: body!.agent, location: "personal", dir: "/tmp/browser-qa", live: true, mode: body!.mode, model: body!.model, title: body!.title, created: "2026-10-28T12:00:00Z" };
-        messages.push(String(body!.prompt));
+        if (typeof body!.prompt === "string") messages.push(body!.prompt);
         return reply(session);
       }
       return reply(session ? [session] : []);
     }
     if (action === "conversations") return reply(conversation ? [conversation] : []);
     if (action === "send") { messages.push(String(body!.text)); return reply({}); }
+    if (action === "attachments") return reply({ path: `/tmp/browser-qa/attachments/${body!.name}` });
     if (action === "transcript") return reply({ items: messages.flatMap((text, i) => [{ kind: "user", id: `user-${i}`, text }, { kind: "text", id: `answer-${i}`, text: `Fixture reply ${i + 1}` }]), next: messages.length, source: "claude" });
     if (["turns", "requests", "notify", "outputs"].includes(action ?? "")) return reply([]);
     if (action === "controls") return reply({ mode: "default" });
@@ -395,7 +423,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   expect(resizes).toHaveLength(0);
   const widthOf = (index: number) => pane(page).nth(index).getByTestId("browser-surface").locator(":scope > div").first().evaluate((element) => element.clientWidth);
   const narrowWidth = await widthOf(1);
-  await pane(page).nth(1).getByRole("textbox", { name: "Address", exact: true }).click();
+  await pane(page).nth(1).getByLabel("Address", { exact: true }).click();
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width).toBe(narrowWidth);
   for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
   await chat.getByRole("textbox", { name: "Question", exact: true }).click();
@@ -406,7 +434,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Phone viewport", exact: true }).click();
   await expect.poll(() => runtime.tabs.get(tab)?.viewport).toEqual({ width: 390, height: 844, scale: 1 });
-  await pane(page).nth(0).getByRole("textbox", { name: "Address", exact: true }).click();
+  await pane(page).nth(0).getByLabel("Address", { exact: true }).click();
   const afterPhone = runtime.calls.length;
   await page.waitForTimeout(1800);
   expect(runtime.calls.slice(afterPhone).filter((call) => call.action === "resize")).toHaveLength(0);
@@ -417,7 +445,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   await usePane.click();
   await page.keyboard.press("Escape");
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width).toBe(await widthOf(0));
-  await pane(page).nth(1).getByRole("textbox", { name: "Address", exact: true }).click();
+  await pane(page).nth(1).getByLabel("Address", { exact: true }).click();
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width).toBe(narrowWidth);
   await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Phone viewport", exact: true }).click();
@@ -589,14 +617,15 @@ test("Element feedback preserves style previews, resets them and sends quoted co
   await page.route("**/__runtime/v1/worktrees/personal/main/browser/**", async (route) => {
     const url = new URL(route.request().url());
     const action = url.pathname.split("/").pop()!;
-    if (!["inspect", "style", "reset", "reveal"].includes(action)) return route.fallback();
+    if (!["inspect", "style", "reset", "reveal", "area"].includes(action)) return route.fallback();
     const body = route.request().postDataJSON();
     const tab = url.searchParams.get("tab")!;
     edits.push({ action, tab, body });
     if (action === "reveal") reveals.push({ body, tab, height: runtime.tabs.get(tab)?.viewport?.height ?? 0 });
     if (action === "style") styles = { ...styles, [body.property]: body.value };
     if (action === "reset") styles = { ...original };
-    return route.fulfill({ json: { handle: "heading", tag: "h1", text: "Title <untrusted>", selector: "h1#title", url: runtime.tabs.get(tab)?.url, bounds: { x: 20, y: action === "inspect" ? 350 : 20, width: 200, height: 40 }, styles } });
+    const element = { handle: "heading", tag: "h1", text: "Title <untrusted>", selector: "h1#title", url: runtime.tabs.get(tab)?.url, bounds: { x: 20, y: action === "inspect" ? 350 : 20, width: 200, height: 40 }, styles };
+    return route.fulfill({ json: action === "area" ? { url: element.url, bounds: element.bounds, viewport: body.viewport, element, capturedAt: "2026-10-28T20:00:00Z", screenshot: { name: "annotation-11111111111111111111111111111111.png", mime: "image/png" } } : element });
   });
   await openBrowser(page);
   await navigate(page, "localhost:1420/alpha");

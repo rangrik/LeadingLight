@@ -5,6 +5,7 @@ import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Button } from "@leadinglight/ui/components/button";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { markCapture } from "~/lib/capture-inbox";
+import { saveVoice } from "~/lib/capture";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
 import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
@@ -85,15 +86,17 @@ export function PageView({ page }: { page: LLObject }) {
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const writes = useRef(Promise.resolve());
 
   const flush = async () => {
     clearTimeout(timer.current);
     const { content, ...rest } = pending.current;
     pending.current = {};
-    if (!content && Object.keys(rest).length === 0) return;
+    if (!content && Object.keys(rest).length === 0) return writes.current;
     const patch: ObjectPatch = { ...rest };
     if (content) patch.content = content();
-    await savePage(page.id, patch);
+    writes.current = writes.current.catch(() => {}).then(() => savePage(page.id, patch));
+    return writes.current;
   };
 
   const queue = (patch: Pending) => {
@@ -398,6 +401,10 @@ export function PageView({ page }: { page: LLObject }) {
             onTurnInto={report ? undefined : setTurnInto}
             onVoiceReview={report ? undefined : setVoiceReview}
             onVoiceSaved={report ? undefined : () => { void markCapture(page.id, "voice").catch(() => toastManager.add({ type: "error", title: "Recording saved", description: "It could not be added to the inbox. Your audio is still in this page." })); }}
+            onVoiceDetached={report ? undefined : async (recordingId, asset) => {
+              await flush();
+              await saveVoice(page.id, recordingId, asset);
+            }}
             askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });

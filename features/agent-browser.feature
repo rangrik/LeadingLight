@@ -118,6 +118,13 @@ Feature: An agent's browser
     And a refused public site offers Allow with its hostname before it loads
     And javascript, data, file and credential-bearing URLs are refused
 
+  Scenario: Re-enter an address while its tab is closing
+    Given a personal tab is showing http://localhost:1420/alpha
+    When I close it and paste that same address before closing finishes
+    Then closing the tab keeps my pasted address
+    When I press Enter
+    Then that address opens in a new personal tab
+
   Scenario: Browse a page by hand
     Given "site folder" is open in a browser tab
     When I click "Press me" in the live page

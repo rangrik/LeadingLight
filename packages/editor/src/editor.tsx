@@ -8,7 +8,7 @@ import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
-import type { AssetStore } from "./assets";
+import type { Asset, AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { pasteText } from "./markdown";
 import { MarkTip } from "./mark-tip";
@@ -30,6 +30,7 @@ import { type Count, countText, OFF, onFound, type Writing, writingKey } from ".
 export type { NotesStore } from "./sidenotes";
 export type { PageSelection } from "./page-selection";
 export type { VoiceReview } from "./voice-review";
+export { attachVoiceAsset } from "./voice-save";
 export { Player as MediaPlayer } from "./player";
 export { citesIn } from "./anchors";
 
@@ -61,6 +62,7 @@ export type BlockEditorHandle = {
   // For changes made from outside the page (linking a mention, merging a tag).
   getJSON: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
+  attachVoiceAsset: (recordingId: string, asset: Asset) => boolean;
   // Focus back where the caret was, for a panel giving the keyboard back.
   refocus: () => void;
   hasFocus: () => boolean;
@@ -223,6 +225,7 @@ export function BlockEditor({
   onTurnInto,
   onVoiceReview,
   onVoiceSaved,
+  onVoiceDetached,
   askKeys,
   style = "plain",
   notes,
@@ -256,6 +259,7 @@ export function BlockEditor({
   onTurnInto?: (selection: PageSelection) => void;
   onVoiceReview?: (review: VoiceReview) => void;
   onVoiceSaved?: () => void;
+  onVoiceDetached?: (recordingId: string, asset: Asset) => Promise<void>;
   askKeys?: string;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
@@ -282,8 +286,10 @@ export function BlockEditor({
   const openRef = useRef(open);
   const voiceReviewRef = useRef(onVoiceReview);
   const voiceSavedRef = useRef(onVoiceSaved);
+  const voiceDetachedRef = useRef(onVoiceDetached);
   voiceReviewRef.current = onVoiceReview;
   voiceSavedRef.current = onVoiceSaved;
+  voiceDetachedRef.current = onVoiceDetached;
   onChangeRef.current = onChange;
   onExitTopRef.current = onExitTop;
   notesRef.current = notes;
@@ -317,6 +323,7 @@ export function BlockEditor({
       }).map((extension) => extension.name === "voiceRecording" ? extension.configure({
         onReview: !readOnly && !annotate && onVoiceReview ? (review: VoiceReview) => voiceReviewRef.current?.(review) : undefined,
         onSaved: !readOnly && !annotate && onVoiceSaved ? () => voiceSavedRef.current?.() : undefined,
+        onDetached: !readOnly && !annotate && onVoiceDetached ? async (id: string, asset: Asset) => { await voiceDetachedRef.current?.(id, asset); } : undefined,
       }) : extension),
     // The store is a module-level singleton in the app.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -502,6 +509,18 @@ export function BlockEditor({
       },
       getJSON: () => editor.getJSON(),
       setContent: (doc) => editor.commands.setContent(doc),
+      attachVoiceAsset: (recordingId, asset) => {
+        if (editor.isDestroyed) return false;
+        const tr = editor.state.tr;
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name === "voiceRecording" && node.attrs.recordingId === recordingId && !node.attrs.src) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, autostart: false });
+          }
+        });
+        if (!tr.docChanged) return false;
+        editor.view.dispatch(tr.setMeta("addToHistory", false));
+        return true;
+      },
       // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
       // from a surface (the ask bar) opened in between.
       refocus: () => editor.view.focus(),

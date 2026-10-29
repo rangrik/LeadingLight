@@ -1,0 +1,3473 @@
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index 03658a8..9ab148c 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -143,6 +143,7 @@ type browser struct {
+ 	recapturing bool // a sharp frame is being taken
+ 	dirty       bool // and the page changed again since
+ 	controls    browserControls
++	developer   browserDeveloper
+ }
+ 
+ // NewBrowsers makes the box's browser manager.
+diff --git a/internal/box/browserannotations_test.go b/internal/box/browserannotations_test.go
+new file mode 100644
+index 0000000..9d531f9
+--- /dev/null
++++ b/internal/box/browserannotations_test.go
+@@ -0,0 +1,400 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++)
++
++// Frame identity and viewer ownership keep a comment from changing another document or viewer's preview.
++func TestBrowserAnnotationsWithRealChromium(t *testing.T) {
++	if testing.Short() {
++		t.Skip("starts Chromium")
++	}
++	chrome, err := FindChromium()
++	if err != nil {
++		t.Skip(err)
++	}
++	wrapper := filepath.Join(t.TempDir(), "chromium")
++	if err = os.WriteFile(wrapper, []byte("#!/bin/sh\nexec '"+strings.ReplaceAll(chrome, "'", "'\\''")+"' --site-per-process \"$@\"\n"), 0o700); err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("BERTH_CHROMIUM", wrapper)
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = before })
++	var port int
++	b, wt, p := browserBox(t, func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("content-type", "text/html; charset=utf-8")
++		switch r.URL.Path {
++		case "/frame":
++			fmt.Fprint(w, `<body style="margin:0"><button id="child" style="position:absolute;left:20px;top:30px;width:100px;height:40px;color:red" onclick="window.clicked=true">Child</button><iframe style="position:absolute;left:25px;top:80px;width:150px;height:100px;border:5px solid" src="http://billing.cal.devbox.localhost:1377/nested"></iframe>`)
++		case "/nested":
++			fmt.Fprint(w, `<body style="margin:0"><button id="nested" style="position:absolute;left:7px;top:9px;width:80px;height:30px;color:red" onclick="window.clicked=true">Nested</button>`)
++		case "/replacement":
++			fmt.Fprint(w, `<button id="child" style="color:purple">Replacement</button>`)
++		default:
++			fmt.Fprintf(w, `<title>Annotations</title><body style="margin:0;height:2000px"><button id="first" style="position:absolute;left:10px;top:10px;width:100px;height:40px;color:red">First</button><button id="second" style="position:absolute;left:10px;top:60px;width:100px;height:30px;color:red">Second</button><iframe id="outer" style="position:absolute;left:200px;top:100px;width:300px;height:200px;border:10px solid;transform:scale(1.25);transform-origin:0 0" src="http://localhost:%d/frame"></iframe>`, port)
++		}
++	})
++	port = p
++	m := b.NewBrowsers(t.TempDir(), 1)
++	defer m.CloseAll("test")
++	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
++	defer cancel()
++	loc, _ := b.Locations.Get(ctx, "cal")
++	br, err := m.get(ctx, loc, wt, "user-annotations")
++	if err != nil {
++		t.Fatal(err)
++	}
++	site := "http://billing.cal.devbox.localhost:1377/"
++	if _, err = br.Open(ctx, site); err != nil {
++		t.Fatal(err)
++	}
++	request := func(fn func(http.ResponseWriter, *http.Request) error, body any, out any) error {
++		raw, _ := json.Marshal(body)
++		r := httptest.NewRequest("POST", "http://box/?tab=user-annotations", bytes.NewReader(raw))
++		r.SetPathValue("loc", "cal")
++		r.SetPathValue("wt", "billing")
++		rec := httptest.NewRecorder()
++		if err := fn(rec, r); err != nil {
++			return err
++		}
++		if out != nil {
++			return json.Unmarshal(rec.Body.Bytes(), out)
++		}
++		return nil
++	}
++	eval := func(js string) string {
++		t.Helper()
++		v, err := br.evaluate(ctx, js)
++		if err != nil {
++			t.Fatal(err)
++		}
++		return string(v)
++	}
++	inspect := func(x, y float64, lease string) browserInspection {
++		t.Helper()
++		var out browserInspection
++		if err := request(b.browserInspect, map[string]any{"x": x, "y": y, "lease": lease}, &out); err != nil {
++			t.Fatal(err)
++		}
++		return out
++	}
++	change := func(handle, lease, color string) error {
++		return request(b.browserStyle, map[string]string{"handle": handle, "lease": lease, "property": "color", "value": color}, nil)
++	}
++	lease := func() string {
++		t.Helper()
++		var out struct {
++			Lease string `json:"lease"`
++		}
++		if err := request(b.browserInspectLease, map[string]string{}, &out); err != nil {
++			t.Fatal(err)
++		}
++		return out.Lease
++	}
++	wait := func(name string, test func() bool) {
++		t.Helper()
++		until := time.Now().Add(4 * time.Second)
++		for time.Now().Before(until) {
++			if test() {
++				return
++			}
++			time.Sleep(15 * time.Millisecond)
++		}
++		t.Fatal(name)
++	}
++
++	t.Run("hover is read only", func(t *testing.T) {
++		for range 4 {
++			var out browserInspection
++			if err := request(b.browserInspectHover, map[string]float64{"x": 30, "y": 30}, &out); err != nil || out.Handle != "" || out.Text != "First" {
++				t.Fatal(out, err)
++			}
++		}
++		br.mu.Lock()
++		count := len(br.controls.inspected)
++		br.mu.Unlock()
++		if count != 0 {
++			t.Fatal("hover created handles", count)
++		}
++	})
++	t.Run("nested cross-origin frames", func(t *testing.T) {
++		child := inspect(250, 165, "")
++		if child.Text != "Child" || child.Bounds.X != 237.5 || child.Bounds.Y != 150 || child.Bounds.Width != 125 || child.Frame == nil || len(child.Frame.Path) != 2 || child.URL != site {
++			t.Fatalf("child %+v", child)
++		}
++		nested := inspect(270, 240, "")
++		if nested.Text != "Nested" || nested.Bounds.X != 258.75 || nested.Bounds.Y != 230 || nested.Bounds.Width != 100 || nested.Frame == nil || len(nested.Frame.Path) != 3 {
++			t.Fatalf("nested %+v", nested)
++		}
++		eval(`document.querySelector('#outer').style.width='300.5px';true`)
++		fractional := inspect(270, 240, "")
++		if fractional.Handle != nested.Handle || fractional.Bounds.X != 258.75 || fractional.Bounds.Width != 100 {
++			t.Fatalf("fractional frame drift %+v", fractional)
++		}
++		eval(`document.querySelector('#outer').style.width='300px';true`)
++		if err := change(nested.Handle, "", "blue"); err != nil {
++			t.Fatal(err)
++		}
++		var reset browserInspection
++		if err := request(b.browserStyleReset, map[string]string{"handle": nested.Handle}, &reset); err != nil || reset.Styles["color"] != "rgb(255, 0, 0)" {
++			t.Fatal(reset, err)
++		}
++		eval(`window.scrollTo(0,50);true`)
++		scrolled := inspect(270, 190, "")
++		if scrolled.Handle != nested.Handle || scrolled.Bounds.Y != 180 {
++			t.Fatalf("scroll %+v", scrolled)
++		}
++		if err := br.applyControlZoom(ctx, 1.5); err != nil {
++			t.Fatal(err)
++		}
++		zoomed := inspect(405, 285, "")
++		if zoomed.Handle != nested.Handle || zoomed.Bounds.X != 388.125 || zoomed.Bounds.Y != 270 {
++			t.Fatalf("zoom %+v", zoomed)
++		}
++		br.applyControlZoom(ctx, 1)
++		eval(`window.scrollTo(0,0);document.querySelector('#outer').style.top='1500px';true`)
++		var revealed browserInspection
++		if err := request(b.browserInspectReveal, map[string]string{"handle": nested.Handle}, &revealed); err != nil {
++			t.Fatal(err)
++		}
++		if revealed.Bounds.Y < 0 || revealed.Bounds.Y+revealed.Bounds.Height > float64(br.currentViewport().Height) {
++			t.Fatalf("frame reveal clipped %+v", revealed)
++		}
++		eval(`document.querySelector('#outer').style.transform='rotate(20deg)';true`)
++		if err := change(nested.Handle, "", "green"); err == nil {
++			t.Fatal("rotated frame accepted")
++		}
++		eval(`document.querySelector('#outer').style.transform='scale(1.25)';document.querySelector('#outer').style.top='100px';window.scrollTo(0,0);true`)
++		eval(fmt.Sprintf(`document.querySelector('#outer').src='http://localhost:%d/replacement';true`, port))
++		wait("frame did not navigate", func() bool {
++			frames, _ := br.inspectionFrames(ctx)
++			for _, f := range frames {
++				if strings.HasSuffix(f.URL, "/replacement") {
++					return true
++				}
++			}
++			return false
++		})
++		if err := change(child.Handle, "", "green"); err == nil {
++			t.Fatal("old frame changed replacement")
++		}
++		fresh := inspect(235, 130, "")
++		if fresh.Handle == child.Handle || fresh.Text != "Replacement" || fresh.Styles["color"] != "rgb(128, 0, 128)" {
++			t.Fatal(fresh)
++		}
++	})
++	t.Run("leases expire independently", func(t *testing.T) {
++		a, c := lease(), lease()
++		first, second := inspect(30, 30, a), inspect(30, 70, c)
++		if err := change(first.Handle, a, "blue"); err != nil {
++			t.Fatal(err)
++		}
++		if err := change(second.Handle, c, "green"); err != nil {
++			t.Fatal(err)
++		}
++		if err := change(first.Handle, c, "black"); err == nil {
++			t.Fatal("another lease used handle")
++		}
++		rival := inspect(30, 30, c)
++		if err := change(rival.Handle, c, "black"); err == nil {
++			t.Fatal("overlapping preview accepted")
++		}
++		br.mu.Lock()
++		br.controls.inspectLeases[a] = time.Now().Add(5 * time.Second)
++		br.scheduleInspectionExpiry()
++		br.mu.Unlock()
++		var renewed struct {
++			ExpiresAt int64 `json:"expiresAt"`
++		}
++		if err := request(b.browserInspectLease, map[string]string{"lease": a}, &renewed); err != nil {
++			t.Fatal(err)
++		}
++		if time.Until(time.UnixMilli(renewed.ExpiresAt)) < 10*time.Second {
++			t.Fatal("renewal did not extend the preview lease")
++		}
++		if eval(`document.querySelector('#first').style.color`) != `"blue"` {
++			t.Fatal("renewed preview expired")
++		}
++		br.mu.Lock()
++		br.controls.inspectLeases[a] = time.Now().Add(80 * time.Millisecond)
++		br.scheduleInspectionExpiry()
++		br.mu.Unlock()
++		wait("expired viewer preview remained", func() bool { return eval(`document.querySelector('#first').style.color`) == `"red"` })
++		if eval(`document.querySelector('#second').style.color`) != `"green"` {
++			t.Fatal("expiry reset active viewer")
++		}
++		if err := request(b.browserInspectLease, map[string]string{"lease": a}, nil); err == nil {
++			t.Fatal("expired lease renewed")
++		}
++		if err := request(b.browserReleaseInspectionLease, map[string]string{"lease": c}, nil); err != nil {
++			t.Fatal(err)
++		}
++		if eval(`document.querySelector('#second').style.color`) != `"red"` {
++			t.Fatal("release left preview")
++		}
++	})
++	t.Run("abandoned cleanup retries a cancelled request", func(t *testing.T) {
++		a := lease()
++		first := inspect(30, 30, a)
++		if err := change(first.Handle, a, "blue"); err != nil {
++			t.Fatal(err)
++		}
++		br.inspectMu.Lock()
++		br.mu.Lock()
++		node := br.controls.inspected[first.Handle]
++		delete(br.controls.inspected, first.Handle)
++		delete(br.controls.inspectLeases, a)
++		br.mu.Unlock()
++		cancelled, stop := context.WithCancel(ctx)
++		stop()
++		br.undoInspections(cancelled, map[string]*browserInspectedNode{first.Handle: node})
++		br.inspectMu.Unlock()
++		wait("cancelled cleanup was not retried", func() bool { return eval(`document.querySelector('#first').style.color`) == `"red"` })
++	})
++	t.Run("area snapshot is scoped and retained", func(t *testing.T) {
++		v := br.currentViewport()
++		body := map[string]any{"x": 10, "y": 10, "width": 100, "height": 40, "viewport": map[string]int{"width": v.Width, "height": v.Height}, "expectedURL": site}
++		var out struct {
++			URL        string `json:"url"`
++			Screenshot struct {
++				File string `json:"file"`
++				Name string `json:"name"`
++			} `json:"screenshot"`
++		}
++		if err := request(b.browserInspectArea, body, &out); err != nil {
++			t.Fatal(err)
++		}
++		raw, err := os.ReadFile(out.Screenshot.File)
++		if err != nil {
++			t.Fatal(err)
++		}
++		w, h := pngSize(raw)
++		if w != 100 || h != 40 || out.URL != site || !annotationShotName.MatchString(out.Screenshot.Name) {
++			t.Fatalf("wrong crop %dx%d %+v", w, h, out)
++		}
++		highDPR := v
++		highDPR.Scale = 2
++		if err := br.resize(ctx, highDPR); err != nil {
++			t.Fatal(err)
++		}
++		var retina struct {
++			Screenshot struct {
++				File string `json:"file"`
++			} `json:"screenshot"`
++		}
++		if err := request(b.browserInspectArea, body, &retina); err != nil {
++			t.Fatal(err)
++		}
++		highRaw, err := os.ReadFile(retina.Screenshot.File)
++		if err != nil {
++			t.Fatal(err)
++		}
++		hw, hh := pngSize(highRaw)
++		if hw != 200 || hh != 80 {
++			t.Fatalf("retina crop %dx%d", hw, hh)
++		}
++		if err := br.resize(ctx, v); err != nil {
++			t.Fatal(err)
++		}
++		pruneShots(filepath.Dir(out.Screenshot.File), 0)
++		if _, err = os.Stat(out.Screenshot.File); err != nil {
++			t.Fatal("transient GC removed annotation", err)
++		}
++		body["expectedURL"] = site + "changed"
++		if err := request(b.browserInspectArea, body, nil); err == nil {
++			t.Fatal("stale URL captured")
++		}
++		body["expectedURL"] = site
++		body["viewport"] = map[string]int{"width": v.Width - 1, "height": v.Height}
++		if err := request(b.browserInspectArea, body, nil); err == nil {
++			t.Fatal("stale viewport captured")
++		}
++		body["viewport"] = map[string]int{"width": v.Width, "height": v.Height}
++		body["x"] = -1
++		if err := request(b.browserInspectArea, body, nil); err == nil {
++			t.Fatal("negative crop accepted")
++		}
++	})
++	t.Run("element capture validates the selected document and its geometry", func(t *testing.T) {
++		a := lease()
++		eval(`document.querySelector('#first').style.left='10px'`)
++		first := inspect(30, 30, a)
++		v := br.currentViewport()
++		body := map[string]any{"handle": first.Handle, "lease": a, "viewport": map[string]int{"width": v.Width, "height": v.Height}, "expectedURL": site}
++		var out struct {
++			Element    browserInspection `json:"element"`
++			Screenshot struct {
++				File string `json:"file"`
++			} `json:"screenshot"`
++		}
++		if err := request(b.browserInspectArea, body, &out); err != nil {
++			t.Fatal(err)
++		}
++		raw, err := os.ReadFile(out.Screenshot.File)
++		if err != nil {
++			t.Fatal(err)
++		}
++		w, h := pngSize(raw)
++		if out.Element.Text != "First" || w != 100 || h != 40 {
++			t.Fatal("wrong element evidence", out, w, h)
++		}
++		br.cdp.mu.Lock()
++		original := br.cdp.w
++		br.cdp.w = &annotationCaptureMutation{WriteCloser: original, session: br.session, expression: `document.querySelector('#first').style.left='120px'`}
++		br.cdp.mu.Unlock()
++		err = request(b.browserInspectArea, body, nil)
++		br.cdp.mu.Lock()
++		br.cdp.w = original
++		br.cdp.mu.Unlock()
++		if err == nil {
++			t.Fatal("attached old geometry after layout shift")
++		}
++		eval(`document.querySelector('#first').style.left='10px'`)
++		br.cdp.mu.Lock()
++		br.cdp.w = &annotationCaptureMutation{WriteCloser: original, session: br.session, expression: `document.querySelector('#first').replaceWith(document.querySelector('#first').cloneNode(true))`}
++		br.cdp.mu.Unlock()
++		err = request(b.browserInspectArea, body, nil)
++		br.cdp.mu.Lock()
++		br.cdp.w = original
++		br.cdp.mu.Unlock()
++		if err == nil {
++			t.Fatal("attached a replacement node with old metadata")
++		}
++		body["handle"] = inspect(30, 30, a).Handle
++		if _, err := br.Open(ctx, site); err != nil {
++			t.Fatal(err)
++		}
++		if err := request(b.browserInspectArea, body, nil); err == nil {
++			t.Fatal("old handle survived a same-URL reload")
++		}
++	})
++}
++
++// Change the real page exactly before the screenshot command reaches Chromium.
++type annotationCaptureMutation struct {
++	io.WriteCloser
++	session, expression string
++}
++
++func (w *annotationCaptureMutation) Write(raw []byte) (int, error) {
++	if w.expression != "" && bytes.Contains(raw, []byte(`"method":"Page.captureScreenshot"`)) {
++		command, _ := json.Marshal(map[string]any{"id": 0, "sessionId": w.session, "method": "Runtime.evaluate", "params": map[string]any{"expression": w.expression}})
++		w.expression = ""
++		if _, err := w.WriteCloser.Write(append(command, 0)); err != nil {
++			return 0, err
++		}
++	}
++	return w.WriteCloser.Write(raw)
++}
+diff --git a/internal/box/browserapi.go b/internal/box/browserapi.go
+index 0f8e900..f6ecd91 100644
+--- a/internal/box/browserapi.go
++++ b/internal/box/browserapi.go
+@@ -563,6 +563,7 @@ func (b *Box) browserAllow(w http.ResponseWriter, r *http.Request) error {
+ 
+ func (b *Box) mountBrowser(route func(string, func(http.ResponseWriter, *http.Request) error)) {
+ 	b.mountBrowserControls(route)
++	b.mountBrowserDeveloper(route)
+ 	p := "/v1/worktrees/{loc}/{wt}/browser/"
+ 	route("POST "+p+"open", b.browserOpen)
+ 	route("POST "+p+"resize", b.browserResize)
+diff --git a/internal/box/browsercontrols.go b/internal/box/browsercontrols.go
+index 4e3bfe6..5d0e70f 100644
+--- a/internal/box/browsercontrols.go
++++ b/internal/box/browsercontrols.go
+@@ -27,25 +27,27 @@ import (
+ 
+ // LeadingLight: controls use Chromium's state; input never waits for an agent snapshot.
+ type browserControls struct {
+-	loading      bool
+-	navSequence  uint64
+-	navCancel    context.CancelFunc
+-	failure      string
+-	dialog       *BrowserDialog
+-	chooser      int64
+-	chooserID    string
+-	chooserSeq   uint64
+-	multiple     bool
+-	zoom         float64
+-	closed       bool
+-	uploadDirs   []string
+-	frames       map[string]bool
+-	mainRequests map[string]bool
+-	requests     map[string]browserControlRequest
+-	refusedHosts map[string]bool
+-	inspectEpoch uint64
+-	inspected    map[string]*browserInspectedNode
+-	inspectUndo  map[int64]*browserInspectedNode
++	loading       bool
++	navSequence   uint64
++	navCancel     context.CancelFunc
++	failure       string
++	dialog        *BrowserDialog
++	chooser       int64
++	chooserID     string
++	chooserSeq    uint64
++	multiple      bool
++	zoom          float64
++	closed        bool
++	uploadDirs    []string
++	frames        map[string]bool
++	mainRequests  map[string]bool
++	requests      map[string]browserControlRequest
++	refusedHosts  map[string]bool
++	inspectEpoch  uint64
++	inspected     map[string]*browserInspectedNode
++	inspectUndo   map[string]*browserInspectedNode
++	inspectLeases map[string]time.Time
++	inspectTimer  *time.Timer
+ }
+ 
+ type browserControlRequest struct {
+@@ -841,6 +843,7 @@ func (c *chromium) publishControlTab(kind, name, why string) {
+ }
+ 
+ func (br *browser) closeControls() {
++	br.developerRevoke("")
+ 	br.mu.Lock()
+ 	br.controls.closed = true
+ 	if br.controls.navCancel != nil {
+@@ -986,16 +989,19 @@ func (b *Box) browserUpload(w http.ResponseWriter, r *http.Request) error {
+ }
+ 
+ type BrowserDownload struct {
+-	ID         string  `json:"id"`
+-	Name       string  `json:"name"`
+-	URL        string  `json:"url"`
+-	State      string  `json:"state"`
+-	Received   float64 `json:"receivedBytes"`
+-	Total      float64 `json:"totalBytes"`
+-	Tab        string  `json:"tab"`
+-	CreatedAt  string  `json:"createdAt"`
+-	Context    string  `json:"-"`
+-	Identified bool    `json:"-"`
++	ID          string  `json:"id"`
++	Name        string  `json:"name"`
++	URL         string  `json:"url"`
++	State       string  `json:"state"`
++	Received    float64 `json:"receivedBytes"`
++	Total       float64 `json:"totalBytes"`
++	Tab         string  `json:"tab"`
++	CreatedAt   string  `json:"createdAt"`
++	ExportState string  `json:"exportState,omitempty"`
++	ExportError string  `json:"exportError,omitempty"`
++	SavedPath   string  `json:"savedPath,omitempty"`
++	Context     string  `json:"-"`
++	Identified  bool    `json:"-"`
+ }
+ 
+ var downloadID = regexp.MustCompile(`^[A-Za-z0-9-]{1,80}$`)
+@@ -1073,7 +1079,7 @@ func (c *chromium) downloadEvent(method string, raw json.RawMessage) {
+ 	if len(c.downloads) > 200 {
+ 		var oldest BrowserDownload
+ 		for _, x := range c.downloads {
+-			if x.State != "inProgress" && (oldest.ID == "" || x.CreatedAt < oldest.CreatedAt) {
++			if x.State != "inProgress" && x.ExportState != "saving" && x.ExportState != "prompted" && (oldest.ID == "" || x.CreatedAt < oldest.CreatedAt) {
+ 				oldest = x
+ 			}
+ 		}
+@@ -1085,18 +1091,29 @@ func (c *chromium) downloadEvent(method string, raw json.RawMessage) {
+ 		data, _ := json.Marshal(c.downloads)
+ 		statefile.Write(filepath.Join(downloadDir(c.path), "index.json"), data)
+ 	}
++	if d.State == "completed" {
++		go c.exportCompletedDownload(d.ID)
++	}
+ }
+ 
+ func readDownloads(path string) map[string]BrowserDownload {
+ 	out := map[string]BrowserDownload{}
+ 	raw, err := os.ReadFile(filepath.Join(downloadDir(path), "index.json"))
+-	if err == nil && len(raw) < 1<<20 {
++	if err == nil && len(raw) < 4<<20 {
+ 		json.Unmarshal(raw, &out)
+ 	}
+ 	if out == nil {
+ 		out = map[string]BrowserDownload{}
+ 	}
+ 	for k, d := range out {
++		if d.ExportState == "prompted" {
++			d.ExportState = "dismissed"
++			out[k] = d
++		}
++		if d.ExportState == "saving" {
++			d.ExportState, d.ExportError = "error", "Saving was interrupted. Check the destination for a partial copy, or use Save to choose another file."
++			out[k] = d
++		}
+ 		if d.State == "inProgress" {
+ 			d.State = "canceled"
+ 			out[k] = d
+@@ -1295,7 +1312,7 @@ func (b *Box) browserShotData(w http.ResponseWriter, r *http.Request) error {
+ 		return err
+ 	}
+ 	name := r.PathValue("name")
+-	if !shotName.MatchString(name) {
++	if !shotName.MatchString(name) && !annotationShotName.MatchString(name) {
+ 		return badRequest("invalid screenshot")
+ 	}
+ 	data, err := boundedBrowserFile(b.Browsers.shotDir(loc.Name, wt.Name), name)
+@@ -1455,6 +1472,8 @@ func (b *Box) browserWorkspace(w http.ResponseWriter, r *http.Request) error {
+ }
+ 
+ func (b *Box) mountBrowserControls(route func(string, func(http.ResponseWriter, *http.Request) error)) {
++	route("GET /v1/browser/download-settings", b.browserDownloadPreferences)
++	route("PUT /v1/browser/download-settings", b.browserDownloadPreferences)
+ 	route("POST /v1/browser/workspace", b.browserWorkspace)
+ 	p := "/v1/worktrees/{loc}/{wt}/browser/"
+ 	route("GET "+p+"state", b.browserControlState)
+@@ -1465,6 +1484,10 @@ func (b *Box) mountBrowserControls(route func(string, func(http.ResponseWriter,
+ 	route("POST "+p+"dialog", b.browserDialog)
+ 	route("GET "+p+"selection", b.browserSelection)
+ 	route("POST "+p+"inspect", b.browserInspect)
++	route("POST "+p+"inspect/hover", b.browserInspectHover)
++	route("POST "+p+"inspect/lease", b.browserInspectLease)
++	route("DELETE "+p+"inspect/lease", b.browserReleaseInspectionLease)
++	route("POST "+p+"inspect/area", b.browserInspectArea)
+ 	route("POST "+p+"inspect/reveal", b.browserInspectReveal)
+ 	route("POST "+p+"style", b.browserStyle)
+ 	route("POST "+p+"style/reset", b.browserStyleReset)
+@@ -1473,6 +1496,8 @@ func (b *Box) mountBrowserControls(route func(string, func(http.ResponseWriter,
+ 	route("GET "+p+"downloads", b.browserDownloads)
+ 	route("POST "+p+"downloads/cancel", b.browserCancelDownload)
+ 	route("GET "+p+"downloads/{id}/data", b.browserDownloadData)
++	route("POST "+p+"downloads/{id}/prompt", b.browserDownloadPrompt)
++	route("PUT "+p+"downloads/{id}/prompt", b.browserDownloadPrompt)
+ 	route("GET "+p+"shots/{name}/data", b.browserShotData)
+ 	route("GET /v1/browser/permissions", b.browserPermissions)
+ 	route("DELETE /v1/browser/permissions", b.browserRevoke)
+diff --git a/internal/box/browserdeveloper.go b/internal/box/browserdeveloper.go
+new file mode 100644
+index 0000000..5f4eba9
+--- /dev/null
++++ b/internal/box/browserdeveloper.go
+@@ -0,0 +1,521 @@
++package box
++
++import (
++	"context"
++	"crypto/rand"
++	"encoding/hex"
++	"encoding/json"
++	"net/http"
++	"net/url"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++)
++
++const developerLifetime = 15 * time.Minute
++const developerResultLimit = 1 << 20
++
++type browserDeveloper struct {
++	mu                                 sync.Mutex
++	run                                sync.Mutex
++	id, origin, reason, state, session string
++	context                            string
++	epoch                              uint64
++	expires                            time.Time
++	events                             []browserDeveloperEvent
++	sequence                           int64
++	bytes                              int
++	dropped                            int
++	requests                           map[string]bool
++	requestOrder                       []string
++	timer                              *time.Timer
++}
++
++type browserDeveloperEvent struct {
++	Sequence  int64           `json:"sequence"`
++	Method    string          `json:"method"`
++	Params    json.RawMessage `json:"params"`
++	Truncated bool            `json:"truncated,omitempty"`
++}
++
++type browserDeveloperStatus struct {
++	Enabled bool      `json:"enabled"`
++	State   string    `json:"state"`
++	ID      string    `json:"id,omitempty"`
++	Origin  string    `json:"origin,omitempty"`
++	Reason  string    `json:"reason,omitempty"`
++	Expires time.Time `json:"expires,omitempty"`
++	Text    string    `json:"text"`
++}
++
++func (m *Browsers) developerEnabled() bool {
++	var setting struct {
++		Enabled bool `json:"enabled"`
++	}
++	raw, err := os.ReadFile(filepath.Join(m.Dir, "developer.json"))
++	return err == nil && json.Unmarshal(raw, &setting) == nil && setting.Enabled
++}
++
++func developerOrigin(raw string) string {
++	u, err := url.Parse(raw)
++	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
++		return ""
++	}
++	return u.Scheme + "://" + u.Host
++}
++
++func (br *browser) developerPage() (string, uint64, bool) {
++	br.mu.Lock()
++	defer br.mu.Unlock()
++	return developerOrigin(br.url), br.controls.inspectEpoch, br.controls.closed
++}
++
++func (br *browser) developerStatus() browserDeveloperStatus {
++	origin, epoch, closed := br.developerPage()
++	enabled := br.m.developerEnabled()
++	d := &br.developer
++	d.mu.Lock()
++	stale := !enabled || closed || (d.id != "" && (epoch != d.epoch || origin != d.origin || time.Now().After(d.expires)))
++	d.mu.Unlock()
++	if stale {
++		br.developerRevoke("")
++	}
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	state := d.state
++	if state == "" {
++		state = "none"
++	}
++	if !enabled {
++		state = "disabled"
++	}
++	out := browserDeveloperStatus{Enabled: enabled, State: state, ID: d.id, Origin: origin, Reason: d.reason, Expires: d.expires}
++	switch state {
++	case "disabled":
++		out.Text = "Developer access is off. Enable it in Browser settings, then request this page."
++	case "pending":
++		out.Text = "Developer access needs your approval in Browser → Developer tools for " + origin + "."
++	case "allowed":
++		out.Text = "Developer access approved for this page until navigation, revocation or " + d.expires.Format(time.RFC3339) + "."
++	case "denied":
++		out.Text = "Developer access was denied for this request."
++	default:
++		out.Text = "Request developer access with a reason before using page-scoped CDP."
++	}
++	return out
++}
++
++// Detaching the private session also stops its profiler and releases its remote object handles.
++func (br *browser) developerRevoke(id string) {
++	d := &br.developer
++	d.mu.Lock()
++	if id != "" && d.id != id {
++		d.mu.Unlock()
++		return
++	}
++	session := d.session
++	if d.timer != nil {
++		d.timer.Stop()
++	}
++	d.id, d.origin, d.reason, d.state, d.session, d.context = "", "", "", "", "", ""
++	d.expires, d.events, d.requests, d.requestOrder, d.timer = time.Time{}, nil, nil, nil, nil
++	d.bytes, d.dropped = 0, 0
++	d.mu.Unlock()
++	if session != "" {
++		br.cdp.listenSession(session, nil)
++		go func() {
++			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++			defer cancel()
++			br.cdp.call(ctx, session, "Profiler.stop", nil, nil)
++			br.cdp.call(ctx, "", "Target.detachFromTarget", map[string]string{"sessionId": session}, nil)
++		}()
++	}
++}
++
++func (br *browser) developerEvent(id, method string, raw json.RawMessage) {
++	if method == "Inspector.detached" || method == "Page.navigatedWithinDocument" {
++		br.developerRevoke(id)
++		return
++	}
++	if method == "Page.frameNavigated" {
++		var e struct {
++			Frame struct {
++				Parent string `json:"parentId"`
++			} `json:"frame"`
++		}
++		if json.Unmarshal(raw, &e) == nil && e.Frame.Parent == "" {
++			br.developerRevoke(id)
++			return
++		}
++	}
++	d := &br.developer
++	d.mu.Lock()
++	defer d.mu.Unlock()
++	if d.id != id || d.state != "allowed" {
++		return
++	}
++	if method == "Runtime.executionContextCreated" {
++		var e struct {
++			Context struct {
++				UniqueID string `json:"uniqueId"`
++				Aux      struct {
++					Default bool   `json:"isDefault"`
++					Frame   string `json:"frameId"`
++				} `json:"auxData"`
++			} `json:"context"`
++		}
++		if json.Unmarshal(raw, &e) == nil && e.Context.Aux.Default && e.Context.Aux.Frame == br.target {
++			d.context = e.Context.UniqueID
++		}
++	}
++	if method == "Network.requestWillBeSent" {
++		var e struct {
++			ID string `json:"requestId"`
++		}
++		if json.Unmarshal(raw, &e) == nil && e.ID != "" && !d.requests[e.ID] {
++			d.requests[e.ID] = true
++			d.requestOrder = append(d.requestOrder, e.ID)
++			if len(d.requestOrder) > 512 {
++				delete(d.requests, d.requestOrder[0])
++				d.requestOrder = d.requestOrder[1:]
++			}
++		}
++	}
++	if !strings.HasPrefix(method, "Network.") && !strings.HasPrefix(method, "Runtime.") && !strings.HasPrefix(method, "Log.") && !strings.HasPrefix(method, "Profiler.") {
++		return
++	}
++	d.sequence++
++	e := browserDeveloperEvent{Sequence: d.sequence, Method: method, Params: append(json.RawMessage(nil), raw...)}
++	if len(raw) > 32<<10 {
++		e.Params = json.RawMessage(`{"notice":"Event exceeds 32 KiB; inspect the individual resource."}`)
++		e.Truncated = true
++	}
++	d.events = append(d.events, e)
++	d.bytes += len(e.Params)
++	for len(d.events) > 256 || d.bytes > developerResultLimit {
++		d.bytes -= len(d.events[0].Params)
++		d.events = d.events[1:]
++		d.dropped++
++	}
++}
++
++func (b *Box) getBrowserDeveloper(w http.ResponseWriter, r *http.Request) error {
++	if b.Browsers == nil {
++		return badRequest("No browser runtime is available.")
++	}
++	writeJSON(w, map[string]bool{"enabled": b.Browsers.developerEnabled()})
++	return nil
++}
++
++func (b *Box) putBrowserDeveloper(w http.ResponseWriter, r *http.Request) error {
++	if b.Browsers == nil {
++		return badRequest("No browser runtime is available.")
++	}
++	var req struct {
++		Enabled bool `json:"enabled"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	if err := b.before(r, "browser.developer.settings", map[string]any{"enabled": req.Enabled}); err != nil {
++		return err
++	}
++	raw, _ := json.Marshal(req)
++	if err := statefile.Write(filepath.Join(b.Browsers.Dir, "developer.json"), raw); err != nil {
++		return err
++	}
++	if !req.Enabled {
++		b.Browsers.mu.Lock()
++		all := make([]*chromium, 0, len(b.Browsers.open))
++		for _, c := range b.Browsers.open {
++			all = append(all, c)
++		}
++		b.Browsers.mu.Unlock()
++		for _, c := range all {
++			for _, br := range c.list() {
++				br.developerRevoke("")
++			}
++		}
++	}
++	b.publish(r, "browser.developer.changed", map[string]any{"enabled": req.Enabled})
++	writeJSON(w, req)
++	return nil
++}
++
++func (b *Box) browserDeveloperStatus(w http.ResponseWriter, r *http.Request) error {
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	writeJSON(w, br.developerStatus())
++	return nil
++}
++
++func (b *Box) browserDeveloperRequest(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Reason string `json:"reason"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	req.Reason = strings.TrimSpace(req.Reason)
++	if req.Reason == "" || len(req.Reason) > 1000 {
++		return badRequest("Describe the developer task in 1–1000 bytes.")
++	}
++	br, loc, wt, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	s := br.developerStatus()
++	if !s.Enabled {
++		return httpError{http.StatusForbidden, s.Text}
++	}
++	origin, epoch, closed := br.developerPage()
++	if closed || origin == "" {
++		return badRequest("Open an HTTP or HTTPS page first.")
++	}
++	if err := b.before(r, "browser.developer.request", map[string]any{"location": loc.Name, "name": wt.Name, "tab": br.tab, "origin": origin, "reason": req.Reason}); err != nil {
++		return err
++	}
++	d := &br.developer
++	d.mu.Lock()
++	if d.state == "allowed" || d.state == "pending" {
++		d.mu.Unlock()
++		writeJSON(w, br.developerStatus())
++		return nil
++	}
++	var token [16]byte
++	if _, err := rand.Read(token[:]); err != nil {
++		d.mu.Unlock()
++		return err
++	}
++	if d.timer != nil {
++		d.timer.Stop()
++	}
++	d.id, d.origin, d.reason, d.state, d.epoch = hex.EncodeToString(token[:]), origin, req.Reason, "pending", epoch
++	d.expires = time.Now().Add(developerLifetime)
++	id := d.id
++	d.timer = time.AfterFunc(developerLifetime, func() { br.developerRevoke(id) })
++	d.mu.Unlock()
++	b.publish(r, "browser.developer.requested", map[string]any{"location": loc.Name, "name": wt.Name, "tab": br.tab, "origin": origin})
++	writeJSON(w, br.developerStatus())
++	return nil
++}
++
++func (b *Box) browserDeveloperDecide(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		ID    string `json:"id"`
++		Allow bool   `json:"allow"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	br, loc, wt, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	d := &br.developer
++	d.run.Lock()
++	defer d.run.Unlock()
++	s := br.developerStatus()
++	if !s.Enabled || s.State != "pending" || s.ID != req.ID || req.ID == "" {
++		return httpError{http.StatusConflict, "This developer request expired. Request the current page again."}
++	}
++	if err := b.before(r, "browser.developer.approve", map[string]any{"location": loc.Name, "name": wt.Name, "tab": br.tab, "origin": s.Origin, "allow": req.Allow}); err != nil {
++		return err
++	}
++	if !req.Allow {
++		d.mu.Lock()
++		d.state = "denied"
++		d.mu.Unlock()
++		writeJSON(w, br.developerStatus())
++		return nil
++	}
++	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
++	defer cancel()
++	var attached struct {
++		Session string `json:"sessionId"`
++	}
++	if err := br.cdp.call(ctx, "", "Target.attachToTarget", map[string]any{"targetId": br.target, "flatten": true}, &attached); err != nil {
++		return err
++	}
++	d.mu.Lock()
++	if d.id != req.ID || d.state != "pending" {
++		d.mu.Unlock()
++		br.cdp.call(ctx, "", "Target.detachFromTarget", map[string]string{"sessionId": attached.Session}, nil)
++		return httpError{http.StatusConflict, "The page changed before approval."}
++	}
++	d.state, d.session, d.requests = "allowed", attached.Session, map[string]bool{}
++	d.mu.Unlock()
++	br.cdp.listenSession(attached.Session, func(method string, raw json.RawMessage) { br.developerEvent(req.ID, method, raw) })
++	for _, method := range []string{"Page.enable", "Runtime.enable", "DOM.enable", "CSS.enable", "Log.enable", "Profiler.enable", "Performance.enable"} {
++		if err := br.cdp.call(ctx, attached.Session, method, nil, nil); err != nil {
++			br.developerRevoke(req.ID)
++			return err
++		}
++	}
++	if err := br.cdp.call(ctx, attached.Session, "Network.enable", map[string]int{"maxTotalBufferSize": 4 << 20, "maxResourceBufferSize": developerResultLimit}, nil); err != nil {
++		br.developerRevoke(req.ID)
++		return err
++	}
++	writeJSON(w, br.developerStatus())
++	return nil
++}
++
++func (b *Box) browserDeveloperRevoke(w http.ResponseWriter, r *http.Request) error {
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	br.developerRevoke("")
++	writeJSON(w, br.developerStatus())
++	return nil
++}
++
++// Only page inspection methods cross this boundary; profile, process and local-file methods never do.
++func developerMethod(method string, params map[string]any) bool {
++	for _, key := range []string{"sessionId", "targetId", "browserContextId", "files"} {
++		if _, ok := params[key]; ok {
++			return false
++		}
++	}
++	domain, name, ok := strings.Cut(method, ".")
++	if !ok {
++		return false
++	}
++	switch domain {
++	case "DOM":
++		return strings.HasPrefix(name, "get") && name != "getFileInfo" || strings.HasPrefix(name, "querySelector") || name == "describeNode" || name == "resolveNode" || name == "requestNode" || name == "requestChildNodes" || name == "collectClassNamesFromSubtree" || name == "performSearch" || name == "discardSearchResults"
++	case "CSS":
++		return strings.HasPrefix(name, "get") || name == "collectClassNames" || name == "setStyleTexts" || name == "setEffectivePropertyValueForNode" || name == "setStyleSheetText" || name == "addRule" || name == "createStyleSheet"
++	case "Runtime":
++		return name == "evaluate" || name == "callFunctionOn" || name == "getProperties" || name == "releaseObject" || name == "releaseObjectGroup" || name == "getHeapUsage"
++	case "Accessibility":
++		return name == "getFullAXTree" || name == "getPartialAXTree" || name == "getRootAXNode" || name == "getChildAXNodes" || name == "queryAXTree"
++	case "DOMSnapshot":
++		return name == "captureSnapshot"
++	case "Profiler":
++		return name == "start" || name == "stop" || name == "getBestEffortCoverage" || name == "startPreciseCoverage" || name == "stopPreciseCoverage" || name == "takePreciseCoverage"
++	case "Performance":
++		return name == "getMetrics"
++	case "Network":
++		return name == "getResponseBody" || name == "getRequestPostData" || name == "searchInResponseBody"
++	case "Page":
++		return name == "getLayoutMetrics" || name == "getFrameTree"
++	default:
++		return false
++	}
++}
++
++func (b *Box) browserDeveloperCall(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Method string         `json:"method"`
++		Params map[string]any `json:"params"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	if !developerMethod(req.Method, req.Params) {
++		return httpError{http.StatusForbidden, "This method is outside page-scoped developer access."}
++	}
++	br, loc, wt, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	d := &br.developer
++	d.run.Lock()
++	defer d.run.Unlock()
++	s := br.developerStatus()
++	if s.State != "allowed" {
++		return httpError{http.StatusForbidden, s.Text}
++	}
++	d.mu.Lock()
++	session, id, executionContext := d.session, d.id, d.context
++	requestID, _ := req.Params["requestId"].(string)
++	known := d.requests[requestID]
++	d.mu.Unlock()
++	if strings.HasPrefix(req.Method, "Network.") && !known {
++		return httpError{http.StatusForbidden, "That request was not captured by this page's current developer approval."}
++	}
++	if err := b.before(r, "browser.developer.cdp", map[string]any{"location": loc.Name, "name": wt.Name, "tab": br.tab, "origin": s.Origin, "method": req.Method}); err != nil {
++		return err
++	}
++	if req.Params == nil {
++		req.Params = map[string]any{}
++	}
++	if req.Method == "Runtime.evaluate" {
++		if executionContext == "" {
++			return httpError{http.StatusConflict, "The page's execution context is not ready. Try again."}
++		}
++		delete(req.Params, "contextId")
++		req.Params["uniqueContextId"] = executionContext
++		req.Params["timeout"] = 5000
++	}
++	if req.Method == "Runtime.callFunctionOn" {
++		if object, ok := req.Params["objectId"].(string); !ok || object == "" {
++			return badRequest("callFunctionOn requires an objectId from this page's developer session.")
++		}
++		delete(req.Params, "executionContextId")
++		delete(req.Params, "uniqueContextId")
++	}
++	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
++	defer cancel()
++	var result json.RawMessage
++	if err := br.cdp.call(ctx, session, req.Method, req.Params, &result); err != nil {
++		return err
++	}
++	if now := br.developerStatus(); now.State != "allowed" || now.ID != id {
++		return httpError{http.StatusConflict, "Developer access changed while the command ran; its result was discarded."}
++	}
++	if len(result) > developerResultLimit {
++		return httpError{http.StatusRequestEntityTooLarge, "Developer result exceeds 1 MiB. Narrow the query or capture a shorter profile."}
++	}
++	if len(result) == 0 {
++		result = json.RawMessage(`{}`)
++	}
++	writeJSON(w, map[string]any{"result": result, "text": string(result)})
++	return nil
++}
++
++func (b *Box) browserDeveloperEvents(w http.ResponseWriter, r *http.Request) error {
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	if s := br.developerStatus(); s.State != "allowed" {
++		return httpError{http.StatusForbidden, s.Text}
++	}
++	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
++	d := &br.developer
++	d.mu.Lock()
++	all := make([]browserDeveloperEvent, 0, len(d.events))
++	for _, e := range d.events {
++		if e.Sequence > after {
++			all = append(all, e)
++		}
++	}
++	sequence, dropped := d.sequence, d.dropped
++	d.mu.Unlock()
++	result := map[string]any{"events": all, "sequence": sequence, "dropped": dropped}
++	raw, _ := json.Marshal(result)
++	result["text"] = string(raw)
++	writeJSON(w, result)
++	return nil
++}
++
++func (b *Box) mountBrowserDeveloper(route func(string, func(http.ResponseWriter, *http.Request) error)) {
++	route("GET /v1/browser/developer", b.getBrowserDeveloper)
++	route("PUT /v1/browser/developer", b.putBrowserDeveloper)
++	p := "/v1/worktrees/{loc}/{wt}/browser/developer"
++	route("GET "+p, b.browserDeveloperStatus)
++	route("POST "+p+"/request", b.browserDeveloperRequest)
++	route("POST "+p+"/decide", b.browserDeveloperDecide)
++	route("DELETE "+p, b.browserDeveloperRevoke)
++	route("POST "+p+"/cdp", b.browserDeveloperCall)
++	route("GET "+p+"/events", b.browserDeveloperEvents)
++}
+diff --git a/internal/box/browserdeveloper_test.go b/internal/box/browserdeveloper_test.go
+new file mode 100644
+index 0000000..5eb14ae
+--- /dev/null
++++ b/internal/box/browserdeveloper_test.go
+@@ -0,0 +1,237 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"encoding/json"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++)
++
++// Developer methods must not turn a page approval into profile or filesystem access.
++func TestBrowserDeveloperMethodBoundary(t *testing.T) {
++	for _, method := range []string{"DOM.getDocument", "CSS.getComputedStyleForNode", "Runtime.evaluate", "Profiler.start", "Profiler.stop", "Performance.getMetrics", "Network.getResponseBody"} {
++		if !developerMethod(method, nil) {
++			t.Fatalf("refused %s", method)
++		}
++	}
++	for _, method := range []string{"Browser.close", "Target.attachToTarget", "Storage.getCookies", "Network.getAllCookies", "Network.getCookies", "Network.loadNetworkResource", "Security.setIgnoreCertificateErrors", "Fetch.continueResponse", "IO.read", "DOM.setFileInputFiles", "DOM.getFileInfo", "Page.setDownloadBehavior", "Debugger.pause"} {
++		if developerMethod(method, nil) {
++			t.Fatalf("accepted %s", method)
++		}
++	}
++	for _, key := range []string{"sessionId", "targetId", "browserContextId", "files"} {
++		if developerMethod("DOM.getDocument", map[string]any{key: "other"}) {
++			t.Fatalf("accepted %s", key)
++		}
++	}
++}
++
++// An unbounded console or response stream must not retain unlimited page data.
++func TestBrowserDeveloperEventBounds(t *testing.T) {
++	br := &browser{developer: browserDeveloper{id: "grant", state: "allowed", requests: map[string]bool{}}}
++	br.developerEvent("old-grant", "Runtime.consoleAPICalled", json.RawMessage(`{}`))
++	if len(br.developer.events) != 0 {
++		t.Fatal("accepted a stale session event")
++	}
++	for i := 0; i < 300; i++ {
++		br.developerEvent("grant", "Runtime.consoleAPICalled", json.RawMessage(`{"value":"`+strings.Repeat("x", 32<<10)+`"}`))
++	}
++	d := &br.developer
++	if len(d.events) != 256 || d.dropped != 44 || d.bytes > developerResultLimit || !d.events[0].Truncated {
++		t.Fatalf("unbounded event retention: count=%d dropped=%d bytes=%d", len(d.events), d.dropped, d.bytes)
++	}
++	for i := 0; i < 520; i++ {
++		br.developerEvent("grant", "Network.requestWillBeSent", json.RawMessage(fmt.Sprintf(`{"requestId":"request-%d"}`, i)))
++	}
++	if len(d.requests) != 512 || d.requests["request-0"] || !d.requests["request-519"] {
++		t.Fatal("captured request ownership was not bounded")
++	}
++}
++
++// Approval, page identity and event ownership are checked against a real CDP session.
++func TestBrowserDeveloperWithRealChromium(t *testing.T) {
++	if testing.Short() {
++		t.Skip("starts Chromium")
++	}
++	if _, err := FindChromium(); err != nil {
++		t.Skip(err)
++	}
++	b, wt, _ := browserBox(t, func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path == "/data" {
++			fmt.Fprint(w, "developer response")
++			return
++		}
++		fmt.Fprint(w, `<title>Developer fixture</title><style>button{color:rgb(12,34,56)}</style><button id="target">Inspect me</button>`)
++	})
++	m := b.NewBrowsers(t.TempDir(), 1)
++	defer m.CloseAll("test")
++	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
++	defer cancel()
++	loc, _ := b.Locations.Get(ctx, "cal")
++	br, err := m.get(ctx, loc, wt, "user-developer")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := br.Open(ctx, "http://billing.cal.devbox.localhost:1377/one"); err != nil {
++		t.Fatal(err)
++	}
++	call := func(fn func(http.ResponseWriter, *http.Request) error, body any) (map[string]any, error) {
++		raw, _ := json.Marshal(body)
++		r := httptest.NewRequest("POST", "http://box/?tab=user-developer", bytes.NewReader(raw)).WithContext(ctx)
++		r.SetPathValue("loc", "cal")
++		r.SetPathValue("wt", "billing")
++		rec := httptest.NewRecorder()
++		err := fn(rec, r)
++		var result map[string]any
++		if err == nil {
++			err = json.Unmarshal(rec.Body.Bytes(), &result)
++		}
++		return result, err
++	}
++	must := func(fn func(http.ResponseWriter, *http.Request) error, body any) map[string]any {
++		t.Helper()
++		v, err := call(fn, body)
++		if err != nil {
++			t.Fatal(err)
++		}
++		return v
++	}
++	cdp := func(method string, params any) map[string]any {
++		t.Helper()
++		v := must(b.browserDeveloperCall, map[string]any{"method": method, "params": params})
++		return v["result"].(map[string]any)
++	}
++	request := func() string {
++		t.Helper()
++		v := must(b.browserDeveloperRequest, map[string]string{"reason": "Inspect the fixture"})
++		return v["id"].(string)
++	}
++	approve := func() {
++		t.Helper()
++		id := request()
++		v := must(b.browserDeveloperDecide, map[string]any{"id": id, "allow": true})
++		if v["state"] != "allowed" {
++			t.Fatal(v)
++		}
++	}
++	if _, err := call(b.browserDeveloperRequest, map[string]string{"reason": "Inspect"}); err == nil {
++		t.Fatal("request allowed while setting off")
++	}
++	must(b.putBrowserDeveloper, map[string]bool{"enabled": true})
++	id := request()
++	if _, err := call(b.browserDeveloperCall, map[string]any{"method": "DOM.getDocument"}); err == nil {
++		t.Fatal("CDP ran before approval")
++	}
++	if v := must(b.browserDeveloperDecide, map[string]any{"id": id, "allow": false}); v["state"] != "denied" {
++		t.Fatal(v)
++	}
++	approve()
++	doc := cdp("DOM.getDocument", map[string]any{"depth": 1})["root"].(map[string]any)
++	node := cdp("DOM.querySelector", map[string]any{"nodeId": doc["nodeId"], "selector": "#target"})["nodeId"]
++	styles := cdp("CSS.getComputedStyleForNode", map[string]any{"nodeId": node})
++	if !strings.Contains(fmt.Sprint(styles), "rgb(12, 34, 56)") {
++		t.Fatal(styles)
++	}
++	cdp("Profiler.start", nil)
++	cdp("Runtime.evaluate", map[string]any{"expression": "(()=>{let t=performance.now();while(performance.now()-t<30){};return document.title})()", "returnByValue": true})
++	profile := cdp("Profiler.stop", nil)["profile"].(map[string]any)
++	if len(profile["nodes"].([]any)) == 0 {
++		t.Fatal("empty CPU profile")
++	}
++	if len(cdp("Performance.getMetrics", nil)["metrics"].([]any)) == 0 {
++		t.Fatal("empty performance metrics")
++	}
++	cdp("Runtime.evaluate", map[string]any{"expression": "fetch('/data').then(r=>r.text())", "awaitPromise": true, "returnByValue": true})
++	var requestID string
++	for i := 0; i < 30 && requestID == ""; i++ {
++		v := must(b.browserDeveloperEvents, nil)
++		for _, raw := range v["events"].([]any) {
++			e := raw.(map[string]any)
++			if e["method"] == "Network.responseReceived" {
++				p := e["params"].(map[string]any)
++				if strings.HasSuffix(p["response"].(map[string]any)["url"].(string), "/data") {
++					requestID = p["requestId"].(string)
++				}
++			}
++		}
++		if requestID == "" {
++			time.Sleep(10 * time.Millisecond)
++		}
++	}
++	if requestID == "" {
++		t.Fatal("missing captured request")
++	}
++	if got := cdp("Network.getResponseBody", map[string]string{"requestId": requestID})["body"]; got != "developer response" {
++		t.Fatal(got)
++	}
++	if _, err := call(b.browserDeveloperCall, map[string]any{"method": "Network.getResponseBody", "params": map[string]string{"requestId": "another-tab"}}); err == nil {
++		t.Fatal("read another request")
++	}
++	first := must(b.browserDeveloperEvents, nil)
++	second := must(b.browserDeveloperEvents, nil)
++	if len(first["events"].([]any)) == 0 || len(second["events"].([]any)) < len(first["events"].([]any)) {
++		t.Fatal("event read consumed history")
++	}
++	other, err := m.get(ctx, loc, wt, "user-other")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if other.developerStatus().State == "allowed" {
++		t.Fatal("approval leaked to another tab")
++	}
++	if _, err := call(b.browserDeveloperCall, map[string]any{"method": "Runtime.evaluate", "params": map[string]any{"expression": "'x'.repeat(1048576)", "returnByValue": true}}); err == nil {
++		t.Fatal("oversized result accepted")
++	}
++	if _, err := br.Open(ctx, "http://billing.cal.devbox.localhost:1377/two"); err != nil {
++		t.Fatal(err)
++	}
++	if s := br.developerStatus(); s.State == "allowed" || s.ID != "" {
++		t.Fatal("navigation retained approval", s)
++	}
++	if _, err := call(b.browserDeveloperDecide, map[string]any{"id": id, "allow": true}); err == nil {
++		t.Fatal("old approval accepted")
++	}
++	approve()
++	cdp("Profiler.start", nil)
++	must(b.putBrowserDeveloper, map[string]bool{"enabled": false})
++	if s := br.developerStatus(); s.State != "disabled" || s.ID != "" {
++		t.Fatal(s)
++	}
++	br.cdp.mu.Lock()
++	remaining := len(br.cdp.listeners)
++	br.cdp.mu.Unlock()
++	if remaining != 0 {
++		t.Fatal("revocation retained session listener", remaining)
++	}
++	if _, err := br.evaluate(ctx, "document.title"); err != nil {
++		t.Fatal("revocation disrupted ordinary browser", err)
++	}
++	must(b.putBrowserDeveloper, map[string]bool{"enabled": true})
++	approve()
++	br.developer.mu.Lock()
++	br.developer.expires = time.Now().Add(-time.Second)
++	br.developer.mu.Unlock()
++	if s := br.developerStatus(); s.State == "allowed" {
++		t.Fatal("expired approval remained active")
++	}
++	approve()
++	br.chromium.closeTab(br, "developer close test")
++	br.developer.mu.Lock()
++	session := br.developer.session
++	br.developer.mu.Unlock()
++	if session != "" {
++		t.Fatal("close retained developer session")
++	}
++	br.cdp.mu.Lock()
++	remaining = len(br.cdp.listeners)
++	br.cdp.mu.Unlock()
++	if remaining != 0 {
++		t.Fatal("close retained developer event listener")
++	}
++
++}
+diff --git a/internal/box/browserdownloads.go b/internal/box/browserdownloads.go
+new file mode 100644
+index 0000000..8da7d55
+--- /dev/null
++++ b/internal/box/browserdownloads.go
+@@ -0,0 +1,355 @@
++package box
++
++import (
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"os"
++	"path/filepath"
++	"sort"
++	"strings"
++	"sync"
++	"unicode"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++)
++
++type browserDownloadSettings struct {
++	Enabled   bool   `json:"enabled"`
++	Ask       bool   `json:"ask"`
++	Directory string `json:"directory"`
++	Default   string `json:"defaultDirectory"`
++}
++
++var browserDownloadSettingsMu sync.Mutex
++
++func (m *Browsers) downloadSettings() browserDownloadSettings {
++	home, _ := os.UserHomeDir()
++	s := browserDownloadSettings{Default: filepath.Join(home, "Downloads")}
++	raw, err := os.ReadFile(filepath.Join(m.Dir, "download-settings.json"))
++	if err == nil && len(raw) < 16384 {
++		var saved struct {
++			Enabled   bool   `json:"enabled"`
++			Ask       bool   `json:"ask"`
++			Directory string `json:"directory"`
++		}
++		if json.Unmarshal(raw, &saved) == nil {
++			s.Enabled, s.Ask = saved.Enabled, saved.Ask
++			if filepath.IsAbs(saved.Directory) {
++				s.Directory = filepath.Clean(saved.Directory)
++			}
++		}
++	}
++	if s.Directory == "" {
++		s.Directory = s.Default
++	}
++	return s
++}
++
++func (b *Box) browserDownloadPreferences(w http.ResponseWriter, r *http.Request) error {
++	if EmbeddedFiles == "" || b.Browsers == nil {
++		return badRequest("download preferences need the LeadingLight runtime")
++	}
++	browserDownloadSettingsMu.Lock()
++	defer browserDownloadSettingsMu.Unlock()
++	s := b.Browsers.downloadSettings()
++	if r.Method == "PUT" {
++		var req struct {
++			Enabled   *bool   `json:"enabled"`
++			Ask       *bool   `json:"ask"`
++			Directory *string `json:"directory"`
++		}
++		if err := decode(r, &req); err != nil {
++			return err
++		}
++		if req.Enabled != nil {
++			s.Enabled = *req.Enabled
++		}
++		if req.Ask != nil {
++			s.Ask = *req.Ask
++		}
++		if req.Directory != nil {
++			dir := *req.Directory
++			if dir == "" {
++				dir = s.Default
++			}
++			if !filepath.IsAbs(dir) || strings.ContainsRune(dir, 0) || len(dir) > 8192 {
++				return badRequest("choose an absolute download folder")
++			}
++			st, err := os.Stat(dir)
++			if err != nil || !st.IsDir() {
++				return badRequest("the download folder is unavailable")
++			}
++			s.Directory = filepath.Clean(dir)
++		}
++		raw, err := json.Marshal(s)
++		if err != nil {
++			return err
++		}
++		if err := statefile.Write(filepath.Join(b.Browsers.Dir, "download-settings.json"), raw); err != nil {
++			return err
++		}
++	}
++	writeJSON(w, s)
++	return nil
++}
++
++func safeDownloadName(name string) string {
++	name = filepath.Base(strings.ReplaceAll(name, "\\", "/"))
++	name = strings.Map(func(r rune) rune {
++		if unicode.IsControl(r) {
++			return -1
++		}
++		return r
++	}, name)
++	name = strings.Trim(name, ". ")
++	for len(name) > 200 {
++		name = string([]rune(name)[:len([]rune(name))-1])
++	}
++	if name == "" {
++		return "download"
++	}
++	return name
++}
++
++// Exclusive creation prevents a web filename or a second download from replacing an existing file.
++func copyBrowserDownload(source, id, directory, suggested string) (saved string, err error) {
++	if !downloadID.MatchString(id) {
++		return "", errors.New("invalid download")
++	}
++	from, err := os.OpenRoot(source)
++	if err != nil {
++		return "", err
++	}
++	defer from.Close()
++	st, err := from.Lstat(id)
++	if err != nil {
++		return "", err
++	}
++	if !st.Mode().IsRegular() {
++		return "", errors.New("not a regular download")
++	}
++	in, err := from.Open(id)
++	if err != nil {
++		return "", err
++	}
++	defer in.Close()
++	opened, err := in.Stat()
++	if err != nil || !os.SameFile(st, opened) {
++		return "", errors.New("the download changed before saving")
++	}
++	to, err := os.OpenRoot(directory)
++	if err != nil {
++		return "", err
++	}
++	defer to.Close()
++	name := safeDownloadName(suggested)
++	ext := filepath.Ext(name)
++	stem := strings.TrimSuffix(name, ext)
++	var out *os.File
++	for n := 0; n < 10000; n++ {
++		candidate := name
++		if n > 0 {
++			candidate = fmt.Sprintf("%s (%d)%s", stem, n, ext)
++		}
++		out, err = to.OpenFile(candidate, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
++		if errors.Is(err, os.ErrExist) {
++			continue
++		}
++		if err != nil {
++			return "", err
++		}
++		name = candidate
++		break
++	}
++	if out == nil {
++		return "", errors.New("too many downloads have this filename")
++	}
++	identity, identityErr := out.Stat()
++	defer func() {
++		closeErr := out.Close()
++		if err == nil {
++			err = closeErr
++		}
++		if err != nil {
++			// Do not remove a file another process replaced after our exclusive create.
++			current, z := to.Lstat(name)
++			if identityErr == nil && z == nil && os.SameFile(identity, current) {
++				_ = to.Remove(name)
++			}
++			saved = ""
++		}
++	}()
++	if identityErr != nil {
++		return "", identityErr
++	}
++	written, err := io.CopyBuffer(out, io.NewSectionReader(in, 0, st.Size()), make([]byte, 1<<20))
++	if err == nil && written != st.Size() {
++		err = io.ErrUnexpectedEOF
++	}
++	if err == nil {
++		now, statErr := in.Stat()
++		if statErr != nil || now.Size() != st.Size() || !now.ModTime().Equal(st.ModTime()) {
++			err = errors.New("the download changed while saving")
++		}
++	}
++	if err == nil {
++		err = out.Sync()
++	}
++	if err != nil {
++		current, e := to.Lstat(name)
++		if e == nil && os.SameFile(identity, current) {
++			_ = to.Remove(name)
++		}
++		return "", err
++	}
++	return filepath.Join(directory, name), nil
++}
++
++func (c *chromium) exportCompletedDownload(id string) {
++	if c.m == nil {
++		return
++	}
++	browserDownloadSettingsMu.Lock()
++	settings := c.m.downloadSettings()
++	browserDownloadSettingsMu.Unlock()
++	if !settings.Enabled || settings.Ask {
++		return
++	}
++	c.dmu.Lock()
++	d, ok := c.downloads[id]
++	active := 0
++	for _, item := range c.downloads {
++		if item.ExportState == "saving" || item.ExportState == "prompted" {
++			active++
++		}
++	}
++	if !ok || d.State != "completed" || !d.Identified || !userBrowserTab(d.Tab) || d.ExportState != "" || c.exports >= 2 || active >= 200 {
++		c.dmu.Unlock()
++		return
++	}
++	d.ExportState = "saving"
++	c.downloads[id] = d
++	raw, err := json.Marshal(c.downloads)
++	if err == nil {
++		err = statefile.Write(filepath.Join(downloadDir(c.path), "index.json"), raw)
++	}
++	if err != nil {
++		d.ExportState, d.ExportError = "error", "Could not record the save. Use Save to choose a destination."
++		c.downloads[id] = d
++		c.dmu.Unlock()
++		return
++	}
++	c.exports++
++	c.dmu.Unlock()
++	defer c.finishDownloadExport()
++	path, err := copyBrowserDownload(downloadDir(c.path), id, settings.Directory, d.Name)
++	c.dmu.Lock()
++	defer c.dmu.Unlock()
++	d, ok = c.downloads[id]
++	if !ok {
++		return
++	}
++	if err != nil {
++		d.ExportState, d.ExportError = "error", browserDownloadText(err.Error(), 1000)
++	} else {
++		d.ExportState, d.SavedPath = "saved", path
++	}
++	c.downloads[id] = d
++	raw, _ = json.Marshal(c.downloads)
++	_ = statefile.Write(filepath.Join(downloadDir(c.path), "index.json"), raw)
++}
++
++// Pending copies stay in the bounded history; finishing one fills the available worker slots.
++func (c *chromium) finishDownloadExport() {
++	c.dmu.Lock()
++	c.exports--
++	pending := make([]BrowserDownload, 0, len(c.downloads))
++	for _, d := range c.downloads {
++		if d.State == "completed" && d.Identified && userBrowserTab(d.Tab) && d.ExportState == "" {
++			pending = append(pending, d)
++		}
++	}
++	sort.Slice(pending, func(i, j int) bool { return pending[i].CreatedAt < pending[j].CreatedAt })
++	if len(pending) > 2-c.exports {
++		pending = pending[:2-c.exports]
++	}
++	c.dmu.Unlock()
++	for _, d := range pending {
++		go c.exportCompletedDownload(d.ID)
++	}
++}
++
++// Persist a single claim before opening a native dialog, including across duplicate panes and reloads.
++func (b *Box) browserDownloadPrompt(w http.ResponseWriter, r *http.Request) error {
++	id := r.PathValue("id")
++	if !downloadID.MatchString(id) {
++		return badRequest("invalid download")
++	}
++	_, wt, err := b.browserTarget(r)
++	if err != nil {
++		return err
++	}
++	c := b.Browsers.lookupChromium(wt.Path)
++	if c == nil {
++		return badRequest("the browser closed")
++	}
++	browserDownloadSettingsMu.Lock()
++	settings := b.Browsers.downloadSettings()
++	browserDownloadSettingsMu.Unlock()
++	c.dmu.Lock()
++	defer c.dmu.Unlock()
++	d, ok := c.downloads[id]
++	if !ok || d.State != "completed" || !userBrowserTab(d.Tab) {
++		return badRequest("this personal download is unavailable")
++	}
++	previous := d
++	if r.Method == "POST" {
++		active := 0
++		for _, item := range c.downloads {
++			if item.ExportState == "saving" || item.ExportState == "prompted" {
++				active++
++			}
++		}
++		if !settings.Enabled || !settings.Ask || !d.Identified || d.ExportState != "" || active >= 200 {
++			writeJSON(w, map[string]bool{"claimed": false})
++			return nil
++		}
++		d.ExportState = "prompted"
++	} else {
++		var req struct {
++			SavedPath string `json:"savedPath"`
++			Error     string `json:"error"`
++			Cancelled bool   `json:"cancelled"`
++		}
++		if err := decode(r, &req); err != nil {
++			return err
++		}
++		if d.ExportState != "prompted" {
++			return badRequest("this download has no pending save dialog")
++		}
++		if req.SavedPath != "" {
++			if !filepath.IsAbs(req.SavedPath) || strings.ContainsRune(req.SavedPath, 0) || len(req.SavedPath) > 8192 || req.Error != "" || req.Cancelled {
++				return badRequest("invalid saved file")
++			}
++			d.ExportState, d.SavedPath = "saved", filepath.Clean(req.SavedPath)
++		} else if req.Error != "" {
++			d.ExportState, d.ExportError = "error", browserDownloadText(req.Error, 1000)
++		} else {
++			d.ExportState = "dismissed"
++		}
++	}
++	c.downloads[id] = d
++	raw, err := json.Marshal(c.downloads)
++	if err == nil {
++		err = statefile.Write(filepath.Join(downloadDir(c.path), "index.json"), raw)
++	}
++	if err != nil {
++		c.downloads[id] = previous
++		return err
++	}
++	writeJSON(w, map[string]any{"claimed": r.Method == "POST", "id": d.ID, "name": d.Name, "tab": d.Tab})
++	return nil
++}
+diff --git a/internal/box/browserdownloads_test.go b/internal/box/browserdownloads_test.go
+new file mode 100644
+index 0000000..81d92cb
+--- /dev/null
++++ b/internal/box/browserdownloads_test.go
+@@ -0,0 +1,357 @@
++package box
++
++import (
++	"bytes"
++	"crypto/sha256"
++	"encoding/json"
++	"fmt"
++	"io"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++)
++
++// Export must preserve exact large-file bytes without replacing existing files or following source links.
++func TestBrowserDownloadCopyBoundary(t *testing.T) {
++	source, dest := t.TempDir(), t.TempDir()
++	payload := bytes.Repeat([]byte("download bytes 東京\x00"), 2<<20)
++	if err := os.WriteFile(filepath.Join(source, "one"), payload, 0o600); err != nil {
++		t.Fatal(err)
++	}
++	old := filepath.Join(dest, "report.bin")
++	if err := os.WriteFile(old, []byte("existing"), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	var wg sync.WaitGroup
++	paths := make(chan string, 2)
++	for range 2 {
++		wg.Go(func() {
++			path, err := copyBrowserDownload(source, "one", dest, `../../private\report.bin`)
++			if err != nil {
++				t.Error(err)
++				return
++			}
++			paths <- path
++		})
++	}
++	wg.Wait()
++	close(paths)
++	seen := map[string]bool{}
++	for path := range paths {
++		if filepath.Dir(path) != dest || seen[path] || path == old {
++			t.Fatal("unsafe or duplicate destination", path)
++		}
++		seen[path] = true
++		file, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		hash := sha256.New()
++		n, err := io.Copy(hash, file)
++		file.Close()
++		want := sha256.Sum256(payload)
++		if err != nil || n != int64(len(payload)) || !bytes.Equal(hash.Sum(nil), want[:]) {
++			t.Fatal("changed bytes", n, err)
++		}
++	}
++	if len(seen) != 2 {
++		t.Fatal("missing export", seen)
++	}
++	if got, _ := os.ReadFile(old); string(got) != "existing" {
++		t.Fatal("overwrote existing file")
++	}
++	if err := os.Symlink(old, filepath.Join(source, "link")); err != nil {
++		t.Fatal(err)
++	}
++	for _, id := range []string{"link", "../report.bin", "/etc/passwd"} {
++		if path, err := copyBrowserDownload(source, id, dest, "bad"); err == nil || path != "" {
++			t.Fatal("accepted unsafe source", id)
++		}
++	}
++	if path, err := copyBrowserDownload(source, "one", filepath.Join(dest, "missing"), "bad"); err == nil || path != "" {
++		t.Fatal("accepted missing destination")
++	}
++	if got := safeDownloadName("..\\...\x00"); got != "download" {
++		t.Fatal(got)
++	}
++	if got := safeDownloadName(strings.Repeat("東", 200)); len(got) > 200 {
++		t.Fatal("unbounded filename")
++	}
++}
++
++// Competing viewers and reloads must never reopen a claimed native save dialog.
++func TestBrowserDownloadPromptClaim(t *testing.T) {
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = before })
++	b, wt, _ := browserBox(t, nil)
++	m := &Browsers{Dir: t.TempDir(), open: map[string]*chromium{}}
++	b.Browsers = m
++	c := &chromium{m: m, path: wt.Path, done: make(chan struct{}), downloads: map[string]BrowserDownload{
++		"personal": {ID: "personal", Name: "file.txt", Tab: "user-one", Identified: true, State: "completed"},
++		"agent":    {ID: "agent", Tab: "agent-one", Identified: true, State: "completed"},
++	}}
++	m.open[wt.Path] = c
++	if err := os.MkdirAll(downloadDir(wt.Path), 0o700); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.WriteFile(filepath.Join(m.Dir, "download-settings.json"), []byte(`{"enabled":true,"ask":true}`), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	call := func(method, id, body string) (bool, error) {
++		r := httptest.NewRequest(method, "/?tab=user-one", strings.NewReader(body))
++		r.SetPathValue("loc", "cal")
++		r.SetPathValue("wt", "billing")
++		r.SetPathValue("id", id)
++		w := httptest.NewRecorder()
++		err := b.browserDownloadPrompt(w, r)
++		var result struct {
++			Claimed bool `json:"claimed"`
++		}
++		if err == nil {
++			err = json.Unmarshal(w.Body.Bytes(), &result)
++		}
++		return result.Claimed, err
++	}
++	var claimed atomic.Int32
++	var wg sync.WaitGroup
++	for range 8 {
++		wg.Go(func() {
++			ok, err := call("POST", "personal", "{}")
++			if err != nil {
++				t.Error(err)
++			}
++			if ok {
++				claimed.Add(1)
++			}
++		})
++	}
++	wg.Wait()
++	if claimed.Load() != 1 {
++		t.Fatal("duplicate claim", claimed.Load())
++	}
++	raw, err := os.ReadFile(filepath.Join(downloadDir(wt.Path), "index.json"))
++	var persisted map[string]BrowserDownload
++	if err != nil || json.Unmarshal(raw, &persisted) != nil || persisted["personal"].ExportState != "prompted" {
++		t.Fatal("claim not persisted", string(raw), err)
++	}
++	if got := readDownloads(wt.Path)["personal"].ExportState; got != "dismissed" {
++		t.Fatal("restart retained active dialog", got)
++	}
++	if _, err := call("PUT", "personal", `{"savedPath":"relative"}`); err == nil {
++		t.Fatal("accepted relative saved path")
++	}
++	if _, err := call("PUT", "personal", `{"cancelled":true}`); err != nil {
++		t.Fatal(err)
++	}
++	if ok, err := call("POST", "personal", "{}"); ok || err != nil {
++		t.Fatal("reopened cancelled dialog", ok, err)
++	}
++	if _, err := call("PUT", "personal", `{"savedPath":"/tmp/fake"}`); err == nil {
++		t.Fatal("changed a finished dialog")
++	}
++	if _, err := call("POST", "agent", "{}"); err == nil {
++		t.Fatal("claimed agent download")
++	}
++	c.downloads = readDownloads(wt.Path)
++	if ok, err := call("POST", "personal", "{}"); ok || err != nil {
++		t.Fatal("reopened after reload", ok, err)
++	}
++	c.downloads["overflow"] = BrowserDownload{ID: "overflow", Tab: "user-one", Identified: true, State: "completed"}
++	for i := range 200 {
++		id := fmt.Sprintf("pending-%d", i)
++		c.downloads[id] = BrowserDownload{ID: id, ExportState: "prompted"}
++	}
++	if ok, err := call("POST", "overflow", "{}"); ok || err != nil {
++		t.Fatal("unbounded active claims", ok, err)
++	}
++	if err := os.WriteFile(filepath.Join(m.Dir, "download-settings.json"), []byte(`{"enabled":true,"ask":false}`), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	c.exportCompletedDownload("overflow")
++	if c.downloads["overflow"].ExportState != "" {
++		t.Fatal("unbounded active exports")
++	}
++}
++
++// Native activation and personal-tab ownership gate automatic filesystem writes.
++func TestBrowserDownloadPreferencesAndExport(t *testing.T) {
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = before })
++	home := t.TempDir()
++	t.Setenv("HOME", home)
++	defaultDir := filepath.Join(home, "Downloads")
++	if err := os.Mkdir(defaultDir, 0o700); err != nil {
++		t.Fatal(err)
++	}
++	dest := t.TempDir()
++	m := &Browsers{Dir: t.TempDir()}
++	b := &Box{Browsers: m}
++	preferences := func(method, body string) (browserDownloadSettings, error) {
++		r := httptest.NewRequest(method, "/v1/browser/download-settings", strings.NewReader(body))
++		w := httptest.NewRecorder()
++		err := b.browserDownloadPreferences(w, r)
++		var settings browserDownloadSettings
++		if err == nil {
++			err = json.Unmarshal(w.Body.Bytes(), &settings)
++		}
++		return settings, err
++	}
++	s, err := preferences("GET", "")
++	if err != nil || s.Enabled || s.Ask || s.Directory != defaultDir {
++		t.Fatal(s, err)
++	}
++	encoded, _ := json.Marshal(map[string]any{"enabled": true, "directory": dest})
++	s, err = preferences("PUT", string(encoded))
++	if err != nil || !s.Enabled || s.Directory != dest || s.Ask {
++		t.Fatal(s, err)
++	}
++	for _, body := range []string{`{"directory":"relative"}`, `{"directory":"/missing-download-folder"}`} {
++		if _, err := preferences("PUT", body); err == nil {
++			t.Fatal("accepted invalid folder")
++		}
++	}
++	c := &chromium{m: m, path: t.TempDir(), downloads: map[string]BrowserDownload{}}
++	dir := downloadDir(c.path)
++	if err := os.MkdirAll(dir, 0o700); err != nil {
++		t.Fatal(err)
++	}
++	for _, d := range []BrowserDownload{
++		{ID: "personal", Tab: "user-one", Identified: true, State: "completed"},
++		{ID: "agent", Tab: "agent-one", Identified: true, State: "completed"},
++		{ID: "unknown", Tab: "user-one", State: "completed"},
++		{ID: "partial", Tab: "user-one", Identified: true, State: "inProgress"},
++	} {
++		d.Name = d.ID + ".txt"
++		c.downloads[d.ID] = d
++		if err := os.WriteFile(filepath.Join(dir, d.ID), []byte(d.ID), 0o600); err != nil {
++			t.Fatal(err)
++		}
++		c.exportCompletedDownload(d.ID)
++	}
++	if d := c.downloads["personal"]; d.ExportState != "saved" || d.SavedPath != filepath.Join(dest, "personal.txt") {
++		t.Fatal(d)
++	}
++	c.exportCompletedDownload("personal")
++	entries, _ := os.ReadDir(dest)
++	if len(entries) != 1 {
++		t.Fatal("exported agent, unknown, partial or duplicate download", entries)
++	}
++	if _, err := preferences("PUT", `{"ask":true}`); err != nil {
++		t.Fatal(err)
++	}
++	c.downloads["ask"] = BrowserDownload{ID: "ask", Name: "ask", Tab: "user-one", Identified: true, State: "completed"}
++	c.exportCompletedDownload("ask")
++	if c.downloads["ask"].ExportState != "" {
++		t.Fatal("copied Ask download")
++	}
++	delete(c.downloads, "ask")
++	if _, err := preferences("PUT", `{"ask":false}`); err != nil {
++		t.Fatal(err)
++	}
++	c.downloads["missing"] = BrowserDownload{ID: "missing", Tab: "user-one", Identified: true, State: "completed"}
++	c.exportCompletedDownload("missing")
++	if d := c.downloads["missing"]; d.ExportState != "error" || d.ExportError == "" || d.SavedPath != "" {
++		t.Fatal("failed export reported saved", d)
++	}
++	s, err = preferences("PUT", `{"directory":""}`)
++	if err != nil || s.Directory != defaultDir {
++		t.Fatal("reset failed", s, err)
++	}
++}
++
++// History trimming must not lose the result of an active copy or native Save dialog.
++func TestBrowserDownloadRetentionPinsActiveExports(t *testing.T) {
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = before })
++	c := &chromium{path: t.TempDir(), downloads: map[string]BrowserDownload{}}
++	if err := os.MkdirAll(downloadDir(c.path), 0o700); err != nil {
++		t.Fatal(err)
++	}
++	for i := range 201 {
++		id := fmt.Sprintf("file-%03d", i)
++		c.downloads[id] = BrowserDownload{ID: id, State: "completed", CreatedAt: fmt.Sprintf("%04d", i)}
++	}
++	for id, state := range map[string]string{"file-000": "prompted", "file-001": "saving"} {
++		d := c.downloads[id]
++		d.ExportState = state
++		c.downloads[id] = d
++	}
++	c.downloadEvent("Browser.downloadProgress", json.RawMessage(`{"guid":"file-200","state":"completed"}`))
++	if len(c.downloads) != 200 || c.downloads["file-000"].ExportState != "prompted" || c.downloads["file-001"].ExportState != "saving" {
++		t.Fatal("trimmed an active export")
++	}
++	if _, kept := c.downloads["file-002"]; kept {
++		t.Fatal("did not trim oldest inactive record")
++	}
++	restarted := readDownloads(c.path)
++	if restarted["file-000"].ExportState != "dismissed" || restarted["file-001"].ExportState != "error" {
++		t.Fatal("restart retained active export states")
++	}
++}
++
++// A completion burst must drain pending files without running more than two automatic copies.
++func TestBrowserDownloadExportsDrainWithBoundedWorkers(t *testing.T) {
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = before })
++	dest := t.TempDir()
++	m := &Browsers{Dir: t.TempDir()}
++	raw, _ := json.Marshal(browserDownloadSettings{Enabled: true, Directory: dest})
++	if err := os.WriteFile(filepath.Join(m.Dir, "download-settings.json"), raw, 0o600); err != nil {
++		t.Fatal(err)
++	}
++	c := &chromium{m: m, path: t.TempDir(), downloads: map[string]BrowserDownload{}}
++	if err := os.MkdirAll(downloadDir(c.path), 0o700); err != nil {
++		t.Fatal(err)
++	}
++	payload := bytes.Repeat([]byte("bounded-copy"), 100000)
++	for i := range 16 {
++		id := fmt.Sprintf("file-%02d", i)
++		c.downloads[id] = BrowserDownload{ID: id, Name: id, State: "completed", Tab: "user-one", Identified: true}
++		if err := os.WriteFile(filepath.Join(downloadDir(c.path), id), payload, 0o600); err != nil {
++			t.Fatal(err)
++		}
++	}
++	start := make(chan struct{})
++	var wg sync.WaitGroup
++	for id := range c.downloads {
++		wg.Go(func() { <-start; c.exportCompletedDownload(id) })
++	}
++	close(start)
++	deadline := time.Now().Add(10 * time.Second)
++	for {
++		c.dmu.Lock()
++		active, saved := c.exports, 0
++		for _, d := range c.downloads {
++			if d.ExportState == "saved" {
++				saved++
++			}
++		}
++		c.dmu.Unlock()
++		if active > 2 {
++			t.Fatal("unbounded copies", active)
++		}
++		if saved == 16 && active == 0 {
++			break
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("pending exports did not drain", saved, active)
++		}
++		time.Sleep(time.Millisecond)
++	}
++	wg.Wait()
++	for i := range 16 {
++		data, err := os.ReadFile(filepath.Join(dest, fmt.Sprintf("file-%02d", i)))
++		if err != nil || !bytes.Equal(data, payload) {
++			t.Fatal("changed saved bytes", i, err)
++		}
++	}
++}
+diff --git a/internal/box/browserinspect.go b/internal/box/browserinspect.go
+index 7d4a725..0c5e13d 100644
+--- a/internal/box/browserinspect.go
++++ b/internal/box/browserinspect.go
+@@ -22,31 +22,40 @@ type browserStyleSnapshot struct {
+ }
+ type browserInspectOptions struct {
+ 	baseline *browserStyleSnapshot
++	frame    string
++	loader   string
+ 	reveal   bool
+ }
++type browserBounds struct {
++	X      float64 `json:"x"`
++	Y      float64 `json:"y"`
++	Width  float64 `json:"width"`
++	Height float64 `json:"height"`
++}
+ type browserInspection struct {
+-	Handle   string `json:"handle"`
+-	Tag      string `json:"tag"`
+-	Text     string `json:"text"`
+-	Selector string `json:"selector"`
+-	URL      string `json:"url"`
+-	Bounds   struct {
+-		X      float64 `json:"x"`
+-		Y      float64 `json:"y"`
+-		Width  float64 `json:"width"`
+-		Height float64 `json:"height"`
+-	} `json:"bounds"`
+-	Styles map[string]string `json:"styles"`
++	Handle   string                  `json:"handle,omitempty"`
++	Tag      string                  `json:"tag"`
++	Text     string                  `json:"text"`
++	Selector string                  `json:"selector"`
++	URL      string                  `json:"url"`
++	Bounds   browserBounds           `json:"bounds"`
++	Frame    *browserInspectionFrame `json:"frame,omitempty"`
++	Styles   map[string]string       `json:"styles"`
+ }
+ type browserInspectedNode struct {
++	frame    string
++	loader   string
++	lease    string
++	expires  time.Time
+ 	node     int64
+ 	epoch    uint64
+ 	original map[string]browserStyleValue
+ 	baseline *browserStyleSnapshot
+ }
+ 
+-var browserVisualProperties = []string{"color", "background-color", "font-size", "font-weight", "line-height", "padding", "border-radius", "width", "height"}
++var browserVisualProperties = []string{"color", "background-color", "font-size", "font-weight", "line-height", "padding", "border-radius", "width", "height", "font-family", "font-style", "letter-spacing", "margin", "gap", "opacity", "text-align"}
+ var browserStyleChars = regexp.MustCompile(`^[a-zA-Z0-9\s#%.,()+-]+$`)
++var browserFontChars = regexp.MustCompile(`^[\p{L}\p{N}\s,"'-]+$`)
+ var browserStyleFunctions = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9-]*)\s*\(`)
+ 
+ func validateBrowserStyle(property, value string) error {
+@@ -57,7 +66,11 @@ func validateBrowserStyle(property, value string) error {
+ 			break
+ 		}
+ 	}
+-	if !allowed || len(value) == 0 || len(value) > 256 || !browserStyleChars.MatchString(value) {
++	chars := browserStyleChars.MatchString(value)
++	if property == "font-family" {
++		chars = browserFontChars.MatchString(value)
++	}
++	if !allowed || len(value) == 0 || len(value) > 256 || !chars {
+ 		return badRequest("choose a supported visual property and CSS value")
+ 	}
+ 	for _, match := range browserStyleFunctions.FindAllStringSubmatch(value, -1) {
+@@ -74,11 +87,11 @@ func validateBrowserStyle(property, value string) error {
+ const browserInspectFunction = `function(properties,property,value,restore,baseline,reveal){
+  const e=this;
+  if(!(e instanceof Element)||!e.isConnected||e.ownerDocument!==document) return {error:'The element changed. Inspect it again.'};
+- if(/^(IFRAME|FRAME|OBJECT|EMBED)$/.test(e.tagName)) return {error:'Element feedback inside frames is not supported yet.'};
++ if(/^(OBJECT|EMBED)$/.test(e.tagName)) return {error:'This embedded document does not expose elements for feedback.'};
+  const original={attribute:property?e.getAttribute('style'):null,properties:{}};
+  if(property){
+   if(!CSS.supports(property,value)) return {invalid:'This is not a valid CSS value for '+property+'.'};
+-  const names=property==='padding'?['padding-top','padding-right','padding-bottom','padding-left']:property==='border-radius'?['border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius']:[property];
++  const names=property==='padding'?['padding-top','padding-right','padding-bottom','padding-left']:property==='margin'?['margin-top','margin-right','margin-bottom','margin-left']:property==='gap'?['row-gap','column-gap']:property==='border-radius'?['border-top-left-radius','border-top-right-radius','border-bottom-right-radius','border-bottom-left-radius']:[property];
+   for(const p of names)original.properties[p]={value:e.style.getPropertyValue(p),priority:e.style.getPropertyPriority(p)};
+   e.style.setProperty(property,value,'important');
+  }
+@@ -89,7 +102,8 @@ const browserInspectFunction = `function(properties,property,value,restore,basel
+    expected.cssText=baseline.attribute||'';
+    const names=new Set([...expected,...e.style]);
+    if([...names].every(p=>expected.getPropertyValue(p)===e.style.getPropertyValue(p)&&expected.getPropertyPriority(p)===e.style.getPropertyPriority(p))){
+-    if(baseline.attribute===null)e.removeAttribute('style');else e.setAttribute('style',baseline.attribute);
++    // Flush lazy CSSOM attribute writes before removing an originally absent attribute.
++    if(baseline.attribute===null){e.getAttribute('style');e.removeAttribute('style');}else e.setAttribute('style',baseline.attribute);
+    }
+   }
+  }
+@@ -102,30 +116,45 @@ const browserInspectFunction = `function(properties,property,value,restore,basel
+  for(const p of properties)styles[p]=computed.getPropertyValue(p);
+  let selector=e.localName;
+  if(e.id)selector+='#'+CSS.escape(e.id);else for(const name of [...e.classList].slice(0,3))selector+='.'+CSS.escape(name);
+- return {tag:e.localName,text:(e.innerText||'').slice(0,2048),selector:selector.slice(0,1024),url:location.href,bounds:{x:(r.x-(v?v.offsetLeft:0))*s,y:(r.y-(v?v.offsetTop:0))*s,width:r.width*s,height:r.height*s},styles,original};
++ return {tag:e.localName,text:(e.innerText||'').slice(0,2048),selector:selector.slice(0,1024),url:location.href,bounds:{x:r.x,y:r.y,width:r.width,height:r.height},styles,original};
+ }`
+ 
+ func (br *browser) inspectNode(ctx context.Context, node int64, property, value string, restore map[string]browserStyleValue, options ...browserInspectOptions) (browserInspection, browserStyleSnapshot, error) {
+ 	var out browserInspection
+-	var world struct {
+-		ID int `json:"executionContextId"`
++	var opts browserInspectOptions
++	if len(options) > 0 {
++		opts = options[0]
++	}
++	if opts.frame == "" {
++		opts.frame = br.target
+ 	}
+-	if err := br.cdp.call(ctx, br.session, "Page.createIsolatedWorld", map[string]any{"frameId": br.target, "worldName": "leadinglight-element-feedback"}, &world); err != nil {
++	frames, err := br.inspectionFrames(ctx, opts.frame)
++	if err != nil {
++		return out, browserStyleSnapshot{}, err
++	}
++	frame, ok := frames[opts.frame]
++	if !ok || (opts.loader != "" && frame.Loader != opts.loader) {
++		return out, browserStyleSnapshot{}, staleInspection()
++	}
++	if restore == nil {
++		if _, err = br.inspectionBounds(ctx, frames, opts.frame, browserBounds{}, opts.reveal); err != nil {
++			return out, browserStyleSnapshot{}, err
++		}
++	}
++	session, world, release, err := br.inspectionWorld(ctx, opts.frame)
++	if err != nil {
+ 		return out, browserStyleSnapshot{}, err
+ 	}
++	defer release()
+ 	var remote struct {
+ 		Object struct {
+ 			ID string `json:"objectId"`
+ 		} `json:"object"`
+ 	}
+-	if err := br.cdp.call(ctx, br.session, "DOM.resolveNode", map[string]any{"backendNodeId": node, "executionContextId": world.ID}, &remote); err != nil {
+-		return out, browserStyleSnapshot{}, httpError{http.StatusConflict, "The element changed. Inspect it again."}
+-	}
+-	defer br.cdp.call(ctx, br.session, "Runtime.releaseObject", map[string]any{"objectId": remote.Object.ID}, nil)
+-	var opts browserInspectOptions
+-	if len(options) > 0 {
+-		opts = options[0]
++	if err = br.cdp.call(ctx, session, "DOM.resolveNode", map[string]any{"backendNodeId": node, "executionContextId": world}, &remote); err != nil {
++		return out, browserStyleSnapshot{}, staleInspection()
+ 	}
++	defer br.cdp.call(ctx, session, "Runtime.releaseObject", map[string]any{"objectId": remote.Object.ID}, nil)
+ 	args := []map[string]any{{"value": browserVisualProperties}, {"value": property}, {"value": value}, {"value": restore}, {"value": opts.baseline}, {"value": opts.reveal}}
+ 	var result struct {
+ 		Result struct {
+@@ -133,7 +162,7 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
+ 		} `json:"result"`
+ 		Exception json.RawMessage `json:"exceptionDetails"`
+ 	}
+-	if err := br.cdp.call(ctx, br.session, "Runtime.callFunctionOn", map[string]any{"objectId": remote.Object.ID, "functionDeclaration": browserInspectFunction, "arguments": args, "returnByValue": true}, &result); err != nil {
++	if err := br.cdp.call(ctx, session, "Runtime.callFunctionOn", map[string]any{"objectId": remote.Object.ID, "functionDeclaration": browserInspectFunction, "arguments": args, "returnByValue": true}, &result); err != nil {
+ 		return out, browserStyleSnapshot{}, err
+ 	}
+ 	if len(result.Exception) > 0 {
+@@ -156,13 +185,33 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
+ 	if err := json.Unmarshal(result.Result.Value, &out); err != nil {
+ 		return out, browserStyleSnapshot{}, err
+ 	}
++	transformed, err := br.inspectionBounds(ctx, frames, opts.frame, out.Bounds, false)
++	if err != nil && restore == nil {
++		if property != "" {
++			undoArgs := []map[string]any{{"value": browserVisualProperties}, {"value": ""}, {"value": ""}, {"value": info.Original.Properties}, {"value": info.Original}, {"value": false}}
++			br.cdp.call(ctx, session, "Runtime.callFunctionOn", map[string]any{"objectId": remote.Object.ID, "functionDeclaration": browserInspectFunction, "arguments": undoArgs, "returnByValue": true}, nil)
++		}
++		return out, info.Original, err
++	}
++	out.Bounds = transformed
++	if opts.frame != br.target {
++		out.Frame = &browserInspectionFrame{URL: out.URL, Path: inspectionFramePath(frames, opts.frame)}
++		out.URL = frames[br.target].URL
++	}
+ 	return out, info.Original, nil
+ }
+ 
+ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
++	return b.browserInspectPoint(w, r, false)
++}
++func (b *Box) browserInspectHover(w http.ResponseWriter, r *http.Request) error {
++	return b.browserInspectPoint(w, r, true)
++}
++func (b *Box) browserInspectPoint(w http.ResponseWriter, r *http.Request, hover bool) error {
+ 	var req struct {
+-		X float64 `json:"x"`
+-		Y float64 `json:"y"`
++		X     float64 `json:"x"`
++		Y     float64 `json:"y"`
++		Lease string  `json:"lease"`
+ 	}
+ 	if err := decode(r, &req); err != nil {
+ 		return err
+@@ -174,44 +223,38 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
++	v := br.currentViewport()
++	if req.X >= float64(v.Width) || req.Y >= float64(v.Height) {
++		return badRequest("choose a point inside the page")
++	}
+ 	br.inspectMu.Lock()
+ 	defer br.inspectMu.Unlock()
+-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
++	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+ 	defer cancel()
+ 	br.restoreInspectionPreviews(ctx)
+ 	br.mu.Lock()
+-	epoch := br.controls.inspectEpoch
+-	closed := br.controls.closed
++	epoch, closed := br.controls.inspectEpoch, br.controls.closed
++	leaseOK := req.Lease == "" || time.Now().Before(br.controls.inspectLeases[req.Lease])
+ 	br.mu.Unlock()
+ 	if closed {
+ 		return httpError{http.StatusConflict, "This tab closed."}
+ 	}
+-	var hit struct {
+-		Node  int64  `json:"backendNodeId"`
+-		Frame string `json:"frameId"`
++	if !leaseOK {
++		return expiredInspectionLease()
+ 	}
+-	// CDP hit-tests document pixels; the stream uses visual viewport pixels.
+-	var metrics struct {
+-		Visual struct {
+-			Scale float64 `json:"scale"`
+-			X     float64 `json:"pageX"`
+-			Y     float64 `json:"pageY"`
+-		} `json:"cssVisualViewport"`
+-	}
+-	if err := br.cdp.call(ctx, br.session, "Page.getLayoutMetrics", nil, &metrics); err != nil {
++	node, hitFrame, err := br.inspectionHit(ctx, req.X, req.Y)
++	if err != nil {
+ 		return err
+ 	}
+-	scale := metrics.Visual.Scale
+-	if scale <= 0 {
+-		scale = 1
+-	}
+-	if err := br.cdp.call(ctx, br.session, "DOM.getNodeForLocation", map[string]any{"x": int(req.X/scale + metrics.Visual.X), "y": int(req.Y/scale + metrics.Visual.Y)}, &hit); err != nil {
++	frames, err := br.inspectionFrames(ctx, hitFrame)
++	if err != nil {
+ 		return err
+ 	}
+-	if hit.Frame != br.target {
+-		return httpError{http.StatusConflict, "Element feedback inside frames is not supported yet."}
++	frame, ok := frames[hitFrame]
++	if !ok {
++		return staleInspection()
+ 	}
+-	out, _, err := br.inspectNode(ctx, hit.Node, "", "", nil)
++	out, _, err := br.inspectNode(ctx, node, "", "", nil, browserInspectOptions{frame: hitFrame, loader: frame.Loader})
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -220,11 +263,17 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+ 	if epoch != br.controls.inspectEpoch || br.controls.closed {
+ 		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
+ 	}
++	if hover {
++		writeJSON(w, out)
++		return nil
++	}
+ 	if br.controls.inspected == nil {
+ 		br.controls.inspected = map[string]*browserInspectedNode{}
+ 	}
+ 	for handle, n := range br.controls.inspected {
+-		if n.node == hit.Node && n.epoch == epoch {
++		if n.node == node && n.frame == hitFrame && n.loader == frame.Loader && n.epoch == epoch && n.lease == req.Lease {
++			n.expires = time.Now().Add(browserInspectionLeaseTTL)
++			br.scheduleInspectionExpiry()
+ 			out.Handle = handle
+ 			writeJSON(w, out)
+ 			return nil
+@@ -242,11 +291,12 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+ 		return httpError{http.StatusConflict, "Reset existing element previews or reload before inspecting more elements."}
+ 	}
+ 	var random [16]byte
+-	if _, err := rand.Read(random[:]); err != nil {
++	if _, err = rand.Read(random[:]); err != nil {
+ 		return err
+ 	}
+ 	out.Handle = hex.EncodeToString(random[:])
+-	br.controls.inspected[out.Handle] = &browserInspectedNode{node: hit.Node, epoch: epoch, original: map[string]browserStyleValue{}}
++	br.controls.inspected[out.Handle] = &browserInspectedNode{node: node, frame: hitFrame, loader: frame.Loader, epoch: epoch, lease: req.Lease, expires: time.Now().Add(browserInspectionLeaseTTL), original: map[string]browserStyleValue{}}
++	br.scheduleInspectionExpiry()
+ 	writeJSON(w, out)
+ 	return nil
+ }
+@@ -254,6 +304,7 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+ func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error {
+ 	var req struct {
+ 		Handle string `json:"handle"`
++		Lease  string `json:"lease"`
+ 	}
+ 	if err := decode(r, &req); err != nil {
+ 		return err
+@@ -271,9 +322,15 @@ func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error
+ 	if node == nil || node.epoch != epoch || closed {
+ 		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
+ 	}
+-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
++	br.mu.Lock()
++	validLease := br.validInspectionLease(node, req.Lease)
++	br.mu.Unlock()
++	if !validLease {
++		return expiredInspectionLease()
++	}
++	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+ 	defer cancel()
+-	out, _, err := br.inspectNode(ctx, node.node, "", "", nil, browserInspectOptions{reveal: true})
++	out, _, err := br.inspectNode(ctx, node.node, "", "", nil, browserInspectOptions{frame: node.frame, loader: node.loader, reveal: true})
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -296,6 +353,7 @@ func (b *Box) browserStyleReset(w http.ResponseWriter, r *http.Request) error {
+ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset bool) error {
+ 	var req struct {
+ 		Handle   string `json:"handle"`
++		Lease    string `json:"lease"`
+ 		Property string `json:"property"`
+ 		Value    string `json:"value"`
+ 	}
+@@ -321,15 +379,35 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
+ 	if node == nil || node.epoch != epoch || closed {
+ 		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
+ 	}
+-	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
++	br.mu.Lock()
++	validLease := br.validInspectionLease(node, req.Lease)
++	br.mu.Unlock()
++	if !validLease {
++		return expiredInspectionLease()
++	}
++	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+ 	defer cancel()
++	if !reset {
++		br.mu.Lock()
++		conflict := false
++		for _, other := range br.controls.inspected {
++			if other != node && other.node == node.node && other.frame == node.frame && other.loader == node.loader && len(other.original) > 0 {
++				conflict = true
++				break
++			}
++		}
++		br.mu.Unlock()
++		if conflict {
++			return httpError{http.StatusConflict, "Another viewer is previewing this element. Wait for its preview to end."}
++		}
++	}
+ 	var restore map[string]browserStyleValue
+ 	if reset {
+ 		req.Property = ""
+ 		req.Value = ""
+ 		restore = node.original
+ 	}
+-	out, original, err := br.inspectNode(ctx, node.node, req.Property, req.Value, restore, browserInspectOptions{baseline: node.baseline})
++	out, original, err := br.inspectNode(ctx, node.node, req.Property, req.Value, restore, browserInspectOptions{frame: node.frame, loader: node.loader, baseline: node.baseline})
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -347,7 +425,7 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
+ 		if baseline == nil {
+ 			baseline = &original
+ 		}
+-		br.inspectNode(ctx, node.node, "", "", undo, browserInspectOptions{baseline: baseline})
++		br.inspectNode(ctx, node.node, "", "", undo, browserInspectOptions{frame: node.frame, loader: node.loader, baseline: baseline})
+ 		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
+ 	}
+ 	defer br.mu.Unlock()
+@@ -372,11 +450,11 @@ func (br *browser) invalidateInspections() {
+ 	br.controls.inspectEpoch++
+ 	if !br.controls.closed {
+ 		if br.controls.inspectUndo == nil {
+-			br.controls.inspectUndo = map[int64]*browserInspectedNode{}
++			br.controls.inspectUndo = map[string]*browserInspectedNode{}
+ 		}
+-		for _, n := range br.controls.inspected {
++		for handle, n := range br.controls.inspected {
+ 			if len(n.original) > 0 {
+-				br.controls.inspectUndo[n.node] = n
++				br.controls.inspectUndo[handle] = n
+ 			}
+ 		}
+ 		if len(br.controls.inspectUndo) > 0 {
+@@ -389,6 +467,11 @@ func (br *browser) invalidateInspections() {
+ 			}()
+ 		}
+ 	} else {
++		if br.controls.inspectTimer != nil {
++			br.controls.inspectTimer.Stop()
++			br.controls.inspectTimer = nil
++		}
++		br.controls.inspectLeases = nil
+ 		br.controls.inspectUndo = nil
+ 	}
+ 	br.controls.inspected = nil
+@@ -399,7 +482,5 @@ func (br *browser) restoreInspectionPreviews(ctx context.Context) {
+ 	pending := br.controls.inspectUndo
+ 	br.controls.inspectUndo = nil
+ 	br.mu.Unlock()
+-	for _, n := range pending {
+-		br.inspectNode(ctx, n.node, "", "", n.original, browserInspectOptions{baseline: n.baseline})
+-	}
++	br.undoInspections(ctx, pending)
+ }
+diff --git a/internal/box/browserinspect_test.go b/internal/box/browserinspect_test.go
+index dd4c2a3..cc3d7f5 100644
+--- a/internal/box/browserinspect_test.go
++++ b/internal/box/browserinspect_test.go
+@@ -23,6 +23,11 @@ func TestBrowserStyleValidation(t *testing.T) {
+ 			t.Fatal("accepted", v)
+ 		}
+ 	}
++	for property, value := range map[string]string{"font-family": `"Open Sans", sans-serif`, "font-style": "italic", "letter-spacing": "1px", "margin": "10px 20px", "gap": "10px 20px", "opacity": "0.5", "text-align": "center"} {
++		if err := validateBrowserStyle(property, value); err != nil {
++			t.Fatal(property, err)
++		}
++	}
+ 	if err := validateBrowserStyle("background-image", "red"); err == nil {
+ 		t.Fatal("accepted property")
+ 	}
+@@ -105,12 +110,25 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
+ 	if again := inspect(110, 110); again.Handle != selected.Handle {
+ 		t.Fatal("same element lost undo handle")
+ 	}
++	// A single-property reset must restore attribute absence, which changes [style] selectors.
++	eval(`document.querySelector('#target').removeAttribute('style');true`)
++	style(selected.Handle, "opacity", "0.4")
++	if _, err := call(b.browserStyleReset, map[string]string{"handle": selected.Handle}); err != nil {
++		t.Fatal(err)
++	}
++	if got := eval(`document.querySelector('#target').getAttribute('style')`); got != "null" {
++		t.Fatalf("opacity reset left a style attribute: %s", got)
++	}
+ 	// The baseline starts at the first preview, including changes made after inspection.
+ 	for _, attribute := range []string{"null", `""`, `"color:red!important;padding:7px 9px;border-radius:3px 4px;--kept:yes"`} {
+ 		eval(`(()=>{let e=document.querySelector('#target'),v=` + attribute + `;if(v===null)e.removeAttribute('style');else e.setAttribute('style',v);return true})()`)
+ 		style(selected.Handle, "color", "blue")
+ 		style(selected.Handle, "padding", "20px")
+ 		style(selected.Handle, "border-radius", "15px")
++		style(selected.Handle, "margin", "11px 12px")
++		style(selected.Handle, "gap", "6px 8px")
++		style(selected.Handle, "font-family", `"Open Sans", sans-serif`)
++		style(selected.Handle, "opacity", "0.5")
+ 		if _, err := call(b.browserStyleReset, map[string]string{"handle": selected.Handle}); err != nil {
+ 			t.Fatal(err)
+ 		}
+@@ -137,8 +155,8 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
+ 	if _, err := call(b.browserStyle, map[string]string{"handle": selected.Handle, "property": "width", "value": "red"}); err == nil {
+ 		t.Fatal("invalid CSS accepted")
+ 	}
+-	if _, err := call(b.browserInspect, map[string]float64{"x": 410, "y": 110}); err == nil {
+-		t.Fatal("inspected child frame with wrong coordinate space")
++	if child, err := call(b.browserInspect, map[string]float64{"x": 412, "y": 112}); err != nil || child.Tag != "button" || child.Bounds.X != 410 || child.Bounds.Y != 110 || child.Frame == nil {
++		t.Fatalf("child frame coordinates: %+v, %v", child, err)
+ 	}
+ 	eval(`document.body.style.height='3000px';window.scrollTo(0,60);true`)
+ 	scrolled := inspect(110, 65)
+diff --git a/internal/box/browserinspectarea.go b/internal/box/browserinspectarea.go
+new file mode 100644
+index 0000000..9469bbe
+--- /dev/null
++++ b/internal/box/browserinspectarea.go
+@@ -0,0 +1,186 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"crypto/rand"
++	"encoding/base64"
++	"encoding/hex"
++	"image"
++	"image/png"
++	"math"
++	"net/http"
++	"os"
++	"path/filepath"
++	"reflect"
++	"regexp"
++	"sort"
++	"time"
++)
++
++var annotationShotName = regexp.MustCompile(`^annotation-[a-f0-9]{32}\.png$`)
++
++func (b *Box) browserInspectArea(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		browserBounds
++		Viewport struct {
++			Width  int `json:"width"`
++			Height int `json:"height"`
++		} `json:"viewport"`
++		ExpectedURL string `json:"expectedURL"`
++		Handle      string `json:"handle"`
++		Lease       string `json:"lease"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	for _, v := range []float64{req.X, req.Y, req.Width, req.Height} {
++		if math.IsNaN(v) || math.IsInf(v, 0) {
++			return badRequest("choose an area inside the page")
++		}
++	}
++	if req.Handle == "" && (req.X < 0 || req.Y < 0 || req.Width < 1 || req.Height < 1 || req.X+req.Width > float64(req.Viewport.Width) || req.Y+req.Height > float64(req.Viewport.Height)) {
++		return badRequest("choose an area inside the page")
++	}
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	br.inspectMu.Lock()
++	defer br.inspectMu.Unlock()
++	br.castMu.Lock()
++	defer br.castMu.Unlock()
++	br.zoomMu.Lock()
++	defer br.zoomMu.Unlock()
++	br.mu.Lock()
++	epoch, url, viewport, closed := br.controls.inspectEpoch, br.url, br.viewport, br.controls.closed
++	br.mu.Unlock()
++	changed := func() error {
++		return httpError{http.StatusConflict, "The page or viewport changed. Select the area again."}
++	}
++	if closed || req.ExpectedURL == "" || req.ExpectedURL != url || req.Viewport.Width != viewport.Width || req.Viewport.Height != viewport.Height {
++		return changed()
++	}
++	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
++	defer cancel()
++	var element *browserInspection
++	var node *browserInspectedNode
++	if req.Handle != "" {
++		br.mu.Lock()
++		node = br.controls.inspected[req.Handle]
++		valid := node != nil && node.epoch == epoch && br.validInspectionLease(node, req.Lease)
++		br.mu.Unlock()
++		if !valid {
++			return staleInspection()
++		}
++		selected, _, inspectErr := br.inspectNode(ctx, node.node, "", "", nil, browserInspectOptions{frame: node.frame, loader: node.loader, reveal: true})
++		if inspectErr != nil {
++			return inspectErr
++		}
++		element = &selected
++		x, y := math.Max(0, selected.Bounds.X), math.Max(0, selected.Bounds.Y)
++		right, bottom := math.Min(float64(viewport.Width), selected.Bounds.X+selected.Bounds.Width), math.Min(float64(viewport.Height), selected.Bounds.Y+selected.Bounds.Height)
++		if right <= x || bottom <= y {
++			return badRequest("The selected element is outside the page. Inspect it again.")
++		}
++		req.browserBounds = browserBounds{X: x, Y: y, Width: right - x, Height: bottom - y}
++	}
++	var shot struct {
++		Data string `json:"data"`
++	}
++	if err = br.cdp.call(ctx, br.session, "Page.captureScreenshot", map[string]any{"format": "png", "captureBeyondViewport": false, "fromSurface": true}, &shot); err != nil {
++		return err
++	}
++	capturedAt := time.Now().UTC().Format(time.RFC3339Nano)
++	if element != nil {
++		after, _, inspectErr := br.inspectNode(ctx, node.node, "", "", nil, browserInspectOptions{frame: node.frame, loader: node.loader})
++		if inspectErr != nil {
++			return inspectErr
++		}
++		if !reflect.DeepEqual(*element, after) {
++			return httpError{http.StatusConflict, "The element changed during capture. Inspect it again."}
++		}
++	}
++	br.mu.Lock()
++	same := epoch == br.controls.inspectEpoch && url == br.url && viewport == br.viewport && !br.controls.closed
++	if node != nil {
++		same = same && br.validInspectionLease(node, req.Lease)
++	}
++	br.mu.Unlock()
++	if !same {
++		return changed()
++	}
++	if len(shot.Data) > 48<<20 {
++		return badRequest("this screenshot is too large")
++	}
++	raw, err := base64.StdEncoding.DecodeString(shot.Data)
++	if err != nil {
++		return err
++	}
++	iw, ih := pngSize(raw)
++	if iw < 1 || ih < 1 || iw > maxViewportW*int(maxViewportScale) || ih > maxViewportH*int(maxViewportScale) {
++		return badRequest("invalid screenshot dimensions")
++	}
++	picture, err := png.Decode(bytes.NewReader(raw))
++	if err != nil {
++		return err
++	}
++	sx, sy := float64(iw)/float64(viewport.Width), float64(ih)/float64(viewport.Height)
++	crop := image.Rect(int(math.Floor(req.X*sx)), int(math.Floor(req.Y*sy)), int(math.Ceil((req.X+req.Width)*sx)), int(math.Ceil((req.Y+req.Height)*sy))).Intersect(picture.Bounds())
++	clipped := picture.(interface {
++		SubImage(image.Rectangle) image.Image
++	}).SubImage(crop)
++	var encoded bytes.Buffer
++	if err = png.Encode(&encoded, clipped); err != nil {
++		return err
++	}
++	if encoded.Len() > 20<<20 {
++		return httpError{http.StatusRequestEntityTooLarge, "This annotation exceeds 20 MiB. Select a smaller area."}
++	}
++	var random [16]byte
++	if _, err = rand.Read(random[:]); err != nil {
++		return err
++	}
++	name := "annotation-" + hex.EncodeToString(random[:]) + ".png"
++	dir := br.m.shotDir(br.location, br.worktree)
++	if err = os.MkdirAll(dir, 0o700); err != nil {
++		return err
++	}
++	file := filepath.Join(dir, name)
++	if err = os.WriteFile(file, encoded.Bytes(), 0o600); err != nil {
++		return err
++	}
++	pruneAnnotationShots(dir)
++	writeJSON(w, map[string]any{"url": url, "bounds": req.browserBounds, "viewport": map[string]int{"width": viewport.Width, "height": viewport.Height}, "screenshot": map[string]string{"file": file, "name": name, "mime": "image/png"}, "capturedAt": capturedAt, "element": element})
++	return nil
++}
++
++// Saved comments outlive transient screenshots, with a separate bounded disk budget.
++func pruneAnnotationShots(dir string) {
++	names, _ := filepath.Glob(filepath.Join(dir, "annotation-*.png"))
++	type entry struct {
++		path string
++		size int64
++		at   time.Time
++	}
++	files := []entry{}
++	var total int64
++	for _, name := range names {
++		if !annotationShotName.MatchString(filepath.Base(name)) {
++			continue
++		}
++		if info, err := os.Lstat(name); err == nil && info.Mode().IsRegular() {
++			files = append(files, entry{name, info.Size(), info.ModTime()})
++			total += info.Size()
++		}
++	}
++	sort.Slice(files, func(i, j int) bool { return files[i].at.Before(files[j].at) })
++	for len(files) > 200 || total > 128<<20 {
++		if len(files) == 0 {
++			break
++		}
++		total -= files[0].size
++		os.Remove(files[0].path)
++		files = files[1:]
++	}
++}
+diff --git a/internal/box/browserinspectframes.go b/internal/box/browserinspectframes.go
+new file mode 100644
+index 0000000..6b7a394
+--- /dev/null
++++ b/internal/box/browserinspectframes.go
+@@ -0,0 +1,326 @@
++package box
++
++import (
++	"context"
++	"encoding/json"
++	"math"
++	"net/http"
++	"time"
++)
++
++type browserInspectionFrame struct {
++	URL  string   `json:"url"`
++	Path []string `json:"path"`
++}
++type inspectionFrame struct {
++	ID     string `json:"id"`
++	Parent string `json:"parentId"`
++	Loader string `json:"loaderId"`
++	URL    string `json:"url"`
++}
++type inspectionTree struct {
++	Frame    inspectionFrame  `json:"frame"`
++	Children []inspectionTree `json:"childFrames"`
++}
++
++func staleInspection() error {
++	return httpError{http.StatusConflict, "The element changed. Inspect it again."}
++}
++
++func (br *browser) inspectionFrames(ctx context.Context, wanted ...string) (map[string]inspectionFrame, error) {
++	var response struct {
++		Tree inspectionTree `json:"frameTree"`
++	}
++	if err := br.cdp.call(ctx, br.session, "Page.getFrameTree", nil, &response); err != nil {
++		return nil, err
++	}
++	frames := map[string]inspectionFrame{}
++	var walk func(inspectionTree)
++	walk = func(t inspectionTree) {
++		if _, ok := frames[t.Frame.ID]; !ok && len(frames) >= 256 {
++			return
++		}
++		if t.Frame.Parent == "" {
++			t.Frame.Parent = frames[t.Frame.ID].Parent
++		}
++		frames[t.Frame.ID] = t.Frame
++		for _, child := range t.Children {
++			walk(child)
++		}
++	}
++	walk(response.Tree)
++	var targets struct {
++		Targets []struct {
++			ID          string `json:"targetId"`
++			Type        string `json:"type"`
++			Parent      string `json:"parentId"`
++			ParentFrame string `json:"parentFrameId"`
++			URL         string `json:"url"`
++		} `json:"targetInfos"`
++	}
++	if err := br.cdp.call(ctx, "", "Target.getTargets", nil, &targets); err != nil {
++		return nil, err
++	}
++	for range 16 {
++		added := false
++		for _, target := range targets.Targets {
++			if target.Type != "iframe" || len(frames) >= 256 {
++				continue
++			}
++			if _, ok := frames[target.ID]; ok {
++				continue
++			}
++			parent := target.ParentFrame
++			if parent == "" {
++				parent = target.Parent
++			}
++			if _, ok := frames[parent]; ok {
++				frames[target.ID] = inspectionFrame{ID: target.ID, Parent: parent, URL: target.URL}
++				added = true
++			}
++		}
++		if !added {
++			break
++		}
++	}
++	if len(wanted) > 0 {
++		frame, ok := frames[wanted[0]]
++		if ok && frame.Loader == "" {
++			session, _, release, err := br.inspectionWorld(ctx, frame.ID)
++			if err != nil {
++				return nil, err
++			}
++			defer release()
++			if err = br.cdp.call(ctx, session, "Page.getFrameTree", nil, &response); err != nil {
++				return nil, err
++			}
++			walk(response.Tree)
++		}
++	}
++	return frames, nil
++}
++func inspectionFramePath(frames map[string]inspectionFrame, frame string) []string {
++	path := []string{}
++	for frame != "" && len(path) < 16 {
++		path = append([]string{frame}, path...)
++		frame = frames[frame].Parent
++	}
++	return path
++}
++
++// A child renderer needs its own CDP session; it is detached as soon as this request ends.
++func (br *browser) inspectionWorld(ctx context.Context, frame string) (string, int, func(), error) {
++	session := br.session
++	var world struct {
++		ID int `json:"executionContextId"`
++	}
++	create := func() error {
++		return br.cdp.call(ctx, session, "Page.createIsolatedWorld", map[string]any{"frameId": frame, "worldName": "leadinglight-element-feedback"}, &world)
++	}
++	release := func() {}
++	if err := create(); err != nil {
++		if frame == br.target {
++			return "", 0, release, staleInspection()
++		}
++		var attached struct {
++			Session string `json:"sessionId"`
++		}
++		if err = br.cdp.call(ctx, "", "Target.attachToTarget", map[string]any{"targetId": frame, "flatten": true}, &attached); err != nil {
++			return "", 0, release, staleInspection()
++		}
++		session = attached.Session
++		release = func() {
++			cleanup, cancel := context.WithTimeout(context.Background(), time.Second)
++			defer cancel()
++			br.cdp.call(cleanup, "", "Target.detachFromTarget", map[string]any{"sessionId": session}, nil)
++		}
++		if err = create(); err != nil {
++			release()
++			return "", 0, func() {}, staleInspection()
++		}
++	}
++	return session, world.ID, release, nil
++}
++
++const inspectionFrameOwnerFunction = `function(reveal){
++ if(!(this instanceof HTMLIFrameElement||this instanceof HTMLFrameElement)||!this.isConnected)return null;
++ if(reveal)Element.prototype.scrollIntoView.call(this,{block:'nearest',inline:'nearest',behavior:'instant'});
++ const r=this.getBoundingClientRect(),c=getComputedStyle(this),n=p=>parseFloat(c.getPropertyValue(p))||0;
++ const left=n('border-left-width')+n('padding-left'),right=n('border-right-width')+n('padding-right'),top=n('border-top-width')+n('padding-top'),bottom=n('border-bottom-width')+n('padding-bottom');
++ const border=c.boxSizing==='border-box',sx=r.width/(n('width')+(border?0:left+right)),sy=r.height/(n('height')+(border?0:top+bottom));
++ return {x:r.x+left*sx,y:r.y+top*sy,sx,sy};
++}`
++
++func (br *browser) inspectionBounds(ctx context.Context, frames map[string]inspectionFrame, frame string, bounds browserBounds, reveal bool) (browserBounds, error) {
++	path := inspectionFramePath(frames, frame)
++	if len(path) == 0 || path[0] != br.target || len(path) >= 16 {
++		return bounds, badRequest("This frame is nested too deeply to annotate.")
++	}
++	type offset struct {
++		X  float64 `json:"x"`
++		Y  float64 `json:"y"`
++		SX float64 `json:"sx"`
++		SY float64 `json:"sy"`
++	}
++	offsets := make([]offset, 0, len(path)-1)
++	for i := 1; i < len(path); i++ {
++		parent, child := path[i-1], path[i]
++		session, world, release, err := br.inspectionWorld(ctx, parent)
++		if err != nil {
++			return bounds, err
++		}
++		value, err := func() (offset, error) {
++			defer release()
++			var owner struct {
++				Node int64 `json:"backendNodeId"`
++			}
++			if err := br.cdp.call(ctx, session, "DOM.getFrameOwner", map[string]any{"frameId": child}, &owner); err != nil {
++				return offset{}, staleInspection()
++			}
++			var box struct {
++				Model struct {
++					Content []float64 `json:"content"`
++				} `json:"model"`
++			}
++			if err := br.cdp.call(ctx, session, "DOM.getBoxModel", map[string]any{"backendNodeId": owner.Node}, &box); err != nil {
++				return offset{}, staleInspection()
++			}
++			q := box.Model.Content
++			if len(q) != 8 || math.Abs(q[1]-q[3]) > .1 || math.Abs(q[0]-q[6]) > .1 || q[2] <= q[0] || q[5] <= q[1] {
++				return offset{}, badRequest("Rotated, skewed or mirrored frames cannot be annotated yet.")
++			}
++			var remote struct {
++				Object struct {
++					ID string `json:"objectId"`
++				} `json:"object"`
++			}
++			if err := br.cdp.call(ctx, session, "DOM.resolveNode", map[string]any{"backendNodeId": owner.Node, "executionContextId": world}, &remote); err != nil {
++				return offset{}, staleInspection()
++			}
++			defer br.cdp.call(ctx, session, "Runtime.releaseObject", map[string]any{"objectId": remote.Object.ID}, nil)
++			var result struct {
++				Result struct {
++					Value *offset `json:"value"`
++				} `json:"result"`
++				Exception json.RawMessage `json:"exceptionDetails"`
++			}
++			if err := br.cdp.call(ctx, session, "Runtime.callFunctionOn", map[string]any{"objectId": remote.Object.ID, "functionDeclaration": inspectionFrameOwnerFunction, "arguments": []map[string]any{{"value": reveal}}, "returnByValue": true}, &result); err != nil {
++				return offset{}, err
++			}
++			if result.Result.Value == nil || len(result.Exception) > 0 || result.Result.Value.SX <= 0 || result.Result.Value.SY <= 0 {
++				return offset{}, staleInspection()
++			}
++			return *result.Result.Value, nil
++		}()
++		if err != nil {
++			return bounds, err
++		}
++		offsets = append(offsets, value)
++	}
++	for i := len(offsets) - 1; i >= 0; i-- {
++		o := offsets[i]
++		bounds.X = o.X + bounds.X*o.SX
++		bounds.Y = o.Y + bounds.Y*o.SY
++		bounds.Width *= o.SX
++		bounds.Height *= o.SY
++	}
++	var metrics struct {
++		Visual struct {
++			X     float64 `json:"offsetX"`
++			Y     float64 `json:"offsetY"`
++			Scale float64 `json:"scale"`
++		} `json:"cssVisualViewport"`
++	}
++	if err := br.cdp.call(ctx, br.session, "Page.getLayoutMetrics", nil, &metrics); err != nil {
++		return bounds, err
++	}
++	scale := metrics.Visual.Scale
++	if scale <= 0 {
++		scale = 1
++	}
++	bounds.X = (bounds.X - metrics.Visual.X) * scale
++	bounds.Y = (bounds.Y - metrics.Visual.Y) * scale
++	bounds.Width *= scale
++	bounds.Height *= scale
++	return bounds, nil
++}
++
++func (br *browser) inspectionHit(ctx context.Context, x, y float64) (int64, string, error) {
++	session := br.session
++	documentX, documentY := x, y
++	var metrics struct {
++		Visual struct {
++			Scale float64 `json:"scale"`
++			X     float64 `json:"pageX"`
++			Y     float64 `json:"pageY"`
++		} `json:"cssVisualViewport"`
++	}
++	if err := br.cdp.call(ctx, session, "Page.getLayoutMetrics", nil, &metrics); err != nil {
++		return 0, "", err
++	}
++	scale := metrics.Visual.Scale
++	if scale <= 0 {
++		scale = 1
++	}
++	documentX = x/scale + metrics.Visual.X
++	documentY = y/scale + metrics.Visual.Y
++	for range 16 {
++		var hit struct {
++			Node  int64  `json:"backendNodeId"`
++			Frame string `json:"frameId"`
++		}
++		if err := br.cdp.call(ctx, session, "DOM.getNodeForLocation", map[string]any{"x": int(documentX), "y": int(documentY)}, &hit); err != nil {
++			return 0, "", err
++		}
++		var description struct {
++			Node struct {
++				Name  string `json:"nodeName"`
++				Frame string `json:"frameId"`
++			} `json:"node"`
++		}
++		if err := br.cdp.call(ctx, session, "DOM.describeNode", map[string]any{"backendNodeId": hit.Node}, &description); err != nil {
++			return 0, "", err
++		}
++		child := description.Node.Frame
++		if (description.Node.Name != "IFRAME" && description.Node.Name != "FRAME") || child == "" {
++			return hit.Node, hit.Frame, nil
++		}
++		childSession, world, release, err := br.inspectionWorld(ctx, child)
++		if err != nil || childSession == session {
++			if release != nil {
++				release()
++			}
++			return hit.Node, hit.Frame, nil
++		}
++		defer release()
++		frames, err := br.inspectionFrames(ctx, child)
++		if err != nil {
++			return 0, "", err
++		}
++		origin, err := br.inspectionBounds(ctx, frames, child, browserBounds{Width: 1, Height: 1}, false)
++		if err != nil {
++			return 0, "", err
++		}
++		localX, localY := (x-origin.X)/origin.Width, (y-origin.Y)/origin.Height
++		var size struct {
++			Result struct {
++				Value struct {
++					Width  float64 `json:"width"`
++					Height float64 `json:"height"`
++					X      float64 `json:"x"`
++					Y      float64 `json:"y"`
++				} `json:"value"`
++			} `json:"result"`
++		}
++		if err = br.cdp.call(ctx, childSession, "Runtime.evaluate", map[string]any{"contextId": world, "expression": "({width:innerWidth,height:innerHeight,x:scrollX,y:scrollY})", "returnByValue": true}, &size); err != nil {
++			return 0, "", err
++		}
++		if localX < 0 || localY < 0 || localX >= size.Result.Value.Width || localY >= size.Result.Value.Height {
++			return hit.Node, hit.Frame, nil
++		}
++		session = childSession
++		documentX = localX + size.Result.Value.X
++		documentY = localY + size.Result.Value.Y
++	}
++	return 0, "", badRequest("This frame is nested too deeply to annotate.")
++}
+diff --git a/internal/box/browserinspectlease.go b/internal/box/browserinspectlease.go
+new file mode 100644
+index 0000000..d67a2cf
+--- /dev/null
++++ b/internal/box/browserinspectlease.go
+@@ -0,0 +1,190 @@
++package box
++
++import (
++	"context"
++	"crypto/rand"
++	"encoding/hex"
++	"net/http"
++	"time"
++)
++
++const browserInspectionLeaseTTL = 15 * time.Second
++
++func expiredInspectionLease() error {
++	return httpError{http.StatusConflict, "This feedback session expired. Inspect the element again."}
++}
++
++func (b *Box) browserInspectLease(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Lease string `json:"lease"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	br.mu.Lock()
++	defer br.mu.Unlock()
++	if br.controls.closed {
++		return httpError{http.StatusConflict, "This tab closed."}
++	}
++	now := time.Now()
++	if req.Lease != "" && !now.Before(br.controls.inspectLeases[req.Lease]) {
++		return expiredInspectionLease()
++	}
++	if req.Lease == "" {
++		if len(br.controls.inspectLeases) >= 16 {
++			return badRequest("Too many viewers are commenting on this tab.")
++		}
++		var random [16]byte
++		if _, err = rand.Read(random[:]); err != nil {
++			return err
++		}
++		req.Lease = hex.EncodeToString(random[:])
++	}
++	if br.controls.inspectLeases == nil {
++		br.controls.inspectLeases = map[string]time.Time{}
++	}
++	until := now.Add(browserInspectionLeaseTTL)
++	br.controls.inspectLeases[req.Lease] = until
++	br.scheduleInspectionExpiry()
++	writeJSON(w, map[string]any{"lease": req.Lease, "expiresAt": until.UnixMilli()})
++	return nil
++}
++func (b *Box) browserReleaseInspectionLease(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Lease string `json:"lease"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	if req.Lease == "" {
++		return badRequest("name the feedback session to close")
++	}
++	br, _, _, err := b.browserFor(r, false)
++	if err != nil {
++		return err
++	}
++	br.inspectMu.Lock()
++	defer br.inspectMu.Unlock()
++	br.mu.Lock()
++	delete(br.controls.inspectLeases, req.Lease)
++	pending := map[string]*browserInspectedNode{}
++	for handle, node := range br.controls.inspected {
++		if node.lease == req.Lease {
++			pending[handle] = node
++			delete(br.controls.inspected, handle)
++		}
++	}
++	br.mu.Unlock()
++	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
++	defer cancel()
++	br.undoInspections(ctx, pending)
++	writeJSON(w, map[string]bool{"released": true})
++	return nil
++}
++
++// Call with br.mu held; renewal changes the deadline, never another viewer's ownership.
++func (br *browser) validInspectionLease(node *browserInspectedNode, lease string) bool {
++	if node.lease != lease {
++		return false
++	}
++	now := time.Now()
++	if lease != "" {
++		return now.Before(br.controls.inspectLeases[lease])
++	}
++	if !now.Before(node.expires) {
++		return false
++	}
++	node.expires = now.Add(browserInspectionLeaseTTL)
++	br.scheduleInspectionExpiry()
++	return true
++}
++func (br *browser) scheduleInspectionExpiry() {
++	if br.controls.inspectTimer != nil {
++		br.controls.inspectTimer.Stop()
++		br.controls.inspectTimer = nil
++	}
++	if br.controls.closed {
++		return
++	}
++	var next time.Time
++	take := func(t time.Time) {
++		if next.IsZero() || t.Before(next) {
++			next = t
++		}
++	}
++	for _, until := range br.controls.inspectLeases {
++		take(until)
++	}
++	for _, node := range br.controls.inspected {
++		if node.lease == "" {
++			take(node.expires)
++		}
++	}
++	if len(br.controls.inspectUndo) > 0 {
++		take(time.Now().Add(time.Second))
++	}
++	if !next.IsZero() {
++		br.controls.inspectTimer = time.AfterFunc(max(time.Millisecond, time.Until(next)), br.expireInspections)
++	}
++}
++func (br *browser) expireInspections() {
++	br.inspectMu.Lock()
++	defer br.inspectMu.Unlock()
++	br.mu.Lock()
++	now := time.Now()
++	for lease, until := range br.controls.inspectLeases {
++		if !now.Before(until) {
++			delete(br.controls.inspectLeases, lease)
++		}
++	}
++	pending := br.controls.inspectUndo
++	br.controls.inspectUndo = nil
++	if pending == nil {
++		pending = map[string]*browserInspectedNode{}
++	}
++	for handle, node := range br.controls.inspected {
++		expired := !now.Before(node.expires)
++		if node.lease != "" {
++			expired = !now.Before(br.controls.inspectLeases[node.lease])
++		}
++		if expired {
++			pending[handle] = node
++			delete(br.controls.inspected, handle)
++		}
++	}
++	br.mu.Unlock()
++	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++	defer cancel()
++	br.undoInspections(ctx, pending)
++	br.mu.Lock()
++	br.scheduleInspectionExpiry()
++	br.mu.Unlock()
++}
++func (br *browser) undoInspections(ctx context.Context, pending map[string]*browserInspectedNode) {
++	for handle, node := range pending {
++		if len(node.original) == 0 {
++			continue
++		}
++		_, _, err := br.inspectNode(ctx, node.node, "", "", node.original, browserInspectOptions{frame: node.frame, loader: node.loader, baseline: node.baseline})
++		if err != nil {
++			if e, ok := err.(httpError); ok && e.status == http.StatusConflict {
++				continue
++			}
++			br.mu.Lock()
++			if !br.controls.closed {
++				if br.controls.inspectUndo == nil {
++					br.controls.inspectUndo = map[string]*browserInspectedNode{}
++				}
++				br.controls.inspectUndo[handle] = node
++			}
++			br.mu.Unlock()
++		}
++	}
++	br.mu.Lock()
++	br.scheduleInspectionExpiry()
++	br.mu.Unlock()
++}
+diff --git a/internal/box/browsernavigation_controls_test.go b/internal/box/browsernavigation_controls_test.go
+index 707b046..7c6528d 100644
+--- a/internal/box/browsernavigation_controls_test.go
++++ b/internal/box/browsernavigation_controls_test.go
+@@ -163,7 +163,11 @@ func TestBrowserSlowNavigationWithRealChromium(t *testing.T) {
+ 			input.Type = "mouseReleased"
+ 			input.Buttons = 0
+ 			call(b.browserInput, input)
+-			time.Sleep(500 * time.Millisecond)
++			// Adopting a Chromium target enables its domains before publishing the tab.
++			deadline := time.Now().Add(10 * time.Second)
++			for len(br.chromium.list()) != before+1 && time.Now().Before(deadline) {
++				time.Sleep(30 * time.Millisecond)
++			}
+ 			if len(br.chromium.list()) != before+1 {
+ 				var targets any
+ 				br.cdp.call(ctx, "", "Target.getTargets", nil, &targets)
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index a3e0615..4fb6770 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -49,6 +49,7 @@ type chromium struct {
+ 	persistent bool
+ 	dmu        sync.Mutex
+ 	downloads  map[string]BrowserDownload
++	exports    int
+ 	started    time.Time
+ 	done       chan struct{}
+ 
+diff --git a/internal/box/cdp.go b/internal/box/cdp.go
+index 89e836b..a84fa18 100644
+--- a/internal/box/cdp.go
++++ b/internal/box/cdp.go
+@@ -20,12 +20,13 @@ type cdpConn struct {
+ 	w io.WriteCloser
+ 	r *bufio.Reader
+ 
+-	mu      sync.Mutex
+-	next    int64
+-	pending map[int64]chan cdpReply
+-	onEvent func(method, session string, params json.RawMessage)
+-	closed  chan struct{}
+-	err     error
++	mu        sync.Mutex
++	next      int64
++	pending   map[int64]chan cdpReply
++	listeners map[string]func(string, json.RawMessage)
++	onEvent   func(method, session string, params json.RawMessage)
++	closed    chan struct{}
++	err       error
+ }
+ 
+ type cdpReply struct {
+@@ -94,8 +95,15 @@ func (c *cdpConn) readLoop() {
+ 			}
+ 			continue
+ 		}
+-		if m.Method != "" && c.onEvent != nil {
+-			c.onEvent(m.Method, m.SessionID, m.Params)
++		if m.Method != "" {
++			c.mu.Lock()
++			listener := c.listeners[m.SessionID]
++			c.mu.Unlock()
++			if listener != nil {
++				listener(m.Method, m.Params)
++			} else if c.onEvent != nil {
++				c.onEvent(m.Method, m.SessionID, m.Params)
++			}
+ 		}
+ 	}
+ }
+@@ -167,3 +175,17 @@ func (c *cdpConn) close() {
+ 	c.mu.Unlock()
+ 	c.w.Close()
+ }
++
++// A separate session keeps developer domain state away from the browser controls.
++func (c *cdpConn) listenSession(id string, listener func(string, json.RawMessage)) {
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if c.listeners == nil {
++		c.listeners = map[string]func(string, json.RawMessage){}
++	}
++	if listener == nil {
++		delete(c.listeners, id)
++	} else {
++		c.listeners[id] = listener
++	}
++}
+diff --git a/internal/boxcmd/boxcmd.go b/internal/boxcmd/boxcmd.go
+index e094af8..6cca499 100644
+--- a/internal/boxcmd/boxcmd.go
++++ b/internal/boxcmd/boxcmd.go
+@@ -92,6 +92,9 @@ var usageSections = []struct {
+ 		{"%[1]s browser console %[2]s[LOC/WT] [--all]", "New console errors and warnings since the last look"},
+ 		{"%[1]s browser network %[2]s[LOC/WT]", "Failed requests since the last look"},
+ 		{"%[1]s browser eval %[2]s[LOC/WT] JS", "Run JavaScript in the page (output capped at 2 KB)"},
++		{"%[1]s browser developer-request %[2]s[LOC/WT] REASON", "Ask the person for developer access to this page; never approve your own request"},
++		{"%[1]s browser developer-status|developer-events %[2]s[LOC/WT] [--after N]", "Check approval or read its bounded CDP event history"},
++		{"%[1]s browser cdp %[2]s[LOC/WT] METHOD [JSON_PARAMS]", "Run page-scoped CDP after explicit approval (DOM/CSS/Runtime, network and CPU profiles)"},
+ 		{"%[1]s browser status|close %[2]s[LOC/WT] [--tab NAME]", "Whether it runs, or close it (with --tab, just that tab)"},
+ 		{"%[1]s browser tabs %[2]s[LOC/WT]", "Its tabs: each its own page, cookies and size ($BERTH_BROWSER_TAB is the default)"},
+ 		{"%[1]s browser list%[3]s [--json]", "Browsers running on the box"},
+@@ -258,7 +261,7 @@ func Run(ctx context.Context, c *box.Client, args []string, out io.Writer) error
+ 	case "flow secret":
+ 		return flowSecret(ctx, c, rest, out)
+ 	case "browser open", "browser resize", "browser snapshot", "browser click", "browser fill", "browser press", "browser select", "browser hover", "browser check",
+-		"browser wait", "browser shot", "browser console", "browser network", "browser status", "browser close", "browser tabs", "browser eval", "browser allow", "browser list", "browser reap":
++		"browser cdp", "browser developer-request", "browser developer-status", "browser developer-events", "browser wait", "browser shot", "browser console", "browser network", "browser status", "browser close", "browser tabs", "browser eval", "browser allow", "browser list", "browser reap":
+ 		return browserCmd(ctx, c, strings.TrimPrefix(cmd, "browser "), rest, out)
+ 	case "shots compare", "shots baseline", "shots accept":
+ 		return shotsCmd(ctx, c, strings.TrimPrefix(cmd, "shots "), rest, out)
+diff --git a/internal/boxcmd/browsercmd.go b/internal/boxcmd/browsercmd.go
+index 70527e4..dc9ac18 100644
+--- a/internal/boxcmd/browsercmd.go
++++ b/internal/boxcmd/browsercmd.go
+@@ -2,11 +2,13 @@ package boxcmd
+ 
+ import (
+ 	"context"
++	"encoding/json"
+ 	"errors"
+ 	"fmt"
+ 	"io"
+ 	"net/url"
+ 	"os"
++	"strconv"
+ 	"strings"
+ 
+ 	"github.com/cosscom/shipyard/internal/box"
+@@ -259,6 +261,43 @@ func browserCmd(ctx context.Context, c *box.Client, sub string, args []string, o
+ 			return usageErr("browser eval [LOC/WT] JS")
+ 		}
+ 		return browserCall(ctx, c, loc, wt, tab, "POST", "eval", map[string]string{"js": rest[0]}, out)
++	case "developer-request", "developer-status", "developer-events", "cdp":
++		fs, _ := flags(args)
++		after := fs.Int64("after", 0, "event sequence to read after")
++		pos, err := parse(fs, args)
++		if err != nil {
++			return err
++		}
++		loc, wt, rest, err := browserWorktree(pos)
++		if err != nil {
++			return err
++		}
++		switch sub {
++		case "developer-request":
++			if len(rest) != 1 {
++				return usageErr("browser developer-request [LOC/WT] REASON [--tab NAME]")
++			}
++			return browserCall(ctx, c, loc, wt, tab, "POST", "developer/request", map[string]string{"reason": rest[0]}, out)
++		case "developer-status":
++			if len(rest) != 0 {
++				return usageErr("browser developer-status [LOC/WT] [--tab NAME]")
++			}
++			return browserCall(ctx, c, loc, wt, tab, "GET", "developer", nil, out)
++		case "developer-events":
++			if len(rest) != 0 || *after < 0 {
++				return usageErr("browser developer-events [LOC/WT] [--after N] [--tab NAME]")
++			}
++			return browserCall(ctx, c, loc, wt, tab, "GET", "developer/events?after="+strconv.FormatInt(*after, 10), nil, out)
++		default:
++			if len(rest) < 1 || len(rest) > 2 {
++				return usageErr("browser cdp [LOC/WT] METHOD [JSON_PARAMS] [--tab NAME]")
++			}
++			params := map[string]any{}
++			if len(rest) == 2 && json.Unmarshal([]byte(rest[1]), &params) != nil {
++				return errors.New("CDP params must be a JSON object")
++			}
++			return browserCall(ctx, c, loc, wt, tab, "POST", "developer/cdp", map[string]any{"method": rest[0], "params": params}, out)
++		}
+ 	case "allow":
+ 		fs, _ := flags(args)
+ 		pos, err := parse(fs, args)
+diff --git a/internal/boxcmd/browserdeveloper_test.go b/internal/boxcmd/browserdeveloper_test.go
+new file mode 100644
+index 0000000..4767d30
+--- /dev/null
++++ b/internal/boxcmd/browserdeveloper_test.go
+@@ -0,0 +1,19 @@
++package boxcmd
++
++import "testing"
++
++// The CLI must keep the chosen tab and request approval rather than invent a grant.
++func TestBrowserDeveloperCommands(t *testing.T) {
++	r, _ := run(t, `{"text":"pending"}`, "browser", "developer-request", "cal/billing", "Inspect layout", "--tab", "user-one")
++	if r.path != "/v1/worktrees/cal/billing/browser/developer/request?tab=user-one" || r.body["reason"] != "Inspect layout" {
++		t.Fatal(r)
++	}
++	r, _ = run(t, `{"text":"{}"}`, "browser", "cdp", "cal/billing", "DOM.getDocument", `{"depth":2}`, "--tab", "user-one")
++	if r.path != "/v1/worktrees/cal/billing/browser/developer/cdp?tab=user-one" || r.body["method"] != "DOM.getDocument" || r.body["params"].(map[string]any)["depth"] != float64(2) {
++		t.Fatal(r)
++	}
++	r, _ = run(t, `{"text":"[]"}`, "browser", "developer-events", "cal/billing", "--after", "12", "--tab", "user-one")
++	if r.path != "/v1/worktrees/cal/billing/browser/developer/events?after=12&tab=user-one" {
++		t.Fatal(r)
++	}
++}

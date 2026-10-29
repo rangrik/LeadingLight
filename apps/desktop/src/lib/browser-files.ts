@@ -6,6 +6,18 @@ const MAX_BYTES = 32 * 1024 * 1024;
 const CHUNK_BYTES = 1024 * 1024;
 const filename = (name: string) => (name.split(/[\\/]/).pop() ?? "").replace(/[\x00-\x1f\x7f]/g, "").replace(/^\.+$/, "") || "download";
 const decode = (data: string) => Uint8Array.from(atob(data), (character) => character.charCodeAt(0));
+let dialogs = Promise.resolve<unknown>(undefined);
+
+// Different panes can finish at once; native save panels must open one at a time.
+function chooseBrowserPath(title: string, name: string, directory?: string, canPrompt = () => true): Promise<string | null> {
+  const next = dialogs.catch(() => {}).then(async () => {
+    const { save } = await import("@tauri-apps/plugin-dialog");
+    if (!canPrompt()) return null;
+    return save({ title, defaultPath: directory ? `${directory.replace(/[\\/]+$/, "")}/${filename(name)}` : filename(name) });
+  });
+  dialogs = next;
+  return next;
+}
 
 export async function saveBrowserFile(file: BrowserFile): Promise<boolean> {
   if (file.data.length > Math.ceil(MAX_BYTES / 3) * 4) throw new Error("Saving files over 32 MB is not supported yet.");
@@ -15,8 +27,8 @@ export async function saveBrowserFile(file: BrowserFile): Promise<boolean> {
   for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
   const name = filename(file.name);
   if (await isNative) {
-    const [{ save }, { writeFile }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/plugin-fs")]);
-    const path = await save({ title: "Save browser file", defaultPath: name });
+    const { writeFile } = await import("@tauri-apps/plugin-fs");
+    const path = await chooseBrowserPath("Save browser file", name);
     if (!path) return false;
     // The save dialog adds only the chosen file to Tauri's filesystem scope.
     await writeFile(path, bytes);
@@ -34,7 +46,7 @@ export async function saveBrowserFile(file: BrowserFile): Promise<boolean> {
 }
 
 // Native downloads are written in bounded chunks, so large files never fill the app's memory.
-export async function saveBrowserDownload(base: string, tab: string, id: string): Promise<boolean> {
+export async function saveBrowserDownload(base: string, tab: string, id: string, options: { directory?: string; onSaved?: (path: string) => void; canPrompt?: () => boolean } = {}): Promise<boolean> {
   const route = `${base}/downloads/${encodeURIComponent(id)}/data?tab=${encodeURIComponent(tab)}`;
   if (!(await isNative)) return saveBrowserFile(await ask<BrowserFile>("GET", route));
   type Chunk = BrowserFile & { totalBytes: number; offset: number; done: boolean };
@@ -48,8 +60,8 @@ export async function saveBrowserDownload(base: string, tab: string, id: string)
     return bytes;
   };
   let bytes = checkedBytes(chunk, 0);
-  const [{ save }, { open }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/plugin-fs")]);
-  const path = await save({ title: "Save download", defaultPath: filename(chunk.name) });
+  const { open } = await import("@tauri-apps/plugin-fs");
+  const path = await chooseBrowserPath("Save download", chunk.name, options.directory, options.canPrompt);
   if (!path) return false;
   const file = await open(path, { write: true, create: true, truncate: true });
   let offset = 0;
@@ -64,10 +76,12 @@ export async function saveBrowserDownload(base: string, tab: string, id: string)
       offset += bytes.length;
       if (chunk.done) {
         if (offset !== total) throw new Error("The download is incomplete.");
-        return true;
+        break;
       }
       chunk = await read(offset);
       bytes = checkedBytes(chunk, offset);
     }
   } finally { await file.close(); }
+  options.onSaved?.(path);
+  return true;
 }
