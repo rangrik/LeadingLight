@@ -1,8 +1,9 @@
 # iPad checks — 2026-10-28 and 2026-10-29
 
 Browser checks ran in the isolated `codex/ipad-app` worktree using fixture notes at localhost:1437.
-Physical iPad checks followed after the user explicitly requested "you test it". No production
-notes were read, copied or changed; the device checks use only fixtures in LeadingLight Dev.
+Physical iPad checks followed after the user explicitly requested "you test it". Early checks
+used fixtures in LeadingLight Dev. Later acceptance connected the user’s Mac library through
+authorized encrypted sync and compared the devices read-only; see [NATIVE-SYNC.md](NATIVE-SYNC.md).
 
 | Check | Result |
 | --- | --- |
@@ -27,7 +28,7 @@ notes were read, copied or changed; the device checks use only fixtures in Leadi
 | Native attachment paths after an app update | Initial update broke the existing PNG; the corrected signed update restored the same image without reimporting it |
 | Native rotation and keyboard behavior | Portrait keyboard taps and landscape capture Save passed; after the fix, rotation kept the existing caret visible without another input |
 | Hardware long-page behavior and multitasking | Not verified |
-| Account login and Mac-to-iPad sync | Pending integration with the separate cloud work |
+| Account login and Mac-to-iPad sync | Same account connected; 53 active pages, 61 history entries and 10 attachment hashes match after the pagination fix and approved recovery |
 
 The focused regression is `apps/desktop/qa/ipad.spec.ts`. Screenshots are in the ignored
 `apps/desktop/qa/report/` folder. Browser tests use IndexedDB; the mocked identity test verifies
@@ -55,7 +56,7 @@ affected paths only. Evidence is in `qa/report/ipad-independent/rotation-REPORT.
 `rotation-final-webkit.json` and `rotation-final-focused-log.txt` under the desktop app.
 Browser viewport changes and simulated keyboard heights do not replace the device checks below.
 
-Remaining native acceptance and sync requirements are in `IPAD.md` and `DEFERRED.md`.
+Remaining hardware checks are in `IPAD.md` and `DEFERRED.md`; final sync acceptance is recorded in `NATIVE-SYNC.md`.
 
 The initial unsigned archive was built at
 `apps/desktop/src-tauri/gen/apple/build/leadinglight-desktop_iOS.xcarchive`, with the
@@ -92,7 +93,7 @@ arm64 device code, the privacy manifest and absence of Mac sidecars. `devicectl`
 successful install, and a separate app listing confirmed the name, identifier and version.
 
 The profile expires November 5, 2026 at 12:16 AM Pacific. Re-sign and reinstall before then to
-continue testing. Existing Mac notes have not been transferred. Build processes were stopped.
+continue testing. The later Mac library transfer and verification are recorded in `NATIVE-SYNC.md`.
 
 ## Physical iPad checks — 2026-10-29
 

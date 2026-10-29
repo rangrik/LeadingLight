@@ -32,9 +32,7 @@ secrets in the existing deployment environment.
 
 Fixture checks cover account isolation, expiry, revocation, replay, browser origin guards,
 encrypted key transfer and failed verification. Browser approval is exercised in Chromium
-and WebKit. Device delivery must additionally verify the real Mac library, an image/PDF,
-an offline iPad edit and its return to the Mac. Record those results here after installation;
-passing fixture tests alone does not establish that the owner's devices are connected.
+and WebKit. The installed-device results below are separate from those fixture checks.
 
 2026-10-29, merged source `5f06240`: workspace typecheck, 44 desktop unit tests, 20 Rust
 tests and arm64 iOS compilation passed. The isolated PostgreSQL server suite passed 10/10.
@@ -44,5 +42,27 @@ adoption, offline edits and reconnect, history restore and repeated sync without
 history or conflict copies. Native identity and relocated iOS assets passed 4/4 checks.
 
 Independent Sonnet 5.5 review found account-switch and failed-approval rollback issues;
-both were fixed and covered by the final browser cases. Device installation and the owner's
-real library still require acceptance after this build.
+both were fixed and covered by the final browser cases.
+
+The installed Mac and iPad connected to the same account on 2026-10-29. Bidirectional fixture
+edits and history restore passed. Initial library comparison found 53 active Mac pages but
+49 on iPad despite both showing Up to date. The server sorted sequence numbers as text;
+fix `9756705` orders them numerically. The PostgreSQL suite passed 12/12 and independent
+Sonnet 5.5 review passed.
+
+With the user’s approval, four missed baseline events moved from cloud sequences 6–9 to
+62–65. Their IDs and encrypted payloads stayed unchanged, and the event count remained 61.
+Normal sync then recovered all four pages. Read-only comparison confirmed matching IDs,
+content and revisions for all 53 active pages, all 61 history IDs and all 52 baselines.
+Ten attachment hashes matched with no missing files, and both SQLite integrity checks passed.
+All four recovered titles were visible on the physical iPad; both apps showed Up to date.
+
+With Wi-Fi fully off in Settings, a cold iPad launch retained the October 23 daily record
+and the fixture body’s Mac marker. The PNG rendered, and the downloaded PDF opened
+`LL-IPAD-PDF-2026-10-29` in Quick Look. This final pass tested offline reading; it made no
+new offline edit. Earlier physical offline-edit persistence and online bidirectional edits
+and history restore are separate passes, not a new offline edit syncing back to the Mac.
+Wi-Fi rejoined the original network, and the iPad was left on the Pages list.
+
+Across 14 types and 27 properties, the only catalog difference was the Page display preference:
+`view.kind` was `table` on Mac and `list` on iPad. The remaining definitions matched.

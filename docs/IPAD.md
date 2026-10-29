@@ -141,7 +141,8 @@ Never copy browser cookies or upload the live SQLite database to connect a nativ
 Attachments use stable content identifiers inside encrypted events, then become local files
 on iPad for offline Quick Look. Limits are 32 MiB per file and 64 MiB of unique attachment
 bytes per event. Missing or oversized files produce an error and keep the local page.
-See [NATIVE-SYNC.md](NATIVE-SYNC.md) for the transport and acceptance record.
+The user’s Mac library is now present on the iPad. See [NATIVE-SYNC.md](NATIVE-SYNC.md)
+for the verified page, history and attachment counts, recovery record and remaining checks.
 
 ## Native acceptance
 
