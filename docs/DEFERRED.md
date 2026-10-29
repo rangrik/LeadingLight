@@ -179,3 +179,13 @@ A custom grammar-only trap would duplicate shared focus handling, so it is not a
 Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
 Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 `engine-focus-control.mjs`. Native behavior has not been tested.
+
+## 2026-10-28 — Browser address field in a narrow split
+
+Independent delivery QA found that opening Browser beside a note at a 520 px window
+leaves its roughly 236 px pane with a sliver of an Address field and an overlapping
+globe/bookmark icon. This arrives unchanged from the shared-browser branch. Note
+editing and navigation back still work. Leave toolbar adaptation to the browser's
+responsive pass; revisit before recommending side-by-side browsing in small windows.
+Evidence: `apps/desktop/qa/report/writing-coach-delivery-2026-10-28/`
+`delivery-independent/j1-520-5-browser-zoom.png`.

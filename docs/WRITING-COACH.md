@@ -134,6 +134,37 @@ stays as evidence of the bugs found, not the final state. Raw final logs are in
 `apps/desktop/qa/report/scope-verification/`.
 
 Real system speech and native WebKit still need a person in the Mac app. Broader
-authored lessons and learning outcomes still need feedback from use. This slice
-stays uncommitted in the worktree, following the commit-only-when-asked rule. Main
-was not edited, and no app was installed or pushed.
+authored lessons and learning outcomes still need feedback from use. That slice was held uncommitted until the user approved delivery below.
+
+## Approved delivery — 2026-10-28
+
+Committed as `74d56f0`, then merged main `b9a56a9` in `b69a5b9`. Main's shared
+browser and idle-runtime Quit fix are retained. The only conflict was decision
+numbering: browser stays 31 and writing review is 32.
+
+The combined source passes typecheck, 30 desktop unit tests, eight Rust tests and
+all 143 browser scenarios (8.9 minutes). Independent Sonnet QA passed 70 checks
+across two-note writing review and voice capture to a project Task, at 1280 and
+520 px. Audio/transcription and browser-runtime replies were explicit stand-ins;
+these do not establish native behavior. The narrow Browser toolbar finding is in
+DEFERRED. On 2,000 paragraphs, quiet/inline typing medians were 3.4/3.2 ms and
+maxima 12.7/7.5 ms to document change, excluding paint; no sample exceeded 16 ms.
+
+The user approved merging, building and installing from main, then testing native
+parts personally. All earlier report paths in this document are retained beneath
+`apps/desktop/qa/report/writing-coach-delivery-2026-10-28/` in the main checkout.
+That folder also keeps the final build and install logs.
+
+### Native checks
+
+1. In a note, select “I ate a apple.” and choose Writing → Review writing. Apply
+   should change only that passage, pause on its result, and Undo should restore it.
+2. Open Why, then Listen. A local English voice should speak only on request;
+   Stop and closing the review should stop it. Without a local voice, it says so.
+3. Use ⌃⌥I, record a new voice note, and stop. Open it from Captures, play the saved
+   audio, then use Review transcript to make a Task with a project. The task should
+   contain the selected words and the source should retain its audio and transcript.
+
+The capture shortcut belongs to whichever app copy started first; quit other dev
+copies if they intercept it. Browser's separate native menu and file-dialog checks
+are in `BROWSER-VERIFICATION.md`. No native window was automated.
