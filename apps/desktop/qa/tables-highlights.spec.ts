@@ -87,10 +87,12 @@ test("Block menu supports its displayed keyboard shortcuts", async ({ page }) =>
   await page.keyboard.press("Meta+d");
   await expect(body(page).locator("p")).toHaveText(["One", "Two", "Three", "Three"]);
   await expect(page.getByRole("menu", { name: "Block" })).toHaveCount(0);
+  await expect(body(page)).toBeFocused();
   await page.keyboard.press("Meta+/");
   await expect(page.getByRole("menu", { name: "Block" })).toBeVisible();
   await page.keyboard.press("Backspace");
   await expect(body(page).locator("p")).toHaveText(["One", "Two", "Three"]);
+  await expect(body(page)).toBeFocused();
   await page.keyboard.press("Meta+z");
   await expect(body(page).locator("p")).toHaveText(["One", "Two", "Three", "Three"]);
 });

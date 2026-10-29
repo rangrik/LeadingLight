@@ -24,6 +24,7 @@ import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
 import { BrowserPane } from "~/components/agent-browser";
+import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
@@ -225,9 +226,9 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
-                  <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
+                  leaf.page === CHAT_VIEW ? <BrowserChat /> : <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
                 ) : leaf.page.startsWith(BROWSER_VIEW) ? (
-                  <BrowserPane pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} session={leaf.page.split("/")[2] || undefined} worktree={leaf.page.split("/")[1] || undefined} />
+                  <BrowserPane active={front && !folded} pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} session={leaf.page.split("/")[2] || undefined} worktree={leaf.page.split("/")[1] || undefined} />
                 ) : (
                   <PagePane id={leaf.page} />
                 )}

@@ -293,6 +293,9 @@ worker, keep one at a check, and use the browser; Shipyard's sessions, notificat
 runs do the rest, and a worker started by an agent with full access gets it too. A restart loses no
 send: the turn ledger is written before berthd exits.
 
+Since 2026-10-28, Quit stops the runtime when no agent is in a turn and no run is active, since
+nothing should keep running for no reason; a turn or run going keeps it, and agents wait in tmux.
+
 
 ## 19. A project's agents reach LeadingLight through the runtime, as tools
 
@@ -476,7 +479,82 @@ Panes, tabs and the active tab are restored on launch. Quick capture is one box 
 in from outside is one habit: words, an address or a voice note all land in Captures, and the box
 saves whatever was typed on close so a capture can never be lost.
 
-## 31. Writing review is quiet, local, and chosen
+## 31. The browser shares Chromium with the agent
+
+2026-10-28. Both the person and the agent must operate the same page, including its sign-in and
+form state. Extend the bundled MIT Shipyard runtime and its CDP browser, with an additive patch,
+instead of introducing a second WebKit browser or an Electron app. The app displays its live
+frames and sends input through the existing local runtime transport. Remote website HTML never
+enters the notes webview. Agent snapshots, references, screenshots and actions keep working.
+
+Personal tabs use an app-owned persistent profile per workspace; named and unnamed agent tabs
+stay isolated. A legacy command without a tab must not inherit personal cookies. Explicit tab
+names let an agent work on a personal tab when asked. Website content is
+untrusted, and the runtime's network restrictions still apply to manual and agent navigation.
+Browser metadata lives on this Mac; profiles and downloads never go in the linked project.
+
+The reference is ChatGPT's documented built-in Browser, not an assumption that its private
+implementation is available. Research, exclusions and any remaining gaps live in
+`docs/BROWSER-RESEARCH.md`; behavior lives in `features/agent-browser.feature`.
+
+Browser opens from the sidebar without requiring a project: its empty workspace is app-owned.
+Ask about page attaches the exact tab to one conversation, including a standalone browser chat.
+The attachment is visible and removable, stays in memory, and is never inherited by another chat.
+Each sent message freezes its tab context; website titles and text are not agent instructions.
+
+Managed Git checkouts can all be named `LeadingLight`. Embedded runtime worktrees in that layout
+get stable path suffixes, and the browser chooses the linked checkout's path before git's main
+checkout. Ambiguous names fail rather than opening a different workspace.
+
+The native Edit menu needs an explicit bridge: macOS otherwise handles Undo and Select All in
+the local input that forwards typing. Only while the browser page has focus, its six Edit actions
+target that tab's input queue. Focus tokens prevent a delayed menu event reaching another tab.
+
+Clear browsing data removes only this workspace's personal profile, tabs and local history after
+confirmation. It retains bookmarks and downloaded files, and refuses while agent tabs are open.
+Native download saving writes bounded chunks to the chosen file so large downloads stay usable
+without granting the frontend broad filesystem access.
+
+Element feedback uses explicit selection on the shared page. The runtime keeps an opaque handle
+to that element; bounded metadata and the person's comment accompany the exact tab in chat.
+Visual previews accept a small list of CSS properties and keep the original inline styles for
+Reset. Leaving the feedback panel ends its previews; Ask copies the comment and chosen styles
+to chat first. Navigation invalidates selection, so an old preview cannot change a new page.
+Picking suppresses activation and typing but permits scrolling. After the feedback panel changes
+the viewport, a handle-based reveal keeps the selected element visible without activating it.
+Reset restores the original style attribute when safe, while preserving unrelated page changes.
+
+Personal pages follow the pane's size by default; shrinking a desktop screenshot made text too
+small beside a chat. Explicit phone/desktop sizes stay fixed, and agent tabs keep the size the
+agent chose until the person opts into the pane's size.
+Input waits for a frame at the requested size, so a click cannot use old image coordinates after
+the runtime has resized the page.
+Two views can share one tab. Only the last browser pane used controls that tab's automatic size;
+other views fit its frames. Ownership passes on close, avoiding competing resize requests.
+The auto/fixed choice also belongs to the tab, so using another pane cannot cancel phone mode.
+It stays in app memory, bounded to 256 recent explicit choices; it is not a saved device profile.
+Resize requests run in order per tab. Every view pauses input while they run and waits for a
+frame at the final size, including views whose state poll has not caught up yet.
+Afterward, a fresh state read resumes following the agent's viewport; an older poll cannot
+release the input guard, and an agent changing size again cannot leave the view stuck.
+
+Uploads carry the file chooser's identity, not only its tab name. A navigation or a second chooser
+invalidates a delayed file choice so it cannot attach to a different form.
+
+Search words open DuckDuckGo's ordinary results URL, which needs no key or new search service.
+The local runtime keeps at most 24 live tabs per workspace. Metadata is bounded (200 bookmarks,
+500 history entries and 20 closed tabs); file picks allow 20 files and 32 MiB per pick. Clipboard
+text is limited to 64 KiB and rejected rather than truncated. These bounds keep local memory and
+IPC predictable; native download saving has no fixed file-size cap.
+
+Navigation belongs to the tab's lifetime, not the HTTP control request's timeout. Chromium's
+events determine loading and errors, and Stop cancels even a slow link navigation. Permission
+notices describe the current tab's blocked requests; the shared proxy's historical refusals
+remain diagnostic data rather than prompts on unrelated pages.
+Revocation blocks new network requests, not cached page display. The permissions view says so;
+removing cached content and sign-ins remains the separate Clear browsing data action.
+
+## 32. Writing review is quiet, local, and chosen
 
 Grammar help defaults to review on request. Inline underlines are optional. Harper provides
 actual suggestions; applying one preserves marks, has its own undo step, and refuses stale

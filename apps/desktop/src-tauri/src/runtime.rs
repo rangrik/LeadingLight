@@ -1,6 +1,6 @@
-// The project runtime (DECISIONS.md, 18): our own berthd, started from here and left running
-// when the app quits, so agents and runs carry on. The webview reaches it only through these
-// commands, which speak HTTP to its socket.
+// The project runtime (DECISIONS.md, 18): our own berthd, started from here. Quit leaves it
+// running while a turn or a run is going, so they carry on, and stops it otherwise. The webview
+// reaches it only through these commands, which speak HTTP to its socket.
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -119,9 +119,13 @@ fn read_chunks(r: &mut impl BufRead, mut on: impl FnMut(&[u8]) -> bool) -> Resul
     }
 }
 
-fn info(sock: &Path) -> Option<Value> {
-    let (code, body) = request(sock, "GET", "/v1/info", None, Duration::from_secs(3)).ok()?;
+fn get(sock: &Path, path: &str, wait: Duration) -> Option<Value> {
+    let (code, body) = request(sock, "GET", path, None, wait).ok()?;
     (code == 200).then(|| serde_json::from_slice(&body).ok()).flatten()
+}
+
+fn info(sock: &Path) -> Option<Value> {
+    get(sock, "/v1/info", Duration::from_secs(3))
 }
 
 fn set(rt: &Runtime, home: &Path, state: &'static str, version: Option<String>, error: Option<String>) -> Status {
@@ -150,7 +154,7 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
         if i["build"].as_str() != Some(want.as_str()) {
             backup(&home, i["build"].as_str().unwrap_or("unknown"));
         }
-        stop(&home, &sock);
+        stop(&home, &sock, Duration::from_secs(10));
     }
     let dir = match install(&home, &want, &bin) {
         Ok(dir) => dir,
@@ -239,15 +243,33 @@ fn backup(home: &Path, build: &str) {
     }
 }
 
-// An older build ends; its agents keep running in tmux and the next one follows them again.
-fn stop(home: &Path, sock: &Path) {
+// It ends, waited for up to `wait`; its agents keep running in tmux and the next one follows them.
+fn stop(home: &Path, sock: &Path, wait: Duration) {
     let Some(pid) = std::fs::read_to_string(home.join("berthd.pid")).ok().and_then(|s| s.trim().parse::<i32>().ok()) else {
         return;
     };
     let _ = Command::new("/bin/kill").args(["-TERM", &pid.to_string()]).status();
-    let until = Instant::now() + Duration::from_secs(10);
+    let until = Instant::now() + wait;
     while Instant::now() < until && info(sock).is_some() {
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+// Nothing going: no agent mid-turn and no run berthd still has to finish. An unread answer keeps it.
+fn idle(sessions: Option<Value>, runs: Option<Value>) -> bool {
+    let (Some(Value::Array(s)), Some(Value::Array(r))) = (sessions, runs) else { return false };
+    let turn = s.iter().any(|s| s["agent_state"] == "running" && s["exited"] != true);
+    let run = r.iter().any(|r| !matches!(r["status"].as_str(), Some("succeeded" | "failed" | "cancelled" | "interrupted")));
+    !turn && !run
+}
+
+// On Quit, after the windows saved: an idle runtime stops without a wait, so the quit never hangs.
+pub fn quit(app: &AppHandle) {
+    let home = home(app);
+    let sock = socket(&home);
+    let read = |path: &str| get(&sock, path, Duration::from_secs(1));
+    if idle(read("/v1/sessions"), read("/v1/runs?status=active")) {
+        stop(&home, &sock, Duration::ZERO);
     }
 }
 
@@ -396,5 +418,19 @@ mod tests {
         let plain = b"HTTP/1.1 409 Conflict\r\nContent-Length: 2\r\n\r\n{}";
         let mut r = BufReader::new(&plain[..]);
         assert_eq!(read_head(&mut r).unwrap(), (409, false));
+    }
+
+    // Quit must never stop a runtime with a turn or a run going; shapes as berthd answers them.
+    #[test]
+    fn idle_only_when_nothing_is_going() {
+        let j = |s: &str| serde_json::from_str::<Value>(s).ok();
+        let shell = r#"[{"name":"shell1","command":"sleep 900","attached":0,"exited":false}]"#;
+        let settled = r#"[{"name":"a","agent_state":"waiting","exited":false},{"name":"b","agent_state":"running","exited":true}]"#;
+        assert!(idle(j("[]"), j("[]")));
+        assert!(idle(j(shell), j(r#"[{"id":"r_1","status":"cancelled"}]"#)));
+        assert!(idle(j(settled), j("[]")));
+        assert!(!idle(j(r#"[{"name":"a","agent_state":"running","exited":false}]"#), j("[]")));
+        assert!(!idle(j("[]"), j(r#"[{"id":"r_1","template":"exec","status":"running"}]"#)));
+        assert!(!idle(None, j("[]")));
     }
 }

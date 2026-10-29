@@ -108,6 +108,14 @@ Feature: The project runtime
     When I open the app again
     Then it uses the same runtime, and the turn's end is there
 
+  Scenario: Quitting with nothing going stops the runtime
+    Given the Mac app's runtime has no agent in the middle of a turn and no run active
+    When I quit the app
+    Then its berthd is gone, and the pid in runtime/berthd.pid no longer runs
+    And its agents are still in their tmux server
+    When I open the app again
+    Then the runtime starts again and lists the same agents
+
   Scenario: A newer app takes over from an older runtime
     Given the Mac app's runtime is running an older build
     When a newer app starts
