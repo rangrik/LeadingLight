@@ -74,8 +74,8 @@ Use this **What to Test** text:
 > Test creating and reopening notes offline, rotating and resizing the iPad, using the
 > onscreen keyboard on a long page, Quick capture, and adding an image and PDF. Reopen the
 > app in airplane mode and check the image and Quick Look preview. Report lost edits,
-> clipped controls, keyboard overlap or file errors. This build stores notes on this iPad;
-> Mac-to-iPad account sync is not included yet.
+> clipped controls, keyboard overlap or file errors. Connect the same account on Mac and iPad, wait for Up to date,
+> then check an offline edit and its return after reconnecting.
 
 ## Direct development install
 
@@ -117,25 +117,31 @@ its build context is required by Xcode's Rust script.
 
 ## Access to existing notes
 
-The related cloud implementation lives in the **Compare versioning options** chat, currently
-in `/Users/pranavkanade/.codex/worktrees/c7fe/LeadingLight`. Its deployed web app is
-[LeadingLight Web](https://leadinglight-web.vercel.app). It already includes encrypted journal
-sync, offline web storage, history and responsive iPad layouts. That work is not in this
-branch. On 2026-10-29 that chat reported Google and GitHub sign-in, session persistence and
-logout passing in Safari. Use the same provider across devices; they currently create separate
-workspaces. Google remains in testing mode with the user's account enabled.
-The latest cloud handoff confirms encrypted note sync in the browser; browser-to-Mac pairing
-is next. Native account integration is not included in this iPad build.
+Mac, iPad and [LeadingLight Web](https://leadinglight-web.vercel.app) share the encrypted
+journal. Open **Account and sync → Account → Connect your workspace** in each native app.
+The browser approves the device using its existing account and transfers the recovery key
+with end-to-end encryption. Compare the connection code shown in both places, approve, then
+return to the native app. Wait for **Sync → Up to date** before leaving the network.
 
-The cloud implementation explicitly leaves native account handoff and Mac attachment transfer
-unfinished. Its API uses same-origin browser cookies and `/api` routes; a native Tauri origin
-cannot use that session. Do not point the native app at the website and grant it native
-filesystem capabilities, copy browser cookies, or upload the live SQLite database.
+Use the same workspace account on every device. Google and GitHub remain separate identities;
+matching email addresses do not join them. Workspace sign-in is separate from the Mac's
+Claude Code/Codex login. Connecting notes does not grant remote agent access.
 
-Before promising Mac-to-iPad access, integrate the cloud changes, add native sign-in with a
-system-browser callback and account-bound session, and transfer encrypted attachments using
-portable identifiers. Verify the same note on Mac and iPad, edits made offline on both,
-deletions, wrong recovery keys, images/audio, and sign-out. Use fixture accounts and notes first.
+Notes, history, images and attachments download into each device's local storage. The Mac
+need not stay awake after uploading its changes. Offline edits sync when the app is open
+and online again; conflicting edits keep a separate copy. Linked project folders, agent
+processes and local app settings remain on the device. Later edits to shared type/property
+definitions are still deferred; missing definitions accompany synced pages.
+
+The native credential lives in Keychain and expires after 30 days. Sign out revokes that
+connection while keeping local notes. The browser keeps the recovery key; save it privately
+from the Sync panel before clearing browser storage or replacing all connected devices.
+Never copy browser cookies or upload the live SQLite database to connect a native app.
+
+Attachments use stable content identifiers inside encrypted events, then become local files
+on iPad for offline Quick Look. Limits are 32 MiB per file and 64 MiB of unique attachment
+bytes per event. Missing or oversized files produce an error and keep the local page.
+See [NATIVE-SYNC.md](NATIVE-SYNC.md) for the transport and acceptance record.
 
 ## Native acceptance
 
@@ -171,4 +177,4 @@ For repeat acceptance on a separately installed development build:
    visible; tapping the PDF should open Quick Look. Dismiss it to return to the same page.
    An unsupported file should show an error without leaving the page.
 
-The developer build uses the iPad's own sandbox. It does not read the Mac's production notes.
+The developer build keeps its own iPad sandbox. Account sync downloads encrypted copies of the connected workspace into it.

@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardPanel } from '@leadin
 import { Input } from '@leadinglight/ui/components/input';
 import { Label } from '@leadinglight/ui/components/label';
 import { Alert, AlertDescription } from '@leadinglight/ui/components/alert';
-import { isNative } from '~/lib/platform';
+import { isDesktop, useMobile } from '~/lib/platform';
 import { useCloud } from '~/lib/cloud';
 import { createPair, refreshPairs, removePair, selectPair, selectedPair, useRemote } from '~/lib/remote';
 
@@ -15,10 +15,12 @@ const codexSignedIn = (status: unknown) => Boolean((status as { account?: { resu
 const deadline = (pair: { expiresAt: string; serverTime?: string }) => performance.now() + Math.max(0, Date.parse(pair.expiresAt) - (pair.serverTime ? Date.parse(pair.serverTime) : Date.now()));
 
 export function PairingSettings() {
-  const [native, setNative] = useState<boolean | null>(null);
-  useEffect(() => { void isNative.then(setNative); }, []);
-  if (native === null) return <p className="text-sm text-muted-foreground">Checking this device…</p>;
-  return native ? <MacPairing /> : <BrowserPairing />;
+  const mobile = useMobile();
+  const [desktop, setDesktop] = useState<boolean | null>(null);
+  useEffect(() => { void isDesktop.then(setDesktop); }, []);
+  if (mobile) return <p className="text-sm text-muted-foreground">Agents are not available in the iPad app. Your notes and sync still work.</p>;
+  if (desktop === null) return <p className="text-sm text-muted-foreground">Checking this device…</p>;
+  return desktop ? <MacPairing /> : <BrowserPairing />;
 }
 
 export function RemoteAgentConnection() {

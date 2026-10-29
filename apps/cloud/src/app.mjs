@@ -1,4 +1,5 @@
 import { relayRequest } from './relay.mjs';
+import { NativeError, authenticateNative, nativePublicRequest, nativeBrowserRequest, revokeNative } from './native.mjs';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const enabled = (env, id) => env.CLOUD_ACCESS === 'public' || (env.CLOUD_ALLOWED_USERS || '').split(',').map((v) => v.trim()).includes(id);
 const bounded = (value, max) => typeof value === 'string' && value.length <= max;
@@ -11,13 +12,19 @@ export function application({ env, sql, auth }) {
       const url = new URL(request.url), path = url.pathname;
       if (origin && url.origin !== origin) return json({ error: 'Unexpected host.' }, 400);
       if (path.startsWith('/api/relay/device/')) return await relayRequest({ request, sql, readBody: limitedBody });
-      if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('origin') !== origin) return json({ error: 'Unexpected origin.' }, 403);
-      if (path === '/api/config') return json({ allowed: enabled(env, (await auth.user(request))?.id), ready: auth.ready, providers: auth.providers, agents: [] });
+      if (['/api/native/start', '/api/native/poll'].includes(path)) return auth.ready ? await nativePublicRequest({ request, sql, readBody: limitedBody, origin }) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
+      const native = request.headers.has('authorization') ? await authenticateNative(request, sql) : null;
+      if (!native && !['GET', 'HEAD'].includes(request.method) && request.headers.get('origin') !== origin) return json({ error: 'Unexpected origin.' }, 403);
+      if (path === '/api/config') return json({ allowed: enabled(env, (native?.user ?? await auth.user(request))?.id), ready: auth.ready, providers: auth.providers, agents: [] });
       if (path.startsWith('/api/auth/')) return auth.ready ? auth.handle(request) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       if (path === '/api/worker' || path === '/api/queue-worker') return agentsUnavailable();
-      const user = await auth.user(request);
+      const user = native?.user ?? await auth.user(request);
       if (!user) return json({ error: 'Sign in to use cloud features.' }, 401);
-      if (path === '/api/me') return json(user);
+      const expectedOwner = request.headers.get('x-leadinglight-owner');
+      if (expectedOwner && expectedOwner !== user.id) return json({ error: 'The signed-in account changed. Reconnect to the original workspace and try again.' }, 409);
+      if (path === '/api/me') return json(native ? { ...user, expiresAt: native.expiresAt } : user);
+      if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
+      if (path.startsWith('/api/native/')) return await nativeBrowserRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path.startsWith('/api/relay/')) return await relayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path === '/api/jobs' && request.method === 'GET') return json({ jobs: [] });
       if (path === '/api/jobs' || path.startsWith('/api/jobs/')) return agentsUnavailable();
@@ -56,6 +63,7 @@ export function application({ env, sql, auth }) {
       }
       return json({ error: 'Not found.' }, 404);
     } catch (error) {
+      if (error instanceof NativeError) return json({ error: error.message }, error.status);
       if (error instanceof RangeError || error instanceof SyntaxError) return json({ error: 'Request is too large or invalid.' }, 400);
       console.error('Cloud request failed', error instanceof Error ? error.name : 'Error');
       return json({ error: 'Cloud is temporarily unavailable. Your local notes are safe.' }, 503);

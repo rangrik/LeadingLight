@@ -30,6 +30,7 @@ import { TypesSection } from "~/components/settings/types-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 import { COVERS } from "~/lib/use-shortcuts";
+import { useMobile } from "~/lib/platform";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
 // one. Shipyard's sections about agents, machines and its own General stay out until there is ours.
@@ -53,8 +54,9 @@ export const openSection = (id: SectionId) => useStore.getState().setView({ kind
 type Props = { open: boolean; onOpenChange: (open: boolean) => void; style?: React.CSSProperties; windowToggle?: boolean };
 
 export function SettingsView({ open, onOpenChange, style, windowToggle }: Props) {
+  const mobile = useMobile();
   const view = useStore((s) => s.view);
-  const id = (view.kind === "settings" && SECTIONS.some((s) => s.id === view.section) ? view.section : "appearance") as SectionId;
+  const id = (view.kind === "settings" && SECTIONS.some((s) => s.id === view.section && !(mobile && s.id === "browser")) ? view.section : "appearance") as SectionId;
   const current = SECTIONS.find((s) => s.id === id)!;
 
   // Esc goes back to the app, unless something in the page has it (a field, a menu or a dialog).
@@ -87,6 +89,7 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
 }
 
 function SettingsSidebar({ current }: { current: SectionId }) {
+  const mobile = useMobile();
   const { isMobile, state, setOpenMobile } = useSidebar();
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset">
@@ -107,7 +110,7 @@ function SettingsSidebar({ current }: { current: SectionId }) {
           <SidebarGroup>
             <SidebarGroupLabel>Settings</SidebarGroupLabel>
             <SidebarMenu>
-              {SECTIONS.map((s) => (
+              {SECTIONS.filter((s) => !(mobile && s.id === "browser")).map((s) => (
                 <SidebarMenuItem key={s.id}>
                   <SidebarMenuButton
                     aria-current={s.id === current ? "page" : undefined}

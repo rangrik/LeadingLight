@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm --filter @leadinglight/desktop build",
+  "buildCommand": "pnpm --filter @leadinglight/cloud migrate && pnpm --filter @leadinglight/desktop build",
   "outputDirectory": "apps/desktop/dist",
   "regions": ["iad1"],
   "functions": { "api/gateway.mjs": { "maxDuration": 180 } },

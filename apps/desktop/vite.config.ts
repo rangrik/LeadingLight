@@ -66,7 +66,7 @@ export default defineConfig(() => ({
   clearScreen: false,
   server: {
     port: 1420,
-    proxy: { "/api": "http://127.0.0.1:8787" },
+    proxy: { "/api": process.env.CLOUD_API_ORIGIN || "http://127.0.0.1:8787" },
     strictPort: true,
     // IPv4 so the Berth proxy can reach it; Tauri loads it by the same address.
     host: host || "127.0.0.1",

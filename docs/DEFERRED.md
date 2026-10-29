@@ -183,12 +183,9 @@ Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 
 ## 2026-10-28 — iPad delivery and native account sync
 
-The iPad target is built separately from the active cloud work in the “Compare versioning
-options” chat. That implementation still defers native account handoff and portable Mac
-attachments. Reuse its encrypted journal and account service after integration; do not add a
-second sync protocol. This is a delivery dependency, so Mac-to-iPad data access is not ready
-until a real two-device check passes. See `IPAD.md`.
-The latest handoff confirms browser encrypted note sync; browser-to-Mac pairing is next.
+Native account handoff and portable attachments are implemented with the shared encrypted
+journal. Release acceptance is recorded in `NATIVE-SYNC.md`; deployment alone does not prove
+the owner's Mac library has reached the iPad.
 
 TestFlight remains unavailable without Apple Developer membership. On 2026-10-29 the user chose
 direct development testing; LeadingLight Dev was signed with their Personal Team and installed
@@ -218,8 +215,7 @@ with Apple or adopt a compatible SQLite integration, then check the final binary
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private and source changes remain uncommitted. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
-| 2026-10-28 | Native account handoff, portable Mac attachments and sync-device linking without a recovery key | Agent pairing is separate from note sync. Mac file URLs and project folders cannot be used in Safari; native session exchange needs a registered redirect. | Before promising full Mac-to-web sync; add encrypted blob transfer and secure native OAuth handoff. |
+| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
 | 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
 | 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing type/property definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
 | 2026-10-29 | Remote project agents and isolated cloud runners | Browser pairing currently grants page-agent access to the existing Mac runtime. Project folders and terminals need a separate grant. Shared API keys and usage billing are rejected, not deferred. | Design scoped project access, or validate user-authorized CLI login in a sandbox service such as E2B. Preserve approvals and isolation; measure hosting costs separately from model usage. |
@@ -229,4 +225,3 @@ with Apple or adopt a compatible SQLite integration, then check the final binary
 | 2026-10-29 | Inherited MCP configuration in unpaired local Codex note turns | Native pairing QA showed that an empty MCP table merges with the user's settings. Remote turns now explicitly disable inherited entries and verify the result; the older local launch remains unchanged. | Apply the same isolation to local note turns before claiming they exclude the user's configured helpers. |
 | 2026-10-29 | Keychain restore diagnostics and signed Mac updates | Rebuilding the ad-hoc dev app changed its code identity and triggered a macOS Keychain prompt. A failed restore currently omits that connection without an explanation. | Surface an actionable restore error/retry and use a stable Developer ID signature before public Mac updates. Never relax Keychain access controls. |
 | 2026-10-29 | History version-row height when timestamps wrap | Native QA showed a wrapped timestamp touching the next row in the narrow history list. Pairing, saved versions and attribution worked; this is outside the runtime repair. | Before broader UI acceptance, let history rows fit two-line timestamps and verify narrow layouts. |
-| 2026-10-28 | Native iPhone/iPad apps | User explicitly chose the web app first. | After Safari acceptance on physical devices. |

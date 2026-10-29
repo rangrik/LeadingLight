@@ -101,3 +101,42 @@ Feature: LeadingLight on iPad
     Given the account and encrypted sync work has not been integrated into this build
     Then this build does not claim my Mac's notes are already on the iPad
     And it does not create a second cloud service or copy the live Mac database
+
+  Scenario: Approve a device with the existing workspace account
+    Given I am signed into my workspace in the browser with encrypted sync enabled
+    When the installed app requests a connection
+    And I open its link and choose Connect this device in the browser
+    Then only that device can retrieve the approved account and decrypt its recovery key
+    And the browser never receives the device's session credential
+    And a request that was already claimed cannot be claimed again
+
+  Scenario: A failed connection preserves existing keys
+    Given this browser's notes and recovery key belong to one workspace account
+    When I sign into another account and try to approve a device
+    Then approval is refused and the original recovery key is unchanged
+    When I open an invalid or expired connection link
+    Then I see an error and cannot approve it
+    When I open a connection link while signed out
+    Then I must sign in before I can approve the device
+
+  Scenario: An account change while approval is open does not consume the request
+    Given I opened a device connection link while signed into one account
+    When the browser signs into another account before I approve
+    Then approval fails with an account changed message
+    And the connection is still waiting for approval
+    And my existing recovery key remains unchanged
+
+  Scenario: Keychain failure preserves the prior workspace
+    Given the installed app has an existing recovery key and paused sync
+    When a verified connection cannot be saved to Keychain
+    Then its provisional session is discarded
+    And the prior account, recovery key, backup key, and paused state remain unchanged
+    And no notes are uploaded before the connection is confirmed
+
+  Scenario: A failed browser approval does not link a new workspace
+    Given this browser has no recovery key and no linked account
+    And a device connection was approved elsewhere after I opened its dialog
+    When I try to approve that connection here
+    Then I see that the connection was already approved
+    And this browser remains unlinked without a new recovery key
+    And no notes are uploaded

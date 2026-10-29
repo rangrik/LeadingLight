@@ -24,6 +24,29 @@ CREATE TABLE IF NOT EXISTS sync_events (
   PRIMARY KEY(owner,id)
 );
 CREATE INDEX IF NOT EXISTS sync_events_pull ON sync_events(owner,seq);
+CREATE TABLE IF NOT EXISTS native_requests (
+  id uuid PRIMARY KEY,
+  challenge text NOT NULL,
+  device_name text NOT NULL,
+  public_key jsonb NOT NULL,
+  owner text,
+  account_name text,
+  key_envelope jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT now()+interval '10 minutes',
+  claimed_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS native_sessions (
+  id uuid PRIMARY KEY,
+  owner text NOT NULL,
+  account_name text NOT NULL,
+  device_name text NOT NULL,
+  credential_hash text NOT NULL UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT now()+interval '30 days',
+  revoked_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS native_sessions_owner ON native_sessions(owner);
 CREATE TABLE IF NOT EXISTS relay_pairs (
   id uuid PRIMARY KEY,
   owner text NOT NULL,

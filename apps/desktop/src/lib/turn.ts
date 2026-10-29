@@ -7,7 +7,7 @@ import { effortFor } from "~/lib/codex";
 import { GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
 import { type Item, patchThread, type Thread, threadOf } from "~/lib/threads";
 import { action } from "~/lib/history-types";
-import { isNative } from "~/lib/platform";
+import { isDesktop, isMobile } from "~/lib/platform";
 import { remoteRunCurrent, remoteTarget } from "~/lib/remote";
 
 // One turn of a thread, with Claude (Claude Code's stream-json) or GPT (Codex's app server):
@@ -52,10 +52,11 @@ const session = (th: Thread, p: Provider) => (p === "codex" ? { id: th.codexId, 
 
 // Mentioned pages are read after the thread is marked busy, so a second send can't slip in.
 export async function sendTurn(o: { page: AskPage; threadId: string; question: string; quote: Quote | null; pages: Promise<NoteText[]>; agent?: Agent }) {
+  if (await isMobile) throw new Error("Agents are not available in the iPad app.");
   const { page, threadId, question, quote } = o;
   const prefs = aiPrefs();
-  const native = await isNative;
-  const target = native ? "local" : remoteTarget();
+  const desktop = await isDesktop;
+  const target = desktop ? "local" : remoteTarget();
   const th = threadOf(page.id, threadId);
   if (!th || th.busy) return;
   const changedTarget = (th.executionTarget ?? "local") !== target;
@@ -82,7 +83,7 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   const note = { id: page.id, title: page.title(), text: page.text() };
   const pages = await o.pages.catch(() => []);
   if (!turns.has(id) || turn.stopped) return;
-  if (!native && target !== remoteTarget()) return finish(id, "failed", "The agent connection changed while the question was being prepared. Nothing was sent. Ask again on the selected Mac.");
+  if (!desktop && target !== remoteTarget()) return finish(id, "failed", "The agent connection changed while the question was being prepared. Nothing was sent. Ask again on the selected Mac.");
   const s = changedTarget ? { id: undefined, seen: {} } : session(th, provider);
   const input = { note, pages, agent: o.agent?.prompt ?? null, quote: quote?.text ?? null, question };
   const { prompt, seen } = buildPrompt({ seen: s.seen, ...input });

@@ -164,26 +164,17 @@ with Project 4.
 Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
 for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
-## Web workspace, history and cloud (2026-10-28)
+## Workspace history and connected devices (2026-10-29)
 
-- Account sync and offline web access are being built in the cloud worktree (`c7fe`).
-- Native iPad target: shared editor, local SQLite, touch navigation and build setup in
-  `docs/IPAD.md`. Native account handoff, attachment transfer and device acceptance still
-  gate cross-device delivery.
+Atomic page history, milestones, whole-action undo and authorship share the local store.
+Google/GitHub workspace sign-in and encrypted sync use the hosted service; browser agents
+pair separately with the installed Mac's existing CLI accounts. No model API keys or resale.
 
-Built in this worktree: atomic page history, milestones, whole-action undo, word authorship,
-optional accounts and encrypted background sync. Agents use the installed Mac app and the
-user’s CLI accounts. Mobile uses the responsive web app and offline cache. Defaults are in
-DECISIONS 31–33; setup is in
-[`apps/cloud/README.md`](../apps/cloud/README.md).
+The native iPad target shares the editor and SQLite store. Native account approval and
+portable encrypted attachments connect the Mac, iPad and web workspace. See
+[IPAD.md](IPAD.md), [NATIVE-SYNC.md](NATIVE-SYNC.md), decisions 34–37 and
+[cloud setup](../apps/cloud/README.md). Google remains in testing mode and access is private.
 
-Hosted at `https://leadinglight-web.vercel.app` with Neon PostgreSQL.
-Google and GitHub sign-in are live and verified; Google remains in testing mode.
-Browser-to-Mac pairing is deployed and verified in Safari with the installed Mac
-development app and real Claude/Codex CLIs. No API-key setup or usage billing.
-A browser approves note changes while the paired Mac
-runs its existing signed-in CLI. Both apps stay open and connected.
-Next: verify production cross-device sync and physical iPhone/iPad Safari acceptance.
-Project-agent access and isolated cloud runners need separate permission and execution designs.
-Full native account handoff, Mac attachment transfer, catalog edits across devices and history storage management remain in
-DEFERRED. Native iPhone/iPad apps follow web acceptance.
+Project-agent access, later catalog edits across devices, history compaction and storage
+management remain in DEFERRED. Release acceptance must prove the owner's library is downloaded
+before calling the iPad ready for offline use.

@@ -4,7 +4,7 @@ import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "@leadinglight/ui/components/empty";
-import { isNative } from "~/lib/platform";
+import { isDesktop, useMobile } from "~/lib/platform";
 import { refreshPairs, remoteReady, selectedPair, useRemote } from "~/lib/remote";
 import { useCloud } from "~/lib/cloud";
 import { openPairingSettings, RemoteAgentConnection } from "~/components/pairing-settings";
@@ -58,14 +58,16 @@ let took = 0;
 // In a pane the menu's words start 16 px in, under the pane's title (9 px, then its own 7).
 type AskViewProps = { head?: (menu: ReactNode) => ReactNode };
 export function AskView(props: AskViewProps) {
-  const [native, setNative] = useState<boolean | null>(null);
+  const mobile = useMobile();
+  const [desktop, setDesktop] = useState<boolean | null>(null);
   const cloud = useCloud();
   const remote = useRemote(), pair = selectedPair();
-  useEffect(() => { void isNative.then((value) => { setNative(value); if (!value) void refreshPairs(); }); }, []);
-  if (native === null || !native && (!cloud.initialized || !remote.initialized)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
+  useEffect(() => { void isDesktop.then((value) => { setDesktop(value); if (!value && !mobile) void refreshPairs(); }); }, [mobile]);
+  if (mobile) return <Empty><EmptyDescription>Agents are not available in the iPad app.</EmptyDescription></Empty>;
+  if (desktop === null || !desktop && (!cloud.initialized || !remote.initialized)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
     {props.head?.(null)}<Empty><EmptyDescription role="status">Loading your Mac connection…</EmptyDescription></Empty>
   </section>;
-  if (native !== true && !(pair?.state === "active" && pair.localKey) && !(import.meta.env.DEV && !remote.selected)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
+  if (desktop !== true && !(pair?.state === "active" && pair.localKey) && !(import.meta.env.DEV && !remote.selected)) return <section aria-label="Agent" className="flex h-full min-h-0 flex-col" data-testid="agent-panel">
     {props.head?.(null)}
     <Empty><EmptyHeader><EmptyTitle>Agents work on your Mac</EmptyTitle><EmptyDescription>{LOCAL_AGENTS_MESSAGE}</EmptyDescription></EmptyHeader><EmptyContent><Button onClick={openPairingSettings}>Connect a Mac</Button><p className="text-xs text-muted-foreground">Pair this browser with your Mac to use its agents here.</p></EmptyContent></Empty>
   </section>;

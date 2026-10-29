@@ -634,10 +634,9 @@ browser agent stand-in as a real answer.
 Attached files use iOS Quick Look through a small native plugin. It accepts only an asset
 filename, checks the resolved path stays inside the app's assets, and leaves the file unchanged.
 
-Account sync belongs to the existing cloud work in the “Compare versioning options” chat
-(worktree `c7fe`, checked 2026-10-28). Its web service is already deployed; native account
-handoff and portable attachments are still pending there. The iPad target does not invent a
-second sync service or imply that local Mac data has moved. See `docs/IPAD.md`.
+Native account sync reuses the cloud journal and service in decision 34. Browser approval
+transfers the existing workspace key to the installed app; encrypted attachment bundles use
+stable content identifiers across devices. See `docs/NATIVE-SYNC.md`.
 
 ## 34. History, authorship and web cloud defaults (2026-10-28)
 
@@ -699,3 +698,19 @@ risk replaying work whose delivery state is no longer known.
 Remote Codex disables inherited MCP entries and notification hooks, then verifies
 its effective configuration before opening a thread. Its isolated JavaScript tool
 dispatcher stays enabled for note tools; shell, plugins and computer tools stay off.
+
+## 37. Native devices join the existing encrypted workspace (2026-10-29)
+
+The installed app starts a ten-minute connection with a private polling verifier and P-256
+public key. The signed-in browser shows a matching code and explicitly approves the device.
+It encrypts the workspace recovery key for that public key; the service cannot read it.
+A single claim returns a scoped, 30-day credential. Rust keeps it provisional until the
+frontend verifies the key and account, then saves it in Keychain. Failed verification keeps
+the earlier login and key. Native requests use a fixed HTTPS origin and cannot access browser
+agent grants; browser writes retain their origin checks.
+
+Sync requests carry the expected account, checked against the authenticated session. Native
+asset paths never leave the device: bounded attachment bundles travel inside encrypted
+journal events, identified by a hash of MIME type and bytes. Receivers validate before writing
+stable local files. Comparisons use these identities so a different sandbox path does not
+create a conflict. Notes remain usable offline; uploads resume with the foreground app.

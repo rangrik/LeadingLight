@@ -28,6 +28,7 @@ mod relay;
 #[cfg(target_os = "macos")]
 mod voice;
 mod web;
+mod native_cloud;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
@@ -107,6 +108,7 @@ fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Resul
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .manage(native_cloud::NativeCloud::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -120,6 +122,7 @@ pub fn run() {
     #[cfg(not(target_os = "macos"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         native_platform,
+        native_cloud::cloud_request,
         web::web_fetch,
         web::web_save_media
     ]);
@@ -134,6 +137,7 @@ pub fn run() {
         .manage(relay::Relay::default())
         .invoke_handler(tauri::generate_handler![
             native_platform,
+            native_cloud::cloud_request,
             agent::agent_status,
             agent::agent_ask,
             agent::agent_reply,

@@ -13,7 +13,7 @@ import { detachBrowser } from "~/lib/browser-context";
 import { requestBrowserOpen } from "~/lib/browser-opening";
 import { updateBrowserDownloadPreferences, useBrowserDownloadPreferences, useNativeBrowserDownloads } from "~/lib/browser-preferences";
 import { openPage } from "~/lib/panes";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 import { browserBase, useBrowserData } from "~/lib/project-runtime/browser";
 import { ask } from "~/lib/project-runtime/transport";
 import { browserView } from "~/lib/space";
@@ -27,7 +27,7 @@ export function BrowserSection() {
   const { error: activationError } = useNativeBrowserDownloads();
   useEffect(() => {
     let live = true;
-    void isNative.then((next) => { if (live) setNative(next); });
+    void isDesktop.then((next) => { if (live) setNative(next); });
     void ask<{ location: string; worktree: string }>("POST", "/v1/browser/workspace").then((w) => { if (live) setBase(browserBase(w.location, w.worktree)); }, (e) => { if (live) setError(String(e)); });
     return () => { live = false; };
   }, []);

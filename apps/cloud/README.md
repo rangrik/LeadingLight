@@ -35,6 +35,12 @@ The previous model adapters, hosted queue worker and recovery cron are removed. 
 
 The service stores encrypted sync envelopes. The sync recovery key never reaches the service. Loss of every device and the recovery key makes encrypted notes unrecoverable. History stays until storage management is added.
 
+Native Mac and iPad apps now join this same account through browser approval. The server stores
+only hashed device credentials and encrypted recovery-key envelopes. Native sessions are scoped
+to note sync and cannot grant browser agent access. Additive schema setup runs in the production
+build before the web client is deployed. See [native sync](../../docs/NATIVE-SYNC.md) for limits
+and the required device acceptance.
+
 Redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --prod --yes --scope pranavs-projects-9ffa1d28`.
 
 ## Verification
