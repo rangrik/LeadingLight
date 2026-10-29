@@ -12,6 +12,7 @@ import { ask, stream } from "~/lib/project-runtime/transport";
 export type BrowserFrame = { data: string; mime?: string; w: number; h: number; scale?: number; url?: string };
 export type BrowserBounds = { x: number; y: number; width: number; height: number };
 export type BrowserViewport = { width: number; height: number };
+export type BrowserAreaSelection = { bounds: BrowserBounds; viewport: BrowserViewport; url: string };
 type Input = {
   type: "mouseMoved" | "mousePressed" | "mouseReleased" | "mouseWheel" | "keyDown" | "keyUp" | "text";
   x?: number; y?: number; button?: string; buttons?: number; clickCount?: number;
@@ -30,6 +31,7 @@ type Props = {
   onError?: (message: string) => void;
   picking?: boolean;
   onPick?: (point: { x: number; y: number }) => void;
+  onArea?: (selection: BrowserAreaSelection) => void;
   highlight?: BrowserBounds;
 };
 type Connection = "connecting" | "live" | "reconnecting" | "closed";
@@ -47,7 +49,7 @@ export function BrowserSurface(props: Props) {
   return <Surface key={`${props.base}/${props.tab}`} {...props} />;
 }
 
-function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy = false, onFrame, onViewport, onError, picking = false, onPick, highlight }: Props) {
+function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy = false, onFrame, onViewport, onError, picking = false, onPick, onArea, highlight }: Props) {
   const suffix = `?tab=${encodeURIComponent(tab)}`;
   const root = useRef<HTMLDivElement>(null);
   const image = useRef<HTMLImageElement>(null);
@@ -66,6 +68,12 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   const [caret, setCaret] = useState({ x: 0, y: 0 });
   const [failure, setFailure] = useState("");
   const [outlined, setOutlined] = useState<BrowserBounds>();
+  const [hovered, setHovered] = useState<BrowserBounds>();
+  const [dragged, setDragged] = useState<BrowserBounds>();
+  const selection = useRef<{ start: { x: number; y: number }; client: { x: number; y: number }; viewport: BrowserViewport; url: string; dragged: boolean } | null>(null);
+  const hover = useRef<{ sequence: number; timer: number; pending?: { x: number; y: number }; inFlight: boolean }>({ sequence: 0, timer: 0, inFlight: false });
+  const pickingNow = useRef(picking);
+  pickingNow.current = picking;
   const pickingPointer = useRef(false);
   const live = active && visible && foreground;
   const resizing = resizeBusy || (!!expectedViewport && !!frame && (frame.w !== expectedViewport.width || frame.h !== expectedViewport.height));
@@ -293,6 +301,39 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
       y: Math.max(0, Math.min(current.h - 1, (y - rect.top) * current.h / rect.height)),
     };
   };
+  const clearHover = () => {
+    hover.current.sequence++; hover.current.pending = undefined;
+    window.clearTimeout(hover.current.timer); setHovered(undefined);
+  };
+  const hoverAt = (at: { x: number; y: number }) => {
+    const current = hover.current;
+    const sequence = ++current.sequence;
+    current.pending = at;
+    window.clearTimeout(current.timer);
+    const inspect = () => {
+      if (current.inFlight || !current.pending || !pickingNow.current) return;
+      const point = current.pending; current.pending = undefined; current.inFlight = true;
+      const frame = currentFrame.current;
+      void ask<{ bounds: BrowserBounds; url: string }>("POST", `${base}/inspect/hover${suffix}`, point).then((result) => {
+        if (sequence === current.sequence && pickingNow.current && !selection.current && scrollAllowed.current && frame?.url === currentFrame.current?.url && frame?.w === currentFrame.current?.w && frame?.h === currentFrame.current?.h && result.url === frame?.url && result.bounds && Object.values(result.bounds).every(Number.isFinite)) setHovered(result.bounds);
+      }).catch(() => {}).finally(() => {
+        current.inFlight = false;
+        if (current.pending && pickingNow.current) hoverAt(current.pending);
+      });
+    };
+    current.timer = window.setTimeout(inspect, 80);
+  };
+  useEffect(() => {
+    clearHover(); selection.current = null; setDragged(undefined); pickingPointer.current = false;
+    return () => { hover.current.sequence++; hover.current.pending = undefined; window.clearTimeout(hover.current.timer); };
+  }, [picking, ready, frame?.w, frame?.h, frame?.url, size.width, size.height]);
+  useEffect(() => {
+    const cancel = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") { selection.current = null; setDragged(undefined); pickingPointer.current = false; clearHover(); }
+    };
+    window.addEventListener("keydown", cancel);
+    return () => window.removeEventListener("keydown", cancel);
+  }, []);
   const sendPointer = (event: PointerEvent, type: Input["type"]) => {
     const at = point(event.clientX, event.clientY);
     if (!at || !ready) return;
@@ -315,10 +356,12 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
     if (!element || !ready) return;
     const wheel = (event: WheelEvent) => {
       if (!scrollAllowed.current || event.ctrlKey || event.metaKey) return;
+      if (selection.current) { event.preventDefault(); return; }
       const at = point(event.clientX, event.clientY);
       if (!at) return;
       event.preventDefault();
       setOutlined(undefined);
+      clearHover();
       const rect = element.getBoundingClientRect();
       const factor = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? currentFrame.current!.h : 1;
       channel.current?.send({ type: "mouseWheel", ...at, deltaX: event.deltaX * factor * currentFrame.current!.w / rect.width, deltaY: event.deltaY * factor * currentFrame.current!.h / rect.height, modifiers: modifiers(event) });
@@ -376,7 +419,8 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
                     pickingPointer.current = true;
                     event.currentTarget.setPointerCapture(event.pointerId);
                     const at = point(event.clientX, event.clientY);
-                    if (at && event.button === 0) onPick?.(at);
+                    clearHover();
+                    if (at && event.button === 0 && frame) selection.current = { start: at, client: { x: event.clientX, y: event.clientY }, viewport: { width: frame.w, height: frame.h }, url: frame.url ?? "", dragged: false };
                     return;
                   }
                   const bounds = root.current!.getBoundingClientRect();
@@ -385,24 +429,45 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
                   event.currentTarget.setPointerCapture(event.pointerId);
                   sendPointer(event, "mousePressed");
                 }}
-                onPointerMove={(event) => { if (!picking && !pickingPointer.current) sendPointer(event, "mouseMoved"); }}
+                onPointerMove={(event) => {
+                  if (!picking && !pickingPointer.current) { sendPointer(event, "mouseMoved"); return; }
+                  if (!picking || !ready) return;
+                  const at = point(event.clientX, event.clientY);
+                  if (!at) return;
+                  const selected = selection.current;
+                  if (!selected) { hoverAt(at); return; }
+                  selected.dragged ||= Math.hypot(event.clientX - selected.client.x, event.clientY - selected.client.y) > 5;
+                  if (selected.dragged) setDragged({ x: Math.min(selected.start.x, at.x), y: Math.min(selected.start.y, at.y), width: Math.abs(at.x - selected.start.x), height: Math.abs(at.y - selected.start.y) });
+                }}
+                onPointerLeave={() => { if (!selection.current) clearHover(); }}
                 onPointerUp={(event) => {
-                  if (!pickingPointer.current && !picking) sendPointer(event, "mouseReleased");
+                  const selected = selection.current;
+                  const at = point(event.clientX, event.clientY);
+                  if (picking && ready && selected && at && event.button === 0 && selected.url === frame?.url && selected.viewport.width === frame?.w && selected.viewport.height === frame?.h) {
+                    if (selected.dragged) {
+                      const bounds = { x: Math.min(selected.start.x, at.x), y: Math.min(selected.start.y, at.y), width: Math.abs(at.x - selected.start.x), height: Math.abs(at.y - selected.start.y) };
+                      if (bounds.width >= 1 && bounds.height >= 1) onArea?.({ bounds, viewport: selected.viewport, url: selected.url });
+                    } else onPick?.(at);
+                  }
+                  selection.current = null; setDragged(undefined);
+                  if (!pickingPointer.current && !picking && pointer.current) sendPointer(event, "mouseReleased");
                   pickingPointer.current = false;
                   if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 }}
                 onPointerCancel={(event) => {
                   pickingPointer.current = false;
+                  selection.current = null; setDragged(undefined); clearHover();
                   channel.current?.release();
                   if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
                 }}
-                onLostPointerCapture={() => { pickingPointer.current = false; if (pointer.current) channel.current?.release(); }}
+                onLostPointerCapture={() => { pickingPointer.current = false; selection.current = null; setDragged(undefined); if (pointer.current) channel.current?.release(); }}
                 ref={image}
                 src={`data:${frame.mime ?? "image/jpeg"};base64,${frame.data}`}
                 style={{ width, height: width * frame.h / frame.w }}
                 width={width}
               />
               {outlined && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-primary bg-primary/10" style={{ left: outlined.x * width / frame.w, top: outlined.y * width / frame.w, width: outlined.width * width / frame.w, height: outlined.height * width / frame.w }} />}
+              {picking && (dragged ?? hovered) && <div aria-hidden="true" className="pointer-events-none absolute border-2 border-primary bg-primary/10" data-testid="browser-annotation-outline" style={{ left: (dragged ?? hovered)!.x * width / frame.w, top: (dragged ?? hovered)!.y * width / frame.w, width: (dragged ?? hovered)!.width * width / frame.w, height: (dragged ?? hovered)!.height * width / frame.w }} />}
             </ContextMenuTrigger>
             <ContextMenuPopup finalFocus={keyboard}>
               <ContextMenuItem disabled={!ready || picking} onClick={() => { keyboard.current?.focus({ preventScroll: true }); channel.current?.copy(); }}>Copy selection</ContextMenuItem>
@@ -459,7 +524,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
       </div>
       <div className="flex min-h-7 shrink-0 items-center gap-2 border-t px-2 text-muted-foreground text-xs">
         <MousePointer2 aria-hidden="true" className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{failure && ready ? failure : picking ? "Click an element to comment on it" : focused ? "Typing in the page · ⌘L for the address" : "Click the page to browse"}</span>
+        <span className="min-w-0 flex-1 truncate">{failure && ready ? failure : picking ? "Click an element or drag an area to comment" : focused ? "Typing in the page · ⌘L for the address" : "Click the page to browse"}</span>
         <Button className="shrink-0" disabled={!ready || picking} onClick={() => keyboard.current?.focus({ preventScroll: true })} size="xs" variant="ghost">Focus page</Button>
       </div>
     </div>

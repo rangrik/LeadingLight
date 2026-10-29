@@ -50,10 +50,10 @@ export function readBrowserData(raw: string | null): BrowserData {
   return result;
 }
 
-export function rememberVisit(data: BrowserData, name: string, url: string, title: string): BrowserData {
+export function rememberVisit(data: BrowserData, name: string, url: string, title: string, recordHistory = true): BrowserData {
   if (!safeBrowserURL(url)) return data;
   const entry = { url, title: title || new URL(url).hostname, time: Date.now() };
-  const same = data.history[0]?.url === url && data.history[0]?.title === entry.title;
+  const same = !recordHistory;
   const current = data.tabs.find((t) => t.name === name);
   if (same && (!personalTab(name) || (current?.url === url && current.title === entry.title))) return data;
   return {
@@ -64,6 +64,19 @@ export function rememberVisit(data: BrowserData, name: string, url: string, titl
 }
 
 export const browserKey = (base: string) => `ll.browser.workspace:${base}`;
+
+export const BROWSER_HISTORY_RANGES = [{ value: "hour", label: "Last hour" }, { value: "day", label: "Last 24 hours" }, { value: "week", label: "Last 7 days" }, { value: "all", label: "All time" }];
+export type BrowserHistoryRange = "hour" | "day" | "week" | "all";
+export function clearBrowserHistory(data: BrowserData, range: BrowserHistoryRange, now = Date.now()): BrowserData {
+  const cutoff = range === "all" ? -Infinity : now - ({ hour: 3600000, day: 86400000, week: 604800000 }[range]);
+  return { ...data, history: data.history.filter((entry) => entry.time < cutoff) };
+}
+
+export function browserSuggestions(history: BrowserEntry[], input: string): BrowserEntry[] {
+  const query = input.trim().toLocaleLowerCase();
+  if (!query) return [];
+  return history.filter((entry) => safeBrowserURL(entry.url) && `${entry.title} ${entry.url}`.toLocaleLowerCase().includes(query)).slice(0, 8);
+}
 
 export function agentBrowserInstructions(location: string, worktree: string, tab: string): string {
   const quote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;

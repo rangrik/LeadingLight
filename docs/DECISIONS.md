@@ -553,3 +553,49 @@ notices describe the current tab's blocked requests; the shared proxy's historic
 remain diagnostic data rather than prompts on unrelated pages.
 Revocation blocks new network requests, not cached page display. The permissions view says so;
 removing cached content and sign-ins remains the separate Clear browsing data action.
+
+## 33. Browser feedback keeps evidence; developer access belongs to a page
+
+2026-10-28. Saved browser comments carry a frozen image of the selected area and quoted
+element metadata, so a later page change cannot silently change what the person meant.
+Temporary style previews belong to a viewer lease; losing that viewer resets its previews.
+Frame selection uses Chromium frame identities and transforms, not page-provided selectors.
+
+Developer tools require both an enabled setting and explicit approval for the current page.
+Navigation, closing the tab, revocation or expiry ends that approval. CDP calls remain scoped
+to the approved page; browser-wide profile, process and file access are separate capabilities.
+
+Download preferences belong to this app's runtime. Only the native app enables automatic
+copies to the chosen folder; browser-build tests keep their own downloads. Copies use bounded
+buffers and exclusive file creation, never a filename supplied by a page as a filesystem path.
+History can be cleared by time. Website data is labelled as an all-time workspace clear,
+because Chromium's available storage commands cannot prove time-scoped removal for every store.
+
+Comments belong to the workspace and exact URL, so closing a tab does not lose them. Keep up to
+20 per page and 200 total. Their PNGs have a separate 200-image / 128 MiB budget; expired images
+block sending rather than silently dropping evidence. Sending copies them into chat attachments.
+Browser settings can remove saved comments across all workspaces, so forgotten pages cannot
+permanently fill the quota. Comments already attached to a chat keep their copied evidence.
+Element capture resolves the handle and checks its document, geometry and metadata on both
+sides of the screenshot request, rejecting a moved or replaced element instead of mismatching evidence.
+Frame inspection supports nested cross-origin frames and positive axis-aligned scaling; rotated,
+skewed or mirrored frames fail explicitly. Text replacement is deferred because restoring child
+nodes safely needs more than undoing CSS. Viewer leases renew every five seconds and expire at 15.
+
+Developer tools expose page-scoped DOM, CSS, runtime, network and profiling commands. Access ends
+after 15 minutes or a document change. A separate CDP session prevents interference with ordinary
+controls; browser-wide commands remain unavailable. This is the trusted local runtime model,
+not a sandbox against another process with full access to the person's Mac.
+
+Ask where to save uses a durable claim before opening one native dialog. Cancellation, duplicate
+panes and reloads cannot repeat it. An interrupted automatic copy is reported as interrupted and
+keeps its source; a partial destination may remain. Manual Save can retry elsewhere.
+Two automatic copies run at once per workspace. Active saves survive history trimming; the
+existing 200-download retention limit still applies to older unclaimed records in extreme bursts.
+Opening a saved tab does not create a new history visit; actual navigation does. Clearing history
+therefore survives Settings and app reloads without removing the open page.
+
+Keep the current engine for this pass. Synthetic-device probes worked in full Chromium but
+returned NotSupportedError in headless-shell. Camera/microphone need a deliberate permission
+flow and macOS checks. Removing the mute flag would play sound on the runtime host without an
+audio transport or per-tab control, so it is not an audio implementation.

@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "12d35552d5154b8b8cc42f910e48fdb7e9742ef9",
-  "version": "0.3.30-ll.26",
+  "version": "0.3.30-ll.27",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -43,6 +43,7 @@
     "0028-conversation-by.patch",
     "0029-requests-test-outputs.patch",
     "0030-leadinglight-tools.patch",
-    "0031-browser-controls.patch"
+    "0031-browser-controls.patch",
+    "0032-browser-feedback-and-preferences.patch"
   ]
 }

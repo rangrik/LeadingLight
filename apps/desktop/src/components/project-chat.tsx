@@ -15,7 +15,7 @@ import { useFolder } from "~/components/project-folder";
 import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
-import { bindBrowserContext, browserContextPrompt, detachBrowser, useBrowserContext } from "~/lib/browser-context";
+import { bindBrowserContext, browserAnnotations, browserContextImages, browserContextPrompt, detachBrowser, useBrowserContext } from "~/lib/browser-context";
 import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { said as saidIn, type TranscriptItem } from "~/lib/project-runtime/transcript";
@@ -246,7 +246,8 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
     stuck.current = true;
     const files = attached;
     const context = browser ? browserContextPrompt(browser) : "";
-    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files, context).then((c) => {
+    const images = browser ? browserContextImages(browser) : [];
+    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files, context, images).then((c) => {
       setAttached((a) => a.filter((f) => !files.includes(f)));
       if (!current) {
         adopt(key, c.id);
@@ -429,7 +430,7 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
       {/* Kept mounted under a request, so a message being written survives it. */}
       <div className={open ? "hidden" : "shrink-0"}>
         {chat.restore?.why && <p className="mx-4 mb-1.5 text-muted-foreground text-xs">{chat.restore.why}</p>}
-        {browser && <div className="mx-3 mb-2 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs" data-testid="browser-chat-context"><Globe className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{browser.title || browser.url}</p><p className="truncate text-muted-foreground">{browser.url}</p>{browser.annotation && <p className="line-clamp-2 break-words text-muted-foreground">Element feedback: {browser.annotation.comment || "Style preview"}</p>}</div><Tooltip><TooltipTrigger render={<Button aria-label="Remove browser page" onClick={() => detachBrowser(pageId)} size="icon-xs" variant="ghost" />}><X className="size-4" /></TooltipTrigger><TooltipPopup>Remove browser page</TooltipPopup></Tooltip></div>}
+        {browser && <div className="mx-3 mb-2 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs" data-testid="browser-chat-context"><Globe className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{browser.title || browser.url}</p><p className="truncate text-muted-foreground">{browser.url}</p>{browserAnnotations(browser).length > 0 && <p className="line-clamp-2 break-words text-muted-foreground">{browserAnnotations(browser).length === 1 ? (browserAnnotations(browser)[0].element ? "Element feedback" : "Area feedback") : `${browserAnnotations(browser).length} comments`}: {browserAnnotations(browser).map((note) => note.comment || "Style preview").join(" · ")}{browserContextImages(browser).length > 0 ? ` · ${browserContextImages(browser).length} saved screenshot${browserContextImages(browser).length === 1 ? "" : "s"}` : ""}</p>}</div><Tooltip><TooltipTrigger render={<Button aria-label="Remove browser page" onClick={() => detachBrowser(pageId)} size="icon-xs" variant="ghost" />}><X className="size-4" /></TooltipTrigger><TooltipPopup>Remove browser page</TooltipPopup></Tooltip></div>}
         <Composer
           agents={[]}
           key={key}

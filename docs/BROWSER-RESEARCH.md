@@ -135,8 +135,9 @@ another agent framework while upstream APIs and runtimes are migrating.
 | Permissions | List and revoke allowed sites; preserve workspace network restrictions | Passed: proxy, private-address and revocation tests |
 | Downloads and dialogs | Track/cancel/save downloads; answer page alert/confirm/prompt | Passed: real download bytes/dialogs and native export harness; native save dialog awaits manual check |
 | Chat layout | Full/split view and browser-scoped keyboard shortcuts | Passed: 360px, light/dark and shortcut regressions; native Edit menu awaits manual check |
-| Annotation and style feedback | Element comments and reversible visual previews | Passed: UI handoff, multiple properties, exact undo, zoom/scroll and stale-node checks; top document only |
-| Full developer mode | Controlled general CDP inspection with a distinct approval boundary | Gap: existing console/snapshot tools do not establish parity |
+| Annotation and style feedback | Saved element/area comments, frozen screenshots, batch chat attachments and reversible previews | Next pass: nested cross-origin frames, viewer leases and additional font/spacing/opacity controls; see verification record |
+| Developer mode | Separate setting and approval for DOM, CSS, runtime, network and profiling | Next pass implements page-scoped CDP with expiring document grants; unrestricted browser-wide CDP remains a deliberate gap |
+| Browser preferences | Address history suggestions, searchable/removable history, selective clearing and download destinations | Next pass implements these; website data clearing is explicitly all-time, while history supports time ranges |
 | Other browser integrations | Extension attachment, profile import, cloud browsing and password handling | Outside the selected local-runtime architecture |
 | Media and accessibility | Sound, device permission prompts, and a semantic page for assistive tools | Gap: the current transport sends images and input, not audio or a native page accessibility tree |
 
@@ -146,3 +147,24 @@ Persistent cookies must be checked after a real runtime restart. Ordinary UI
 tests cannot prove the native file dialog or OS keyboard handling; those need the
 isolated development app checks required by AGENTS.md. The runtime itself is also
 tested as a real process with real Chromium and agent commands.
+
+## Follow-up parity pass
+
+The [current public Browser guide](https://learn.chatgpt.com/docs/browser) was checked
+again for saved comments, drag-area annotations, Browser settings and developer
+access. Decision 33 records the implementation boundaries. Saved annotations retain
+the captured image rather than pretending that a live page remains unchanged.
+
+The remaining architecture gaps are extension attachment to existing browser profiles,
+cloud browsing, unrestricted browser-wide CDP, audio transport, device permission flows
+and a native page accessibility tree. The last three are limitations of our frame
+transport; they are not claims about undocumented GPT behavior. A text snapshot does
+not establish native accessibility parity.
+
+Synthetic media probes used Chromium 156.0.8078.4 with fake devices only. Full Chromium
+created audio/video tracks; headless-shell returned NotSupportedError. Exact-origin
+permission changes stayed within their browser context and revocation ended the fake
+tracks. [CDP Browser permissions](https://chromedevtools.github.io/devtools-protocol/tot/Browser/)
+provide permission overrides, while [CDP Media](https://chromedevtools.github.io/devtools-protocol/tot/Media/)
+provides diagnostics, not audio output transport. No physical device or audible audio
+was used in these probes.
