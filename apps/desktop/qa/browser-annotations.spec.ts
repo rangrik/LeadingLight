@@ -163,8 +163,7 @@ test("Annotation hover is read-only, late hover is discarded, and cancelled drag
   expect(runtime.calls.filter((call) => call.action === "input" && ["mousePressed", "mouseReleased"].includes(String(call.body.type)))).toHaveLength(0);
 });
 
-// Seam: saved evidence, page scoping and chat handoff; a batch must upload its frozen region images.
-test("Element and area comments survive reload and send their original cropped screenshots as a batch", async ({ page, runtime }, info) => {
+async function saveComments(page: Page, runtime: Runtime) {
   await open(page); await annotate(page);
   await browser(page).getByTestId("browser-frame").click({ position: { x: 50, y: 40 } });
   const element = page.getByTestId("browser-feedback");
@@ -179,15 +178,24 @@ test("Element and area comments survive reload and send their original cropped s
   await area.getByRole("textbox", { name: "Your feedback", exact: true }).fill("Tighten spacing in this area.");
   await area.getByRole("button", { name: "Save comment", exact: true }).click();
   await expect(comments).toContainText("2 comments");
+  return comments;
+}
+
+// Seam: persistence is scoped by workspace and URL, independently of a tab's lifetime.
+test("Saved element and area comments survive reload and reopening within their workspace", async ({ page, runtime }) => {
+  const comments = await saveComments(page, runtime);
   await navigate(page, "beta"); await expect(comments).toHaveCount(0);
   await navigate(page, "alpha"); await expect(comments).toContainText("2 comments");
   await page.reload(); await expect(comments).toContainText("2 comments");
-  runtime.workspace = "other";
-  await page.reload(); await expect(address(page)).toHaveValue("http://localhost:1420/alpha"); await expect(comments).toHaveCount(0);
-  runtime.workspace = "personal";
-  await page.reload(); await expect(comments).toContainText("2 comments");
   await browser(page).getByRole("button", { name: "Close alpha", exact: true }).click();
   await navigate(page, "alpha"); await expect(comments).toContainText("2 comments");
+  runtime.workspace = "other";
+  await page.reload(); await expect(address(page)).toHaveValue("http://localhost:1420/alpha"); await expect(comments).toHaveCount(0);
+});
+
+// Seam: attaching a batch freezes its metadata and uploads the original images despite later edits.
+test("Element and area comments send their original cropped screenshots as an immutable batch", async ({ page, runtime }, info) => {
+  const comments = await saveComments(page, runtime);
   await comments.getByRole("button", { name: "Ask about comments", exact: true }).click();
   const chat = page.getByTestId("project-chat");
   await expect(chat.getByTestId("browser-chat-context")).toContainText("2 saved screenshots");

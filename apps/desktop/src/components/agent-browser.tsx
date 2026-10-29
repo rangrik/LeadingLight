@@ -104,6 +104,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   const wasFull = useRef(false);
   const field = useRef<HTMLInputElement>(null);
   const addressRevision = useRef(0);
+  const addressDraft = useRef(false);
   const closingTabs = useRef(new Set<string>());
   const interacted = useRef(false);
   const selectedRef = useRef(selected);
@@ -144,7 +145,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   const choose = (name: string, fromUser = true, keepDraft = false) => {
     if (fromUser) interacted.current = true;
     setSelected(name); setError(""); setDismissedError(""); setFind(null); setView(null); setPendingURL("");
-    if (!keepDraft) setAddress(known.find((t) => t.name === name)?.url || "");
+    if (!keepDraft) { addressDraft.current = false; setAddress(known.find((t) => t.name === name)?.url || ""); }
     update((d) => ({ ...d, selected: name }));
   };
   const fresh = () => {
@@ -157,7 +158,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     if (!loaded || interacted.current) return;
     choose((session && tabs.find((t) => t.name === session)?.name) || selected || data.tabs[0]?.name || tabs.find((t) => personalTab(t.name))?.name || "", false);
   }, [loaded]);
-  useEffect(() => { if (url && document.activeElement !== field.current) setAddress(url); }, [url, selected]);
+  useEffect(() => { if (url && !addressDraft.current) setAddress(url); }, [url, selected]);
   useEffect(() => {
     if (active && (full || wasFull.current)) root.current?.focus({ preventScroll: true });
     wasFull.current = full;
@@ -214,6 +215,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     let next: string;
     try { next = browserAddress(input); } catch (e) { setError(browserError(e)); return; }
     if (!target || closingTabs.current.has(target) || (!personalTab(target) && !tabs.some((t) => t.name === target))) target = fresh();
+    addressDraft.current = false;
     setAddress(next); setPendingURL(next); setView(null);
     await run(async () => {
       await ask("POST", tabRoute(base, tabs.some((t) => t.name === target) ? "navigate" : "open", target), { action: "open", url: next, ...(data.tabs.some((t) => t.name === target) ? {} : { size: "1280x800" }) });
@@ -391,7 +393,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
       <Tool disabled={!state?.canGoBack || busy} label="Back" onClick={() => void action("back")}><ArrowLeft className="size-4" /></Tool>
       <Tool disabled={!state?.canGoForward || busy} label="Forward" onClick={() => void action("forward")}><ArrowRight className="size-4" /></Tool>
       <Tool disabled={!running} label={state?.loading ? "Stop loading" : "Reload"} onClick={() => void action(state?.loading ? "stop" : "reload")}>{state?.loading ? <Square className="size-4" /> : <RotateCw className="size-4" />}</Tool>
-      <BrowserAddress history={data.history} inputRef={field} onChange={(value) => { addressRevision.current++; interacted.current = true; setAddress(value); }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
+      <BrowserAddress history={data.history} inputRef={field} onChange={(value) => { addressRevision.current++; addressDraft.current = true; interacted.current = true; setAddress(value); }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
       <Tool disabled={!safeBrowserURL(url)} label={marked ? "Remove bookmark" : "Bookmark this page"} onClick={toggleBookmark}><Bookmark className={cn("size-4", marked && "fill-current")} /></Tool>
       <Tool disabled={!running} label="Ask about page" onClick={() => void run(() => askAboutPage())}><MessagesSquare className="size-4" /></Tool>
       <Menu onOpenChange={setMenuOpen} open={menuOpen}><Tooltip><TooltipTrigger render={<MenuTrigger render={<Button aria-label="Browser menu" size="icon-sm" variant="ghost" />} />}><Ellipsis className="size-4" /></TooltipTrigger><TooltipPopup>Browser menu</TooltipPopup></Tooltip><MenuPopup align="end">

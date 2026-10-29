@@ -3247,6 +3247,23 @@ index 0000000..d67a2cf
 +	br.scheduleInspectionExpiry()
 +	br.mu.Unlock()
 +}
+diff --git a/internal/box/browsernavigation_controls_test.go b/internal/box/browsernavigation_controls_test.go
+index 707b046..7c6528d 100644
+--- a/internal/box/browsernavigation_controls_test.go
++++ b/internal/box/browsernavigation_controls_test.go
+@@ -163,7 +163,11 @@ func TestBrowserSlowNavigationWithRealChromium(t *testing.T) {
+ 			input.Type = "mouseReleased"
+ 			input.Buttons = 0
+ 			call(b.browserInput, input)
+-			time.Sleep(500 * time.Millisecond)
++			// Adopting a Chromium target enables its domains before publishing the tab.
++			deadline := time.Now().Add(10 * time.Second)
++			for len(br.chromium.list()) != before+1 && time.Now().Before(deadline) {
++				time.Sleep(30 * time.Millisecond)
++			}
+ 			if len(br.chromium.list()) != before+1 {
+ 				var targets any
+ 				br.cdp.call(ctx, "", "Target.getTargets", nil, &targets)
 diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
 index a3e0615..4fb6770 100644
 --- a/internal/box/browsertabs.go
