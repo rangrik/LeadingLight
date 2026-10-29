@@ -1,0 +1,9 @@
+# Keep the render recipes and optimized assets; omit working files and QA captures.
+**/*.blend
+**/*.blend1
+**/research-*.png
+**/reference-*.png
+**/qa/
+**/*draft*.png
+**/qa-*.png
+**/*sample*.txt
