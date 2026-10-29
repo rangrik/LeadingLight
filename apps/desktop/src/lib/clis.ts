@@ -1,5 +1,5 @@
 import { localPrefs } from "~/lib/local-prefs";
-import { isNative } from "~/lib/platform";
+import { isDesktop, isMobile } from "~/lib/platform";
 import { createStore } from "~/lib/state";
 
 // The Claude Code and Codex command-line tools (src-tauri/src/clis.rs): what is installed, the
@@ -40,7 +40,8 @@ const fakes = (): Cli[] => [
 ];
 
 async function info(): Promise<Cli[]> {
-  if (!(await isNative)) return fakes();
+  if (await isMobile) return [];
+  if (!(await isDesktop)) return import.meta.env.DEV ? fakes() : [];
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<Cli[]>("cli_info");
 }
@@ -49,7 +50,7 @@ async function info(): Promise<Cli[]> {
 // (Claude's) says nothing about that, so there is no prompt for it.
 const found = new Map<string, { at: number; version: string | null }>();
 async function latestOf(c: Cli): Promise<string | null> {
-  if (!(await isNative)) return c.id === "codex" ? "0.163.0" : null;
+  if (!(await isDesktop)) return c.id === "codex" ? "0.163.0" : null;
   const src = c.source;
   const url =
     src === "npm" || src === "bun" || src === "pnpm"
@@ -79,9 +80,10 @@ const patch = (id: Cli["id"], p: Partial<Tool>) => tools.set(tools.get().map((t)
 
 // Runs the tool's own update; then reads its version again, as the update may not have moved it.
 export async function updateTool(id: Cli["id"]): Promise<void> {
+  if (await isMobile) throw new Error("Command-line tools require the Mac app.");
   patch(id, { updating: true, error: undefined });
   try {
-    if (await isNative) {
+    if (await isDesktop) {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke<string>("cli_update", { id });
     } else {

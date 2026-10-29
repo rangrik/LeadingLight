@@ -7,7 +7,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { openLink } from "~/lib/links";
 import { openPage } from "~/lib/panes";
 import { pageOf } from "~/lib/space";
-import type { Approval, Item } from "~/lib/threads";
+import { turnContent, type Approval, type Item } from "~/lib/threads";
 
 // A thread as synara draws one: my messages on the right; each turn's steps folded under one
 // line ("Worked for 12s") once it is done; the answer, the text after the last step, below.
@@ -99,11 +99,7 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
   const [shownAt] = useState(Date.now);
   const user = items[0]?.kind === "user" ? items[0] : null;
   const end = items.find((i) => i.kind === "end");
-  const body = items.filter((i) => i.kind !== "user" && i.kind !== "end");
-  // Text before the last step is the turn's narration and folds with the steps.
-  const last = body.reduce((at, i, k) => (i.kind === "text" ? at : k), -1);
-  const work = body.slice(0, last + 1);
-  const answer = body.slice(last + 1).flatMap((i) => (i.kind === "text" ? [i] : []));
+  const { work, answer } = turnContent(items);
   const how = end?.how ?? (live ? "working" : "stopped");
   // A turn whose length isn't known (a project chat's older turns) says only how it ended.
   const length = end?.ms ? `${how === "done" ? " for" : ""} ${secs(end.ms)}` : "";

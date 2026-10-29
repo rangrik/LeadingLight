@@ -74,7 +74,10 @@ test("Narrow cards keep the title whole and show only whole counts", async ({ pa
     const edge = await header.locator("[aria-label=Counts]").evaluate((b) => b.parentElement!.getBoundingClientRect().right + 0.5);
     for (const count of await header.locator("[data-count]").all())
       if (await count.isVisible()) expect((await count.boundingBox())!.x + (await count.boundingBox())!.width).toBeLessThanOrEqual(edge);
+    await header.hover();
+    await expect(header.getByRole("button", { name: "History and authorship" })).toBeVisible();
   }
+  await page.screenshot({ path: "qa/report/merged-narrow-cards.png", animations: "disabled" });
 });
 
 // Seam: a page's type against Settings › Writing › Use on. Catches the tools on records (a person)

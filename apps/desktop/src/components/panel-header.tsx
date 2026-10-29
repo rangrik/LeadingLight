@@ -9,6 +9,7 @@ import {
 import { Separator } from "@leadinglight/ui/components/separator";
 import { SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { useMobile } from "~/lib/platform";
 import type { ReactNode } from "react";
 
 // The inset panel's top band, from sidebar-08's page.tsx: the sidebar trigger and the crumbs.
@@ -34,8 +35,9 @@ type Props = {
 };
 
 export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
+  const mobile = useMobile();
   return (
-    <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region>
+    <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region={!mobile || undefined}>
       <div
         className={cn(
           "flex min-w-0 items-center gap-2 overflow-hidden px-4 transition-[padding] duration-200 ease-linear",
@@ -58,13 +60,13 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               {root && (
-                <BreadcrumbItem className="hidden shrink-0 md:block">
+                <BreadcrumbItem className="hidden shrink-0 md:@[24rem]/header:block">
                   {onRoot ? <BreadcrumbLink render={<button onClick={onRoot} type="button" />}>{root}</BreadcrumbLink> : root}
                 </BreadcrumbItem>
               )}
               {current !== null && (
                 <>
-                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:block" />}
+                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[24rem]/header:block" />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
                     <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>

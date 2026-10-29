@@ -176,7 +176,7 @@ function SystemNote({ themes }: { themes: Theme[] }) {
   const { light, dark } = useSystemPair(themes);
   return (
     <>
-      {light?.name ?? "A light theme"} by day, {dark?.name ?? "a dark one"} when the Mac is dark.
+      {light?.name ?? "A light theme"} in light mode, {dark?.name ?? "a dark one"} in dark mode.
     </>
   );
 }
@@ -191,9 +191,9 @@ function SystemPicks({ themes }: { themes: Theme[] }) {
   };
   const options = (appearance: "light" | "dark") => themes.filter((t) => (t.appearance === "dark") === (appearance === "dark")).map((t) => ({ value: t.id, label: t.name }));
   return (
-    <SettingsRow label="By day, and when it's dark" description="Follows the Mac.">
+    <SettingsRow label="By day, and when it's dark" description="Follows system appearance.">
       <SimpleSelect size="sm" className="w-40" aria-label="Theme by day" value={light.id} options={options("light")} onChange={(id) => id && pick("light", id)} />
-      <SimpleSelect size="sm" className="w-40" aria-label="Theme when the Mac is dark" value={dark.id} options={options("dark")} onChange={(id) => id && pick("dark", id)} />
+      <SimpleSelect size="sm" className="w-40" aria-label="Theme in dark mode" value={dark.id} options={options("dark")} onChange={(id) => id && pick("dark", id)} />
     </SettingsRow>
   );
 }

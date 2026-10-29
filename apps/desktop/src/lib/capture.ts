@@ -8,7 +8,7 @@ import { pageLabel } from "./labels";
 import { editPage, liveEditor, whenLive } from "./live";
 import { docText, objects } from "./objects";
 import { openBeside } from "./panes";
-import { isNative } from "./platform";
+import { isDesktop } from "./platform";
 import { createPage, markSaved, pageOf, patchSummary, retype, savePage, space } from "./space";
 import { PAGE_TYPE } from "./store";
 import { captureOf, captureProperties, markCapture, setCaptureProject } from "./capture-inbox";
@@ -124,7 +124,7 @@ type LinkRequest = { seq: number; kind: "create" | "day"; title?: string; typeId
 // hears back once each is saved; pages its link menu and project picker make are made here too,
 // so there is one writer; tail guesses here, where it runs; and ⇧⌘↩ there opens the idea here.
 export async function hostCapture(tail: { guess: (text: string, opened: number) => Promise<Guess>; took: (project: string) => void }): Promise<() => void> {
-  if (!(await isNative)) return () => {};
+  if (!(await isDesktop)) return () => {};
   const { emitTo, listen } = await import("@tauri-apps/api/event");
   // A webpage is fetched here; the box's Escape stops it.
   const fetching = new Map<number, AbortController>();

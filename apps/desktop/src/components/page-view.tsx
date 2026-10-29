@@ -1,3 +1,4 @@
+import { saveEmergency, clearEmergency } from "~/lib/store-local";
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
@@ -19,6 +20,7 @@ import { WorkPanel } from "~/components/work-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
+import { useMobile } from "~/lib/platform";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
@@ -41,9 +43,11 @@ import { TurnIntoPage } from "~/components/turn-into-page";
 import { VoiceReviewDialog } from "~/components/voice-review";
 import { TailPage, TailToday } from "~/components/tail";
 import { today } from "~/lib/daily";
+import { currentEdit } from "@leadinglight/editor/authorship";
+import type { ChangeContext } from "~/lib/history-types";
 
 // The body is read only when a save runs, not on every keystroke.
-type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string };
+type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string; context?: ChangeContext };
 
 const SAVE_DELAY_MS = 500;
 
@@ -58,6 +62,7 @@ const fit = (el: HTMLTextAreaElement | null) => {
 };
 
 export function PageView({ page }: { page: LLObject }) {
+  const mobile = useMobile();
   const [title, setTitle] = useState(page.title);
   const [typeId, setTypeId] = useState(page.typeId);
   const keysFor = useKeysFor();
@@ -84,23 +89,31 @@ export function PageView({ page }: { page: LLObject }) {
 
   const pending = useRef<Pending>({});
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const writes = useRef(Promise.resolve());
+  const saving = useRef<Promise<void>>(Promise.resolve());
+  const restoring = useRef(false);
 
-  const flush = async () => {
+  const flush = (): Promise<void> => {
     clearTimeout(timer.current);
-    const { content, ...rest } = pending.current;
+    const batch = pending.current;
+    const { content, context, ...rest } = batch;
     pending.current = {};
-    if (!content && Object.keys(rest).length === 0) return writes.current;
+    if (!content && Object.keys(rest).length === 0) return saving.current;
     const patch: ObjectPatch = { ...rest };
     if (content) patch.content = content();
-    writes.current = writes.current.catch(() => {}).then(() => savePage(page.id, patch));
-    return writes.current;
+    const recovery = saveEmergency(page, patch, context);
+    const write = saving.current.catch(() => {}).then(() => savePage(page.id, patch, context)).then(() => clearEmergency(page.id, recovery));
+    saving.current = write.catch((error) => {
+      pending.current = { ...batch, ...pending.current };
+      throw error;
+    });
+    return saving.current;
   };
 
   const queue = (patch: Pending) => {
-    Object.assign(pending.current, patch);
+    if (restoring.current) return;
+    Object.assign(pending.current, patch, { context: currentEdit() });
     clearTimeout(timer.current);
-    timer.current = setTimeout(flush, SAVE_DELAY_MS);
+    timer.current = setTimeout(() => void flush().catch(() => {}), SAVE_DELAY_MS);
   };
 
   // Every other stored property, including ones this version doesn't know, is kept as it was.
@@ -179,6 +192,21 @@ export function PageView({ page }: { page: LLObject }) {
     if (!page.title && !page.content) titleRef.current?.focus();
     const untrack = trackFlush(flush);
     const unlive = registerLive(page.id, {
+      flush,
+      dirty: () => Object.keys(pending.current).length > 0,
+      discard: () => { clearTimeout(timer.current); pending.current = {}; },
+      snapshot: () => ({ title: titleRef.current?.value ?? page.title, content: editorRef.current?.getJSON() ?? page.content, properties: latest.current }),
+      restore: (next) => {
+        restoring.current = true;
+        clearTimeout(timer.current);
+        pending.current = {};
+        setTitle(next.title);
+        setTypeId(next.typeId);
+        latest.current = next.properties;
+        setProps(next.properties);
+        editorRef.current?.setContent(next.content ?? { type: "doc", content: [] });
+        restoring.current = false;
+      },
       editor: () => editorRef.current,
       content: () => editorRef.current?.getJSON() ?? page.content ?? { type: "doc", content: [] },
       setContent: (doc) => editorRef.current?.setContent(doc),
@@ -193,7 +221,7 @@ export function PageView({ page }: { page: LLObject }) {
       untrack();
       unlive();
       setPageStats(page.id, null);
-      void flush();
+      void flush().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -395,7 +423,7 @@ export function PageView({ page }: { page: LLObject }) {
           <BlockEditor
             assets={assets}
             content={page.content}
-            onAsk={openAsk}
+            onAsk={mobile ? undefined : openAsk}
             onTurnInto={report ? undefined : setTurnInto}
             onVoiceReview={report ? undefined : setVoiceReview}
             onVoiceSaved={report ? undefined : () => { void markCapture(page.id, "voice").catch(() => toastManager.add({ type: "error", title: "Recording saved", description: "It could not be added to the inbox. Your audio is still in this page." })); }}

@@ -1,5 +1,14 @@
 import { localPrefs } from "~/lib/local-prefs";
+import { platform, useMobile } from "~/lib/platform";
 
-// Linked folders and project chats are in development (docs/PROJECT-1.md): off until a person
-// turns them on in Settings › AI › Projects.
-export const projectPrefs = localPrefs("ll.projects", { enabled: false });
+// Keep the saved preference, but never start Mac project processes on an iPad.
+const saved = localPrefs("ll.projects", { enabled: false });
+export const projectPrefs = {
+  ...saved,
+  get: () => ({ ...saved.get(), enabled: saved.get().enabled && ["macos", "browser"].includes(platform.get()) }),
+  use: () => {
+    const prefs = saved.use();
+    const mobile = useMobile();
+    return { ...prefs, enabled: prefs.enabled && !mobile };
+  },
+};

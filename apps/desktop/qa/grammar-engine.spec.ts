@@ -37,7 +37,9 @@ test("Grammar corrections keep emoji offsets, formatting, and undo boundaries", 
   });
   expect(r.from).toBe(6);
   expect(r.applied).toBe(true);
-  expect(r.changed.content[0].content[1]).toEqual({ type: "text", text: "received", marks: [{ type: "bold" }] });
+  expect(r.changed.content[0].content[1]).toEqual({ type: "text", text: "received", marks: [
+    { type: "origin", attrs: { kind: "human", name: "You", model: null, run: null } }, { type: "bold" },
+  ] });
   expect(r.undone).toEqual(r.original);
 });
 

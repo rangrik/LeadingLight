@@ -100,6 +100,7 @@ test("New page, paste Markdown: the heading names it, the rest is formatted", as
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/");
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
   await page.evaluate(() => navigator.clipboard.writeText("# Trip plan\n\n## Packing\n\n- **passport**\n- charger\n"));
   await page.keyboard.press("ControlOrMeta+V");
   await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("Trip plan");

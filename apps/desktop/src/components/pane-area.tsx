@@ -28,7 +28,9 @@ import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
+import { PageHistory } from "~/components/page-history";
 import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -96,10 +98,11 @@ const mounted = new Set<string>();
 // Cards are one flat list, a card per tab, keyed by tab id and kept in id order, so a tab that
 // moves pane or splits off is never remounted: its editor, unsaved edits and scroll stay.
 export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean; lead?: boolean }) {
+  const mobile = useMobile();
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
-  const { open: sidebarOpen } = useSidebar();
+  const { open: sidebarOpen, isMobile } = useSidebar();
   space.use(); // titles and icons follow edits
   const writing = useWritingPrefs();
   useLayoutEffect(() => {
@@ -122,12 +125,13 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
   if (!root) return null;
   const { leaves, dividers } = layout(root);
   const split = leaves.length > 1;
-  const folding = split && hasNotes(root) && size.w > 0 && size.w < widthNeeded(root);
+  const folding = split && (hasNotes(root) || mobile) && size.w > 0 && size.w < widthNeeded(root);
   const order = [...leaves].sort((a, b) => a.rect.x - b.rect.x || a.rect.y - b.rect.y).map((l) => l.leaf.id);
   const at = Math.max(0, order.indexOf(focus));
   const wide = size.w - (order.length - 1) * (STRIP + GAP);
   // Folded: strips in reading order, the pane in use taking the rest.
   const box = (id: string, rect: Rect) => {
+    if (isMobile) return { left: 0, top: 0, width: size.w, height: size.h };
     if (!folding) return place(rect, size);
     const i = order.indexOf(id);
     const left = i * (STRIP + GAP) + (i > at ? wide - STRIP : 0);
@@ -147,12 +151,12 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           const leaf = { ...pane, page: pageIn(tab), back: front ? pane.back : undefined };
           // Opened from the Feed in its place (a narrow window): its crumb goes back there.
           const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
-          const folded = front && folding && order.indexOf(leaf.id) !== at;
+          const folded = !isMobile && front && folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
           return (
             <section
               aria-label={shown.title}
-              className={cn("group/card absolute flex flex-col overflow-hidden", CARD, !front && "hidden")}
+              className={cn("group/card absolute flex flex-col overflow-hidden", CARD, (!front || (isMobile && pane.id !== focus)) && "hidden")}
               data-folded={folded || undefined}
               data-pane={front ? leaf.id : undefined}
               data-pane-page={leaf.page}
@@ -176,7 +180,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 after={<PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
-                lead={lead && rect.x < EPS && rect.y < EPS}
+                lead={lead && ((mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
                 toggle={!windowToggle}
@@ -189,8 +193,9 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
-                {isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
-                {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
+                {isPageView(leaf.page) && <PageHistory className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
                   <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
@@ -236,7 +241,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
             </section>
           );
         })}
-      {!folding && dividers.map((d) => <DividerHandle area={area} d={d} key={d.id} limits={ratioLimits(root, d, size)} size={size} />)}
+      {!isMobile && !folding && dividers.map((d) => <DividerHandle area={area} d={d} key={d.id} limits={ratioLimits(root, d, size)} size={size} />)}
       <DropOverlay at={(r) => place(r, size)} />
       <DragGhost />
     </div>

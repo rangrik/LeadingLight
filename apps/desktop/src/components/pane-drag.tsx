@@ -24,7 +24,7 @@ const BODY = ["select-none", "[&_*]:cursor-grabbing!", "[&_iframe]:pointer-event
 // Starts watching a press on a sidebar row or a pane header. Buttons inside it never start a drag.
 export function armDrag(e: React.PointerEvent<HTMLElement>, source: Source) {
   const inner = (e.target as HTMLElement).closest("button, input, a");
-  if (e.button !== 0 || e.ctrlKey || (inner && inner !== e.currentTarget)) return;
+  if (e.pointerType === "touch" || e.button !== 0 || e.ctrlKey || (inner && inner !== e.currentTarget)) return;
   const el = e.currentTarget;
   const id = e.pointerId;
   const x0 = e.clientX;

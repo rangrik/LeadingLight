@@ -8,10 +8,18 @@ import type { Quote } from "~/lib/ask";
 export type Status = "running" | "done" | "failed" | "declined" | "stopped";
 export type Item =
   | { kind: "user"; text: string; quote?: string; files?: string[] }
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; id?: string; phase?: "commentary" | "partial_answer" | "final_answer" }
   | { kind: "thinking"; text: string; start: number; end?: number }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: Status; output?: string }
   | { kind: "end"; ms: number; how: "done" | "stopped" | "failed"; error?: string; plan?: boolean };
+
+export function turnContent(items: Item[]) {
+  const body = items.filter((i) => i.kind !== "user" && i.kind !== "end").filter((i) => i.kind !== "text" || i.text.trim());
+  const last = body.reduce((at, i, k) => i.kind === "text" ? at : k, -1);
+  const answer = body.filter((i, k): i is Extract<Item, { kind: "text" }> => i.kind === "text" && (i.phase ? i.phase !== "commentary" : k > last));
+  const answers = new Set<Item>(answer);
+  return { answer, work: body.filter((i) => !answers.has(i)) };
+}
 
 // A change waiting for the person, while its turn waits on it.
 export type Approval = { requestId: string | number; tool: string; input: Record<string, unknown>; toolUseId: string };
@@ -28,6 +36,9 @@ export type Thread = {
   codexId?: string;
   codexSeen?: Seen;
   allowed: string[];
+  executionTarget?: string;
+  remoteRun?: { id: string; target: string; started: number };
+  stopping?: boolean;
   // Not kept: the turn running, its start, a change waiting, the words Replace acts on, a note.
   busy?: string;
   started?: number;
@@ -52,6 +63,15 @@ function load(pageId: string): PageThreads {
   let list: Thread[] = [];
   try {
     list = JSON.parse(localStorage.getItem(key(pageId)) ?? "[]") as Thread[];
+    if (list.some((t) => t.remoteRun)) {
+      list = list.map((t) => t.remoteRun ? {
+        ...t, remoteRun: undefined, busy: undefined, stopping: undefined, approval: undefined,
+        sessionId: undefined, codexId: undefined, seen: {}, codexSeen: {}, allowed: [],
+        items: [...t.items.map((i): Item => i.kind === 'tool' && i.status === 'running' ? { ...i, status: 'stopped' } : i.kind === 'thinking' && !i.end ? { ...i, end: Date.now() } : i),
+          { kind: 'end', how: 'failed', ms: 0, error: 'Connection interrupted when this browser reloaded. The Mac stops this turn when its connection lease expires. Nothing was resent.' }],
+      } : t);
+      localStorage.setItem(key(pageId), JSON.stringify(list));
+    }
   } catch {
     // A broken record starts the page afresh.
   }
@@ -67,7 +87,7 @@ function save(pageId: string) {
     .list.filter((t) => t.items.length)
     .sort((a, b) => b.updated - a.updated)
     .slice(0, KEEP)
-    .map(({ busy: _b, started: _s, approval: _a, quote: _q, note: _n, ...t }) => ({
+    .map(({ busy: _b, stopping: _stop, started: _s, approval: _a, quote: _q, note: _n, ...t }) => ({
       ...t,
       items: t.items.map((i) => (i.kind === "tool" && i.output && i.output.length > OUTPUT ? { ...i, output: `${i.output.slice(0, OUTPUT)}…` } : i)),
     }));

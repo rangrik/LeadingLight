@@ -180,6 +180,63 @@ Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing
 Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 `engine-focus-control.mjs`. Native behavior has not been tested.
 
+## 2026-10-28 — iPad delivery and native account sync
+
+Native account handoff and portable attachments are implemented with the shared encrypted
+journal. Release acceptance is recorded in `NATIVE-SYNC.md`; deployment alone does not prove
+the owner's Mac library has reached the iPad.
+
+TestFlight remains unavailable without Apple Developer membership. On 2026-10-29 the user chose
+direct development testing; LeadingLight Dev was signed with their Personal Team and installed
+on the connected iPad. The user then authorized agent-led native testing: persistence, Files
+import and cancellation, offline attachments, Quick Look and onscreen keyboard checks passed.
+Immediate Home save checks passed once each for body and capture; repeated suspension timing,
+multitasking resize and very long pages still need device coverage. Revisit during the next
+hardware pass; browser equivalents do not establish those native results. The rotation fix
+passed on device: the fifth-paragraph caret stayed visible with the keyboard open and no input.
+A signed update exposed a stale sandbox path in the saved PNG URL; its recovery fix now passes
+on device without reimport or data reset. A Wi-Fi-off cold launch kept the original PNG and text,
+and the original PDF opened offline in Quick Look. Evidence: `apps/desktop/qa/report/ipad-device/attachments-recovered-offline.png`.
+The development profile expires November 5, 2026 at 12:16 AM Pacific.
+
+## 2026-10-29 — SQLite privacy declaration before TestFlight
+
+The iOS release imports `statfs` and `fstatfs` from bundled SQLite 3.46.0. Those calls inspect
+filesystem type and read-only flags; we have not established an approved DiskSpace reason
+for that purpose. The manifest declares the proven app-container timestamp use (`C617.1`),
+without inventing a free-space use. This is an unresolved Apple acceptance risk, not an
+observed rejection. [SQLite recommends the system library](https://sqlite.org/forum/info/d404fb0a8b3d9e74),
+but SQLx 0.8.6 calls `sqlite3_unlock_notify`, which Apple's iOS SDK does not export, so switching
+libraries alone would break the build. Revisit before TestFlight upload: resolve the declaration
+with Apple or adopt a compatible SQLite integration, then check the final binary and validate it.
+
+## 2026-10-28 — Cloud preview
+
+Detached voice saves still need a failure probe where the page save fails while
+the user leaves it (reviewed 2026-10-29). The audio file may be saved without being
+attached to its block. Slow writes, failed audio writes and ordinary detached saves
+pass; recovery from both failures together is outside this pairing merge. Revisit
+before claiming full recording recovery from disk failures.
+
+On 2026-10-29, the combined browser run also lost the audio block while the capture
+review test clicked its transcript and typed; the review button then timed out.
+Four isolated reruns passed unchanged. Keep the failing trace in
+`/tmp/leadinglight-main-merge-playwright`; investigate selection/layout timing if
+this recurs or before broad voice acceptance. It is not claimed fixed.
+
+| Date | Item | Why not now | Revisit when |
+|---|---|---|---|
+| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
+| 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
+| 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing definitions and adopts desktop changes to untouched starter definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
+| 2026-10-29 | Remote project agents and isolated cloud runners | Browser pairing currently grants page-agent access to the existing Mac runtime. Project folders and terminals need a separate grant. Shared API keys and usage billing are rejected, not deferred. | Design scoped project access, or validate user-authorized CLI login in a sandbox service such as E2B. Preserve approvals and isolation; measure hosting costs separately from model usage. |
+| 2026-10-29 | Remote turns continuing after browser closure | The browser owns page tools and approvals. Reloading or closing interrupts the turn and keeps its partial transcript; automatic replay could repeat an edit. | Move tool execution to a durable workspace with replay-safe mutations before offering unattended remote work. |
+| 2026-10-29 | Recovering a pairing after unrecoverable delivery/storage failure | Normal received events clear from the relay, but a local queue overflow, invalid delivery or failed durable save stops work and revokes the grant. Re-pairing is the explicit recovery path. | Add replay-safe stream recovery and backpressure if real workloads hit these failures; do not silently resume uncertain edits. |
+| 2026-10-29 | Broader CLI version compatibility | Remote Codex discovers supported feature flags and restricts the current note tool set. Future provider built-ins need a fresh scope review. | Before supporting new CLI versions broadly; keep the real CLI/Keychain acceptance matrix with the release. |
+| 2026-10-29 | Inherited MCP configuration in unpaired local Codex note turns | Native pairing QA showed that an empty MCP table merges with the user's settings. Remote turns now explicitly disable inherited entries and verify the result; the older local launch remains unchanged. | Apply the same isolation to local note turns before claiming they exclude the user's configured helpers. |
+| 2026-10-29 | Keychain restore diagnostics and signed Mac updates | Rebuilding the ad-hoc dev app changed its code identity and triggered a macOS Keychain prompt. A failed restore currently omits that connection without an explanation. | Surface an actionable restore error/retry and use a stable Developer ID signature before public Mac updates. Never relax Keychain access controls. |
+| 2026-10-29 | History version-row height when timestamps wrap | Native QA showed a wrapped timestamp touching the next row in the narrow history list. Pairing, saved versions and attribution worked; this is outside the runtime repair. | Before broader UI acceptance, let history rows fit two-line timestamps and verify narrow layouts. |
+
 ## 2026-10-29 — Computer Use background activation
 
 After background capture closes, automated mouse events can miss the main webview

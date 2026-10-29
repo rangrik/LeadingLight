@@ -8,6 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
+import { useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
 import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
 import { describe } from "~/lib/space";
@@ -44,11 +45,12 @@ export function History({ pane, tab }: { pane: string; tab: Tab }) {
 
 // A pane's tabs, above its header while it has two or more. The row's own room drags the window in the app.
 export function TabRow({ leaf, inset }: { leaf: Leaf; inset: boolean }) {
+  const mobile = useMobile();
   return (
     <Tabs
       className={cn("h-(--header-height) shrink-0 flex-row items-center gap-1 border-b px-2 transition-[padding] duration-200 ease-linear", inset && "ps-[calc(var(--traffic-left)_+_50px)]")}
       data-tab-row
-      data-tauri-drag-region
+      data-tauri-drag-region={!mobile || undefined}
       onValueChange={(id) => showTab(leaf.id, String(id))}
       value={leaf.active}
     >

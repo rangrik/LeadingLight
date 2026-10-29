@@ -1,0 +1,7 @@
+{
+  "name": "@leadinglight/cloud",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node --env-file-if-exists=.env src/server.mjs", "migrate": "node --env-file-if-exists=.env src/migrate.mjs", "test": "node --test src/*.test.mjs" },
+  "dependencies": { "@auth/core": "^0.41.0", "postgres": "^3.4.7" }
+}

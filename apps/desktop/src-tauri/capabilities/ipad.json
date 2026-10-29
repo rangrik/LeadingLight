@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "ipad",
+  "description": "Local notes and attachments in the iPad app",
+  "platforms": ["iOS"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "leadinglight-preview:allow-asset-preview",
+    "sql:default",
+    "sql:allow-execute",
+    "fs:default",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-appdata-meta-recursive",
+    "dialog:allow-open"
+  ]
+}

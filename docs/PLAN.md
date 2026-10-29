@@ -164,6 +164,17 @@ with Project 4.
 Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
 for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
-## Later
+## Workspace history and connected devices (2026-10-29)
 
-- Sync between devices. Mobile.
+Atomic page history, milestones, whole-action undo and authorship share the local store.
+Google/GitHub workspace sign-in and encrypted sync use the hosted service; browser agents
+pair separately with the installed Mac's existing CLI accounts. No model API keys or resale.
+
+The native iPad target shares the editor and SQLite store. Native account approval and
+portable encrypted attachments connect the Mac, iPad and web workspace. See
+[IPAD.md](IPAD.md), [NATIVE-SYNC.md](NATIVE-SYNC.md), decisions 34–37 and
+[cloud setup](../apps/cloud/README.md). Google remains in testing mode and access is private.
+
+Project-agent access, later catalog edits across devices, history compaction and storage
+management remain in DEFERRED. Release acceptance must prove the owner's library is downloaded
+before calling the iPad ready for offline use.

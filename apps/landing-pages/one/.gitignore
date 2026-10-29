@@ -1,0 +1,5 @@
+artwork/*.png
+artwork/*.log
+artwork/*.txt
+artwork/qa-*.mjs
+public/*.png

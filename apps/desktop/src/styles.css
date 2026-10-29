@@ -77,3 +77,35 @@
 .ll-page[data-page-toc] { --toc: 60px; }
 @container (width >= 960px) { .ll-page[data-page-toc] { --toc: 200px; } }
 @container (width < 1168px) { .ll-page[data-page-notes][data-page-toc] { --toc: 60px; } }
+
+/* iPad's keyboard and safe areas leave one measured region for the app and its sidebars. */
+html[data-ipad] {
+  --ll-top: calc(var(--ll-viewport-top, 0px) + env(safe-area-inset-top));
+  --ll-height: calc(var(--ll-viewport-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overscroll-behavior: none;
+}
+[data-ipad] #root { position: fixed; top: var(--ll-top); inset-inline: env(safe-area-inset-left) env(safe-area-inset-right); height: var(--ll-height); }
+[data-ipad] .ll-shell { height: var(--ll-height); min-height: 0; }
+[data-ipad] .ll-inset { height: var(--ll-height); }
+[data-ipad] [data-slot="sidebar-container"] { top: var(--ll-top); height: var(--ll-height); }
+[data-ipad] [data-slot="sidebar"][data-mobile] { top: var(--ll-top); height: var(--ll-height); }
+[data-ipad] .ll-settings { top: var(--ll-top); bottom: auto; height: var(--ll-height); }
+[data-ipad] .ll-capture-overlay { top: calc(var(--ll-top) + 12px); }
+[data-ipad] .ll-capture-box { max-height: calc(var(--ll-height) - 24px); }
+[data-ipad] [data-page-scroller] { overscroll-behavior: contain; scroll-padding-bottom: 24px; }
+@media (min-width: 768px) {
+  [data-ipad] .ll-inset { height: calc(var(--ll-height) - 1rem); }
+}
+@media (pointer: coarse) {
+  [data-slot="sidebar-menu-button"] { min-height: 44px; }
+  [data-tab] [aria-label="Close tab"], [data-slot="sidebar-menu-action"] { opacity: 1; }
+}
+
+html[data-authorship="true"] .ll-editor [data-origin="agent"] {
+  background: color-mix(in srgb, var(--info) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--info) 55%, transparent);
+}
+html[data-authorship="true"] .ll-editor [data-origin="human"] {
+  text-decoration: underline dotted color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+  text-underline-offset: 3px;
+}

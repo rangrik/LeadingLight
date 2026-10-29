@@ -1,3 +1,4 @@
+import { action } from "./history-types";
 import type { Evidence } from "~/lib/evidence";
 import type { ObjectSummary } from "~/lib/objects";
 import { editPage } from "~/lib/live";
@@ -55,7 +56,7 @@ export const agentOf = (c: Caller) => {
 export async function agentFor(c: Caller): Promise<ObjectSummary> {
   const found = agentOf(c);
   // The runtime's word on which conversation a session runs is the one kept.
-  if (found && c.conversation && runOf(found)!.conversation !== c.conversation) await editPage(found.id, { properties: (p) => ({ ...p, run: { ...(p.run as Run), conversation: c.conversation } }) });
+  if (found && c.conversation && runOf(found)!.conversation !== c.conversation) await editPage(found.id, { properties: (p) => ({ ...p, run: { ...(p.run as Run), conversation: c.conversation } }) }, action("Connected agent conversation", { kind: "agent", name: found.title, run: c.session }));
   if (found) return found;
   const run: Run = { conversation: c.conversation ?? "", session: c.session, location: c.location ?? "", agent: c.agent ?? "claude", ...(c.by && { by: c.by }) };
   const name = run.agent === "codex" ? "Codex" : "Claude";
@@ -67,6 +68,6 @@ export async function agentFor(c: Caller): Promise<ObjectSummary> {
       typeId: AGENT,
       title: lead ? `${name}, working for ${lead.title}` : c.title ? `${name}: ${c.title.replace(/…$/, "").slice(0, 60)}` : name,
       properties: { run, "agent-profile": name, ...(lead && { "agent-parent": [lead.id] }), ...(task && { "agent-task": [task] }) },
-    }),
+    }, action("Started agent", { kind: "agent", name, run: c.session })),
   );
 }

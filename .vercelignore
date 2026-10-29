@@ -1,0 +1,14 @@
+.git
+.agents
+.codex
+**/node_modules
+**/.env
+**/.env.*
+**/dist
+**/target
+**/.DS_Store
+apps/desktop/src-tauri
+apps/desktop/qa/.results*
+apps/desktop/qa/report
+release-assets
+*.log

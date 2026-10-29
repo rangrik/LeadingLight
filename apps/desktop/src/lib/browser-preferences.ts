@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 import { ask } from "~/lib/project-runtime/transport";
 import { personalTab } from "~/lib/browser-data";
 import { saveBrowserDownload } from "~/lib/browser-files";
@@ -67,7 +67,7 @@ export function useNativeBrowserDownloads(base?: string) {
     let live = true;
     let timer = 0;
     setError("");
-    void isNative.then(async (native) => {
+    void isDesktop.then(async (native) => {
       if (!native || !live) return;
       const current = await readBrowserDownloadPreferences();
       if (!current.enabled && live) await updateBrowserDownloadPreferences({ enabled: true });
