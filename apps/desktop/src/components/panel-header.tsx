@@ -58,13 +58,13 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               {root && (
-                <BreadcrumbItem className="hidden shrink-0 md:block">
+                <BreadcrumbItem className="hidden shrink-0 md:@[24rem]/header:block">
                   {onRoot ? <BreadcrumbLink render={<button onClick={onRoot} type="button" />}>{root}</BreadcrumbLink> : root}
                 </BreadcrumbItem>
               )}
               {current !== null && (
                 <>
-                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:block" />}
+                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[24rem]/header:block" />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
                     <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>

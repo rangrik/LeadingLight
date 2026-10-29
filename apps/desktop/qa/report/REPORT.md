@@ -118,5 +118,5 @@ with and without authorship; this does not establish a 16 ms total typing budget
 Screenshots are generated under `qa/report/`; failure traces use ignored
 `qa/.results-*` directories. Real OAuth callbacks, provider accounts, Vercel runtime
 and cron, physical iPhone/iPad Safari, and native account/attachment handoff remain
-unverified. See `apps/cloud/README.md`, decision 31 and `docs/DEFERRED.md` before
+unverified. See `apps/cloud/README.md`, decision 34 and `docs/DEFERRED.md` before
 inviting users to a hosted preview.

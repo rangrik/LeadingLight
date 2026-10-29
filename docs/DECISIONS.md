@@ -293,6 +293,9 @@ worker, keep one at a check, and use the browser; Shipyard's sessions, notificat
 runs do the rest, and a worker started by an agent with full access gets it too. A restart loses no
 send: the turn ledger is written before berthd exits.
 
+Since 2026-10-28, Quit stops the runtime when no agent is in a turn and no run is active, since
+nothing should keep running for no reason; a turn or run going keeps it, and agents wait in tmux.
+
 
 ## 19. A project's agents reach LeadingLight through the runtime, as tools
 
@@ -402,6 +405,8 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+Stopping commits the take: its save can finish after the editor closes, attaching by recording id
+to the latest page through the main window. Leaving an active recording still cancels it.
 
 ## 28. Captures stay pages; review state is metadata
 
@@ -476,7 +481,150 @@ Panes, tabs and the active tab are restored on launch. Quick capture is one box 
 in from outside is one habit: words, an address or a voice note all land in Captures, and the box
 saves whatever was typed on close so a capture can never be lost.
 
-## 31. History, authorship and web cloud defaults (2026-10-28)
+## 31. The browser shares Chromium with the agent
+
+2026-10-28. Both the person and the agent must operate the same page, including its sign-in and
+form state. Extend the bundled MIT Shipyard runtime and its CDP browser, with an additive patch,
+instead of introducing a second WebKit browser or an Electron app. The app displays its live
+frames and sends input through the existing local runtime transport. Remote website HTML never
+enters the notes webview. Agent snapshots, references, screenshots and actions keep working.
+
+Personal tabs use an app-owned persistent profile per workspace; named and unnamed agent tabs
+stay isolated. A legacy command without a tab must not inherit personal cookies. Explicit tab
+names let an agent work on a personal tab when asked. Website content is
+untrusted, and the runtime's network restrictions still apply to manual and agent navigation.
+Browser metadata lives on this Mac; profiles and downloads never go in the linked project.
+
+The reference is ChatGPT's documented built-in Browser, not an assumption that its private
+implementation is available. Research, exclusions and any remaining gaps live in
+`docs/BROWSER-RESEARCH.md`; behavior lives in `features/agent-browser.feature`.
+
+Browser opens from the sidebar without requiring a project: its empty workspace is app-owned.
+Ask about page attaches the exact tab to one conversation, including a standalone browser chat.
+The attachment is visible and removable, stays in memory, and is never inherited by another chat.
+Each sent message freezes its tab context; website titles and text are not agent instructions.
+
+Managed Git checkouts can all be named `LeadingLight`. Embedded runtime worktrees in that layout
+get stable path suffixes, and the browser chooses the linked checkout's path before git's main
+checkout. Ambiguous names fail rather than opening a different workspace.
+
+The native Edit menu needs an explicit bridge: macOS otherwise handles Undo and Select All in
+the local input that forwards typing. Only while the browser page has focus, its six Edit actions
+target that tab's input queue. Focus tokens prevent a delayed menu event reaching another tab.
+
+Clear browsing data removes only this workspace's personal profile, tabs and local history after
+confirmation. It retains bookmarks and downloaded files, and refuses while agent tabs are open.
+Native download saving writes bounded chunks to the chosen file so large downloads stay usable
+without granting the frontend broad filesystem access.
+
+Element feedback uses explicit selection on the shared page. The runtime keeps an opaque handle
+to that element; bounded metadata and the person's comment accompany the exact tab in chat.
+Visual previews accept a small list of CSS properties and keep the original inline styles for
+Reset. Leaving the feedback panel ends its previews; Ask copies the comment and chosen styles
+to chat first. Navigation invalidates selection, so an old preview cannot change a new page.
+Picking suppresses activation and typing but permits scrolling. After the feedback panel changes
+the viewport, a handle-based reveal keeps the selected element visible without activating it.
+Reset restores the original style attribute when safe, while preserving unrelated page changes.
+
+Personal pages follow the pane's size by default; shrinking a desktop screenshot made text too
+small beside a chat. Explicit phone/desktop sizes stay fixed, and agent tabs keep the size the
+agent chose until the person opts into the pane's size.
+Input waits for a frame at the requested size, so a click cannot use old image coordinates after
+the runtime has resized the page.
+Two views can share one tab. Only the last browser pane used controls that tab's automatic size;
+other views fit its frames. Ownership passes on close, avoiding competing resize requests.
+The auto/fixed choice also belongs to the tab, so using another pane cannot cancel phone mode.
+It stays in app memory, bounded to 256 recent explicit choices; it is not a saved device profile.
+Resize requests run in order per tab. Every view pauses input while they run and waits for a
+frame at the final size, including views whose state poll has not caught up yet.
+Afterward, a fresh state read resumes following the agent's viewport; an older poll cannot
+release the input guard, and an agent changing size again cannot leave the view stuck.
+
+Uploads carry the file chooser's identity, not only its tab name. A navigation or a second chooser
+invalidates a delayed file choice so it cannot attach to a different form.
+
+Search words open DuckDuckGo's ordinary results URL, which needs no key or new search service.
+The local runtime keeps at most 24 live tabs per workspace. Metadata is bounded (200 bookmarks,
+500 history entries and 20 closed tabs); file picks allow 20 files and 32 MiB per pick. Clipboard
+text is limited to 64 KiB and rejected rather than truncated. These bounds keep local memory and
+IPC predictable; native download saving has no fixed file-size cap.
+
+Navigation belongs to the tab's lifetime, not the HTTP control request's timeout. Chromium's
+events determine loading and errors, and Stop cancels even a slow link navigation. Permission
+notices describe the current tab's blocked requests; the shared proxy's historical refusals
+remain diagnostic data rather than prompts on unrelated pages.
+Revocation blocks new network requests, not cached page display. The permissions view says so;
+removing cached content and sign-ins remains the separate Clear browsing data action.
+
+## 32. Writing review is quiet, local, and chosen
+
+Grammar help defaults to review on request. Inline underlines are optional. Harper provides
+actual suggestions; applying one preserves marks, has its own undo step, and refuses stale
+text. Keep wording remembers that occurrence for the current page session, not a universal rule.
+A text selection bounds the review; Apply pauses on its result until Next suggestion.
+Quiet word counts do not start grammar checks.
+
+Short lessons are authored for named rules, with optional practice. Saved tips store rule ids,
+not a mistake history. Dictionary words stay on this device. Listening uses only local English
+system voices. Neither the checker nor practice assigns a score or claims someone has learned
+something. See WRITING-COACH.md for the scenarios and questions to test with the writer.
+
+## 33. Browser feedback keeps evidence; developer access belongs to a page
+
+2026-10-28. Saved browser comments carry a frozen image of the selected area and quoted
+element metadata, so a later page change cannot silently change what the person meant.
+Temporary style previews belong to a viewer lease; losing that viewer resets its previews.
+Frame selection uses Chromium frame identities and transforms, not page-provided selectors.
+
+Developer tools require both an enabled setting and explicit approval for the current page.
+Navigation, closing the tab, revocation or expiry ends that approval. CDP calls remain scoped
+to the approved page; browser-wide profile, process and file access are separate capabilities.
+
+Download preferences belong to this app's runtime. Only the native app enables automatic
+copies to the chosen folder; browser-build tests keep their own downloads. Copies use bounded
+buffers and exclusive file creation, never a filename supplied by a page as a filesystem path.
+History can be cleared by time. Website data is labelled as an all-time workspace clear,
+because Chromium's available storage commands cannot prove time-scoped removal for every store.
+
+Comments belong to the workspace and exact URL, so closing a tab does not lose them. Keep up to
+20 per page and 200 total. Their PNGs have a separate 200-image / 128 MiB budget; expired images
+block sending rather than silently dropping evidence. Sending copies them into chat attachments.
+Browser settings can remove saved comments across all workspaces, so forgotten pages cannot
+permanently fill the quota. Comments already attached to a chat keep their copied evidence.
+Element capture resolves the handle and checks its document, geometry and metadata on both
+sides of the screenshot request, rejecting a moved or replaced element instead of mismatching evidence.
+Frame inspection supports nested cross-origin frames and positive axis-aligned scaling; rotated,
+skewed or mirrored frames fail explicitly. Text replacement is deferred because restoring child
+nodes safely needs more than undoing CSS. Viewer leases renew every five seconds and expire at 15.
+
+Developer tools expose page-scoped DOM, CSS, runtime, network and profiling commands. Access ends
+after 15 minutes or a document change. A separate CDP session prevents interference with ordinary
+controls; browser-wide commands remain unavailable. This is the trusted local runtime model,
+not a sandbox against another process with full access to the person's Mac.
+
+Ask where to save uses a durable claim before opening one native dialog. Cancellation, duplicate
+panes and reloads cannot repeat it. An interrupted automatic copy is reported as interrupted and
+keeps its source; a partial destination may remain. Manual Save can retry elsewhere.
+Two automatic copies run at once per workspace. Active saves survive history trimming; the
+existing 200-download retention limit still applies to older unclaimed records in extreme bursts.
+Opening a saved tab does not create a new history visit; actual navigation does. Clearing history
+therefore survives Settings and app reloads without removing the open page.
+
+Keep the current engine for this pass. Synthetic-device probes worked in full Chromium but
+returned NotSupportedError in headless-shell. Camera/microphone need a deliberate permission
+flow and macOS checks. Removing the mute flag would play sound on the runtime host without an
+audio transport or per-tab control, so it is not an audio implementation.
+
+Below a 420 px browser pane, Address gets its own row and all actions stay visible
+below it. The pane width controls this layout, so narrow splits work in wide windows.
+Nested popups handle Escape before feedback closes; a failed developer command clears
+the earlier result so the displayed method and output cannot imply a false success.
+Raw address input marks a draft even when the pasted value is unchanged, so an
+unfinished tab close cannot erase it; merely focusing still permits redirect updates.
+Reset synchronizes Chromium's pending CSS attribute before removing it. This preserves
+the difference between an absent and an empty style attribute, including website selectors.
+
+## 34. History, authorship and web cloud defaults (2026-10-28)
 
 Chosen while the owner asked us to proceed without questions; review these defaults before launch.
 
@@ -484,14 +632,14 @@ Chosen while the owner asked us to proceed without questions; review these defau
 - Authorship is recorded when words enter the editor. The page stays quiet until “Show authorship” is enabled. Inspection lists You, the agent/model, or Origin unknown. This is provenance, not AI detection. Imported text is attributed to the person inserting it, not its original outside author.
 - No account is needed locally. Google and GitHub use Auth.js. ChatGPT identity is enabled only with a registered, approved commercial client. Signing in does not connect ChatGPT or Claude subscription credits. Different identity providers make different accounts; no automatic email linking.
 - Web sync is opt-in, with compressed, chunked AES-GCM encrypted journal entries in our PostgreSQL service and a per-account recovery key held on the device. This **does store encrypted data**, unlike direct-only transfer. It lets devices reconnect at different times. Concurrent offline changes make a separate copy. It is not character-level collaborative merging. Local folders and Mac file URLs do not transfer.
-- Agent execution follows decision 7 and the correction in decision 32: the installed Mac app uses each person's CLI accounts. Decision 33 adds approved browser access to that runtime. Workspace sign-in and encrypted sync stay independent of agent sign-in.
+- Agent execution follows decision 7 and the correction in decision 35: the installed Mac app uses each person's CLI accounts. Decision 36 adds approved browser access to that runtime. Workspace sign-in and encrypted sync stay independent of agent sign-in.
 - Mobile and iPad use the responsive browser build first. Production builds include an offline shell. IndexedDB holds local notes; PostgreSQL holds optional encrypted sync. Production web builds never use the development agent stand-in.
 - Hosted preview: `leadinglight-web.vercel.app`, separate from the existing image service. Neon `leadinglight-web-db` uses the free plan in `iad1`, with production-only credentials and Neon Auth off. Google and GitHub sign-in are registered and verified; both owner identities are separately allowlisted. Google remains in testing mode. No model API keys, usage billing or paid infrastructure plan are required.
 
 Sources checked: [ChatGPT sign-in](https://developers.openai.com/siwc/website),
 [Auth.js core](https://authjs.dev/reference/core).
 
-## 32. Agents use the person's existing CLI account (2026-10-29)
+## 35. Agents use the person's existing CLI account (2026-10-29)
 
 The owner rejected the shared API-key cloud implementation. No user or service model keys,
 usage resale or per-token billing. The first release runs agents only in the installed Mac app,
@@ -506,7 +654,7 @@ Validate supported authentication, tenant isolation and hosting costs before sel
 service such as E2B; do not copy local login tokens or promise permanent free hosting. Neither
 remote execution option is part of this release. They must preserve the user's own provider usage.
 
-## 33. Browser pairing reuses the Mac's page-agent runtime (2026-10-29)
+## 36. Browser pairing reuses the Mac's page-agent runtime (2026-10-29)
 
 A paired browser uses the existing note agent's ask/reply/cancel protocol. The Mac
 launches the same Claude Code/Codex processes; the browser retains its page tools,
@@ -524,7 +672,7 @@ Both apps must stay running and connected. The Mac polls outbound; a renewable l
 stops remote work after connection loss. A reload interrupts rather than replaying
 note mutations. Command IDs, a durable Mac start ledger and ordered event IDs prevent
 repeated execution. Either app can revoke the grant. Session IDs belong to their
-pairing and never move to another Mac. This replaces decision 32's temporary browser
+pairing and never move to another Mac. This replaces decision 35's temporary browser
 agent restriction; the user's own CLI usage remains the rule.
 
 The relay discards acknowledged reply ciphertext and keeps replay fingerprints.

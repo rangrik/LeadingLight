@@ -49,14 +49,16 @@ export function stream(method: string, path: string, body: unknown, quiet: numbe
   const end = () => !done && ((done = true), ended());
   const read = (line: string) => line.trim() && on(line);
   void isNative.then(async (native) => {
+    if (done) return;
     if (native) {
       const { Channel } = await import("@tauri-apps/api/core");
       const channel = new Channel<string>();
       // An empty line is the stream's end (runtime.rs).
-      channel.onmessage = (line) => (line ? read(line) : end());
+      channel.onmessage = (line) => !done && (line ? read(line) : end());
       const id = await invoke<number>("runtime_stream", { method, path, body: body ?? null, quiet, on: channel }).catch(() => null);
       if (id === null) return end();
       stop = () => void invoke("runtime_stream_stop", { id });
+      if (done) stop();
       return;
     }
     const abort = new AbortController();
@@ -64,6 +66,7 @@ export function stream(method: string, path: string, body: unknown, quiet: numbe
     let silent = window.setTimeout(() => abort.abort(), quiet * 1000);
     try {
       const res = await fetch(`/__runtime${path}`, { method, signal: abort.signal, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+      if (!res.ok) throw new Error(`The runtime answered ${res.status}`);
       const reader = res.body?.getReader();
       const text = new TextDecoder();
       let rest = "";
@@ -74,9 +77,9 @@ export function stream(method: string, path: string, body: unknown, quiet: numbe
         silent = window.setTimeout(() => abort.abort(), quiet * 1000);
         const lines = (rest + text.decode(chunk.value, { stream: true })).split("\n");
         rest = lines.pop() ?? "";
-        lines.forEach(read);
+        if (!done) lines.forEach(read);
       }
-      read(rest);
+      if (!done) read(rest);
     } catch {
       // Stopped, or the dev server went away.
     }

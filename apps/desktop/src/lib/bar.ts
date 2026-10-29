@@ -23,6 +23,8 @@ export const useNarrow = () =>
   );
 
 const PANE: Record<BarView, string> = { feed: FEED_VIEW, captures: INBOX_VIEW, ask: ASK_VIEW, suggestions: SUGGESTIONS_VIEW };
+// A name in a sentence may be one of these views; it opens here.
+export const barViewOf = (page: string) => (Object.keys(PANE) as BarView[]).find((v) => PANE[v] === page);
 const paneOf = (view?: BarView) => {
   const { root } = panes.get();
   const pages = view ? [PANE[view]] : Object.values(PANE);

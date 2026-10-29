@@ -162,14 +162,14 @@ with Project 4.
 
 [Project 4 — The bar, tabs, and quick capture](PROJECT-4.md): one strip at the right edge with
 Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
-for words, addresses and voice notes. Four slices built and merged; QA and install in progress.
+for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
 ## Web workspace, history and cloud (2026-10-28)
 
 Built in this worktree: atomic page history, milestones, whole-action undo, word authorship,
 optional accounts and encrypted background sync. Agents use the installed Mac app and the
 user’s CLI accounts. Mobile uses the responsive web app and offline cache. Defaults are in
-DECISIONS 31–33; setup is in
+DECISIONS 34–36; setup is in
 [`apps/cloud/README.md`](../apps/cloud/README.md).
 
 Hosted at `https://leadinglight-web.vercel.app` with Neon PostgreSQL.

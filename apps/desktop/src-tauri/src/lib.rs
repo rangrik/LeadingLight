@@ -11,6 +11,7 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 // that project chats run in (runtime.rs).
 mod agent;
 mod agent_guard;
+mod browser_menu;
 mod capture;
 mod clis;
 mod menu;
@@ -102,6 +103,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(agent::Agents::default())
+        .manage(browser_menu::BrowserMenu::default())
         .manage(runtime::Runtime::default())
         .manage(relay::Relay::default())
         .invoke_handler(tauri::generate_handler![
@@ -130,17 +132,23 @@ pub fn run() {
             web::web_fetch,
             web::web_save_media,
             voice::voice_transcribe,
+            browser_menu::browser_menu_focus,
+            browser_menu::browser_clipboard,
             shortcuts_set
         ])
         .setup(|app| {
             #[cfg(target_os = "macos")]
             menu_bar(app)?;
+            browser_menu::setup(app.handle())?;
             capture::setup(app.handle())?;
             runtime::setup(app.handle());
             relay::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == capture::MAIN && matches!(event, WindowEvent::Focused(false)) {
+                browser_menu::restore(window.app_handle());
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == capture::MAIN && !QUITTING.load(Ordering::Relaxed) {
                     api.prevent_close();
@@ -152,11 +160,10 @@ pub fn run() {
             if event.id() == "quit" {
                 QUITTING.store(true, Ordering::Relaxed);
                 capture::release(app);
-                agent::stop_all(app);
                 for window in app.webview_windows().values() {
                     let _ = window.close();
                 }
-            } else {
+            } else if !browser_menu::on_event(app, event.id().as_ref()) {
                 menu::on_event(app, event.id().as_ref());
             }
         })
@@ -169,6 +176,11 @@ pub fn run() {
                     let _ = main.show();
                     let _ = main.set_focus();
                 }
+            }
+            // Every way of quitting (⌘Q, the Dock) ends here, after the windows have closed.
+            if matches!(event, RunEvent::Exit) {
+                agent::stop_all(app);
+                runtime::quit(app);
             }
         });
 }

@@ -32,7 +32,7 @@ test("a new ledger version clears the old entries", () => {
 });
 
 // The seam: writing on a page with a suggestion. An Enter or words elsewhere must keep it; its own
-// words changed must drop it uncounted; leaving the page keeps it, a no once the panel showed it 30 s.
+// words changed must drop it uncounted; leaving keeps it (a no once seen 30 s) and drops the row uncounted.
 test("an edit elsewhere never drops or ignores a suggestion; leaving the page after 30 s seen is a no", () => {
   const offer = { where: "p", block: 1, text: "Call Sam", seen: 0 };
   const row = { where: "p" };
@@ -41,7 +41,7 @@ test("an edit elsewhere never drops or ignores a suggestion; leaving the page af
   assert.deepEqual(edited(lines, "p", ["Beans", "Call Sam", "", "more"], 40_000), { gone: [row], ignored: [row], moved: [] });
   assert.deepEqual(edited([offer], "p", ["", "Beans", "Call Sam"]).moved, [[offer, 2]]);
   assert.deepEqual(edited([offer], "p", ["Beans", "Call Sam about"], 40_000), { gone: [offer], ignored: [], moved: [] });
-  assert.deepEqual(edited(lines, "p", undefined, 30_000), { gone: [row], ignored: [offer, row], moved: [] });
+  assert.deepEqual(edited(lines, "p", undefined, 30_000), { gone: [row], ignored: [offer], moved: [] });
   assert.deepEqual(edited([offer, { ...offer, ignored: true }, { ...offer, seen: undefined }], "p", undefined, 29_000).ignored, []);
 });
 

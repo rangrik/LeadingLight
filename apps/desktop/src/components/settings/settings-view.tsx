@@ -1,4 +1,4 @@
-import { ArrowLeft, Boxes, Info, Keyboard, Lightbulb, Palette, PenLine, Shapes, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Boxes, Globe, Info, Keyboard, Lightbulb, Palette, PenLine, Shapes, SlidersHorizontal, Sparkles } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { closeSettings } from "@/views/settings/open";
@@ -16,8 +16,10 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
+import { shown } from "~/components/capture-box";
 import { PanelHeader } from "~/components/panel-header";
 import { AboutSection } from "~/components/settings/about-section";
+import { BrowserSection } from "~/components/settings/browser-section";
 import { AiSection } from "~/components/settings/ai-section";
 import { AppearanceSection } from "~/components/settings/appearance-section";
 import { CaptureSection } from "~/components/settings/capture-section";
@@ -27,10 +29,11 @@ import { ShortcutsSection } from "~/components/settings/shortcuts-section";
 import { TypesSection } from "~/components/settings/types-section";
 import { WritingSection } from "~/components/settings/writing-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
+import { COVERS } from "~/lib/use-shortcuts";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
 // one. Shipyard's sections about agents, machines and its own General stay out until there is ours.
-export type SectionId = "appearance" | "writing" | "types" | "properties" | "objects" | "capture" | "ai" | "shortcuts" | "about";
+export type SectionId = "appearance" | "writing" | "types" | "properties" | "objects" | "capture" | "browser" | "ai" | "shortcuts" | "about";
 
 const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
@@ -39,6 +42,7 @@ const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?
   { id: "properties", title: "Properties", icon: SlidersHorizontal, Component: PropertiesSection },
   { id: "objects", title: "Objects", icon: Boxes, Component: ObjectsSection },
   { id: "capture", title: "Capture", icon: Lightbulb, Component: CaptureSection },
+  { id: "browser", title: "Browser", icon: Globe, Component: BrowserSection },
   { id: "ai", title: "AI", icon: Sparkles, Component: AiSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
   { id: "about", title: "About", icon: Info, Component: AboutSection },
@@ -59,7 +63,7 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
       if (e.key !== "Escape" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t?.closest("input, textarea, select, [contenteditable=true], [role=dialog], [role=menu], [role=listbox]")) return;
-      if (document.querySelector("[role=dialog], [role=alertdialog]")) return;
+      if (shown(COVERS)) return;
       closeSettings();
     };
     window.addEventListener("keydown", onKey);

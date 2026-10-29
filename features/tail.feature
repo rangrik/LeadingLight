@@ -31,6 +31,8 @@ Feature: Tail
     And no count shows in the sidebar
     When I write in Today's body
     Then the three rows stay where they are, and none counts as ignored
+    When I click "3 ideas"
+    Then the bar opens on Captures, and Today stays in its pane
 
   Scenario: A nod files the ideas, and Undo takes it back
     Given Today shows its three rows
@@ -53,6 +55,10 @@ Feature: Tail
   Scenario: Open goes beside
     When I press Open on the first row
     Then "Garden plan" opens beside Today, and Today stays where it was
+    Given Today alone again, with its Type menu opened and closed with Escape
+    When I press ⌃↩
+    Then "Garden plan" opens beside Today the same way
+    And while a menu, a dialog or the Type menu is still open, ⌃↩ does nothing
 
   Scenario: The lines expire at the next beat
     Given Today shows its three rows and I press nothing
@@ -61,6 +67,7 @@ Feature: Tail
     And while I stay on Today, a beat changes nothing in front of me
     When I have named the untitled page and filed the ideas myself
     Then the next beat shows only what is still true
+    And a row that goes fades out over 150 ms, the last one too, before the room it took closes
     When a beat was held while I was on Today, and I then press File them
     Then leaving the window and coming back never brings "3 ideas since Tuesday" back
 
@@ -117,6 +124,8 @@ Feature: Tail
       paragraph ends in the same words
     When I type anything in the body
     Then the row leaves, and the words do not move
+    When I open another page and come back three times without typing
+    Then the row shows each time, and nothing counts as ignored
 
   Scenario: The capture box guesses
     When I open New idea and type "fix the gate latch before the weekend"

@@ -8,10 +8,13 @@ import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import { anchors, newId, setLiveQuotes, trimmed } from "./anchors";
-import type { AssetStore } from "./assets";
+import type { Asset, AssetStore } from "./assets";
 import { BlockHandle } from "./block-handle";
 import { pasteText } from "./markdown";
 import { MarkTip } from "./mark-tip";
+import { GrammarCoach } from "./grammar-coach";
+import type { GrammarRange } from "./grammar-review";
+import type { VoiceReview } from "./voice-review";
 import { selectedBlocks } from "./block-selection";
 import { EmojiPicker } from "./emoji-prefix";
 import { createExtensions } from "./extensions";
@@ -26,6 +29,9 @@ import { type Count, countText, OFF, onFound, type Writing, writingKey } from ".
 
 export type { NotesStore } from "./sidenotes";
 export type { PageSelection } from "./page-selection";
+export type { VoiceReview } from "./voice-review";
+export { attachVoiceAsset } from "./voice-save";
+export { Player as MediaPlayer } from "./player";
 export { citesIn } from "./anchors";
 
 export type EditorDoc = JSONContent;
@@ -52,9 +58,11 @@ export type Stats = { page: Count; selected: Count | null };
 
 export type BlockEditorHandle = {
   focus: (position?: FocusPosition) => void;
+  reviewWriting: () => void;
   // For changes made from outside the page (linking a mention, merging a tag).
   getJSON: () => EditorDoc;
   setContent: (doc: EditorDoc) => void;
+  attachVoiceAsset: (recordingId: string, asset: Asset) => boolean;
   // Focus back where the caret was, for a panel giving the keyboard back.
   refocus: () => void;
   hasFocus: () => boolean;
@@ -215,7 +223,9 @@ export function BlockEditor({
   annotate,
   onAsk,
   onTurnInto,
+  onVoiceReview,
   onVoiceSaved,
+  onVoiceDetached,
   askKeys,
   style = "plain",
   notes,
@@ -247,7 +257,9 @@ export function BlockEditor({
   // Given, the selection toolbar offers Ask with the selected words.
   onAsk?: (selected: Selected) => void;
   onTurnInto?: (selection: PageSelection) => void;
+  onVoiceReview?: (review: VoiceReview) => void;
   onVoiceSaved?: () => void;
+  onVoiceDetached?: (recordingId: string, asset: Asset) => Promise<void>;
   askKeys?: string;
   style?: PageStyle;
   // Where sidenotes keep their text; without it the page can't take notes.
@@ -272,14 +284,19 @@ export function BlockEditor({
   const onExitTopRef = useRef(onExitTop);
   const notesRef = useRef(notes);
   const openRef = useRef(open);
+  const voiceReviewRef = useRef(onVoiceReview);
   const voiceSavedRef = useRef(onVoiceSaved);
+  const voiceDetachedRef = useRef(onVoiceDetached);
+  voiceReviewRef.current = onVoiceReview;
   voiceSavedRef.current = onVoiceSaved;
+  voiceDetachedRef.current = onVoiceDetached;
   onChangeRef.current = onChange;
   onExitTopRef.current = onExitTop;
   notesRef.current = notes;
   openRef.current = open;
   // The note just added, which opens with the cursor in it.
   const [newNote, setNewNote] = useState<string | null>(null);
+  const [grammarReview, setGrammarReview] = useState<{ at?: number; scope?: GrammarRange } | null>(null);
 
   const extensions = useMemo(
     () =>
@@ -304,7 +321,9 @@ export function BlockEditor({
           return true;
         },
       }).map((extension) => extension.name === "voiceRecording" ? extension.configure({
+        onReview: !readOnly && !annotate && onVoiceReview ? (review: VoiceReview) => voiceReviewRef.current?.(review) : undefined,
         onSaved: !readOnly && !annotate && onVoiceSaved ? () => voiceSavedRef.current?.() : undefined,
+        onDetached: !readOnly && !annotate && onVoiceDetached ? async (id: string, asset: Asset) => { await voiceDetachedRef.current?.(id, asset); } : undefined,
       }) : extension),
     // The store is a module-level singleton in the app.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -360,6 +379,19 @@ export function BlockEditor({
     return () => void (!editor.isDestroyed && editor.unregisterPlugin(annotating));
   }, [editor, annotate]);
 
+  useEffect(() => {
+    if (readOnly || annotate) return;
+    const click = (event: MouseEvent) => {
+      const mark = (event.target as HTMLElement).closest(".ll-spelling, .ll-grammar");
+      if (!mark || !editor.isEditable) return;
+      const at = editor.view.posAtDOM(mark, 0);
+      setGrammarReview({ at });
+    };
+    const dom = editor.view.dom;
+    dom.addEventListener("click", click);
+    return () => dom.removeEventListener("click", click);
+  }, [editor, readOnly, annotate]);
+
   const aids = JSON.stringify(writing ?? OFF);
   useLayoutEffect(() => {
     if (!editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(writingKey, JSON.parse(aids)));
@@ -377,6 +409,7 @@ export function BlockEditor({
   const onStatsRef = useRef(onStats);
   onStatsRef.current = onStats;
   const counting = Boolean(onStats);
+  const countGrammar = Boolean(writing?.grammar && !writing?.quiet);
   useEffect(() => {
     if (!counting) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -390,8 +423,8 @@ export function BlockEditor({
     const send = () => {
       const { doc, selection } = editor.state;
       const deadline = performance.now() + 20;
-      const page = countText(doc, 0, doc.content.size, deadline);
-      const selected = selection.empty ? null : countText(doc, selection.from, selection.to, deadline);
+      const page = countText(doc, 0, doc.content.size, deadline, countGrammar);
+      const selected = selection.empty ? null : countText(doc, selection.from, selection.to, deadline, countGrammar);
       const done = page.done && selected?.done !== false;
       if (done || performance.now() - sent > 1000) {
         sent = performance.now();
@@ -408,7 +441,7 @@ export function BlockEditor({
       editor.off("transaction", changed);
       off();
     };
-  }, [editor, counting]);
+  }, [editor, counting, countGrammar]);
 
   // Dev-only hook so QA scripts can read editor state.
   if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
@@ -469,8 +502,25 @@ export function BlockEditor({
         editor.commands.focus(position);
         editor.view.focus();
       },
+      reviewWriting: () => {
+        if (readOnly || annotate || !editor.isEditable) return;
+        const { from, to, empty } = editor.state.selection;
+        setGrammarReview({ scope: !empty && editor.state.selection instanceof TextSelection ? { from, to } : undefined });
+      },
       getJSON: () => editor.getJSON(),
       setContent: (doc) => editor.chain().setMeta("preserveOrigin", true).setContent(doc).run(),
+      attachVoiceAsset: (recordingId, asset) => {
+        if (editor.isDestroyed) return false;
+        const tr = editor.state.tr;
+        editor.state.doc.descendants((node, pos) => {
+          if (node.type.name === "voiceRecording" && node.attrs.recordingId === recordingId && !node.attrs.src) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, autostart: false });
+          }
+        });
+        if (!tr.docChanged) return false;
+        editor.view.dispatch(tr.setMeta("addToHistory", false));
+        return true;
+      },
       // The view alone: TipTap's own focus lands a frame later, and would take the keyboard
       // from a surface (the ask bar) opened in between.
       refocus: () => editor.view.focus(),
@@ -564,6 +614,12 @@ export function BlockEditor({
       reveal: (id) => {
         const tint = "color-mix(in srgb, var(--info) 24%, transparent)";
         // A report's block (b1, b2…), which never moves: reports don't change.
+        if (id.startsWith("voice-")) {
+          const block = editor.view.dom.querySelector<HTMLElement>(`[data-voice-id="${CSS.escape(id)}"]`);
+          block?.scrollIntoView({ block: "center", behavior: "smooth" });
+          block?.animate([{ backgroundColor: tint }, { backgroundColor: "transparent" }], 1400);
+          return;
+        }
         const nth = /^b(\d+)$/.exec(id);
         if (nth) {
           const block = editor.view.dom.children[Number(nth[1]) - 1] as HTMLElement | undefined;
@@ -585,7 +641,7 @@ export function BlockEditor({
         for (const el of els) el.animate([{ backgroundColor: tint }, { backgroundColor: tint, offset: 0.6 }, { backgroundColor: "transparent" }], 1400);
       },
     }),
-    [editor],
+    [editor, readOnly, annotate],
   );
 
   const quote = quoteTo && {
@@ -626,6 +682,7 @@ export function BlockEditor({
       />
       <TableToolbar editor={editor} />
       <MarkTip editor={editor} />
+      {!readOnly && !annotate && grammarReview && <GrammarCoach editor={editor} at={grammarReview.at} scope={grammarReview.scope} onClose={() => setGrammarReview(null)} />}
       <EmojiPicker editor={editor} />
     </div>
   );

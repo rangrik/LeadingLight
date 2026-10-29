@@ -101,16 +101,18 @@ export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
-  if (view === INBOX_VIEW) return { title: "Capture inbox" };
+  if (view === INBOX_VIEW) return { title: "Captures" };
   if (view === FEED_VIEW) return { title: "Feed" };
   if (view === ASK_VIEW) return { title: "Ask" };
   if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
+    if (!id) return { title: "Browser chat" };
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(BROWSER_VIEW)) {
     const id = view.slice(BROWSER_VIEW.length).split("/")[0];
+    if (!id) return { title: "Browser" };
     return { title: "Browser", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(TYPE_VIEW)) {

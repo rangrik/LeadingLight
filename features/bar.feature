@@ -11,7 +11,7 @@ Feature: The bar
   - count: a small number on an icon, only when its panel has something waiting; none on Ask or Quick capture
   - pin: a button in the panel's header that keeps the panel on its view when a page would switch it
   - Feed: the items the Feed lane showed (feed.feature), answered the same way; ⌥⌘F opens it
-  - Captures: the capture inbox's list with its review ticks (capture inbox); ⌥⌘C opens it
+  - Captures: the capture inbox's list with its review ticks (capture inbox); ⌥⌘K opens it
   - Ask: the agent panel's thread and composer (ask.feature); ⌘J opens it, as it did
   - Suggestions: tail's view (suggestions.feature); ⌥⌘S opens it
 
@@ -54,3 +54,4 @@ Feature: The bar
     Given the window is 1000 px wide
     When I open a panel
     Then the panel shows as a pane beside the page, as the Feed did in a narrow window, and the strip stays
+    And the pane is titled as the panel is: Captures, Feed, Ask or Suggestions

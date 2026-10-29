@@ -2,10 +2,13 @@ import { Extension, getChangedRanges } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
-import { isSpelling, mistakesIn, onMistakes } from "./grammar";
+import { isSpelling, onMistakes } from "./grammar";
+import { grammarMistakes, grammarText, mapGrammarKept } from "./grammar-prose";
 import { STYLE_WORDS } from "./style-words";
 
 export { isSpelling } from "./grammar";
+export { collectGrammarIssues, applyGrammarIssue, keepGrammarIssue, grammarIssueIsCurrent, onGrammarChange, addGrammarWord, grammarWords, removeGrammarWord, retryGrammarCheck, mapGrammarRange } from "./grammar-review";
+export type { GrammarIssue, GrammarReview, GrammarRange } from "./grammar-review";
 
 // iA Writer's editor aids (features/writing.feature). They only decorate: the page never changes.
 export type Part = "noun" | "verb" | "adjective" | "adverb" | "conjunction";
@@ -16,6 +19,7 @@ export type Writing = {
   syntax: Part[];
   style: Check[];
   grammar: boolean;
+  quiet?: boolean;
 };
 
 export const PARTS: Part[] = ["noun", "verb", "adjective", "adverb", "conjunction"];
@@ -31,18 +35,7 @@ const PATTERN = Object.fromEntries(
   }),
 ) as Record<Check, RegExp>;
 
-// A text block's text with one character per position, so an index is an offset into it.
-// Inline code and links to pages are blanked, and where is kept: they are not prose.
-function plainText(block: PMNode) {
-  let text = "";
-  const blanks: [number, number][] = [];
-  block.forEach((child) => {
-    const blank = child.isText ? child.marks.some((m) => m.type.name === "code") : child.type.name !== "hardBreak";
-    if (blank) blanks.push([text.length, text.length + child.nodeSize]);
-    text += blank ? " ".repeat(child.nodeSize) : child.isText ? child.text : "\n";
-  });
-  return { text, blanks };
-}
+const plainText = grammarText;
 
 // The part-of-speech tagger (compromise, about 120 kB) loads the first time it is needed.
 type Tagged = { from: number; to: number; part: Part };
@@ -97,8 +90,8 @@ const measure = (text: string) => ({
 
 // What a text block holds, worked out once per block: a block an edit didn't touch keeps its node.
 type Analysis = ReturnType<typeof measure> & {
+  block: PMNode;
   text: string;
-  blanks: [number, number][];
   prose: boolean;
   style: { from: number; to: number; check: Check }[];
   tagged?: Tagged[];
@@ -107,20 +100,20 @@ const analyses = new WeakMap<PMNode, Analysis>();
 function analyse(block: PMNode): Analysis {
   let a = analyses.get(block);
   if (a) return a;
-  const { text, blanks } = plainText(block);
+  const { text } = plainText(block);
   const prose = !block.type.spec.code;
   const style = prose ? CHECKS.flatMap((check) => [...text.matchAll(PATTERN[check])].map((m) => ({ from: m.index, to: m.index + m[0].length, check }))) : [];
-  a = { ...measure(block.textBetween(0, block.content.size, "\n", " ")), text, blanks, prose, style, tagged: prose ? undefined : [] };
+  a = { block, ...measure(block.textBetween(0, block.content.size, "\n", " ")), text, prose, style, tagged: prose ? undefined : [] };
   analyses.set(block, a);
   return a;
 }
 // Harper reads blanked code as a run of spaces, so what it finds there is dropped.
-const mistakesOf = (a: Analysis) =>
-  a.prose ? mistakesIn(a.text)?.filter((m) => !a.blanks.some(([from, to]) => m.from < to && m.to > from)) : [];
+const mistakesOf = (a: Analysis, pos: number, doc: PMNode) =>
+  a.prose ? grammarMistakes(a.block, pos, doc) : [];
 // Tagging a long page at once would freeze it, so counting can stop at a deadline and go on later.
 const tagsOf = (a: Analysis, deadline = Infinity) => (a.tagged ??= tag && performance.now() < deadline ? tag(a.text) : undefined);
 
-function checkBlock(block: PMNode, pos: number, writing: Writing): Decoration[] {
+function checkBlock(block: PMNode, pos: number, writing: Writing, doc: PMNode): Decoration[] {
   const a = analyse(block);
   const at = pos + 1;
   const decos: Decoration[] = [];
@@ -129,7 +122,7 @@ function checkBlock(block: PMNode, pos: number, writing: Writing): Decoration[] 
   for (const { from, to, check } of a.style)
     if (writing.style.includes(check)) decos.push(Decoration.inline(at + from, at + to, { class: "ll-style", "data-tip": LABEL[check] }));
   if (writing.grammar)
-    for (const m of mistakesOf(a) ?? [])
+    for (const m of mistakesOf(a, pos, doc) ?? [])
       decos.push(Decoration.inline(at + m.from, at + m.to, { class: isSpelling(m.kind) ? "ll-spelling" : "ll-grammar", "data-tip": m.message }));
   return decos;
 }
@@ -140,7 +133,7 @@ function checkAll(doc: PMNode, writing: Writing): DecorationSet {
   if (!marking(writing)) return DecorationSet.empty;
   const decos: Decoration[] = [];
   doc.descendants((node, pos) => {
-    if (node.isTextblock) decos.push(...checkBlock(node, pos, writing));
+    if (node.isTextblock) decos.push(...checkBlock(node, pos, writing, doc));
     return !node.isTextblock;
   });
   return DecorationSet.create(doc, decos);
@@ -217,7 +210,7 @@ export const writingKey = new PluginKey<WritingState>("writing");
 function recheck(doc: PMNode, { writing, checks }: WritingState, blocks: (node: PMNode, pos: number) => boolean, from = 0, to = doc.content.size) {
   doc.nodesBetween(from, to, (node, pos) => {
     if (!node.isTextblock) return true;
-    if (blocks(node, pos)) checks = checks.remove(checks.find(pos + 1, pos + node.nodeSize - 1)).add(doc, checkBlock(node, pos, writing));
+    if (blocks(node, pos)) checks = checks.remove(checks.find(pos + 1, pos + node.nodeSize - 1)).add(doc, checkBlock(node, pos, writing, doc));
     return false;
   });
   return checks;
@@ -236,7 +229,8 @@ export const WritingAids = Extension.create({
         key: writingKey,
         state: {
           init: () => ({ writing: OFF, checks: DecorationSet.empty, dirty: [] }),
-          apply(tr, value, _old, state) {
+          apply(tr, value, old, state) {
+            if (tr.docChanged) mapGrammarKept(old.doc, state.doc, tr.mapping);
             const meta = tr.getMeta(writingKey) as Meta | undefined;
             if (meta === "recheck") {
               let checks = value.checks;
@@ -244,7 +238,7 @@ export const WritingAids = Extension.create({
                 checks = recheck(state.doc, { ...value, checks }, () => true, Math.max(0, r.from - 1), Math.min(state.doc.content.size, r.to + 1));
               return { ...value, checks, dirty: [] };
             }
-            if (meta instanceof Set) return { ...value, checks: recheck(state.doc, value, (node) => meta.has(analyse(node).text) && Boolean(mistakesOf(analyse(node))?.length)) };
+            if (meta instanceof Set) return { ...value, checks: recheck(state.doc, value, (node) => meta.has(analyse(node).text)) };
             if (meta) {
               const writing = meta === "rebuild" ? value.writing : meta;
               return { writing, checks: checkAll(state.doc, writing), dirty: [] };
@@ -260,7 +254,7 @@ export const WritingAids = Extension.create({
           // Harper checks spelling too, so the browser's own red underline would be a second one.
           attributes: (state): Record<string, string> => ({
             ...(dimming(state) && { class: "ll-focusing" }),
-            ...(writingKey.getState(state)!.writing.grammar && { spellcheck: "false" }),
+            ...((writingKey.getState(state)!.writing.grammar || writingKey.getState(state)!.writing.quiet) && { spellcheck: "false" }),
           }),
           decorations(state) {
             const { checks } = writingKey.getState(state)!;
@@ -326,11 +320,11 @@ export type Count = Omit<ReturnType<typeof measure>, "filled"> & {
 };
 const zero = <K extends string>(keys: K[]) => Object.fromEntries(keys.map((k) => [k, 0])) as Record<K, number>;
 
-export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline = Infinity): { count: Count; done: boolean } {
+export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline = Infinity, checkGrammar = true): { count: Count; done: boolean } {
   if (!tag) loadTagger().catch(console.error);
   const c = { words: 0, characters: 0, sentences: 0, paragraphs: 0, parts: zero(PARTS), style: zero(CHECKS), grammar: {} as Record<string, number> };
   let parts = Boolean(tag);
-  let grammar = true;
+  let grammar = checkGrammar;
   let done = true;
   doc.nodesBetween(from, to, (node, pos) => {
     if (!node.isTextblock) return true;
@@ -347,8 +341,7 @@ export function countText(doc: PMNode, from = 0, to = doc.content.size, deadline
     if (parts && !tagged) [parts, done] = [false, false];
     for (const t of tagged ?? []) if (inside(t)) c.parts[t.part]++;
     for (const f of a.style) if (inside(f)) c.style[f.check]++;
-    // Asked of every block, so Harper starts reading all of them at once.
-    const mistakes = mistakesOf(a);
+    const mistakes = checkGrammar ? mistakesOf(a, pos, doc) : [];
     if (!mistakes) grammar = false;
     for (const f of mistakes ?? []) if (inside(f)) c.grammar[f.kind] = (c.grammar[f.kind] ?? 0) + 1;
     return false;

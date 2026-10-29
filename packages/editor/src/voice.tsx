@@ -6,8 +6,9 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import type { Asset, AssetStore } from "./assets";
 import { Player } from "./player";
+import { captureVoiceReview, type VoiceReview } from "./voice-review";
 
-type VoiceOptions = { assets: AssetStore; onSaved?: () => void };
+type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void; onDetached?: (recordingId: string, asset: Asset) => Promise<void> };
 
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -30,13 +31,14 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   const cancelled = useRef(false);
   const busy = useRef(false);
   const attempt = useRef(0);
+  const committed = useRef<string | null>(null);
   const editable = editor.isEditable && !editor.view.dom.closest("[data-annotate]");
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      cancelled.current = true;
+      if (!committed.current) cancelled.current = true;
       if (recorder.current?.state !== "inactive") recorder.current?.stop();
       stream.current?.getTracks().forEach((track) => track.stop());
     };
@@ -57,6 +59,16 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     return () => window.clearInterval(timer);
   }, [phase]);
 
+  const commit = () => {
+    const pos = getPos();
+    if (pos === undefined || editor.isDestroyed) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (current?.type.name !== "voiceRecording") return;
+    committed.current = crypto.randomUUID();
+    // The save's identity is not a separate edit for Undo.
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, recordingId: committed.current }).setMeta("addToHistory", false));
+  };
+
   const transcribe = async (asset: Asset) => {
     setPhase("transcribing");
     try {
@@ -71,7 +83,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       const paragraphs = text.split(/\n+/).filter(Boolean).map((line) => editor.schema.nodes.paragraph.create(null, editor.schema.text(line)));
       // Undoing the transcript must keep the saved audio, even when recognition finishes at once.
       editor.view.dispatch(closeHistory(editor.state.tr)
-        .setNodeMarkup(pos, undefined, { ...current.attrs, transcribed: true })
+        .setNodeMarkup(pos, undefined, { ...current.attrs, transcribed: true, transcript: text })
         .insert(pos + current.nodeSize, paragraphs));
       editor.view.dispatch(closeHistory(editor.state.tr));
     } catch (cause) {
@@ -90,8 +102,18 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     setError("");
     try {
       const asset = await assets.put(file);
-      if (!alive.current) return;
-      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime });
+      if (!alive.current || editor.isDestroyed) {
+        if (committed.current) await options.onDetached?.(committed.current, asset);
+        return;
+      }
+      const pos = getPos();
+      if (pos === undefined || editor.state.doc.nodeAt(pos)?.attrs.recordingId !== committed.current) {
+        pending.current = null;
+        busy.current = false;
+        setPhase("idle");
+        return;
+      }
+      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, recordingId: committed.current });
       pending.current = null;
       options.onSaved?.();
       await transcribe(asset);
@@ -99,7 +121,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       if (alive.current) {
         setError(`The recording could not be saved: ${message(cause)}. Keep this page open and try again.`);
         setPhase("idle");
-      }
+      } else console.error("A stopped recording could not finish saving after its page closed.", cause);
       busy.current = false;
     }
   };
@@ -109,6 +131,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     busy.current = true;
     const started = ++attempt.current;
     cancelled.current = false;
+    committed.current = null;
     setError("");
     setPhase("starting");
     try {
@@ -129,11 +152,13 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       capture.onerror = () => {
         if (!alive.current || started !== attempt.current) return;
         setError("The microphone stopped responding. Any audio captured so far will be saved.");
+        commit();
         if (capture.state !== "inactive") capture.stop();
       };
       capture.onstop = () => {
         input.getTracks().forEach((track) => track.stop());
-        if (!alive.current || cancelled.current || started !== attempt.current) return;
+        if ((!alive.current && !committed.current) || cancelled.current || started !== attempt.current) return;
+        if (!committed.current) commit();
         stream.current = null;
         recorder.current = null;
         const type = capture.mimeType || chunks[0]?.type || "audio/mp4";
@@ -171,7 +196,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   };
 
   return (
-    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" contentEditable={false}>
+    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" data-voice-id={node.attrs.recordingId ? `voice-${node.attrs.recordingId}` : undefined} contentEditable={false}>
       {node.attrs.src && <Player kind="audio" src={node.attrs.src} onError={() => setError("The saved recording cannot be played. The audio file may have been moved or deleted.")} />}
       {editable && <div className="ll-row flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-sm" data-controls>
         <Mic className="size-4 shrink-0 text-muted-foreground" />
@@ -183,6 +208,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
             : node.attrs.transcribed ? "Voice recording · transcript added below" : node.attrs.src ? "Voice recording" : "Record a voice note"}
         </span>
         {phase === "recording" && <Button size="xs" variant="outline" onClick={() => {
+          commit();
           setPhase("saving");
           if (recorder.current?.state !== "inactive") recorder.current?.stop();
         }}><Square className="size-4 fill-current" />Stop and transcribe</Button>}
@@ -195,6 +221,11 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
           setError("");
           void transcribe({ url: node.attrs.src, name: node.attrs.name, size: node.attrs.size, mime: node.attrs.mime });
         }}>Retry transcription</Button>}
+        {phase === "idle" && node.attrs.transcript && options.onReview && <Button size="xs" variant="outline" onClick={() => {
+          const pos = getPos();
+          const review = pos === undefined ? null : captureVoiceReview(editor, pos);
+          if (review) options.onReview?.(review);
+        }}>Review transcript</Button>}
       </div>}
       {error && <p className="text-muted-foreground text-sm" role="alert">{error}</p>}
     </NodeViewWrapper>
@@ -207,7 +238,7 @@ export const VoiceRecording = Node.create<VoiceOptions>({
   atom: true,
   draggable: true,
   addOptions: () => ({ assets: null as unknown as AssetStore }),
-  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" }, autostart: { default: false, rendered: false } }),
+  addAttributes: () => ({ src: { default: null }, name: { default: null }, size: { default: null }, mime: { default: null }, recordingId: { default: null }, transcript: { default: null }, transcribed: { default: false, parseHTML: (element) => element.getAttribute("transcribed") === "true" }, autostart: { default: false, rendered: false } }),
   parseHTML: () => [{ tag: 'div[data-voice-recording]' }],
   renderHTML: ({ HTMLAttributes }) => ["div", mergeAttributes(HTMLAttributes, { "data-voice-recording": "" }), ["audio", { src: HTMLAttributes.src, controls: "" }]],
   addNodeView: () => ReactNodeViewRenderer(VoiceView, { stopEvent: ({ event }) => !!(event.target as Element)?.closest?.("[data-controls]") }),

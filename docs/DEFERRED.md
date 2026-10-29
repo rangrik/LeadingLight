@@ -5,6 +5,15 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-10-28 | Native automation focus after permission or capture-panel transitions | CUA sometimes lost the panel or could not activate main-window voice controls. Normal relaunch restored recording, playback and transcript review; all requested audio checks passed. A tool-versus-app cause was not established. | Direct user interaction reproduces it, or native automation can trace the key-window transition without changing focus itself. |
+| 2026-10-28 | Recover a stopped recording when storage fails after leaving | The failure is logged, but the unsaved audio stays in the closed editor's memory and cannot be retried from the reopened page, especially across native capture webviews. Save failures while the original editor stays open remain retryable. | Add retained pending recordings and recovery UI that work across native windows. |
+| 2026-10-28 | Browser audio, camera/microphone prompts and a native page accessibility tree | The transport carries images and input. Synthetic devices work in full Chromium but fail in current headless-shell; removing the mute flag provides neither audio transport nor per-tab controls. A text snapshot is not a native accessibility tree. | Validate a full-engine/transport and native permission design with macOS media and assistive tools. |
+| 2026-10-28 | Unrestricted browser-wide CDP, extension attachment, profile import and cloud browsing | Page-scoped developer commands now have separate approval. Browser-wide process/profile access and attaching to an existing browser need a distinct permission and lifecycle model; cloud browsing needs a service. | Build and test the separate integration rather than widening a page grant. |
+| 2026-10-28 | Annotation text replacement and rotated/skewed/mirrored frames | CSS previews restore styles safely; text replacement can destroy child nodes. Positive axis-aligned frame transforms are supported, other transforms fail explicitly. | Add a reversible DOM editing model and accurate transform/hit-testing tests. |
+| 2026-10-28 | Time-scoped cookie/cache/website-data clearing | History has time ranges. Chromium storage commands cannot establish time-scoped removal across every website store; the dialog explicitly clears website data for all time. | A storage API or tracked store lifecycle can prove consistent time-scoped clearing. |
+| 2026-10-28 | The caret scroll after an edit made by code | The editor's caret scroll (`packages/editor/src/caret-scroll.ts`) runs a frame after a key, to the caret as it is then. An edit made by code inside that frame moves the page to wherever it put the caret; composer.spec's 80-line insert did, half the time. A person can't act inside one frame, so only tests meet it; the test now waits a frame. | A feature edits the page by code right after a key, or the plugin is next touched: drop the pending frame on any change that wasn't typed. |
+| 2026-10-28 | The daily card in a pane under 260 px | The buttons stack and stay inside the card, but from about 230 px the label is cut ("Left over: 3 thin…"), and in the stack the ghost buttons' words sit 8 px inside the outline button's edge. Panes that narrow come only from three panes plus the panel in a small window. | A floor on pane width, or a card whose buttons fold into one menu when the pane is narrow. |
+| 2026-10-28 | The in-the-middle tag missing right after the first capture, in WebKit | Two overlapping page refreshes (`ensureTag`, `lib/capture.ts`) can leave the new tag page out of `space.get().pages` until a reload, so the Captures count and the daily card miss it. Seen in headless WebKit after `__tail.seed()`; the real app already has the tag. | The first capture in a fresh space misses the Captures count, or `ensureTag` is next touched: make its refresh wait for the one before it. |
 | 2026-10-27 | The bar following the page in a narrow window | At 1000 px or less the bar's view is a pane with no pin, so a page with suggestions does not switch it. Slice 3 kept it so: with no pin, following would take over a pane the person chose with no way to stop it. | Someone in a narrow window misses suggestions, or the narrow pane gets a pin. |
 | 2026-10-27 | Suggestions that expire by themselves | An offer stays until its block's words change, a nod, or the daily card's Dismiss all, so one never acted on comes back on the card each day. | The card grows past a handful most mornings. |
 | 2026-10-27 | Hand off driven end to end in the browser | It needs a project with a linked folder and starts a real agent in the project runtime, so the slice's smoke checked only its muted state with Projects off. | The first time it is used in the installed app: check the brief names each item and its pages, and the card reads "Handed to an agent." until the report shows under Feed. |
@@ -68,7 +77,6 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-22 | Checkmarks on the writing tools in the Mac menu bar | The View menu's items toggle but don't show their state; the Writing menu at the panel's top right does. Showing it means check items kept in step from the webview. | When asked. |
 | 2026-10-22 | "Find a setting" finds nothing in Writing, Types, Properties, Objects, Capture or AI | Its index is Shipyard's own list of sections (vendor/shipyard/.../settings/find.tsx), which we don't edit; it still names Terminal, Boxes and the rest. | With the designer's Settings pass (the brief), or when Settings gets a find of our own. |
 | 2026-10-22 | Syntax highlight in Solarized Light: adjectives and conjunctions are both olive | The colours are the theme's own yellow and green, made readable on the page; Solarized's two are close. Every other theme checked tells them apart. | Someone uses Syntax with Solarized Light, or themes get colours of their own for it. |
-| 2026-10-22 | Fixing a grammar mistake from its underline, ignoring one, or adding a word Harper doesn't know | Harper offers suggestions, ignores and a word list; each needs a menu on the underline and a place to keep what was ignored. Pointing at a mistake shows its reason. | Someone fixes many mistakes by hand, or a correct word keeps being underlined. |
 | 2026-10-22 | A word still being typed can get a red underline when typing pauses mid-word ("te" on the way to "teh") | Telling a finished word from an unfinished one needs the cursor in the check; the next pause after the word is done puts it right. | It gets in the way of writing. |
 | 2026-10-23 | synara's Goal, Debug and Fast modes, auto-compact, and follow-ups queued or steered into a running turn | Plan mode covers "think first" for notes; Fast mode is Opus-only and billed as extra usage; a turn here is short, so Send waits for it. | When turns run long enough that waiting to say more gets in the way. |
 | 2026-10-23 | Claude Code's file and shell tools (Read, Edit, Bash) for the agent | It works on notes and the web; reaching the rest of the Mac needs a different trust story than Ask for approval. | When a note's task needs a file on the Mac. |
@@ -113,7 +121,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-24 | Unpin on the panel's no-page card hides it until Ask is pressed again | Floating, it shows only with a page in front, and unpinning there closes it. | Someone unpins from a list and expects it back. |
 | 2026-10-24 | Browser build only: pinned left with the sidebar folded, the sidebar button sits in the page card's header mid-window | The Mac app keeps that button at the window's edge; the browser build holds it in the first page card. | If the browser build ships. |
 | 2026-10-24 | A relinked folder keeps its runtime location's scripts | Relinking adds the location again, which drops what was set on it (its setup scripts). Nothing sets them yet. | Slice 8a, when a project keeps scripts or services on its location: carry them across a relink. |
-| 2026-10-24 | Toasts sit over the Claude/Codex usage line at the bottom of the sidebar | Both are main's (CLI updates and plan usage), not Project 1's; moving either changes every toast. | If a toast hides the usage someone wants to read. |
+| 2026-10-24 | Toasts can cover the Claude/Codex usage line or browser feedback controls | Notification placement belongs to the whole app; moving it for one pane shifts the overlap elsewhere. The toast can be dismissed. | Review placement with the app's other floating surfaces. |
 | 2026-10-24 | Three panes and the Ask window at 820 px squeeze the page title to a letter per line | Panes keep their minimum widths and the page card gives way. A layout question beyond Project 1. | If someone works with that many panes on a small window. |
 | 2026-10-24 | An earlier turn's "Worked for" can show the next turn's time for a moment while that turn starts | The chat lines up turns with the runtime's ledger, which lists a new turn a little before or after its message; it settles within a poll. | If it's noticed; the fix is the runtime naming each turn's message. |
 | 2026-10-24 | A turn the relink stopped (its folder had moved) reads "Worked", not Stopped | Its session is removed so the chat can pick up in the new place, and with it the ledger that said how that turn ended. | If it misleads someone; the runtime would need to keep a removed session's turns. |
@@ -128,6 +136,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-24 | Codex adds each Git checkout it works in to ~/.codex/config.toml as trusted | Codex writes it itself when a project agent runs in a checkout (Project 1's acceptance clone is listed too); the runtime changes none of the person's settings. | Someone minds the entries, or Codex gains a way to run a thread without recording trust. |
 | 2026-10-26 | Web capture of content behind sign-in, generated only by page scripts, or streamed media | Save webpage keeps the downloaded readable HTML and bounded media files; it does not run a website or borrow browser cookies. Missing media stays as a labelled link. | Add a browser extension or a capture flow for an already signed-in browser when these sources are needed. |
 | 2026-10-26 | Imported webpage table grids and inline data images | Table cell text is kept in reading order as paragraphs; media without an http address gets a counted placeholder. Preserving grids and decoding inline images need their own conversion checks. | Sources need faithful table layout or contain useful inline images. |
+| 2026-10-26 | Original transcript review for older voice blocks | Older recordings did not store a transcript snapshot or recording id. Guessing from neighboring paragraphs could misattribute edited text. Their audio and editable text remain available; new recordings and retried transcriptions carry snapshots. | A user needs to import or explicitly attach an older transcript to its recording. |
 | 2026-10-26 | Tail: a small gap between the ellipsis and the words after a truncated name, in a split | A row's widest name is cut to the room the other words leave, rounded down to a whole pixel, so in a narrow pane a sliver shows between "…" and the words after it. The words still show, which was the point. | The designer's pass on tail's rows, or someone notices it. |
 | 2026-10-26 | Tail: the model can decline a line but not find one | The word rules find the candidates and the model picks among them, so context stays small and each line can be checked. A line the rules don't see never shows. | Real beats show the rules missing what matters; then let the model propose a kind from the digest. |
 | 2026-10-26 | Tail: chips on list items and headings | A pause is read only on a top-level paragraph, the block the chip's placement and the nod's edit know. | Someone writes tasks in lists and misses the chip. |
@@ -142,11 +151,52 @@ promoting stable downloads. Intel needs separately built runtime helpers and a f
 Intel smoke test. In-app updates need their own signing keys and an update flow;
 add that when the downloadable preview distribution is proven.
 
+## 2026-10-28 — Upstream Shipyard test fixtures
+
+The optional all-workspace unit run passes 564 of 568 vendored tests. Three depend
+on upstream `internal/` fixtures absent from our vendored subset (devtools, doctor,
+and screen). One expects distinct berth-dark syntax colors but sees `#fafafa` for
+all three. The vendored tree is identical to the merged main version and cannot be
+edited here. Revisit with the next Shipyard sync and its test-fixture manifest;
+LeadingLight's desktop, image-service, and release tests are run separately.
+
+## 2026-10-28 — Update toast over a narrow review sheet
+
+At a 520 px browser width, main's "Codex update available" toast can cover Listen
+in the grammar sheet for its 15-second lifetime. Independent QA reproduced this
+with a fresh browser profile. The toast is unrelated to this merge; changing its
+layer affects every modal, so notification placement needs a separate fix. Revisit
+before the next narrow-window polish pass. Screenshot:
+`apps/desktop/qa/report/mi-shots/x-update-toast-over-sheet-520.png`.
+
+## 2026-10-28 — Very rapid Tab repeat across dialog edges
+
+Base UI 1.9 moves focus from its hidden dialog guards on the next animation frame.
+Several Tab presses before that frame can briefly reach the background in Chromium;
+focus then returns inside. This also reproduces in the unchanged Delete page dialog.
+At 200 ms between keys, forward and backward focus stay contained at 1280 and 520 px.
+A custom grammar-only trap would duplicate shared focus handling, so it is not added.
+Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing speed.
+Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
+`engine-focus-control.mjs`. Native behavior has not been tested.
+
 ## 2026-10-28 — Cloud preview
+
+Detached voice saves still need a failure probe where the page save fails while
+the user leaves it (reviewed 2026-10-29). The audio file may be saved without being
+attached to its block. Slow writes, failed audio writes and ordinary detached saves
+pass; recovery from both failures together is outside this pairing merge. Revisit
+before claiming full recording recovery from disk failures.
+
+On 2026-10-29, the combined browser run also lost the audio block while the capture
+review test clicked its transcript and typed; the review button then timed out.
+Four isolated reruns passed unchanged. Keep the failing trace in
+`/tmp/leadinglight-main-merge-playwright`; investigate selection/layout timing if
+this recurs or before broad voice acceptance. It is not claimed fixed.
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private and source changes remain uncommitted. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
+| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
 | 2026-10-28 | Native account handoff, portable Mac attachments and sync-device linking without a recovery key | Agent pairing is separate from note sync. Mac file URLs and project folders cannot be used in Safari; native session exchange needs a registered redirect. | Before promising full Mac-to-web sync; add encrypted blob transfer and secure native OAuth handoff. |
 | 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
 | 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing type/property definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |

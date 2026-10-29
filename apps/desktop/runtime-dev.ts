@@ -117,7 +117,9 @@ const handler: Connect.NextHandleFunction = (req, res) => {
     return;
   }
   // Everything else goes to berthd as it is, streams included (its events).
-  const up = request({ socketPath: sock, method: req.method, path: url.pathname + url.search, headers: { "content-type": "application/json" } }, (r) => {
+  // DELETE bodies need explicit framing; Node otherwise treats them as bodyless.
+  const framing = req.headers["content-length"] ? { "content-length": req.headers["content-length"] } : req.headers["transfer-encoding"] ? { "transfer-encoding": "chunked" } : {};
+  const up = request({ socketPath: sock, method: req.method, path: url.pathname + url.search, headers: { "content-type": "application/json", ...framing } }, (r) => {
     res.writeHead(r.statusCode ?? 502, { "content-type": r.headers["content-type"] ?? "application/json" });
     r.pipe(res);
     // berthd gone mid-answer (a restart): the answer ends, so a stream's reader opens it again.

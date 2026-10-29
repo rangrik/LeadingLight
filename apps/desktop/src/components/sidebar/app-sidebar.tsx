@@ -1,9 +1,9 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place).
+// usage as the footer (NavUser's place), and a Browser entry.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Globe } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +16,8 @@ import {
 } from "@leadinglight/ui/components/sidebar";
 import { CloudButton } from "~/components/cloud-settings";
 import { UsageButton } from "~/components/usage-button";
+import { openBeside } from "~/lib/panes";
+import { browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -81,6 +83,12 @@ export function AppSidebar({
               <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={pick(onToday)}>
                 <CalendarDays />
                 <span>Today</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => openBeside(browserView(""))}>
+                <Globe className="size-4" />
+                <span>Browser</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

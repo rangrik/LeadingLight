@@ -38,7 +38,7 @@ test("Focus mode keeps the line being written in the middle", async ({ page }) =
 // Seam: Harper's wasm and worker load through the bundler and report back to the editor and header,
 // and the reason reaches COSS's tooltip. Catches grammar that never arrives, or the slow native tip.
 test("Grammar check underlines, explains and counts a misspelling", async ({ page }) => {
-  await open(page, {});
+  await open(page, { grammarMode: "inline" });
   await page.keyboard.type("I recieved it.");
   const word = page.getByRole("textbox", { name: "Page body" }).locator(".ll-spelling");
   await expect(word).toHaveText("recieved", { timeout: 15000 });
@@ -74,7 +74,10 @@ test("Narrow cards keep the title whole and show only whole counts", async ({ pa
     const edge = await header.locator("[aria-label=Counts]").evaluate((b) => b.parentElement!.getBoundingClientRect().right + 0.5);
     for (const count of await header.locator("[data-count]").all())
       if (await count.isVisible()) expect((await count.boundingBox())!.x + (await count.boundingBox())!.width).toBeLessThanOrEqual(edge);
+    await header.hover();
+    await expect(header.getByRole("button", { name: "History and authorship" })).toBeVisible();
   }
+  await page.screenshot({ path: "qa/report/merged-narrow-cards.png", animations: "disabled" });
 });
 
 // Seam: a page's type against Settings › Writing › Use on. Catches the tools on records (a person)

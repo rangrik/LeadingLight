@@ -18,7 +18,7 @@ import { openPage } from "~/lib/panes";
 import { iconFor, pageOf, space } from "~/lib/space";
 import { newPage } from "~/lib/templates";
 
-export function TurnIntoPage({ selection, onClose }: { selection: PageSelection; onClose: () => void }) {
+export function TurnIntoPage({ selection, onClose, recording }: { selection: PageSelection; onClose: () => void; recording?: { pageId: string; id: string } }) {
   const { types, props } = space.use();
   const choices = types.filter((type) => type.id !== "daily" && !type.made);
   const suggested = selection.text.trim().split(/\s+/).slice(0, 3).join(" ");
@@ -48,7 +48,9 @@ export function TurnIntoPage({ selection, onClose }: { selection: PageSelection;
     try {
       const page = await newPage(type.id, {
         title: title.trim() || suggested,
-        content: selection.content,
+        content: recording ? { ...selection.content, content: [...(selection.content.content ?? []), {
+          type: "paragraph", content: [{ type: "text", text: "Source recording", marks: [{ type: "link", attrs: { href: `ll:${recording.pageId}#voice-${recording.id}` } }] }],
+        }] } : selection.content,
         properties: projectProp ? { [projectProp.id]: project ? [project] : [] } : {},
       });
       const linked = selection.replaceWithLink(page.id);
@@ -69,8 +71,8 @@ export function TurnIntoPage({ selection, onClose }: { selection: PageSelection;
     <Dialog open onOpenChange={(open) => { if (!open) close(); }}>
       <DialogPopup finalFocus={false} showCloseButton={!busy}>
         <DialogHeader>
-          <DialogTitle>Turn into</DialogTitle>
-          <DialogDescription>Keep the selected text in a new page, with a link in its place.</DialogDescription>
+          <DialogTitle>{recording ? "Create from recording" : "Turn into"}</DialogTitle>
+          <DialogDescription>{recording ? "Keep these words in a new page. Your recording and transcript stay unchanged." : "Keep the selected text in a new page, with a link in its place."}</DialogDescription>
         </DialogHeader>
         <Form className="contents" onSubmit={(event) => { event.preventDefault(); void create(); }}>
           <DialogPanel className="grid gap-4">

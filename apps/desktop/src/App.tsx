@@ -34,7 +34,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
-import { hostCapture, openIdea, saveCapture, saveWebpage } from "~/lib/capture";
+import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
@@ -139,9 +139,11 @@ export default function App() {
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
-        // The panes left open last time, less pages gone since and live browsers; else the top of
-        // Recent (which leaves tasks out), in the order chosen.
-        const exists = (id: string) => (isPageView(id) ? list.some((p) => p.id === id) : !id.startsWith(BROWSER_VIEW));
+        // Browser tabs restore on demand; a browser belonging to a deleted page does not.
+        const exists = (id: string) => {
+          const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
+          return !page || list.some((p) => p.id === page);
+        };
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
@@ -171,6 +173,7 @@ export default function App() {
   const captureHost = useMemo<CaptureHost>(
     () => ({
       save: saveCapture,
+      saveVoice,
       saveWeb: saveWebpage,
       open: (id) => {
         setCapture(false);

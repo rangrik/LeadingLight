@@ -128,8 +128,9 @@ export function DropOverlay({ at }: { at: (r: Rect) => React.CSSProperties }) {
     );
   return (
     <div className="pointer-events-none absolute inset-0 z-30">
+      {/* Over a header the tint is opaque, so none of the header shows beside the label. */}
       <div
-        className="absolute flex items-center justify-center rounded-xl border-2 border-info/60 border-dashed bg-info/10 transition-[left,top,width,height] duration-150 ease-out"
+        className={`absolute flex items-center justify-center rounded-xl border-2 border-info/60 border-dashed transition-[left,top,width,height] duration-150 ease-out ${target.box ? "bg-[color-mix(in_oklab,var(--color-info)_10%,var(--color-background))]" : "bg-info/10"}`}
         style={target.box ?? at(target.rect!)}
       >
         <span className="flex max-w-[calc(100%-16px)] items-center gap-1.5 rounded-md border bg-popover px-2 py-1 text-popover-foreground text-xs shadow-sm">
