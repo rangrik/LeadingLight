@@ -1,5 +1,5 @@
 import { CLAUDE_EFFORTS, isClaude } from "~/lib/ai-prefs";
-import { isNative } from "~/lib/platform";
+import { isDesktop, isMobile } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { createStore } from "~/lib/state";
 
@@ -37,9 +37,10 @@ let loading: Promise<void> | null = null;
 export function loadCodex(fresh = false): Promise<void> {
   if (loading && !fresh) return loading;
   loading = (async () => {
+    if (await isMobile) { codex.set({ state: "missing", models: [], error: "Local agents require the Mac app." }); return; }
     let r: Json;
     try {
-      if (await isNative) {
+      if (await isDesktop) {
         const { invoke } = await import("@tauri-apps/api/core");
         r = await invoke("codex_status");
       } else if (projectPrefs.get().enabled && !new URLSearchParams(location.search).has("codex")) {

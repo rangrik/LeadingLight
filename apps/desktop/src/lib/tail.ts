@@ -12,7 +12,7 @@ import { localPrefs } from "./local-prefs";
 import { docText, type ObjectSummary, objects } from "./objects";
 import { docMarkdown } from "./page-markdown";
 import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
-import { isNative } from "./platform";
+import { isMobile, isNative } from "./platform";
 import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
 import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, lineAt, MAX_LINES, type Place, quietForm, quietLine, record, seenOn, sentenceOf, type Shown, TODAY, upgraded } from "./tail-memory";
@@ -790,6 +790,7 @@ export function nodFront() {
 // A beat at app open, then every while, and when the window comes back after being away.
 let started = false;
 export async function startTail() {
+  if (await isMobile) return;
   await isNative;
   // An older ledger's ignores go, and the quiet sentences they set with them.
   const old = ledger.get();

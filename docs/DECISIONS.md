@@ -566,3 +566,18 @@ Short lessons are authored for named rules, with optional practice. Saved tips s
 not a mistake history. Dictionary words stay on this device. Listening uses only local English
 system voices. Neither the checker nor practice assigns a score or claims someone has learned
 something. See WRITING-COACH.md for the scenarios and questions to test with the writer.
+
+## iPad uses the same editor and store
+
+The iPad app is a Tauri iOS target of the existing React app. Pages keep the same schema
+and TipTap content, with SQLite and files on each device. Native storage and Mac capabilities
+are separate checks: an iPad must never start a CLI, reserve traffic-light space, or show a
+browser agent stand-in as a real answer.
+
+Attached files use iOS Quick Look through a small native plugin. It accepts only an asset
+filename, checks the resolved path stays inside the app's assets, and leaves the file unchanged.
+
+Account sync belongs to the existing cloud work in the “Compare versioning options” chat
+(worktree `c7fe`, checked 2026-10-28). Its web service is already deployed; native account
+handoff and portable attachments are still pending there. The iPad target does not invent a
+second sync service or imply that local Mac data has moved. See `docs/IPAD.md`.

@@ -1,6 +1,7 @@
 fn main() {
     println!("cargo:rerun-if-changed=swift/Transcribe.swift");
-    println!("cargo:rerun-if-changed=Info.plist");
+    println!("cargo:rerun-if-changed=Info.macos.plist");
+    println!("cargo:rerun-if-changed=Info.ios.plist");
     println!("cargo:rerun-if-changed=Entitlements.plist");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         let target = std::env::var("TARGET").unwrap();

@@ -1,4 +1,5 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
+import { resolveAssetUrls } from "./assets";
 import { isNative } from "./platform";
 import type { ObjectStore } from "./store";
 import { localStore } from "./store-local";
@@ -9,13 +10,13 @@ export type { LLObject, ObjectPatch, ObjectSummary, ProjectFolder } from "./stor
 const store = isNative.then((native) => (native ? sqliteStore : localStore));
 
 export const objects: ObjectStore = {
-  list: async () => (await store).list(),
-  get: async (id) => (await store).get(id),
-  create: async (init) => (await store).create(init),
+  list: async () => resolveAssetUrls(await (await store).list()),
+  get: async (id) => resolveAssetUrls(await (await store).get(id)),
+  create: async (init) => resolveAssetUrls(await (await store).create(init)),
   update: async (id, patch) => (await store).update(id, patch),
   remove: async (id) => (await store).remove(id),
-  containing: async (text) => (await store).containing(text),
-  catalog: async () => (await store).catalog(),
+  containing: async (text) => resolveAssetUrls(await (await store).containing(text)),
+  catalog: async () => resolveAssetUrls(await (await store).catalog()),
   putType: async (type) => (await store).putType(type),
   deleteType: async (id) => (await store).deleteType(id),
   putProp: async (prop) => (await store).putProp(prop),

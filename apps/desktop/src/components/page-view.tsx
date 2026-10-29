@@ -18,6 +18,7 @@ import { WorkPanel } from "~/components/work-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
+import { useMobile } from "~/lib/platform";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
@@ -57,6 +58,7 @@ const fit = (el: HTMLTextAreaElement | null) => {
 };
 
 export function PageView({ page }: { page: LLObject }) {
+  const mobile = useMobile();
   const [title, setTitle] = useState(page.title);
   const [typeId, setTypeId] = useState(page.typeId);
   const keysFor = useKeysFor();
@@ -392,7 +394,7 @@ export function PageView({ page }: { page: LLObject }) {
           <BlockEditor
             assets={assets}
             content={page.content}
-            onAsk={openAsk}
+            onAsk={mobile ? undefined : openAsk}
             onTurnInto={report ? undefined : setTurnInto}
             onVoiceReview={report ? undefined : setVoiceReview}
             onVoiceSaved={report ? undefined : () => { void markCapture(page.id, "voice").catch(() => toastManager.add({ type: "error", title: "Recording saved", description: "It could not be added to the inbox. Your audio is still in this page." })); }}

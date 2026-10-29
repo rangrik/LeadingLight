@@ -189,3 +189,36 @@ editing and navigation back still work. Leave toolbar adaptation to the browser'
 responsive pass; revisit before recommending side-by-side browsing in small windows.
 Evidence: `apps/desktop/qa/report/writing-coach-delivery-2026-10-28/`
 `delivery-independent/j1-520-5-browser-zoom.png`.
+
+## 2026-10-28 — iPad delivery and native account sync
+
+The iPad target is built separately from the active cloud work in the “Compare versioning
+options” chat. That implementation still defers native account handoff and portable Mac
+attachments. Reuse its encrypted journal and account service after integration; do not add a
+second sync protocol. This is a delivery dependency, so Mac-to-iPad data access is not ready
+until a real two-device check passes. See `IPAD.md`.
+The latest handoff confirms browser encrypted note sync; browser-to-Mac pairing is next.
+
+TestFlight remains unavailable without Apple Developer membership. On 2026-10-29 the user chose
+direct development testing; LeadingLight Dev was signed with their Personal Team and installed
+on the connected iPad. The user then authorized agent-led native testing: persistence, Files
+import and cancellation, offline attachments, Quick Look and onscreen keyboard checks passed.
+Immediate Home save checks passed once each for body and capture; repeated suspension timing,
+multitasking resize and very long pages still need device coverage. Revisit during the next
+hardware pass; browser equivalents do not establish those native results. The rotation fix
+passed on device: the fifth-paragraph caret stayed visible with the keyboard open and no input.
+A signed update exposed a stale sandbox path in the saved PNG URL; its recovery fix now passes
+on device without reimport or data reset. A Wi-Fi-off cold launch kept the original PNG and text,
+and the original PDF opened offline in Quick Look. Evidence: `apps/desktop/qa/report/ipad-device/attachments-recovered-offline.png`.
+The development profile expires November 5, 2026 at 12:16 AM Pacific.
+
+## 2026-10-29 — SQLite privacy declaration before TestFlight
+
+The iOS release imports `statfs` and `fstatfs` from bundled SQLite 3.46.0. Those calls inspect
+filesystem type and read-only flags; we have not established an approved DiskSpace reason
+for that purpose. The manifest declares the proven app-container timestamp use (`C617.1`),
+without inventing a free-space use. This is an unresolved Apple acceptance risk, not an
+observed rejection. [SQLite recommends the system library](https://sqlite.org/forum/info/d404fb0a8b3d9e74),
+but SQLx 0.8.6 calls `sqlite3_unlock_notify`, which Apple's iOS SDK does not export, so switching
+libraries alone would break the build. Revisit before TestFlight upload: resolve the declaration
+with Apple or adopt a compatible SQLite integration, then check the final binary and validate it.

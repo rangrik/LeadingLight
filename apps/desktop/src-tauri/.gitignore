@@ -1,3 +1,5 @@
 /gen/schemas
+# Recreated by pnpm ios:init; native settings live in tauri.ios.conf.json.
+/gen/apple/
 # The project runtime, built by scripts/project-runtime/build.sh
 /binaries/

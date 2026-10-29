@@ -11,6 +11,11 @@
     "sync:shipyard": "scripts/sync-shipyard.sh",
     "install:app": "scripts/install-app.sh",
     "install:dev-app": "scripts/install-dev-app.sh",
+    "ios:init": "scripts/ios.sh init --ci",
+    "ios:build": "scripts/ios.sh build --target aarch64 --debug --no-sign --archive-only",
+    "ios:build:sim": "scripts/ios.sh build --target aarch64-sim --debug --no-sign --archive-only",
+    "ios:archive": "scripts/ios.sh release-archive",
+    "ios:export": "scripts/ios.sh release-export",
     "runtime:build": "scripts/project-runtime/build.sh && scripts/project-runtime/build-tmux.sh",
     "runtime:probe": "node scripts/project-runtime/probe.mjs"
   }

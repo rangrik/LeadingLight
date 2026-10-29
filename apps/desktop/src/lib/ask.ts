@@ -1,5 +1,6 @@
 import type { BlockEditorHandle } from "@leadinglight/editor/editor";
 import { useSyncExternalStore } from "react";
+import { platform } from "~/lib/platform";
 import { hideBar, showBar, showing } from "~/lib/bar";
 
 // What asking is about: the page in front, the words selected when Ask was pressed, and
@@ -48,6 +49,7 @@ export const askEditor = () => editor;
 // Ask on the words given, or the editor's own selection: words get the bar; none, Ask itself.
 // ⌘J from inside Ask closes it, as the Ask button does.
 export function openAsk(quote?: Quote | null) {
+  if (!["macos", "browser"].includes(platform.get())) return;
   if (!state.page) return;
   if (showing("ask") && quote === undefined && document.activeElement?.closest("[data-testid=agent-panel]")) return closeAsk();
   const q = quote === undefined ? (editor?.selection() ?? null) : quote;

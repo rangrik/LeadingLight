@@ -6,7 +6,7 @@ import { Textarea } from "@leadinglight/ui/components/textarea";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { SHORTCUTS } from "@/lib/shortcuts";
 import { accelOf } from "~/lib/keymap";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 import { ask, stream } from "~/lib/project-runtime/transport";
 
 export type BrowserFrame = { data: string; mime?: string; w: number; h: number; scale?: number; url?: string };
@@ -39,7 +39,7 @@ const modifiers = (e: { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shi
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 let menuWork: Promise<unknown> = Promise.resolve();
 const nativeMenu = (owner: string, focused: boolean) => (menuWork = menuWork.catch(() => {}).then(async () => {
-  if (await isNative) await (await import("@tauri-apps/api/core")).invoke("browser_menu_focus", { owner, focused });
+  if (await isDesktop) await (await import("@tauri-apps/api/core")).invoke("browser_menu_focus", { owner, focused });
 }));
 
 // A new tab gets a new input queue, so a late frame or key can never land in another tab.
@@ -96,7 +96,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
     void nativeReady.current.catch((error) => callbacks.current.onError?.(message(error)));
   };
   const clipboard = async (text?: string) => {
-    if (!(await isNative)) return text === undefined ? navigator.clipboard.readText() : navigator.clipboard.writeText(text);
+    if (!(await isDesktop)) return text === undefined ? navigator.clipboard.readText() : navigator.clipboard.writeText(text);
     await nativeReady.current;
     const owner = nativeOwner.current;
     if (!owner) throw new Error("Focus the browser page first.");
@@ -116,7 +116,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   useEffect(() => {
     let alive = true;
     let unlisten: (() => void) | undefined;
-    nativeListening.current = isNative.then(async (native) => {
+    nativeListening.current = isDesktop.then(async (native) => {
       if (!native || !alive) return;
       unlisten = await (await import("@tauri-apps/api/event")).listen<{ owner: string; action: string }>("ll:browser-edit", ({ payload }) => {
         if (!alive || !inputAllowed.current || payload.owner !== nativeOwner.current || document.activeElement !== keyboard.current) return;

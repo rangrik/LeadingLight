@@ -1,4 +1,4 @@
-import { isNative } from "~/lib/platform";
+import { isDesktop, isMobile } from "~/lib/platform";
 
 // The project runtime's API (DECISIONS.md, 18): through the app's runtime commands in the Mac
 // app (src-tauri/src/runtime.rs), through the dev server's /__runtime in a browser
@@ -11,7 +11,8 @@ export type RuntimeEvent = { seq: number; type: string; time: string; data?: Rec
 const invoke = async <T>(cmd: string, args: Record<string, unknown>) => (await import("@tauri-apps/api/core")).invoke<T>(cmd, args);
 
 export async function runtimeStatus(opts: { start?: boolean; restart?: boolean } = {}): Promise<RuntimeStatus> {
-  if (await isNative) return invoke("runtime_status", { start: !!opts.start, restart: !!opts.restart });
+  if (await isMobile) return { state: "failed", error: "Project agents require the Mac app.", home: "" };
+  if (await isDesktop) return invoke("runtime_status", { start: !!opts.start, restart: !!opts.restart });
   const query = opts.restart ? "?restart=1" : opts.start ? "?start=1" : "";
   const res = await fetch(`/__runtime/status${query}`).catch(() => null);
   return res?.ok ? res.json() : { state: "failed", error: "This build has no project runtime.", home: "" };
@@ -26,7 +27,8 @@ const parse = (text: string) => {
 };
 
 export async function call<T = unknown>(method: string, path: string, body?: unknown): Promise<Reply<T>> {
-  if (await isNative) return invoke("runtime_call", { method, path, body: body ?? null });
+  if (await isMobile) throw new Error("Project agents require the Mac app.");
+  if (await isDesktop) return invoke("runtime_call", { method, path, body: body ?? null });
   const send = () => fetch(`/__runtime${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   let res = await send();
   // Not started yet in this dev server's checkout: started once, as the app does.
@@ -48,8 +50,9 @@ export function stream(method: string, path: string, body: unknown, quiet: numbe
   let done = false;
   const end = () => !done && ((done = true), ended());
   const read = (line: string) => line.trim() && on(line);
-  void isNative.then(async (native) => {
+  void isDesktop.then(async (native) => {
     if (done) return;
+    if (await isMobile) return end();
     if (native) {
       const { Channel } = await import("@tauri-apps/api/core");
       const channel = new Channel<string>();

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { platform } from "~/lib/platform";
 import { localPrefs } from "~/lib/local-prefs";
 import { closePane, focusedPage, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
 import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
@@ -41,6 +42,7 @@ export function useShowing(view: BarView) {
 
 // Narrow, one pane holds the bar's view, as the panel does.
 export function showBar(view: BarView) {
+  if (!["macos", "browser"].includes(platform.get()) && view !== "captures") return;
   if (!narrow()) return bar.set({ open: true, view });
   const open = paneOf(view) ?? paneOf();
   if (!open) return openBeside(PANE[view]);

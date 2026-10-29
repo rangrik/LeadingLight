@@ -29,6 +29,7 @@ import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -96,6 +97,7 @@ const mounted = new Set<string>();
 // Cards are one flat list, a card per tab, keyed by tab id and kept in id order, so a tab that
 // moves pane or splits off is never remounted: its editor, unsaved edits and scroll stay.
 export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean; lead?: boolean }) {
+  const mobile = useMobile();
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
@@ -122,7 +124,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
   if (!root) return null;
   const { leaves, dividers } = layout(root);
   const split = leaves.length > 1;
-  const folding = split && hasNotes(root) && size.w > 0 && size.w < widthNeeded(root);
+  const folding = split && (hasNotes(root) || mobile) && size.w > 0 && size.w < widthNeeded(root);
   const order = [...leaves].sort((a, b) => a.rect.x - b.rect.x || a.rect.y - b.rect.y).map((l) => l.leaf.id);
   const at = Math.max(0, order.indexOf(focus));
   const wide = size.w - (order.length - 1) * (STRIP + GAP);
@@ -176,7 +178,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 after={<PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
-                lead={lead && rect.x < EPS && rect.y < EPS}
+                lead={lead && ((mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
                 toggle={!windowToggle}
@@ -189,8 +191,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
-                {isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
-                {isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
                   <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}

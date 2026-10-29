@@ -16,6 +16,7 @@ export default defineConfig({
   projects: [
     { name: "qa", grepInvert: /@gallery/ },
     { name: "gallery", grep: /@gallery/ },
+    { name: "ipad-webkit", testMatch: "ipad.spec.ts", use: { browserName: "webkit" } },
   ],
   use: {
     baseURL: `http://127.0.0.1:${port}`,

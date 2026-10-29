@@ -166,4 +166,7 @@ for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10
 
 ## Later
 
-- Sync between devices. Mobile.
+- Account sync and offline web access are being built in the cloud worktree (`c7fe`).
+- Native iPad target: shared editor, local SQLite, touch navigation and build setup in
+  `docs/IPAD.md`. Native account handoff, attachment transfer and device acceptance still
+  gate cross-device delivery.

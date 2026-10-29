@@ -1,0 +1,12 @@
+[package]
+name = "tauri-plugin-leadinglight-preview"
+version = "0.1.0"
+edition = "2024"
+links = "tauri-plugin-leadinglight-preview"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2" }
+serde_json = "1"
