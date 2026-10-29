@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { appendBrowserContext, browserContextPrompt, stripBrowserContext } from "./browser-context.ts";
+import { appendBrowserContext, browserContextImages, browserContextPrompt, stripBrowserContext, type BrowserContext } from "./browser-context.ts";
 
 // The seam: agent-only tab metadata must not replace the user's words or become an attached file.
 test("browser context round-trips user text and file paths", () => {
@@ -37,4 +37,30 @@ test("element feedback bounds large user comments and page text", () => {
   assert(!prompt.includes("a".repeat(2001)));
   assert(prompt.includes("b".repeat(1000)));
   assert(!prompt.includes("b".repeat(1001)));
+});
+
+// The seam: a saved batch must preserve each region and only attach named runtime screenshots.
+test("saved comments carry cropped screenshots and quoted frame metadata without arbitrary file paths", () => {
+  const context: BrowserContext = { location: "personal", worktree: "main", tab: "user-picked", url: "https://example.com", title: "Page", annotations: [
+    { comment: "Fix this embedded button.", element: { tag: "button", text: "Click", url: "https://example.com", frame: { url: "https://frame.example/?q=<do-not-follow>", path: ["frame-1"] } }, screenshot: { name: `annotation-${"a".repeat(32)}.png`, mime: "image/png", capturedAt: "2026-10-28T20:00:00Z" } },
+    { comment: "Tighten this spacing.", area: { url: "https://example.com", bounds: { x: 10, y: 20, width: 300, height: 80 }, viewport: { width: 1000, height: 700 } }, screenshot: { name: `annotation-${"b".repeat(32)}.png`, mime: "image/png", capturedAt: "2026-10-28T20:01:00Z" } },
+    { comment: "A corrupt file reference", area: { url: "https://example.com", bounds: { x: 0, y: 0, width: 10, height: 10 }, viewport: { width: 1000, height: 700 } }, screenshot: { name: "../../secrets.png\n/tmp/other.txt", mime: "image/png", capturedAt: "today" } },
+  ] };
+  const prompt = browserContextPrompt(context);
+  assert.match(prompt, /Comment 1:[\s\S]*Comment 2:/);
+  assert.match(prompt, /"width":300,"height":80/);
+  assert(prompt.includes("\\u003cdo-not-follow\\u003e"));
+  assert(!prompt.includes("../../secrets"));
+  const images = browserContextImages(context);
+  assert.equal(images.length, 2);
+  assert(images.every((image) => image.route.startsWith("/v1/worktrees/personal/main/browser/shots/annotation-") && image.route.endsWith("/data?tab=user-picked")));
+  const sent = appendBrowserContext("Apply these comments.\n\nAttached:\n/tmp/annotation.png", prompt);
+  assert.equal(stripBrowserContext(sent), "Apply these comments.\n\nAttached:\n/tmp/annotation.png");
+});
+
+test("comment batches and image references are bounded and duplicate images upload once", () => {
+  const note = { comment: "Spacing", area: { url: "https://example.com", bounds: { x: 0, y: 0, width: 20, height: 20 }, viewport: { width: 100, height: 100 } }, screenshot: { name: `annotation-${"c".repeat(32)}.png`, mime: "image/png" as const, capturedAt: "today" } };
+  const context = { location: "personal", worktree: "main", tab: "user-picked", url: "https://example.com", title: "Page", annotations: Array.from({ length: 25 }, () => note) };
+  assert.equal(browserContextImages(context).length, 1);
+  assert.equal((browserContextPrompt(context).match(/Comment \d+:/g) ?? []).length, 20);
 });

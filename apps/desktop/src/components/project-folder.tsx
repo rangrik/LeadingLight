@@ -11,7 +11,7 @@ import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/compone
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { pageLabel } from "~/lib/labels";
 import { openBeside, openPage } from "~/lib/panes";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 import { cloneRepo, folders, linkFolder, loadFolders, refresh, unlinkFolder } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { ask } from "~/lib/project-runtime/transport";
@@ -53,7 +53,7 @@ export function LinkFolderDialog({ pageId, open, onOpenChange }: { pageId: strin
   // A folder already at the clone's place, which can be linked as it is.
   const [there, setThere] = useState<string | null>(null);
   const cloning = useRef<(() => void) | null>(null);
-  useEffect(() => void isNative.then(setNative), []);
+  useEffect(() => void isDesktop.then(setNative), []);
   useEffect(() => {
     if (!open) return cloning.current?.();
     setError(null);

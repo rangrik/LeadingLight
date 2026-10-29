@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "LeadingLight Dev",
+  "identifier": "com.leadinglight.dev.ipad"
+}

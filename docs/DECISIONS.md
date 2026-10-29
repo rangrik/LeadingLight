@@ -97,7 +97,7 @@ keeps nothing to leak or fall out of step. Access maps to Claude Code's permissi
 Ask for approval is `default`, Approve for me is `auto`, Full access is `bypassPermissions`,
 Plan mode is `plan`. Reading never asks. The browser build has a stand-in that plays the same
 protocol, so the panel and the tools can be tried and tested without Claude Code.
-Anthropic's terms allow this for one's own login; shipping it to others would need their approval.
+Each person signs into the official CLI with their own account; the app does not share credentials.
 
 GPT models go through Codex the same way: each turn is one `codex app-server`, resuming its
 thread, with the page tools passed as the app server's dynamic tools, which Codex asks the app
@@ -405,6 +405,8 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+Stopping commits the take: its save can finish after the editor closes, attaching by recording id
+to the latest page through the main window. Leaving an active recording still cancels it.
 
 ## 28. Captures stay pages; review state is metadata
 
@@ -566,3 +568,149 @@ Short lessons are authored for named rules, with optional practice. Saved tips s
 not a mistake history. Dictionary words stay on this device. Listening uses only local English
 system voices. Neither the checker nor practice assigns a score or claims someone has learned
 something. See WRITING-COACH.md for the scenarios and questions to test with the writer.
+
+## 33. Browser feedback keeps evidence; developer access belongs to a page
+
+2026-10-28. Saved browser comments carry a frozen image of the selected area and quoted
+element metadata, so a later page change cannot silently change what the person meant.
+Temporary style previews belong to a viewer lease; losing that viewer resets its previews.
+Frame selection uses Chromium frame identities and transforms, not page-provided selectors.
+
+Developer tools require both an enabled setting and explicit approval for the current page.
+Navigation, closing the tab, revocation or expiry ends that approval. CDP calls remain scoped
+to the approved page; browser-wide profile, process and file access are separate capabilities.
+
+Download preferences belong to this app's runtime. Only the native app enables automatic
+copies to the chosen folder; browser-build tests keep their own downloads. Copies use bounded
+buffers and exclusive file creation, never a filename supplied by a page as a filesystem path.
+History can be cleared by time. Website data is labelled as an all-time workspace clear,
+because Chromium's available storage commands cannot prove time-scoped removal for every store.
+
+Comments belong to the workspace and exact URL, so closing a tab does not lose them. Keep up to
+20 per page and 200 total. Their PNGs have a separate 200-image / 128 MiB budget; expired images
+block sending rather than silently dropping evidence. Sending copies them into chat attachments.
+Browser settings can remove saved comments across all workspaces, so forgotten pages cannot
+permanently fill the quota. Comments already attached to a chat keep their copied evidence.
+Element capture resolves the handle and checks its document, geometry and metadata on both
+sides of the screenshot request, rejecting a moved or replaced element instead of mismatching evidence.
+Frame inspection supports nested cross-origin frames and positive axis-aligned scaling; rotated,
+skewed or mirrored frames fail explicitly. Text replacement is deferred because restoring child
+nodes safely needs more than undoing CSS. Viewer leases renew every five seconds and expire at 15.
+
+Developer tools expose page-scoped DOM, CSS, runtime, network and profiling commands. Access ends
+after 15 minutes or a document change. A separate CDP session prevents interference with ordinary
+controls; browser-wide commands remain unavailable. This is the trusted local runtime model,
+not a sandbox against another process with full access to the person's Mac.
+
+Ask where to save uses a durable claim before opening one native dialog. Cancellation, duplicate
+panes and reloads cannot repeat it. An interrupted automatic copy is reported as interrupted and
+keeps its source; a partial destination may remain. Manual Save can retry elsewhere.
+Two automatic copies run at once per workspace. Active saves survive history trimming; the
+existing 200-download retention limit still applies to older unclaimed records in extreme bursts.
+Opening a saved tab does not create a new history visit; actual navigation does. Clearing history
+therefore survives Settings and app reloads without removing the open page.
+
+Keep the current engine for this pass. Synthetic-device probes worked in full Chromium but
+returned NotSupportedError in headless-shell. Camera/microphone need a deliberate permission
+flow and macOS checks. Removing the mute flag would play sound on the runtime host without an
+audio transport or per-tab control, so it is not an audio implementation.
+
+Below a 420 px browser pane, Address gets its own row and all actions stay visible
+below it. The pane width controls this layout, so narrow splits work in wide windows.
+Nested popups handle Escape before feedback closes; a failed developer command clears
+the earlier result so the displayed method and output cannot imply a false success.
+Raw address input marks a draft even when the pasted value is unchanged, so an
+unfinished tab close cannot erase it; merely focusing still permits redirect updates.
+Reset synchronizes Chromium's pending CSS attribute before removing it. This preserves
+the difference between an absent and an empty style attribute, including website selectors.
+
+## iPad uses the same editor and store
+
+The iPad app is a Tauri iOS target of the existing React app. Pages keep the same schema
+and TipTap content, with SQLite and files on each device. Native storage and Mac capabilities
+are separate checks: an iPad must never start a CLI, reserve traffic-light space, or show a
+browser agent stand-in as a real answer.
+
+Attached files use iOS Quick Look through a small native plugin. It accepts only an asset
+filename, checks the resolved path stays inside the app's assets, and leaves the file unchanged.
+
+Native account sync reuses the cloud journal and service in decision 34. Browser approval
+transfers the existing workspace key to the installed app; encrypted attachment bundles use
+stable content identifiers across devices. See `docs/NATIVE-SYNC.md`.
+
+## 34. History, authorship and web cloud defaults (2026-10-28)
+
+Chosen while the owner asked us to proceed without questions; review these defaults before launch.
+
+- Pages and their history commit together. Typing is grouped into five-minute editing sessions; named milestones split a session. Restoring adds a version. An agent turn shares one action across its tools; undo refuses to erase later changes. Reports stay immutable.
+- Authorship is recorded when words enter the editor. The page stays quiet until “Show authorship” is enabled. Inspection lists You, the agent/model, or Origin unknown. This is provenance, not AI detection. Imported text is attributed to the person inserting it, not its original outside author.
+- No account is needed locally. Google and GitHub use Auth.js. ChatGPT identity is enabled only with a registered, approved commercial client. Signing in does not connect ChatGPT or Claude subscription credits. Different identity providers make different accounts; no automatic email linking.
+- Web sync is opt-in, with compressed, chunked AES-GCM encrypted journal entries in our PostgreSQL service and a per-account recovery key held on the device. This **does store encrypted data**, unlike direct-only transfer. It lets devices reconnect at different times. Concurrent offline changes make a separate copy. It is not character-level collaborative merging. Local folders and Mac file URLs do not transfer.
+- Agent execution follows decision 7 and the correction in decision 35: the installed Mac app uses each person's CLI accounts. Decision 36 adds approved browser access to that runtime. Workspace sign-in and encrypted sync stay independent of agent sign-in.
+- Mobile and iPad use the responsive browser build first. Production builds include an offline shell. IndexedDB holds local notes; PostgreSQL holds optional encrypted sync. Production web builds never use the development agent stand-in.
+- Hosted preview: `leadinglight-web.vercel.app`, separate from the existing image service. Neon `leadinglight-web-db` uses the free plan in `iad1`, with production-only credentials and Neon Auth off. Google and GitHub sign-in are registered and verified; both owner identities are separately allowlisted. Google remains in testing mode. No model API keys, usage billing or paid infrastructure plan are required.
+
+Sources checked: [ChatGPT sign-in](https://developers.openai.com/siwc/website),
+[Auth.js core](https://authjs.dev/reference/core).
+
+## 35. Agents use the person's existing CLI account (2026-10-29)
+
+The owner rejected the shared API-key cloud implementation. No user or service model keys,
+usage resale or per-token billing. The first release runs agents only in the installed Mac app,
+using the existing Claude Code/Codex runtime, approvals and project isolation. A local run needs
+that Mac awake and connected. Browser, iPhone and iPad web users can edit, inspect history and sync notes;
+Agents explains the Mac requirement. The paid provider adapters, queue worker and cron are removed.
+
+Next option: pair the web workspace with a trusted Mac and route requests to its existing runtime.
+Show which Mac will run the task and whether it is reachable; keep approvals with that runtime.
+A later isolated cloud runner may use the same agent contract with user-authorized CLI sign-in.
+Validate supported authentication, tenant isolation and hosting costs before selecting a sandbox
+service such as E2B; do not copy local login tokens or promise permanent free hosting. Neither
+remote execution option is part of this release. They must preserve the user's own provider usage.
+
+## 36. Browser pairing reuses the Mac's page-agent runtime (2026-10-29)
+
+A paired browser uses the existing note agent's ask/reply/cancel protocol. The Mac
+launches the same Claude Code/Codex processes; the browser retains its page tools,
+approvals and history. This grant covers page agents. Project folders, terminals and
+project-worker control need a separate permission scope, rather than an unrestricted
+remote runtime proxy.
+
+The signed-in browser creates a five-minute, high-entropy copyable pairing code.
+The Mac reviews the workspace identity and explicitly allows that browser. A separate
+per-pair key encrypts prompts, tool results and events across a PostgreSQL relay.
+CLI login credentials stay on the Mac; Mac relay credentials live in Keychain.
+No inbound port, model API keys, shared model account or usage billing is introduced.
+
+Both apps must stay running and connected. The Mac polls outbound; a renewable lease
+stops remote work after connection loss. A reload interrupts rather than replaying
+note mutations. Command IDs, a durable Mac start ledger and ordered event IDs prevent
+repeated execution. Either app can revoke the grant. Session IDs belong to their
+pairing and never move to another Mac. This replaces decision 35's temporary browser
+agent restriction; the user's own CLI usage remains the rule.
+
+The relay discards acknowledged reply ciphertext and keeps replay fingerprints.
+Leases use relay time plus elapsed device time. Stop blocks new note mutations
+immediately; the UI waits for the Mac's confirmation before calling the process stopped.
+An unrecoverable local delivery or storage failure revokes the grant rather than
+risk replaying work whose delivery state is no longer known.
+
+Remote Codex disables inherited MCP entries and notification hooks, then verifies
+its effective configuration before opening a thread. Its isolated JavaScript tool
+dispatcher stays enabled for note tools; shell, plugins and computer tools stay off.
+
+## 37. Native devices join the existing encrypted workspace (2026-10-29)
+
+The installed app starts a ten-minute connection with a private polling verifier and P-256
+public key. The signed-in browser shows a matching code and explicitly approves the device.
+It encrypts the workspace recovery key for that public key; the service cannot read it.
+A single claim returns a scoped, 30-day credential. Rust keeps it provisional until the
+frontend verifies the key and account, then saves it in Keychain. Failed verification keeps
+the earlier login and key. Native requests use a fixed HTTPS origin and cannot access browser
+agent grants; browser writes retain their origin checks.
+
+Sync requests carry the expected account, checked against the authenticated session. Native
+asset paths never leave the device: bounded attachment bundles travel inside encrypted
+journal events, identified by a hash of MIME type and bytes. Receivers validate before writing
+stable local files. Comparisons use these identities so a different sandbox path does not
+create a conflict. Notes remain usable offline; uploads resume with the foreground app.

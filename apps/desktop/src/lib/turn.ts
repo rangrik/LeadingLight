@@ -6,6 +6,9 @@ import { buildPrompt, type NoteText, type Seen, SYSTEM } from "~/lib/ask-prompt"
 import { effortFor } from "~/lib/codex";
 import { GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
 import { type Item, patchThread, type Thread, threadOf } from "~/lib/threads";
+import { action } from "~/lib/history-types";
+import { isDesktop, isMobile } from "~/lib/platform";
+import { remoteRunCurrent, remoteTarget } from "~/lib/remote";
 
 // One turn of a thread, with Claude (Claude Code's stream-json) or GPT (Codex's app server):
 // their lines become the thread's items, and their requests are answered, page tools by
@@ -21,6 +24,7 @@ type Provider = "claude" | "codex";
 // asked: when a change began waiting on the person; that wait isn't the agent's work. For GPT:
 // the prompt (and one with the note, should its thread be gone), and Codex's thread and turn.
 type Turn = {
+  model: string;
   pageId: string;
   threadId: string;
   provider: Provider;
@@ -30,10 +34,15 @@ type Turn = {
   declined: boolean;
   seen?: Seen;
   asked?: number;
+  answering?: boolean;
+  stopped?: boolean;
+  dispatched?: boolean;
+  remote: boolean;
   pending?: (allow: boolean) => Promise<void>;
   gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string };
 };
 const turns = new Map<string, Turn>();
+const canWork = (id: string, turn: Turn) => turns.get(id) === turn && !turn.stopped && (!turn.remote || remoteRunCurrent(id));
 
 const items = (t: Turn, f: (list: Item[]) => Item[]) => patchThread(t.pageId, t.threadId, (th) => ({ ...th, items: f([...th.items]) }));
 const outputOf = (c: unknown) => (typeof c === "string" ? c : Array.isArray(c) ? c.map((x: { text?: string }) => x.text ?? "").join("\n") : "");
@@ -43,21 +52,27 @@ const session = (th: Thread, p: Provider) => (p === "codex" ? { id: th.codexId, 
 
 // Mentioned pages are read after the thread is marked busy, so a second send can't slip in.
 export async function sendTurn(o: { page: AskPage; threadId: string; question: string; quote: Quote | null; pages: Promise<NoteText[]>; agent?: Agent }) {
+  if (await isMobile) throw new Error("Agents are not available in the iPad app.");
   const { page, threadId, question, quote } = o;
   const prefs = aiPrefs();
+  const desktop = await isDesktop;
+  const target = desktop ? "local" : remoteTarget();
   const th = threadOf(page.id, threadId);
   if (!th || th.busy) return;
+  const changedTarget = (th.executionTarget ?? "local") !== target;
   const id = crypto.randomUUID();
   // A mentioned agent's model wins, and with it its provider.
   const model = o.agent?.model ?? prefs.model;
   const provider: Provider = isClaude(model) ? "claude" : "codex";
-  const turn: Turn = { pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false };
+  const turn: Turn = { model, pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false, remote: target !== "local" };
   turns.set(id, turn);
   // The answer is about the words quoted with it; a follow-up without a quote is about the
   // thread, so Replace goes away until words are quoted again.
   patchThread(page.id, threadId, (t) => ({
     ...t,
-    busy: id,
+    busy: id, stopping: undefined, executionTarget: target,
+    remoteRun: target === "local" ? undefined : { id, target, started: Date.now() },
+    ...(changedTarget ? { sessionId: undefined, codexId: undefined, seen: {}, codexSeen: {}, allowed: [] } : {}),
     started: Date.now(),
     updated: Date.now(),
     quote,
@@ -67,8 +82,9 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   }), true);
   const note = { id: page.id, title: page.title(), text: page.text() };
   const pages = await o.pages.catch(() => []);
-  if (!turns.has(id)) return;
-  const s = session(th, provider);
+  if (!turns.has(id) || turn.stopped) return;
+  if (!desktop && target !== remoteTarget()) return finish(id, "failed", "The agent connection changed while the question was being prepared. Nothing was sent. Ask again on the selected Mac.");
+  const s = changedTarget ? { id: undefined, seen: {} } : session(th, provider);
   const input = { note, pages, agent: o.agent?.prompt ?? null, quote: quote?.text ?? null, question };
   const { prompt, seen } = buildPrompt({ seen: s.seen, ...input });
   turn.seen = seen;
@@ -79,9 +95,11 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
     turn.gpt = { prompt: planned(prompt), fresh: planned(fresh.prompt), freshSeen: fresh.seen, model, effort, resume: s.id };
   }
   const req: AskRequest = { id, prompt, system: SYSTEM, model, effort, access: prefs.plan ? "plan" : prefs.access, resume: s.id, provider };
+  turn.dispatched = true;
   await ask(req, (e) => {
     if (!turns.has(id)) return;
     if (e.type === "error") finish(id, "failed", e.message);
+    else if (turn.stopped) return;
     else if (provider === "codex") onCodex(id, e.line);
     else onLine(id, e.line);
   }).catch((err: unknown) => finish(id, "failed", err instanceof Error ? err.message : String(err)));
@@ -185,8 +203,8 @@ function streamed(list: Item[], ev: Line): Item[] {
 
 async function control(id: string, t: Turn, line: Line) {
   const r = line.request ?? {};
-  const respond = (response: object) => reply(id, { type: "control_response", response: { subtype: "success", request_id: line.request_id, response } });
-  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message) });
+  const respond = (response: object) => canWork(id, t) ? reply(id, { type: "control_response", response: { subtype: "success", request_id: line.request_id, response } }) : Promise.resolve();
+  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message, { ...action("Claude edited page", { kind: "agent", name: "Claude", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t)) });
   if (r.subtype !== "can_use_tool") return reply(id, { type: "control_response", response: { subtype: "error", request_id: line.request_id, error: "Not supported here" } });
   if (r.tool_name === "ExitPlanMode") {
     t.planned = true;
@@ -239,8 +257,10 @@ function onCodex(id: string, line: Line) {
   if (m === "item/started" || m === "item/completed") items(t, (list) => codexItem(list, p.item, m === "item/completed"));
   else if (m === "item/agentMessage/delta")
     items(t, (list) => {
-      const k = lastOf(list, "text");
-      if (k >= 0) list[k] = { kind: "text", text: (list[k] as { text: string }).text + p.delta };
+      const k = p.itemId ? list.findIndex((i) => i.kind === "text" && i.id === p.itemId) : lastOf(list, "text");
+      const i = list[k];
+      if (i?.kind === "text") list[k] = { ...i, text: i.text + p.delta };
+      else list.push({ kind: "text", id: p.itemId, text: p.delta });
       return list;
     });
   else if (m === "item/reasoning/summaryTextDelta" || m === "item/reasoning/textDelta")
@@ -260,10 +280,13 @@ function onCodex(id: string, line: Line) {
 
 function codexItem(list: Item[], item: Line, done: boolean): Item[] {
   if (item?.type === "agentMessage") {
-    const k = lastOf(list, "text");
-    // Text arrives as deltas; the finished message fills in any that didn't.
-    if (!done) list.push({ kind: "text", text: "" });
-    else if (k >= 0 && !(list[k] as { text: string }).text) list[k] = { kind: "text", text: item.text ?? "" };
+    const k = item.id ? list.findIndex((i) => i.kind === "text" && i.id === item.id) : done ? lastOf(list, "text") : -1;
+    const old = list[k];
+    const phase = ["commentary", "partial_answer", "final_answer"].includes(item.phase) ? item.phase : old?.kind === "text" ? old.phase : undefined;
+    // Completion is authoritative; streams for different message ids can interleave.
+    const next: Item = { kind: "text", id: item.id, phase, text: done ? (item.text ?? "") : old?.kind === "text" ? old.text : (item.text ?? "") };
+    if (k >= 0) list[k] = next;
+    else list.push(next);
   } else if (item?.type === "reasoning") {
     const k = lastOf(list, "thinking");
     const i = list[k];
@@ -284,8 +307,8 @@ function codexItem(list: Item[], item: Line, done: boolean): Item[] {
 // A page tool GPT asked for: run at once, or once the person allows it.
 async function toolCall(id: string, t: Turn, rid: string | number, name: string, input: Record<string, string>, callId: string) {
   const respond = async (allow: boolean, text = DECLINED) => {
-    const r = allow ? await runTool(t.pageId, name, input).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
-    await reply(id, { id: rid, result: { contentItems: r.content.map((c) => ({ type: "inputText", text: c.text })), success: !r.isError } });
+    const r = allow ? await runTool(t.pageId, name, input, { ...action("GPT edited page", { kind: "agent", name: "GPT", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t)).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
+    if (canWork(id, t)) await reply(id, { id: rid, result: { contentItems: r.content.map((c) => ({ type: "inputText", text: c.text })), success: !r.isError } });
   };
   if (t.plan && CHANGES.test(name)) return respond(false, GPT_PLAN);
   // Codex has no classifier for the app's tools, so Approve for me asks too.
@@ -295,21 +318,29 @@ async function toolCall(id: string, t: Turn, rid: string | number, name: string,
 }
 
 // The person's answer to the change waiting. Declining ends the turn, as in Claude Code.
-export function answer(pageId: string, threadId: string, choice: "once" | "thread" | "decline") {
+export async function answer(pageId: string, threadId: string, choice: "once" | "thread" | "decline") {
   const th = threadOf(pageId, threadId);
   const a = th?.approval;
   const t = th?.busy ? turns.get(th.busy) : undefined;
-  if (!th?.busy || !a || !t) return;
+  if (!th?.busy || !a || !t || t.answering || t.stopped) return;
   const busy = th.busy;
-  if (t.provider === "codex") {
-    void t.pending?.(choice !== "decline").then(() => {
-      if (choice === "decline" && t.gpt?.thread && t.gpt.turn) void reply(busy, { method: "turn/interrupt", id: 3, params: { threadId: t.gpt.thread, turnId: t.gpt.turn } });
-    });
-    t.pending = undefined;
-  } else {
-    const response = choice === "decline" ? { behavior: "deny", message: DECLINED, interrupt: true } : { behavior: "allow", updatedInput: a.input };
-    void reply(busy, { type: "control_response", response: { subtype: "success", request_id: a.requestId, response } });
-  }
+  t.answering = true;
+  patchThread(pageId, threadId, (x) => ({ ...x, note: 'Sending your decision…' }));
+  try {
+    if (t.provider === "codex") {
+      await t.pending?.(choice !== "decline");
+      if (choice === "decline" && t.gpt?.thread && t.gpt.turn) await reply(busy, { method: "turn/interrupt", id: 3, params: { threadId: t.gpt.thread, turnId: t.gpt.turn } });
+      t.pending = undefined;
+    } else {
+      const response = choice === "decline" ? { behavior: "deny", message: DECLINED, interrupt: true } : { behavior: "allow", updatedInput: a.input };
+      await reply(busy, { type: "control_response", response: { subtype: "success", request_id: a.requestId, response } });
+    }
+  } catch (error) {
+    finish(busy, "failed", `The decision could not reach the agent. Nothing will be replayed. ${error instanceof Error ? error.message : String(error)}`);
+    void cancel(busy).catch(() => {});
+    return;
+  } finally { t.answering = false; }
+  if (!canWork(busy, t)) return;
   t.declined ||= choice === "decline";
   // The clock moves on by the wait, so the turn's time is the agent's alone.
   const waited = Date.now() - (t.asked ?? Date.now());
@@ -317,17 +348,23 @@ export function answer(pageId: string, threadId: string, choice: "once" | "threa
   patchThread(pageId, threadId, (x) => ({
     ...x,
     started: (x.started ?? Date.now()) + waited,
-    approval: undefined,
+    approval: undefined, note: undefined,
     allowed: choice === "thread" ? [...x.allowed, a.tool] : x.allowed,
     items: choice === "decline" ? x.items.map((i) => (i.kind === "tool" && i.id === a.toolUseId ? { ...i, status: "declined" } : i)) : x.items,
   }));
 }
 
-export function stopTurn(pageId: string, threadId: string) {
-  const busy = threadOf(pageId, threadId)?.busy;
-  if (!busy) return;
-  void cancel(busy);
-  finish(busy, "stopped");
+export async function stopTurn(pageId: string, threadId: string) {
+  const thread = threadOf(pageId, threadId), busy = thread?.busy;
+  if (!busy || thread.stopping) return;
+  const turn = turns.get(busy);
+  if (turn) { turn.stopped = true; turn.pending = undefined; }
+  patchThread(pageId, threadId, (t) => ({ ...t, stopping: true, approval: undefined, note: 'Stopping…' }));
+  if (turn && !turn.dispatched) return finish(busy, "stopped");
+  try { await cancel(busy); finish(busy, "stopped"); }
+  catch (error) {
+    if (turns.has(busy)) patchThread(pageId, threadId, (t) => ({ ...t, stopping: false, note: `Cannot confirm the agent stopped yet. ${error instanceof Error ? error.message : String(error)}` }));
+  }
 }
 
 function finish(id: string, how: "done" | "stopped" | "failed", error?: string, result?: Line) {
@@ -347,7 +384,7 @@ function finish(id: string, how: "done" | "stopped" | "failed", error?: string, 
     (th) => ({
       ...th,
       ...kept(th),
-      busy: undefined,
+      busy: undefined, stopping: undefined, remoteRun: undefined, note: undefined,
       started: undefined,
       approval: undefined,
       updated: now,

@@ -32,6 +32,10 @@ pnpm build      # bundle the desktop app
 pnpm typecheck
 ```
 
+An iPad target shares this app. With Xcode and CocoaPods installed, run `pnpm ios:init`
+and `pnpm ios:build` to create an unsigned device archive. Signing, device acceptance and
+the shared account and encrypted sync connection are described in [iPad setup](docs/IPAD.md).
+
 ## Data model
 
 Notes live in a local SQLite file (`leadinglight.db` in the app data dir) via

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Source for `pnpm tauri icon`. The ink t-dot tile, at 824 px and 100 px in from each edge (Apple's icon grid). -->
+  <g transform="translate(100 100) scale(1.609375)">
+    <rect width="512" height="512" rx="116" fill="#15151A"/>
+    <g transform="translate(72 72) scale(0.71875)" fill="none" stroke="#F6F2EB" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M226,104 V358 A56,56 0 0 0 282,414 H314"/>
+      <path d="M140,204 H226"/>
+      <circle cx="300" cy="204" r="32" fill="#F6F2EB" stroke="none"/>
+    </g>
+  </g>
+</svg>

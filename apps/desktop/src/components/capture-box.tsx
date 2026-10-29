@@ -1,4 +1,5 @@
-import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import { attachVoiceAsset, BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import type { Asset } from "@leadinglight/editor/assets";
 import type { LinkHost } from "@leadinglight/editor/links";
 import { CalendarDays, Check, Folder, Globe, Hash, Lightbulb, Mic } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -14,6 +15,7 @@ import { assets } from "~/lib/assets";
 import { type Draft, type Guess, TAG, type WebSaved } from "~/lib/capture";
 import { readText } from "~/lib/capture-text";
 import { isKey, useKeysFor } from "~/lib/keymap";
+import { useMobile } from "~/lib/platform";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
@@ -25,6 +27,7 @@ import type { SourceMode } from "~/lib/web-source";
 // create makes the picker's projects there, and guess asks tail (lib/tail.ts) there.
 export type CaptureHost = {
   save: (draft: Draft) => Promise<string | null>;
+  saveVoice: (id: string, recordingId: string, asset: Asset) => Promise<void>;
   saveWeb: (url: string, mode: SourceMode, project: string | null, signal: AbortSignal) => Promise<WebSaved>;
   open: (id: string) => void;
   close: () => void;
@@ -52,6 +55,7 @@ const MODES: [SourceMode, string][] = [["link", "Link only"], ["text", "Text onl
 // The capture box (features/capture.feature, quick-capture.feature): a header bar over a title
 // line and the block editor, saving as you type; a lone address saves a webpage instead.
 export function CaptureBox({ host, className }: { host: CaptureHost; className?: string }) {
+  const mobile = useMobile();
   const [title, setTitle] = useState("");
   const [bodyText, setBodyText] = useState("");
   // A voice block in the body, and its audio saved.
@@ -94,6 +98,8 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     return () => {
       alive.current = false;
       clearTimeout(pause.current);
+      const body = draft.current.body?.();
+      if (body) draft.current.body = () => body;
       gone.current();
     };
   }, []);
@@ -244,16 +250,16 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const offer = !webpage && guess.project && (guess.task || !project) ? (project ?? guess.project) : null;
 
   return (
-    <div aria-label="New idea" className={cn(SURFACE, "flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role="dialog">
-      <header className="flex h-10 shrink-0 items-center gap-1.5 border-b px-5 text-[13px] text-muted-foreground leading-5">
+    <div aria-label="New idea" className={cn(SURFACE, "ll-capture-box @container/capture flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role="dialog">
+      <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-b px-5 py-1.5 text-[13px] text-muted-foreground leading-5">
         {webpage ? (
           <>
             <Globe className="size-4" />
             <span>Webpage</span>
-            <span aria-hidden>·</span>
-            <SegmentedControl aria-label="What to save" render={<RadioGroupPrimitive disabled={web.busy} onValueChange={(v) => setMode(v as SourceMode)} value={mode} />} size="sm">
+            <span aria-hidden className="hidden @[30rem]/capture:inline">·</span>
+            <SegmentedControl className="order-last w-full @[30rem]/capture:order-none @[30rem]/capture:w-auto" aria-label="What to save" render={<RadioGroupPrimitive disabled={web.busy} onValueChange={(v) => setMode(v as SourceMode)} value={mode} />} size="sm">
               {MODES.map(([value, label]) => (
-                <SegmentedControlItem className="text-[13px] sm:text-[13px]" key={value} render={<RadioPrimitive.Root value={value} />}>
+                <SegmentedControlItem className="flex-1 text-[13px] sm:text-[13px]" key={value} render={<RadioPrimitive.Root value={value} />}>
                   {label}
                 </SegmentedControlItem>
               ))}
@@ -263,12 +269,14 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
           <>
             <Lightbulb className={cn("size-4", COLORS.yellow.text)} />
             <span>New idea</span>
-            <span aria-hidden>·</span>
-            <CalendarDays className={cn("size-4", COLORS.blue.text)} />
-            <span>In Today</span>
-            <span aria-hidden>·</span>
-            <Hash className="size-4" />
-            <span>{TAG}</span>
+            <span className="hidden @[30rem]/capture:contents">
+              <span aria-hidden>·</span>
+              <CalendarDays className={cn("size-4", COLORS.blue.text)} />
+              <span>In Today</span>
+              <span aria-hidden>·</span>
+              <Hash className="size-4" />
+              <span>{TAG}</span>
+            </span>
           </>
         )}
         {/* Takes only the room left, so a long project name gives way, not the words before it. */}
@@ -328,6 +336,17 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
               setVoice(true);
               touched();
             }}
+            onVoiceDetached={async (recordingId, asset) => {
+              await chain.current;
+              if (id.current) return host.saveVoice(id.current, recordingId, asset);
+              const body = draft.current.body?.();
+              const next = body && attachVoiceAsset(body, recordingId, asset);
+              if (!next) return;
+              draft.current.body = () => next;
+              draft.current.voice = true;
+              version.current++;
+              await save();
+            }}
             placeholder="It saves as you go and shows up in Today."
             ref={editorRef}
           />
@@ -342,7 +361,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
             )}
           </div>
         )}
-        <footer className="mt-2 flex h-5 items-center gap-3 text-[13px] text-muted-foreground leading-5">
+        <footer className={cn("mt-2 flex shrink-0 items-center gap-3 text-[13px] text-muted-foreground leading-5", mobile ? "min-h-11 flex-wrap" : "h-5")}>
           {/* Focus goes back to the title, since the mic turns off once the block is in. */}
           <Tooltip>
             <TooltipTrigger
@@ -379,7 +398,15 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
               </span>
             )
           )}
-          <span className="ms-auto flex items-center gap-3">
+          {mobile ? (
+            <div className="ms-auto flex items-center gap-2">
+              {!empty && <>
+                <Button disabled={web.busy} onClick={() => webpage ? void saveWeb(true) : open()} size="sm" variant="outline">Open beside</Button>
+                <Button disabled={web.busy} onClick={() => webpage ? void saveWeb(false) : close()} size="sm">Save</Button>
+              </>}
+              <Button onClick={close} size="sm" variant="ghost">Close</Button>
+            </div>
+          ) : <span className="ms-auto flex items-center gap-3">
             {!empty && (
               <>
                 {offer && (
@@ -402,7 +429,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
               <Kbd>esc</Kbd>
               Close
             </span>
-          </span>
+          </span>}
         </footer>
       </div>
     </div>

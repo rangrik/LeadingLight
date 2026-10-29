@@ -12,15 +12,20 @@ import { localPrefs } from "./local-prefs";
 import { docText, type ObjectSummary, objects } from "./objects";
 import { docMarkdown } from "./page-markdown";
 import { focusedPage, leaves, openBeside, openPage, panes } from "./panes";
-import { isNative } from "./platform";
-import { createPage, INBOX_VIEW, listed, pageOf, removePage, retype, space, typeOf } from "./space";
+import { isMobile, isNative } from "./platform";
+import { createPage, INBOX_VIEW, listed, pageOf, retype, space, typeOf } from "./space";
 import { createStore } from "./state";
 import { ABOUT, appLine, counts, dated, edited, type Entry, factOf, isOut, isQuiet, lineAt, MAX_LINES, type Place, quietForm, quietLine, record, seenOn, sentenceOf, type Shown, TODAY, upgraded } from "./tail-memory";
 import { answerOf, buildDigest, type Candidate, current, mayRead, named, noteIn, parseAnswer, type Slots, stillTrue, TAIL, type Thread, threadFor, type Trigger } from "./tail-prompt";
 import { fingerprint, nextRead, reader } from "./tail-read";
-import { newPage } from "./templates";
 import { tailTurn } from "./turn";
 import { suggested } from "./writing";
+import { authored, stampDoc } from "@leadinglight/editor/authorship";
+import { action, type ChangeContext } from "./history-types";
+import { commitAction, undoAction } from "./history";
+import { flushAll } from "./saving";
+import { newObject } from "./store";
+import { pageInit } from "./templates";
 
 // Tail (docs/TAIL.md, features/tail.feature): reads along and offers one line to nod at. Word
 // rules find what might be worth a line; a tail turn picks, or stays silent. Nothing it shows is
@@ -51,7 +56,7 @@ export type Line = {
   row?: Part[];
   nod: string;
   // block: where a suggestion's block is now, which edits above it move.
-  act: (block?: number) => Promise<Done | void>;
+  act: (block?: number, context?: ChangeContext) => Promise<Done | void>;
   // A suggestion: the top-level block it is about, that block's words, which it stays for, when it
   // came, the pages it is about, and the model's slots, so it can be made again at the next start.
   block?: number;
@@ -252,9 +257,9 @@ async function ideasToFile(pages: ObjectSummary[]): Promise<Found | undefined> {
         // The count is a name too: it opens Captures in the bar, where the ideas wait.
         words: [{ text: `${ideas.length} ideas`, page: INBOX_VIEW }, ` since ${since}. ${one ? "1 looks like a task" : `${tasks.length} look like tasks`} for `, name(p), "."],
         nod: one ? "File it" : "File them",
-        act: async () => {
+        act: async (_block, context) => {
           const was = tasks.map((t) => pageOf(t.id) ?? t);
-          for (const t of was) await retype(t.id, "task", ({ "idea-project": _, ...rest }) => ({ ...rest, "task-project": [p.id] }));
+          for (const t of was) await retype(t.id, "task", ({ "idea-project": _, ...rest }) => ({ ...rest, "task-project": [p.id] }), context);
           return {
             words: [`Filed ${one ? "1 as a task" : `${tasks.length} as tasks`} in `, name(p), "."],
             undo: async () => {
@@ -287,8 +292,8 @@ function taskWithoutDay(pages: ObjectSummary[]): Found | undefined {
         where: TODAY,
         words: [{ text: short, page: t.id }, " has no day."],
         nod: `Set ${day.word}`,
-        act: async () => {
-          await editPage(t.id, { properties: (props) => ({ ...props, due: { start: day.start } }) });
+        act: async (_block, context) => {
+          await editPage(t.id, { properties: (props) => ({ ...props, due: { start: day.start } }) }, context);
           return { words: [`Due ${day.word}.`], undo: () => editPage(t.id, { properties: ({ due: _, ...rest }) => rest }) };
         },
       };
@@ -316,8 +321,8 @@ async function untitled(pages: ObjectSummary[]): Promise<Found | undefined> {
               where: TODAY,
               words: [`An untitled page from ${dayOf(p.createdAt)} starts "`, { text: text.split(/\s+/).length > 5 ? `${start}…` : start, page: p.id }, '".'],
               nod: "Name it",
-              act: async () => {
-                await editPage(p.id, { title });
+              act: async (_block, context) => {
+                await editPage(p.id, { title }, context);
                 return { words: ["Named ", { text: title, page: p.id }, "."], undo: () => editPage(p.id, { title: "" }) };
               },
             }
@@ -361,7 +366,7 @@ const ledger = localPrefs<{ v?: number; entries: Entry[]; shown: Record<string, 
 // The page about how you work: one per space, of the app's own type, found by its id.
 const aboutPage = () => space.get().pages.find((p) => p.typeId === ABOUT);
 let making: Promise<string> | undefined;
-const aboutId = async () => aboutPage()?.id ?? (making ??= createPage({ typeId: ABOUT, title: "How you work" }).then((p) => p.id).finally(() => (making = undefined)));
+const aboutId = async () => aboutPage()?.id ?? (making ??= createPage({ typeId: ABOUT, title: "How you work" }, action("Created Tail memory", { kind: "agent", name: "Tail" })).then((p) => p.id).finally(() => (making = undefined)));
 export const openAbout = async () => openPage(await aboutId());
 const aboutLines = async () => {
   const p = aboutPage();
@@ -378,7 +383,7 @@ function rewrite(add?: string, gone: (sentence: string) => boolean = () => false
     const line = add ? [{ type: "paragraph", content: [{ type: "text", text: dated(isoDay(new Date()), add) }] }] : [];
     return { ...doc, content: [...kept, ...line].slice(-MAX_LINES) };
   };
-  writing = writing.then(async () => editPage(await aboutId(), { content })).catch(console.error);
+  writing = writing.then(async () => editPage(await aboutId(), { content: (doc) => stampDoc(content(doc), { kind: "agent", name: "Tail" })! }, action("Updated Tail memory", { kind: "agent", name: "Tail" }))).catch(console.error);
   return writing;
 }
 // A place as its quiet sentence names it.
@@ -563,26 +568,21 @@ function asTask(page: string, index: number, blocks: EditorDoc[]): Found | undef
         words: ["Make this a task?"],
         row: ['Make "', { text: first(text, 5), page }, '" a task?'],
         nod: "Make task",
-        act: async (i = index) => {
-          const was = liveEditor(page)?.getJSON().content?.[i] ?? block;
+        act: async (i = index, given) => {
+          const context = given ?? action("Made task", { kind: "agent", name: "Tail" });
+          await flushAll();
+          const before = await objects.get(page);
+          if (!before) throw new Error("Save the page before making a task.");
+          if (textOf(before.content?.content?.[i] ?? {}, false) !== text) throw new Error("This line changed. Ask Tail again before making it a task.");
           // The task's body names the same pages, linked.
           const body = named.reduce((b, p) => linkFirst(b, p.title.trim(), p.id), { type: "paragraph", content: [{ type: "text", text: title }] } as EditorDoc);
-          const task = await newPage("task", { title, content: { type: "doc", content: [body] }, properties: day ? { due: { start: day.start } } : {} });
-          const count = () => liveEditor(page)?.getJSON().content?.length ?? 0;
-          const before = count();
-          liveEditor(page)?.setBlock(i, { type: "pageLink", attrs: { id: task.id } });
-          // A link as the last block gets an empty line after it; Undo takes that away too, unless
-          // words were typed in it since.
-          const added = count() - before;
+          const task = newObject(await pageInit("task", { title, content: stampDoc({ type: "doc", content: [body] }, context.author), properties: day ? { due: { start: day.start } } : {} }));
+          const content = { ...before.content, type: "doc", content: [...(before.content?.content ?? [])] };
+          content.content.splice(i, 1, { type: "pageLink", attrs: { id: task.id } });
+          await commitAction([{ before: null, after: task }, { before, after: { ...before, content } }], context);
           return {
             words: [day ? `Made a task, due ${day.word}.` : "Made a task."],
-            undo: async () => {
-              const blocks = liveEditor(page)?.getJSON().content ?? [];
-              const at = blocks.findIndex((b) => b.type === "pageLink" && b.attrs?.id === task.id);
-              const blank = added && blocks[at + 1]?.type === "paragraph" && !blocks[at + 1].content?.length;
-              if (at >= 0) liveEditor(page)?.setBlock(at, was, blank ? 2 : 1);
-              removePage(task.id);
-            },
+            undo: () => undoAction(context.action),
           };
         },
       };
@@ -607,8 +607,8 @@ function mention(page: string, index: number, blocks: EditorDoc[]): Found | unde
       words: [name(p), " has a page."],
       row: [name(p), ' has a page: "', { text: first(textOf(block).trim(), 4), page }, '".'],
       nod: "Link",
-      act: async (i = index) => {
-        liveEditor(page)?.setBlock(i, linkFirst(liveEditor(page)?.getJSON().content?.[i] ?? block, p.title.trim(), p.id));
+      act: async (i = index, context = action("Linked page", { kind: "agent", name: "Tail" })) => {
+        authored(context, () => liveEditor(page)?.setBlock(i, linkFirst(liveEditor(page)?.getJSON().content?.[i] ?? block, p.title.trim(), p.id)));
         // Back to the name's words, keeping any typed on the line since.
         const unlink = (b: EditorDoc) => ({ ...b, content: b.content?.map((n) => (n.type === "mention" && n.attrs?.id === p.id ?{ type: "text", text: p.title.trim() } : n)) });
         return { words: ["Linked."], undo: async () => liveEditor(page)?.setBlock(i, unlink(liveEditor(page)?.getJSON().content?.[i] ?? block)) };
@@ -742,8 +742,12 @@ export async function nod(line: Line) {
   }
   acting = true;
   let done: Done | void;
+  const context = action(line.nod, { kind: "agent", name: "Tail" });
   try {
-    done = await line.act(tail.get().find((l) => l.id === line.id)?.block ?? line.block);
+    await flushAll();
+    done = await line.act(tail.get().find((l) => l.id === line.id)?.block ?? line.block, context);
+    await flushAll();
+    if (done && (await objects.history()).some((e) => e.action === context.action)) done.undo = () => undoAction(context.action);
   } finally {
     acting = false;
   }
@@ -790,6 +794,7 @@ export function nodFront() {
 // A beat at app open, then every while, and when the window comes back after being away.
 let started = false;
 export async function startTail() {
+  if (await isMobile) return;
   await isNative;
   // An older ledger's ignores go, and the quiet sentences they set with them.
   const old = ledger.get();

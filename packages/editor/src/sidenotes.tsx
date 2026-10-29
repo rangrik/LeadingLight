@@ -108,7 +108,7 @@ function NoteEditor({
   useEffect(() => {
     const sync = () => {
       const body = store.current.read(id) ?? [{ type: "paragraph" }];
-      if (JSON.stringify(body) !== JSON.stringify(editor.getJSON().content)) editor.commands.setContent({ type: "doc", content: body }, { emitUpdate: false });
+      if (JSON.stringify(body) !== JSON.stringify(editor.getJSON().content)) editor.chain().setMeta("preserveOrigin", true).setContent({ type: "doc", content: body }, { emitUpdate: false }).run();
     };
     if (!editor.isFocused) sync();
     editor.on("focus", sync);

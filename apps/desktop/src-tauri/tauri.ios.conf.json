@@ -1,0 +1,20 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "LeadingLight",
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "bundle": {
+    "externalBin": [],
+    "resources": ["../../../LICENSE", "../../../vendor/shipyard/LICENSE", "../licenses/"],
+    "iOS": {
+      "minimumSystemVersion": "16.4",
+      "infoPlist": "Info.ios.plist"
+    }
+  }
+}

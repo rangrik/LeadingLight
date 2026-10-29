@@ -8,7 +8,7 @@ import type { Asset, AssetStore } from "./assets";
 import { Player } from "./player";
 import { captureVoiceReview, type VoiceReview } from "./voice-review";
 
-type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void };
+type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => void; onSaved?: () => void; onDetached?: (recordingId: string, asset: Asset) => Promise<void> };
 
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
@@ -31,13 +31,14 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   const cancelled = useRef(false);
   const busy = useRef(false);
   const attempt = useRef(0);
+  const committed = useRef<string | null>(null);
   const editable = editor.isEditable && !editor.view.dom.closest("[data-annotate]");
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      cancelled.current = true;
+      if (!committed.current) cancelled.current = true;
       if (recorder.current?.state !== "inactive") recorder.current?.stop();
       stream.current?.getTracks().forEach((track) => track.stop());
     };
@@ -57,6 +58,16 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, [phase]);
+
+  const commit = () => {
+    const pos = getPos();
+    if (pos === undefined || editor.isDestroyed) return;
+    const current = editor.state.doc.nodeAt(pos);
+    if (current?.type.name !== "voiceRecording") return;
+    committed.current = crypto.randomUUID();
+    // The save's identity is not a separate edit for Undo.
+    editor.view.dispatch(editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, recordingId: committed.current }).setMeta("addToHistory", false));
+  };
 
   const transcribe = async (asset: Asset) => {
     setPhase("transcribing");
@@ -91,8 +102,18 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     setError("");
     try {
       const asset = await assets.put(file);
-      if (!alive.current) return;
-      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, recordingId: crypto.randomUUID() });
+      if (!alive.current || editor.isDestroyed) {
+        if (committed.current) await options.onDetached?.(committed.current, asset);
+        return;
+      }
+      const pos = getPos();
+      if (pos === undefined || editor.state.doc.nodeAt(pos)?.attrs.recordingId !== committed.current) {
+        pending.current = null;
+        busy.current = false;
+        setPhase("idle");
+        return;
+      }
+      updateAttributes({ src: asset.url, name: asset.name, size: asset.size, mime: asset.mime, recordingId: committed.current });
       pending.current = null;
       options.onSaved?.();
       await transcribe(asset);
@@ -100,7 +121,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       if (alive.current) {
         setError(`The recording could not be saved: ${message(cause)}. Keep this page open and try again.`);
         setPhase("idle");
-      }
+      } else console.error("A stopped recording could not finish saving after its page closed.", cause);
       busy.current = false;
     }
   };
@@ -110,6 +131,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     busy.current = true;
     const started = ++attempt.current;
     cancelled.current = false;
+    committed.current = null;
     setError("");
     setPhase("starting");
     try {
@@ -130,11 +152,13 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       capture.onerror = () => {
         if (!alive.current || started !== attempt.current) return;
         setError("The microphone stopped responding. Any audio captured so far will be saved.");
+        commit();
         if (capture.state !== "inactive") capture.stop();
       };
       capture.onstop = () => {
         input.getTracks().forEach((track) => track.stop());
-        if (!alive.current || cancelled.current || started !== attempt.current) return;
+        if ((!alive.current && !committed.current) || cancelled.current || started !== attempt.current) return;
+        if (!committed.current) commit();
         stream.current = null;
         recorder.current = null;
         const type = capture.mimeType || chunks[0]?.type || "audio/mp4";
@@ -184,6 +208,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
             : node.attrs.transcribed ? "Voice recording · transcript added below" : node.attrs.src ? "Voice recording" : "Record a voice note"}
         </span>
         {phase === "recording" && <Button size="xs" variant="outline" onClick={() => {
+          commit();
           setPhase("saving");
           if (recorder.current?.state !== "inactive") recorder.current?.stop();
         }}><Square className="size-4 fill-current" />Stop and transcribe</Button>}

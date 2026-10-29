@@ -64,7 +64,8 @@
     "macOS": {
       "minimumSystemVersion": "13.0",
       "signingIdentity": "-",
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "infoPlist": "Info.macos.plist"
     },
     "externalBin": [
       "binaries/berthd",

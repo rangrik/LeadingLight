@@ -1,6 +1,6 @@
 import { keysFor, SHORTCUTS } from "@/lib/shortcuts";
 import { localPrefs } from "~/lib/local-prefs";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 
 // The keys changed in Settings › Shortcuts (features/shortcuts.feature), by id; the rest keep
 // lib/shortcuts.json's. They are written into the table itself, so Shipyard's sheet shows them too.
@@ -63,7 +63,7 @@ export function refuse(id: string, accel: string): string | undefined {
 
 // The Mac app's menu bar and its global ⌃⌥I take keys before the page (lib.rs); hold lets every key through.
 async function toNative(hold = false) {
-  if (!(await isNative)) return;
+  if (!(await isDesktop)) return;
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("shortcuts_set", { keys: Object.fromEntries(SHORTCUTS.map((s) => [s.id, hold ? null : (s.accel ?? null)])) });
 }

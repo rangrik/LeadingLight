@@ -18,7 +18,7 @@ import { closeUpdateToast } from "~/components/cli-updates";
 import { TypeChoices, UseSuggestions } from "~/components/settings/writing-section";
 import { behind, cliPrefs, commandOf, INSTALL, loadTools, SOURCE, type Tool, tools, updateTool } from "~/lib/clis";
 import { openLink } from "~/lib/links";
-import { isNative } from "~/lib/platform";
+import { isDesktop, useMobile } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transport";
 import { space } from "~/lib/space";
@@ -27,6 +27,11 @@ import { ABOUT } from "~/lib/tail-memory";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
+  const mobile = useMobile();
+  return mobile ? <SettingsPage title="AI" description="Local agents run in LeadingLight on your Mac. Cloud agents are not connected in this iPad build." children={null} /> : <DesktopAiSection />;
+}
+
+function DesktopAiSection() {
   const prefs = useAiPrefs();
   // The Effort rows read Codex's list, which comes in after the page opens.
   codex.use();
@@ -40,7 +45,7 @@ export function AiSection() {
   const [native, setNative] = useState(false);
   useEffect(() => {
     void listAgents(true).then(setAgents);
-    void isNative.then(setNative);
+    void isDesktop.then(setNative);
   }, []);
 
   return (

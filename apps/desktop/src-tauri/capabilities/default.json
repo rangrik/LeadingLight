@@ -2,6 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window and the capture box",
+  "platforms": ["macOS"],
   "windows": ["main", "capture"],
   "permissions": [
     "core:default",

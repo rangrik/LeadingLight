@@ -1,27 +1,45 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-
+#[cfg(target_os = "macos")]
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+};
+#[cfg(target_os = "macos")]
 use tauri::menu::MenuItemKind;
+#[cfg(target_os = "macos")]
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 use tauri_plugin_sql::{Migration, MigrationKind};
 
-// Claude through the installed Claude Code (agent.rs), the menu bar, built from
-// src/lib/shortcuts.json (Shipyard's, see vendor/shipyard/README.md); each item tells
-// the webview as berth://menu, the idea capture box (capture.rs), and the project runtime
-// that project chats run in (runtime.rs).
+#[cfg(target_os = "macos")]
 mod agent;
+#[cfg(target_os = "macos")]
+mod agent_guard;
+#[cfg(target_os = "macos")]
 mod browser_menu;
+#[cfg(target_os = "macos")]
 mod capture;
+#[cfg(target_os = "macos")]
 mod clis;
+#[cfg(target_os = "macos")]
 mod menu;
+#[cfg(target_os = "macos")]
 mod runtime;
-mod web;
+#[cfg(target_os = "macos")]
+mod relay;
+#[cfg(target_os = "macos")]
 mod voice;
+mod web;
+mod native_cloud;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
 // Closing the main window hides it, so ⌃⌥I keeps working; only Quit lets it close.
+#[cfg(target_os = "macos")]
 static QUITTING: AtomicBool = AtomicBool::new(false);
+
+#[tauri::command]
+fn native_platform() -> &'static str {
+    std::env::consts::OS
+}
 
 fn migrations() -> Vec<Migration> {
     vec![
@@ -41,6 +59,12 @@ fn migrations() -> Vec<Migration> {
             version: 3,
             description: "pages linked to folders",
             sql: include_str!("../migrations/003_project_folders.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 4,
+            description: "atomic page history",
+            sql: include_str!("../migrations/004_history.sql"),
             kind: MigrationKind::Up,
         },
     ]
@@ -65,6 +89,7 @@ fn menu_bar(app: &tauri::App) -> tauri::Result<()> {
 
 // Settings › Shortcuts (lib/keymap.ts): each menu item gets its keys, or none while Settings
 // records new ones. New idea's are also the capture box's global keys.
+#[cfg(target_os = "macos")]
 #[tauri::command]
 fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Result<(), String> {
     if let Some(menu) = app.menu() {
@@ -82,7 +107,8 @@ fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Resul
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
+        .manage(native_cloud::NativeCloud::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
@@ -90,14 +116,28 @@ pub fn run() {
             tauri_plugin_sql::Builder::default()
                 .add_migrations(DB_URL, migrations())
                 .build(),
-        )
+        );
+    #[cfg(target_os = "ios")]
+    let builder = builder.plugin(tauri_plugin_leadinglight_preview::init());
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        native_platform,
+        native_cloud::cloud_request,
+        web::web_fetch,
+        web::web_save_media
+    ]);
+    #[cfg(target_os = "macos")]
+    let builder = builder
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
         .manage(agent::Agents::default())
         .manage(browser_menu::BrowserMenu::default())
         .manage(runtime::Runtime::default())
+        .manage(relay::Relay::default())
         .invoke_handler(tauri::generate_handler![
+            native_platform,
+            native_cloud::cloud_request,
             agent::agent_status,
             agent::agent_ask,
             agent::agent_reply,
@@ -105,6 +145,10 @@ pub fn run() {
             agent::agent_cancel,
             agent::agent_list,
             agent::agent_folder,
+            relay::relay_list,
+            relay::relay_preview,
+            relay::relay_approve,
+            relay::relay_revoke,
             clis::cli_info,
             clis::cli_update,
             clis::codex_usage,
@@ -124,11 +168,11 @@ pub fn run() {
             shortcuts_set
         ])
         .setup(|app| {
-            #[cfg(target_os = "macos")]
             menu_bar(app)?;
             browser_menu::setup(app.handle())?;
             capture::setup(app.handle())?;
             runtime::setup(app.handle());
+            relay::setup(app.handle());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -152,20 +196,26 @@ pub fn run() {
             } else if !browser_menu::on_event(app, event.id().as_ref()) {
                 menu::on_event(app, event.id().as_ref());
             }
-        })
+        });
+    builder
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            // The Dock icon brings the hidden main window back.
-            if let RunEvent::Reopen { has_visible_windows: false, .. } = event {
-                if let Some(main) = app.get_webview_window(capture::MAIN) {
-                    let _ = main.show();
-                    let _ = main.set_focus();
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            {
+                let (app, event) = (_app, _event);
+                // The Dock icon brings the hidden main window back.
+                if let RunEvent::Reopen { has_visible_windows: false, .. } = event {
+                    if let Some(main) = app.get_webview_window(capture::MAIN) {
+                        let _ = main.show();
+                        let _ = main.set_focus();
+                    }
                 }
-            }
-            // Every way of quitting (⌘Q, the Dock) ends here, after the windows have closed.
-            if matches!(event, RunEvent::Exit) {
-                runtime::quit(app);
+                // Every way of quitting (⌘Q, the Dock) ends here, after the windows have closed.
+                if matches!(event, RunEvent::Exit) {
+                    agent::stop_all(app);
+                    runtime::quit(app);
+                }
             }
         });
 }

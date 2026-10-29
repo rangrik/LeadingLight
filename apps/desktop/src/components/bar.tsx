@@ -18,6 +18,7 @@ import { discoverVoiceCaptures, toReview } from "~/lib/capture-inbox";
 import { wantFocus } from "~/lib/feed";
 import { useKeysFor } from "~/lib/keymap";
 import { focusedPage, panes } from "~/lib/panes";
+import { platform, useMobile } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { isPageView, space } from "~/lib/space";
 import { inPanel, suggestionsOn, tail } from "~/lib/tail";
@@ -30,6 +31,7 @@ const ORDER: BarView[] = ["suggestions", "feed", "captures", "ask"];
 
 // Ask goes through openAsk, so its composer takes the keyboard; the Feed's first item does.
 export function toggleView(view: BarView) {
+  if (!["macos", "browser"].includes(platform.get()) && view !== "captures") return;
   if (view === "ask") return showing("ask") ? closeAsk() : openAsk(null);
   if (view === "feed") wantFocus.now = !showing("feed");
   toggleBar(view);
@@ -83,6 +85,7 @@ function StripButton({ view }: { view: BarView }) {
 }
 
 export function BarStrip({ onCapture }: { onCapture: () => void }) {
+  const mobile = useMobile();
   const keys = useKeysFor()("new-idea");
   // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
   useEffect(() => {
@@ -98,11 +101,11 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
   return (
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
-    <nav aria-label="Bar" className="flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region>
-      {ORDER.map((v) => (
+    <nav aria-label="Bar" className="flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
+      {ORDER.filter((v) => !mobile || v === "captures").map((v) => (
         <StripButton key={v} view={v} />
       ))}
-      <span className="flex-1" data-tauri-drag-region />
+      <span className="flex-1" data-tauri-drag-region={!mobile || undefined} />
       <Tooltip>
         <TooltipTrigger render={<Button aria-label="Quick capture" data-quick-capture onClick={onCapture} size="icon" variant="ghost" />}>
           <Plus />
@@ -173,10 +176,11 @@ function PanelEdge({ width, onResize }: { width: number; onResize: (w: number | 
 
 // Beside the strip, pushing the pages; a pane instead in a narrow window.
 export function BarPanel() {
+  const mobile = useMobile();
   const { open, view, width } = bar.use();
   const [dragged, setDragged] = useState<number | null>(null);
   const isNarrow = useNarrow();
-  if (!open || isNarrow) return null;
+  if (!open || isNarrow || (mobile && view !== "captures")) return null;
   const w = dragged ?? width;
   return (
     <>

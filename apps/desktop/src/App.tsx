@@ -1,3 +1,4 @@
+import { CloudSettings } from "~/components/cloud-settings";
 import { FileText, Plus } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
@@ -33,7 +34,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
-import { hostCapture, openIdea, saveCapture, saveWebpage } from "~/lib/capture";
+import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
 import { setPages as setAskPages } from "~/lib/ask";
 import { openEssay } from "~/lib/essay";
@@ -43,7 +44,8 @@ import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
-import { isNative } from "~/lib/platform";
+import { isDesktop, useMobile } from "~/lib/platform";
+import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
@@ -55,7 +57,7 @@ import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
-import { BROWSER_VIEW, isPageView } from "~/lib/space";
+import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, SUGGESTIONS_VIEW, isPageView } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -82,6 +84,8 @@ export default function App() {
   useCodeColors();
   useBerthConnection();
   useEffect(watchStillness, []);
+  const mobile = useMobile();
+  useEffect(() => mobile ? watchViewport() : undefined, [mobile]);
   const view = useStore((s) => s.view);
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
@@ -118,9 +122,9 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
-  const { enabled: projectsOn } = projectPrefs.use();
+  const projectsOn = projectPrefs.use().enabled && !mobile;
 
-  useEffect(() => void isNative.then(setNative), []);
+  useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
   const linkedFolders = folders.use().size > 0;
   useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
@@ -140,6 +144,7 @@ export default function App() {
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
+          if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           return !page || list.some((p) => p.id === page);
         };
@@ -163,7 +168,7 @@ export default function App() {
     if (captureFrom.current?.isConnected) captureFrom.current.focus();
   }, []);
   const toggleCapture = useCallback(() => {
-    void isNative.then(async (native) => {
+    void isDesktop.then(async (native) => {
       if (native) return (await import("@tauri-apps/api/core")).invoke("capture_show");
       if (capture) closeCapture();
       else setCapture(true);
@@ -172,6 +177,7 @@ export default function App() {
   const captureHost = useMemo<CaptureHost>(
     () => ({
       save: saveCapture,
+      saveVoice,
       saveWeb: saveWebpage,
       open: (id) => {
         setCapture(false);
@@ -215,7 +221,7 @@ export default function App() {
     window.addEventListener("pagehide", save);
     document.addEventListener("visibilitychange", onHidden);
     let unlisten: (() => void) | undefined;
-    void isNative.then(async (native) => {
+    void isDesktop.then(async (native) => {
       if (!native) return;
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       // Tauri waits for this before closing the window (Close window, the close button and ⌘Q). A
@@ -309,7 +315,7 @@ export default function App() {
   const shell = (
       <SidebarProvider
         // Nothing slides while the sidebar's edge is dragged, so the sidebar keeps up with the pointer.
-        className="isolate h-svh overflow-hidden data-resizing:**:transition-none"
+        className="ll-shell isolate h-svh min-h-0 overflow-hidden data-resizing:**:transition-none"
         data-resizing={resizing || undefined}
         inert={settings || undefined}
         onOpenChange={(open) => !settings && setSidebarOpen(open)}
@@ -318,7 +324,7 @@ export default function App() {
       >
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
-        <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />
+        {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         <AppSidebar
           onCreate={create}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
@@ -327,7 +333,7 @@ export default function App() {
           todayActive={current !== undefined && current === dayShown(today())}
           types={navTypes}
         />
-        <SidebarInset className="relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
+        <SidebarInset className="ll-inset relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {/* The bar's panel is a card beside the pages, never over them. */}
           <div className="flex min-h-0 flex-1">
             {root ? (
@@ -355,7 +361,7 @@ export default function App() {
             <BarPanel />
           </div>
           {/* The ask bar sits by the selected words. */}
-          {root && <AskBar />}
+          {root && !mobile && <AskBar />}
         </SidebarInset>
         <BarStrip onCapture={toggleCapture} />
         <DeletePageDialog
@@ -366,6 +372,7 @@ export default function App() {
           }}
           page={pendingDelete}
         />
+        <CloudSettings />
       </SidebarProvider>
     );
 
@@ -384,12 +391,12 @@ export default function App() {
           )}
           {/* The row only places the box; a click beside it reaches the page under it. */}
           {capture && (
-            <div className="pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center">
-              <CaptureBox className="pointer-events-auto h-80 w-[640px] shadow-2xl" host={captureHost} />
+            <div className="ll-capture-overlay pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center px-3">
+              <CaptureBox className="pointer-events-auto h-80 max-h-[70dvh] w-full max-w-[640px] shadow-2xl" host={captureHost} />
             </div>
           )}
           <ShortcutsSheet />
-          <CliUpdates />
+          {!mobile && <CliUpdates />}
           <ZoomHud />
         </TooltipProvider>
       </ShipyardToasts>

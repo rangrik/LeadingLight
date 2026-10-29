@@ -196,8 +196,8 @@ pub async fn cli_update(id: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-// Codex's app server for the app's own threads: none of the person's MCP servers, hooks, plugins
-// or shell, so it starts quickly and only has the page tools the app passes and web search.
+// Common note-thread flags. Paired threads also disable and verify each inherited MCP server
+// in agent.rs; an empty MCP table alone does not clear the user's configured servers.
 pub fn codex_server(bin: &Path) -> Command {
     let mut c = tool_command(bin);
     c.arg("app-server");

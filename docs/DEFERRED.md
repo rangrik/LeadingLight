@@ -5,12 +5,12 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-10-28 | Browser previews after an abrupt viewer exit | Normal panel close resets previews, but a closed or crashed viewer cannot finish that request. Reloading the page removes them. Reliable cleanup needs a runtime lease for each viewer. | Add viewer leases with abrupt-close and reconnect tests. |
-| 2026-10-28 | Highlighting an element before clicking in the browser picker | Clicking selects and highlights the element. The current inspect operation creates a handle; calling it on every pointer move would create unnecessary state. | Add a bounded, read-only hover hit test. |
-| 2026-10-28 | A newly denied browser tab is titled New tab | The runtime has no loaded document title yet. The permission notice and address identify the destination. | Add a destination label that cannot replace the title of a previously loaded page after a failed navigation. |
-| 2026-10-28 | Browser element feedback inside frames, and freehand area comments | The current opaque element handles operate on the top document; frames return an explicit error. Frame transforms and origin changes need their own coordinate and lifetime checks. | Add frame-aware selection and screenshot-area references, with nested/zoomed frame tests. |
-| 2026-10-28 | Browser audio, camera/microphone prompts and a native page accessibility tree | The shared Chromium transport carries image frames and input. It cannot provide these by changing toolbar controls. Page text is available as an accessible snapshot. | Extend the transport and native permission flow, then verify media and assistive tools on macOS. |
-| 2026-10-28 | Full browser developer mode, extension attachment, profile import and cloud browsing | Console, failed requests, snapshots and element previews are implemented. A full inspector or attachment to a regular browser needs a distinct permission and process model; existing sign-ins are deliberately app-owned. | Build a separately scoped integration with permission, lifecycle and profile-migration checks. |
+| 2026-10-28 | Native automation focus after permission or capture-panel transitions | CUA sometimes lost the panel or could not activate main-window voice controls. Normal relaunch restored recording, playback and transcript review; all requested audio checks passed. A tool-versus-app cause was not established. | Direct user interaction reproduces it, or native automation can trace the key-window transition without changing focus itself. |
+| 2026-10-28 | Recover a stopped recording when storage fails after leaving | The failure is logged, but the unsaved audio stays in the closed editor's memory and cannot be retried from the reopened page, especially across native capture webviews. Save failures while the original editor stays open remain retryable. | Add retained pending recordings and recovery UI that work across native windows. |
+| 2026-10-28 | Browser audio, camera/microphone prompts and a native page accessibility tree | The transport carries images and input. Synthetic devices work in full Chromium but fail in current headless-shell; removing the mute flag provides neither audio transport nor per-tab controls. A text snapshot is not a native accessibility tree. | Validate a full-engine/transport and native permission design with macOS media and assistive tools. |
+| 2026-10-28 | Unrestricted browser-wide CDP, extension attachment, profile import and cloud browsing | Page-scoped developer commands now have separate approval. Browser-wide process/profile access and attaching to an existing browser need a distinct permission and lifecycle model; cloud browsing needs a service. | Build and test the separate integration rather than widening a page grant. |
+| 2026-10-28 | Annotation text replacement and rotated/skewed/mirrored frames | CSS previews restore styles safely; text replacement can destroy child nodes. Positive axis-aligned frame transforms are supported, other transforms fail explicitly. | Add a reversible DOM editing model and accurate transform/hit-testing tests. |
+| 2026-10-28 | Time-scoped cookie/cache/website-data clearing | History has time ranges. Chromium storage commands cannot establish time-scoped removal across every website store; the dialog explicitly clears website data for all time. | A storage API or tracked store lifecycle can prove consistent time-scoped clearing. |
 | 2026-10-28 | The caret scroll after an edit made by code | The editor's caret scroll (`packages/editor/src/caret-scroll.ts`) runs a frame after a key, to the caret as it is then. An edit made by code inside that frame moves the page to wherever it put the caret; composer.spec's 80-line insert did, half the time. A person can't act inside one frame, so only tests meet it; the test now waits a frame. | A feature edits the page by code right after a key, or the plugin is next touched: drop the pending frame on any change that wasn't typed. |
 | 2026-10-28 | The daily card in a pane under 260 px | The buttons stack and stay inside the card, but from about 230 px the label is cut ("Left over: 3 thin…"), and in the stack the ghost buttons' words sit 8 px inside the outline button's edge. Panes that narrow come only from three panes plus the panel in a small window. | A floor on pane width, or a card whose buttons fold into one menu when the pane is narrow. |
 | 2026-10-28 | The in-the-middle tag missing right after the first capture, in WebKit | Two overlapping page refreshes (`ensureTag`, `lib/capture.ts`) can leave the new tag page out of `space.get().pages` until a reload, so the Captures count and the daily card miss it. Seen in headless WebKit after `__tail.seed()`; the real app already has the tag. | The first capture in a fresh space misses the Captures count, or `ensureTag` is next touched: make its refresh wait for the one before it. |
@@ -180,12 +180,60 @@ Revisit on a Base UI update or if native WebKit reproduces it at ordinary typing
 Evidence: `apps/desktop/qa/report/scope-independent/engine-focus-frames.mjs` and
 `engine-focus-control.mjs`. Native behavior has not been tested.
 
-## 2026-10-28 — Browser address field in a narrow split
 
-Independent delivery QA found that opening Browser beside a note at a 520 px window
-leaves its roughly 236 px pane with a sliver of an Address field and an overlapping
-globe/bookmark icon. This arrives unchanged from the shared-browser branch. Note
-editing and navigation back still work. Leave toolbar adaptation to the browser's
-responsive pass; revisit before recommending side-by-side browsing in small windows.
-Evidence: `apps/desktop/qa/report/writing-coach-delivery-2026-10-28/`
-`delivery-independent/j1-520-5-browser-zoom.png`.
+## 2026-10-28 — iPad delivery and native account sync
+
+Native account handoff and portable attachments are implemented with the shared encrypted
+journal. Release acceptance is recorded in `NATIVE-SYNC.md`; deployment alone does not prove
+the owner's Mac library has reached the iPad.
+
+TestFlight remains unavailable without Apple Developer membership. On 2026-10-29 the user chose
+direct development testing; LeadingLight Dev was signed with their Personal Team and installed
+on the connected iPad. The user then authorized agent-led native testing: persistence, Files
+import and cancellation, offline attachments, Quick Look and onscreen keyboard checks passed.
+Immediate Home save checks passed once each for body and capture; repeated suspension timing,
+multitasking resize and very long pages still need device coverage. Revisit during the next
+hardware pass; browser equivalents do not establish those native results. The rotation fix
+passed on device: the fifth-paragraph caret stayed visible with the keyboard open and no input.
+A signed update exposed a stale sandbox path in the saved PNG URL; its recovery fix now passes
+on device without reimport or data reset. A Wi-Fi-off cold launch kept the original PNG and text,
+and the original PDF opened offline in Quick Look. Evidence: `apps/desktop/qa/report/ipad-device/attachments-recovered-offline.png`.
+The development profile expires November 5, 2026 at 12:16 AM Pacific.
+
+## 2026-10-29 — SQLite privacy declaration before TestFlight
+
+The iOS release imports `statfs` and `fstatfs` from bundled SQLite 3.46.0. Those calls inspect
+filesystem type and read-only flags; we have not established an approved DiskSpace reason
+for that purpose. The manifest declares the proven app-container timestamp use (`C617.1`),
+without inventing a free-space use. This is an unresolved Apple acceptance risk, not an
+observed rejection. [SQLite recommends the system library](https://sqlite.org/forum/info/d404fb0a8b3d9e74),
+but SQLx 0.8.6 calls `sqlite3_unlock_notify`, which Apple's iOS SDK does not export, so switching
+libraries alone would break the build. Revisit before TestFlight upload: resolve the declaration
+with Apple or adopt a compatible SQLite integration, then check the final binary and validate it.
+
+## 2026-10-28 — Cloud preview
+
+Detached voice saves still need a failure probe where the page save fails while
+the user leaves it (reviewed 2026-10-29). The audio file may be saved without being
+attached to its block. Slow writes, failed audio writes and ordinary detached saves
+pass; recovery from both failures together is outside this pairing merge. Revisit
+before claiming full recording recovery from disk failures.
+
+On 2026-10-29, the combined browser run also lost the audio block while the capture
+review test clicked its transcript and typed; the review button then timed out.
+Four isolated reruns passed unchanged. Keep the failing trace in
+`/tmp/leadinglight-main-merge-playwright`; investigate selection/layout timing if
+this recurs or before broad voice acceptance. It is not claimed fixed.
+
+| Date | Item | Why not now | Revisit when |
+|---|---|---|---|
+| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
+| 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
+| 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing definitions and adopts desktop changes to untouched starter definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
+| 2026-10-29 | Remote project agents and isolated cloud runners | Browser pairing currently grants page-agent access to the existing Mac runtime. Project folders and terminals need a separate grant. Shared API keys and usage billing are rejected, not deferred. | Design scoped project access, or validate user-authorized CLI login in a sandbox service such as E2B. Preserve approvals and isolation; measure hosting costs separately from model usage. |
+| 2026-10-29 | Remote turns continuing after browser closure | The browser owns page tools and approvals. Reloading or closing interrupts the turn and keeps its partial transcript; automatic replay could repeat an edit. | Move tool execution to a durable workspace with replay-safe mutations before offering unattended remote work. |
+| 2026-10-29 | Recovering a pairing after unrecoverable delivery/storage failure | Normal received events clear from the relay, but a local queue overflow, invalid delivery or failed durable save stops work and revokes the grant. Re-pairing is the explicit recovery path. | Add replay-safe stream recovery and backpressure if real workloads hit these failures; do not silently resume uncertain edits. |
+| 2026-10-29 | Broader CLI version compatibility | Remote Codex discovers supported feature flags and restricts the current note tool set. Future provider built-ins need a fresh scope review. | Before supporting new CLI versions broadly; keep the real CLI/Keychain acceptance matrix with the release. |
+| 2026-10-29 | Inherited MCP configuration in unpaired local Codex note turns | Native pairing QA showed that an empty MCP table merges with the user's settings. Remote turns now explicitly disable inherited entries and verify the result; the older local launch remains unchanged. | Apply the same isolation to local note turns before claiming they exclude the user's configured helpers. |
+| 2026-10-29 | Keychain restore diagnostics and signed Mac updates | Rebuilding the ad-hoc dev app changed its code identity and triggered a macOS Keychain prompt. A failed restore currently omits that connection without an explanation. | Surface an actionable restore error/retry and use a stable Developer ID signature before public Mac updates. Never relax Keychain access controls. |
+| 2026-10-29 | History version-row height when timestamps wrap | Native QA showed a wrapped timestamp touching the next row in the narrow history list. Pairing, saved versions and attribution worked; this is outside the runtime repair. | Before broader UI acceptance, let history rows fit two-line timestamps and verify narrow layouts. |

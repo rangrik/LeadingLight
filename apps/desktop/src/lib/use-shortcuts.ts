@@ -8,7 +8,7 @@ import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
-import { isNative } from "~/lib/platform";
+import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
@@ -95,7 +95,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     window.addEventListener("keydown", onKey);
     let unlisten: (() => void) | undefined;
     let gone = false;
-    void isNative.then(async (native) => {
+    void isDesktop.then(async (native) => {
       if (!native || gone) return;
       sendKeys();
       const { listen } = await import("@tauri-apps/api/event");

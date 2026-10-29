@@ -28,6 +28,7 @@ import { Tables } from "./table";
 import { Todo } from "./todo";
 import { WritingAids } from "./writing";
 import { CaretScroll } from "./caret-scroll";
+import { Origin } from "./authorship";
 
 // ArrowUp on the first line, or Backspace in a lone empty block, hands focus back to the title.
 // Low priority so menus get the keys first.
@@ -264,7 +265,7 @@ export function createExtensions(opts: {
     Italic.extend(emphasis("*", "_")),
     Underline.extend(plain),
     Strike.extend(emphasis("~~")),
-    Code.extend(plain),
+    Code.extend({ ...plain, excludes: "bold italic underline strike highlight" }),
     CodeBlock,
     TaskList,
     Todo.configure({ nested: true }),
@@ -289,6 +290,7 @@ export function createExtensions(opts: {
     Cited,
     Thought,
     Cite,
+    Origin,
     opts.placeholder ? Placeholder.configure({ paragraph: opts.placeholder }) : Placeholder,
     BlurSelection,
     WritingAids,

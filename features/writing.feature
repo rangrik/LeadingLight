@@ -128,6 +128,7 @@ Feature: Writing tools
     And the counts sit on the crumbs' text baseline and take only the room the title leaves: the
       title is never cut while a count shows, a narrow card shows only the counts that fit whole,
       in that order, and one too narrow for the first shows none and no divider
+    And narrow cards hide the parent breadcrumb before crowding the title or history control
     And pointing at a dot names it in the app's tooltip
     When I select "the quick fox"
     Then they count the selection: "3 of 14 words" and the selection's own parts and issues
