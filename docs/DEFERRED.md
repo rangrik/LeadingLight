@@ -5,6 +5,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-10-28 | Recover a stopped recording when storage fails after leaving | The failure is logged, but the unsaved audio stays in the closed editor's memory and cannot be retried from the reopened page, especially across native capture webviews. Save failures while the original editor stays open remain retryable. | Add retained pending recordings and recovery UI that work across native windows. |
 | 2026-10-28 | Browser previews after an abrupt viewer exit | Normal panel close resets previews, but a closed or crashed viewer cannot finish that request. Reloading the page removes them. Reliable cleanup needs a runtime lease for each viewer. | Add viewer leases with abrupt-close and reconnect tests. |
 | 2026-10-28 | Highlighting an element before clicking in the browser picker | Clicking selects and highlights the element. The current inspect operation creates a handle; calling it on every pointer move would create unnecessary state. | Add a bounded, read-only hover hit test. |
 | 2026-10-28 | A newly denied browser tab is titled New tab | The runtime has no loaded document title yet. The permission notice and address identify the destination. | Add a destination label that cannot replace the title of a previously loaded page after a failed navigation. |

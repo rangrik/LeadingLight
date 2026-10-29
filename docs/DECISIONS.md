@@ -405,6 +405,8 @@ media uses the existing asset store. Native downloads are bounded, anonymous HTT
 Voice blocks save audio through the same asset store before transcribing. A bundled Swift helper
 uses Apple's SpeechAnalyzer on macOS 26+, following MacBud's approach. Recognition stays on the
 Mac; Apple may download its speech model. Failed recognition keeps the audio and offers retry.
+Stopping commits the take: its save can finish after the editor closes, attaching by recording id
+to the latest page through the main window. Leaving an active recording still cancels it.
 
 ## 28. Captures stay pages; review state is metadata
 
