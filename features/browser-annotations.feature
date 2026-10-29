@@ -34,6 +34,12 @@ Feature: Browser annotations
     Then its original inline style attribute returns
     And unrelated changes made by the page remain
 
+  Scenario: Reset preserves the absence of inline styles
+    Given an element has no inline style attribute
+    When I preview only its opacity and reset it
+    Then the element has no inline style attribute again
+    And website rules that match an inline style attribute do not start matching it
+
   Scenario: A viewer disappears during a preview
     Given one viewer owns a temporary style preview
     And another viewer has a different selected element in the same tab

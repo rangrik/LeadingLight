@@ -621,3 +621,5 @@ Nested popups handle Escape before feedback closes; a failed developer command c
 the earlier result so the displayed method and output cannot imply a false success.
 Raw address input marks a draft even when the pasted value is unchanged, so an
 unfinished tab close cannot erase it; merely focusing still permits redirect updates.
+Reset synchronizes Chromium's pending CSS attribute before removing it. This preserves
+the difference between an absent and an empty style attribute, including website selectors.

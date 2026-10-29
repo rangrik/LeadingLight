@@ -2090,7 +2090,7 @@ index 0000000..81d92cb
 +	}
 +}
 diff --git a/internal/box/browserinspect.go b/internal/box/browserinspect.go
-index 7d4a725..1b7ed17 100644
+index 7d4a725..0c5e13d 100644
 --- a/internal/box/browserinspect.go
 +++ b/internal/box/browserinspect.go
 @@ -22,31 +22,40 @@ type browserStyleSnapshot struct {
@@ -2174,7 +2174,17 @@ index 7d4a725..1b7ed17 100644
    for(const p of names)original.properties[p]={value:e.style.getPropertyValue(p),priority:e.style.getPropertyPriority(p)};
    e.style.setProperty(property,value,'important');
   }
-@@ -102,30 +115,45 @@ const browserInspectFunction = `function(properties,property,value,restore,basel
+@@ -89,7 +102,8 @@ const browserInspectFunction = `function(properties,property,value,restore,basel
+    expected.cssText=baseline.attribute||'';
+    const names=new Set([...expected,...e.style]);
+    if([...names].every(p=>expected.getPropertyValue(p)===e.style.getPropertyValue(p)&&expected.getPropertyPriority(p)===e.style.getPropertyPriority(p))){
+-    if(baseline.attribute===null)e.removeAttribute('style');else e.setAttribute('style',baseline.attribute);
++    // Flush lazy CSSOM attribute writes before removing an originally absent attribute.
++    if(baseline.attribute===null){e.getAttribute('style');e.removeAttribute('style');}else e.setAttribute('style',baseline.attribute);
+    }
+   }
+  }
+@@ -102,30 +116,45 @@ const browserInspectFunction = `function(properties,property,value,restore,basel
   for(const p of properties)styles[p]=computed.getPropertyValue(p);
   let selector=e.localName;
   if(e.id)selector+='#'+CSS.escape(e.id);else for(const name of [...e.classList].slice(0,3))selector+='.'+CSS.escape(name);
@@ -2231,7 +2241,7 @@ index 7d4a725..1b7ed17 100644
  	args := []map[string]any{{"value": browserVisualProperties}, {"value": property}, {"value": value}, {"value": restore}, {"value": opts.baseline}, {"value": opts.reveal}}
  	var result struct {
  		Result struct {
-@@ -133,7 +161,7 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
+@@ -133,7 +162,7 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
  		} `json:"result"`
  		Exception json.RawMessage `json:"exceptionDetails"`
  	}
@@ -2240,7 +2250,7 @@ index 7d4a725..1b7ed17 100644
  		return out, browserStyleSnapshot{}, err
  	}
  	if len(result.Exception) > 0 {
-@@ -156,13 +184,33 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
+@@ -156,13 +185,33 @@ func (br *browser) inspectNode(ctx context.Context, node int64, property, value
  	if err := json.Unmarshal(result.Result.Value, &out); err != nil {
  		return out, browserStyleSnapshot{}, err
  	}
@@ -2276,7 +2286,7 @@ index 7d4a725..1b7ed17 100644
  	}
  	if err := decode(r, &req); err != nil {
  		return err
-@@ -174,44 +222,38 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+@@ -174,44 +223,38 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
  	if err != nil {
  		return err
  	}
@@ -2338,7 +2348,7 @@ index 7d4a725..1b7ed17 100644
  	if err != nil {
  		return err
  	}
-@@ -220,11 +262,17 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+@@ -220,11 +263,17 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
  	if epoch != br.controls.inspectEpoch || br.controls.closed {
  		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
  	}
@@ -2357,7 +2367,7 @@ index 7d4a725..1b7ed17 100644
  			out.Handle = handle
  			writeJSON(w, out)
  			return nil
-@@ -242,11 +290,12 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+@@ -242,11 +291,12 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
  		return httpError{http.StatusConflict, "Reset existing element previews or reload before inspecting more elements."}
  	}
  	var random [16]byte
@@ -2372,7 +2382,7 @@ index 7d4a725..1b7ed17 100644
  	writeJSON(w, out)
  	return nil
  }
-@@ -254,6 +303,7 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
+@@ -254,6 +304,7 @@ func (b *Box) browserInspect(w http.ResponseWriter, r *http.Request) error {
  func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error {
  	var req struct {
  		Handle string `json:"handle"`
@@ -2380,7 +2390,7 @@ index 7d4a725..1b7ed17 100644
  	}
  	if err := decode(r, &req); err != nil {
  		return err
-@@ -271,9 +321,15 @@ func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error
+@@ -271,9 +322,15 @@ func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error
  	if node == nil || node.epoch != epoch || closed {
  		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
  	}
@@ -2398,7 +2408,7 @@ index 7d4a725..1b7ed17 100644
  	if err != nil {
  		return err
  	}
-@@ -296,6 +352,7 @@ func (b *Box) browserStyleReset(w http.ResponseWriter, r *http.Request) error {
+@@ -296,6 +353,7 @@ func (b *Box) browserStyleReset(w http.ResponseWriter, r *http.Request) error {
  func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset bool) error {
  	var req struct {
  		Handle   string `json:"handle"`
@@ -2406,7 +2416,7 @@ index 7d4a725..1b7ed17 100644
  		Property string `json:"property"`
  		Value    string `json:"value"`
  	}
-@@ -321,15 +378,35 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
+@@ -321,15 +379,35 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
  	if node == nil || node.epoch != epoch || closed {
  		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
  	}
@@ -2444,7 +2454,7 @@ index 7d4a725..1b7ed17 100644
  	if err != nil {
  		return err
  	}
-@@ -347,7 +424,7 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
+@@ -347,7 +425,7 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
  		if baseline == nil {
  			baseline = &original
  		}
@@ -2453,7 +2463,7 @@ index 7d4a725..1b7ed17 100644
  		return httpError{http.StatusConflict, "The page changed. Inspect it again."}
  	}
  	defer br.mu.Unlock()
-@@ -372,11 +449,11 @@ func (br *browser) invalidateInspections() {
+@@ -372,11 +450,11 @@ func (br *browser) invalidateInspections() {
  	br.controls.inspectEpoch++
  	if !br.controls.closed {
  		if br.controls.inspectUndo == nil {
@@ -2468,7 +2478,7 @@ index 7d4a725..1b7ed17 100644
  			}
  		}
  		if len(br.controls.inspectUndo) > 0 {
-@@ -389,6 +466,11 @@ func (br *browser) invalidateInspections() {
+@@ -389,6 +467,11 @@ func (br *browser) invalidateInspections() {
  			}()
  		}
  	} else {
@@ -2480,7 +2490,7 @@ index 7d4a725..1b7ed17 100644
  		br.controls.inspectUndo = nil
  	}
  	br.controls.inspected = nil
-@@ -399,7 +481,5 @@ func (br *browser) restoreInspectionPreviews(ctx context.Context) {
+@@ -399,7 +482,5 @@ func (br *browser) restoreInspectionPreviews(ctx context.Context) {
  	pending := br.controls.inspectUndo
  	br.controls.inspectUndo = nil
  	br.mu.Unlock()
@@ -2490,7 +2500,7 @@ index 7d4a725..1b7ed17 100644
 +	br.undoInspections(ctx, pending)
  }
 diff --git a/internal/box/browserinspect_test.go b/internal/box/browserinspect_test.go
-index dd4c2a3..1d9fcc6 100644
+index dd4c2a3..cc3d7f5 100644
 --- a/internal/box/browserinspect_test.go
 +++ b/internal/box/browserinspect_test.go
 @@ -23,6 +23,11 @@ func TestBrowserStyleValidation(t *testing.T) {
@@ -2505,7 +2515,22 @@ index dd4c2a3..1d9fcc6 100644
  	if err := validateBrowserStyle("background-image", "red"); err == nil {
  		t.Fatal("accepted property")
  	}
-@@ -111,6 +116,10 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
+@@ -105,12 +110,25 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
+ 	if again := inspect(110, 110); again.Handle != selected.Handle {
+ 		t.Fatal("same element lost undo handle")
+ 	}
++	// A single-property reset must restore attribute absence, which changes [style] selectors.
++	eval(`document.querySelector('#target').removeAttribute('style');true`)
++	style(selected.Handle, "opacity", "0.4")
++	if _, err := call(b.browserStyleReset, map[string]string{"handle": selected.Handle}); err != nil {
++		t.Fatal(err)
++	}
++	if got := eval(`document.querySelector('#target').getAttribute('style')`); got != "null" {
++		t.Fatalf("opacity reset left a style attribute: %s", got)
++	}
+ 	// The baseline starts at the first preview, including changes made after inspection.
+ 	for _, attribute := range []string{"null", `""`, `"color:red!important;padding:7px 9px;border-radius:3px 4px;--kept:yes"`} {
+ 		eval(`(()=>{let e=document.querySelector('#target'),v=` + attribute + `;if(v===null)e.removeAttribute('style');else e.setAttribute('style',v);return true})()`)
  		style(selected.Handle, "color", "blue")
  		style(selected.Handle, "padding", "20px")
  		style(selected.Handle, "border-radius", "15px")
@@ -2516,7 +2541,7 @@ index dd4c2a3..1d9fcc6 100644
  		if _, err := call(b.browserStyleReset, map[string]string{"handle": selected.Handle}); err != nil {
  			t.Fatal(err)
  		}
-@@ -137,8 +146,8 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
+@@ -137,8 +155,8 @@ func TestBrowserInspectionWithRealChromium(t *testing.T) {
  	if _, err := call(b.browserStyle, map[string]string{"handle": selected.Handle, "property": "width", "value": "red"}); err == nil {
  		t.Fatal("invalid CSS accepted")
  	}
