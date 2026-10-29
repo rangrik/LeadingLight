@@ -35,3 +35,14 @@ encrypted key transfer and failed verification. Browser approval is exercised in
 and WebKit. Device delivery must additionally verify the real Mac library, an image/PDF,
 an offline iPad edit and its return to the Mac. Record those results here after installation;
 passing fixture tests alone does not establish that the owner's devices are connected.
+
+2026-10-29, merged source `5f06240`: workspace typecheck, 44 desktop unit tests, 20 Rust
+tests and arm64 iOS compilation passed. The isolated PostgreSQL server suite passed 10/10.
+Post-merge browser acceptance passed 14/14 account cases and 8/8 iPad cases in Chromium
+and WebKit. Two browser databases also passed encrypted PNG/PDF transfer, initial catalog
+adoption, offline edits and reconnect, history restore and repeated sync without duplicate
+history or conflict copies. Native identity and relocated iOS assets passed 4/4 checks.
+
+Independent Sonnet 5.5 review found account-switch and failed-approval rollback issues;
+both were fixed and covered by the final browser cases. Device installation and the owner's
+real library still require acceptance after this build.
