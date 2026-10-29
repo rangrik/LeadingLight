@@ -101,6 +101,18 @@ build success does not establish that OS menus and dialogs were exercised.
 No native window was automated, and no user notes or browser profile were used
 by the isolated runtime tests.
 
+The release bundle was built from main at `d923235` and passed
+`codesign --verify --deep --strict`. Its identifier is `com.leadinglight.app`; its
+runtime is `v0.3.30-ll.27+beb43ef5`. The signed runtime file hash is
+`5c2d1fedd38efc83d661c5ef9f684b162a56eadb3aaa0baf88d4d09be0707ce5`;
+the unsigned test binary hash above differs because packaging adds its signature.
+
+Installation is pending. `pnpm install:app --no-build` refused because LeadingLight
+was running and changed nothing. After the person quits it, install the prepared
+bundle from main, then remove LeadingLight Dev 0c49fc from this branch's worktree.
+Owned QA servers and isolated runtimes have been stopped; the branch stays available
+for that cleanup. No native window was driven or user app process stopped.
+
 ## Native checks
 
 Use the installed LeadingLight app. Browser tests cannot establish WebKit's OS
