@@ -43,7 +43,22 @@ If the file has changed since, the dialog says so. A file a later turn deleted s
 
 ## Stop
 
-Click **Stop** while the agent works. The turn ends with **Stopped**, and you can send a new message.
+Click **Stop** while the agent works. The turn ends with **Stopped**, and you can send a new message. A message you had queued goes next.
+
+## Send more while the agent works
+
+You don't have to wait for a turn to end. Type the next message and press <kbd>↩</kbd>. It shows after the turn in a dashed bubble that reads **Queued · sends when Claude finishes**, the field empties, and **Stop** stays. When the turn ends, the message goes by itself: its bubble reads **Sent · Claude starts on it** for a moment, then it shows as your next message, and the agent answers it as a turn of its own. Several messages go in the order you sent them.
+
+Each queued bubble has two buttons:
+
+- **Send now** types the message into the running turn. Its bubble reads **Sent · Claude reads it after this step**: Claude reads it after the step it is on and takes it into account before going on; Codex drops what it was doing and answers it. Once read, the message shows inside that turn, under the one that started it. No new turn starts for it.
+- **Remove** drops it. It never reaches the agent.
+
+Press <kbd>⌘</kbd><kbd>↩</kbd> instead of <kbd>↩</kbd> to send a message into the running turn straight away. Its dashed bubble reads **Sent · Claude reads it after this step** until the agent reads it. Hover **Send** while a turn runs and its tooltip says the same.
+
+While the agent waits on a question or an approval, queued messages wait too. **Send now** then says the agent is waiting for your answer first. Answer the card, and the queue goes after the turn.
+
+The queue lives in the project runtime, not in the window. Close the chat or reload the app, and the queued messages are still there and still go when the turn ends. [Ask](/ai/ask) on a page doesn't queue: its Send waits for the turn.
 
 ## Access and Plan mode
 

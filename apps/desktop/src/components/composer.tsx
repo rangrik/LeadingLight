@@ -20,6 +20,7 @@ import { Kbd } from "@leadinglight/ui/components/kbd";
 import { Menu, MenuCheckboxItem, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { Slider } from "@leadinglight/ui/components/slider";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import type { Agent } from "~/lib/agents";
 import { ACCESS, type Access, type AiPrefs, EFFORTS, GPT_ACCESS, isClaude, labelOf, MODELS, setAiPrefs, useAiPrefs } from "~/lib/ai-prefs";
@@ -82,6 +83,7 @@ export function Composer({
   restore,
   settings,
   files,
+  queue,
 }: {
   ready: boolean;
   busy: boolean;
@@ -89,7 +91,8 @@ export function Composer({
   placeholder: string;
   agents: Agent[];
   pages: PageRef[];
-  onSend: (question: string, mentions: Mention[]) => void;
+  // now: sent into the running turn (⌘↩) rather than queued for after it.
+  onSend: (question: string, mentions: Mention[], now?: boolean) => void;
   onStop: () => void;
   fieldRef: RefObject<HTMLDivElement | null>;
   // A project chat has none of the page's own (they ask about the note in view).
@@ -99,11 +102,15 @@ export function Composer({
   settings?: ChatSettings;
   // Files to go with the next message (a project chat's), and taking one off or adding more.
   files?: { names: string[]; add: (f: File[]) => void; remove: (i: number) => void };
+  // Set, Send stays on while busy: Enter queues the message for when the agent (who) finishes,
+  // ⌘↩ sends it now. Without it Send waits for the turn (the note chat).
+  queue?: { who: string };
 }) {
   const prefs = useAiPrefs();
   const s = settings ?? { ...prefs, onChange: setAiPrefs };
   const [value, setValue] = useState<ComposerValue>([]);
   useEffect(() => void (restore && setValue([{ type: "text", text: restore.text }])), [restore?.at]);
+  const can = ready && (!busy || !!queue);
   const triggers: ComposerTrigger[] = [
     {
       character: "@",
@@ -114,11 +121,11 @@ export function Composer({
     },
     { character: "/", items: commands.map((c) => ({ id: c.id, label: c.label, description: c.description ?? c.question.trim(), type: "action" as const, icon: <Slash /> })) },
   ];
-  const send = (draft: ComposerValue) => {
+  const send = (draft: ComposerValue, now = false) => {
     const question = getComposerText(draft).trim();
-    if (!question || busy || !ready) return;
+    if (!question || !can) return;
     setValue([]);
-    onSend(question, mentionsIn(draft));
+    onSend(question, mentionsIn(draft), now);
   };
 
   return (
@@ -129,12 +136,12 @@ export function Composer({
         if (!c) return;
         if (c.send) {
           setValue([]);
-          if (ready && !busy) onSend(c.question, mentionsIn(value));
+          if (can) onSend(c.question, mentionsIn(value));
         } else setValue([{ type: "text", text: c.question }]);
       }}
-      onSubmit={send}
+      onSubmit={(draft) => send(draft)}
       onValueChange={setValue}
-      submitDisabled={!ready || busy}
+      submitDisabled={!can}
       triggers={triggers}
       value={value}
     >
@@ -151,6 +158,13 @@ export function Composer({
       )}
       <ComposerInput
         aria-label="Question"
+        onKeyDown={(e) => {
+          // ⌘↩ while the agent works: into the running turn, ahead of the editor's own Enter.
+          if (e.key !== "Enter" || !e.metaKey || !busy || !queue) return;
+          e.preventDefault();
+          (e as { preventBaseUIHandler?: () => void }).preventBaseUIHandler?.();
+          send(value, true);
+        }}
         placeholder={placeholder}
         ref={fieldRef}
         renderToken={(t) => <ComposerToken icon={t.kind === "agent" ? <Bot /> : <FileText />} token={t} variant="chip" />}
@@ -173,18 +187,36 @@ export function Composer({
         </ComposerActionGroup>
         <ComposerActionGroup align="end" className="min-w-0 flex-nowrap">
           <ModelPicker back={fieldRef} s={s} />
-          {busy ? (
+          {busy && (
             <Button aria-label={stopping ? "Stopping" : "Stop"} disabled={stopping} className={round} onClick={onStop} size="icon-sm" variant="outline">
               <Square className="size-2.5 fill-current" />
             </Button>
+          )}
+          {busy && queue ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <ComposerSubmit
+                    render={
+                      <Button aria-label="Send" className={round} size="icon-sm">
+                        <ArrowUp />
+                      </Button>
+                    }
+                  />
+                }
+              />
+              <TooltipPopup>Sends when {queue.who} finishes. ⌘↩ sends now.</TooltipPopup>
+            </Tooltip>
           ) : (
-            <ComposerSubmit
-              render={
-                <Button aria-label="Send" className={round} size="icon-sm">
-                  <ArrowUp />
-                </Button>
-              }
-            />
+            !busy && (
+              <ComposerSubmit
+                render={
+                  <Button aria-label="Send" className={round} size="icon-sm">
+                    <ArrowUp />
+                  </Button>
+                }
+              />
+            )
           )}
         </ComposerActionGroup>
       </ComposerActions>

@@ -1,0 +1,176 @@
+From dcd4c8121fb5ea9f94d4be7424247000b29ecc31 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Fri, 30 Oct 2026 03:53:30 -0700
+Subject: [PATCH] A prompt sent into a running turn is part of that turn
+
+A send with when "now" (or a held prompt sent now) while the agent works
+is read as part of the turn it is in: Claude Code reads it after its
+current step, Codex at once, and neither starts another turn for it. The
+ledger still opened a pending turn for it, which no hook ever started, so
+it sat open until it expired two minutes later and held the inbox shut
+for that long. Such a send is now marked steer: no turn is opened, a held
+prompt's turn ends as it is typed, and the result names the running turn.
+
+A send with when "idle" to a fresh agent, which shows running before the
+ledger has heard from it, is held too rather than typed at once.
+---
+ internal/box/inbox.go       | 10 ++++++++++
+ internal/box/inbox_test.go  |  7 ++++---
+ internal/box/orchestrate.go | 22 ++++++++++++++++++----
+ internal/box/turns.go       | 26 ++++++++++++++++++++++++++
+ 4 files changed, 58 insertions(+), 7 deletions(-)
+
+diff --git a/internal/box/inbox.go b/internal/box/inbox.go
+index a92fb83..fb85e87 100644
+--- a/internal/box/inbox.go
++++ b/internal/box/inbox.go
+@@ -82,10 +82,18 @@ func (b *Box) sendQueued(w http.ResponseWriter, r *http.Request) error {
+ 		return err
+ 	}
+ 	data := map[string]any{"name": name, "from": it.Origin, "when": "now"}
++	steer := ""
++	if waiting == "" {
++		steer, _ = b.Turns.Steering(name)
++	}
+ 	if waiting != "" {
+ 		// Typed at a question, it is an answer there, not a turn of its own.
+ 		data["answer"], data["turn"] = true, waiting
+ 		b.Turns.endQueued(name, turn, "sent as an answer")
++	} else if steer != "" {
++		// Typed into the running turn, which the agent folds it into.
++		data["steer"], data["turn"] = true, steer
++		b.Turns.endQueued(name, turn, "sent into the running turn")
+ 	} else {
+ 		data["turn"] = turn
+ 	}
+@@ -93,6 +101,8 @@ func (b *Box) sendQueued(w http.ResponseWriter, r *http.Request) error {
+ 	res := SendResult{Sent: true, Turn: turn, Seq: e.Seq, At: e.Time.UTC()}
+ 	if waiting != "" {
+ 		res.Turn = waiting
++	} else if steer != "" {
++		res.Turn = steer
+ 	} else if tr, ok := b.Turns.Get(turn); ok && tr.State == "running" && tr.Fidelity != "hooks" {
+ 		// The agent cannot say it started: the send says so.
+ 		b.Events.Publish(events.Event{Type: "agent.started", Box: b.Name, Origin: origin(r), Data: map[string]any{
+diff --git a/internal/box/inbox_test.go b/internal/box/inbox_test.go
+index 252c76b..7f46bff 100644
+--- a/internal/box/inbox_test.go
++++ b/internal/box/inbox_test.go
+@@ -131,13 +131,14 @@ func TestTheInboxCanBeListedCancelledAndSentNow(t *testing.T) {
+ 	if st := call(t, c, "POST", path, "", map[string]bool{"force": false}, &refused); st != 409 || !strings.Contains(refused["error"], "waiting") {
+ 		t.Fatalf("send now at a question = %d %v", st, refused)
+ 	}
+-	// Working again: it is typed now, ahead of the turn's end.
++	// Working again: it is typed now, into the running turn, which the agent
++	// reads it as part of; the held turn ends, since it will never start.
+ 	hook(bus, "agent.started", "agent", sess.Dir, "claude", "signal", "tool")
+ 	var now SendResult
+-	if st := call(t, c, "POST", path, "", nil, &now); st != 200 || !now.Sent || now.Turn != a.Turn {
++	if st := call(t, c, "POST", path, "", nil, &now); st != 200 || !now.Sent || now.Turn != sess.Name+"#1" {
+ 		t.Fatalf("send now = %d %+v", st, now)
+ 	}
+-	if got, _ := turns.Get(a.Turn); got.State != "pending" || got.SentSeq == 0 {
++	if got, _ := turns.Get(a.Turn); got.State != "lost" || got.Status != "sent into the running turn" {
+ 		t.Fatalf("sent turn = %+v", got)
+ 	}
+ 	call(t, c, "GET", "/v1/sessions/agent/queue", "", nil, &q)
+diff --git a/internal/box/orchestrate.go b/internal/box/orchestrate.go
+index 1a030d1..ae8d206 100644
+--- a/internal/box/orchestrate.go
++++ b/internal/box/orchestrate.go
+@@ -214,18 +214,27 @@ func (b *Box) sendPrompt(ctx context.Context, name string, req SendRequest, orig
+ 			return hold()
+ 		}
+ 	}
+-	waiting := ""
++	waiting, busy := "", false
+ 	if b.Turns != nil {
+-		if st := b.enrich(ctx, []Session{sess})[0]; st.AgentState == "waiting" && !st.SoftWait {
++		st := b.enrich(ctx, []Session{sess})[0]
++		if st.AgentState == "waiting" && !st.SoftWait {
+ 			waiting = st.Turn
+ 		}
++		// A fresh agent shows running before the ledger has heard from it:
++		// a prompt for its idle time waits for that too.
++		busy = st.AgentState == "running"
+ 	}
+ 	if waiting != "" && req.When == "now" && !req.Force {
+ 		return SendResult{}, httpError{http.StatusConflict, ErrAgentWaiting{name}.Error()}
+ 	}
+-	if b.Turns != nil && req.When == "idle" && !b.Turns.Ready(name) {
++	if b.Turns != nil && req.When == "idle" && (busy || !b.Turns.Ready(name)) {
+ 		return hold()
+ 	}
++	// Typed into a running turn, the agent folds it in (Turns.Steering).
++	steer := ""
++	if b.Turns != nil && waiting == "" {
++		steer, _ = b.Turns.Steering(name)
++	}
+ 	if err := b.driverFor(sess).Send(ctx, sess, req.Text, enter); err != nil {
+ 		return SendResult{}, err
+ 	}
+@@ -242,11 +251,16 @@ func (b *Box) sendPrompt(ctx context.Context, name string, req SendRequest, orig
+ 	if waiting != "" {
+ 		// Typed at a question: an answer, part of the turn that asked.
+ 		data["answer"], data["turn"] = true, waiting
++	} else if steer != "" {
++		data["steer"], data["turn"] = true, steer
+ 	}
+ 	e := b.Events.Publish(events.Event{Type: "session.sent", Box: b.Name, Origin: origin, Data: data})
+ 	res := SendResult{Sent: true, Seq: e.Seq, At: e.Time.UTC()}
+-	if waiting != "" {
++	if waiting != "" || steer != "" {
+ 		res.Turn = waiting
++		if steer != "" {
++			res.Turn = steer
++		}
+ 		return res, nil
+ 	}
+ 	if enter && sess.Title == "" && commandName(req.Text) == "" {
+diff --git a/internal/box/turns.go b/internal/box/turns.go
+index 5bfba76..e83a73d 100644
+--- a/internal/box/turns.go
++++ b/internal/box/turns.go
+@@ -550,6 +550,12 @@ func (t *Turns) sent(e events.Event) {
+ 		t.bump()
+ 		return
+ 	}
++	if e.Data["steer"] == true {
++		// Typed into a running turn, which the agent reads it as part of
++		// (Steering): no turn of its own.
++		t.bump()
++		return
++	}
+ 	if c, _ := e.Data["command"].(string); c != "" {
+ 		// The agent's own command (/cost, /model) starts no turn: its hooks
+ 		// never say it started, so a pending one would take the next
+@@ -1327,6 +1333,26 @@ func (t *Turns) Cancel(name, turn string) error {
+ 	return nil
+ }
+ 
++// Steering finds the turn a prompt typed now goes into: the running turn of
++// a session whose hooks mark its turns. Claude Code reads the prompt after
++// its current step and Codex at once, but both as part of that turn, and
++// neither starts another for it. A pending turn opened for such a prompt
++// would never start, and would hold the inbox until it expired. ok is false
++// when a send starts a turn of its own.
++func (t *Turns) Steering(name string) (turn string, ok bool) {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	t.init()
++	s := t.sess[name]
++	if s == nil || startsAtSend(s) {
++		return "", false
++	}
++	if cur := s.current(); cur != nil && cur.State == "running" {
++		return cur.ID, true
++	}
++	return "", false
++}
++
+ // Ready says whether a prompt can be typed into the session now: its agent
+ // is idle or finished (or has never said), and nothing is held before it.
+ func (t *Turns) Ready(name string) bool {
+-- 
+2.51.2
+

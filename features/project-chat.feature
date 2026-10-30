@@ -204,3 +204,77 @@ Feature: A project's chat
     Then a refused write lists no file
     And a deleted file shows as deleted, and opening it shows it as it last was
 
+  # Messages while the agent works: queued for after its turn, or sent into it (slice 12)
+  # The runtime holds a queued message in the session's inbox and types it once the agent is
+  # idle; the app keeps nothing of its own (the probe: pnpm runtime:probe queue).
+
+  Scenario: A message typed while the agent works waits for its turn
+    Given access is Full access
+    When I send "Run sleep 20, then say done"
+    And while it runs I type "Now say the single word MANGO" and press Enter
+    Then the field empties, and my words show after the turn in a dashed bubble that says
+      "Queued · sends when Claude finishes", with Send now and Remove
+    And Stop is still there, and the field takes another message
+    When the turn ends
+    Then the queued message goes by itself: its bubble reads "Sent · Claude starts on it" until the
+      record has it, with no gap between, then it shows as my next message, and Claude says MANGO
+
+  Scenario: Several wait in order
+    Given a turn is running
+    When I press Enter on "First" and then on "Second"
+    Then two queued bubbles show, First above Second, each with its own Send now and Remove
+    And after the turn they go in that order, a turn each
+
+  Scenario: Remove a queued message
+    Given two queued messages
+    When I press Remove on the first
+    Then it is gone, never reaches Claude, and the second stays
+
+  Scenario: Send a queued message now
+    Given a turn is running with a queued message
+    When I press Send now on it
+    Then its bubble reads "Sent · Claude reads it after this step", and Claude takes the message up in the same turn, after the step it is on
+    And once Claude has read it, it shows as my message inside that turn, under the one that started it
+    And no turn starts for it: the step keeps running, and every turn's "Worked for" stays right, after a reload too
+
+  Scenario: ⌘↩ sends into the running turn
+    Given a turn is running
+    When I type "Also check the tests" and press ⌘↩
+    Then it goes at once, not queued: a dashed bubble says "Sent · Claude reads it after this step"
+    And the step keeps running, with no new "Working for" under my message
+    When Claude reads it
+    Then the dashed bubble goes and my message shows inside the turn, as Send now's does
+
+  Scenario: A second message right after the first in a new chat
+    Given a new chat
+    When I send "Run sleep 20, then say done" and, within a second, press Enter on "Then say PAPA"
+    Then the second waits for the chat to start, then shows queued in that chat, not in a chat of its own
+    And it goes after the first turn
+
+  Scenario: Nothing goes into a question
+    Given Claude is waiting on a question or an approval, with a message queued
+    Then the card is in front and the queued bubble stays
+    When I press Send now on it
+    Then a line under it says "Claude is waiting for your answer first.", in view under the card, and it stays queued
+    When I answer the card and the turn ends
+    Then the queued message goes
+
+  Scenario: Queued messages come back
+    Given a queued message
+    When I close the card and press Chat again, or reload the app
+    Then the queued bubble is there, and the message still goes when the turn ends
+
+  Scenario: Stop with a message queued
+    Given a turn is running with a message queued
+    When I press Stop
+    Then the turn ends "Stopped", and the queued message goes next, as a turn of its own
+
+  Scenario: Send says what it does
+    Given a turn is running
+    When I hover Send
+    Then its tooltip reads "Sends when Claude finishes. ⌘↩ sends now."
+
+  Scenario: The note chat is as it was
+    When I press Ask on "Research" and type while Claude works
+    Then Send waits for the turn, as features/ask.feature says
+

@@ -296,6 +296,15 @@ send: the turn ledger is written before berthd exits.
 Since 2026-10-28, Quit stops the runtime when no agent is in a turn and no run is active, since
 nothing should keep running for no reason; a turn or run going keeps it, and agents wait in tmux.
 
+Since 2026-10-30, a message sent while the agent works is held by the runtime (a send with
+`when: idle` goes into the session's inbox) and typed once the agent is idle; Send now and ⌘↩ type
+it into the running turn, which the agent folds into that turn (Claude Code reads it after its
+current step, Codex at once; neither starts a turn for it, so the runtime opens none). The runtime's
+transcript reader marks such a message mid-turn (a prompt echoed while a turn is open), so the app
+shows it inside that turn and the turns on screen match the ledger's. The app keeps no queue of its
+own: it lists the inbox, so a reload or another window shows the same one. The runtime refuses to
+type into a question the agent waits on, and the app says so rather than forcing it.
+
 
 ## 19. A project's agents reach LeadingLight through the runtime, as tools
 

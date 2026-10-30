@@ -14,8 +14,12 @@ import { createStore } from "~/lib/state";
 // a chat keeps up while another page is in front.
 
 export type Conversation = { id: string; agent: string; location?: string; dir: string; session?: string; live?: boolean; mode?: string; model?: string; effort?: string; title?: string; by?: string; created: string; updated?: string };
-export type Session = { name: string; agent_state?: string; state_since?: string; exited?: boolean; driver?: string; agent?: string; created?: string };
+export type Session = { name: string; agent_state?: string; state_since?: string; exited?: boolean; driver?: string; agent?: string; created?: string; queued?: number };
 export type Turn = { n: number; state: string; started?: string; ended?: string; origin?: string };
+// A message the runtime holds until the agent is idle (slice 12): the start of its words.
+export type Queued = { turn: string; preview: string; length: number; at: string; typed?: boolean };
+// One typed into the running turn (Send now, ⌘↩): on its way until the agent reads it.
+export type Steered = { id: string; text: string; at: number };
 // A file an agent wrote, kept by the runtime as that write left it (slice 7).
 export type Output = { id: string; path: string; tool: string; at: number; size: number; kept: boolean; missing?: boolean };
 // An answer being written, and how far it has got (features/agent-interactions.feature).
@@ -31,6 +35,9 @@ export type Chat = {
   texts: Record<string, string>;
   requests: RuntimeRequest[];
   outputs: Output[];
+  // Messages held for after the agent's turn, oldest first; and ones sent into it, not yet read.
+  queued: Queued[];
+  steered: Steered[];
   // Workers and runs its agent started and still waits on, and every session's state (theirs among them).
   workers: string[];
   runs: string[];
@@ -44,7 +51,7 @@ export type Chat = {
   error: string | null;
 };
 
-const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], workers: [], runs: [], sessions: [], answers: {}, deliveries: {}, restore: null, error: null });
+const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], queued: [], steered: [], workers: [], runs: [], sessions: [], answers: {}, deliveries: {}, restore: null, error: null });
 const chats = new Map<string, ReturnType<typeof createStore<Chat>>>();
 export const chatOf = (key: string) => {
   let s = chats.get(key);
@@ -52,10 +59,15 @@ export const chatOf = (key: string) => {
   return s;
 };
 const patch = (key: string, p: Partial<Chat>) => chatOf(key).set({ ...chatOf(key).get(), ...p });
-// A new chat takes its own key once the runtime names it; the new-chat key starts afresh.
+// A new chat takes its own key once the runtime names it; the new-chat key starts afresh. A send
+// that waited on the new-chat key follows it, and its own end adopts nothing again: the new-chat
+// key is blank by then.
+const adopted = new Map<string, string>();
 export function adopt(from: string, to: string) {
+  if (adopted.get(from) === to) return;
   chatOf(to).set(chatOf(from).get());
   chatOf(from).set(blank());
+  adopted.set(from, to);
 }
 
 export const listChats = (location: string) => ask<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(location)}&limit=200`);
@@ -111,6 +123,7 @@ const saveAnswers = (conv: string, answers: Record<string, AnswerDraft>) => loca
 // The chat as the runtime has it now: its session, record, turns and requests.
 export async function sync(key: string, conv: Conversation): Promise<void> {
   const name = conv.session;
+  const at0 = Date.now();
   const sessions = await ask<Session[]>("GET", "/v1/sessions");
   const session = sessions.find((s) => s.name === name) ?? null;
   const before = chatOf(key).get();
@@ -124,6 +137,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const outputs = await ask<Output[]>("GET", `/v1/conversations/${conv.id}/outputs`).catch(() => null);
   // The session's own mode: approving a plan changes it without the conversation's record.
   const controls = session && !session.exited ? await ask<{ mode?: string }>("GET", `/v1/sessions/${name}/controls`).catch(() => null) : null;
+  // What the runtime holds for after its turn; read only while one side says it holds something.
+  const queued = !session || session.exited ? [] : session.queued || chatOf(key).get().queued.length ? await ask<Queued[] | null>("GET", `/v1/sessions/${name}/queue`).catch(() => null) : null;
   const window = page && page.source !== "none" ? merge(w, page) : w;
   // A sent message is sending until the record has it.
   const plain = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -136,6 +151,15 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   // The reply being written stays until a read brings its words (the record can lag the turn's
   // end), at most a few seconds, so it never blinks out.
   const running = session?.agent_state === "running";
+  // A message sent into the turn is read once the record has it; the turn ending reads it or not.
+  // A message is known by its words, or by its preview: the runtime's ends a long one with "…".
+  const head = (s: string) => plain(s.replace(/…$/, ""));
+  const steered = now.steered.filter((s) => running && !added.some((a) => a.startsWith(head(s.text))));
+  // One held while this read was out isn't in its list yet: it stays until the next read. One typed
+  // at the turn's end (gone from the list, its turn not over: the turns were read first, so they can
+  // still say queued) stays, as sent, until the record has it, so it never blinks out between.
+  const typed = (q: Queued) => turns.some((t) => `${name}#${t.n}` === q.turn && (t.state === "queued" || t.state === "pending" || t.state === "running")) && !window.items.some((i) => plain(splitAttached(said(i) ?? "").said).startsWith(head(q.preview)));
+  const held = queued ? [...queued, ...now.queued.filter((q) => !queued.some((x) => x.turn === q.turn)).flatMap((q) => (Date.parse(q.at) >= at0 - 500 ? [q] : typed(q) ? [{ ...q, typed: true }] : []))] : now.queued;
   const keep = !!now.draft && !inRecord(window, now.draft) && (running || Date.now() - (kept.get(key) ?? Date.now()) < 3000);
   if (keep && !running && !kept.has(key)) kept.set(key, Date.now());
   if (!keep || running) kept.delete(key);
@@ -147,7 +171,7 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const mine = (watches ?? []).filter((x) => x.parent === name);
   const workers = [...new Set(mine.filter((x) => x.session).map((x) => x.session as string))];
   const runs = [...new Set(mine.filter((x) => x.kind === "run" && x.run).map((x) => x.run as string))];
-  patch(key, { synced: true, sessions, workers, runs, outputs: outputs ?? chatOf(key).get().outputs, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  patch(key, { synced: true, sessions, workers, runs, outputs: outputs ?? chatOf(key).get().outputs, queued: held, steered, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
   settleAnswers(key);
 }
 
@@ -218,12 +242,27 @@ export function watch(key: string, conv: Conversation, { reply = true } = {}): (
   };
 }
 
+// The runtime's refusal to type into an agent waiting on a question, in our words.
+const refused = (err: unknown, conv: Conversation | null) =>
+  err instanceof Error && /waiting for someone/.test(err.message) ? new Error(`${conv?.agent === "codex" ? "Codex" : "Claude"} is waiting for your answer first.`) : err;
+
 // Sends text: a new chat starts its agent in the folder; an ended one is resumed first. Each
-// message carries a key of its own, so a send repeated after a lost answer is one message.
-export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = [], context = "", browserImages: BrowserImageReference[] = []): Promise<Conversation> {
+// message carries a key of its own, so a send repeated after a lost answer is one message. Sent
+// "idle" while the agent works, the runtime holds it until the turn ends (slice 12).
+const sends = new Map<string, Promise<unknown>>();
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = [], context = "", browserImages: BrowserImageReference[] = [], when: "now" | "idle" = "now"): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
+  // One at a time per chat: a message typed while the first is still starting the chat waits for
+  // it, then goes to that chat rather than starting another.
+  const prev = sends.get(key);
+  const run = prev ? prev.catch(() => {}).then(() => sendTo(adopted.get(key) ?? key, id, location, text, prefs, files, context, browserImages, when)) : sendTo(key, id, location, text, prefs, files, context, browserImages, when);
+  sends.set(key, run);
+  run.catch(() => {}).finally(() => sends.get(key) === run && sends.delete(key));
+  return run;
+}
+async function sendTo(key: string, id: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[], context: string, browserImages: BrowserImageReference[], when: "now" | "idle"): Promise<Conversation> {
   try {
     // A folder gone since the page opened: no agent starts, in its place or anywhere else.
     await refreshFolders();
@@ -255,7 +294,14 @@ export async function send(key: string, location: string, text: string, prefs: P
         const s = await ask<Session>("POST", `/v1/conversations/${conv.id}/resume`, {});
         conv = { ...conv, session: s.name, live: true };
       }
-      await ask("POST", `/v1/sessions/${conv.session}/send`, { text: await full(conv.session ?? ""), when: "now", idem_key: id });
+      const r = await ask<{ queued?: boolean; turn?: string; at?: string }>("POST", `/v1/sessions/${conv.session}/send`, { text: await full(conv.session ?? ""), when, idem_key: id }).catch((e) => { throw refused(e, conv); });
+      const c = chatOf(key).get();
+      const running = c.turns.find((t) => t.state === "running");
+      // Held by the runtime: it isn't on its way into the record, it waits in the queue.
+      if (r.queued && r.turn) patch(key, { submissions: observeMessageSubmissionCanonical(c.submissions, [id]), queued: [...c.queued.filter((q) => q.turn !== r.turn), { turn: r.turn, preview: text.slice(0, 280), length: text.length, at: r.at ?? new Date().toISOString() }] });
+      // Typed into the running turn: no turn of its own, so no new one starts on screen; it shows
+      // as sent until the agent reads it.
+      else if (running && r.turn === `${conv.session}#${running.n}`) patch(key, { submissions: observeMessageSubmissionCanonical(c.submissions, [id]), steered: [...c.steered, { id, text, at: Date.now() }] });
     }
     patch(key, { conv, submissions: acceptMessageSubmission(chatOf(key).get().submissions, id) });
     if (watching.has(key)) watching.set(key, { key, conv });
@@ -267,6 +313,26 @@ export async function send(key: string, location: string, text: string, prefs: P
     patch(key, { submissions, ...(outcome === "rejected" && { restore: { text, at: Date.now() }, error: err instanceof Error ? err.message : String(err) }) });
     throw err;
   }
+}
+
+// A queued message typed into the running turn now, or taken out of the queue; the runtime refuses
+// to type into a question the agent waits on, and says so.
+export async function sendNow(key: string, turn: string): Promise<void> {
+  const c = chatOf(key).get();
+  if (!c.conv?.session) return;
+  await ask("POST", `/v1/sessions/${c.conv.session}/queue/${encodeURIComponent(turn)}/send`, {}).catch((e) => { throw refused(e, c.conv); });
+  // Typed into the turn: it shows as sent until the agent reads it, as one sent with ⌘↩ does.
+  const c1 = chatOf(key).get();
+  const q = c1.queued.find((x) => x.turn === turn);
+  patch(key, { queued: c1.queued.filter((x) => x.turn !== turn), steered: q ? [...c1.steered, { id: turn, text: q.preview, at: Date.now() }] : c1.steered });
+  await sync(key, c.conv);
+}
+export async function unqueue(key: string, turn: string): Promise<void> {
+  const c = chatOf(key).get();
+  if (!c.conv?.session) return;
+  await ask("DELETE", `/v1/sessions/${c.conv.session}/queue/${encodeURIComponent(turn)}`);
+  patch(key, { queued: chatOf(key).get().queued.filter((q) => q.turn !== turn) });
+  await sync(key, c.conv);
 }
 
 // The messages still sending, by their words.

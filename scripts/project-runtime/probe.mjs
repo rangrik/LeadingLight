@@ -92,12 +92,12 @@ async function check(name, fn) {
     console.log(`FAIL ${name}: ${e.message ?? e}`);
   }
 }
-const items = async (s) => (await api("GET", `/v1/sessions/${s}/transcript`)).json.items;
+const items = async (s) => (await api("GET", `/v1/sessions/${s}/transcript`)).json?.items ?? [];
 const session = async (s) => (await api("GET", "/v1/sessions")).json.find((x) => x.name === s);
 const send = (s, text, idem) => api("POST", `/v1/sessions/${s}/send`, { text, when: "now", idem_key: idem });
 const pick = (s, key) => api("POST", `/v1/sessions/${s}/send`, { text: key, enter: false });
 const openQuestion = (s) => until("a question", async () => (await items(s)).find((i) => i.kind === "question" && !i.done));
-const replyAfter = (s, n, word) => until(`a reply with ${word}`, async () => (await items(s)).slice(n).find((i) => i.kind === "text" && i.text.includes(word)));
+const replyAfter = (s, n, word, ms) => until(`a reply with ${word}`, async () => (await items(s)).slice(n).find((i) => i.kind === "text" && i.text.includes(word)), ms);
 const asking = (s, tool) => until(`asks for ${tool}`, async () => { const x = await session(s); return x?.agent_state === "waiting" && x.ask?.tool === tool && x; });
 
 // The question asked, with the options it was told to offer; two answers at once, of which
@@ -502,6 +502,126 @@ async function browser() {
   }
 }
 
+// Messages sent while an agent works (features/project-chat.feature, slice 12): held in the
+// runtime's inbox until it is idle, listed, cancelled, sent now into the running turn, and never
+// typed into a question it waits on.
+async function queue(agent = "claude") {
+  const s = `probe-queue-${agent}`;
+  const slow = (word) => `Use your shell tool to run exactly \`sleep 12\`, then reply with the single word ${word}.`;
+  const hold = (text, idem) => api("POST", `/v1/sessions/${s}/send`, { text, when: "idle", idem_key: idem });
+  const held = async () => (await api("GET", `/v1/sessions/${s}/queue`)).json ?? [];
+  const running = () => until("running", async () => (await session(s))?.agent_state === "running");
+  const idle = () => until("idle", async () => ["finished", "idle"].includes((await session(s))?.agent_state), 180_000);
+  // The record after n as kinds and first words, to read an order from.
+  const trail = async (n) => (await items(s)).slice(n).filter((i) => ["user", "text", "tools"].includes(i.kind)).map((i) => `${i.kind}:${(i.text ?? i.items?.map((c) => c.verb).join("+") ?? "").trim().replace(/\s+/g, " ").slice(0, 40)}`);
+  const turns = async () => (await api("GET", `/v1/sessions/${s}/turns`)).json.map((t) => `${t.n}:${t.state}`);
+  await check(`queue ${agent}: a message sent while it works is held, listed, and typed once it is idle`, async () => {
+    const r = await api("POST", "/v1/sessions", { name: s, location: "plain", agent, driver: agent, mode: "bypassPermissions", ...(agent === "claude" && { model: "haiku", effort: "low" }), prompt: slow("FIRST") });
+    if (r.status !== 200) throw new Error(JSON.stringify(r.json));
+    await running();
+    const n = (await items(s)).length;
+    const a = await hold("Reply with the single word SECOND.", "q-second");
+    if (a.status !== 200 || !a.json.queued || !a.json.turn) throw new Error(`send gave ${a.status} ${JSON.stringify(a.json)}`);
+    const b = await hold("Reply with the single word THIRD.", "q-third");
+    const list = await held();
+    if (list.map((q) => q.turn).join() !== `${a.json.turn},${b.json.turn}` || !list[0].preview.includes("SECOND")) throw new Error(`queue lists ${JSON.stringify(list)}`);
+    const c = await api("DELETE", `/v1/sessions/${s}/queue/${encodeURIComponent(b.json.turn)}`);
+    if (c.status !== 200 || (await held()).length !== 1) throw new Error(`cancel gave ${c.status}; queue ${JSON.stringify(await held())}; turns ${await turns()}; state ${(await session(s))?.agent_state}; trail ${await trail(n)}`);
+    const sess = await session(s);
+    await replyAfter(s, n, "FIRST");
+    await replyAfter(s, n, "SECOND");
+    if ((await held()).length) throw new Error("the queue still holds something");
+    const log = await trail(n);
+    if (log.some((x) => /THIRD/.test(x))) throw new Error(`the cancelled message was typed: ${log}`);
+    return { sessionQueued: sess.queued, order: log, turns: await turns() };
+  });
+  // After a message went into a running turn, the next held one must still go once it is idle:
+  // the ledger must not keep a turn open for the message the agent folded into its own.
+  const flows = async (word, idem, seen) => {
+    await idle();
+    const n = (await items(s)).length;
+    const t0 = Date.now();
+    const a = await hold(`Reply with the single word ${word}.`, idem);
+    if (a.status !== 200) throw new Error(`hold gave ${a.status} ${JSON.stringify(a.json)}`);
+    await replyAfter(s, n, word, 45_000).catch(async () => { throw new Error(`${word}, held while idle, was not typed within 45 s (queue ${JSON.stringify(await held())}, turns ${(await turns()).slice(-3)}; before that ${JSON.stringify(seen)})`); });
+    return Date.now() - t0;
+  };
+  await check(`queue ${agent}: a held message sent now goes into the running turn`, async () => {
+    await idle();
+    const n = (await items(s)).length;
+    await send(s, slow("APPLE"), "q-apple");
+    await running();
+    const a = await hold("Reply with the single word KIWI.", "q-kiwi");
+    const t0 = Date.now();
+    const r = await api("POST", `/v1/sessions/${s}/queue/${encodeURIComponent(a.json.turn)}/send`, {});
+    if (r.status !== 200 || !r.json.sent) throw new Error(`send now gave ${r.status} ${JSON.stringify(r.json)}`);
+    if ((await held()).length) throw new Error("still listed as queued");
+    const first = await until("a reply", async () => (await items(s)).slice(n).find((i) => i.kind === "text" && /KIWI|APPLE/.test(i.text ?? "")));
+    const firstAfterMs = Date.now() - t0;
+    await replyAfter(s, n, "KIWI");
+    await idle();
+    const order = await trail(n);
+    const seen = { firstReply: first.text.trim().slice(0, 40), firstAfterMs, saidApple: order.some((x) => /text:.*APPLE/.test(x)), order, turns: (await turns()).slice(-3) };
+    return { ...seen, nextHeldTypedAfterMs: await flows("FIG", "q-fig", seen) };
+  });
+  await check(`queue ${agent}: a message sent now while it works reaches it mid-turn`, async () => {
+    await idle();
+    const n = (await items(s)).length;
+    await send(s, slow("MANGO"), "q-mango");
+    await running();
+    const t0 = Date.now();
+    const r = await send(s, "Stop what you are doing and reply with only the word PEAR.", "q-pear");
+    if (r.status !== 200 || !r.json.sent) throw new Error(`send gave ${r.status} ${JSON.stringify(r.json)}`);
+    const states = new Set();
+    let userSeenAfterMs = null;
+    const first = await until("a reply", async () => {
+      states.add((await session(s))?.agent_state);
+      const after = (await items(s)).slice(n);
+      if (userSeenAfterMs === null && after.some((i) => i.kind === "user" && /PEAR/.test(i.text ?? ""))) userSeenAfterMs = Date.now() - t0;
+      return after.find((i) => i.kind === "text" && /PEAR|MANGO/.test(i.text ?? ""));
+    });
+    const firstAfterMs = Date.now() - t0;
+    await idle();
+    await sleep(1500);
+    const seen = { firstReply: first.text.trim().slice(0, 40), firstAfterMs, userSeenAfterMs, statesSeen: [...states], order: await trail(n), turns: (await turns()).slice(-3) };
+    return { ...seen, nextHeldTypedAfterMs: await flows("DATE", "q-date", seen) };
+  });
+  await check(`queue ${agent}: a stopped turn lets the held message go next`, async () => {
+    await idle();
+    const n = (await items(s)).length;
+    await send(s, slow("GRAPE"), "q-grape");
+    await running();
+    await hold("Reply with the single word LIME.", "q-lime");
+    const t0 = Date.now();
+    const r = await api("POST", `/v1/sessions/${s}/interrupt`);
+    if (r.status !== 200) throw new Error(`interrupt gave ${r.status} ${JSON.stringify(r.json)}`);
+    await replyAfter(s, n, "LIME", 60_000).catch(async () => { throw new Error(`LIME was not typed within 60 s of Stop (queue ${JSON.stringify(await held())}, turns ${(await turns()).slice(-3)})`); });
+    return { limeAfterMs: Date.now() - t0, order: await trail(n) };
+  });
+  if (agent !== "claude") return;
+  await check("queue claude: nothing is typed into a question it waits on", async () => {
+    await idle();
+    const n = (await items(s)).length;
+    await api("POST", `/v1/sessions/${s}/mode`, { mode: "default" });
+    await send(s, "Use the AskUserQuestion tool to ask me one single-choice question: tea or coffee, options Tea and Coffee. Then reply with my answer in capital letters.", "q-ask");
+    const q = await openQuestion(s);
+    // The app's card comes from the request, recorded a moment after the question is in the record.
+    await until("its request", async () => (await api("GET", `/v1/sessions/${s}/requests`)).json.find((r) => r.state === "pending" || r.state === "recorded"));
+    const now = await api("POST", `/v1/sessions/${s}/send`, { text: "Reply with the single word PLUM.", when: "now", idem_key: "q-plum-now" });
+    if (now.status !== 409) throw new Error(`typed into a waiting agent: ${now.status} ${JSON.stringify(now.json)}`);
+    const a = await hold("Reply with the single word PLUM.", "q-plum");
+    if (!a.json.queued) throw new Error(`not held: ${JSON.stringify(a.json)}`);
+    const sn = await api("POST", `/v1/sessions/${s}/queue/${encodeURIComponent(a.json.turn)}/send`, {});
+    if (sn.status !== 409) throw new Error(`send now typed into a question: ${sn.status} ${JSON.stringify(sn.json)}`);
+    if (!(await held()).some((q) => q.turn === a.json.turn)) throw new Error("the held message is gone");
+    const ans = await api("POST", `/v1/sessions/${s}/answer`, { tool: q.tool, answers: [{ picks: ["Tea"] }] });
+    if (ans.status !== 200) throw new Error(`answer gave ${ans.status} ${JSON.stringify(ans.json)}`);
+    await replyAfter(s, n, "TEA");
+    await replyAfter(s, n, "PLUM");
+    return { refused: now.json?.error, order: await trail(n) };
+  });
+}
+
 try {
   await start();
   await api("POST", "/v1/locations", { name: "plain", path: folder });
@@ -511,6 +631,8 @@ try {
   if (!only || only === "requests") await requests();
   if (!only || only === "workers") await workers();
   if (!only || only === "recovery") await recovery();
+  if (!only || only === "queue") await queue();
+  if (!only || only === "queue-codex") await queue("codex");
   await check("leaves the person's setup alone", async () => {
     if (mtimes().join() !== before.join()) throw new Error("agent config changed");
     if (mcp() !== mcpBefore) throw new Error("the person's MCP servers changed");

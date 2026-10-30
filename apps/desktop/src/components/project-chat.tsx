@@ -9,6 +9,7 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
+import { QueuedMessage } from "~/components/queued-message";
 import { WorkerCard, type WorkerRow } from "~/components/worker-card";
 import { type ChatSettings, type Command, Composer } from "~/components/composer";
 import { useFolder } from "~/components/project-folder";
@@ -16,7 +17,7 @@ import { Turn } from "~/components/thread-view";
 import { type Access, isClaude, useAiPrefs } from "~/lib/ai-prefs";
 import { codex } from "~/lib/codex";
 import { bindBrowserContext, browserAnnotations, browserContextImages, browserContextPrompt, detachBrowser, useBrowserContext } from "~/lib/browser-context";
-import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sending, setMode, setModel, splitAttached, stop, watch } from "~/lib/project-runtime/chat";
+import { accessOf, adopt, type Agent, agentOf, answer, type Chat, type Conversation, chatOf, inRecord, listChats, type Output, modeFor, send, sendNow, sending, setMode, setModel, splitAttached, stop, unqueue, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { said as saidIn, type TranscriptItem } from "~/lib/project-runtime/transcript";
 import { ask, call } from "~/lib/project-runtime/transport";
@@ -63,7 +64,10 @@ function turnsOf(chat: Chat): Shown[] {
     if (saidIn(t) !== null) {
       // Files sent with it show by name; the runtime keeps them under a stamped name.
       const { said, files } = splitAttached(saidIn(t) ?? "");
-      out.push({ items: [{ kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) }], files: [], reports: [] });
+      const user: Item = { kind: "user", text: said, files: files.map((f) => (f.split("/").at(-1) ?? f).replace(/^\d{8}-\d{6}-(\d+-)?/, "")) };
+      // Typed into a running turn (Send now, ⌘↩): part of that turn, not one of its own.
+      if (t.midTurn && out.length) add(user);
+      else out.push({ items: [user], files: [], reports: [] });
     }
     // How a turn ended is said by a notice: stopped, or an error.
     else if (t.kind === "notice" && t.notice === "interrupted") last().stopped = true;
@@ -89,10 +93,13 @@ function turnsOf(chat: Chat): Shown[] {
       if (files && !t.error && !asking) files.splice(0, files.length, ...files.filter((f) => f.name !== t.file), { name: t.file, tool: t.tool, output });
     } else if (t.kind === "question") add({ kind: "text", text: (t.questions ?? []).map((q, k) => (t.answers?.[k] ? `${q.question}\n\n**${t.answers[k]}**` : q.question)).join("\n\n") });
   }
-  // Ended turns end; the ledger knows how the session's own last ones went.
-  const live = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
-  // Turns a message started; not ones the agent started itself or a worker's report started.
-  const sent = chat.turns.filter((t) => !t.origin || t.origin === "berth");
+  // Ended turns end; the ledger knows how the session's own last ones went. A turn it started for a
+  // queued message still on its way into the record (typed) has no turn on screen yet.
+  const typed = new Set(chat.queued.filter((q) => q.typed).map((q) => q.turn));
+  const live = (chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting") && typed.size === 0;
+  // Turns a message started; not ones the agent started itself or a worker's report started, nor
+  // ones still held in the queue or never started (sent into a running turn, or dropped), nor typed.
+  const sent = chat.turns.filter((t) => (!t.origin || t.origin === "berth") && t.state !== "queued" && t.state !== "lost" && !typed.has(`${chat.conv?.session}#${t.n}`));
   out.forEach((turn, k) => {
     const isLast = k === out.length - 1;
     // A step still going when its turn ended was stopped with it.
@@ -242,12 +249,13 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
           ),
       }
     : { ...mine, accessChoices: ACCESS_IN_FOLDER[agent], branch: state.repo ? { on: branch, set: setBranch } : undefined, onChange: (p) => setFresh((f) => ({ ...f, ...p })) };
-  const go = (text: string) => {
+  // While the agent works a message waits for its turn, unless sent now (⌘↩, slice 12).
+  const go = (text: string, now = false) => {
     stuck.current = true;
     const files = attached;
     const context = browser ? browserContextPrompt(browser) : "";
     const images = browser ? browserContextImages(browser) : [];
-    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files, context, images).then((c) => {
+    void send(key, location, text, { ...settings, branch: !started && !!state.repo && branch }, files, context, images, busy && !now ? "idle" : "now").then((c) => {
       setAttached((a) => a.filter((f) => !files.includes(f)));
       if (!current) {
         adopt(key, c.id);
@@ -257,7 +265,7 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
       refresh();
     }, () => {});
   };
-  const now = chat.turns.at(-1);
+  const now = chat.turns.filter((t) => t.state !== "queued").at(-1);
   // A card that hides the composer carries its Stop: the agent can be stopped while it asks.
   const footer = (line: ReactNode) => (
     <div className="mt-2 flex min-h-6 items-center gap-2">
@@ -402,10 +410,18 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
             })()}
           </div>
         ))}
+        {/* Sent into the running turn, until the agent reads it. */}
+        {chat.steered.map((s) => (
+          <QueuedMessage key={s.id} q={{ turn: s.id, preview: s.text.slice(0, 280), length: s.text.length, at: "" }} sent="step" who={NAME[agent]} />
+        ))}
         {waitingOn.map((text, k) => (
           <div className="mt-4 first:mt-0" key={`sending:${k}`}>
             <Turn items={[{ kind: "user", text }]} live onGoAhead={() => {}} page={title} />
           </div>
+        ))}
+        {/* Held for after the turn, in the order they will go. */}
+        {chat.queued.map((q) => (
+          <QueuedMessage key={q.turn} onRemove={() => unqueue(key, q.turn)} onSendNow={() => sendNow(key, q.turn)} q={q} sent={q.typed ? "turn" : undefined} who={NAME[agent]} />
         ))}
         {chat.error && <p className="mt-2 break-words text-destructive-foreground">{chat.error}</p>}
       </div>
@@ -446,10 +462,11 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
             },
             remove: (i) => setAttached((a) => a.filter((_, k) => k !== i)),
           }}
-          onSend={(q) => go(q)}
+          onSend={(q, _m, now) => go(q, now)}
           onStop={() => void stop(key)}
           pages={[]}
           placeholder={browserWorkspace || browser ? `Ask ${NAME[agent]} about the page…` : `Ask ${NAME[agent]} to work in the folder…`}
+          queue={live || waitingOn.length > 0 ? { who: NAME[agent] } : undefined}
           ready
           restore={chat.restore}
           settings={settings}

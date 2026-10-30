@@ -28,6 +28,8 @@ export type TranscriptItem = {
   command?: string;
   args?: string;
   off?: number;
+  // A message typed into a running turn (Send now, ⌘↩): part of that turn, not a new one.
+  midTurn?: boolean;
 };
 
 // What the person said in an item: their words, or a slash command and its words.

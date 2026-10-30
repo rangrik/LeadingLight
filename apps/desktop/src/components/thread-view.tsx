@@ -97,7 +97,8 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
   const now = useNow(live && !waiting);
   // Until the runtime lists the turn, it began when it was first shown.
   const [shownAt] = useState(Date.now);
-  const user = items[0]?.kind === "user" ? items[0] : null;
+  // The message that started it, and any typed into it while it ran.
+  const users = items.filter((i): i is Extract<Item, { kind: "user" }> => i.kind === "user");
   const end = items.find((i) => i.kind === "end");
   const { work, answer } = turnContent(items);
   const how = end?.how ?? (live ? "working" : "stopped");
@@ -107,8 +108,8 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
   const shown = live || open;
   return (
     <div className="mt-4 first:mt-0">
-      {user && (
-        <div className="flex justify-end">
+      {users.map((user, k) => (
+        <div className={cn("flex justify-end", k > 0 && "mt-2")} key={k}>
           <div className="max-w-[85%] rounded-2xl bg-muted px-3 py-2 dark:bg-foreground/10">
             {user.quote && <blockquote className="mb-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground">{user.quote}</blockquote>}
             <p className="whitespace-pre-wrap break-words">{user.text}</p>
@@ -125,7 +126,7 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
             )}
           </div>
         </div>
-      )}
+      ))}
       {(work.length > 0 || live || how !== "done") && (
         <button
           aria-expanded={shown}

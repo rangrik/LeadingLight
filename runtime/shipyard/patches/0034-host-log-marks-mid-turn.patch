@@ -1,0 +1,243 @@
+From da209101dd1927039394391586294ec1315ff1d9 Mon Sep 17 00:00:00 2001
+From: rangrik <k.pranav.apk@gmail.com>
+Date: Fri, 30 Oct 2026 05:19:58 -0700
+Subject: [PATCH] A prompt echoed inside a structured session's turn is
+ mid-turn
+
+berthd send into a running structured Claude Code session writes the
+prompt to the driver, which folds it into the turn it is in and echoes it
+as a plain user line (isReplay) between the turn's tool results. Claude
+Code's own record marks the same thing with a queued_command, which the
+reader shows as a mid-turn message; the stream says nothing, so the
+reader showed it as a new turn, and the crew's turns no longer matched
+the ledger's.
+
+The host reader now keeps where the turn stands (each turn starts with
+the stream's init line and ends in a result, also one cut short) and
+marks a prompt echoed while one is open as mid-turn, written once.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ internal/transcript/claude.go     |  4 +--
+ internal/transcript/host.go       | 53 +++++++++++++++++++++++++++++--
+ internal/transcript/host_test.go  | 40 +++++++++++++++++++++++
+ internal/transcript/peer.go       | 25 ++++++++++++---
+ internal/transcript/transcript.go |  3 ++
+ 5 files changed, 116 insertions(+), 9 deletions(-)
+
+diff --git a/internal/transcript/claude.go b/internal/transcript/claude.go
+index 5f4b650..953e1d7 100644
+--- a/internal/transcript/claude.go
++++ b/internal/transcript/claude.go
+@@ -191,7 +191,7 @@ func (claudeParser) line(c *conv, b []byte) {
+ 	if !isArray(msg.Content) {
+ 		var s string
+ 		if json.Unmarshal(msg.Content, &s) == nil && l.Type == "user" {
+-			c.userTurn(s, l.Origin, turnPrompt, at)
++			c.userTurn(s, l.Origin, c.promptHow(), at)
+ 		}
+ 		return
+ 	}
+@@ -243,7 +243,7 @@ func (claudeParser) line(c *conv, b []byte) {
+ 		}
+ 	}
+ 	if len(typed) > 0 {
+-		c.userTurn(strings.Join(typed, "\n"), l.Origin, turnPrompt, at)
++		c.userTurn(strings.Join(typed, "\n"), l.Origin, c.promptHow(), at)
+ 	}
+ }
+ 
+diff --git a/internal/transcript/host.go b/internal/transcript/host.go
+index 966ac6f..0e5932c 100644
+--- a/internal/transcript/host.go
++++ b/internal/transcript/host.go
+@@ -98,8 +98,57 @@ func shownSource(source string) string {
+ // hostParser reads an agent-host log with the Claude parser.
+ type hostParser struct{ claudeParser }
+ 
++// hostTurn is the part of a stream-json line that says where a turn
++// stands: every turn ends in a result (also one cut short), and each starts
++// with the stream's init line.
++type hostTurn struct {
++	Type    string `json:"type"`
++	Subtype string `json:"subtype"`
++	Message struct {
++		Content json.RawMessage `json:"content"`
++	} `json:"message"`
++}
++
+ func (p hostParser) line(c *conv, b []byte) {
+-	if line, ok := unwrapHost(b); ok {
+-		p.claudeParser.line(c, line)
++	var e hostEntry
++	if json.Unmarshal(b, &e) != nil || e.Dir != "out" {
++		return
++	}
++	var h hostTurn
++	_ = json.Unmarshal(e.Data, &h)
++	if h.Type == "result" || h.Type == "system" && h.Subtype == "init" {
++		c.hostOpen = false
++	}
++	line, ok := unwrapHost(b)
++	if !ok {
++		return
++	}
++	// The stream echoes each prompt once; one echoed while a turn is open was
++	// typed into that turn (Claude Code's record says so with a
++	// queued_command; the stream says nothing).
++	typed := h.Type == "user" && hostTyped(h.Message.Content)
++	c.hostMid = typed && c.hostOpen
++	p.claudeParser.line(c, line)
++	c.hostMid = false
++	if typed {
++		c.hostOpen = true
++	}
++}
++
++// hostTyped says whether a user line carries words (not a tool's result).
++func hostTyped(content json.RawMessage) bool {
++	if !isArray(content) {
++		var s string
++		return json.Unmarshal(content, &s) == nil && s != ""
++	}
++	var blocks []claudeBlock
++	if json.Unmarshal(content, &blocks) != nil {
++		return false
++	}
++	for _, b := range blocks {
++		if b.Type == "text" {
++			return true
++		}
+ 	}
++	return false
+ }
+diff --git a/internal/transcript/host_test.go b/internal/transcript/host_test.go
+index 2d68ee1..d337d5e 100644
+--- a/internal/transcript/host_test.go
++++ b/internal/transcript/host_test.go
+@@ -112,6 +112,46 @@ func TestASkillsInstructionsAreNotShownAsThePersonsMessage(t *testing.T) {
+ 	}
+ }
+ 
++// A prompt sent into a running turn (berthd send into a structured session)
++// is echoed by the stream as a plain user line, between the turn's tool
++// results. It is part of that turn, as a queued_command is in Claude Code's
++// own record, so the reader marks it mid-turn; the prompts that start turns
++// are not.
++func TestAPromptEchoedInsideATurnIsMidTurn(t *testing.T) {
++	lines := []string{
++		`{"type":"system","subtype":"init","session_id":"s1"}`,
++		`{"type":"user","message":{"role":"user","content":"Count to ten slowly"}}`,
++		`{"type":"assistant","message":{"id":"m1","role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"sleep 5"}}],"stop_reason":null}}`,
++		`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"done"}]}}`,
++		`{"type":"user","message":{"role":"user","content":"Also say FOXTROT"},"isReplay":true}`,
++		`{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"Ten. FOXTROT."}],"stop_reason":null}}`,
++		`{"type":"result","subtype":"success","result":"Ten. FOXTROT."}`,
++		`{"type":"user","message":{"role":"user","content":"Thanks"}}`,
++	}
++	var log strings.Builder
++	for i, l := range lines {
++		fmt.Fprintf(&log, `{"seq":%d,"at":%d,"dir":"out","data":%s}`+"\n", i+1, 1792300000000+int64(i)*1000, l)
++	}
++	path := filepath.Join(t.TempDir(), "log.jsonl")
++	if err := os.WriteFile(path, []byte(log.String()), 0o600); err != nil {
++		t.Fatal(err)
++	}
++	res, err := NewReader().Read(SourceClaudeHost, path, "/home/dev/acme", 0)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var got []string
++	for _, it := range res.Items {
++		if it.Kind == "user" {
++			got = append(got, fmt.Sprintf("%s:%v", it.Text, it.MidTurn))
++		}
++	}
++	want := "Count to ten slowly:false|Also say FOXTROT:true|Thanks:false"
++	if strings.Join(got, "|") != want {
++		t.Fatalf("user items %q, want %q", strings.Join(got, "|"), want)
++	}
++}
++
+ // A helper an agent leaves working in the background (an Agent call with
+ // run_in_background) is back when the stream says so, in a system line of
+ // its own (Claude Code 2.1, as recorded): the crew shows it back, its time
+diff --git a/internal/transcript/peer.go b/internal/transcript/peer.go
+index 50d1796..5070c20 100644
+--- a/internal/transcript/peer.go
++++ b/internal/transcript/peer.go
+@@ -340,14 +340,25 @@ func originFrom(o *Origin) string {
+ }
+ 
+ // How a user turn arrived: the person's prompt, an isMeta line (Claude
+-// Code's, never shown as the person's), or a queued_command (read
+-// mid-turn).
++// Code's, never shown as the person's), a queued_command (read mid-turn),
++// or a prompt a structured session's stream echoed inside an open turn
++// (mid-turn too, written once: host.go).
+ const (
+ 	turnPrompt = iota
+ 	turnMeta
+ 	turnQueued
++	turnMidHost
+ )
+ 
++// promptHow is how a plain prompt line arrived: mid-turn, when the host
++// log says the turn was still open.
++func (c *conv) promptHow() int {
++	if c.hostMid {
++		return turnMidHost
++	}
++	return turnPrompt
++}
++
+ // userTurn reads a user turn: the person's words go to userText, the rest
+ // become messages. The same message delivered twice (a queued_command, then
+ // its line) shows once.
+@@ -361,7 +372,7 @@ func (c *conv) userTurn(s string, o *Origin, how int, at int64) {
+ 			if how == turnMeta && !k.midTurn {
+ 				continue
+ 			}
+-			if how == turnQueued && !strings.HasPrefix(k.text, "<") {
++			if (how == turnQueued || how == turnMidHost) && !strings.HasPrefix(k.text, "<") {
+ 				k.midTurn = true
+ 			}
+ 			if !k.midTurn {
+@@ -369,14 +380,18 @@ func (c *conv) userTurn(s string, o *Origin, how int, at int64) {
+ 				continue
+ 			}
+ 			// Claude Code writes a mid-turn message more than once (its
+-			// queued_command, the note around it, sometimes its line).
+-			if c.queued[k.text] {
++			// queued_command, the note around it, sometimes its line); a
++			// stream echoes it once.
++			if how != turnMidHost && c.queued[k.text] {
+ 				continue
+ 			}
+ 			n := c.base + len(c.items)
+ 			userText(c, k.text)
+ 			if c.base+len(c.items) > n {
+ 				c.items[len(c.items)-1].MidTurn = true
++				if how == turnMidHost {
++					continue
++				}
+ 				if c.queued == nil {
+ 					c.queued = map[string]bool{}
+ 				}
+diff --git a/internal/transcript/transcript.go b/internal/transcript/transcript.go
+index 1c112a2..8c1e99e 100644
+--- a/internal/transcript/transcript.go
++++ b/internal/transcript/transcript.go
+@@ -199,6 +199,9 @@ type conv struct {
+ 	// queued are messages shown from a mid-turn queued_command, so their
+ 	// user line (if Claude Code writes one later) isn't shown twice.
+ 	queued map[string]bool
++	// hostOpen says a structured session's turn is still going (host.go);
++	// hostMid, that the line being read is a prompt echoed inside it.
++	hostOpen, hostMid bool
+ 	// sig is what the conversation says about the agent (signals.go).
+ 	sig signals
+ 	// lineAt is when the last line the agent wrote was written (Unix ms).
+-- 
+2.51.2
+
