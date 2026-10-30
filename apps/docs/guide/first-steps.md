@@ -40,7 +40,7 @@ Type `/` on an empty line. The slash menu lists every kind of block: text, headi
 ## 4. Make a book, and link to it
 
 1. In the sidebar under **Types**, click **Books**, then **New book**. Call it *Dune*.
-2. A Book comes with properties: **Author**, **Rating**, **Status**, **Finished on** and **Tags**. Click a value to set it. For **Author**, type a name and choose **Create person** to make a Person page at the same time.
+2. A Book comes with properties: **Author**, **Rating**, **Status**, **Finished on** and **Tags**. Click a value to set it. For **Author**, type a name, such as *Frank Herbert*, and choose **Create person “Frank Herbert”** to make a Person page at the same time.
 3. Go back to *Trip to Kyoto*. Type `@Dun` and choose *Dune* from the menu. The link shows the book's icon and follows it if you rename the book.
 
 <img class="shot" src="/screenshots/mention-menu.webp" alt="Typing @Dun opens a menu offering the book Dune, or creating a new page of any type" />
@@ -69,7 +69,7 @@ Click **Books** in the sidebar. Switch between the list, table, gallery and boar
 
 ## 8. Open two pages side by side
 
-Shift-click a page in the sidebar to open it beside the one you're on, or drag a page to the edge of the window. Each side keeps its own tabs.
+Shift-click a page in the sidebar to open it beside the one you're on, or drag its row onto an edge of the open page. Each side keeps its own tabs.
 
 <img class="shot" src="/screenshots/panes.webp" alt="Trip to Kyoto and Dune open side by side" />
 
@@ -85,7 +85,7 @@ Press <kbd>⌃⌥I</kbd>. A small box opens; type what's on your mind, then pres
 
 ## 10. Ask about it
 
-In the Mac app, if you use Claude Code or Codex, select some words and press <kbd>⌘J</kbd> to ask about them, or open **Ask** on any page. Claude can read the page and, when you approve, change it.
+In the Mac app, if you use Claude Code or Codex, select some words and press <kbd>⌘J</kbd> to ask about them, or click **Ask Claude** (the sparkles button) at the top of any page. Claude can read the page and, when you approve, change it.
 
 → [AI and agents](/ai/)
 

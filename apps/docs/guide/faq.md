@@ -35,15 +35,15 @@ Yes. Everything works without one. An account is only needed for encrypted sync 
 
 ### Do I need Claude or Codex?
 
-No. Notes, links, types, capture and writing tools all work without them. The AI features appear once [Claude Code](https://claude.com/code) or the [Codex CLI](https://developers.openai.com/codex/cli) is installed and signed in on your Mac. See [AI and agents](/ai/).
+No. Notes, links, types, capture and writing tools all work without them. The AI features work once [Claude Code](https://claude.com/code) or the [Codex CLI](https://developers.openai.com/codex/cli) is installed and signed in on your Mac. See [AI and agents](/ai/).
 
 ### Do I need an API key?
 
-No, and LeadingLight never asks for one. Agents run through the command-line tool you already signed in to, and your plan's own limits apply. The bottom of the sidebar shows how much of each plan is left.
+No, and LeadingLight never asks for one. Agents run through the command-line tool you already signed in to, and your plan's own limits apply. The bottom of the sidebar shows how much of each plan you've used.
 
 ### Can agents change my notes without asking?
 
-Not unless you allow it. By default an agent asks before each change to a page, and you can decline. You can give a thread more access, or use **Plan mode**, where nothing changes until you say so. Every agent action can be undone as a whole from the page's history. See [Ask Claude about a page](/ai/ask#approvals).
+Not unless you allow it. By default an agent asks before each change to a page, and you can decline. You can give a thread more access, or use **Plan mode**, where nothing changes until you say so. Every agent action can be undone as a whole from the page's history, as long as you haven't changed those pages since. See [Ask Claude about a page](/ai/ask#approvals).
 
 ### Why don't agents work in the web app?
 
@@ -61,11 +61,11 @@ It's removed from your lists at once, after you confirm. There is no trash view 
 
 ### Can I import from Notion, Obsidian or Capacities?
 
-Not as a file import yet. You can paste Markdown into a page and it becomes formatted text, headings, lists, code and all; paste into the title of a new page and its first heading becomes the title. See [Pasting Markdown](/write/markdown).
+Not as a file import. You can paste Markdown into a page and it becomes formatted text, headings, lists, code and all; paste into the title of a new page and its first heading becomes the title. See [Pasting Markdown](/write/markdown).
 
 ### Can I export my notes?
 
-There is no export command yet. Your notes are in a standard SQLite file you own, and you can copy text out of any page.
+There is no export command. Your notes are in a standard SQLite file you own, and you can copy text out of any page.
 
 ### Does sync merge edits made on two devices at once?
 
@@ -78,10 +78,9 @@ These are known gaps. Each has a reason and a plan to come back to it.
 - **Search across all notes** (⌘K), and a **trash** with restore.
 - **Math blocks**, **block references** and **saved queries**.
 - **A graph view** of links.
-- **Stickers**, images and web links as pages, and opening the same page twice side by side.
+- **Stickers**, images as pages, and opening the same page twice side by side.
 - **Editing values inside lists**, and editing an embed in place.
 - **Intel builds**, **signed and notarized downloads**, and **automatic updates**.
-- **Real-time collaboration.** LeadingLight is for one person's notes.
 - **Sync for everyone.** Accounts and sync are in private preview, and Google sign-in is in testing.
 - **iPad on the App Store or TestFlight.**
 

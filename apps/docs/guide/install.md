@@ -60,7 +60,7 @@ Your notes are kept in the app's data folder, not inside the app, so replacing t
 
 ## Where your notes are
 
-Everything you write is in a single SQLite file, `leadinglight.db`, in `~/Library/Application Support/com.leadinglight.app/`, with images and files you add stored next to it. To back up your notes, quit LeadingLight and copy that folder. Page history lives in the same store. See [Your data and privacy](/guide/privacy).
+Everything you write is in a single SQLite file, `leadinglight.db`, in `~/Library/Application Support/com.leadinglight.app/`, with the images and files you add in an `assets` folder beside it. To back up your notes, quit LeadingLight and copy that folder. Page history lives in the same store. See [Your data and privacy](/guide/privacy).
 
 ## Uninstall
 

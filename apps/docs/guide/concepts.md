@@ -21,7 +21,7 @@ A **type** says what an object is: **Page**, **Person**, **Book**, **Meeting**, 
 - how its list shows (list, table, gallery or board),
 - **templates**, one of which can be the default.
 
-Types are yours to change. You can rename them, add or remove properties, make new types, and turn any page's shape into a type with **Save as type**. Nothing about a type is built into the app, so a type you make works just like the starter ones.
+Types are yours to change. You can rename them, add or remove properties, make new types, and turn any page's shape into a type with **Save as type**. The starter types are ordinary types, so one you make works just like them. **Page**, **Tag** and **Daily note** can't be deleted.
 
 You can change an object's type at any time, and it keeps every value it had.
 
@@ -39,7 +39,7 @@ An object shows its type's properties, and it can add any other property of its 
 
 Type `@` or `[[` in any sentence to link to an object, or to create one on the spot. A link points at the object itself, not its name, so it keeps working when you rename it.
 
-Every object lists its **backlinks**: everything that links to it, grouped by where the link is, with the line around each. Links made through a property, such as a Book's author, show too, under that property's name. Mentions of the object's name that aren't linked yet are offered with a **Link** button.
+Every object lists its **backlinks**: everything that links to it, with the line around each, in tabs by type when the links come from more than one type. Links made through a property show too: a person's page lists the books that name them as **Author** under **Linked books**. Mentions of the object's name that aren't linked yet are offered with a **Link** button.
 
 Tags, collections and daily notes are made from the same parts. A tag is an object of type Tag; tagging a page links it. A daily note is an object of type Daily note, one per day.
 

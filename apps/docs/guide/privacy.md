@@ -11,7 +11,7 @@ LeadingLight is local first. Your notes are kept on your device, and nearly ever
 
 | Where you use it | Where notes are kept |
 | --- | --- |
-| Mac app | A SQLite file, `leadinglight.db`, in `~/Library/Application Support/com.leadinglight.app/`. Images and files you add are stored beside it. |
+| Mac app | A SQLite file, `leadinglight.db`, in `~/Library/Application Support/com.leadinglight.app/`. Images and files you add are kept in an `assets` folder beside it. |
 | Web app | Your browser's storage for that site (IndexedDB). Clearing the site's data in the browser deletes them. |
 | iPad | A SQLite file inside the app, as on the Mac. |
 
@@ -36,12 +36,13 @@ LeadingLight has no analytics or tracking of its own.
 | Use a cover or an embed from a link | Your device loads that address, as a browser would. |
 | Save a web page | LeadingLight fetches the page and, if you choose, its images and media from that website. |
 | Ask Claude or Codex, or use any agent feature | Claude Code or Codex on your Mac sends what the agent reads (your question, the page, and pages or files it is allowed to read) to Anthropic or OpenAI, under your own account and their terms. Agents ask before they change anything, unless you give them more access. |
-| Let Tail read along | Tail sends a short digest of what changed, only from the types you tick in its settings. Sidenotes stay private. |
-| Check for Claude Code and Codex updates | The app looks up the newest version where your copy updates from (npm or Homebrew). You can turn this off in **Settings › AI**. |
+| Let Tail read along | Through Claude Code or Codex, Tail sends the lines around where you paused and a short digest of what changed. Words and properties come only from the types you tick under **Settings › AI › Tail › Reads on**; the titles and types of all pages go too, so names can be linked. Sidenotes stay private. |
+| Check for Claude Code and Codex updates | The app looks up the newest version where your copy updates from (npm or Homebrew). You can turn off **Check for updates** in **Settings › AI**. |
+| Use the built-in browser | It loads the sites you or an agent open, as any browser would. Its history, site data and downloads stay on your Mac. |
 | Turn on encrypted sync | Your notes are encrypted on your device before they're uploaded. The service stores only encrypted data and can't read it. Your sign-in (Google or GitHub) identifies your account. |
 | Use agents from a browser | Your browser and your Mac exchange messages through an encrypted relay. The relay can't read prompts, answers or tool results, and your Claude Code or Codex sign-in never leaves the Mac. |
 
-LeadingLight never asks for or stores a model API key. Agents use the Claude Code or Codex account you already signed in to on your Mac, and that plan's limits apply. The app doesn't read their sign-in secrets either: it asks the tools themselves, for example to show how much of your plan is left.
+LeadingLight never asks for or stores a model API key. Agents use the Claude Code or Codex account you already signed in to on your Mac, and that plan's limits apply. The app doesn't read their sign-in secrets either: it asks the tools themselves, for example to show how much of your plan you've used.
 
 ## Encrypted sync and your recovery key
 

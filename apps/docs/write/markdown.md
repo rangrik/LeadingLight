@@ -60,7 +60,7 @@ A code fence's language name sets the block's **Language**. Short and mixed-case
 - **Marks with spaces inside them.** `2 * 3 * 4 = 24` and `a == b == c` paste exactly as written; nothing turns italic or highlighted.
 - **Inside a code block.** Pasting Markdown with the cursor in a code block keeps it as code, exactly as pasted, with no new blocks.
 - **Code copied from a web page.** A snippet copied from a site, coloured or not, arrives as one code block, even if its lines start with `# `. It never turns into headings, and pasted into the title of a new page it goes into the body as code.
-- **Formatted text.** When what you copied has its own formatting, such as a web page with a heading and a link, that formatting is used. Blocks copied from another LeadingLight page arrive as they were.
+- **Formatted text.** When what you copied has its own formatting, such as a web page with a heading and a link, that formatting is used. Pasted into the title of a new page, it all goes into the body and the title stays empty. Blocks copied from another LeadingLight page arrive as they were.
 
 Markdown copied from a code editor, such as VS Code, is formatted from the Markdown.
 

@@ -69,7 +69,7 @@ Select some words and the **Text formatting** toolbar appears beside them. Click
 | **Highlight** | <kbd>⇧⌘H</kbd> |
 | **Link** | |
 
-The toolbar also holds **Turn into** (make a new page from the selected words, see [Pages](/organize/pages)), **Add sidenote** (see [Sidenotes, thoughts and essays](/write/sidenotes)) and **Ask about this** (see [Ask Claude](/ai/ask)).
+The toolbar also holds **Turn into** (make a new page, such as an idea or a task, from the selected words; see [Tasks and new objects](/organize/tasks#turn-selected-words-into-a-page)), **Add sidenote** (see [Sidenotes, thoughts and essays](/write/sidenotes)) and **Ask about this** (see [Ask Claude](/ai/ask)).
 
 These keys only format text. They never open or close the sidebar or anything else in the app.
 
