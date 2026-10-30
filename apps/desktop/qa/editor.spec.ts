@@ -16,12 +16,14 @@ test("Clicking text after a selected recording accepts immediate typing", async 
   const body = page.getByRole("textbox", { name: "Page body" });
   await page.keyboard.type("x");
   await expect(body.locator("p").first()).toHaveText("Original transcript");
+  await expect(body.locator('[data-media="voice"]')).toHaveCount(1);
   await title.click();
   await page.evaluate(() => document.addEventListener("selectionchange", (event) => event.stopImmediatePropagation(), true));
   await body.locator("p").first().click();
   await page.keyboard.press("End");
   await page.keyboard.type(" Edited later.");
   await expect(body.locator("p").first()).toHaveText("Original transcript Edited later.");
+  await expect(body.locator('[data-origin="human"]').filter({ hasText: "Edited later." })).toHaveCount(1);
   await expect(body.locator('[data-media="voice"]')).toHaveCount(1);
   await expect(body.locator(".ll-selected")).toHaveCount(0);
 });

@@ -19,10 +19,16 @@ read-only content and dragging alone. The input guard still protects selected bl
 A deterministic regression holds `selectionchange`, performs the real click and keys,
 and verifies the edit and recording. It failed before the fix and passes with it.
 
+Merging main `67ad95f` exposed a second interaction: its authorship mark handled
+text replacement before the block-selection guard and could replace a selected
+recording. Authorship now defers whole-block selections to that guard. The regression
+also checks that the recording survives typing and new words keep human authorship.
+
 ## Validation
 
-- Typecheck and all 24 focused editor, voice, review and capture-recording tests pass.
-- The previously intermittent capture-review scenario passes 20 consecutive reruns.
+- On merged main, typecheck and all 30 editor, voice, review, capture and history
+  tests pass. Targeted selection and authorship checks also pass in WebKit.
+- Before merging main, the intermittent capture-review scenario passed 20 reruns.
 - The full capture-review test checks the edit immediately after typing and again
   after creating a page from the original transcript.
 - Independent QA passes for immediate typing, selected-block protection, Meta-click,
@@ -56,7 +62,8 @@ was changed: returning to the previous app remains required by decision 14.
 
 Local evidence is in the ignored folder `apps/desktop/qa/report/native-focus-2026-10-29/`:
 `agent-selection-result.json`, `agent-qa-results.json`, `agent-performance-results.json`,
-`events-followup.jsonl`, `native-fixed-edit.png`, `native-fixed-review.png`,
+`agent-postmerge-final-results.json`, `events-followup.jsonl`,
+`native-fixed-edit.png`, `native-fixed-review.png`,
 `native-fixed-final.txt`, and `native-fixed-saved.json`. Earlier traces and diagnostic
 source are preserved there; temporary tracing is removed from product source.
 

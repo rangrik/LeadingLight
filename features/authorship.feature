@@ -25,3 +25,10 @@ Feature: Know where the words came from
     When I turn authorship on and off
     Then the body and history do not change
     And attribution is available by touch as well as mouse
+
+  Scenario: Authorship keeps selected recordings protected
+    Given a recording block is selected above its transcript
+    When I type "x"
+    Then the recording and transcript are unchanged
+    When I click the transcript and type " Edited later."
+    Then the words appear at the cursor and are attributed to me

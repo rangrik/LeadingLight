@@ -1,6 +1,7 @@
 import { Mark, type JSONContent } from "@tiptap/core";
 import { isHistoryTransaction } from "@tiptap/pm/history";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { selectedBlocks } from "./block-selection";
 
 export type Author = { kind: "human" | "agent" | "unknown"; name: string; model?: string; run?: string };
 export type EditContext = { action: string; label: string; author: Author; preserveOrigin?: boolean };
@@ -53,6 +54,7 @@ export const Origin = Mark.create({
       key,
       props: {
         handleTextInput(view, from, to, text) {
+          if (selectedBlocks(view.state.selection)) return false;
           const mark = view.state.schema.marks.origin.create(context?.author ?? { kind: "human", name: "You" });
           if (from !== to) {
             view.dispatch(view.state.tr.insertText(text, from, to).removeMark(from, from + text.length, view.state.schema.marks.origin).addMark(from, from + text.length, mark));
