@@ -34,8 +34,10 @@ also checks that the recording survives typing and new words keep human authorsh
 - Independent QA passes for immediate typing, selected-block protection, Meta-click,
   text dragging and visual inspection. Sonnet 5.5 and Berth were unavailable; an
   available Codex agent used headless Playwright on port 1460.
-- On 2,000 paragraphs, baseline/fixed typing averages were about 11 ms, with p95
-  about 15–16 ms. Both had occasional 20–21 ms samples; no regression was measured.
+- Before merging main, the 2,000-paragraph baseline/fixed averages were about 11 ms,
+  with p95 about 15–16 ms. Final merged-source runs averaged 14.45/15.06 ms with p95
+  18.1/18.0 ms and a maximum of 22.1 ms, exceeding the 16 ms target. These are not a
+  matched baseline for the authorship guard, so its contribution is not established.
 - The rebuilt native app accepts the edit, keeps the original transcript in Review,
   saves both correctly to SQLite, and plays audio after Quick capture → Escape.
 
@@ -62,7 +64,8 @@ was changed: returning to the previous app remains required by decision 14.
 
 Local evidence is in the ignored folder `apps/desktop/qa/report/native-focus-2026-10-29/`:
 `agent-selection-result.json`, `agent-qa-results.json`, `agent-performance-results.json`,
-`agent-postmerge-final-results.json`, `events-followup.jsonl`,
+`agent-postmerge-final-results.json`, `agent-postmerge-performance-results.json`,
+`events-followup.jsonl`,
 `native-fixed-edit.png`, `native-fixed-review.png`,
 `native-fixed-final.txt`, and `native-fixed-saved.json`. Earlier traces and diagnostic
 source are preserved there; temporary tracing is removed from product source.

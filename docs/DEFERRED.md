@@ -247,8 +247,9 @@ activation. Evidence: [investigation](NATIVE-RECORDING-FOCUS.md).
 
 ## 2026-10-29 — Occasional long-page typing samples over 16 ms
 
-On 2,000 paragraphs, baseline and fixed editor builds both have occasional 20–21 ms
-keydown-to-input samples, with averages around 11 ms and p95 around 15–16 ms. The
-selection fix does not run on typing and adds no measured cost. Revisit in a typing
-performance pass if the outliers persist without other local work running. Evidence:
-`apps/desktop/qa/report/native-focus-2026-10-29/agent-performance-results.json`.
+Before merging current main, 2,000-paragraph baseline/fixed runs averaged about 11 ms
+with occasional 20–21 ms samples. Final merged-source runs averaged 14.45/15.06 ms,
+with p95 18.1/18.0 ms and maximum 22.1 ms. The strict 16 ms budget is not met; these
+are not a matched baseline for the authorship guard. Revisit in a separate typing
+performance pass. Evidence:
+`apps/desktop/qa/report/native-focus-2026-10-29/agent-postmerge-performance-results.json`.
