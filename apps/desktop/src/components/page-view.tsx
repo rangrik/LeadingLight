@@ -1,4 +1,5 @@
 import { saveEmergency, clearEmergency } from "~/lib/store-local";
+import { carry } from "~/lib/catalog";
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
@@ -133,6 +134,8 @@ export function PageView({ page }: { page: LLObject }) {
     setTypeId(next);
     patchSummary(page.id, { typeId: next });
     queue({ typeId: next });
+    const carried = carry(latest.current, typeOf(next), space.get().props);
+    if (carried !== latest.current) replaceProps(carried);
   };
   const rename = (value: string) => {
     if (reportOf(pageOf(page.id))) return;

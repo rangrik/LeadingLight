@@ -52,6 +52,26 @@ export const OWN_KEYS = new Set(["icon", "cover", "description", "templateOf"]);
 
 export const newId = (prefix: string) => `${prefix}${crypto.randomUUID().slice(0, 8)}`;
 
+// What a property's value must fit: its name, kind and the options that shape the value.
+const shape = (p: PropDef) => JSON.stringify([p.name, p.kind, !!p.options.many, p.options.type ?? null, p.options.choices?.map((c) => c.id) ?? null]);
+const empty = (v: unknown) => v == null || v === "" || (Array.isArray(v) && v.length === 0);
+
+// A page changing type: a value the new type has no row for moves to its property of the same
+// shape, if that one is empty. An idea's Project becomes the task's instead of a stray row.
+export function carry(values: Record<string, unknown>, to: TypeDef, props: PropDef[]): Record<string, unknown> {
+  const def = (id: string) => props.find((p) => p.id === id);
+  let next = values;
+  for (const key of Object.keys(values)) {
+    const from = def(key);
+    if (!from || to.props.includes(key)) continue;
+    const twin = to.props.map(def).find((p) => p && shape(p) === shape(from));
+    if (!twin || !empty(next[twin.id])) continue;
+    const { [key]: value, ...rest } = next;
+    next = { ...rest, [twin.id]: value };
+  }
+  return next;
+}
+
 // Values as stored. Dates are ISO days, so they sort as text.
 export type DateValue = { start: string; time?: string; end?: string };
 export type FileValue = { url: string; name: string; size: number; mime: string };

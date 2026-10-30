@@ -55,7 +55,7 @@ See [AI and agents](/ai/) and [Tail and suggestions](/ai/tail).
 
 Click **Type** in the property bar under the title and pick another type. The page shows that type's properties at once, empty if it had no value for them, and its sidebar row takes the type's icon.
 
-Changing the type keeps every value. A property the new type doesn't have stays on the page as its own.
+Changing the type keeps every value. Where the new type has a property of the same name and kind, the value moves to it: an idea's Project becomes the task's Project. Any other property the new type doesn't have stays on the page as its own.
 
 Daily note and the app's own types aren't offered here: a daily note is made by its date, and agents' pages by the app.
 

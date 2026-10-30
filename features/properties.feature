@@ -35,6 +35,18 @@ Feature: Properties and types
       all empty
     And the sidebar row "Dune" shows the Book type's icon
 
+  Scenario: Changing the type carries a value to the same-named property
+    Given "Fix the gate" is an Idea with the Project "House"
+    When I pick "Task" in the "Type" picker
+    Then its rows are Done, Due, Project ("House") and Tags; there is no second "Project" row
+    And the Tasks list shows "House" beside "Fix the gate", and "House" lists it under "Linked tasks"
+    When I pick "Idea" in the "Type" picker
+    Then Project still reads "House"
+    Given instead "Dune" is a Book with Status "Reading"
+    When I pick "Project" in the "Type" picker
+    Then the Project's "Status" is empty, and the Book's, reading "Reading", stays as the page's
+      own row: the two have different options, so nothing is guessed
+
   Scenario Outline: Each kind of value can be set and survives a reload
     Given the page's type is "Book"
     When I set <property> to <value>
