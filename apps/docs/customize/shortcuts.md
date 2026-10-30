@@ -151,6 +151,7 @@ When the capture box is open (<kbd>⌃⌥I</kbd>, or **New idea** in the sidebar
 | --- | --- |
 | <kbd>⌘↩</kbd> | Saves the idea and closes the box. With nothing typed, it just closes. |
 | <kbd>⇧⌘↩</kbd> | Saves the idea and opens it in a new pane beside the page in view. |
+| <kbd>⌃↩</kbd> | When Tail guesses a project, saves the idea there, as a task or an idea, as the footer says. See [Tail](/ai/tail#the-capture-box-s-guess). |
 | <kbd>Esc</kbd> | Closes the box. What you typed is already saved. |
 | <kbd>⇥</kbd> | Moves from the title line to the body. |
 

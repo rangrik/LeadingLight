@@ -82,7 +82,7 @@ The **Types** section of the sidebar has one row per type, by its plural name. C
 
 A type with no pages yet says so, such as **No books yet**, with a sentence on what the type is for and a **New book** button.
 
-**New** on Daily notes opens today's note. Agents and Reports have no **New** button; the app makes them.
+**New** on Daily notes opens today's note. The app's own types, such as Agents and Reports, have no **New** button; the app makes them.
 
 ## Edit a type
 

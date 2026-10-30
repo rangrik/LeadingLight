@@ -92,7 +92,7 @@ When something you wrote deserves a page of its own, such as an idea or a task, 
 1. Select the words, even several paragraphs with formatting and lists.
 2. Click **Turn into** in the selection toolbar. The **Turn into** dialog opens.
 3. Pick a **Type**. It starts on Idea. You can pick Task, any starter type, or a type you made.
-4. Enter a **Title**, or leave it blank to use the first three words.
+4. Check the **Title**. It starts as the first three words of the selection; type your own, or leave it blank to use those three words.
 5. If the type has a project, such as Idea or Task, pick a **Project**.
 6. Check the **Body**: it shows the words that will be kept.
 7. Click **Create idea** (or **Create task**, and so on).

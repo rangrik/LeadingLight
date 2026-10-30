@@ -57,8 +57,8 @@ Assigning the page again finds that task rather than making another.
 
 ### When Assign isn't there
 
-- A page that isn't part of a project with a linked folder shows no **Assign**. The dialog says to
-  set its project or link a folder first.
+- A page that isn't part of a project with a linked folder shows no **Assign**. Set its project, or
+  link a folder to it, first.
 - With **Linked folders and project chats** turned off, no page shows **Assign**.
 - If you pick a GPT model and Codex isn't ready, the dialog says "Codex isn't on this Mac or isn't
   signed in."

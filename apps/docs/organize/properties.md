@@ -107,7 +107,7 @@ Created and Updated can't be changed to another kind, and can't be chosen as a k
 - **Remove from** *type* takes a property off a type. Pages of the type stop showing it, except pages that had a value: they keep it as their own property, value and all.
 
 ::: info Limits
-A property can't be deleted from your space yet. Removing it from every page and type tidies it away, and its values stay stored.
+A property can't be deleted from your space yet. You can remove it from every page and type, but **Add property** still offers it, and its values stay stored.
 :::
 
 ## Created and Updated

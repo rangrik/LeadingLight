@@ -9,7 +9,7 @@ Everything you write in LeadingLight is a page. The sidebar lists your pages so 
 
 ## Make a page
 
-Click **New page** at the right of the **Recent** label in the sidebar. When you have no pages yet, the main area shows **No page open** with a **New page** button too.
+Click **New page** at the right of the **Recent** label in the sidebar, or press <kbd>⌘N</kbd>. When you have no pages yet, the main area shows **No page open** with a **New page** button too.
 
 The new page opens with the cursor in its title. The body below shows *Type '/' for commands* until you start writing. Pages save as you type; there is nothing to confirm.
 
@@ -25,7 +25,7 @@ The card header above the page shows where you are: the type's plural name, then
 
 ## Find pages in Recent
 
-**Recent** lists your pages, newest first. Daily notes, tags, tasks and templates live in their own lists under **Types**, not in Recent. A page you open shows as the current row.
+**Recent** lists your pages, newest first. Daily notes, tags and tasks live in their own lists under **Types**, and templates in their type's settings, so none of them is in Recent. A page you open shows as the current row.
 
 To change the order, click **Sort Recent** beside **New page** and pick one:
 

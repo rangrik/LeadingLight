@@ -63,7 +63,7 @@ A link to a task on its own line, as a **Line**, has a checkbox in place of the 
 
 Each type sets how its links look by default, in **Type settings** › **Links show as**. If Books show as **Wide card**, every new block link to a book is a wide card. You can still change any single link with its **Link view** menu. See [Types and templates](/organize/types).
 
-## Tags with #
+## Tags with `#`
 
 Type <kbd>#</kbd> and a word, such as "#ide". The menu offers your matching tags, and **Create #"ide"** if there is none yet. Pick it: the line shows "#ide" and a tag page "ide" is listed under Tags. See [Tags and daily notes](/organize/tags-daily).
 

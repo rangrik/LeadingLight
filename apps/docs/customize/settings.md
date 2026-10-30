@@ -90,7 +90,7 @@ Claude through Claude Code, and GPT through Codex, both on this Mac. There is no
 
 - **Account**: whether **Claude Code** and **Codex** are installed and signed in, with **Check again**.
 - **Command-line tools**: the version of each tool found on this Mac, **Update** when a newer one is out, and **Check for updates** to look for them in the background.
-- **Projects**: **Linked folders and project chats** turns on linking a page to a folder on this Mac. **Runtime** shows whether the project runtime is running, with **Start** or **Restart**.
+- **Projects**: **Linked folders and project chats** turns on linking a page to a folder on this Mac. It is marked **In development** and is off at first. **Runtime** shows whether the project runtime is running, with **Start** or **Restart**.
 - **Answers**: the **Model** and **Effort** to use, and **Access**: **Ask for approval**, **Approve for me** or **Full access**.
 - **Tail**: **Offers** (**Off**, **Quiet** or **Normal**), how many seconds to wait before it reads a block, its own **Model** and **Effort**, the types it **Reads on**, **How you work** (notes tail keeps about you, which you can edit or delete) and when it last ran.
 - **Agents**: the agents you can mention with `@`, each a Claude Code agent file. **Show folder** opens the folder where yours go.

@@ -37,7 +37,7 @@ To make the panel wider or narrower, drag its left edge. It keeps that width.
 A small number on an icon tells you something is waiting there. It shows only when there is something
 to see, so the strip stays quiet the rest of the time.
 
-- **Feed** counts the questions and requests from agents you have not answered yet.
+- **Feed** counts the questions and requests from agents you have not answered yet. It shows once project agents are turned on in **Settings › AI**.
 - **Captures** counts captures you have not reviewed yet.
 - **Suggestions** counts suggestions you have not seen yet. Opening the panel marks them as seen.
 

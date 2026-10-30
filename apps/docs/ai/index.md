@@ -57,7 +57,7 @@ In LeadingLight in a web browser, Ask shows **Agents work on your Mac** with **C
 |---|---|
 | **Account** | Which account Claude Code and Codex are signed in to, with **Check again** |
 | **Command-line tools** | The version of each tool, how it was installed, and **Update** |
-| **Projects** | The switch for linked folders and project chats, and the project runtime |
+| **Projects** | The switch for linked folders and project chats (still in development, so off at first), and the project runtime |
 | **Answers** | The **Model**, **Effort** and **Access** that Ask uses |
 | **Tail** | Tail's settings; see [Tail and suggestions](/ai/tail) |
 | **Agents** | Every agent you can mention with `@`; see [Agents](/ai/ask#agents) |
@@ -89,7 +89,7 @@ About ten seconds after the app opens, and then once an hour, the app looks for 
 
 Left alone, the toast goes after 15 seconds and comes back at a later hourly check, never sooner, even if you quit and reopen the app. Once you've answered it for a version, it doesn't show again for that version.
 
-If an update fails, a toast reads **Couldn't update** with the reason and the command to run in Terminal yourself.
+If an update fails, a toast reads, for example, **Couldn't update Codex**, with the reason and the command to run in Terminal yourself.
 
 To stop the checks, turn off **Check for updates** in the **Command-line tools** group. The rows still say what is installed.
 

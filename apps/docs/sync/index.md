@@ -10,8 +10,9 @@ saved there first. Sign in only when you want the same notes on another device: 
 or the web app in a browser.
 
 Sync is end-to-end encrypted. Your devices encrypt notes before they leave, and a recovery key that
-only your devices hold unlocks them. The service stores the encrypted copies and nothing more: it
-can't read your notes, and it never runs AI models.
+only your devices hold unlocks them. The service stores the encrypted copies, and passes on encrypted
+messages between a browser and a Mac you have paired. It can't read either, and it never runs AI
+models.
 
 ::: warning Private preview
 Accounts and sync are in a private preview. You can sign in, but sync stays off until the people
@@ -27,7 +28,7 @@ Press **Account and sync** in the sidebar. The window, "Your workspace, everywhe
 | --- | --- |
 | **Account** | Sign in, see who you are signed in as, and sign out |
 | **Sync** | Turn on encrypted sync, see its status, and keep your recovery key |
-| **Agents** | Connect a browser and a Mac so agents can run from the browser. See [Agents from a browser](/sync/pairing) |
+| **Agents** | Connect a browser and a Mac so agents can run from the browser. Not shown on iPad. See [Agents from a browser](/sync/pairing) |
 
 To keep going without an account, press **Continue on this device**.
 

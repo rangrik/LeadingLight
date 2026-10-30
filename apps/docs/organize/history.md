@@ -66,7 +66,7 @@ Undo never throws away your later work. If one of those pages changed after the 
 - **A failed save is not hidden.** If your device refuses a save, the page keeps your unsaved edits and tells you. No version is recorded for it. In **Page history** you can click **Keep my unsaved edits as a new page**.
 - **Two tabs can't overwrite each other.** If the same page is open in two browser tabs and both save, the older save is refused rather than replacing the newer page, and its text stays available.
 - **A sudden close keeps your last edit.** If Safari reloads or closes in the middle of a save, the last edit is recovered, and a newer version is kept separately.
-- **Deleting right after typing keeps the words.** The deletion records the latest words, so undoing it brings them back.
+- **Deleting right after typing keeps the words.** If you delete a page before its last words are saved, the deletion still records them in history.
 
 ## See who wrote what
 

@@ -60,7 +60,7 @@ The box wears your theme, light or dark, in the Mac app and in a browser.
    in the body starts a new paragraph; it doesn't close the box.
 4. Press <kbd>⌘↩</kbd> or <kbd>Esc</kbd> when you are done.
 
-The idea is now an Idea page, listed in the sidebar under Pages. Its properties are **Project**,
+The idea is now an Idea page, listed in the sidebar under **Recent**. Its properties are **Project**,
 **Tags** (with "in-the-middle"), **Created** and **Updated**.
 
 If you skip the title and type only in the body, the body's first line becomes the page's title.

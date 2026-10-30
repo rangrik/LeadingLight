@@ -10,15 +10,16 @@ several pages side by side, and each of those places can hold tabs, as a browser
 
 ## The window
 
-- **The sidebar** runs down the left. **LeadingLight** sits at its top, then **Today**, your types
+- **The sidebar** runs down the left. **LeadingLight** sits at its top, then **Today**,
+  **Browser** (see [The built-in browser](/ai/browser)), your types
   (such as People or Books), any pinned pages, and **Recent**, the list of your pages with a
   **New page** button. **Settings** is at the bottom.
 - **The page area** fills the rest. Each open page is a card with rounded corners, with a small
   gap between it, its neighbours and the window's edges.
 - **The bar** is the slim strip at the right edge of the window. See [The bar](/workspace/bar).
 
-In the Mac app the title bar is part of the window, as in Apple Notes: the traffic lights sit on the
-same line as the top of each page.
+In the Mac app the title bar is part of the window, as in Apple Notes: the traffic lights sit level
+with the card header at the top of the page.
 
 ### The card header
 
