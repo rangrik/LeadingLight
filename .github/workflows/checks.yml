@@ -37,6 +37,7 @@ jobs:
       - run: pnpm --filter @leadinglight/desktop test
       - run: pnpm --filter @leadinglight/image-service test
       - run: pnpm --filter @leadinglight/desktop build
+      - run: pnpm --filter @leadinglight/docs build
       - run: pnpm --filter @leadinglight/desktop exec playwright install --with-deps chromium
       - name: Browser smoke
         run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa smoke.spec.ts saving.spec.ts unsplash.spec.ts

@@ -1,0 +1,70 @@
+/* The app's look: the system font, ink on paper, neutral greys, no decorative colour. */
+:root {
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --vp-font-family-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --vp-c-brand-1: #2b2c33;
+  --vp-c-brand-2: #45464f;
+  --vp-c-brand-3: #15151a;
+  --vp-c-brand-soft: rgba(43, 44, 51, 0.08);
+  --vp-home-hero-name-color: #15151a;
+  --vp-button-brand-bg: #15151a;
+  --vp-button-brand-hover-bg: #2b2c33;
+  --vp-button-brand-active-bg: #45464f;
+  --vp-button-brand-text: #f6f2eb;
+  --vp-button-brand-hover-text: #f6f2eb;
+  --vp-button-brand-active-text: #f6f2eb;
+}
+
+.dark {
+  --vp-c-brand-1: #e3e4e8;
+  --vp-c-brand-2: #c9cad1;
+  --vp-c-brand-3: #f6f2eb;
+  --vp-c-brand-soft: rgba(227, 228, 232, 0.1);
+  --vp-home-hero-name-color: #f6f2eb;
+  --vp-button-brand-bg: #f6f2eb;
+  --vp-button-brand-hover-bg: #e3e4e8;
+  --vp-button-brand-active-bg: #c9cad1;
+  --vp-button-brand-text: #15151a;
+  --vp-button-brand-hover-text: #15151a;
+  --vp-button-brand-active-text: #15151a;
+}
+
+/* Links stay readable in the neutral palette. */
+.vp-doc a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--vp-c-divider);
+}
+.vp-doc a:hover {
+  text-decoration-color: currentColor;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 0.4em;
+  border: 1px solid var(--vp-c-divider);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--vp-c-bg-soft);
+  font-family: var(--vp-font-family-base);
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Screenshots sit on a soft card, like the app's pages. */
+.vp-doc img.shot {
+  display: block;
+  margin: 20px 0;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+}
+
+.VPHero .image-src {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: 48px;
+}

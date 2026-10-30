@@ -18,6 +18,7 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
 - `vendor/shipyard` — Shipyard's app source, verbatim (MIT), synced from upstream with
   `pnpm sync:shipyard`. Never edit it; read `vendor/shipyard/README.md`. In `apps/desktop`,
   `@/` is the vendored tree and `~/` is our own `src/`.
+- `apps/docs` — the documentation site (VitePress). When a change alters what a user sees, update its page.
 - `features/` — Gherkin specs. This is the contract for what the app does.
 - `docs/DECISIONS.md` — why things are the way they are. Read it before touching an architecture piece.
 - `docs/PLAN.md` — milestones.

@@ -16,7 +16,7 @@ notes, checks and downloads are managed by [GitHub Actions](docs/RELEASING.md).
 - `packages/ui`: shared UI, built on [COSS UI](https://coss.com/ui/docs/get-started)
 - `packages/editor`: the block editor (TipTap/ProseMirror with our own UI)
 - `apps/image-service`: the small Vercel service for Unsplash covers
-- More apps (website, docs) will go in `apps/`.
+- `apps/docs`: the documentation site (VitePress); run it with `pnpm --filter @leadinglight/docs dev`
 
 pnpm workspaces handle the JS side. A Cargo workspace (root `Cargo.toml`) handles Rust.
 
