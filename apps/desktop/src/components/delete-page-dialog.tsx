@@ -8,6 +8,7 @@ import {
   AlertDialogTitle,
 } from "@leadinglight/ui/components/alert-dialog";
 import { Button } from "@leadinglight/ui/components/button";
+import { useRef } from "react";
 import { pageLabel } from "~/lib/labels";
 import type { ObjectSummary } from "~/lib/objects";
 
@@ -20,9 +21,11 @@ export function DeletePageDialog({
   onCancel: () => void;
   onConfirm: (id: string) => void;
 }) {
+  // Focus Delete so Enter confirms; Base UI would focus Cancel, the first button.
+  const confirm = useRef<HTMLButtonElement>(null);
   return (
     <AlertDialog onOpenChange={(open) => !open && onCancel()} open={page !== null}>
-      <AlertDialogPopup className="max-w-sm">
+      <AlertDialogPopup className="max-w-sm" initialFocus={confirm}>
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{page ? pageLabel(page.title) : ""}”?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -32,7 +35,7 @@ export function DeletePageDialog({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
-          <Button onClick={() => page && onConfirm(page.id)} variant="destructive">
+          <Button onClick={() => page && onConfirm(page.id)} ref={confirm} variant="destructive">
             Delete
           </Button>
         </AlertDialogFooter>

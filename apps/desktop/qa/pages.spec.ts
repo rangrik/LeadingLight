@@ -136,6 +136,20 @@ test("Delete asks for confirmation and Cancel keeps the page", async ({ page }) 
   await expect(row(page, "Draft")).toBeVisible();
 });
 
+// Guards the dialog's first focus: Base UI would focus Cancel, so Enter kept the page.
+test("Enter confirms the delete and Escape keeps the page", async ({ page }) => {
+  await createPage(page, "Draft");
+  await chooseDelete(page, "Draft");
+  const dialog = page.getByRole("alertdialog", { name: "Delete “Draft”?" });
+  await expect(dialog.getByRole("button", { name: "Delete" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(row(page, "Draft")).toBeVisible();
+  await chooseDelete(page, "Draft");
+  await page.keyboard.press("Enter");
+  await expect(row(page, "Draft")).toHaveCount(0);
+});
+
 test("Confirming delete removes the page and opens the next one", async ({ page }) => {
   await createPage(page, "Old");
   await createPage(page, "New");

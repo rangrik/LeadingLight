@@ -60,7 +60,7 @@ Hover any row in the sidebar and click **More** to see:
 
 1. Choose **Delete** in the row's menu, or **Delete page…** at the end of the page's **Page options** menu.
 2. A dialog asks **Delete "Draft"?** and says the page and everything in it will be removed.
-3. Click **Delete** to confirm, or **Cancel** to keep the page.
+3. Press <kbd>Return</kbd> or click **Delete** to confirm. <kbd>Esc</kbd> or **Cancel** keeps the page.
 
 After a delete, the next page in the list opens. If it was your last page, the sidebar shows **No pages yet**.
 

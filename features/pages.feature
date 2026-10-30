@@ -88,6 +88,15 @@ Feature: Pages
     When I click "Cancel"
     Then the dialog closes and "Draft" is still listed
 
+  Scenario: Enter confirms the delete and Escape keeps the page
+    Given I have created a page titled "Draft"
+    When I hover the sidebar row "Draft", click "More" and choose "Delete"
+    Then the dialog's "Delete" button has focus
+    When I press Escape
+    Then the dialog closes and "Draft" is still listed
+    When I choose "Delete" in the menu of "Draft" again and press Enter
+    Then "Draft" is no longer listed
+
   Scenario: Confirming delete removes the page and opens the next one
     Given I have created a page titled "Old"
     And I have created a page titled "New"
