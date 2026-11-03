@@ -20,9 +20,12 @@ Feature: Compatible library updates preserve notes
     Then its dependencies resolve and the browser app builds
 
   Scenario: Render math in an agent reply
-    Given an agent reply contains an inline formula and a display formula
+    Given an agent reply contains "\(x^2\)" and a display formula between "$$" lines
     When the reply is shown
     Then both formulas render and invalid formulas remain visible as text
+    And "$5 and $10" stays ordinary text
+    And formulas inside code stay ordinary code
+    And math inside folded work renders when I expand it
 
   Scenario: Syntax colors follow the chosen theme
     Given a project file contains a keyword, a string, and a comment

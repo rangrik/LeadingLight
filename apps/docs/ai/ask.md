@@ -44,6 +44,8 @@ Under the answer are **Insert below**, **Replace** and a copy button.
 
 With a GPT model, Codex's running notes and its final answer show as separate messages, outside the folded work. Copy and **Insert below** always use the final answer.
 
+Formulas render in replies and expanded work. Inline math uses `\(…\)`; display math uses `\[…\]` or a pair of `$$` lines. Single dollar amounts and formulas inside code stay as written. An invalid formula shows its source.
+
 ## Put the answer into your note
 
 - **Insert below** adds the answer's paragraphs after the block that held your selection.

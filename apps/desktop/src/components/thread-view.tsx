@@ -1,6 +1,5 @@
 import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
 import { memo, type MouseEvent, type Ref, useEffect, useState } from "react";
-import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -8,6 +7,7 @@ import { openLink } from "~/lib/links";
 import { openPage } from "~/lib/panes";
 import { pageOf } from "~/lib/space";
 import { turnContent, type Approval, type Item } from "~/lib/threads";
+import { useReplyMarkdown } from "~/lib/reply-markdown";
 
 // A thread as synara draws one: my messages on the right; each turn's steps folded under one
 // line ("Worked for 12s") once it is done; the answer, the text after the last step, below.
@@ -84,10 +84,11 @@ const follow = (e: MouseEvent, onFile?: (href: string) => void) => {
   if (/^(https?|mailto):/i.test(href)) openLink(href);
   else onFile?.(href);
 };
-const Markdown = ({ text, streaming, onFile }: { text: string; streaming?: boolean; onFile?: (href: string) => void }) => (
+const Markdown = ({ text, streaming, onFile }: { text: string; streaming?: boolean; onFile?: (href: string) => void }) => {
+  const html = useReplyMarkdown(text || "​");
   // micromark escapes any HTML in the answer, so this is the answer's own Markdown only.
-  <div className="ll-answer" dangerouslySetInnerHTML={{ __html: markdownHtml(text || "​").html }} data-streaming={streaming ? "" : undefined} onClick={(e) => follow(e, onFile)} />
-);
+  return <div className="ll-answer" dangerouslySetInnerHTML={{ __html: html }} data-streaming={streaming ? "" : undefined} onClick={(e) => follow(e, onFile)} />;
+};
 
 type TurnProps = { items: Item[]; live: boolean; started?: number; waiting?: boolean; page: string; onGoAhead: () => void; onFile?: (href: string) => void };
 // Only the turn being worked on redraws as words stream in; finished ones keep their Markdown.

@@ -24,6 +24,7 @@
 .ll-answer pre code { background: none; padding: 0; }
 /* Agents write a poem's or a list's lines with single newlines, as a chat shows them. */
 .ll-answer p { white-space: pre-line; }
+.ll-answer .katex-display { overflow-x: auto; overflow-y: hidden; }
 .ll-answer table { display: block; overflow-x: auto; border-collapse: collapse; }
 .ll-answer th, .ll-answer td { padding: 0.25rem 1rem 0.25rem 0; text-align: left; border-bottom: 1px solid var(--border); }
 .ll-answer th { font-weight: 600; }
