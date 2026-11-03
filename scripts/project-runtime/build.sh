@@ -37,7 +37,8 @@ SRC="$CACHE/shipyard"
 [ -d "$SRC" ] || git clone --quiet --filter=blob:none --no-checkout "$REPO" "$SRC"
 git -C "$SRC" cat-file -e "$COMMIT^{commit}" 2>/dev/null || git -C "$SRC" fetch --quiet origin "$COMMIT"
 BUILD=$(mktemp -d "$CACHE/build.XXXXXX")
-trap 'rm -rf "$BUILD"' EXIT
+TEST_STATE=
+trap 'rm -rf "$BUILD"; if [ -n "$TEST_STATE" ]; then rm -rf "$TEST_STATE"; fi' EXIT
 git -C "$SRC" archive "$COMMIT" | tar -x -C "$BUILD"
 
 # Its license and notices ship with the app as vendor/shipyard has them.
@@ -54,9 +55,16 @@ if [ "${1:-}" = "--test" ]; then
   shift
   [ "$#" -gt 0 ] || set -- ./...
   # Resolve the test browser before isolating HOME, which otherwise changes browser discovery.
-  TEST_CHROMIUM=${BERTH_CHROMIUM:-$(cd apps/desktop && node --input-type=module -e 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath());')}
-  [ -x "$TEST_CHROMIUM" ] || { echo "Install Playwright Chromium or set BERTH_CHROMIUM to a test browser." >&2; exit 1; }
-  TEST_STATE="$BUILD/.test-state"
+  TEST_CHROMIUM=${BERTH_CHROMIUM:-}
+  if [ -z "$TEST_CHROMIUM" ]; then
+    if ! TEST_CHROMIUM=$(cd apps/desktop && node --input-type=module -e 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath());' 2>/dev/null); then
+      echo "Run pnpm install --frozen-lockfile first, or set BERTH_CHROMIUM to an installed test browser." >&2
+      exit 1
+    fi
+  fi
+  [ -x "$TEST_CHROMIUM" ] || { echo "Run pnpm --filter @leadinglight/desktop exec playwright install chromium, or set BERTH_CHROMIUM." >&2; exit 1; }
+  # Unix socket paths must fit macOS's short limit.
+  TEST_STATE=$(mktemp -d /tmp/ll-rt.XXXXXX)
   mkdir -p "$TEST_STATE/home" "$TEST_STATE/tmp" "$TEST_STATE/tmux" "$TEST_STATE/box" "$TEST_STATE/user"
   TEST_BROWSER="$TEST_CHROMIUM"
   if [ "$(uname -s)" = Darwin ]; then
@@ -68,13 +76,13 @@ exec "$LL_TEST_CHROMIUM" --use-mock-keychain "$@"
 EOF
     chmod +x "$TEST_BROWSER"
   fi
-  (cd "$BUILD" && env -i HOME="$TEST_STATE/home" USER="${USER:-}" PATH="$GO/bin:$PATH" \
+  touch "$BUILD/.leadinglight-runtime-build" "$TEST_STATE/.leadinglight-runtime-test-state"
+  exec env -i HOME="$TEST_STATE/home" USER="${USER:-}" PATH="$GO/bin:$PATH" \
     TMPDIR="$TEST_STATE/tmp/" TMUX_TMPDIR="$TEST_STATE/tmux" \
     BERTH_HOME="$TEST_STATE/box" BERTH_USER_DIR="$TEST_STATE/user" BERTH_CHROMIUM="$TEST_BROWSER" LL_TEST_CHROMIUM="$TEST_CHROMIUM" \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
     GOPATH="$CACHE/gopath" GOCACHE="$CACHE/gocache" GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
-    go test -count=1 -timeout=20m "$@")
-  exit 0
+    node "$ROOT/scripts/project-runtime/test-run.mjs" "$BUILD" "$TEST_STATE" "$@"
 fi
 
 # The version names the patch set too, so two sets never pass for one.
