@@ -28,3 +28,9 @@ Feature: Codex note turns isolate configured integrations
     Given Codex reports a retrying error for the current note turn
     When that turn completes successfully
     Then the conversation does not report a failure
+
+  Scenario: A note turn is stopped while Codex is starting
+    Given Codex is still checking its features and configured integrations
+    When I stop the note turn
+    Then no Codex note thread starts after the checks finish
+    And the turn does not leave an app server running
