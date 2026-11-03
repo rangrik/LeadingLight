@@ -61,7 +61,7 @@
     "d3-shape": "3.2.0",
     "diff": "9.0.0",
     "ghostty-web": "^0.4.0",
-    "katex": "^0.16.47",
+    "katex": "^0.19.1",
     "lucide-react": "^1.48.0",
     "micromark": "^4.0.3",
     "micromark-extension-gfm": "^3.0.0",
@@ -74,7 +74,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/d3-array": "3.2.2",
     "@types/d3-sankey": "0.12.5",
     "@types/d3-shape": "3.1.7",
@@ -82,9 +82,9 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.2.1",
     "micromark-util-types": "^2.0.3",
-    "tailwindcss": "^4.3.3",
+    "tailwindcss": "^4.3.4",
     "typescript": "~6.0.3",
     "vite": "^8.0.16"
   }

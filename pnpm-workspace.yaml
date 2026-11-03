@@ -4,3 +4,7 @@ packages:
   # Shipyard, vendored (vendor/shipyard/README.md).
   - vendor/shipyard/app
   - vendor/shipyard/packages/plugin-sdk
+
+# micromark-extension-math still pins KaTeX below the patched release.
+overrides:
+  'micromark-extension-math>katex': '^0.19.1'

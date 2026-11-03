@@ -54,6 +54,7 @@ export default defineConfig(() => ({
   resolve: {
     alias: [
       // Our shortcuts table and our themes, in Shipyard's places (vendor/shipyard/README.md).
+      { find: "@/lib/syntax-colors", replacement: path.resolve(here, "src/lib/syntax-colors.ts") },
       { find: "@/lib/shortcuts.json", replacement: path.resolve(here, "src/lib/shortcuts.json") },
       { find: "@/themes/builtin", replacement: path.resolve(here, "../../packages/themes/src/builtin.ts") },
       { find: /^@\//, replacement: `${path.join(shipyard, "app/src")}/` },
