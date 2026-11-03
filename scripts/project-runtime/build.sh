@@ -4,6 +4,7 @@
 # Any checksum, notice or patch that doesn't match stops the build.
 #
 #   scripts/project-runtime/build.sh      writes apps/desktop/src-tauri/binaries/
+#   scripts/project-runtime/build.sh --test [go test arguments]
 set -eu
 cd "$(dirname "$0")/../.."
 ROOT=$(pwd)
@@ -48,6 +49,34 @@ PATCHES=$(node -p "require('./$PIN').patches.join(' ')")
 for P in $PATCHES; do
   (cd "$BUILD" && git apply --whitespace=nowarn "$ROOT/runtime/shipyard/patches/$P") || { echo "patch $P no longer applies to $COMMIT" >&2; exit 1; }
 done
+
+if [ "${1:-}" = "--test" ]; then
+  shift
+  [ "$#" -gt 0 ] || set -- ./...
+  # Resolve the test browser before isolating HOME, which otherwise changes browser discovery.
+  TEST_CHROMIUM=${BERTH_CHROMIUM:-$(cd apps/desktop && node --input-type=module -e 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath());')}
+  [ -x "$TEST_CHROMIUM" ] || { echo "Install Playwright Chromium or set BERTH_CHROMIUM to a test browser." >&2; exit 1; }
+  TEST_STATE="$BUILD/.test-state"
+  mkdir -p "$TEST_STATE/home" "$TEST_STATE/tmp" "$TEST_STATE/tmux" "$TEST_STATE/box" "$TEST_STATE/user"
+  TEST_BROWSER="$TEST_CHROMIUM"
+  if [ "$(uname -s)" = Darwin ]; then
+    # Disposable test profiles must not ask for the person's macOS Keychain.
+    TEST_BROWSER="$TEST_STATE/chromium"
+    cat > "$TEST_BROWSER" <<'EOF'
+#!/bin/sh
+exec "$LL_TEST_CHROMIUM" --use-mock-keychain "$@"
+EOF
+    chmod +x "$TEST_BROWSER"
+  fi
+  (cd "$BUILD" && env -i HOME="$TEST_STATE/home" USER="${USER:-}" PATH="$GO/bin:$PATH" \
+    TMPDIR="$TEST_STATE/tmp/" TMUX_TMPDIR="$TEST_STATE/tmux" \
+    BERTH_HOME="$TEST_STATE/box" BERTH_USER_DIR="$TEST_STATE/user" BERTH_CHROMIUM="$TEST_BROWSER" LL_TEST_CHROMIUM="$TEST_CHROMIUM" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_TERMINAL_PROMPT=0 \
+    GOPATH="$CACHE/gopath" GOCACHE="$CACHE/gocache" GOTOOLCHAIN=local GOFLAGS=-mod=readonly \
+    go test -count=1 -timeout=20m "$@")
+  exit 0
+fi
+
 # The version names the patch set too, so two sets never pass for one.
 SUM=$(cd runtime/shipyard/patches && cat $PATCHES | shasum -a 256 | cut -c1-8)
 

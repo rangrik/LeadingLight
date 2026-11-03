@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "a6ee436af12210c00aca4a40f8f69955afd18fc1",
-  "version": "0.3.31-ll.29",
+  "version": "0.3.31-ll.30",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -48,6 +48,10 @@
     "0033-steer-keeps-the-turn.patch",
     "0034-host-log-marks-mid-turn.patch",
     "0035-moved-resume-test.patch",
-    "0036-folder-stats.patch"
+    "0036-folder-stats.patch",
+    "0037-worker-reporting.patch",
+    "0038-runtime-lifecycle.patch",
+    "0039-portable-tests-and-cli-help.patch",
+    "0040-cancellable-browser-commands.patch"
   ]
 }

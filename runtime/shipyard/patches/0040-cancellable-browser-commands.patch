@@ -1,0 +1,237 @@
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index 9ab148c..e9cdfe3 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -111,7 +111,8 @@ type browser struct {
+ 	bctx    string // its browser context; "" for the main tab's, the default
+ 	opened  time.Time
+ 
+-	run       sync.Mutex // one command at a time
++	run       chan struct{} // one command at a time
++	runOnce   sync.Once
+ 	uploadMu  sync.Mutex
+ 	inspectMu sync.Mutex
+ 	zoomMu    sync.Mutex
+@@ -844,7 +845,11 @@ func (br *browser) pageTitle(ctx context.Context) string {
+ // Open navigates and prints a first look: title, URL and a compact
+ // interactive snapshot, with any errors.
+ func (br *browser) Open(ctx context.Context, url string) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	loaded := make(chan struct{})
+ 	br.mu.Lock()
+ 	br.loaded = loaded
+@@ -982,7 +987,11 @@ func (br *browser) capLines(lines []string, limit int) (string, string) {
+ // Snapshot prints the page, or with delta what changed since the last
+ // snapshot of this page.
+ func (br *browser) Snapshot(ctx context.Context, full, delta bool, selector string, depth int) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	o := snapOptions{full: full, depth: depth, maxLines: 2000}
+ 	if selector != "" {
+ 		id, err := br.resolve(ctx, selector)
+@@ -1114,7 +1123,11 @@ var keyCodes = map[string]int{"Enter": 13, "Tab": 9, "Escape": 27, "Backspace":
+ // Act clicks, fills, presses, selects or hovers, then prints what changed:
+ // a delta of the snapshot, new console errors and failed requests.
+ func (br *browser) Act(ctx context.Context, action, target, value string) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	before := br.currentURL()
+ 	var id int64
+ 	if action != "press" || target != "" {
+@@ -1223,7 +1236,11 @@ func (br *browser) Act(ctx context.Context, action, target, value string) (Brows
+ // Wait waits for text on the page, a URL containing url, or the network
+ // to go quiet.
+ func (br *browser) Wait(ctx context.Context, text, url string, idle bool, timeout time.Duration) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	if timeout <= 0 || timeout > time.Minute {
+ 		timeout = 10 * time.Second
+ 	}
+@@ -1271,7 +1288,11 @@ func jsString(s string) string {
+ // width pixels wide (800 by default, which an agent reads for about 530
+ // tokens), or with native the page's own pixels, its size at its scale.
+ func (br *browser) Shot(ctx context.Context, el string, full bool, width int, native bool) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	if width <= 0 {
+ 		width = 800
+ 	}
+@@ -1394,7 +1415,11 @@ func (br *browser) Network() BrowserResult {
+ 
+ // Eval runs JavaScript in the page and prints its value, at most 2 KB.
+ func (br *browser) Eval(ctx context.Context, js string) (BrowserResult, error) {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return BrowserResult{}, err
++	}
++	defer done()
+ 	raw, err := br.evaluate(ctx, js)
+ 	if err != nil {
+ 		return BrowserResult{Text: "error: " + err.Error()}, nil
+diff --git a/internal/box/browserqueue_test.go b/internal/box/browserqueue_test.go
+new file mode 100644
+index 0000000..44f7066
+--- /dev/null
++++ b/internal/box/browserqueue_test.go
+@@ -0,0 +1,86 @@
++package box
++
++import (
++	"bufio"
++	"context"
++	"encoding/json"
++	"errors"
++	"net"
++	"testing"
++	"time"
++)
++
++// A cancelled request must leave a busy tab's queue without waiting for Chromium.
++func TestCancelledBrowserCommandDoesNotWaitBehindAnother(t *testing.T) {
++	client, chrome := net.Pipe()
++	defer client.Close()
++	defer chrome.Close()
++	requests := make(chan cdpMessage, 4)
++	go func() {
++		r := bufio.NewReader(chrome)
++		for {
++			raw, err := r.ReadBytes(0)
++			if err != nil {
++				return
++			}
++			var msg cdpMessage
++			if json.Unmarshal(raw[:len(raw)-1], &msg) != nil {
++				return
++			}
++			requests <- msg
++			var params struct {
++				Expression string `json:"expression"`
++			}
++			json.Unmarshal(msg.Params, &params)
++			if params.Expression == "blocked" {
++				continue
++			}
++			reply, _ := json.Marshal(map[string]any{"id": msg.ID, "result": map[string]any{"result": map[string]any{"value": "ready"}}})
++			if _, err := chrome.Write(append(reply, 0)); err != nil {
++				return
++			}
++		}
++	}()
++	br := &browser{chromium: &chromium{cdp: newCDP(client, client, nil)}}
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	active := make(chan struct{})
++	go func() { defer close(active); br.Eval(ctx, "blocked") }()
++	select {
++	case <-requests:
++	case <-time.After(3 * time.Second):
++		t.Fatal("first command never reached Chromium")
++	}
++	for _, expired := range []bool{true, false} {
++		cancelled, stop := context.WithTimeout(context.Background(), 50*time.Millisecond)
++		want := context.DeadlineExceeded
++		if expired {
++			stop()
++			want = context.Canceled
++		}
++		queued := make(chan error, 1)
++		go func() { _, err := br.Snapshot(cancelled, false, false, "", 0); queued <- err }()
++		var got error
++		select {
++		case got = <-queued:
++		case <-time.After(time.Second):
++			stop()
++			cancel()
++			<-active
++			<-queued
++			t.Fatalf("cancelled command waited for the active command (already expired: %v)", expired)
++		}
++		stop()
++		if !errors.Is(got, want) {
++			t.Fatalf("cancelled command = %v, want %v", got, want)
++		}
++	}
++	cancel()
++	<-active
++	check, done := context.WithTimeout(context.Background(), time.Second)
++	defer done()
++	out, err := br.Eval(check, "ready")
++	if err != nil || out.Text != `"ready"` {
++		t.Fatalf("next command = %+v, %v", out, err)
++	}
++}
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index 4fb6770..0a6aaee 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -665,15 +665,27 @@ func (br *browser) idleFor() time.Duration {
+ }
+ 
+ // begin starts a command on the tab, one at a time, and returns its end.
+-func (br *browser) begin() func() {
+-	br.run.Lock()
++func (br *browser) begin(ctx context.Context) (func(), error) {
++	br.runOnce.Do(func() { br.run = make(chan struct{}, 1) })
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	select {
++	case br.run <- struct{}{}:
++	case <-ctx.Done():
++		return nil, ctx.Err()
++	}
++	if err := ctx.Err(); err != nil {
++		<-br.run
++		return nil, err
++	}
+ 	br.busy.Add(1)
+ 	br.touch()
+ 	return func() {
+ 		br.touch()
+ 		br.busy.Add(-1)
+-		br.run.Unlock()
+-	}
++		<-br.run
++	}, nil
+ }
+ 
+ func (br *browser) closeWatchers() {
+diff --git a/internal/box/browserviewport.go b/internal/box/browserviewport.go
+index e2705df..2c7a13b 100644
+--- a/internal/box/browserviewport.go
++++ b/internal/box/browserviewport.go
+@@ -271,7 +271,11 @@ func (m *Browsers) Resize(ctx context.Context, path, tab string, v Viewport) (*b
+ // resize applies a size to the running page: its viewport and scale, the
+ // screencast's frames, and a fresh frame for whoever watches.
+ func (br *browser) resize(ctx context.Context, v Viewport) error {
+-	defer br.begin()()
++	done, err := br.begin(ctx)
++	if err != nil {
++		return err
++	}
++	defer done()
+ 	if err := br.applyViewport(ctx, v); err != nil {
+ 		return err
+ 	}
