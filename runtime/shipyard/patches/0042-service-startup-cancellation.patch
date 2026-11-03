@@ -617,10 +617,10 @@ index ce05672e02d83b374834199da7fd3bc6d50b5378..2fe861402d4fc5899987aa08b054880b
  		b.killServiceSession(ctx, location, worktree, s.Name)
 diff --git a/internal/service/cancellation_test.go b/internal/service/cancellation_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..a444a91efbe7d5c807950b7bc091f5fa5525f52f
+index 0000000000000000000000000000000000000000..99ef9eda33556dd161004ecb93dd718d17de90de
 --- /dev/null
 +++ b/internal/service/cancellation_test.go
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,224 @@
 +package service
 +
 +import (
@@ -811,8 +811,176 @@ index 0000000000000000000000000000000000000000..a444a91efbe7d5c807950b7bc091f5fa
 +		t.Fatalf("rollback replaced an external symlink to its former inode: %q, %v", got, err)
 +	}
 +}
++
++func TestFailedInstallLeavesExternalPermissionChangesUntouched(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	original := spec
++	original.LogPath = filepath.Join(home, "service.log")
++	path, err := Install(original)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Chmod(path, 0o640); err != nil {
++		t.Fatal(err)
++	}
++	updated := original
++	updated.Args = []string{"agent", "--changed"}
++	command = func(context.Context, string, ...string) ([]byte, error) {
++		if err := os.Chmod(path, 0o600); err != nil {
++			t.Fatal(err)
++		}
++		return nil, context.Canceled
++	}
++	_, err = InstallContext(context.Background(), updated)
++	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "unit changed") {
++		t.Errorf("installation must report cancellation and the permission change: %v", err)
++	}
++	info, err := os.Stat(path)
++	if err != nil || info.Mode().Perm() != 0o600 {
++		t.Fatalf("rollback overwrote another owner's permissions: %v, %v", info, err)
++	}
++	got, err := os.ReadFile(path)
++	want, _ := Render(updated)
++	if err != nil || string(got) != string(want) {
++		t.Fatalf("rollback replaced the definition another owner changed: %q, %v", got, err)
++	}
++}
+diff --git a/internal/service/definitionreads_test.go b/internal/service/definitionreads_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..b7ababdbcfea3876face0451f3eb8ac944099da1
+--- /dev/null
++++ b/internal/service/definitionreads_test.go
+@@ -0,0 +1,94 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"syscall"
++	"testing"
++	"time"
++)
++
++// A blocked filesystem read does not observe context cancellation. Exercise
++// special files in a disposable subprocess so a regression leaves no blocked
++// goroutine holding a unit lock in the test runner.
++func TestServiceDefinitionReadsRejectSpecialFiles(t *testing.T) {
++	if kind := os.Getenv("BERTH_TEST_SERVICE_FILE_KIND"); kind != "" {
++		home, calls := stub(t, "darwin")
++		s := spec
++		s.LogPath = filepath.Join(home, "service.log")
++		path, err := UnitPath(s)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
++			t.Fatal(err)
++		}
++		target := path
++		if kind != "fifo" {
++			target = filepath.Join(home, "external-definition")
++		}
++		if kind == "linked-regular" {
++			data, err := Render(s)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err := os.WriteFile(target, data, 0o600); err != nil {
++				t.Fatal(err)
++			}
++		} else if err := syscall.Mkfifo(target, 0o600); err != nil {
++			t.Fatal(err)
++		}
++		if kind != "fifo" {
++			if err := os.Symlink(target, path); err != nil {
++				t.Fatal(err)
++			}
++		}
++		switch os.Getenv("BERTH_TEST_SERVICE_FILE_OPERATION") {
++		case "ensure":
++			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
++			defer cancel()
++			if _, err := EnsureContext(ctx, s); err == nil {
++				t.Fatal("ensure accepted a special or linked definition")
++			}
++		case "installed-any-path":
++			if InstalledAnyPATH(s) {
++				t.Fatal("installed check accepted a special or linked definition")
++			}
++		default:
++			t.Fatal("unknown subprocess operation")
++		}
++		if len(*calls) != 0 {
++			t.Fatalf("read-only rejection invoked the service manager: %v", *calls)
++		}
++		if _, err := os.Stat(pendingUnitPath(path)); !errors.Is(err, os.ErrNotExist) {
++			t.Fatalf("rejected definition acquired a pending-install marker: %v", err)
++		}
++		if kind != "fifo" {
++			if got, err := os.Readlink(path); err != nil || got != target {
++				t.Fatalf("rejection replaced the existing symlink: %q, %v", got, err)
++			}
++		}
++		return
++	}
++	for _, kind := range []string{"fifo", "linked-fifo", "linked-regular"} {
++		for _, operation := range []string{"ensure", "installed-any-path"} {
++			t.Run(kind+"/"+operation, func(t *testing.T) {
++				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++				defer cancel()
++				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestServiceDefinitionReadsRejectSpecialFiles$")
++				cmd.Env = append(os.Environ(), "TMPDIR="+t.TempDir(), "BERTH_TEST_SERVICE_FILE_KIND="+kind, "BERTH_TEST_SERVICE_FILE_OPERATION="+operation)
++				cmd.WaitDelay = time.Second
++				out, err := cmd.CombinedOutput()
++				if ctx.Err() != nil {
++					t.Fatalf("%s blocked on %s past cancellation: %s", operation, kind, out)
++				}
++				if err != nil {
++					t.Fatalf("subprocess failed: %v\n%s", err, out)
++				}
++			})
++		}
++	}
++}
+diff --git a/internal/service/read.go b/internal/service/read.go
+index c99b2ba3b2b48cef179bfaa9930273fda08496a5..0b13e0e63deccd972135b67a6b7b3b8b33ed003f 100644
+--- a/internal/service/read.go
++++ b/internal/service/read.go
+@@ -6,7 +6,6 @@ import (
+ 	"encoding/xml"
+ 	"errors"
+ 	"fmt"
+-	"os"
+ 	"strings"
+ )
+ 
+@@ -42,18 +41,15 @@ func (u Unit) Arg(flag string) string {
+ 	return ""
+ }
+ 
+-// Read reads the unit installed under name; ok is false when there is none.
++// Read reads the regular unit file installed under name; ok is false when there is none.
+ // It understands what Render writes, which is all Install ever installs.
+ func Read(name string) (u Unit, ok bool, err error) {
+ 	path, err := unitPath(Spec{Name: name})
+ 	if err != nil {
+ 		return Unit{}, false, err
+ 	}
+-	data, err := os.ReadFile(path)
+-	if errors.Is(err, os.ErrNotExist) {
+-		return Unit{}, false, nil
+-	}
+-	if err != nil {
++	data, _, exists, err := readUnitFile(path)
++	if err != nil || !exists {
+ 		return Unit{}, false, err
+ 	}
+ 	if goos == "darwin" {
 diff --git a/internal/service/service.go b/internal/service/service.go
-index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5da827e70 100644
+index fdab1605e59e8673c748afd530dbc37925f74678..58e33a4a079c6242ef72243aee09c2bbd1d58864 100644
 --- a/internal/service/service.go
 +++ b/internal/service/service.go
 @@ -6,6 +6,7 @@ package service
@@ -889,18 +1057,33 @@ index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5
  			return fmt.Errorf("launchd has no login session for you on this Mac (%s), so berthd cannot run as your launch agent. "+
  				"Log in at the Mac once (screen sharing counts) and try again", lastLine(out, err))
  		}
-@@ -252,6 +274,11 @@ func Installed(s Spec) bool {
+@@ -210,8 +232,8 @@ func Migrate(s Spec) (bool, error) {
+ 	if err != nil || !ok || u.Program != s.Program || u.Env["BERTH_HOME"] != s.Env["BERTH_HOME"] {
+ 		return false, err
+ 	}
+-	have, err := os.ReadFile(u.Path)
+-	if err != nil {
++	have, _, exists, err := readUnitFile(u.Path)
++	if err != nil || !exists {
+ 		return false, err
+ 	}
+ 	path := u.Path
+@@ -252,8 +274,13 @@ func Installed(s Spec) bool {
  	if err != nil {
  		return false
  	}
+-	have, err := os.ReadFile(path)
+-	if err != nil {
 +	// A restored definition can still be unloaded, or the manager may have
 +	// accepted a changed definition before cancellation hid its reply.
 +	if _, err := os.Lstat(pendingUnitPath(path)); !errors.Is(err, os.ErrNotExist) {
 +		return false
 +	}
- 	have, err := os.ReadFile(path)
- 	if err != nil {
++	have, _, exists, err := readUnitFile(path)
++	if err != nil || !exists {
  		return false
+ 	}
+ 	want, err := Render(s)
 @@ -300,7 +327,24 @@ func InstalledByName(name string) bool {
  }
  
@@ -975,7 +1158,7 @@ index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5
 +			if statErr != nil {
 +				return statErr
 +			}
-+			if !current.Mode().IsRegular() || !os.SameFile(current, written) {
++			if !current.Mode().IsRegular() || !os.SameFile(current, written) || current.Mode() != written.Mode() {
 +				return errors.New("unit changed during failed installation; leaving it untouched")
 +			}
 +			contents, _, exists, readErr := readUnitFile(path)
@@ -995,11 +1178,11 @@ index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5
 +			return path, errors.Join(err, fmt.Errorf("restoring %s: %w", path, restoreErr))
 +		}
 +		return path, err
- 	}
--	return path, load(s, path)
++	}
 +	if err := clearUnitPending(path); err != nil {
 +		return path, fmt.Errorf("finishing service installation: %w", err)
-+	}
+ 	}
+-	return path, load(s, path)
 +	return path, nil
  }
  
@@ -1051,12 +1234,12 @@ index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5
  	if _, err := os.Stat(path); os.IsNotExist(err) {
 -		return "", nil
 +		return "", clearUnitPending(path)
-+	}
-+	if err := unload(ctx, s); interrupted(err) {
-+		return path, errors.Join(err, markUnitPending(path))
  	}
 -	unload(s)
 -	return path, os.Remove(path)
++	if err := unload(ctx, s); interrupted(err) {
++		return path, errors.Join(err, markUnitPending(path))
++	}
 +	if err := os.Remove(path); err != nil {
 +		return path, err
 +	}
@@ -1078,21 +1261,21 @@ index fdab1605e59e8673c748afd530dbc37925f74678..069dc6924a5384cc6432edf4544daff5
 +func RunningContext(ctx context.Context, s Spec) (bool, error) {
 +	var out []byte
 +	var err error
- 	if goos == "darwin" {
--		out, err := command("launchctl", "print", launchdTarget(s))
--		return err == nil && strings.Contains(string(out), "state = running")
++	if goos == "darwin" {
 +		out, err = command(ctx, "launchctl", "print", launchdTarget(s))
 +	} else {
 +		out, err = command(ctx, "systemctl", "--user", "is-active", s.Name+".service")
- 	}
--	out, err := command("systemctl", "--user", "is-active", s.Name+".service")
--	return err == nil && strings.TrimSpace(string(out)) == "active"
++	}
 +	if interrupted(err) {
 +		return false, err
 +	}
-+	if goos == "darwin" {
+ 	if goos == "darwin" {
+-		out, err := command("launchctl", "print", launchdTarget(s))
+-		return err == nil && strings.Contains(string(out), "state = running")
 +		return err == nil && strings.Contains(string(out), "state = running"), nil
-+	}
+ 	}
+-	out, err := command("systemctl", "--user", "is-active", s.Name+".service")
+-	return err == nil && strings.TrimSpace(string(out)) == "active"
 +	return err == nil && strings.TrimSpace(string(out)) == "active", nil
  }
  
