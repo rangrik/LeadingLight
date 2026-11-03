@@ -18,7 +18,9 @@ test("Two pages side by side each keep their own edits", async ({ page }) => {
   await page.goto("/");
   await create(page, "Left");
   await create(page, "Right");
-  const row = (await nav(page).getByRole("button", { name: "Left", exact: true }).boundingBox())!;
+  const left = nav(page).getByRole("button", { name: "Left", exact: true });
+  await left.scrollIntoViewIfNeeded();
+  const row = (await left.boundingBox())!;
   const area = (await page.locator("[data-pane-area]").boundingBox())!;
   await page.mouse.move(row.x + 20, row.y + row.height / 2);
   await page.mouse.down();

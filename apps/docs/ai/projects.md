@@ -52,7 +52,9 @@ If you rename or move a linked folder, the folder row says **Folder not found** 
 1. Click **Relink…**.
 2. Enter or choose the folder's new place.
 
-If it's the same folder, LeadingLight says **Same folder, moved**, the row shows the new name and path, and everything kept for the page is still there. The project's chats carry on in the new place and remember what was said. A chat whose agent was still working when you relinked stops; send it a message to pick it up again in the new place.
+If it's the same folder, LeadingLight says **Same folder, moved**, the row shows the new name and path, and everything kept for the page is still there. A chat whose agent was still working when you relinked stops; send it a message to resume in the new place.
+
+Resuming also needs the provider's conversation history. Claude keeps that history by folder, and relinking does not move it. If Claude cannot find the old conversation, the chat shows that failure; you can start a new chat in the relinked folder.
 
 If you relink to a different folder, LeadingLight asks first: "This is a different folder from the one linked before", with **Link anyway**.
 

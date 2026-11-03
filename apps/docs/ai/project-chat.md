@@ -167,7 +167,7 @@ A worker started by an agent in **Full access** gets full access too.
 ## When something is wrong
 
 - If the linked folder is gone, the chat says the folder isn't there, and the folder row offers **Relink…**. No agent starts anywhere.
-- If the folder moved and you relink it, the chat carries on in the new place. See [When a folder moves](/ai/projects#when-a-folder-moves).
+- If the folder moved and you relink it, the chat resumes in the new place when the provider can find its history. Claude may report that it cannot find the old conversation: relinking does not move Claude's history from its old folder. See [When a folder moves](/ai/projects#when-a-folder-moves).
 
 ::: info Limits
 - A file deleted by a command the agent runs, such as `rm`, isn't shown as deleted, and a file a command writes isn't listed under its turn. Only files written with the agent's own file tools, and files Codex deletes, are.

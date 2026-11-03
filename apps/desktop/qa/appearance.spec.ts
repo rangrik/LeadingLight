@@ -109,7 +109,8 @@ test("Light, Dark and Match system", async ({ page }) => {
   await page.getByRole("button", { name: "Light", exact: true }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   await page.getByRole("button", { name: "Match system", exact: true }).click();
-  await expect(page.getByText(/by day,/)).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Theme by day" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Theme in dark mode" })).toBeVisible();
 });
 
 test("Themes can be searched", async ({ page }) => {

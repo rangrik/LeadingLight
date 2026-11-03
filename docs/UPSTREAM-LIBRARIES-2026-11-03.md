@@ -17,6 +17,11 @@ lockfile. Tauri's Rust lockfile already had 2.12.5. No version was downgraded.
 - Adapted the file editor's color lookup to the nested TextMate theme returned
   by `@pierre/diffs`; the vendored code remains unchanged. The old lookup
   rendered all roles in the plain text color.
+- Connected the read-only Then/Now project previews to that editor. Change still
+  shows the diff; neither preview can write the file.
+- Connected our note and project reply renderer to Shipyard's math parser and
+  lazy KaTeX loading. Browser QA caught that the parser's unit tests alone did
+  not establish that formulas appeared in our own conversation UI.
 
 The production npm audit reports no known vulnerabilities. Frozen install,
 workspace typecheck, desktop build, desktop unit tests, the existing math

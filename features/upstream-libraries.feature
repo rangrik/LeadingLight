@@ -24,7 +24,7 @@ Feature: Compatible library updates preserve notes
     When the reply is shown
     Then both formulas render and invalid formulas remain visible as text
     And "$5 and $10" stays ordinary text
-    And formulas inside code stay ordinary code
+    And formulas inside inline code and ordinary code blocks stay ordinary code
     And math inside folded work renders when I expand it
 
   Scenario: Syntax colors follow the chosen theme
