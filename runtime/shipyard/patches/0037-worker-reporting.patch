@@ -1,0 +1,178 @@
+diff --git a/internal/box/notify_box_test.go b/internal/box/notify_box_test.go
+index 8d84b44..d7cb707 100644
+--- a/internal/box/notify_box_test.go
++++ b/internal/box/notify_box_test.go
+@@ -18,7 +18,8 @@ import (
+ 
+ // The whole loop on a real box: an agent on the box sends work naming
+ // itself, the work's turn ends, and the box types a notification into the
+-// agent's session. A caller named from off the box is ignored.
++// agent's session once its own turn ends. A caller named from off the box
++// is ignored.
+ func TestWorkStartedOnTheBoxReportsBackToItsCaller(t *testing.T) {
+ 	ledger := &Turns{}
+ 	var bx *Box
+@@ -32,7 +33,9 @@ func TestWorkStartedOnTheBoxReportsBackToItsCaller(t *testing.T) {
+ 	call(t, c, "POST", "/v1/locations", "", map[string]string{"name": "cal", "path": repo}, nil)
+ 	bin := t.TempDir()
+ 	fake := filepath.Join(bin, "claude")
+-	os.WriteFile(fake, []byte("#!/bin/sh\nexec cat\n"), 0o755)
++	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexec cat\n"), 0o755); err != nil {
++		t.Fatal(err)
++	}
+ 	for _, name := range []string{"lead", "worker"} {
+ 		if status := call(t, c, "POST", "/v1/sessions", "", map[string]string{"location": "cal", "name": name, "command": fake}, nil); status != 200 {
+ 			t.Fatalf("start %s: %d", name, status)
+@@ -82,6 +85,12 @@ func TestWorkStartedOnTheBoxReportsBackToItsCaller(t *testing.T) {
+ 		t.Fatalf("the test itself is in session %q", who)
+ 	}
+ 
++	// The caller is working when it delegates. A freshly started agent
++	// that has said nothing is still booting to sendPrompt, so a report
++	// for it would correctly be queued until it announces readiness.
++	hook(bus, "agent.ready", "lead", repo, "claude")
++	hook(bus, "agent.started", "lead", repo, "claude", "signal", "prompt")
++
+ 	// Named on the box's own socket: watched.
+ 	local = local.WithCaller("lead")
+ 	res, err := local.Send(ctx, "worker", SendRequest{Text: "do the thing", When: "now"})
+@@ -92,38 +101,121 @@ func TestWorkStartedOnTheBoxReportsBackToItsCaller(t *testing.T) {
+ 	if len(ws) != 1 || ws[0].Parent != "lead" || ws[0].Turn != res.Turn {
+ 		t.Fatalf("watches = %+v, want lead on %s", ws, res.Turn)
+ 	}
+-	go bx.Reports.Run(ctx, bx)
++	reportsCtx, cancelReports := context.WithCancel(ctx)
++	reportsDone := make(chan struct{})
++	go func() {
++		defer close(reportsDone)
++		bx.Reports.Run(reportsCtx, bx)
++	}()
++	stopReports := func() { cancelReports(); <-reportsDone }
++	t.Cleanup(stopReports)
+ 	// Its hooks say it started, then that it finished.
+ 	bus.Publish(events.Event{Type: "agent.started", Data: map[string]any{"session": "worker"}})
+ 	bus.Publish(events.Event{Type: "agent.finished", Data: map[string]any{"session": "worker"}})
+ 
++	// A completed report must stay held while the caller is working,
++	// including after its coalescing window, without typing or queuing it.
++	waitUntil(t, "the worker report to wait for its caller", 15*time.Second, func() bool {
++		bx.Reports.mu.Lock()
++		defer bx.Reports.mu.Unlock()
++		reports := bx.Reports.st.Pending["lead"]
++		return len(reports) == 1 && time.Since(reports[0].At) >= notifyCoalesce
++	})
++	if turns := ledger.List("lead", 5); len(turns) != 1 || turns[0].State != "running" {
++		t.Fatalf("reported to a caller still working: %+v", turns)
++	}
++	if screen, err := bx.Sessions.Screen(ctx, "lead", 200); err != nil || strings.Contains(screen, "<berth-notification>") {
++		t.Fatalf("caller screen while working: %q (%v)", screen, err)
++	}
++
++	hook(bus, "agent.finished", "lead", repo, "claude")
++	report := waitForCallerReport(t, ctx, bx)
++	// Stop the background pass before inspecting it synchronously. A
++	// repeated child event and another pass must not report it twice.
++	stopReports()
++	bus.Publish(events.Event{Type: "agent.finished", Data: map[string]any{"session": "worker"}})
++	bx.Reports.Step(ctx)
++	if n := len(bx.Reports.Watches()); n != 0 {
++		t.Fatalf("%d watches left after the report", n)
++	}
++	turns := ledger.List("lead", 5)
++	if len(turns) != 2 || turns[1].ID != report.ID {
++		t.Fatalf("reported more than once: %+v", turns)
++	}
++}
++
++// A report can be queued if the caller is still starting, or becomes busy
++// between the notifier's readiness check and its send. The ordinary inbox
++// dispatcher must deliver it once the caller is ready, as it does a prompt.
++func TestAQueuedReportReachesItsCallerOnceReady(t *testing.T) {
++	dir := t.TempDir()
++	ledger := &Turns{Path: filepath.Join(dir, "turns.json"), InboxPath: filepath.Join(dir, "inbox.json")}
++	var bx *Box
++	_, bus := servedBox(t, func(b *Box) { b.Turns = ledger; bx = b })
++	ledger.Attach(bus)
++	ctx, cancel := context.WithCancel(context.Background())
++	t.Cleanup(cancel)
++	fake := filepath.Join(t.TempDir(), "claude")
++	if err := os.WriteFile(fake, []byte("#!/bin/sh\nexec cat\n"), 0o755); err != nil {
++		t.Fatal(err)
++	}
++	if _, err := bx.Sessions.Create(ctx, "lead", "", t.TempDir(), fake, nil); err != nil {
++		t.Fatal(err)
++	}
++	text := NotificationText([]Report{{Kind: "turn", Session: "worker", Status: "finished"}}, 0)
++	if err := (&boxNotifyHost{bx}).deliver(ctx, "lead", text); err != nil {
++		t.Fatal(err)
++	}
++	queued := ledger.List("lead", 5)
++	if len(queued) != 1 || queued[0].State != "queued" || queued[0].Origin != "berth:report" {
++		t.Fatalf("report for a starting caller: %+v", queued)
++	}
++
++	done := make(chan struct{})
++	go func() { defer close(done); ledger.Run(ctx, bx) }()
++	stopLedger := func() { cancel(); <-done }
++	t.Cleanup(stopLedger)
++	hook(bus, "agent.ready", "lead", "", "claude")
++	report := waitForCallerReport(t, ctx, bx)
++	stopLedger()
++	if report.ID != queued[0].ID {
++		t.Fatalf("delivery started another turn: %+v, queued %+v", report, queued[0])
++	}
++	// Even a repeated readiness signal cannot resend the drained inbox.
++	hook(bus, "agent.ready", "lead", "", "claude")
++	bx.deliverInbox(context.Background())
++	if turns := ledger.List("lead", 5); len(turns) != 1 || turns[0].SentSeq != report.SentSeq {
++		t.Fatalf("queued report delivered more than once: %+v", turns)
++	}
++}
++
++// Check both the terminal delivery and its sent ledger entry: seeing a
++// queued berth:report turn alone does not mean the caller received it.
++func waitForCallerReport(t *testing.T, ctx context.Context, bx *Box) Turn {
++	t.Helper()
+ 	deadline := time.Now().Add(15 * time.Second)
+ 	for {
+-		screen, _ := bx.Sessions.Screen(ctx, "lead", 200)
++		screen, err := bx.Sessions.Screen(ctx, "lead", 200)
++		if err != nil {
++			t.Fatal(err)
++		}
++		turns := bx.Turns.List("lead", 5)
+ 		if strings.Contains(screen, "</berth-notification>") {
+ 			flat := strings.ReplaceAll(screen, "\n", "")
+ 			if !strings.Contains(flat, `session="worker"`) || !strings.Contains(flat, `status="finished"`) {
+ 				t.Fatalf("the notification lacks the facts:\n%s", screen)
+ 			}
+-			break
++			for _, tr := range turns {
++				if tr.Origin == "berth:report" && tr.State != "queued" && tr.SentSeq != 0 {
++					return tr
++				}
++			}
+ 		}
+ 		if time.Now().After(deadline) {
+-			t.Fatalf("lead was never told:\n%s", screen)
+-		}
+-		time.Sleep(200 * time.Millisecond)
+-	}
+-	if n := len(bx.Reports.Watches()); n != 0 {
+-		t.Fatalf("%d watches left after the report", n)
+-	}
+-	// What lead was told made it a turn from berth, and no watch.
+-	for wait := time.Now().Add(3 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+-		ts := ledger.List("lead", 5)
+-		if len(ts) > 0 && ts[len(ts)-1].Origin == "berth:report" {
+-			break
+-		}
+-		if time.Now().After(wait) {
+-			t.Fatalf("lead's turns: %+v", ts)
++			st, _ := bx.Turns.State("lead")
++			t.Fatalf("lead was never told (state: %+v; turns: %+v):\n%s", st, turns, screen)
+ 		}
++		time.Sleep(50 * time.Millisecond)
+ 	}
+ }
+ 
