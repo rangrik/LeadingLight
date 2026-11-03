@@ -154,15 +154,6 @@ promoting stable downloads. Intel needs separately built runtime helpers and a f
 Intel smoke test. In-app updates need their own signing keys and an update flow;
 add that when the downloadable preview distribution is proven.
 
-## 2026-11-03 — Upstream Shipyard syntax-color test
-
-The fixture manifest now includes the missing devtools, doctor and screen inputs.
-The vendored suite passes 627 of 628 tests. Its syntax-color test still expects
-top-level theme rules; the installed diff library nests them under `textmate`.
-LeadingLight's adapter fixes the actual file preview, with a passing check across
-all 23 themes. The upstream test imports its own unmodified module directly.
-Revisit when Shipyard adopts the theme API; remove our adapter at that point.
-
 ## 2026-10-28 — Update toast over a narrow review sheet
 
 At a 520 px browser width, main's "Codex update available" toast can cover Listen
@@ -271,15 +262,3 @@ work. Tauri's dialog patch needs native picker coverage. VitePress still uses
 Vite 5 and needs a docs-tool upgrade rather than an application-wide override.
 Revisit these as separate worktrees with their own migration and native checks;
 the current refresh takes compatible editor, rendering and build fixes.
-
-## 2026-11-03 — Broad Shipyard runtime suite
-
-The full box test suite exceeded three- and six-minute deadlines. Three failures
-also reproduce on the previous pin with its local patches:
-`TestWorkStartedOnTheBoxReportsBackToItsCaller` times out with an empty lead screen;
-`TestReviewRoutesOverTheWire` has a temporary-directory cleanup race; and
-`TestAttachPassesShiftEnter` assumes single-spaced `od` output on macOS.
-The last emits the expected bytes, and the review route passes on an isolated
-new-pin rerun. The worker report failure remains unexplained. Revisit that seam
-before claiming broad runtime acceptance; the refreshed source's focused
-transcript, folder identity, resume and removal checks pass.

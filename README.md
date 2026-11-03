@@ -27,10 +27,17 @@ Needs Node 22+, pnpm 10, and Rust (stable).
 ```sh
 pnpm install
 pnpm runtime:build # prepare the bundled helpers on an Apple Silicon Mac
+pnpm runtime:test  # test the pinned runtime in isolated temporary state
 pnpm dev        # run the desktop app
 pnpm build      # bundle the desktop app
 pnpm typecheck
 ```
+
+Runtime tests need an installed Chromium. The command uses Playwright's browser
+by default; set `BERTH_CHROMIUM` to use another test binary. It also accepts Go
+test arguments, for example `pnpm runtime:test -run TestHelpMatchesFlags ./cmd/...`.
+See the [runtime validation notes](docs/RUNTIME-FIXES-2026-11-03.md) for isolation
+and coverage limits.
 
 An iPad target shares this app. With Xcode and CocoaPods installed, run `pnpm ios:init`
 and `pnpm ios:build` to create an unsigned device archive. Signing, device acceptance and

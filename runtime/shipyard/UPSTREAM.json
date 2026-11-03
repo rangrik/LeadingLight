@@ -52,6 +52,9 @@
     "0037-worker-reporting.patch",
     "0038-runtime-lifecycle.patch",
     "0039-portable-tests-and-cli-help.patch",
-    "0040-cancellable-browser-commands.patch"
+    "0040-cancellable-browser-commands.patch",
+    "0041-cdp-cancellation.patch",
+    "0042-service-startup-cancellation.patch",
+    "0043-wait-for-startup-target-close.patch"
   ]
 }
