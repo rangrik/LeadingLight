@@ -1,0 +1,222 @@
+diff --git a/internal/box/browserstartup_order_test.go b/internal/box/browserstartup_order_test.go
+new file mode 100644
+index 0000000..c30488b
+--- /dev/null
++++ b/internal/box/browserstartup_order_test.go
+@@ -0,0 +1,146 @@
++package box
++
++import (
++	"bufio"
++	"context"
++	"encoding/json"
++	"errors"
++	"net"
++	"strings"
++	"testing"
++	"time"
++)
++
++// The browser may acknowledge closeTarget before removing the page. The
++// extra nonblank page is not a startup target and must never be closed.
++func startupTargetFixture(t *testing.T, accept bool, gone <-chan struct{}) (*chromium, <-chan string, <-chan struct{}) {
++	t.Helper()
++	client, peer := net.Pipe()
++	c := &chromium{cdp: newCDP(client, client, nil), tabs: map[string]*browser{}, sessions: map[string]*browser{}}
++	closed := make(chan string, 4)
++	polled := make(chan struct{}, 1)
++	t.Cleanup(func() { c.cdp.close(); peer.Close() })
++	go func() {
++		r := bufio.NewReader(peer)
++		first := true
++		created := false
++		for {
++			raw, err := r.ReadBytes(0)
++			if err != nil {
++				return
++			}
++			var cmd cdpMessage
++			if json.Unmarshal(raw[:len(raw)-1], &cmd) != nil {
++				return
++			}
++			result := map[string]any{}
++			switch cmd.Method {
++			case "Target.getTargets":
++				pages := []map[string]string{{"targetId": "keep", "type": "page", "url": "https://example.test/"}}
++				if created {
++					pages = append(pages, map[string]string{"targetId": "private-page", "type": "page", "url": "about:blank"},
++						map[string]string{"targetId": "other-blank", "type": "page", "url": "about:blank"})
++				}
++				include := first
++				if !first {
++					select {
++					case <-gone:
++					default:
++						include = true
++					}
++					select {
++					case polled <- struct{}{}:
++					default:
++					}
++				}
++				if include {
++					pages = append(pages, map[string]string{"targetId": "startup", "type": "page", "url": "about:blank"})
++				}
++				first = false
++				result["targetInfos"] = pages
++			case "Target.createBrowserContext":
++				result["browserContextId"] = "private"
++			case "Target.createTarget":
++				created = true
++				result["targetId"] = "private-page"
++			case "Target.attachToTarget":
++				result["sessionId"] = "session"
++			case "Target.closeTarget":
++				var params struct {
++					ID string `json:"targetId"`
++				}
++				json.Unmarshal(cmd.Params, &params)
++				closed <- params.ID
++				result["success"] = accept
++			}
++			response, _ := json.Marshal(map[string]any{"id": cmd.ID, "result": result})
++			if _, err := peer.Write(append(response, 0)); err != nil {
++				return
++			}
++		}
++	}()
++	return c, closed, polled
++}
++
++func TestPrivateBrowserWaitsForStartupTargetDestruction(t *testing.T) {
++	previous := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = previous })
++	gone := make(chan struct{})
++	c, closed, polled := startupTargetFixture(t, true, gone)
++	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++	defer cancel()
++	done := make(chan error, 1)
++	go func() { done <- c.attachMain(ctx, DefaultViewport) }()
++	select {
++	case <-polled:
++	case <-ctx.Done():
++		t.Fatal("did not check whether the original target closed")
++	}
++	select {
++	case err := <-done:
++		t.Fatalf("returned while the startup target still existed: %v", err)
++	default:
++	}
++	if id := <-closed; id != "startup" {
++		t.Fatalf("closed unrelated target %q", id)
++	}
++	close(gone)
++	select {
++	case err := <-done:
++		if err != nil {
++			t.Fatal(err)
++		}
++	case <-ctx.Done():
++		t.Fatal("did not finish after startup target closed")
++	}
++	select {
++	case id := <-closed:
++		t.Fatalf("closed unrelated target %q", id)
++	default:
++	}
++	if br := c.lookup(""); br == nil || br.bctx != "private" {
++		t.Fatal("private main tab not attached")
++	}
++}
++
++func TestPrivateBrowserRejectsUnclosedStartupTarget(t *testing.T) {
++	previous := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	t.Cleanup(func() { EmbeddedFiles = previous })
++	for _, accept := range []bool{false, true} {
++		t.Run(map[bool]string{false: "refused", true: "never-destroyed"}[accept], func(t *testing.T) {
++			c, _, _ := startupTargetFixture(t, accept, make(chan struct{}))
++			ctx, cancel := context.WithTimeout(context.Background(), 70*time.Millisecond)
++			defer cancel()
++			err := c.attachMain(ctx, DefaultViewport)
++			if accept {
++				if !errors.Is(err, context.DeadlineExceeded) {
++					t.Fatalf("undestroyed target: %v", err)
++				}
++			} else if err == nil || !strings.Contains(err.Error(), "refused") {
++				t.Fatalf("refused close: %v", err)
++			}
++		})
++	}
++}
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index 0a6aaee..cf78830 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -322,11 +322,26 @@ func (c *chromium) attachMain(ctx context.Context, v Viewport) error {
+ 			c.cdp.call(ctx, "", "Target.disposeBrowserContext", map[string]any{"browserContextId": isolated.ID}, nil)
+ 			return err
+ 		}
++		closing := make(map[string]bool)
+ 		for _, t := range targets.TargetInfos {
+ 			if t.Type == "page" && (t.URL == "about:blank" || t.URL == "") {
+-				c.cdp.call(ctx, "", "Target.closeTarget", map[string]any{"targetId": t.TargetID}, nil)
++				var result struct {
++					Success bool `json:"success"`
++				}
++				if err := c.cdp.call(ctx, "", "Target.closeTarget", map[string]any{"targetId": t.TargetID}, &result); err != nil {
++					return fmt.Errorf("closing startup target: %w", err)
++				}
++				if !result.Success {
++					return errors.New("closing startup target was refused")
++				}
++				closing[t.TargetID] = true
+ 			}
+ 		}
++		// closeTarget acknowledges the request before destruction finishes.
++		// Don't expose a private browser while its unused default page remains.
++		if err := c.waitForStartupTargets(ctx, closing); err != nil {
++			return err
++		}
+ 		return nil
+ 	}
+ 	target := ""
+@@ -349,6 +364,37 @@ func (c *chromium) attachMain(ctx context.Context, v Viewport) error {
+ 	return err
+ }
+ 
++// waitForStartupTargets waits only for the original pages selected at launch.
++// A close acknowledgement alone does not mean Chromium has destroyed them.
++func (c *chromium) waitForStartupTargets(ctx context.Context, closing map[string]bool) error {
++	for len(closing) > 0 {
++		var current struct {
++			Targets []struct {
++				ID string `json:"targetId"`
++			} `json:"targetInfos"`
++		}
++		if err := c.cdp.call(ctx, "", "Target.getTargets", nil, &current); err != nil {
++			return fmt.Errorf("waiting for startup targets to close: %w", err)
++		}
++		remaining := make(map[string]bool)
++		for _, t := range current.Targets {
++			if closing[t.ID] {
++				remaining[t.ID] = true
++			}
++		}
++		if len(remaining) == 0 {
++			return nil
++		}
++		closing = remaining
++		select {
++		case <-ctx.Done():
++			return fmt.Errorf("waiting for startup targets to close: %w", ctx.Err())
++		case <-time.After(10 * time.Millisecond):
++		}
++	}
++	return nil
++}
++
+ // openTab opens a named tab: a browser context of its own, a window of its
+ // own in it, at the size v. At the box's cap, a tab nobody used for a
+ // minute makes room; else it is refused, rather than take a page another
