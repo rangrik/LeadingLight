@@ -21,11 +21,16 @@ export type TranscriptItem =
   // command). decided is what was answered.
   // A permission the agent's hooks described (structured) names the tool,
   // what it would run or touch (detail) and why, rather than a screen line.
-  | { kind: "ask"; id: string; tool: string; detail: string; choices?: { key: string; label: string; title?: string }[]; decided?: string; why?: string; structured?: boolean; reading?: boolean }
+  // reply: with no options to pick, a reply answers it (a structured
+  // agent, which has no screen of its own).
+  | { kind: "ask"; id: string; tool: string; detail: string; choices?: { key: string; label: string; title?: string }[]; decided?: string; why?: string; structured?: boolean; reading?: boolean; reply?: boolean }
   // The agent at work: the step it is running (timed from the call), or
   // its own word for what it does (label, from its status line) with what
   // else that line says (meta: tokens); since is when it began.
   | { kind: "thinking"; id: string; since: number; label?: string; elapsed?: string; meta?: string; step?: { verb: string; target: string } }
+  // Its turn ended while its work runs on (derive's onItsWork): not at work
+  // itself, so no spinner and no timer.
+  | { kind: "on-its-work"; id: string }
   // A command typed to the agent rather than a prompt: one of its own
   // ("/model", with what followed it) or a shell command ("!"), and the
   // output its program printed (Markdown when it wrote it so).

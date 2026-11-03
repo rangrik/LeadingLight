@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo } from "react";
 
 
 import { Tip } from "@/components/tip";
-import { AgentIcon, StateGlyph } from "@/components/agent-glyph";
+import { AgentIcon, StateGlyph, withWork } from "@/components/agent-glyph";
 import { FileGlyph } from "@/components/files/file-bits";
 import { EmptySide } from "@/components/workspace/compare-view";
 import { CrashProbe } from "@/components/workspace/pane-guard";
@@ -25,13 +25,14 @@ import { armDrag, useTabDrag } from "@/components/workspace/tab-drag";
 import { TerminalView } from "@/components/workspace/terminal-view";
 import { openWorktreePicker } from "@/components/workspace/worktree-picker";
 import { useLabel, useTone, WtChip } from "@/components/workspace/worktree-tone";
-import { agentPresets, closePane, openBrowserAt, openPreviewAt, resumeSession, startAgent, startSession } from "@/lib/actions";
+import { agentPresets, closePane, openBrowserAt, openPreviewAt, resumeConversation, resumeSession, startAgent, startSession } from "@/lib/actions";
 import { boxApi } from "@/lib/api";
-import { agentLabel, agentOf, restartCommand, sessionAgent, sessionName, sessionState } from "@/lib/derive";
+import { agentLabel, agentOf, conversationOf, restartCommand, sessionAgent, sessionName, sessionState } from "@/lib/derive";
 import { nameFromKey } from "@/lib/groups";
 import { type Leaf, leaves, paneWorktree } from "@/lib/layout";
 import { PaneContext } from "@/lib/pane-context";
 import { usePrefs } from "@/lib/prefs";
+import { keysFor } from "@/lib/shortcuts";
 import { isStructured } from "@/lib/structured";
 import { useRemoval } from "@/lib/removing";
 import { useStore } from "@/lib/store";
@@ -145,11 +146,14 @@ export function Pane({ wsKey, tab, pane, visible, focused, split, mixed, compare
           {c.kind === "terminal" && view === "conversation" && (
             <div className="absolute inset-0 z-10 flex flex-col">
               <CrashProbe session={c.session} />
-              <ConversationPane box={c.box} session={c.session} agent={c.agent} visible={visible} onStartAgain={() =>
-                  useStore.getState().boxes[c.box]?.sessions?.find((x) => x.name === c.session)?.switch
-                    ? void resumeSession(c.box, c.session)
-                    : void startSession(restartCommand(c.command) ?? c.agent ?? "", { kind: "replace", tab, pane: pane.id }, c.agent ? agentLabel(c.agent) : "Agent")
-                } onShowTerminal={terminal ? () => showTerminal(wsKey, tab, pane) : undefined} />
+              <ConversationPane box={c.box} session={c.session} agent={c.agent} visible={visible} onStartAgain={() => {
+                  const conv = conversationOf(c.command);
+                  if (useStore.getState().boxes[c.box]?.sessions?.find((x) => x.name === c.session)?.switch) void resumeSession(c.box, c.session);
+                  // Its session gone (a reboot), a structured agent's
+                  // conversation carries on: never its command, run again.
+                  else if (conv) void resumeConversation(c.box, { id: conv, agent: c.agent ?? "claude" }, owner, { kind: "replace", tab, pane: pane.id });
+                  else void startSession(restartCommand(c.command) ?? c.agent ?? "", { kind: "replace", tab, pane: pane.id }, c.agent ? agentLabel(c.agent) : "Agent");
+                }} onShowTerminal={terminal ? () => showTerminal(wsKey, tab, pane) : undefined} />
             </div>
           )}
           {c.kind === "browser" && (
@@ -398,12 +402,12 @@ function PaneTitle({ pane }: { pane: Leaf }) {
   // Near the box's per-session memory ceiling: said here and in its chat.
   const near = away ? undefined : memoryNote(session?.usage);
   return (
-    <Tip label={c.kind === "terminal" ? `${c.session} on ${c.box}${away ? ` · ${c.box} is offline` : ""}${near ? ` · ${near}` : ""}` : undefined} align="start">
+    <Tip label={c.kind === "terminal" ? withWork(`${c.session} on ${c.box}${away ? ` · ${c.box} is offline` : ""}${near ? ` · ${near}` : ""}`, state, session) : undefined} align="start">
       <span className="flex min-w-0 items-center gap-1.5">
         <PaneIcon content={c} agent={agent} />
         <span className="truncate">{label}</span>
         {secondary && <span className="shrink-0 text-muted-foreground">{secondary}</span>}
-        {state && <StateGlyph state={state} className="size-3" />}
+        {state && <StateGlyph state={state} session={session} noTip className="size-3" />}
         {near && session?.usage && (
           <span data-testid="pane-memory" className="flex shrink-0 items-center gap-1 text-tag text-warning-foreground tabular-nums dark:text-warning">
             <GaugeIcon className="size-3" aria-hidden />
@@ -509,7 +513,7 @@ export function PaneActions({ wsKey, tab, pane, onClose, closable, focused = tru
                   <Columns2Icon />
                 </span>
                 Another worktree…
-                {focused && <MenuShortcut>⌘⌥D</MenuShortcut>}
+                {focused && <MenuShortcut>{keysFor("split-worktree")}</MenuShortcut>}
               </MenuItem>
             )}
           </MenuGroup>

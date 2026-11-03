@@ -9,17 +9,11 @@ from the workers their agents started, and showed them all as chats.
 A session an agent starts (it names itself as the caller) or a run
 starts keeps By: the agent's session, or run:<id>.
 ---
- internal/box/api.go           |  3 +++
- internal/box/conversations.go |  5 ++++-
- internal/box/notify.go        | 22 ++++++++++++++++------
- internal/box/runhost.go       |  1 +
- 4 files changed, 24 insertions(+), 7 deletions(-)
-
 diff --git a/internal/box/api.go b/internal/box/api.go
-index 6d76724..937acd2 100644
+index 37b2458..b14db97 100644
 --- a/internal/box/api.go
 +++ b/internal/box/api.go
-@@ -910,6 +910,9 @@ func (b *Box) startStructuredSession(r *http.Request, name, location, dir, prese
+@@ -926,6 +926,9 @@ func (b *Box) startStructuredSession(r *http.Request, name, location, dir, prese
  	data["agent"], data["driver"] = agentFor(sess), sess.Driver
  	b.publish(r, "session.started", data)
  	noteStarted(l, location, dir, sess.Name, prompt)
@@ -30,21 +24,17 @@ index 6d76724..937acd2 100644
  	sess = b.enrich(r.Context(), []Session{sess})[0]
  	b.startStructured(origin(r), gateOrigin(r), sess, prompt)
 diff --git a/internal/box/conversations.go b/internal/box/conversations.go
-index b511e9e..7b37369 100644
+index 43f5d1f..d2812fc 100644
 --- a/internal/box/conversations.go
 +++ b/internal/box/conversations.go
-@@ -42,7 +42,10 @@ type Conversation struct {
- 	Model  string `json:"model,omitempty"`
+@@ -43,6 +43,7 @@ type Conversation struct {
  	Effort string `json:"effort,omitempty"`
  	// Title is its first prompt's first line.
--	Title   string    `json:"title,omitempty"`
-+	Title string `json:"title,omitempty"`
-+	// By is who started it, when not a person: the agent session it works
-+	// for, or "run:<id>".
+ 	Title   string    `json:"title,omitempty"`
 +	By      string    `json:"by,omitempty"`
  	Created time.Time `json:"created"`
  	Updated time.Time `json:"updated,omitzero"`
- }
+ 	// Failed is set when its agent, started again, exited as it started
 diff --git a/internal/box/notify.go b/internal/box/notify.go
 index 0b34094..879261a 100644
 --- a/internal/box/notify.go
@@ -97,6 +87,3 @@ index abd4a08..8d5755d 100644
  	sess = b.enrich(ctx, []Session{sess})[0]
  	awaitHost(sess.sock, 30*time.Second)
  	b.follow(sess)
--- 
-2.51.2
-

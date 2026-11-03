@@ -30,7 +30,7 @@ import type { BoxStatus, Location, Session } from "@/lib/api";
 import type { SessionState } from "@/lib/derive";
 import { usePrefs } from "@/lib/prefs";
 import { type Project, useProjects } from "@/lib/project-groups";
-import { landingAgent } from "@/lib/project-landing";
+import { inUse, landingAgent, landingWorktree } from "@/lib/project-landing";
 import { nextRow, pickedColumn } from "@/lib/sidebar-columns";
 import { clampTasks, draggedTasks, PROJECTS_COLUMN, TASKS_DEFAULT, TASKS_MAX, TASKS_MIN, tasksMax, steppedTasks } from "@/lib/sidebar-width";
 import { NONE, useStore } from "@/lib/store";
@@ -100,24 +100,40 @@ export function usePicked(groupBy: SidebarPrefs["groupBy"]): Picked | undefined 
 // pickProject shows a project's tasks, unfolding the tasks column if it was
 // folded away. Switching to it from another lands the main area there too
 // (switchTo); picking the one shown again leaves it as it is.
-function pickProject(key: string, places: Place[], newTask: Place | undefined, switching: boolean) {
+function pickProject(key: string, places: Place[], home: Place | undefined, switching: boolean) {
   usePrefs.setState({ sidebarPick: key, tasksFolded: false });
-  if (switching) switchTo(places, newTask);
+  if (switching) switchTo(places, home);
 }
 
 type Place = { box: BoxStatus; loc: Location };
 
 // switchTo lands on a project just switched to (lib/project-landing): the
 // agent in it that worked last, in its worktree; with none working or
-// waiting on you, a new task in it, on newTask's box. The rail's tiles do
-// the same.
-export function switchTo(places: Place[], newTask: Place | undefined) {
+// waiting on you, the worktree of it you were in last, else its main
+// checkout on home's box. Only a project with no session open at all
+// (inUse) opens a new task on top, on home's box: one with agents that are
+// just idle or done is only switched to. The rail's tiles do the same.
+export function switchTo(places: Place[], home: Place | undefined) {
   const { boxes, openNewWorktree } = useStore.getState();
-  const hit = landingAgent(
-    places.filter((m) => m.box.state === "online").map((m) => ({ box: m.box.name, loc: m.loc, sessions: boxes[m.box.name]?.sessions ?? [], stats: boxes[m.box.name]?.stats })),
-  );
-  if (hit) openSession(hit.box, hit.session);
-  else if (newTask && newTask.box.state === "online") openNewWorktree({ box: newTask.box.name, location: newTask.loc.name });
+  const up = places.filter((m) => m.box.state === "online");
+  const online = up.map((m) => ({ box: m.box.name, loc: m.loc, sessions: boxes[m.box.name]?.sessions ?? [], stats: boxes[m.box.name]?.stats }));
+  const hit = landingAgent(online);
+  if (hit) return void openSession(hit.box, hit.session);
+  const { spaces } = useWorkspaces.getState();
+  const to = landingWorktree(online, (box, path) => spaces[wsKey(box, path)]?.visitedAt, home?.box.name);
+  if (to) selectWorktree(refOf(to.box, to.loc, to.wt));
+  // Not before every box has listed its sessions: a list still on its way
+  // is not an empty one.
+  const listed = up.every((m) => boxes[m.box.name]?.sessions);
+  if (listed && !inUse(online) && home?.box.state === "online") openNewWorktree({ box: home.box.name, location: home.loc.name });
+}
+
+// useIdle says a project is grayed out in the sidebar: up, its sessions
+// listed, and none open in it (inUse). An away project has its own dimming.
+export function useIdle(places: Place[]): boolean {
+  const lists = useStore(useShallow((s) => places.map((m) => s.boxes[m.box.name]?.sessions)));
+  const up = places.map((m, i) => ({ m, sessions: lists[i] })).filter((x) => x.m.box.state === "online");
+  return up.length > 0 && up.every((x) => x.sessions) && !inUse(up.map((x) => ({ loc: x.m.loc, sessions: x.sessions ?? [] })));
 }
 
 // mostUrgent is the state a project's row says: amber while an agent in it
@@ -169,14 +185,19 @@ export function ProjectsColumn({ prefs, update, picked }: { prefs: SidebarPrefs;
 function ProjectColumnRow({ project: p, selected }: { project: Project; selected: boolean }) {
   // Only its own boxes' data: agents changing on another box leave it be.
   const memberData = useStore(useShallow((s) => p.members.map((m) => s.boxes[m.box.name])));
-  const state = mostUrgent(p.members.map((m, i) => (m.box.state === "online" ? summary((memberData[i]?.sessions ?? []).filter((s) => inWorktrees(m.loc, s)), memberData[i]).state : undefined)));
+  const sums = p.members.map((m, i) => (m.box.state === "online" ? summary((memberData[i]?.sessions ?? []).filter((s) => inWorktrees(m.loc, s)), memberData[i]) : undefined));
+  const state = mostUrgent(sums.map((x) => x?.state));
+  const onWork = state === "running" && sums.every((x) => x?.state !== "running" || x.onWork);
   const online = p.members.some((m) => m.box.state === "online");
   const def = p.members.find((m) => m.box.name === p.defaultBox) ?? p.members[0];
+  const idle = useIdle(p.members);
   return (
     <ColumnRow
       name={p.name}
       selected={selected}
       state={state}
+      onWork={onWork}
+      idle={idle}
       away={online ? undefined : p.members.map((m) => m.box)}
       tip={<PlaceTip name={`${p.name}${p.slug ? ` (${p.slug})` : ""}`} lines={[...p.members.map((m) => `${m.box.name}: ${m.loc.path}`), ...p.members.filter((m) => m.box.state !== "online").map((m) => `${m.box.name} is ${awayText(m.box)}`)]} />}
       items={() => projectGroupActions(p)}
@@ -193,12 +214,16 @@ function RepoColumnRow({ repo, selected }: { repo: Repo; selected: boolean }) {
   const { box, loc } = repo;
   const data = useStore((s) => s.boxes[box.name]);
   const online = box.state === "online";
-  const state = online ? mostUrgent([summary((data?.sessions ?? []).filter((s) => inWorktrees(loc, s)), data).state]) : undefined;
+  const sum = online ? summary((data?.sessions ?? []).filter((s) => inWorktrees(loc, s)), data) : undefined;
+  const state = mostUrgent([sum?.state]);
+  const idle = useIdle([repo]);
   return (
     <ColumnRow
       name={loc.name}
       selected={selected}
       state={state}
+      onWork={sum?.onWork}
+      idle={idle}
       away={online ? undefined : [box]}
       tip={<PlaceTip name={`${loc.name} on ${box.name}`} lines={[loc.path, ...(online ? [] : [`${box.name} is ${awayText(box)}`])]} />}
       items={() => projectActions(box.name, loc)}
@@ -211,13 +236,16 @@ function RepoColumnRow({ repo, selected }: { repo: Repo; selected: boolean }) {
 }
 
 // ColumnRow is a project in the first column: its name, a place row's size
-// and ink, and at its end amber while something in it needs you, blue while
-// something works, and nothing otherwise. Its + and ⋯ fade in over that end,
+// and ink (fainter while nothing is open in it), and at its end amber while
+// something in it needs you, blue while something works, and nothing
+// otherwise. Its + and ⋯ fade in over that end,
 // as on any sidebar row, and its menu is the project header's.
 function ColumnRow({
   name,
   selected,
   state,
+  onWork,
+  idle,
   away,
   tip,
   items,
@@ -230,6 +258,10 @@ function ColumnRow({
   name: string;
   selected: boolean;
   state?: SessionState;
+  // Running with no turn going: only work its agents wait on.
+  onWork?: boolean;
+  // No session open in it (useIdle): grayed out.
+  idle?: boolean;
   away?: BoxStatus[];
   tip: ReactNode;
   items: () => Action[];
@@ -248,6 +280,7 @@ function ColumnRow({
             size="sm"
             data-testid="column-project"
             data-project={name}
+            data-idle={idle || undefined}
             isActive={selected}
             aria-current={selected ? "true" : undefined}
             draggable={!!drag}
@@ -260,12 +293,12 @@ function ColumnRow({
                 : undefined
             }
             onClick={onPick}
-            className={cn(rowClass, "group-hover/row:not-data-[active=true]:bg-sidebar-accent group-hover/row:text-foreground", away && "opacity-70")}
+            className={cn(rowClass, "group-hover/row:not-data-[active=true]:bg-sidebar-accent group-hover/row:text-foreground", idle && ink.faint, away && "opacity-70")}
           >
             <span className="min-w-0 truncate">{name}</span>
             {marks}
             <span className="ml-auto" />
-            {away ? <AwayWord boxes={away} /> : state ? <TaskGlyph state={state} small /> : null}
+            {away ? <AwayWord boxes={away} /> : state ? <TaskGlyph state={state} small onWork={onWork} /> : null}
           </SidebarMenuButton>
         </Tip>
         <RowOverlay selected={selected}>
@@ -327,7 +360,7 @@ export function TasksColumn({ picked, prefs, update }: { picked?: Picked; prefs:
 }
 
 function ProjectTasks({ id, project: p, prefs, update }: { id: string; project: Project; prefs: SidebarPrefs; update: Update }) {
-  const t = useProjectTree(p, prefs, false);
+  const t = useProjectTree(p, prefs, false, false);
   const multiBox = useStore((s) => (s.status?.boxes.length ?? 0) > 1);
   const { def, defMain, online } = t;
   return (
@@ -347,7 +380,7 @@ function ProjectTasks({ id, project: p, prefs, update }: { id: string; project: 
 }
 
 function RepoTasks({ id, repo, prefs, update }: { id: string; repo: Repo; prefs: SidebarPrefs; update: Update }) {
-  const t = useRepoTree(repo, prefs, false);
+  const t = useRepoTree(repo, prefs, false, false);
   const multiBox = useStore((s) => (s.status?.boxes.length ?? 0) > 1);
   const { box, loc, main } = repo;
   return (

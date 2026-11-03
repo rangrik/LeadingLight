@@ -1,0 +1,61 @@
+{
+  "generated": "2026-10-05T17:41:09Z",
+  "home": "/Users/alex",
+  "app": {
+    "version": "0.3.6",
+    "build": "d05a0df",
+    "os": "macOS 26.3",
+    "arch": "arm64",
+    "renderer": "xterm",
+    "chosen": "ghostty",
+    "renderer_reason": "WebAssembly.compile(): refused by Content Security Policy",
+    "theme": "berth-dark",
+    "labs": true,
+    "zen": false,
+    "agent_view": "conversation",
+    "errors": [
+      { "at": "2026-10-05T17:30:00Z", "kind": "error", "code": "box_outdated", "title": "Couldn't send it", "message": "devl runs an older berthd" },
+      { "at": "2026-10-05T17:32:10Z", "kind": "error", "code": "", "title": "Couldn't clone", "message": "git clone https://alex:ghp_abcdefghijklmnopqrstuvwxyz0123456789@github.com/acme/shop.git failed" },
+      { "at": "not a time", "kind": "error", "code": "session_exited", "title": "Couldn't answer", "message": "the session's program has ended,\nso it can't take input" }
+    ],
+    "toasts": [
+      { "at": "2026-10-05T17:20:00Z", "kind": "success", "title": "Worktree created", "message": "/Users/alex/work/shop-checkout-fix" },
+      { "at": "2026-10-05T17:21:00Z", "kind": "info", "title": "Terminals are using xterm.js", "message": "" },
+      { "at": "2026-10-05T17:22:00Z", "kind": "error", "title": "Couldn't send it", "message": "devl runs an older berthd" }
+    ]
+  },
+  "agent": { "version": "0.3.6", "build": "4f1c2a9e0b7d", "state": "online" },
+  "doctor": [
+    { "area": "This computer", "name": "starts at login", "status": "ok", "detail": "background agent installed" },
+    { "area": "This computer", "name": "agent", "status": "ok", "detail": "running" },
+    { "area": "This computer", "name": "local URLs", "status": "ok", "detail": "http://PORT.BOX.localhost" },
+    { "area": "This computer", "name": "app terminal", "status": "warn", "detail": "xterm.js: ghostty-web couldn't start (WebAssembly.compile(): refused)", "fix": "Settings → Terminal → Copy details, and send them to us" },
+    { "area": "This computer", "name": "short URLs via ::1", "status": "ok", "detail": "reaches berth" },
+    { "area": "This computer", "name": "short URLs via 127.0.0.1", "status": "warn", "detail": "answered by another program: nginx", "fix": "Stop that program, then: berth setup port80" },
+    { "area": "Networks", "name": "work", "status": "fail", "detail": "signed out as alex@example.com", "fix": "berth network login work" },
+    { "area": "Boxes", "name": "devl", "status": "ok", "detail": "online, 38ms" },
+    { "area": "Boxes", "name": "old-vps", "status": "warn", "detail": "offline: dial tcp 203.0.113.7:7444: i/o timeout", "fix": "Check the box is on, then on it: berthd doctor" },
+    { "area": "Tools on this computer", "name": "Claude Code", "status": "ok", "detail": "connected" },
+    { "area": "Tools on this computer", "name": "Codex", "status": "info", "detail": "not connected", "fix": "berth integrations install codex" }
+  ],
+  "local_box": {
+    "name": "studio",
+    "state": "online",
+    "version": "0.3.6",
+    "checks": [
+      { "area": "berthd", "name": "service", "status": "ok", "detail": "launchd, starts at login" },
+      { "area": "Worktrees and sessions", "name": "git", "status": "ok", "detail": "/usr/bin/git" },
+      { "area": "Worktrees and sessions", "name": "tmux", "status": "ok", "detail": "/opt/homebrew/bin/tmux (tmux 3.5a)" },
+      { "area": "Worktrees and sessions", "name": "cloudflared", "status": "info", "detail": "not installed; needed for public shares", "fix": "https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" },
+      { "area": "Agents", "name": "claude", "status": "ok", "detail": "/Users/alex/.local/bin/claude" },
+      { "area": "Agents", "name": "codex", "status": "info", "detail": "not installed; needed for Codex sessions", "fix": "npm install -g @openai/codex" },
+      { "area": "Agents", "name": "env", "status": "info", "detail": "OPENAI_API_KEY=op://Private/OpenAI/credential ANTHROPIC_TOKEN: sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" },
+      { "area": "Worktrees and sessions", "name": "PATH", "status": "info", "detail": "/Users/alex/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/home/other/bin" }
+    ]
+  },
+  "boxes": [
+    { "name": "devl", "state": "online", "version": "0.3.6", "build": "b9758a308077", "capabilities": ["diff", "turns", "queue", "ask", "answer"] },
+    { "name": "gpu", "state": "online", "build": "304337b99a15", "capabilities": ["diff", "turns"] },
+    { "name": "old-vps", "state": "offline", "error": "dial tcp: i/o timeout; Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.abc" }
+  ]
+}

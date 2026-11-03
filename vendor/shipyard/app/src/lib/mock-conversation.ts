@@ -33,20 +33,26 @@ async function stream(key: string, text: string) {
   showDraft(key, undefined);
 }
 
+// An item of any kind without its id, which the demo gives it.
+type Unsaved<T> = T extends unknown ? Omit<T, "id"> : never;
+
 // The demo's screen, for the app's tests and screenshots (app/e2e): show
-// what an agent is writing, land its message in its record, or clear it.
+// what an agent is writing, land its message (or any other step: an edit,
+// a command) in its record, or clear it.
 if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("mock")) {
+  // In the record above the demo's own "thinking" row, as a real record
+  // has none.
+  const put = (box: string, session: string, item: TranscriptItem) =>
+    useConversations.setState((s) => {
+      const all = s.items[keyOf(box, session)] ?? [];
+      let at = all.length;
+      while (at > 0 && all[at - 1].kind === "thinking") at--;
+      return { items: { ...s.items, [keyOf(box, session)]: [...all.slice(0, at), item, ...all.slice(at)] } };
+    });
   (window as unknown as { __berthDraft: unknown }).__berthDraft = {
     show: (box: string, session: string, text: string, clipped?: boolean) => showDraft(keyOf(box, session), { text, clipped }),
-    // In the record above the demo's own "thinking" row, as a real
-    // record has none.
-    land: (box: string, session: string, text: string) =>
-      useConversations.setState((s) => {
-        const all = s.items[keyOf(box, session)] ?? [];
-        let at = all.length;
-        while (at > 0 && all[at - 1].kind === "thinking") at--;
-        return { items: { ...s.items, [keyOf(box, session)]: [...all.slice(0, at), { kind: "text", id: id(), text }, ...all.slice(at)] } };
-      }),
+    land: (box: string, session: string, text: string) => put(box, session, { kind: "text", id: id(), text }),
+    record: (box: string, session: string, item: Unsaved<TranscriptItem>) => put(box, session, { ...item, id: id() } as TranscriptItem),
     clear: (box: string, session: string) => showDraft(keyOf(box, session), undefined),
   };
   // An agent's crew: helpers started `ago` seconds back, and back `back`
@@ -264,6 +270,9 @@ export function seedTranscript(box: string, session: string, state: string, work
     items.push({ kind: "ask", id: id(), tool: "Bash", detail: "pnpm db:migrate --name add-idempotency-key", why: "Create the migration for the new idempotency_key column", structured: true, choices: PERMISSION });
   }
   if (state === "running") {
+    // ?structured: the judge's Claude, in chat, has said what it found.
+    if (session === "judge-v2-claude" && new URLSearchParams(location.search).has("structured"))
+      items.push({ kind: "text", id: id(), text: "The judge over-scores short answers on the hard set.\n\n- **0.82** agreement with the labels, was 0.74\n- Next: rerun the hard set with a length penalty." });
     items.push({ kind: "crew", id: id(), names: ["Explore: failing tests", "Explore: fixtures"] });
     items.push({ kind: "thinking", id: id(), since: Date.now() - 12_000 });
     const t = Date.now();
