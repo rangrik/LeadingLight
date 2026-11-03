@@ -10,7 +10,7 @@
     "check:grid": "node scripts/check-grid.mjs",
     "check:type": "node scripts/check-type.mjs",
     "check:titles": "node scripts/check-titles.mjs",
-    "test": "node --experimental-strip-types --test 'src/lib/**/*.test.ts'"
+    "test": "node --experimental-strip-types --import ../../../scripts/shipyard-test-loader.mjs --test 'src/lib/**/*.test.ts'"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -26,10 +26,13 @@ upstream applies here as it is.
   @leadinglight/shipyard typecheck` checks the whole vendored tree on its own.
 - In `apps/desktop`, the alias `@/` means this tree's `src/` (upstream's own
   alias, so files import each other unchanged) and `~/` means our `src/`.
-  Two exceptions, aliased to our own files in upstream's shape:
+  Exceptions are aliased to our own files in upstream's shape:
   `@/lib/shortcuts.json` to `apps/desktop/src/lib/shortcuts.json`, and
   `@/themes/builtin` to `packages/themes/src/builtin.ts` (our palettes; the
-  theme engine here reads them unchanged).
+  theme engine here reads them unchanged). The desktop also aliases
+  `@/lib/syntax-colors` to our adapter for the current `@pierre/diffs` theme
+  shape. The Shipyard test command uses `scripts/shipyard-test-loader.mjs` to
+  exercise that same adapter from the unchanged upstream syntax-color tests.
 - `src/index.css` is the app's Tailwind root; `apps/desktop/src/styles.css`
   imports it and overrides the fonts after it.
 - `apps/desktop/public/builtin-plugins/index.json` is an empty list, so the
