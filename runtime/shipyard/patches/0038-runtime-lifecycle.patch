@@ -1,0 +1,207 @@
+diff --git a/internal/box/api.go b/internal/box/api.go
+index 59052c3..a760eec 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -510,11 +510,12 @@ func (b *Box) createWorktree(r *http.Request, loc Location, req WorktreeRequest)
+ 
+ // runSetup runs the location's setup script in the background, then starts
+ // the services that start with every worktree; without a script it only
+-// starts them. Services start once setup has made the worktree ready.
++// starts them. Services start once setup has made the worktree ready, and
++// their startup completes before worktree.setup.finished is published.
+ func (b *Box) runSetup(from string, loc Location, dir, name string) {
+ 	if loc.Scripts.Setup != "" {
+ 		go b.lifecycle(from, "setup", loc, dir, name, loc.Scripts.Setup, func() error {
+-			go b.startAutostart(loc.Name, name)
++			b.startAutostart(loc.Name, name)
+ 			return nil
+ 		})
+ 		return
+diff --git a/internal/box/firstopen.go b/internal/box/firstopen.go
+index 1e98ca5..75155b9 100644
+--- a/internal/box/firstopen.go
++++ b/internal/box/firstopen.go
+@@ -89,12 +89,5 @@ func (b *Box) setUpOnFirstOpen(from, dir string) {
+ 	if name == "" {
+ 		return
+ 	}
+-	if loc.Scripts.Setup != "" {
+-		go b.lifecycle(from, "setup", loc, path, name, loc.Scripts.Setup, func() error {
+-			go b.startAutostart(loc.Name, name)
+-			return nil
+-		})
+-		return
+-	}
+-	go b.startAutostart(loc.Name, name)
++	b.runSetup(from, loc, path, name)
+ }
+diff --git a/internal/box/prreview.go b/internal/box/prreview.go
+index b9d2ea9..dc22ac0 100644
+--- a/internal/box/prreview.go
++++ b/internal/box/prreview.go
+@@ -570,14 +570,7 @@ func (b *Box) OpenReview(ctx context.Context, from string, req ReviewOpen) (Work
+ 	}})
+ 	// Set up as every worktree of the location is: its kit and its trusted
+ 	// config, read from the main checkout, never from this worktree.
+-	if loc.Scripts.Setup != "" {
+-		go b.lifecycle(from, "setup", loc, wt.Path, wt.Name, loc.Scripts.Setup, func() error {
+-			go b.startAutostart(loc.Name, wt.Name)
+-			return nil
+-		})
+-	} else {
+-		go b.startAutostart(loc.Name, wt.Name)
+-	}
++	b.runSetup(from, loc, wt.Path, wt.Name)
+ 	return wt, nil
+ }
+ 
+diff --git a/internal/box/prreview_test.go b/internal/box/prreview_test.go
+index c34df8d..066b83c 100644
+--- a/internal/box/prreview_test.go
++++ b/internal/box/prreview_test.go
+@@ -585,9 +585,11 @@ func mustJSON(v any) []byte {
+ func TestReviewRoutesOverTheWire(t *testing.T) {
+ 	f := newReviewFixture(t)
+ 	sha := f.pr(42, "", map[string]string{"a.txt": "a\n"})
+-	c, _ := servedBox(t, func(b *Box) {
++	c, bus := servedBox(t, func(b *Box) {
+ 		b.Locations, b.Reviews, b.Team, b.LogDir = f.b.Locations, f.b.Reviews, f.b.Team, f.b.LogDir
+ 	})
++	seen, stop := bus.Subscribe()
++	defer stop()
+ 	var setup ReviewSetup
+ 	if code := call(t, c, "GET", "/v1/locations/shop/review-setup?withhold=OTHER", "app", nil, &setup); code != 200 || setup.IdleDays != 7 || setup.From != "repo" {
+ 		t.Fatalf("setup: %d %+v", code, setup)
+@@ -600,6 +602,12 @@ func TestReviewRoutesOverTheWire(t *testing.T) {
+ 	if code := call(t, c, "POST", "/v1/reviews", "app", ReviewOpen{Location: "shop", Repo: "acme/shop", PR: 42, SHA: sha, Title: "Fix"}, &wt); code != 200 || wt.Review == nil {
+ 		t.Fatalf("open: %d %+v", code, wt)
+ 	}
++	// Opening returns while setup runs. Wait for its filesystem work and
++	// autostart discovery before the fixture's directories are removed.
++	waitFor(t, seen, "worktree.setup.finished")
++	if out, err := os.ReadFile(filepath.Join(wt.Path, ".setup-ran")); err != nil || string(out) != "from-main\n" {
++		t.Fatalf("review setup: %q %v", out, err)
++	}
+ 	var list []ReviewEntry
+ 	if code := call(t, c, "GET", "/v1/reviews", "", nil, &list); code != 200 || len(list) != 1 || list[0].Review.SHA != sha {
+ 		t.Fatalf("list: %d %+v", code, list)
+diff --git a/internal/box/team_test.go b/internal/box/team_test.go
+index d9bfc89..01e6422 100644
+--- a/internal/box/team_test.go
++++ b/internal/box/team_test.go
+@@ -169,17 +169,21 @@ func (f *teamFixture) typeIn(text string) {
+ 
+ func TestTeamSetupRunsItsStepsInATerminalThenSetsUpEachRepo(t *testing.T) {
+ 	f := newTeamFixture(t)
+-	ch, cancel := f.bus.Subscribe()
+-	defer cancel()
+ 	seen := map[string]bool{}
+ 	var seenMu sync.Mutex
+-	go func() {
+-		for e := range ch {
+-			seenMu.Lock()
+-			seen[e.Type] = true
+-			seenMu.Unlock()
++	done := make(chan struct{}, 1)
++	stop := f.bus.Observe(func(e events.Event) {
++		seenMu.Lock()
++		seen[e.Type] = true
++		seenMu.Unlock()
++		if e.Type == "team.done" {
++			select {
++			case done <- struct{}{}:
++			default:
++			}
+ 		}
+-	}()
++	})
++	defer stop()
+ 	st, err := f.b.StartTeam(context.Background(), f.bundle())
+ 	if err != nil {
+ 		t.Fatal(err)
+@@ -246,14 +250,18 @@ func TestTeamSetupRunsItsStepsInATerminalThenSetsUpEachRepo(t *testing.T) {
+ 	if strings.Join(st.KeysSet, ",") != "web/MAIL_KEY,web/STRIPE_KEY" {
+ 		t.Fatalf("keys set: %v", st.KeysSet)
+ 	}
+-	time.Sleep(100 * time.Millisecond)
++	select {
++	case <-done:
++	case <-time.After(10 * time.Second):
++		t.Fatal("no team.done event")
++	}
+ 	seenMu.Lock()
+-	defer seenMu.Unlock()
+ 	for _, typ := range []string{"team.started", "team.step", "team.project", "team.done", "location.added"} {
+ 		if !seen[typ] {
+ 			t.Errorf("no %s event; saw %v", typ, seen)
+ 		}
+ 	}
++	seenMu.Unlock()
+ 	// Running it again (an update, or a second look) skips what is done:
+ 	// the checks pass, gh is signed in, the clones are there.
+ 	if _, err := f.b.StartTeam(context.Background(), f.bundle()); err != nil {
+diff --git a/internal/box/worktreesetup_test.go b/internal/box/worktreesetup_test.go
+index db39864..7f75cb7 100644
+--- a/internal/box/worktreesetup_test.go
++++ b/internal/box/worktreesetup_test.go
+@@ -1,12 +1,60 @@
+ package box
+ 
+ import (
++	"context"
+ 	"os"
+ 	"path/filepath"
++	"strings"
+ 	"testing"
+ 	"time"
++
++	"github.com/cosscom/shipyard/internal/events"
+ )
+ 
++func TestSetupFinishesAfterItsAutostartServices(t *testing.T) {
++	t.Setenv("SHELL", "/bin/sh")
++	ctx := context.Background()
++	repo := gitRepo(t)
++	writeRepoConfig(t, repo, RepoConfig{Setup: "echo ready > .setup-ran", Services: []WorktreeService{{Name: "web", Run: "echo web", Autostart: true}}})
++	units := &Units{Dir: t.TempDir()}
++	units.svc, _ = fakeService()
++	bus := &events.Bus{}
++	b := &Box{Name: "devbox", Locations: NewLocations(filepath.Join(t.TempDir(), "locations.json")), Events: bus, Units: units, LogDir: t.TempDir()}
++	if _, err := b.Locations.Add(ctx, "cal", repo); err != nil {
++		t.Fatal(err)
++	}
++	trustRepo(t, b.Locations, "cal")
++	loc, err := b.Locations.Get(ctx, "cal")
++	if err != nil {
++		t.Fatal(err)
++	}
++	wt, err := b.Locations.CreateWorktree(ctx, "cal", "billing", "", "")
++	if err != nil {
++		t.Fatal(err)
++	}
++	seen, stop := bus.Subscribe()
++	defer stop()
++	b.runSetup("app", loc, wt.Path, wt.Name)
++	var order []string
++	deadline := time.After(10 * time.Second)
++	for len(order) < 3 {
++		select {
++		case e := <-seen:
++			switch e.Type {
++			case "worktree.setup.started", "service.started", "worktree.setup.finished":
++				order = append(order, e.Type)
++			case "worktree.setup.failed", "service.failed":
++				t.Fatalf("setup failed: %+v", e)
++			}
++		case <-deadline:
++			t.Fatalf("setup did not finish: %v", order)
++		}
++	}
++	if got, want := strings.Join(order, ","), "worktree.setup.started,service.started,worktree.setup.finished"; got != want {
++		t.Fatalf("setup events = %s, want %s", got, want)
++	}
++}
++
+ func TestNoSetupSkipsSetupUntilAskedFor(t *testing.T) {
+ 	c, bus := servedBox(t)
+ 	seen, stop := bus.Subscribe()
