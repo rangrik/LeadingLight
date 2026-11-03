@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
-  "commit": "ea121592dc8bd6823e9fbcbff2bdf45d95b1b269",
-  "version": "0.3.30",
+  "commit": "a6ee436af12210c00aca4a40f8f69955afd18fc1",
+  "version": "0.3.31",
   "paths": [
     "app/src",
     "app/scripts",
@@ -15,7 +15,10 @@
     "packages/plugin-sdk/README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
-    "THIRD_PARTY_THEMES.md"
+    "THIRD_PARTY_THEMES.md",
+    "internal/proxy/devtools.js",
+    "internal/doctor/testdata",
+    "internal/box/testdata/screens"
   ],
   "moved": {
     "app/src-tauri/src/menu.rs": "apps/desktop/src-tauri/src/menu.rs",

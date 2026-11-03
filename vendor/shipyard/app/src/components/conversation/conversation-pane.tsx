@@ -36,14 +36,14 @@ import { joinDraft, listenForQuotes, type QuoteFill } from "@/lib/chat-quote";
 import { canPickPast } from "@/lib/commands";
 import { resumeWords } from "@/lib/resume-words";
 import { keyOf, useConversations } from "@/lib/conversation-store";
-import { agentLabel, agentOf, atQuestion, firstPrompt, guessAgent, sessionState, worktreeOf } from "@/lib/derive";
+import { agentLabel, agentOf, atQuestion, chatState, firstPrompt, guessAgent, onItsWork, replyMode, worktreeOf } from "@/lib/derive";
 import type { NextStep } from "@/lib/errors";
 import { errorMessage } from "@/lib/format";
 import { useNotifications } from "@/lib/notifications";
 import { updateBoxes } from "@/lib/outdated";
 import { addComment, type LineComment, pending, removeComment, sendComments, useComments } from "@/lib/review-comments";
 import { githubRepo } from "@/lib/repo-refs";
-import { answerQuestions, type QuestionAnswer } from "@/lib/questions";
+import { answerQuestions, atMenu, lastQuestion, type QuestionAnswer } from "@/lib/questions";
 import { permissionChoices } from "@/lib/screen";
 import { NONE, useStore } from "@/lib/store";
 import { isStructured } from "@/lib/structured";
@@ -86,7 +86,10 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   const away = !!boxStatus && boxStatus.state !== "online";
   // Gone: the box lists its sessions and this one isn't among them.
   const gone = !away && !!listed && !s;
-  const state = gone ? "exited" : s ? sessionState(s, stats) : undefined;
+  // A session on its work is between turns here (chatState): a message
+  // starts a new one.
+  const state = gone ? "exited" : s ? chatState(s, stats) : undefined;
+  const parked = !gone && onItsWork(s);
   const [attempt, setAttempt] = useState(0);
   const feed = useTranscriptFeed(box, session, s?.dir, visible && !mock && !away, attempt);
   // Turn check's wait asks in the agent's last message, which the reply
@@ -98,14 +101,20 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   // from its record: the chat draws it whole and the box fills it in. stuck
   // is why the box couldn't, for this wait: its own screen opens instead.
   const canAnswer = useStore((st) => !!st.boxes[box]?.info?.capabilities?.includes("answer"));
-  const openQ = useMemo(() => {
-    for (let i = items.length - 1; i >= 0; i--) {
-      const it = items[i];
-      if (it.kind === "question") return it.done ? undefined : it;
-      if (it.kind === "user") return undefined;
-    }
-  }, [items]);
+  // The form it waits on: the last one it asked, unless answered.
+  const lastQ = useMemo(() => lastQuestion(items), [items]);
+  const openQ = lastQ?.done ? undefined : lastQ;
   const formAsk = state === "waiting" && !!openQ;
+  // The form this wait showed, by its call: answered in the record, the
+  // box drops the wait a moment later, and no card stands in for it
+  // meanwhile. A wait the chat never showed a form for keeps its card. The
+  // pane can change session, so the form is this session's.
+  const [shownForm, setShownForm] = useState<{ key: string; at?: string; tool: string }>();
+  const openTool = formAsk ? openQ?.tool : undefined;
+  useEffect(() => {
+    if (openTool) setShownForm({ key, at: s?.state_since, tool: openTool });
+  }, [key, openTool, s?.state_since]);
+  const formDone = !!lastQ?.done && shownForm?.key === key && shownForm.at === s?.state_since && shownForm.tool === lastQ.tool;
   // Prompts sent from here that the transcript doesn't show yet.
   // Each remembers the prompts like it the transcript already held, by ID:
   // the transcript is a sliding window, so a position in it doesn't last.
@@ -141,6 +150,9 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   const [stuck, setStuck] = useState<{ at?: string; why: string }>();
   const stuckNow = stuck && stuck.at === s?.state_since ? stuck.why : undefined;
   const answerable = formAsk && canAnswer && agent === "claude" && !stuckNow;
+  // A structured session's screen is its host's, never the agent's own:
+  // there is nothing on it to answer, and it never shows a prompt.
+  const structured = isStructured(s?.driver);
   // Comments on the diff are kept per worktree, as Review keys them.
   const wt = s ? worktreeOf(locations, s) : undefined;
   const reviewKey = wt ? `${box}|${wt.worktree.path}` : undefined;
@@ -156,7 +168,7 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   useEffect(() => {
     if (!mock || !s || useConversations.getState().items[key]) return;
     const wt = worktreeOf(locations, s);
-    const state = sessionState(s, stats);
+    const state = chatState(s, stats);
     void mockConversation().then((m) => {
       if (!useConversations.getState().items[key]) m.seedTranscript(box, session, state, wt ? (wt.worktree.main ? wt.location.name : wt.worktree.name) : session);
     });
@@ -173,7 +185,8 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   // What the box does not send, from the session's state: thinking while it
   // works, its question while it waits.
   const shown = useMemo(() => {
-    if (mock) return withDraft(items, drafts.draft).items;
+    const onWork: TranscriptItem[] = parked ? [{ kind: "on-its-work", id: "live:on-its-work" }] : [];
+    if (mock) return [...withDraft(items, drafts.draft).items, ...onWork];
     const sentNow: TranscriptItem[] = [];
     // Started with a prompt it hasn't read yet, as it waits at a question
     // of its own (whether to trust its folder): the prompt shows as sent.
@@ -207,15 +220,16 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
     // Started with a prompt, it is about to work, not waiting for a first
     // task: say so until its own record arrives.
     else if (prompted && !items.length && (state === "ready" || state === "idle")) out.push({ kind: "thinking", id: "live:starting", since: Date.parse(s?.created ?? "") || Date.now() });
+    out.push(...onWork);
     const decided = answered && answered.at === s?.state_since ? answered.key : undefined;
     // A form of questions draws itself (its question item); one the chat
     // can't read from the record (an older box) only its screen answers.
     const form = formAsk || !!ask?.form;
-    if (state === "waiting" && s?.ask?.tool && !form) {
+    if (state === "waiting" && s?.ask?.tool && !form && !formDone) {
       // The agent's hooks said what it asks: show that, with its screen's
       // options matched to Allow, Always allow and Deny.
       const choices = ask ? (permissionChoices(ask.choices) ?? ask.choices) : [];
-      out.push({ kind: "ask", id: "live:ask", tool: s.ask.tool, detail: s.ask.input ?? "", why: s.ask.why, structured: true, choices, reading: !ask, decided });
+      out.push({ kind: "ask", id: "live:ask", tool: s.ask.tool, detail: s.ask.input ?? "", why: s.ask.why, structured: true, choices, reading: !ask, decided, reply: structured });
     } else if (state === "waiting" && ask && !form && ask.choices.length) {
       // A question is answered by its options: with none read, there is
       // nothing to pick (never a made-up Yes / No), and its own screen
@@ -223,7 +237,7 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
       out.push({ kind: "ask", id: "live:ask", tool: "Question", detail: s?.ask?.message || ask.detail, choices: ask.choices, decided });
     }
     return out;
-  }, [mock, items, state, s?.state_since, s?.ask, s?.created, startedWith, ask, answered, sent, prompted, onScreen, last, formAsk, drafts.draft, drafts.status, drafts.supported]);
+  }, [mock, items, state, parked, s?.state_since, s?.ask, s?.created, startedWith, ask, answered, sent, prompted, onScreen, last, formAsk, formDone, structured, drafts.draft, drafts.status, drafts.supported]);
 
   const edits = useMemo<EditActions | undefined>(() => {
     if (!client || (!canDiff && !mock)) return undefined;
@@ -271,9 +285,6 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   }, [answered, s?.state_since, state, forWords]);
   const staleNow = !!stale && stale === s?.state_since;
   const recognised = state === "waiting" && !staleNow && (answerable || (!formAsk && !ask?.form && (ask ? !!ask.choices.length : !!s?.ask?.tool)));
-  // A structured session's screen is its host's, never the agent's own:
-  // there is nothing on it to answer, and it never shows a prompt.
-  const structured = isStructured(s?.driver);
   const live = useLiveScreen({ box, session, agent, enabled: visible && !mock && !away && !!s && state !== "exited" && !recognised && !structured, running: state === "running", nudge });
 
   // Claude Code and Codex write their conversation once they start: until
@@ -501,7 +512,17 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
   // An option that asks for words ("Tell Claude what to change" on a plan)
   // leaves the agent at a text field once picked: the reply box types them.
   const wantsWords = forWords;
-  const atMenu = !wantsWords && (formAsk || !!ask?.form || !!ask?.choices.length || !!s?.ask?.tool || (open?.kind === "ask" && !open.decided && (!!open.choices?.length || !!open.structured)));
+  const menu = atMenu({
+    structured,
+    form: formAsk,
+    answerable,
+    screenForm: !!ask?.form,
+    choices: ask?.choices.length ?? 0,
+    reading: !mock && !ask,
+    asked: !!s?.ask?.tool,
+    card: open?.kind === "ask" && !open.decided ? { choices: open.choices?.length ?? 0, hooks: !!open.structured } : undefined,
+    wantsWords,
+  });
   latest.current = { reply, fail, again, showTerminal: () => onShowTerminal?.(), hideLive: live.hide, sendComments: () => sendComments(box, session, reviewKey!) };
 
   if (ended && !shown.length) {
@@ -597,8 +618,8 @@ export function ConversationPane({ box, session, agent: remembered, visible, onS
             comments={reviewKey ? toSend.length : 0}
             live={live.show}
             terminal={!!onShowTerminal}
-            mode={state === "running" ? "queue" : state === "waiting" ? "answer" : "send"}
-            blocked={(asking && atMenu) || live.show}
+            mode={replyMode(state)}
+            blocked={(asking && menu) || live.show}
             hint={live.show ? (liveWhy ?? `${who} is showing its own screen: answer it above`) : wantsWords ? `Tell ${who} what to change, then press Enter` : answerable ? `Answer ${who}'s ${openQ?.questions.length === 1 ? "question" : "questions"} above` : undefined}
             actions={actions}
           />

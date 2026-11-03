@@ -1,0 +1,43 @@
+Shipyard diagnostics · 2026-10-05 17:41 UTC
+App: 0.3.6 (build d05a0df) · macOS 26.3 arm64
+Agent: online · berth 0.3.6 (build 4f1c2a9e0b7d)
+Terminal: xterm.js (ghostty-web failed: WebAssembly.compile(): refused by Content Security Policy)
+Look: theme berth-dark · Labs on (agents as conversation, zen off)
+
+Laptop (berth doctor)
+  ✓ starts at login  background agent installed
+  ✓ agent  running
+  ✓ local URLs  http://PORT.BOX.localhost
+  ! app terminal  xterm.js: ghostty-web couldn't start (WebAssembly.compile(): refused) → Settings → Terminal → Copy details, and send them to us
+  ✓ short URLs via ::1  reaches berth
+  ! short URLs via 127.0.0.1  answered by another program: nginx → Stop that program, then: berth setup port80
+  ✗ work  signed out as [email] → berth network login work
+  ✓ devl  online, 38ms
+  ! old-vps  offline: dial tcp 203.0.113.7:7444: i/o timeout → Check the box is on, then on it: berthd doctor
+  ✓ Claude Code  connected
+  · Codex  not connected → berth integrations install codex
+
+Local box studio · online · berthd 0.3.6
+  ✓ service  launchd, starts at login
+  ✓ git  /usr/bin/git
+  ✓ tmux  /opt/homebrew/bin/tmux (tmux 3.5a)
+  · cloudflared  not installed; needed for public shares → https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+  ✓ claude  ~/.local/bin/claude
+  · codex  not installed; needed for Codex sessions → npm install -g @openai/codex
+  · env  OPENAI_API_KEY=[redacted] ANTHROPIC_TOKEN: [redacted]
+  · PATH  ~/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:~/bin
+
+Boxes (3)
+  devl · online · 0.3.6 (b9758a308077) · caps: diff turns queue ask answer
+  gpu · online · (304337b99a15) · caps: diff turns
+  old-vps · offline · last error: dial tcp: i/o timeout; Authorization: Bearer [redacted]
+
+Recent errors (3)
+  17:30 [box_outdated] Couldn't send it: devl runs an older berthd
+  17:32 Couldn't clone: git clone https://[redacted]@github.com/acme/shop.git failed
+  --:-- [session_exited] Couldn't answer: the session's program has ended, so it can't take input
+
+Recent toasts (3)
+  17:20 success Worktree created: ~/work/shop-checkout-fix
+  17:21 info Terminals are using xterm.js
+  17:22 error Couldn't send it: devl runs an older berthd
