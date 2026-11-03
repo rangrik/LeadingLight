@@ -26,5 +26,13 @@ Feature: Compatible library updates preserve notes
 
   Scenario: Syntax colors follow the chosen theme
     Given a project file contains a keyword, a string, and a comment
-    When I open the file in a built-in theme
+    When I open its preview from the project chat in a built-in theme
     Then the three kinds of text use distinct readable colors
+
+  Scenario: Previewing project code cannot edit the file
+    Given a project turn has kept a version of a source file
+    When I open the file and type in its preview
+    Then its contents do not change
+    When I choose Now and then Then
+    Then each view shows the corresponding file contents
+    And Change still shows the added and removed lines

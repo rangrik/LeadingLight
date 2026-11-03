@@ -39,6 +39,8 @@ Each turn lists the files it wrote under it. Click one to open it in a dialog, a
 | **Now** | The file as it is in the folder now, or that it isn't there any more |
 | **Change** | What this turn changed: the lines it took out and put in, marked − and + |
 
+**Then** and **Now** show source files with line numbers and syntax colours from your theme. These previews are read-only: selecting or copying text does not change the file.
+
 If the file has changed since, the dialog says so. A file a later turn deleted shows as deleted, and opens as it last was. A write you declined lists no file.
 
 ## Stop
