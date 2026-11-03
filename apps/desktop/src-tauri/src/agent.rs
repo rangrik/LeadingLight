@@ -20,8 +20,61 @@ use tauri::{AppHandle, Manager, State};
 pub struct Agents(Mutex<HashMap<String, Turn>>);
 
 pub struct Turn {
-    child: Child,
+    child: Option<Child>,
     stdin: Option<Arc<Mutex<ChildStdin>>>,
+    token: Arc<()>,
+}
+
+struct StartingTurn<'a> {
+    agents: &'a Agents,
+    id: String,
+    token: Arc<()>,
+}
+
+impl<'a> StartingTurn<'a> {
+    fn reserve(agents: &'a Agents, id: &str) -> Result<Self, String> {
+        let mut turns = agents.0.lock().map_err(|e| e.to_string())?;
+        if turns.contains_key(id) {
+            return Err("This agent turn has already started.".into());
+        }
+        let token = Arc::new(());
+        turns.insert(id.into(), Turn { child: None, stdin: None, token: token.clone() });
+        Ok(Self { agents, id: id.into(), token })
+    }
+
+    fn check(&self) -> Result<(), String> {
+        let turns = self.agents.0.lock().map_err(|e| e.to_string())?;
+        if turns.get(&self.id).is_some_and(|turn| turn.child.is_none() && Arc::ptr_eq(&turn.token, &self.token)) {
+            Ok(())
+        } else {
+            Err("This agent turn has ended.".into())
+        }
+    }
+
+    fn spawn(&self, command: &mut Command) -> Result<(std::process::ChildStdout, std::process::ChildStderr), String> {
+        let mut turns = self.agents.0.lock().map_err(|e| e.to_string())?;
+        let turn = turns.get_mut(&self.id)
+            .filter(|turn| turn.child.is_none() && Arc::ptr_eq(&turn.token, &self.token))
+            .ok_or("This agent turn has ended.")?;
+        let mut child = command.spawn().map_err(|e| e.to_string())?;
+        let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else {
+            let _ = kill_group(&mut child);
+            return Err("Could not open the agent output.".into());
+        };
+        turn.stdin = child.stdin.take().map(|s| Arc::new(Mutex::new(s)));
+        turn.child = Some(child);
+        Ok((stdout, stderr))
+    }
+}
+
+impl Drop for StartingTurn<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut turns) = self.agents.0.lock() {
+            if turns.get(&self.id).is_some_and(|turn| turn.child.is_none() && Arc::ptr_eq(&turn.token, &self.token)) {
+                turns.remove(&self.id);
+            }
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -208,6 +261,8 @@ fn start_in(
     sink: Sink,
     allowed: Option<&dyn Fn() -> bool>,
 ) -> Result<(), String> {
+    let agents = app.state::<Agents>();
+    let starting = StartingTurn::reserve(&agents, &ask.id)?;
     // Its own folder and no settings, so the note's question never loads a project's hooks or memory.
     let cwd = app
         .path()
@@ -236,6 +291,7 @@ fn start_in(
             .wait_with_output()
             .map_err(|_| "Could not inspect Codex's tools.")?;
         drop(timeout);
+        starting.check()?;
         if !out.status.success() {
             return Err("Update Codex on this Mac before starting a note conversation.".into());
         }
@@ -266,6 +322,7 @@ fn start_in(
             .wait_with_output()
             .map_err(|_| "Could not inspect Codex's integrations.")?;
         drop(timeout);
+        starting.check()?;
         if !out.status.success() {
             return Err("Could not safely disable Codex's configured integrations.".into());
         }
@@ -345,18 +402,8 @@ fn start_in(
     if allowed.is_some_and(|check| !check()) {
         return Err("The browser connection expired before the agent could start.".into());
     }
-    let agents = app.state::<Agents>();
-    let mut running = agents.0.lock().map_err(|e| e.to_string())?;
-    if running.contains_key(&ask.id) {
-        return Err("This agent turn has already started.".into());
-    }
-    let mut child = c.spawn().map_err(|e| e.to_string())?;
-    let stdout = child.stdout.take().ok_or("no stdout")?;
-    let mut stderr = child.stderr.take().ok_or("no stderr")?;
-    let stdin = child.stdin.take().map(|s| Arc::new(Mutex::new(s)));
+    let (stdout, mut stderr) = starting.spawn(&mut c)?;
     let id = ask.id.clone();
-    running.insert(id.clone(), Turn { child, stdin });
-    drop(running);
     if allowed.is_some_and(|check| !check()) {
         stop(&app, &id)?;
         return Err("The browser connection ended while the agent was starting.".into());
@@ -431,7 +478,7 @@ fn start_in(
                         .and_then(|m| m.get_mut(&id))
                     {
                         t.stdin = None;
-                        let _ = kill_group(&mut t.child);
+                        if let Some(child) = t.child.as_mut() { let _ = kill_group(child); }
                     }
                 }
                 continue;
@@ -468,7 +515,7 @@ fn start_in(
         else {
             return;
         };
-        let exit = turn.child.wait().ok();
+        let exit = turn.child.as_mut().and_then(|child| child.wait().ok());
         if !finished {
             let message = if !verified {
                 "Codex could not verify its note-only configuration before the startup deadline."
@@ -483,20 +530,22 @@ fn start_in(
             sink(Event::Error { message });
         }
     });
-    if codex {
-        write_line(&agents, &id, &crate::clis::codex_hello())?;
-        return write_line(&agents, &id, &json!({ "method": "initialized" }));
-    }
-    // The page tools are served from the webview; the question goes in as a message, never a flag.
-    let servers = if ask.tail {
-        json!([])
+    let lines = if codex {
+        [crate::clis::codex_hello(), json!({ "method": "initialized" })]
     } else {
-        json!(["notes"])
+        let servers = if ask.tail { json!([]) } else { json!(["notes"]) };
+        [
+            json!({ "type": "control_request", "request_id": "init", "request": { "subtype": "initialize", "sdkMcpServers": servers } }),
+            json!({ "type": "user", "session_id": "", "parent_tool_use_id": null, "message": { "role": "user", "content": ask.prompt } }),
+        ]
     };
-    let init = json!({ "type": "control_request", "request_id": "init", "request": { "subtype": "initialize", "sdkMcpServers": servers } });
-    let user = json!({ "type": "user", "session_id": "", "parent_tool_use_id": null, "message": { "role": "user", "content": ask.prompt } });
-    write_line(&agents, &id, &init)?;
-    write_line(&agents, &id, &user)
+    for line in lines {
+        if let Err(error) = write_line(&agents, &id, &line) {
+            let _ = stop(&app, &id);
+            return Err(error);
+        }
+    }
+    Ok(())
 }
 
 pub fn send(app: &AppHandle, id: &str, message: &Value) -> Result<(), String> {
@@ -529,7 +578,7 @@ pub fn stop(app: &AppHandle, id: &str) -> Result<(), String> {
 fn stop_in(agents: &Agents, id: &str) -> Result<(), String> {
     let mut turns = agents.0.lock().map_err(|e| e.to_string())?;
     if let Some(turn) = turns.get_mut(id) {
-        kill_group(&mut turn.child)?;
+        if let Some(child) = turn.child.as_mut() { kill_group(child)?; }
     }
     turns.remove(id);
     Ok(())
@@ -685,6 +734,63 @@ pub fn agent_cancel(agents: State<'_, Agents>, id: String) -> Result<(), String>
 mod tests {
     use super::parse_agent;
 
+    // A cancelled preflight must not start the app server when its slow CLI returns.
+    #[test]
+    fn cancelled_preflight_does_not_start_the_server() {
+        use std::{os::unix::process::CommandExt, process::{Command, Stdio}, sync::{mpsc, Arc}, time::{Duration, Instant}};
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../target").join(format!("agent-preflight-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = dir.join("fake-cli.sh");
+        let ready = dir.join("ready");
+        let release = dir.join("release");
+        let server = dir.join("server");
+        std::fs::write(&script, r#"case "$1" in
+features) touch "$2"; while [ ! -e "$3" ]; do sleep 0.01; done ;;
+app-server) touch "$4"; exec sleep 30 ;;
+esac
+"#).unwrap();
+        let agents = Arc::new(super::Agents::default());
+        let worker_agents = agents.clone();
+        let (tx, rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let starting = super::StartingTurn::reserve(&worker_agents, "slow").unwrap();
+            tx.send(()).unwrap();
+            assert!(Command::new("/bin/sh").arg(&script).arg("features").arg(&ready).arg(&release).arg(&server).status().unwrap().success());
+            let mut cmd = Command::new("/bin/sh");
+            cmd.arg(&script).arg("app-server").arg(&ready).arg(&release).arg(&server)
+                .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).process_group(0);
+            let denied = starting.spawn(&mut cmd).is_err();
+            if !denied { super::stop_in(&worker_agents, "slow").unwrap(); }
+            (denied, server.exists())
+        });
+        rx.recv().unwrap();
+        let ready = dir.join("ready");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !ready.exists() && Instant::now() < deadline { std::thread::sleep(Duration::from_millis(10)); }
+        let started = ready.exists();
+        super::stop_in(&agents, "slow").unwrap();
+        std::fs::write(dir.join("release"), "").unwrap();
+        let (denied, server_started) = worker.join().unwrap();
+        assert!(started && denied && !server_started);
+        assert!(agents.0.lock().unwrap().is_empty());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn startup_failure_cleans_only_its_own_reservation() {
+        let agents = super::Agents::default();
+        let first = super::StartingTurn::reserve(&agents, "same").unwrap();
+        super::stop_in(&agents, "same").unwrap();
+        let second = super::StartingTurn::reserve(&agents, "same").unwrap();
+        drop(first);
+        assert!(agents.0.lock().unwrap().contains_key("same"));
+        let mut missing = std::process::Command::new("/nonexistent-leadinglight-agent");
+        assert!(second.spawn(&mut missing).is_err());
+        drop(second);
+        assert!(agents.0.lock().unwrap().is_empty());
+    }
+
     #[test]
     fn a_full_input_pipe_does_not_block_cancellation() {
         use std::{
@@ -706,7 +812,7 @@ mod tests {
             .0
             .lock()
             .unwrap()
-            .insert("blocked".into(), super::Turn { child, stdin });
+            .insert("blocked".into(), super::Turn { child: Some(child), stdin, token: Arc::new(()) });
         let (ready, started) = mpsc::channel();
         let writer_agents = agents.clone();
         let writer = std::thread::spawn(move || {
