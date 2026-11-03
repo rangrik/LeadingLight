@@ -218,68 +218,65 @@ fn start_in(
     // GPT goes through Codex's app server, which the webview drives from its initialize on
     // (lib/turn.ts); its turn ends with turn/completed rather than a result.
     let codex = ask.provider == "codex";
-    let scoped_codex = codex && allowed.is_some();
     let mut scoped_flags = Vec::new();
     let name = if codex { "Codex" } else { "Claude Code" };
     let mut c = if codex {
         let bin = crate::clis::find("codex").ok_or("Codex is not installed")?;
         let mut c = crate::clis::codex_server(&bin);
-        if scoped_codex {
-            let child = crate::clis::tool_command(&bin)
-                .args(["features", "list"])
-                .current_dir(&cwd)
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|_| "Could not inspect Codex's tools.")?;
-            let timeout = crate::clis::watchdog(child.id(), 8);
-            let out = child
-                .wait_with_output()
-                .map_err(|_| "Could not inspect Codex's tools.")?;
-            drop(timeout);
-            if !out.status.success() {
-                return Err("Update Codex on this Mac before connecting a browser.".into());
-            }
-            scoped_flags = crate::agent_guard::codex_flags(&String::from_utf8_lossy(&out.stdout))?;
-            for (flag, name) in &scoped_flags {
-                c.args([*flag, name]);
-            }
-            let child = crate::clis::tool_command(&bin)
-                .args([
-                    "mcp",
-                    "list",
-                    "--json",
-                    "--disable",
-                    "plugins",
-                    "--disable",
-                    "apps",
-                    "--disable",
-                    "hooks",
-                ])
-                .current_dir(&cwd)
-                .stdin(Stdio::null())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-                .map_err(|_| "Could not inspect Codex's integrations.")?;
-            let timeout = crate::clis::watchdog(child.id(), 8);
-            let out = child
-                .wait_with_output()
-                .map_err(|_| "Could not inspect Codex's integrations.")?;
-            drop(timeout);
-            if !out.status.success() {
-                return Err("Could not safely disable Codex's configured integrations.".into());
-            }
-            let list: Value = serde_json::from_slice(&out.stdout)
-                .map_err(|_| "Could not inspect Codex's integrations.")?;
-            c.args([
-                "-c",
-                &crate::agent_guard::codex_mcp_override(&list)?,
-                "-c",
-                "notify=[]",
-            ]);
+        let child = crate::clis::tool_command(&bin)
+            .args(["features", "list"])
+            .current_dir(&cwd)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| "Could not inspect Codex's tools.")?;
+        let timeout = crate::clis::watchdog(child.id(), 8);
+        let out = child
+            .wait_with_output()
+            .map_err(|_| "Could not inspect Codex's tools.")?;
+        drop(timeout);
+        if !out.status.success() {
+            return Err("Update Codex on this Mac before starting a note conversation.".into());
         }
+        scoped_flags = crate::agent_guard::codex_flags(&String::from_utf8_lossy(&out.stdout))?;
+        for (flag, name) in &scoped_flags {
+            c.args([*flag, name]);
+        }
+        let child = crate::clis::tool_command(&bin)
+            .args([
+                "mcp",
+                "list",
+                "--json",
+                "--disable",
+                "plugins",
+                "--disable",
+                "apps",
+                "--disable",
+                "hooks",
+            ])
+            .current_dir(&cwd)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|_| "Could not inspect Codex's integrations.")?;
+        let timeout = crate::clis::watchdog(child.id(), 8);
+        let out = child
+            .wait_with_output()
+            .map_err(|_| "Could not inspect Codex's integrations.")?;
+        drop(timeout);
+        if !out.status.success() {
+            return Err("Could not safely disable Codex's configured integrations.".into());
+        }
+        let list: Value = serde_json::from_slice(&out.stdout)
+            .map_err(|_| "Could not inspect Codex's integrations.")?;
+        c.args([
+            "-c",
+            &crate::agent_guard::codex_mcp_override(&list)?,
+            "-c",
+            "notify=[]",
+        ]);
         // The app passes a tail thread no tools; this takes web search away too.
         if ask.tail {
             c.args(["-c", "web_search=\"disabled\""]);
@@ -364,7 +361,7 @@ fn start_in(
         stop(&app, &id)?;
         return Err("The browser connection ended while the agent was starting.".into());
     }
-    let mut bootstrap_timeout = scoped_codex.then(|| {
+    let mut bootstrap_timeout = codex.then(|| {
         let (tx, rx) = std::sync::mpsc::channel::<()>();
         let (app, id, sink) = (app.clone(), id.clone(), sink.clone());
         std::thread::spawn(move || {
@@ -389,7 +386,7 @@ fn start_in(
         });
         let mut finished = false;
         let mut initialized = None;
-        let mut verified = !scoped_codex;
+        let mut verified = !codex;
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let Ok(v) = serde_json::from_str::<Value>(&line) else {
                 continue;

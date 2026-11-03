@@ -4,6 +4,7 @@ import { type Access, aiPrefs, isClaude } from "~/lib/ai-prefs";
 import type { AskPage, Quote } from "~/lib/ask";
 import { buildPrompt, type NoteText, type Seen, SYSTEM } from "~/lib/ask-prompt";
 import { effortFor } from "~/lib/codex";
+import { codexFailure, codexFailureMessage } from "~/lib/codex-failure";
 import { GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
 import { type Item, patchThread, type Thread, threadOf } from "~/lib/threads";
 import { action } from "~/lib/history-types";
@@ -39,7 +40,7 @@ type Turn = {
   dispatched?: boolean;
   remote: boolean;
   pending?: (allow: boolean) => Promise<void>;
-  gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string };
+  gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string; failure?: ReturnType<typeof codexFailure> };
 };
 const turns = new Map<string, Turn>();
 const canWork = (id: string, turn: Turn) => turns.get(id) === turn && !turn.stopped && (!turn.remote || remoteRunCurrent(id));
@@ -270,11 +271,12 @@ function onCodex(id: string, line: Line) {
       if (i?.kind === "thinking") list[k] = { ...i, text: i.text + p.delta };
       return list;
     });
+  else if (m === "error") g.failure = codexFailure(p) ?? g.failure;
   else if (m === "turn/completed") {
     const status = p.turn?.status;
     t.planned = t.plan && status === "completed";
     const how = status === "completed" ? "done" : status === "interrupted" ? "stopped" : "failed";
-    finish(id, how, how === "failed" ? (p.turn?.error?.message ?? "Codex couldn't finish") : undefined, { session_id: g.thread });
+    finish(id, how, how === "failed" ? codexFailureMessage(p.turn, g.failure) : undefined, { session_id: g.thread });
   }
 }
 

@@ -104,6 +104,8 @@ Claude can look things up on the web. The step reads "Searched the web for" and 
 
 With Codex installed and signed in, the model picker lists its GPT models under **GPT**. Pick one and ask as usual: the steps are the same as Claude's, and a change asks with the same card.
 
+For note conversations, LeadingLight disables your configured Codex MCP servers and notification commands without changing your settings. If it cannot verify that isolation, it stops before starting the conversation. Project chats use their own tools and settings. If a note turn fails, its error appears in the conversation.
+
 Two things differ with GPT:
 
 - Codex searches the web on its own servers, so a web search never shows a card.
