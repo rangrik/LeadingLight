@@ -7,6 +7,7 @@ import { homedir, platform, arch, constants as osConstants } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveTestBrowser } from "./test-browser.mjs";
+import { claudeCredentialStore, gatewayFixture, Unavailable } from "./provider-credentials.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const tests = {
@@ -24,8 +25,10 @@ Codex: existing CODEX_HOME/auth.json; optional BERTH_LIVE_CODEX_MODEL.
 Claude: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or existing Claude credentials.
 ACP: installed opencode, existing auth if present; default model opencode/big-pickle.
 Browser: installed agent-browser or a temporary pinned install; BERTH_CHROMIUM optional.
-Turn check: BERTH_TURNCHECK_LIVE_KEY_FILE and BERTH_TURNCHECK_LIVE_MODEL,
-  or the existing gateway configuration and key in BERTH_HOME.
+Turn check: BERTH_TURNCHECK_LIVE_KEY_FILE, AI_GATEWAY_API_KEY, or VERCEL_OIDC_TOKEN
+  (in that order), plus BERTH_TURNCHECK_LIVE_MODEL or a configured gateway model;
+  or an existing gateway config and pasted key: embedded LeadingLight first,
+  then the local berth runtime. BERTH_HOME/BERTH_USER_DIR select a runtime.
 Exit 1: a check failed. Exit 2: a required provider fixture is unavailable.
 No login or persistent configuration changes are performed.`);
   process.exit(0);
@@ -33,7 +36,6 @@ No login or persistent configuration changes are performed.`);
 if (args.some((g) => g !== "all" && !(g in tests))) throw new Error("unknown provider group; use --help");
 const groups = [...new Set(args.length === 0 || args.includes("all") ? Object.keys(tests) : args)];
 
-class Unavailable extends Error {}
 const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 function executable(name) {
   for (const dir of (process.env.PATH ?? "").split(":")) {
@@ -59,12 +61,12 @@ function run(command, argv, env, cwd, timeout = 30000) {
 }
 function claudeToken() {
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) return process.env.CLAUDE_CODE_OAUTH_TOKEN;
-  const credentials = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), ".credentials.json");
+  const store = claudeCredentialStore();
   let auth;
-  if (existsSync(credentials)) auth = json(credentials).claudeAiOauth;
+  if (existsSync(store.file)) auth = json(store.file).claudeAiOauth;
   else if (platform() === "darwin") {
     // Read the existing credential. Never ask Claude to refresh or write Keychain.
-    const r = spawnSync("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"], { encoding: "utf8", timeout: 10000 });
+    const r = spawnSync("/usr/bin/security", store.keychainArgs, { encoding: "utf8", timeout: 10000 });
     if (r.status === 0) { try { auth = JSON.parse(r.stdout).claudeAiOauth; } catch {} }
   }
   if (!auth?.accessToken) throw new Unavailable("Claude has no saved access token; a valid Claude login or ANTHROPIC_API_KEY is required");
@@ -134,15 +136,11 @@ async function prepare(group, fixture) {
     mkdirSync(env.AGENT_BROWSER_SOCKET_DIR, { mode: 0o700 });
     env.BERTH_TEST_REAL_AGENT_BROWSER = "1";
   } else if (group === "turncheck") {
-    const home = process.env.BERTH_HOME || join(homedir(), ".berth");
-    const path = join(home, "turncheck.json");
-    const cfg = existsSync(path) ? json(path) : {};
-    const key = process.env.BERTH_TURNCHECK_LIVE_KEY_FILE || (cfg.provider === "gateway" ? join(home, "turncheck.key") : "");
-    const model = process.env.BERTH_TURNCHECK_LIVE_MODEL || (cfg.provider === "gateway" && cfg.model);
-    if (!key || !existsSync(key) || !model) throw new Unavailable(`Vercel AI Gateway requires BERTH_TURNCHECK_LIVE_KEY_FILE and BERTH_TURNCHECK_LIVE_MODEL (or an existing gateway key and config in BERTH_HOME)${model ? `; configured model: ${model}` : ""}`);
-    if (!readFileSync(key, "utf8").trim()) throw new Unavailable("Vercel AI Gateway key file is empty");
+    const { key, keyValue, model } = gatewayFixture();
+    if (!(key ? readFileSync(key, "utf8") : keyValue).trim()) throw new Unavailable("Vercel AI Gateway credential is empty");
     env.BERTH_TURNCHECK_LIVE_KEY_FILE = join(fixture, "turncheck.key");
-    copySecret(key, env.BERTH_TURNCHECK_LIVE_KEY_FILE);
+    if (key) copySecret(key, env.BERTH_TURNCHECK_LIVE_KEY_FILE);
+    else secret(env.BERTH_TURNCHECK_LIVE_KEY_FILE, keyValue);
     env.BERTH_TURNCHECK_LIVE_MODEL = model;
   }
   secret(join(fixture, "env.json"), JSON.stringify(env));
