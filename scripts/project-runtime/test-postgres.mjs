@@ -81,11 +81,19 @@ export async function startPostgresFixture({ stateDir, env = process.env, binDir
   // Ignore ambient libpq service files, database addresses and passwords.
   const pgEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("PG")));
   pgEnv.TZ = "UTC";
-  const dir = await mkdtemp(join(state, "pg."));
-  const identity = await lstat(dir);
   const marker = randomBytes(16).toString("hex");
+  const dir = await mkdtemp(join(state, "pg."));
   const mark = join(dir, ".leadinglight-postgres-fixture");
-  await writeFile(mark, marker, { mode: 0o600 });
+  let identity;
+  try {
+    identity = await lstat(dir);
+    await writeFile(mark, marker, { mode: 0o600 });
+  } catch (err) {
+    // No process has started and the marker may not exist yet. Remove the
+    // exact directory mkdtemp just created, including a partial marker file.
+    await rm(dir, { recursive: true, force: true });
+    throw err;
+  }
   const data = join(dir, "data");
   const socket = join(dir, "socket");
   const log = join(dir, "setup.log");
