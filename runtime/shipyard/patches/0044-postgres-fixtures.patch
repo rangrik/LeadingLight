@@ -1,3 +1,18 @@
+diff --git a/internal/box/helperenv_test.go b/internal/box/helperenv_test.go
+index 9a1e4c6..0f75282 100644
+--- a/internal/box/helperenv_test.go
++++ b/internal/box/helperenv_test.go
+@@ -396,6 +396,10 @@ func TestAHelperThatIsOffSlowOrWrongIsAnErrorOfALookAndNoFileIsRead(t *testing.T
+ // Like installing one, having a helper told of a worktree is a paired
+ // laptop's to ask, and a gate on the box can refuse it.
+ func TestOnlyAPairedLaptopHasAHelperToldOfDotenvFilesAndAGateCanRefuseIt(t *testing.T) {
++	// A real-server test fixture is already in the process environment. Keep
++	// this check about secrets from the worktree, not the runner's own URL.
++	t.Setenv("BERTH_DATABASE_TEST_POSTGRES", "")
++	t.Setenv("BERTH_LEADLINE_TEST_POSTGRES", "")
+ 	cfg := filepath.Join(t.TempDir(), "hooks.json")
+ 	if err := os.WriteFile(cfg, []byte(`{"hooks":[]}`), 0o600); err != nil {
+ 		t.Fatal(err)
 diff --git a/internal/leadline/pgproxy/real_test.go b/internal/leadline/pgproxy/real_test.go
 index 5fdae9c..83a9f3a 100644
 --- a/internal/leadline/pgproxy/real_test.go
