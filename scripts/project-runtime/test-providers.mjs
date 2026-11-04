@@ -64,7 +64,7 @@ function claudeToken() {
     if (r.status === 0) { try { auth = JSON.parse(r.stdout).claudeAiOauth; } catch {} }
   }
   if (!auth?.accessToken) throw new Unavailable("Claude has no saved access token; a valid Claude login or ANTHROPIC_API_KEY is required");
-  if (auth.expiresAt && auth.expiresAt <= Date.now()) throw new Unavailable("Claude's saved access token is expired; a fresh login or ANTHROPIC_API_KEY is required");
+  if (typeof auth.expiresAt === "number" && auth.expiresAt <= Date.now()) throw new Unavailable("Claude's saved access token is expired; a fresh login or ANTHROPIC_API_KEY is required");
   return auth.accessToken;
 }
 
@@ -128,7 +128,7 @@ async function prepare(group, fixture) {
     // Keep installed npm wrappers in place so relative binary lookup works.
     writeFileSync(join(fixture, "bin/agent-browser"), `#!/bin/sh\nexec ${quote(ab)} "$@"\n`, { mode: 0o700 });
     env.AGENT_BROWSER_EXECUTABLE_PATH = browser;
-    env.AGENT_BROWSER_ARGS = platform() === "darwin" ? "--use-mock-keychain" : "";
+    env.AGENT_BROWSER_ARGS = [process.env.AGENT_BROWSER_ARGS, platform() === "darwin" ? "--use-mock-keychain" : ""].filter(Boolean).join(",");
     env.AGENT_BROWSER_SOCKET_DIR = join(fixture, "browser-sockets");
     mkdirSync(env.AGENT_BROWSER_SOCKET_DIR, { mode: 0o700 });
     env.BERTH_TEST_REAL_AGENT_BROWSER = "1";
