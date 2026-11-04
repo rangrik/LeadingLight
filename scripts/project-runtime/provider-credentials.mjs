@@ -11,12 +11,16 @@ export function claudeCredentialStore({ env = process.env, home = homedir(), use
   // Claude Code 2.1.314 hashes the raw NFC-normalized config variable, not
   // its realpath. A defined-empty secure-storage override selects the default.
   const dir = env.CLAUDE_SECURESTORAGE_CONFIG_DIR ?? env.CLAUDE_CONFIG_DIR;
+  const defaultDir = join(home, ".claude");
+  // Only the secure-storage override resets an empty value to the default;
+  // an explicitly empty CLAUDE_CONFIG_DIR keeps the file relative to cwd.
+  const storageDir = env.CLAUDE_SECURESTORAGE_CONFIG_DIR !== undefined ? (dir || defaultDir) : (dir ?? defaultDir);
   const suffix = dir ? `-${createHash("sha256").update(dir.normalize("NFC")).digest("hex").slice(0, 8)}` : "";
   let account = env.USER || username;
   if (!account) { try { account = userInfo().username; } catch {} }
   if (!/^[a-zA-Z0-9._-]+$/.test(account || "")) account = "claude-code-user";
   return {
-    file: join((dir || join(home, ".claude")).normalize("NFC"), ".credentials.json"),
+    file: join(storageDir.normalize("NFC"), ".credentials.json"),
     keychainArgs: ["find-generic-password", "-a", account, "-w", "-s", `Claude Code-credentials${suffix}`],
   };
 }

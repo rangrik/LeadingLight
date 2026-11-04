@@ -136,6 +136,15 @@ test("Claude default Keychain lookup selects the OS account explicitly", () => {
   });
 });
 
+test("an explicitly empty Claude config directory keeps credential files relative to cwd", () => {
+  const options = { env: { CLAUDE_CONFIG_DIR: "" }, home: "/example/home", username: "local-user" };
+  const store = claudeCredentialStore(options);
+  assert.equal(store.file, ".credentials.json");
+  assert.equal(store.keychainArgs.at(-1), "Claude Code-credentials");
+  options.env.CLAUDE_SECURESTORAGE_CONFIG_DIR = "";
+  assert.equal(claudeCredentialStore(options).file, "/example/home/.claude/.credentials.json");
+});
+
 test("Claude custom directory hashes the raw NFC value, even for an explicit default path", () => {
   for (const [dir, suffix] of [["/example/home/.claude", "64193d4c"], ["./custom/", "42fafe08"], ["/example/cafe\u0301", "c3afbe10"]]) {
     const store = claudeCredentialStore({ env: { CLAUDE_CONFIG_DIR: dir, USER: "selected-user" } });
