@@ -184,7 +184,7 @@ async function check(group, fixture) {
 const results = [];
 for (const group of groups) {
   if (stopped) break;
-  const fixture = mkdtempSync("/tmp/ll-live.");
+  const fixture = realpathSync(mkdtempSync("/tmp/ll-live."));
   secret(join(fixture, ".leadinglight-live-fixture"), "LeadingLight live provider fixture\n");
   try {
     await prepare(group, fixture);
