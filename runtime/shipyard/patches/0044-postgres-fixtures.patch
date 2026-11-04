@@ -1,0 +1,26 @@
+diff --git a/internal/leadline/pgproxy/real_test.go b/internal/leadline/pgproxy/real_test.go
+index 5fdae9c..83a9f3a 100644
+--- a/internal/leadline/pgproxy/real_test.go
++++ b/internal/leadline/pgproxy/real_test.go
+@@ -301,6 +301,9 @@ func TestRealPostgresByHand(t *testing.T) {
+ 	fe := conn.PgConn().Frontend()
+ 	flush := func() {
+ 		t.Helper()
++		if err := conn.PgConn().Conn().SetWriteDeadline(time.Now().Add(20 * time.Second)); err != nil {
++			t.Fatal(err)
++		}
+ 		if err := fe.Flush(); err != nil {
+ 			t.Fatal(err)
+ 		}
+@@ -308,6 +311,11 @@ func TestRealPostgresByHand(t *testing.T) {
+ 	// until reads messages up to the named one and returns their names.
+ 	until := func(last string) []string {
+ 		t.Helper()
++		// These raw protocol reads bypass pgx's context watcher. A missing
++		// response must fail this check rather than hang the whole test run.
++		if err := conn.PgConn().Conn().SetReadDeadline(time.Now().Add(20 * time.Second)); err != nil {
++			t.Fatal(err)
++		}
+ 		var seen []string
+ 		for {
+ 			msg, err := fe.Receive()
