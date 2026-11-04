@@ -14,14 +14,26 @@ orb=${ORBCTL:-orbctl}
 tmp=$(mktemp -d /tmp/ll-systemd-test.XXXXXXXX)
 # The random suffix prevents colliding with another run or an existing VM.
 machine="ll-systemd-$(basename "$tmp" | cut -d. -f2 | tr '[:upper:]' '[:lower:]')"
-created=0
+attempted=0
+child_pid=
 cleanup() {
   status=$?
-  trap - EXIT
-  if [[ $created == 1 ]]; then
-    echo "Deleting fixture machine $machine" >&2
-    if ! "$orb" delete --force "$machine"; then
-      echo "Could not delete fixture machine $machine; delete it manually." >&2
+  trap - EXIT INT TERM
+  if [[ -n $child_pid ]]; then
+    kill "$child_pid" 2>/dev/null || true
+    wait "$child_pid" 2>/dev/null || true
+  fi
+  if [[ $attempted == 1 ]]; then
+    if machines=$("$orb" list --quiet); then
+      if grep -Fxq -- "$machine" <<< "$machines"; then
+        echo "Deleting fixture machine $machine" >&2
+        if ! "$orb" delete --force "$machine"; then
+          echo "Could not delete fixture machine $machine; delete it manually." >&2
+          status=1
+        fi
+      fi
+    else
+      echo "Could not check for fixture machine $machine; inspect it manually." >&2
       status=1
     fi
   fi
@@ -29,12 +41,30 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# Waiting for a background child lets the shell handle signals immediately.
+run_orb() {
+  "$orb" "$@" &
+  child_pid=$!
+  local result=0
+  wait "$child_pid" || result=$?
+  child_pid=
+  return "$result"
+}
 
 (cd "$source_dir" && GOOS=linux GOARCH=arm64 CGO_ENABLED=0 "$go_bin" test -c -o "$tmp/box.test" ./internal/box)
-"$orb" create --isolated --isolate-network --user fixture --memory 2G --cpus 2 --disk 8G --arch arm64 ubuntu:24.04 "$machine"
-created=1
-"$orb" push -m "$machine" "$tmp/box.test" box.test
-"$orb" run -m "$machine" -u root sh -c '
+# Refuse a collision before attempting creation; never delete that machine.
+machines=$("$orb" list --quiet)
+if grep -Fxq -- "$machine" <<< "$machines"; then
+  echo "Fixture machine $machine already exists; refusing to use it." >&2
+  exit 1
+fi
+attempted=1
+run_orb create --isolated --isolate-network --user fixture --memory 2G --cpus 2 --disk 8G --arch arm64 ubuntu:24.04 "$machine"
+run_orb push -m "$machine" "$tmp/box.test" box.test
+run_orb run -m "$machine" -u root sh -c '
   set -eu
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
@@ -42,8 +72,9 @@ created=1
   loginctl enable-linger fixture
 '
 # The quoted script expands variables in Linux, not on the host.
+result=0
 # shellcheck disable=SC2016
-"$orb" run -m "$machine" -u fixture sh -c '
+run_orb run -m "$machine" -u fixture sh -c '
   set -eu
   export HOME=/home/fixture XDG_RUNTIME_DIR=/run/user/$(id -u)
   export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus BERTH_TEST_SYSTEMD=1
@@ -55,7 +86,9 @@ created=1
   done
   systemd-run --user --scope --quiet --collect -- true
   echo "Real systemd user scope probe passed"
-  exec /home/fixture/box.test -test.count=1 -test.v -test.run "^TestASessionsScopeWithRealSystemd$"
-' | tee "$tmp/test.log"
+  exec /home/fixture/box.test -test.timeout=2m -test.count=1 -test.v -test.run "^TestASessionsScopeWithRealSystemd$"
+' > "$tmp/test.log" 2>&1 || result=$?
+cat "$tmp/test.log"
+if [[ $result != 0 ]]; then exit "$result"; fi
 # A skipped test is not evidence that systemd was exercised.
 grep -q '^--- PASS: TestASessionsScopeWithRealSystemd ' "$tmp/test.log"
