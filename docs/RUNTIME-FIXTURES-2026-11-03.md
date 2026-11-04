@@ -67,6 +67,11 @@ model but no key. These two checks remain unverified; mocks do not replace them.
 Codex uses its account's default model unless `BERTH_LIVE_CODEX_MODEL` is set.
 ACP passed with OpenCode 1.18.21 and `opencode/big-pickle`.
 
+A follow-up [credential audit](RUNTIME-CREDENTIALS-2026-11-04.md) found the
+saved gateway key in its actual split storage location, corrected discovery,
+and distinguished authentication failures from Vercel account verification.
+It also checked the separate Claude Desktop credential store.
+
 The secret helper is not an independent acceptance check: its parent starts a
 copy of the test executable with the helper flag, and verifies the child's
 resolved environment, missing-secret handling, and value-free report. Enabling
