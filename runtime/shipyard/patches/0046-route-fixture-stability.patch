@@ -1,0 +1,54 @@
+diff --git a/internal/agent/boxroutes_test.go b/internal/agent/boxroutes_test.go
+index 68626ba..7fda3a8 100644
+--- a/internal/agent/boxroutes_test.go
++++ b/internal/agent/boxroutes_test.go
+@@ -265,18 +265,45 @@ func TestATerminalSurvivesItsRouteGoingDownWithoutLosingKeys(t *testing.T) {
+ // The person turns routes on and off, and adds one, in Settings › Boxes;
+ // the status says which is in use and how each is doing.
+ func TestRoutesCanBeTurnedOffAndAdded(t *testing.T) {
++	t.Run("paired_slow", func(t *testing.T) { routesCanBeTurnedOffAndAdded(t, false) })
++	t.Run("paired_recovers", func(t *testing.T) { routesCanBeTurnedOffAndAdded(t, true) })
++}
++
++func routesCanBeTurnedOffAndAdded(t *testing.T, recovering bool) {
++	t.Helper()
+ 	rb := newRoutedBox(t, nil)
+-	rb.paired.SetDelay(30 * time.Millisecond)
++	if !recovering {
++		rb.paired.SetDelay(30 * time.Millisecond)
++	}
+ 	a := startRoutedAgent(t, rb.dir)
+ 	tok := uiToken(t, a)
+ 	eventually(t, "box online", func() bool { return boxStatus(t, a).State == StateOnline })
++	if recovering {
++		// Warm the paired connection before stalling it, so the recovery
++		// exercises a pending route measurement rather than TLS startup.
++		uiCall(t, a, "GET", "/v1/boxes/devbox/api/services", tok)
++		eventually(t, "paired route measured before its stall", func() bool {
++			p := routeOf(boxStatus(t, a), wire.RoutePaired)
++			return p.State == wire.RouteUp && p.LatencyMs > 0
++		})
++		rb.paired.Blackhole(true)
++		eventually(t, "ssh active while paired is stalled", func() bool {
++			st := boxStatus(t, a)
++			p := routeOf(st, wire.RoutePaired)
++			return st.Route == "ssh" && (p.State == wire.RouteStalled || p.State == wire.RouteDown)
++		})
++		rb.paired.SetDelay(30 * time.Millisecond)
++		rb.paired.Blackhole(false)
++	}
+ 	// In use, the faster SSH route takes over.
+ 	uiCall(t, a, "GET", "/v1/boxes/devbox/api/services", tok)
+-	eventually(t, "ssh to take over", func() bool {
++	var st BoxStatus
++	eventually(t, "ssh active and both route latencies measured", func() bool {
+ 		uiCall(t, a, "GET", "/v1/boxes/devbox/api/services", tok)
+-		return boxStatus(t, a).Route == "ssh"
++		st = boxStatus(t, a)
++		p, s := routeOf(st, wire.RoutePaired), routeOf(st, "ssh")
++		return st.Route == "ssh" && p.State == wire.RouteUp && s.State == wire.RouteUp && p.LatencyMs > 0 && s.LatencyMs > 0
+ 	})
+-	st := boxStatus(t, a)
+ 	if p, s := routeOf(st, wire.RoutePaired), routeOf(st, "ssh"); p.LatencyMs <= s.LatencyMs || p.State != wire.RouteUp || !s.Active {
+ 		t.Fatalf("routes %+v", st.Routes)
+ 	}
