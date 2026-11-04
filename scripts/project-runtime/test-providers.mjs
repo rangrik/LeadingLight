@@ -3,7 +3,7 @@
 // private fixture; provider configuration and history never use the real home.
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, platform, arch } from "node:os";
+import { homedir, platform, arch, constants as osConstants } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -149,17 +149,42 @@ async function prepare(group, fixture) {
 
 let current;
 let stopped;
+function signalGroup(pid, signal) {
+  if (!pid) return;
+  try { process.kill(-pid, signal); }
+  catch (err) { if (err.code !== "ESRCH") throw err; }
+}
+function groupExists(pid) {
+  if (!pid) return false;
+  try { process.kill(-pid, 0); return true; }
+  catch (err) { if (err.code === "ESRCH") return false; throw err; }
+}
 function cancel(signal) {
-  stopped = signal;
-  if (current) current.kill(signal);
+  stopped ||= signal;
+  current?.stop(stopped);
 }
 process.on("SIGINT", () => cancel("SIGINT"));
 process.on("SIGTERM", () => cancel("SIGTERM"));
 async function check(group, fixture) {
   const child = spawn(join(root, "scripts/project-runtime/build.sh"), ["--test", "./internal/box", "-run", `^${tests[group]}$`, "-json", "-count=1", "-timeout=6m"], {
-    cwd: root, env: { ...process.env, LL_RUNTIME_LIVE_FIXTURE: fixture }, stdio: ["ignore", "pipe", "pipe"],
+    cwd: root, env: { ...process.env, LL_RUNTIME_LIVE_FIXTURE: fixture }, stdio: ["ignore", "pipe", "pipe"], detached: true,
   });
-  current = child;
+  let escalation;
+  function stop(signal) {
+    if (escalation) return;
+    // This also reaches git/curl/compiler children before build.sh execs the
+    // test runner. That runner forwards the signal to its separate Go group.
+    signalGroup(child.pid, signal);
+    // Allow its two-second Go escalation and cleanup to finish before forcing
+    // this group down, including children that keep our output pipes open.
+    escalation = setTimeout(() => signalGroup(child.pid, "SIGKILL"), 10000);
+  }
+  current = { stop };
+  child.once("exit", () => {
+    // An exited build may still have a child holding stdout/stderr. Waiting
+    // only for 'close' would leave the credential fixture alive indefinitely.
+    if (groupExists(child.pid)) stop("SIGTERM");
+  });
   let pending = "", passed = false, skipped = false;
   child.stdout.on("data", (chunk) => {
     pending += chunk;
@@ -174,10 +199,19 @@ async function check(group, fixture) {
     }
   });
   child.stderr.pipe(process.stderr);
-  const timer = setTimeout(() => child.kill("SIGTERM"), 8 * 60 * 1000);
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; stop("SIGTERM"); }, 8 * 60 * 1000);
   let code;
   try { code = await new Promise((done, reject) => { child.once("error", reject); child.once("close", done); }); }
-  finally { clearTimeout(timer); current = undefined; }
+  finally {
+    clearTimeout(timer);
+    clearTimeout(escalation);
+    // Descendants can close their pipes without exiting. Stop any survivors
+    // from this owned group before the caller removes its private fixture.
+    if (groupExists(child.pid)) signalGroup(child.pid, "SIGKILL");
+    current = undefined;
+  }
+  if (timedOut) throw new Error(`${tests[group]} exceeded the eight-minute build/test timeout`);
   if (code !== 0 || !passed || skipped) throw new Error(`${tests[group]} ${skipped ? "was skipped despite its fixture" : !passed ? "did not pass" : `failed (exit ${code})`}`);
 }
 
@@ -203,4 +237,4 @@ for (const group of groups) {
 console.log("\nLive provider results:");
 for (const result of results) console.log(`${result.group}: ${result.status}${result.reason ? ` — ${result.reason}` : ""}`);
 console.log(`LIVE_PROVIDER_RESULTS ${JSON.stringify({ results })}`);
-process.exitCode = stopped ? 130 : results.some((r) => r.status === "failed") ? 1 : results.some((r) => r.status === "unavailable") ? 2 : 0;
+process.exitCode = stopped ? 128 + osConstants.signals[stopped] : results.some((r) => r.status === "failed") ? 1 : results.some((r) => r.status === "unavailable") ? 2 : 0;
