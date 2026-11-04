@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "a6ee436af12210c00aca4a40f8f69955afd18fc1",
-  "version": "0.3.31-ll.30",
+  "version": "0.3.31-ll.31",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -55,6 +55,9 @@
     "0040-cancellable-browser-commands.patch",
     "0041-cdp-cancellation.patch",
     "0042-service-startup-cancellation.patch",
-    "0043-wait-for-startup-target-close.patch"
+    "0043-wait-for-startup-target-close.patch",
+    "0044-postgres-fixtures.patch",
+    "0045-diagnostic-fixtures.patch",
+    "0046-route-fixture-stability.patch"
   ]
 }

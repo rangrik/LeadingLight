@@ -29,3 +29,12 @@ removed afterward; production launch arguments are unchanged. Set
 `BERTH_CHROMIUM` to choose another installed test binary, including the
 Playwright headless shell. The default command passed the real-browser check
 in 4.90 seconds.
+
+The later [fixture pass](RUNTIME-FIXTURES-2026-11-03.md) found that full Chrome
+still took 120.42 seconds for the login screenshot-comparison check; a second
+check was interrupted for diagnosis. The same two checks passed in 9.47 seconds
+with the headless shell. Runtime tests now ask Playwright's public installation
+CLI for its exact headless-shell cache location and select that executable by
+default. This respects `PLAYWRIGHT_BROWSERS_PATH` and avoids guessing a browser
+revision. If it is missing, the command gives an `install --only-shell chromium`
+hint. Explicit browser overrides and all production launch behavior are unchanged.

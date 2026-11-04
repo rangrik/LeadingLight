@@ -6,6 +6,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { homedir, platform, arch, constants as osConstants } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveTestBrowser } from "./test-browser.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const tests = {
@@ -41,7 +42,10 @@ function executable(name) {
   }
   throw new Unavailable(`${name} is not installed on PATH`);
 }
-function json(path) { return JSON.parse(readFileSync(path, "utf8")); }
+function json(path) {
+  try { return JSON.parse(readFileSync(path, "utf8")); }
+  catch { throw new Error(`cannot read provider configuration: ${path}`); }
+}
 function secret(path, data) { writeFileSync(path, data, { mode: 0o600 }); }
 function copySecret(from, to) {
   const st = lstatSync(from);
@@ -110,10 +114,7 @@ async function prepare(group, fixture) {
   } else if (group === "browser") {
     let browser = process.env.BERTH_CHROMIUM || process.env.AGENT_BROWSER_EXECUTABLE_PATH;
     if (!browser) {
-      browser = run(process.execPath, ["--input-type=module", "-e", 'import { chromium } from "@playwright/test"; console.log(chromium.executablePath());'], process.env, join(root, "apps/desktop")).trim();
-      // Headless shell avoids full Chrome's macOS Keychain initialization.
-      const headless = browser.replace(/chromium-(\d+)\/chrome-mac-arm64\/Google Chrome for Testing\.app\/Contents\/MacOS\/Google Chrome for Testing$/, "chromium_headless_shell-$1/chrome-headless-shell-mac-arm64/chrome-headless-shell");
-      if (existsSync(headless)) browser = headless;
+      browser = await resolveTestBrowser(join(root, "apps/desktop"));
     }
     if (!existsSync(browser)) throw new Unavailable("Chromium is unavailable; set BERTH_CHROMIUM to an installed browser executable");
     let ab;
@@ -175,9 +176,9 @@ async function check(group, fixture) {
     // This also reaches git/curl/compiler children before build.sh execs the
     // test runner. That runner forwards the signal to its separate Go group.
     signalGroup(child.pid, signal);
-    // Allow its two-second Go escalation and cleanup to finish before forcing
+    // Allow Go escalation and the bounded helper/PostgreSQL cleanup to finish before forcing
     // this group down, including children that keep our output pipes open.
-    escalation = setTimeout(() => signalGroup(child.pid, "SIGKILL"), 10000);
+    escalation = setTimeout(() => signalGroup(child.pid, "SIGKILL"), 45000);
   }
   current = { stop };
   child.once("exit", () => {

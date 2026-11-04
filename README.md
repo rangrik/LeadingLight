@@ -39,6 +39,11 @@ test arguments, for example `pnpm runtime:test -run TestHelpMatchesFlags ./cmd/.
 See the [runtime validation notes](docs/RUNTIME-FIXES-2026-11-03.md) for isolation
 and coverage limits.
 
+`pnpm runtime:test:fixtures` also provisions a private PostgreSQL cluster and
+enables the local integration checks. `pnpm runtime:test:providers` runs real
+provider checks, and `pnpm runtime:test:systemd` uses a disposable Linux machine.
+See [fixture setup and results](docs/RUNTIME-FIXTURES-2026-11-03.md).
+
 An iPad target shares this app. With Xcode and CocoaPods installed, run `pnpm ios:init`
 and `pnpm ios:build` to create an unsigned device archive. Signing, device acceptance and
 the shared account and encrypted sync connection are described in [iPad setup](docs/IPAD.md).

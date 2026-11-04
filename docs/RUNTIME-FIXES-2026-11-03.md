@@ -96,3 +96,6 @@ The suite's opt-in live-provider, PostgreSQL, real-systemd, and native computer-
 checks need their external fixtures; isolated tests do not establish signed-in
 native acceptance. Existing unrelated deferred items remain in
 [DEFERRED.md](DEFERRED.md).
+
+The subsequent [fixture pass](RUNTIME-FIXTURES-2026-11-03.md) provisions and
+exercises those optional checks and accounts for each of the original 30 skips.
