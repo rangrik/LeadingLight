@@ -172,8 +172,9 @@ were removed. Other worktrees and servers were not stopped or changed.
 The user confirmed quitting LeadingLight. The release Mac bundle was built from main,
 installed at `/Applications/LeadingLight.app`, and verified with `codesign --verify --deep
 --strict`; the installed binary exactly matches the prepared SHA-256 recorded in the durable
-`mac-installation.json`. Both Rust native credential tests passed. Subsequent main merges changed only unrelated
-test expectations; application code remained identical.
+`mac-installation.json`. Both Rust native credential tests passed. The installed application code corresponds to
+`45d619b` (main was `5451a4f` at installation; the intervening changes were docs and tests).
+Other agents' later main changes are preserved by closeout merges and are outside this release validation.
 The agent did not open or drive the native window. The merged branch was deleted. Codex refused to archive this chat's primary checkout, so
 that clean detached checkout remains; its servers and development app are gone. Google review
 monitoring reads the record from the main checkout.
