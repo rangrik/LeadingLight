@@ -6,7 +6,7 @@ test("Native download prompts are serialized, scoped and remembered after cancel
     const path = new URL(route.request().url()).pathname;
     const js = (body: string) => route.fulfill({ contentType: "text/javascript", body });
     if (path === "/") return route.fulfill({ contentType: "text/html", body: "<main>Mock native download boundary</main>" });
-    if (path.endsWith("/lib/platform.ts")) return js("export const isNative = Promise.resolve(true)");
+    if (path.endsWith("/lib/platform.ts")) return js("export const isNative = Promise.resolve(true); export const isDesktop = isNative;");
     if (path.endsWith("/project-runtime/transport.ts")) return js("export const ask = (...args) => window.downloadHarness.ask(...args)");
     if (path.includes("plugin-dialog")) return js("export const save = (...args) => window.downloadHarness.save(...args)");
     if (path.includes("plugin-fs")) return js("export const open = (...args) => window.downloadHarness.open(...args)");
