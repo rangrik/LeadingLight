@@ -136,3 +136,29 @@ Google responses through LeadingLight. Earlier November 3 tests did independentl
 Google Calendar. Native app/agent manual checks above remain unperformed; this deployment
 does not claim they passed. The older installed dev app needs rebuilding for the new origin
 before testing a new native connection.
+
+## Submission and merge validation, November 5, 2026
+
+Google received the sensitive-scope submission at approximately 22:25 UTC. The Unlisted
+4K demo is https://www.youtube.com/watch?v=Pqjj8axkWJM. Verification Center reports data access
+under review; approval and the post-approval consent check remain pending.
+
+Main through `1f04275` was merged into this branch, preserving the other agents' changes.
+All 34 calendar, browser-copy, device-approval and editor checks passed in Chromium/WebKit
+on the combined code. All 48 desktop unit tests, workspace typecheck, production and docs
+builds passed. Cloud tests pass 16/16 with a fresh isolated PostgreSQL database. Their command
+now runs shared-database fixtures sequentially to avoid concurrent schema-creation races.
+Initial cold browser runs hit 30-second limits under host load; the complete final run used
+90-second test limits and passed without skips. The browser device tests do not drive the
+native app or validate real CLI sessions.
+
+Independent QA passed 11 Claude/Codex approval, account-change, plan and cancellation cases,
+plus 21 browser-copy protocol probes. It found a narrow split-pane table overlap, fixed with
+pane-size queries and checked in both engines at narrow and wide sizes. Durable reports and
+screenshots are in the verification artifact folder's `postmerge-qa/` and
+`migration-independent-qa/` directories. The final primary suite ran after the last main merge.
+
+The user's merge/cleanup authorization covers this closeout. The installed app was still
+running during verification; the merged Mac bundle must be installed only after it quits.
+Native manual checks above remain unperformed. The old development app is no longer the
+build to test; use the merged installed LeadingLight after installation completes.
