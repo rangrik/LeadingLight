@@ -2,7 +2,8 @@
 
 Implemented in `codex/iphone-focus`. The contract is `features/iphone.feature`.
 The November 3 checks used isolated data. November 5 added signed development and private release
-installs on the user's iPhone and iPad; the dev apps and their local data remain available.
+installs on the user's iPhone and iPad. Both production libraries are now verified; the dev apps
+were removed after backing up their data.
 
 ## Passed
 
@@ -96,7 +97,7 @@ No SDK versions or simulator metadata were modified to bypass the helper's check
   This verifies retained files, not an end-to-end check of every note.
 - The owner trusted the profile on both devices and confirmed the phone's Today screen.
   The final installed phone process was running. After trust, the iPad launch command succeeded.
-  Physical account sync and the remaining hardware flows below are not yet confirmed.
+  Physical account sync was completed later, as recorded in the production migration section.
 - Fixed the browser approval label to say **LeadingLight on iPhone**. The frontend build and
   root phone smoke passed. Independent Chromium and WebKit checks passed for phone capture,
   search, Today/Continue and Settings, and for iPhone/iPad/desktop-UA iPad/Mac approval names
@@ -116,9 +117,12 @@ with the exact physical device destination, automatic signing and provisioning u
 Use `tauri.ios-dev.conf.json` for iPad. Check each embedded profile's device list before installing:
 a generic archive initially selected the iPad-only profile for the phone bundle and was not used.
 
-## Remaining hardware checks
+## Further hardware coverage
 
-1. Open **LeadingLight iPhone Dev**, create a note, type, immediately go Home, and reopen. Repeat
+These are additional editing and media checks for the production app. Account connection and
+the production-library comparison were completed below.
+
+1. Open **LeadingLight**, create a note, type, immediately go Home, and reopen. Repeat
    in airplane mode and after terminating the app. Expect the latest words, stored in SQLite.
 2. Capture a thought, background immediately, and return. Expect the same words and one capture.
 3. Type low on a long page, rotate with the keyboard open, then scroll up manually. Expect the
@@ -128,8 +132,8 @@ a generic archive initially selected the iPad-only profile for the phone bundle 
 5. Connect a test workspace from **Notes › Account and sync**. Expect Keychain persistence,
    encrypted note/attachment download, and offline edits syncing on a later foreground connection.
 
-Simulator results cover local editing and persistence, but do not establish the remaining physical
-device, microphone, attachment and account-sync results.
+Simulator results cover local editing and persistence, but do not establish every physical
+device, microphone and attachment workflow above.
 
 ## Production identity and icons — November 5
 
@@ -155,7 +159,7 @@ The iPhone and iPad icons extracted from the final signed app were also visually
 
 The frontend build/typecheck passed. Parent and independent phone browser smokes passed on retry;
 initial runs timed out under heavy concurrent compilation. No UI defect remained. Real account
-connection and syncing in the new production identity still require acceptance on the devices.
+connection and syncing in the new production identity were completed in the migration below.
 
 Artifacts: `/tmp/LeadingLight-Production-6c61.xcarchive`,
 `/tmp/LeadingLight-Production-6c61-distribution/LeadingLight.ipa`, and the verified extracted app at
@@ -177,10 +181,18 @@ Private Library backups cover both production and both dev installations. The in
 snapshot has 63 active notes; iPad dev has 48, and both production libraries and iPhone dev are
 empty. Every iPad note ID, all 286 history after-snapshots and all 26 distinct attachment byte
 hashes exist on the Mac. No iPad note is newer. Both production apps have now been approved
-through the normal browser flow. The iPad production copy matches the latest Mac's 65 active
-objects, all 599 history after-snapshots, type/property definitions and referenced attachment
-bytes. Nine old Mac deletion markers without history were never in the sync journal; they
-remain in the private Mac backup. The iPhone download and dev removal are still in progress.
+through the normal browser flow. Fresh backups of both production copies match the latest Mac's
+66 active objects, all 600 history after-snapshots, type/property definitions and referenced
+attachment bytes. All shared current objects match exactly after resolving local attachment paths
+by file hash. Both devices showed **Up to date**. Nine old Mac deletion markers without history
+were never in the sync journal; they remain in the private Mac backup.
+
+Final dev backups contain no new changes: iPad dev has 65 active objects and 597 history entries,
+all represented by the newer production data; iPhone dev is empty. Removed only
+`com.leadinglight.dev.ipad` and `com.leadinglight.dev.iphone`. Fresh installed-app inventories
+confirm each device retains `com.leadinglight.app` and no LeadingLight dev bundle. Both production
+launch commands succeeded after removal. Private before/after Library backups, consistent SQLite
+snapshots and the comparison report remain on the Mac under `LeadingLight Migration Backups`.
 
 The updated Ad Hoc release was installed in place on both devices. Its compiled icons match
 the verified production artwork, strict signing checks pass, and the physical iPad no longer
