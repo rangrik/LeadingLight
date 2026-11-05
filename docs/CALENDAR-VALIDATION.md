@@ -172,7 +172,7 @@ were removed. Other worktrees and servers were not stopped or changed.
 The user confirmed quitting LeadingLight. The release Mac bundle was built from main,
 installed at `/Applications/LeadingLight.app`, and verified with `codesign --verify --deep
 --strict`; the installed binary exactly matches the prepared SHA-256 recorded in the durable
-`mac-installation.json`. Both Rust native credential tests passed. Main's final additional
-`5451a4f` merge changed only an unrelated test expectation; application code remained identical.
+`mac-installation.json`. Both Rust native credential tests passed. Subsequent main merges changed only unrelated
+test expectations; application code remained identical.
 The agent did not open or drive the native window. The branch's checkout is ready to archive;
 Google review monitoring now uses the surviving main checkout.
