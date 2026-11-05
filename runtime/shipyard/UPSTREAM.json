@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "a6ee436af12210c00aca4a40f8f69955afd18fc1",
-  "version": "0.3.31-ll.31",
+  "version": "0.3.31-ll.32",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -58,6 +58,7 @@
     "0043-wait-for-startup-target-close.patch",
     "0044-postgres-fixtures.patch",
     "0045-diagnostic-fixtures.patch",
-    "0046-route-fixture-stability.patch"
+    "0046-route-fixture-stability.patch",
+    "0047-localbox-service-fixture-path.patch"
   ]
 }
