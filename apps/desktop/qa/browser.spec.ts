@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { expect, test as base, type Page } from "@playwright/test";
+import { chromium, expect, test as base, type Page } from "@playwright/test";
 
 // Seam: browser controls to runtime HTTP and global shortcuts; catches wrong-tab actions and note-tab collisions.
 type Tab = { name: string; url: string; title: string; history: string[]; at: number; viewport?: { width: number; height: number; scale: number }; refusedHosts?: string[]; error?: string };
@@ -215,6 +215,47 @@ test("A redirect updates Address when the user returns focus to the page", async
   await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
   await expect(address(page)).toHaveValue("http://localhost:1420/destination");
   expect([...runtime.tabs.values()][0].url).toBe("http://localhost:1420/destination");
+});
+
+// Seam: the surface's keyboard events reach Chromium through the runtime's CDP input API.
+// Chromium needs Enter's carriage-return text to activate a button or insert a newline.
+test("Browser page Enter activates buttons and inserts textarea newlines", async ({ page, runtime }) => {
+  const remote = await chromium.launch({ headless: true });
+  try {
+    const content = await remote.newPage();
+    await content.route("**/*", (route) => route.abort());
+    await content.setContent('<input aria-label="Start"><button onclick="this.textContent=String(Number(this.textContent)+1)">0</button><textarea aria-label="Multiline"></textarea>');
+    const cdp = await content.context().newCDPSession(content);
+    await page.route("**/__runtime/**/input?*", async (route) => {
+      const input = route.request().postDataJSON();
+      await cdp.send(input.type === "text" ? "Input.insertText" : "Input.dispatchKeyEvent", input.type === "text" ? { text: input.text } : input);
+      await route.fulfill({ json: {} });
+    });
+    await openBrowser(page);
+    await navigate(page, "localhost:1420/keyboard");
+    await menu(page, "Desktop viewport");
+    await expect.poll(() => [...runtime.tabs.values()][0]?.viewport?.width).toBe(1280);
+    await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+    await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+    const keyboard = pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true });
+    await expect(keyboard).toBeFocused();
+    await content.getByRole("textbox", { name: "Start", exact: true }).focus();
+    await keyboard.press("Tab");
+    await expect(content.getByRole("button")).toBeFocused();
+    await keyboard.press("Enter");
+    await expect(content.getByRole("button")).toHaveText("1");
+    await keyboard.press("NumpadEnter");
+    await expect(content.getByRole("button")).toHaveText("2");
+    await keyboard.press("Tab");
+    await expect(content.getByRole("textbox", { name: "Multiline" })).toBeFocused();
+    await keyboard.press("a");
+    await keyboard.press("Enter");
+    await keyboard.press("b");
+    await expect(content.getByRole("textbox", { name: "Multiline" })).toHaveValue("a\nb");
+    expect(runtime.tabs.size).toBe(1);
+  } finally {
+    await remote.close();
+  }
 });
 
 test("Bookmarks and history survive reload and can be removed", async ({ page, runtime }) => {
