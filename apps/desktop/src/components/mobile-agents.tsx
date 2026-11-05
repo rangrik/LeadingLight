@@ -20,11 +20,11 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback; } catch { return fallback; } };
 const label = (p: Project) => p.path.split("/").filter(Boolean).at(-1) || p.name;
 
-export function MobileAgentsButton() {
+export function MobileAgentsButton({ className }: { className?: string } = {}) {
   const [open, setOpen] = useState(false);
   const state = mobileAgents.use();
   return <>
-    <Button variant="outline" size="sm" onClick={() => setOpen(true)}><Bot />Agents on Mac</Button>
+    <Button className={className} variant="outline" size="sm" onClick={() => setOpen(true)}><Bot />Agents on Mac</Button>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogPopup className="h-[min(850px,calc(100svh-4rem))] max-w-3xl" bottomStickOnMobile={false}>
         <DialogHeader className="shrink-0 pr-12">

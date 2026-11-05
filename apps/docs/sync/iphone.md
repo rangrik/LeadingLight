@@ -42,6 +42,12 @@ Open **Settings** from Today or Notes. Light and dark follow the device's system
 **Notes › Account and sync** connects the app to the same encrypted workspace as your other devices.
 See [Accounts and encrypted sync](/sync/). Sync is optional; local saving never waits for it.
 
+## Agents on your Mac
+
+Connect your Mac in **Settings → Devices**, then open **Notes → Agents on Mac** to start or continue
+project work. Both devices need Tailscale; your Mac runs the agent and keeps working when the phone
+is closed. No workspace account is needed. See [Mac agent setup](/sync/mobile-agents).
+
 ## Get the app
 
 This is a source preview, with no App Store or TestFlight release yet. Build the universal iOS target

@@ -144,6 +144,32 @@ test("an ambiguous start is found after reopening without starting a second agen
   expect(mock.local).toEqual([]);
 });
 
+// The phone shell must retain a route to the paired Mac without its desktop sidebar.
+test("iPhone pairs in Devices and opens Mac agents from Notes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mock = await mac(page, false); mock.state.approval = false;
+  await page.goto("/?iphone");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
+  await page.getByTestId("settings-nav-devices").click();
+  await page.getByLabel("Mac connection code", { exact: true }).fill("llmac1:test-code");
+  await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
+  await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
+  await page.getByRole("button", { name: /Back to app/ }).click();
+  await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Notes", exact: true }).click();
+  await openAgents(page);
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("Review this disposable project");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText("I found the project on your Mac.", { exact: true })).toBeVisible();
+  expect(mock.starts).toHaveLength(1);
+  expect(mock.local).toEqual([]);
+  await page.screenshot({ path: "qa/report/mobile-agents/iphone-notes-agent.png", fullPage: true });
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Today", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
+});
+
 test("offline phone keeps its draft and Codex starts only after explicit send", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   const mock = await mac(page); mock.state.approval = false;

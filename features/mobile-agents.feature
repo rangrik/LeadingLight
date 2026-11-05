@@ -33,6 +33,14 @@ Feature: Control Mac project agents from iPhone and iPad
     Then the same Mac conversation receives it
     And the device cannot select an unshared folder or bypass approval mode
 
+  Scenario: Reach Mac agents from the iPhone's Notes screen
+    Given I connected my iPhone to a Mac in Settings > Devices
+    When I return to the app and open Notes > Agents on Mac
+    Then I can choose a shared project and start a conversation
+    And its request reaches the paired Mac rather than a local runtime
+    When I close the conversation and open Today
+    Then Today, Capture and Notes remain available
+
   Scenario: Phone suspension does not stop project work
     Given a project agent is running on my Mac
     When I close the mobile app or lose the connection

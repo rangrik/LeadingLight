@@ -18,7 +18,7 @@ conversation. No LeadingLight cloud account or note sync is needed.
 3. In **Settings → Devices**, choose the projects to share, then enable **Mobile access**.
 4. Press **Copy code**. In LeadingLight on your iPhone or iPad, open **Settings → Devices**,
    paste it into **Mac connection code**, and press **Connect Mac**.
-5. Open **Agents on Mac** from the sidebar or Devices settings. Choose a project and a conversation,
+5. Open **Agents on Mac** from **Notes** on iPhone, the sidebar on iPad, or Devices settings. Choose a project and a conversation,
    or start **New chat** with Claude Code or Codex. The provider must already be installed and
    signed in on the Mac.
 

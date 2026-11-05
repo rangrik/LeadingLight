@@ -13,7 +13,8 @@ const set = (status: Status) => mobileAgents.set({ ...status, initialized: true,
 
 async function command<T>(action: "status" | "connect" | "disconnect" | "request", args: Record<string, unknown> = {}): Promise<T> {
   if (await isNative) return (await import("@tauri-apps/api/core")).invoke<T>(`mobile_agents_${action}`, args);
-  if (import.meta.env.DEV && new URLSearchParams(location.search).has("ipad")) {
+  const preview = new URLSearchParams(location.search);
+  if (import.meta.env.DEV && (preview.has("ipad") || preview.has("iphone"))) {
     const response = await fetch(`/__mobile/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args), signal: AbortSignal.timeout(25_000) });
     if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("The mobile preview has no Mac connection. Use the installed iPhone or iPad app.");
     const result = await response.json();

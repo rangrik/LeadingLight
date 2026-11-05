@@ -8,6 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@leadinglight/
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@leadinglight/ui/components/input-group";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@leadinglight/ui/components/sidebar";
 import { CloudButton } from "~/components/cloud-settings";
+import { MobileAgentsButton } from "~/components/mobile-agents";
 import { RowIcon } from "~/components/page-icon";
 import { PaneArea } from "~/components/pane-area";
 import { captured, captureOf } from "~/lib/capture-inbox";
@@ -73,6 +74,7 @@ function PhoneNotes({ active, onOpen, onCreate }: { active: boolean; onOpen: (id
     </InputGroup>
     {!needle && <div className="my-5 space-y-2">
       <Button className="w-full justify-start" onClick={() => onOpen(INBOX_VIEW)} variant="outline"><Inbox />Captures<ChevronRight className="ml-auto" /></Button>
+      <MobileAgentsButton className="min-h-12 w-full justify-start" />
       <Collapsible>
         <CollapsibleTrigger render={<Button className="w-full justify-start" variant="ghost" />}><FileText />Browse by type</CollapsibleTrigger>
         <CollapsiblePanel><SidebarMenu>{types.filter((t) => !t.made || pages.some((p) => p.typeId === t.id)).map((type) => <SidebarMenuItem key={type.id}>
