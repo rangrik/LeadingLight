@@ -29,6 +29,7 @@ mod relay;
 mod voice;
 mod web;
 mod native_cloud;
+mod mobile_agents;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
@@ -123,6 +124,10 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         native_platform,
         native_cloud::cloud_request,
+        mobile_agents::mobile_agents_status,
+        mobile_agents::mobile_agents_connect,
+        mobile_agents::mobile_agents_disconnect,
+        mobile_agents::mobile_agents_request,
         web::web_fetch,
         web::web_save_media
     ]);
@@ -138,6 +143,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             native_platform,
             native_cloud::cloud_request,
+            mobile_agents::mobile_agents_status,
+            mobile_agents::mobile_agents_connect,
+            mobile_agents::mobile_agents_disconnect,
+            mobile_agents::mobile_agents_request,
             agent::agent_status,
             agent::agent_ask,
             agent::agent_reply,

@@ -73,9 +73,10 @@ Images, audio, video and PDFs you add are saved in the app's own storage on the 
 
 The iPad app has your pages and editor, but not the parts that run on a Mac:
 
-- **Agents.** Ask, project chats, assigning tasks and the Feed need the Claude Code or Codex on your
-  Mac. **Settings › AI** says so, and **Account and sync** has no **Agents** tab on iPad. The app
-  never shows a pretend reply.
+- **Agent execution.** Connect to a Mac in **Settings → Devices** to start and control shared
+  project chats over Tailscale. Agents keep running on the Mac. See
+  [Agents from iPhone and iPad](/sync/mobile-agents). Ask about selected note text, Tail, task
+  assignment and the Feed remain Mac features.
 - **The built-in browser.**
 - **Global shortcuts** such as <kbd>⌃⌥I</kbd> for idea capture, the menu bar, and opening at login.
 

@@ -3,6 +3,8 @@
 <plist version="1.0"><dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>LeadingLight records voice notes and keeps their audio in your pages.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>LeadingLight connects to your paired Mac through Tailscale so agents can work on your Mac.</string>
   <key>UISupportedInterfaceOrientations~ipad</key>
   <array>
     <string>UIInterfaceOrientationPortrait</string>

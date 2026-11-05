@@ -57,7 +57,7 @@ const CodePreview = lazy(() => import("@/components/files/code-editor"));
 type Written = { name: string; tool?: string; output?: Output };
 type Report = NonNullable<TranscriptItem["report"]>;
 type Shown = { items: Item[]; files: Written[]; reports: Report[]; stopped?: boolean; error?: string };
-function turnsOf(chat: Chat): Shown[] {
+export function turnsOf(chat: Chat): Shown[] {
   const out: Shown[] = [];
   const add = (i: Item) => (out.length ? out[out.length - 1].items.push(i) : out.push({ items: [i], files: [], reports: [] }));
   const last = () => out[out.length - 1] ?? (out.push({ items: [], files: [], reports: [] }), out[0]);

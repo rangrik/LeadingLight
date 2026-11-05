@@ -195,12 +195,12 @@ function detail(r: RuntimeRequest): string {
   return s(actions[0]?.command) || s(input.command) || s(input.file_path) || s(input.plan) || rest;
 }
 
-export function ApprovalCard({ request, busy, onChoose, children, ref }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement> }) {
+export function ApprovalCard({ request, busy, onChoose, children, ref, allowedChoices }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement>; allowedChoices?: string[] }) {
   // Codex's "always" is for this very command; Claude's for steps of its kind.
   const exact = "threadId" in ((request.input ?? {}) as object) && request.tool === "Bash";
   const actions = ACTIONS[request.kind === "plan" ? "plan" : "approval"].map((a) =>
     request.kind === "plan" && a.choice === "deny" ? { ...a, choice: "keep_planning" } : exact && a.choice === "allow_always" ? { ...a, description: "Don't ask again for this command while the agent runs" } : a,
-  );
+  ).filter((a) => !allowedChoices || allowedChoices.includes(a.choice));
   const text = detail(request);
   const why = s((request.input as Record<string, unknown> | undefined)?.reason);
   return (

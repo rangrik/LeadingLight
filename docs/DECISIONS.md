@@ -723,3 +723,28 @@ asset paths never leave the device: bounded attachment bundles travel inside enc
 journal events, identified by a hash of MIME type and bytes. Receivers validate before writing
 stable local files. Comparisons use these identities so a different sandbox path does not
 create a conflict. Notes remain usable offline; uploads resume with the foreground app.
+
+## 38. Mobile project agents connect directly to the Mac over Tailscale (2026-11-05)
+
+Paseo and Shipyard both keep agent processes on the host while a phone controls them.
+Shipyard's phone companion already binds to a tailnet address, but cannot start agents and
+grants access to the whole host. We add a separate, off-by-default gateway to our pinned
+runtime: the Mac selects project folders, and a copyable secret grants access only to their
+structured Claude/Codex conversations. Folder identity is checked as well as the project name.
+
+The host verifies its address against the running Tailscale daemon. The native client accepts
+only literal Tailscale addresses over HTTPS, pins the certificate from the connection code,
+has no redirect or proxy path, and keeps its secret in Keychain. It never shares cloud sync
+credentials. The gateway has a
+small route allowlist, forces approval mode for new agents, rejects access escalation, and
+uses durable start IDs plus existing message and answer receipts. Rotation or disabling
+revokes access; it does not cancel work already running. The runtime remains available after
+Mac app quit while sharing is enabled, and the phone reconnects by reading its conversation.
+
+This is project control, not remote page editing: the existing page-agent relay retains its
+separate scope and lifecycle (36). The Mac still handles note tools. Model inference still
+uses the person's chosen provider. Tailscale provides reachability and network encryption,
+not agent hosting. See the [mobile guide](../apps/docs/sync/mobile-agents.md).
+
+References: [Paseo connectivity](https://paseo.sh/docs/connectivity),
+[Shipyard phone API](https://github.com/cosscom/shipyard/blob/main/docs/reference/phone-api.mdx).

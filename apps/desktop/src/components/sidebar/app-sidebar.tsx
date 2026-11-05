@@ -18,6 +18,7 @@ import {
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
+import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openBeside } from "~/lib/panes";
 import { browserView } from "~/lib/space";
@@ -116,6 +117,7 @@ export function AppSidebar({
       </SidebarContent>
       <CloudButton />
       <SidebarFooter>
+        {mobile && <MobileAgentsButton />}
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>
       {!mobile && <UsageButton />}
