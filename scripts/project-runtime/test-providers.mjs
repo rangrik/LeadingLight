@@ -102,6 +102,9 @@ async function prepare(group, fixture) {
     env.CLAUDE_CONFIG_DIR = join(fixture, "claude");
     mkdirSync(env.CLAUDE_CONFIG_DIR, { mode: 0o700 });
     secret(join(env.CLAUDE_CONFIG_DIR, ".claude.json"), JSON.stringify({ hasCompletedOnboarding: true }));
+    // The live check explicitly exercises bypass mode, including the terminal
+    // handoff. Record its first-run consent only in this disposable config.
+    secret(join(env.CLAUDE_CONFIG_DIR, "settings.json"), JSON.stringify({ skipDangerousModePermissionPrompt: true }));
     env.BERTH_LIVE_CLAUDE = "1";
   } else if (group === "acp") {
     executable("opencode");
