@@ -44,6 +44,8 @@ Under the answer are **Insert below**, **Replace** and a copy button.
 
 With a GPT model, Codex's running notes and its final answer show as separate messages, outside the folded work. Copy and **Insert below** always use the final answer.
 
+Formulas render in replies and expanded work. Inline math uses `\(…\)`; display math uses `\[…\]` or a pair of `$$` lines. Single dollar amounts, inline code and ordinary code blocks stay as written. Fenced math blocks also render. An invalid formula shows its source.
+
 ## Put the answer into your note
 
 - **Insert below** adds the answer's paragraphs after the block that held your selection.
@@ -103,6 +105,8 @@ Claude can look things up on the web. The step reads "Searched the web for" and 
 ## GPT through Codex
 
 With Codex installed and signed in, the model picker lists its GPT models under **GPT**. Pick one and ask as usual: the steps are the same as Claude's, and a change asks with the same card.
+
+For note conversations, LeadingLight disables your configured Codex MCP servers and notification commands without changing your settings. If it cannot verify that isolation, it stops before starting the conversation. Project chats use their own tools and settings. If a note turn fails, its error appears in the conversation.
 
 Two things differ with GPT:
 

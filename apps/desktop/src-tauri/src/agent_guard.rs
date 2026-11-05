@@ -20,7 +20,7 @@ pub fn codex_flags(list: &str) -> Result<Vec<(&'static str, String)>, String> {
     if !names.contains("shell_tool")
         || !names.contains("view_image") && !names.contains("view_image_tool")
     {
-        return Err("Update Codex on this Mac before connecting a browser.".into());
+        return Err("Update Codex on this Mac before starting a note conversation.".into());
     }
     let mut flags = Vec::new();
     for name in [

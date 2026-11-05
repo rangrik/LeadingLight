@@ -39,6 +39,8 @@ Each turn lists the files it wrote under it. Click one to open it in a dialog, a
 | **Now** | The file as it is in the folder now, or that it isn't there any more |
 | **Change** | What this turn changed: the lines it took out and put in, marked − and + |
 
+**Then** and **Now** show source files with line numbers and syntax colours from your theme. These previews are read-only: selecting or copying text does not change the file.
+
 If the file has changed since, the dialog says so. A file a later turn deleted shows as deleted, and opens as it last was. A write you declined lists no file.
 
 ## Stop
@@ -165,7 +167,7 @@ A worker started by an agent in **Full access** gets full access too.
 ## When something is wrong
 
 - If the linked folder is gone, the chat says the folder isn't there, and the folder row offers **Relink…**. No agent starts anywhere.
-- If the folder moved and you relink it, the chat carries on in the new place. See [When a folder moves](/ai/projects#when-a-folder-moves).
+- If the folder moved and you relink it, the chat resumes in the new place when the provider can find its history. Claude may report that it cannot find the old conversation: relinking does not move Claude's history from its old folder. See [When a folder moves](/ai/projects#when-a-folder-moves).
 
 ::: info Limits
 - A file deleted by a command the agent runs, such as `rm`, isn't shown as deleted, and a file a command writes isn't listed under its turn. Only files written with the agent's own file tools, and files Codex deletes, are.

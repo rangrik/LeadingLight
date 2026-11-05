@@ -8,12 +8,8 @@ another case on a case-blind disk) is the same folder, and a folder moved
 on its disk keeps it. missing says the path is no folder now; a missing
 folder is no workspace.
 ---
- internal/box/locations.go      | 20 +++++++++++++++++++-
- internal/box/locations_test.go | 22 ++++++++++++++++++++++
- 2 files changed, 41 insertions(+), 1 deletion(-)
-
 diff --git a/internal/box/locations.go b/internal/box/locations.go
-index e8158ed..23aa6e4 100644
+index 9341437..fd93723 100644
 --- a/internal/box/locations.go
 +++ b/internal/box/locations.go
 @@ -17,6 +17,7 @@ import (
@@ -38,7 +34,7 @@ index e8158ed..23aa6e4 100644
  	Worktrees []Worktree `json:"worktrees,omitempty"`
  	// Scripts run when berth creates or removes worktrees here.
  	Scripts Scripts `json:"scripts"`
-@@ -434,9 +440,21 @@ func describe(ctx context.Context, s savedLocation) Location {
+@@ -444,9 +450,20 @@ func describe(ctx context.Context, s savedLocation) Location {
  	if s.Kit != nil && s.Kit.Team != nil {
  		loc.KitTeam = s.Kit.Team.Org
  	}
@@ -52,16 +48,15 @@ index e8158ed..23aa6e4 100644
 +	}
  	repo, trust, _ := repoLayer(s)
  	loc.RepoTrust = trust.State
- 	out, err := git(ctx, "-C", s.Path, "worktree", "list", "--porcelain")
+ 	out, err := worktreeList(ctx, s.Path)
 +	if _, gerr := os.Lstat(filepath.Join(s.Path, ".git")); err == nil && gerr != nil {
-+		// A folder inside a repository, not its root, is a plain folder too.
 +		err = gerr
 +	}
  	if err != nil {
- 		// A folder that isn't a repository is its own one workspace, so its
- 		// sessions, ports, services and browser work as a checkout's do.
+ 		// A plain folder is its own workspace.
+ 		loc.Worktrees = []Worktree{{Name: s.Name, Path: s.Path, Main: true, Title: s.Titles[s.Path]}}
 diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
-index b48226f..30243c9 100644
+index 52ef99d..6589d50 100644
 --- a/internal/box/locations_test.go
 +++ b/internal/box/locations_test.go
 @@ -122,9 +122,31 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {

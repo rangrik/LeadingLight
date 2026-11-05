@@ -1,0 +1,1476 @@
+diff --git a/internal/box/browser.go b/internal/box/browser.go
+index e9cdfe3..d654e3e 100644
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -64,9 +64,9 @@ type Browsers struct {
+ 	// memory).
+ 	MaxTabs int
+ 
+-	launchMu sync.Mutex
++	launchMu contextGate
+ 	mu       sync.Mutex
+-	vpMu     sync.Mutex // viewports.json
++	vpMu     contextGate // viewports.json
+ 	b        *Box
+ 	open     map[string]*chromium // worktree path →
+ 	stop     chan struct{}
+@@ -113,10 +113,10 @@ type browser struct {
+ 
+ 	run       chan struct{} // one command at a time
+ 	runOnce   sync.Once
+-	uploadMu  sync.Mutex
+-	inspectMu sync.Mutex
+-	zoomMu    sync.Mutex
+-	castMu    sync.Mutex // keeps watcher changes and their CDP commands in order
++	uploadMu  contextGate
++	inspectMu contextGate
++	zoomMu    contextGate
++	castMu    contextGate // keeps watcher changes and their CDP commands in order
+ 	busy      atomic.Int32
+ 
+ 	mu          sync.Mutex
+@@ -1440,7 +1440,10 @@ func (br *browser) Eval(ctx context.Context, js string) (BrowserResult, error) {
+ // each new watcher gets the page as it is now first.
+ func (br *browser) Watch(ctx context.Context) (chan frame, func()) {
+ 	ch := make(chan frame, 2)
+-	br.castMu.Lock()
++	if err := br.castMu.LockContext(ctx); err != nil {
++		close(ch)
++		return ch, func() {}
++	}
+ 	br.mu.Lock()
+ 	if br.controls.closed {
+ 		br.mu.Unlock()
+diff --git a/internal/box/browseradmission_test.go b/internal/box/browseradmission_test.go
+new file mode 100644
+index 0000000..038bd41
+--- /dev/null
++++ b/internal/box/browseradmission_test.go
+@@ -0,0 +1,248 @@
++package box
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"os/exec"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++)
++
++// These gates protect operations spanning CDP I/O, not just state access.
++// Exercise the actual entry points with the preceding operation still owning
++// each gate, so a cancelled request cannot proceed or wait for that owner.
++func TestBrowserOperationAdmissionsHonorRequestDeadlines(t *testing.T) {
++	b, wt, _ := browserBox(t, func(http.ResponseWriter, *http.Request) {})
++	before := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	defer func() { EmbeddedFiles = before }()
++	client, peer := net.Pipe()
++	defer peer.Close()
++	conn := newCDP(client, client, nil)
++	defer conn.close()
++	seen := make(chan cdpMessage, 32)
++	go replyCDP(peer, seen)
++	m := b.NewBrowsers(t.TempDir(), 2)
++	c := &chromium{m: m, cdp: conn, cmd: &exec.Cmd{}, path: wt.Path, done: make(chan struct{}), tabs: map[string]*browser{}, sessions: map[string]*browser{}}
++	br := &browser{chromium: c, tab: "qa", session: "qa", target: "target", url: "http://localhost/test", viewport: DefaultViewport, watchers: map[chan frame]struct{}{}}
++	c.tabs[br.tab] = br
++	c.sessions[br.session] = br
++	m.open[wt.Path] = c
++	loc, err := b.Locations.Get(context.Background(), "cal")
++	if err != nil {
++		t.Fatal(err)
++	}
++	request := func(fn func(http.ResponseWriter, *http.Request) error, body string, tabs ...string) func(context.Context) error {
++		return func(ctx context.Context) error {
++			tab := "qa"
++			if len(tabs) > 0 {
++				tab = tabs[0]
++			}
++			r := httptest.NewRequest("POST", "http://box/?tab="+tab, strings.NewReader(body)).WithContext(ctx)
++			r.SetPathValue("loc", "cal")
++			r.SetPathValue("wt", wt.Name)
++			return fn(httptest.NewRecorder(), r)
++		}
++	}
++	area := fmt.Sprintf(`{"x":1,"y":1,"width":10,"height":10,"viewport":{"width":%d,"height":%d},"expectedURL":"http://localhost/test"}`, DefaultViewport.Width, DefaultViewport.Height)
++	for _, tc := range []struct {
++		name string
++		gate sync.Locker
++		call func(context.Context) error
++	}{
++		{"zoom", &br.zoomMu, func(ctx context.Context) error { return br.applyControlZoom(ctx, 2) }},
++		{"developer-command", &br.developer.run, request(b.browserDeveloperCall, `{"method":"DOM.getDocument"}`)},
++		{"developer-decision", &br.developer.run, request(b.browserDeveloperDecide, `{"id":"pending","allow":true}`)},
++		{"inspection", &br.inspectMu, request(b.browserInspect, `{"x":1,"y":1}`)},
++		{"inspection-hover", &br.inspectMu, request(b.browserInspectHover, `{"x":1,"y":1}`)},
++		{"inspection-reveal", &br.inspectMu, request(b.browserInspectReveal, `{"handle":"node"}`)},
++		{"style", &br.inspectMu, request(b.browserStyle, `{"handle":"node","property":"color","value":"red"}`)},
++		{"style-reset", &br.inspectMu, request(b.browserStyleReset, `{"handle":"node"}`)},
++		{"lease-release", &br.inspectMu, request(b.browserReleaseInspectionLease, `{"lease":"lease"}`)},
++		{"upload", &br.uploadMu, request(b.browserUpload, `{"chooser":"pick","files":[]}`)},
++		{"area-inspection", &br.inspectMu, request(b.browserInspectArea, area)},
++		{"area-screencast", &br.castMu, request(b.browserInspectArea, area)},
++		{"area-zoom", &br.zoomMu, request(b.browserInspectArea, area)},
++		{"watch", &br.castMu, func(ctx context.Context) error {
++			ch, stop := br.Watch(ctx)
++			defer stop()
++			if _, ok := <-ch; ok {
++				return errors.New("cancelled watcher received a frame")
++			}
++			return ctx.Err()
++		}},
++		{"resize", &br.castMu, func(ctx context.Context) error { return br.resize(ctx, Viewport{640, 480, 1}) }},
++		{"tab-open", &c.opening, func(ctx context.Context) error { _, err := c.openTab(ctx, "another", DefaultViewport); return err }},
++		{"browser-launch", &m.launchMu, func(ctx context.Context) error { _, err := m.chromiumFor(ctx, loc, wt); return err }},
++		{"profile-clear-launch", &m.launchMu, request(b.browserClearProfile, `{"confirm":true}`)},
++		{"profile-clear-tab", &c.opening, request(b.browserClearProfile, `{"confirm":true}`)},
++		{"viewport-open", &m.vpMu, request(b.browserOpen, `{"size":"800x600"}`)},
++		{"viewport-resize", &m.vpMu, request(b.browserResize, `{"size":"800x600"}`)},
++		{"viewport-status", &m.vpMu, request(b.browserStatus, `{}`, "absent")},
++		{"viewport-controls", &m.vpMu, request(b.browserControlState, `{}`, "absent")},
++		{"viewport-save-open", &m.vpMu, func(ctx context.Context) error {
++			_, err := m.Resize(ctx, wt.Path, "qa", Viewport{800, 600, 1})
++			return err
++		}},
++		{"viewport-save-closed", &m.vpMu, func(ctx context.Context) error {
++			_, err := m.Resize(ctx, "/closed", "qa", Viewport{800, 600, 1})
++			return err
++		}},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			tc.gate.Lock()
++			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
++			defer cancel()
++			done := make(chan error, 1)
++			go func() { done <- tc.call(ctx) }()
++			select {
++			case err := <-done:
++				tc.gate.Unlock()
++				if !errors.Is(err, context.DeadlineExceeded) {
++					t.Fatalf("cancelled operation: %v", err)
++				}
++			case <-time.After(time.Second):
++				tc.gate.Unlock()
++				<-done
++				t.Fatal("request remained queued after its deadline")
++			}
++			if len(br.watchers) != 0 || br.busy.Load() != 0 || br.currentViewport() != DefaultViewport {
++				t.Fatal("cancelled operation changed browser state")
++			}
++			if m.Viewport(wt.Path, "qa") != DefaultViewport || m.Viewport("/closed", "qa") != DefaultViewport {
++				t.Fatal("cancelled operation changed saved viewport")
++			}
++		})
++	}
++	pendingCDP(t, conn)
++	select {
++	case msg := <-seen:
++		t.Fatalf("cancelled request reached Chromium: %+v", msg)
++	default:
++	}
++}
++
++func TestBrowserZoomCancellationDoesNotChangeTheNextZoom(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	conn := newCDP(client, client, nil)
++	defer conn.close()
++	br := &browser{chromium: &chromium{cdp: conn}}
++	received := make(chan struct{})
++	go func() { var buf [4096]byte; peer.Read(buf[:]); close(received) }()
++	active, stop := context.WithCancel(context.Background())
++	defer stop()
++	first := make(chan error, 1)
++	go func() { first <- br.applyControlZoom(active, 1) }()
++	<-received
++	queued, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
++	defer cancel()
++	done := make(chan error, 1)
++	go func() { done <- br.applyControlZoom(queued, 2) }()
++	if err := awaitCDP(t, done); !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("queued zoom: %v", err)
++	}
++	stop()
++	awaitCDP(t, first)
++	br.mu.Lock()
++	zoom := br.controls.zoom
++	br.mu.Unlock()
++	if zoom != 0 {
++		t.Fatalf("cancelled zoom changed page state to %v", zoom)
++	}
++	seen := make(chan cdpMessage, 1)
++	go replyCDP(peer, seen)
++	ctx, end := context.WithTimeout(context.Background(), time.Second)
++	defer end()
++	if err := br.applyControlZoom(ctx, 1.5); err != nil {
++		t.Fatal(err)
++	}
++	if msg := <-seen; msg.Method != "Emulation.setPageScaleFactor" {
++		t.Fatal(msg.Method)
++	}
++	br.mu.Lock()
++	zoom = br.controls.zoom
++	br.mu.Unlock()
++	if zoom != 1.5 {
++		t.Fatalf("next zoom did not apply: %v", zoom)
++	}
++	pendingCDP(t, conn)
++}
++
++// Persisting a resize is part of the admitted operation too. A queued or
++// already-cancelled request must not change what a future browser opens at.
++func TestCancelledResizeKeepsSavedAndLiveViewport(t *testing.T) {
++	m := &Browsers{Dir: t.TempDir(), open: map[string]*chromium{}}
++	const path = "/test/worktree"
++	initial := Viewport{800, 600, 1}
++	if err := m.setViewport(path, "qa", initial); err != nil {
++		t.Fatal(err)
++	}
++	cancelled, stop := context.WithCancel(context.Background())
++	stop()
++	if _, err := m.Resize(cancelled, path, "qa", Viewport{390, 844, 2}); !errors.Is(err, context.Canceled) {
++		t.Fatalf("closed-browser resize: %v", err)
++	}
++	if got := m.Viewport(path, "qa"); got != initial {
++		t.Fatalf("cancelled closed-browser resize saved %+v", got)
++	}
++	client, peer := net.Pipe()
++	defer peer.Close()
++	conn := newCDP(client, client, nil)
++	defer conn.close()
++	c := &chromium{m: m, cdp: conn, path: path, done: make(chan struct{}), tabs: map[string]*browser{}}
++	br := &browser{chromium: c, tab: "qa", viewport: initial, watchers: map[chan frame]struct{}{}}
++	c.tabs[br.tab] = br
++	m.open[path] = c
++	end, err := br.begin(context.Background())
++	if err != nil {
++		t.Fatal(err)
++	}
++	queued, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
++	defer cancel()
++	done := make(chan error, 1)
++	go func() { _, err := m.Resize(queued, path, "qa", Viewport{390, 844, 2}); done <- err }()
++	err = awaitCDP(t, done)
++	end()
++	if !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("queued resize: %v", err)
++	}
++	if got := m.Viewport(path, "qa"); got != initial || br.currentViewport() != initial {
++		t.Fatalf("cancelled resize changed saved/live viewport: %+v / %+v", got, br.currentViewport())
++	}
++	br.castMu.Lock()
++	queuedCast, stopCast := context.WithTimeout(context.Background(), 30*time.Millisecond)
++	defer stopCast()
++	go func() { _, err := m.Resize(queuedCast, path, "qa", Viewport{640, 480, 1}); done <- err }()
++	err = awaitCDP(t, done)
++	br.castMu.Unlock()
++	if !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("queued cast resize: %v", err)
++	}
++	if got := m.Viewport(path, "qa"); got != initial || br.currentViewport() != initial {
++		t.Fatalf("cancelled cast resize changed saved/live viewport: %+v / %+v", got, br.currentViewport())
++	}
++	seen := make(chan cdpMessage, 2)
++	go replyCDP(peer, seen)
++	ctx, finish := context.WithTimeout(context.Background(), time.Second)
++	defer finish()
++	for _, v := range []Viewport{{390, 844, 2}, {1280, 800, 1}} {
++		if _, err := m.Resize(ctx, path, "qa", v); err != nil {
++			t.Fatal(err)
++		}
++		if got := m.Viewport(path, "qa"); got != v || br.currentViewport() != v {
++			t.Fatalf("saved/live viewport disagree: %+v / %+v", got, br.currentViewport())
++		}
++		msg := <-seen
++		if msg.Method != "Emulation.setDeviceMetricsOverride" {
++			t.Fatalf("cancelled resize executed later: %+v", msg)
++		}
++	}
++	pendingCDP(t, conn)
++}
+diff --git a/internal/box/browserannotations_test.go b/internal/box/browserannotations_test.go
+index 9d531f9..60292d3 100644
+--- a/internal/box/browserannotations_test.go
++++ b/internal/box/browserannotations_test.go
+@@ -388,6 +388,10 @@ type annotationCaptureMutation struct {
+ 	session, expression string
+ }
+ 
++func (w *annotationCaptureMutation) SetWriteDeadline(deadline time.Time) error {
++	return w.WriteCloser.(cdpWriter).SetWriteDeadline(deadline)
++}
++
+ func (w *annotationCaptureMutation) Write(raw []byte) (int, error) {
+ 	if w.expression != "" && bytes.Contains(raw, []byte(`"method":"Page.captureScreenshot"`)) {
+ 		command, _ := json.Marshal(map[string]any{"id": 0, "sessionId": w.session, "method": "Runtime.evaluate", "params": map[string]any{"expression": w.expression}})
+diff --git a/internal/box/browserapi.go b/internal/box/browserapi.go
+index f6ecd91..7b39924 100644
+--- a/internal/box/browserapi.go
++++ b/internal/box/browserapi.go
+@@ -105,7 +105,11 @@ func (b *Box) browserOpen(w http.ResponseWriter, r *http.Request) error {
+ 	}
+ 	var size *Viewport
+ 	if req.Size != "" || req.Scale != "" {
+-		v, err := b.Browsers.Viewport(wt.Path, tab).Resolve(req.Size, req.Scale)
++		current, err := b.Browsers.viewport(r.Context(), wt.Path, tab)
++		if err != nil {
++			return err
++		}
++		v, err := current.Resolve(req.Size, req.Scale)
+ 		if err != nil {
+ 			return badRequest("%v", err)
+ 		}
+@@ -187,7 +191,11 @@ func (b *Box) browserResize(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
+-	v, err := b.Browsers.Viewport(wt.Path, tab).Resolve(req.Size, req.Scale)
++	current, err := b.Browsers.viewport(r.Context(), wt.Path, tab)
++	if err != nil {
++		return err
++	}
++	v, err := current.Resolve(req.Size, req.Scale)
+ 	if err != nil {
+ 		return badRequest("%v", err)
+ 	}
+@@ -346,7 +354,10 @@ func (b *Box) browserStatus(w http.ResponseWriter, r *http.Request) error {
+ 	}
+ 	if br == nil {
+ 		// Why one can't start, if it can't: cheap, without starting it.
+-		v := b.Browsers.Viewport(wt.Path, tab)
++		v, err := b.Browsers.viewport(r.Context(), wt.Path, tab)
++		if err != nil {
++			return err
++		}
+ 		what := "no browser open"
+ 		if c != nil {
+ 			what = "no tab " + tab + " open"
+diff --git a/internal/box/browsercontrols.go b/internal/box/browsercontrols.go
+index 5d0e70f..14ed4d6 100644
+--- a/internal/box/browsercontrols.go
++++ b/internal/box/browsercontrols.go
+@@ -214,7 +214,11 @@ func (b *Box) browserControlState(w http.ResponseWriter, r *http.Request) error
+ 	}
+ 	br := b.Browsers.Lookup(wt.Path, tab)
+ 	if br == nil {
+-		writeJSON(w, BrowserControlState{Zoom: 1, RefusedHosts: []string{}, Viewport: b.Browsers.Viewport(wt.Path, tab)})
++		v, err := b.Browsers.viewport(r.Context(), wt.Path, tab)
++		if err != nil {
++			return err
++		}
++		writeJSON(w, BrowserControlState{Zoom: 1, RefusedHosts: []string{}, Viewport: v})
+ 		return nil
+ 	}
+ 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+@@ -300,19 +304,37 @@ func (b *Box) browserNavigate(w http.ResponseWriter, r *http.Request) error {
+ 		br.controls.navCancel()
+ 	}
+ 	navigationContext, navigationCancel := context.WithCancel(context.Background())
++	sendContext, sendCancel := context.WithCancel(ctx)
+ 	br.controls.navSequence++
+ 	sequence := br.controls.navSequence
+-	br.controls.navCancel = navigationCancel
++	br.controls.navCancel = func() {
++		sendCancel()
++		navigationCancel()
++	}
+ 	br.controls.failure = ""
+ 	br.controls.loading = req.Action != "stop"
+ 	br.mu.Unlock()
+-	sent := make(chan struct{})
++	// Only a fully sent navigation may outlive this request. Superseding or
++	// closing the tab must also cancel a navigation still queued to write.
++	reply := make(chan cdpReply, 1)
++	id, err := br.cdp.send(sendContext, br.session, method, params, reply)
++	sendCancel()
++	if err != nil {
++		navigationCancel()
++		br.mu.Lock()
++		if !br.controls.closed && sequence == br.controls.navSequence {
++			br.controls.navCancel = nil
++			br.controls.loading = false
++		}
++		br.mu.Unlock()
++		return err
++	}
+ 	go func() {
+ 		defer navigationCancel()
+ 		var nav struct {
+ 			ErrorText string `json:"errorText"`
+ 		}
+-		err := br.cdp.callNotify(navigationContext, br.session, method, params, &nav, sent)
++		err := br.cdp.awaitReply(navigationContext, method, id, reply, &nav)
+ 		br.mu.Lock()
+ 		defer br.mu.Unlock()
+ 		if br.controls.closed || sequence != br.controls.navSequence {
+@@ -330,7 +352,6 @@ func (b *Box) browserNavigate(w http.ResponseWriter, r *http.Request) error {
+ 			br.controls.loading = false
+ 		}
+ 	}()
+-	<-sent
+ 	writeJSON(w, map[string]bool{"ok": true})
+ 	return nil
+ }
+@@ -520,7 +541,9 @@ func (b *Box) browserZoom(w http.ResponseWriter, r *http.Request) error {
+ }
+ 
+ func (br *browser) applyControlZoom(ctx context.Context, factor float64) error {
+-	br.zoomMu.Lock()
++	if err := br.zoomMu.LockContext(ctx); err != nil {
++		return err
++	}
+ 	defer br.zoomMu.Unlock()
+ 	br.mu.Lock()
+ 	if factor == 0 {
+@@ -904,7 +927,9 @@ func (b *Box) browserUpload(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
+-	br.uploadMu.Lock()
++	if err := br.uploadMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.uploadMu.Unlock()
+ 	br.mu.Lock()
+ 	if br.controls.closed || req.Chooser == "" || req.Chooser != br.controls.chooserID {
+@@ -1415,10 +1440,14 @@ func (b *Box) browserClearProfile(w http.ResponseWriter, r *http.Request) error
+ 	if err != nil {
+ 		return err
+ 	}
+-	b.Browsers.launchMu.Lock()
++	if err := b.Browsers.launchMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer b.Browsers.launchMu.Unlock()
+ 	if c := b.Browsers.lookupChromium(wt.Path); c != nil {
+-		c.opening.Lock()
++		if err := c.opening.LockContext(r.Context()); err != nil {
++			return err
++		}
+ 		defer c.opening.Unlock()
+ 		for _, br := range c.list() {
+ 			if (br.tab != "" && !userBrowserTab(br.tab)) || (br.tab == "" && br.tabStatus().used()) {
+diff --git a/internal/box/browserdeveloper.go b/internal/box/browserdeveloper.go
+index 5f4eba9..8a07049 100644
+--- a/internal/box/browserdeveloper.go
++++ b/internal/box/browserdeveloper.go
+@@ -22,7 +22,7 @@ const developerResultLimit = 1 << 20
+ 
+ type browserDeveloper struct {
+ 	mu                                 sync.Mutex
+-	run                                sync.Mutex
++	run                                contextGate
+ 	id, origin, reason, state, session string
+ 	context                            string
+ 	epoch                              uint64
+@@ -320,7 +320,9 @@ func (b *Box) browserDeveloperDecide(w http.ResponseWriter, r *http.Request) err
+ 		return err
+ 	}
+ 	d := &br.developer
+-	d.run.Lock()
++	if err := d.run.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer d.run.Unlock()
+ 	s := br.developerStatus()
+ 	if !s.Enabled || s.State != "pending" || s.ID != req.ID || req.ID == "" {
+@@ -428,7 +430,9 @@ func (b *Box) browserDeveloperCall(w http.ResponseWriter, r *http.Request) error
+ 		return err
+ 	}
+ 	d := &br.developer
+-	d.run.Lock()
++	if err := d.run.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer d.run.Unlock()
+ 	s := br.developerStatus()
+ 	if s.State != "allowed" {
+diff --git a/internal/box/browserinspect.go b/internal/box/browserinspect.go
+index 0c5e13d..db86c5a 100644
+--- a/internal/box/browserinspect.go
++++ b/internal/box/browserinspect.go
+@@ -227,7 +227,9 @@ func (b *Box) browserInspectPoint(w http.ResponseWriter, r *http.Request, hover
+ 	if req.X >= float64(v.Width) || req.Y >= float64(v.Height) {
+ 		return badRequest("choose a point inside the page")
+ 	}
+-	br.inspectMu.Lock()
++	if err := br.inspectMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.inspectMu.Unlock()
+ 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+ 	defer cancel()
+@@ -313,7 +315,9 @@ func (b *Box) browserInspectReveal(w http.ResponseWriter, r *http.Request) error
+ 	if err != nil {
+ 		return err
+ 	}
+-	br.inspectMu.Lock()
++	if err := br.inspectMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.inspectMu.Unlock()
+ 	br.mu.Lock()
+ 	node := br.controls.inspected[req.Handle]
+@@ -369,7 +373,9 @@ func (b *Box) browserStyleChange(w http.ResponseWriter, r *http.Request, reset b
+ 	if err != nil {
+ 		return err
+ 	}
+-	br.inspectMu.Lock()
++	if err := br.inspectMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.inspectMu.Unlock()
+ 	br.mu.Lock()
+ 	node := br.controls.inspected[req.Handle]
+diff --git a/internal/box/browserinspectarea.go b/internal/box/browserinspectarea.go
+index 9469bbe..dc4433a 100644
+--- a/internal/box/browserinspectarea.go
++++ b/internal/box/browserinspectarea.go
+@@ -46,11 +46,17 @@ func (b *Box) browserInspectArea(w http.ResponseWriter, r *http.Request) error {
+ 	if err != nil {
+ 		return err
+ 	}
+-	br.inspectMu.Lock()
++	if err := br.inspectMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.inspectMu.Unlock()
+-	br.castMu.Lock()
++	if err := br.castMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.castMu.Unlock()
+-	br.zoomMu.Lock()
++	if err := br.zoomMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.zoomMu.Unlock()
+ 	br.mu.Lock()
+ 	epoch, url, viewport, closed := br.controls.inspectEpoch, br.url, br.viewport, br.controls.closed
+diff --git a/internal/box/browserinspectlease.go b/internal/box/browserinspectlease.go
+index d67a2cf..40d486b 100644
+--- a/internal/box/browserinspectlease.go
++++ b/internal/box/browserinspectlease.go
+@@ -67,7 +67,9 @@ func (b *Box) browserReleaseInspectionLease(w http.ResponseWriter, r *http.Reque
+ 	if err != nil {
+ 		return err
+ 	}
+-	br.inspectMu.Lock()
++	if err := br.inspectMu.LockContext(r.Context()); err != nil {
++		return err
++	}
+ 	defer br.inspectMu.Unlock()
+ 	br.mu.Lock()
+ 	delete(br.controls.inspectLeases, req.Lease)
+diff --git a/internal/box/browsernavigationcancel_test.go b/internal/box/browsernavigationcancel_test.go
+new file mode 100644
+index 0000000..7bc4ddf
+--- /dev/null
++++ b/internal/box/browsernavigationcancel_test.go
+@@ -0,0 +1,172 @@
++package box
++
++import (
++	"bufio"
++	"context"
++	"encoding/json"
++	"errors"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++	"time"
++)
++
++func navigationCancellationFixture(t *testing.T) (*browser, *observedCDPWriter, net.Conn, func(context.Context, string) error) {
++	t.Helper()
++	b, wt, _ := browserBox(t, func(http.ResponseWriter, *http.Request) {})
++	client, peer := net.Pipe()
++	writer := &observedCDPWriter{Conn: client, started: make(chan struct{})}
++	conn := newCDP(writer, client, nil)
++	t.Cleanup(func() { conn.close(); peer.Close() })
++	m := b.NewBrowsers(t.TempDir(), 1)
++	c := &chromium{m: m, cdp: conn, path: wt.Path, done: make(chan struct{}), tabs: map[string]*browser{}, sessions: map[string]*browser{}}
++	br := &browser{chromium: c, tab: "qa", session: "qa", viewport: DefaultViewport}
++	c.tabs[br.tab] = br
++	c.sessions[br.session] = br
++	m.open[wt.Path] = c
++	return br, writer, peer, func(ctx context.Context, body string) error {
++		r := httptest.NewRequest("POST", "http://box/?tab=qa", strings.NewReader(body)).WithContext(ctx)
++		r.SetPathValue("loc", "cal")
++		r.SetPathValue("wt", wt.Name)
++		return b.browserNavigate(httptest.NewRecorder(), r)
++	}
++}
++
++func awaitNavigationState(t *testing.T, br *browser, test func(browserControls) bool) {
++	t.Helper()
++	deadline := time.Now().Add(time.Second)
++	for {
++		br.mu.Lock()
++		ok := test(br.controls)
++		br.mu.Unlock()
++		if ok {
++			return
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("navigation did not reach expected state")
++		}
++		time.Sleep(time.Millisecond)
++	}
++}
++
++func TestBrowserNavigationCancelsBeforeItIsSent(t *testing.T) {
++	for _, queued := range []bool{false, true} {
++		name := "blocked-write"
++		if queued {
++			name = "queued-behind-another-tab"
++		}
++		t.Run(name, func(t *testing.T) {
++			br, writer, peer, navigate := navigationCancellationFixture(t)
++			active, stop := context.WithCancel(context.Background())
++			defer stop()
++			first := make(chan error, 1)
++			if queued {
++				go func() { first <- br.cdp.call(active, "another-tab", "blocked", nil, nil) }()
++				<-writer.started
++			}
++			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
++			defer cancel()
++			done := make(chan error, 1)
++			go func() { done <- navigate(ctx, `{"action":"reload"}`) }()
++			if err := awaitCDP(t, done); !errors.Is(err, context.DeadlineExceeded) {
++				t.Fatalf("unsent navigation: %v", err)
++			}
++			br.mu.Lock()
++			loading, hasCancel := br.controls.loading, br.controls.navCancel != nil
++			br.mu.Unlock()
++			if loading || hasCancel {
++				t.Fatal("cancelled unsent navigation retained loading state")
++			}
++			if queued {
++				stop()
++				if err := awaitCDP(t, first); !errors.Is(err, context.Canceled) {
++					t.Fatal(err)
++				}
++			}
++			pendingCDP(t, br.cdp)
++			seen := make(chan cdpMessage, 2)
++			go replyCDP(peer, seen)
++			if err := navigate(context.Background(), `{"action":"stop"}`); err != nil {
++				t.Fatal(err)
++			}
++			if msg := <-seen; msg.Method != "Page.stopLoading" {
++				t.Fatalf("cancelled navigation executed later: %+v", msg)
++			}
++			awaitNavigationState(t, br, func(s browserControls) bool { return s.navCancel == nil })
++			pendingCDP(t, br.cdp)
++		})
++	}
++}
++
++func TestBrowserSentNavigationOutlivesRequestCancellation(t *testing.T) {
++	br, _, peer, navigate := navigationCancellationFixture(t)
++	message := make(chan cdpMessage, 1)
++	go func() {
++		raw, err := bufio.NewReader(peer).ReadBytes(0)
++		if err != nil {
++			return
++		}
++		var msg cdpMessage
++		json.Unmarshal(raw[:len(raw)-1], &msg)
++		message <- msg
++	}()
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	if err := navigate(ctx, `{"action":"reload"}`); err != nil {
++		t.Fatal(err)
++	}
++	msg := <-message
++	cancel()
++	// The command has been accepted; its reply still owns the current
++	// navigation even when the HTTP request is already gone.
++	response, _ := json.Marshal(map[string]any{"id": msg.ID, "result": map[string]string{"errorText": "net::ERR_CONNECTION_REFUSED"}})
++	if _, err := peer.Write(append(response, 0)); err != nil {
++		t.Fatal(err)
++	}
++	awaitNavigationState(t, br, func(s browserControls) bool {
++		return s.navCancel == nil && !s.loading && s.failure == "net::ERR_CONNECTION_REFUSED"
++	})
++	pendingCDP(t, br.cdp)
++}
++
++func TestBrowserSupersededNavigationCannotWriteOrClearItsReplacement(t *testing.T) {
++	br, _, peer, navigate := navigationCancellationFixture(t)
++	br.cdp.writeMu.Lock()
++	locked := true
++	defer func() {
++		if locked {
++			br.cdp.writeMu.Unlock()
++		}
++	}()
++	first := make(chan error, 1)
++	go func() { first <- navigate(context.Background(), `{"action":"reload"}`) }()
++	awaitNavigationState(t, br, func(s browserControls) bool { return s.navSequence == 1 })
++	second := make(chan error, 1)
++	go func() {
++		second <- navigate(context.Background(), `{"action":"open","url":"http://localhost/replacement"}`)
++	}()
++	awaitNavigationState(t, br, func(s browserControls) bool { return s.navSequence == 2 })
++	if err := awaitCDP(t, first); !errors.Is(err, context.Canceled) {
++		t.Fatalf("superseded navigation: %v", err)
++	}
++	br.mu.Lock()
++	loading, hasCancel := br.controls.loading, br.controls.navCancel != nil
++	br.mu.Unlock()
++	if !loading || !hasCancel {
++		t.Fatal("old navigation cleared its replacement's state")
++	}
++	seen := make(chan cdpMessage, 2)
++	go replyCDP(peer, seen)
++	br.cdp.writeMu.Unlock()
++	locked = false
++	if err := awaitCDP(t, second); err != nil {
++		t.Fatal(err)
++	}
++	if msg := <-seen; msg.Method != "Page.navigate" || !strings.Contains(string(msg.Params), "/replacement") {
++		t.Fatalf("superseded navigation reached Chromium: %+v", msg)
++	}
++	awaitNavigationState(t, br, func(s browserControls) bool { return s.navCancel == nil })
++	pendingCDP(t, br.cdp)
++}
+diff --git a/internal/box/browsertabs.go b/internal/box/browsertabs.go
+index 0a6aaee..c7385e5 100644
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -53,7 +53,7 @@ type chromium struct {
+ 	started    time.Time
+ 	done       chan struct{}
+ 
+-	opening        sync.Mutex // one tab opens at a time
++	opening        contextGate // one tab opens at a time
+ 	defaultContext string
+ 	popupSource    *browser
+ 	popupSourceAt  time.Time
+@@ -108,12 +108,18 @@ func (m *Browsers) get(ctx context.Context, loc Location, wt Worktree, tab strin
+ 		br.touch()
+ 		return br, nil
+ 	}
+-	return c.openTab(ctx, tab, m.Viewport(wt.Path, tab))
++	v, err := m.viewport(ctx, wt.Path, tab)
++	if err != nil {
++		return nil, err
++	}
++	return c.openTab(ctx, tab, v)
+ }
+ 
+ // chromiumFor returns the worktree's browser, starting one if need be.
+ func (m *Browsers) chromiumFor(ctx context.Context, loc Location, wt Worktree) (*chromium, error) {
+-	m.launchMu.Lock()
++	if err := m.launchMu.LockContext(ctx); err != nil {
++		return nil, err
++	}
+ 	defer m.launchMu.Unlock()
+ 	m.mu.Lock()
+ 	if c := m.open[wt.Path]; c != nil {
+@@ -170,7 +176,11 @@ func (m *Browsers) launch(ctx context.Context, loc Location, wt Worktree) (*chro
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	c, err := m.start(ctx, bin, px.Addr(), wt.Path, m.Viewport(wt.Path, ""))
++	v, err := m.viewport(ctx, wt.Path, "")
++	if err != nil {
++		return nil, err
++	}
++	c, err := m.start(ctx, bin, px.Addr(), wt.Path, v)
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -354,7 +364,9 @@ func (c *chromium) attachMain(ctx context.Context, v Viewport) error {
+ // minute makes room; else it is refused, rather than take a page another
+ // agent is on.
+ func (c *chromium) openTab(ctx context.Context, name string, v Viewport) (*browser, error) {
+-	c.opening.Lock()
++	if err := c.opening.LockContext(ctx); err != nil {
++		return nil, err
++	}
+ 	defer c.opening.Unlock()
+ 	if br := c.lookup(name); br != nil {
+ 		return br, nil
+diff --git a/internal/box/browserviewport.go b/internal/box/browserviewport.go
+index 2c7a13b..db3af89 100644
+--- a/internal/box/browserviewport.go
++++ b/internal/box/browserviewport.go
+@@ -199,23 +199,42 @@ func viewportKey(path, tab string) string {
+ // Viewport is the size a worktree's tab has, or opens at: a named tab
+ // without one of its own opens at the main tab's.
+ func (m *Browsers) Viewport(path, tab string) Viewport {
+-	m.vpMu.Lock()
++	v, _ := m.viewport(context.Background(), path, tab)
++	return v
++}
++
++func (m *Browsers) viewport(ctx context.Context, path, tab string) (Viewport, error) {
++	if err := m.vpMu.LockContext(ctx); err != nil {
++		return Viewport{}, err
++	}
+ 	defer m.vpMu.Unlock()
+ 	all := m.viewports()
++	if err := ctx.Err(); err != nil {
++		return Viewport{}, err
++	}
+ 	if v, ok := all[viewportKey(path, tab)]; ok && v.Check() == nil {
+-		return v
++		return v, nil
+ 	}
+ 	if v, ok := all[viewportKey(path, "")]; ok && v.Check() == nil {
+-		return v
++		return v, nil
+ 	}
+-	return DefaultViewport
++	return DefaultViewport, nil
+ }
+ 
+ // setViewport keeps a tab's size; the default is kept as no entry.
+ func (m *Browsers) setViewport(path, tab string, v Viewport) error {
+-	m.vpMu.Lock()
++	return m.saveViewport(context.Background(), path, tab, v)
++}
++
++func (m *Browsers) saveViewport(ctx context.Context, path, tab string, v Viewport) error {
++	if err := m.vpMu.LockContext(ctx); err != nil {
++		return err
++	}
+ 	defer m.vpMu.Unlock()
+ 	all := m.viewports()
++	if err := ctx.Err(); err != nil {
++		return err
++	}
+ 	key := viewportKey(path, tab)
+ 	if v == DefaultViewport {
+ 		if _, ok := all[key]; !ok {
+@@ -258,28 +277,43 @@ func (m *Browsers) Resize(ctx context.Context, path, tab string, v Viewport) (*b
+ 	if err := v.Check(); err != nil {
+ 		return nil, err
+ 	}
+-	if err := m.setViewport(path, tab, v); err != nil {
++	if err := ctx.Err(); err != nil {
+ 		return nil, err
+ 	}
+ 	br := m.Lookup(path, tab)
+ 	if br == nil {
+-		return nil, nil
++		return nil, m.saveViewport(ctx, path, tab, v)
+ 	}
+-	return br, br.resize(ctx, v)
++	return br, br.resizeAndSave(ctx, v, func() error { return m.saveViewport(ctx, path, tab, v) })
+ }
+ 
+ // resize applies a size to the running page: its viewport and scale, the
+ // screencast's frames, and a fresh frame for whoever watches.
+ func (br *browser) resize(ctx context.Context, v Viewport) error {
++	return br.resizeAndSave(ctx, v, nil)
++}
++
++// A saved preference belongs to the same admitted operation as the live
++// resize: cancelled waiters cannot save, and concurrent saves stay in order.
++func (br *browser) resizeAndSave(ctx context.Context, v Viewport, save func() error) error {
+ 	done, err := br.begin(ctx)
+ 	if err != nil {
+ 		return err
+ 	}
+ 	defer done()
++	if err := br.castMu.LockContext(ctx); err != nil {
++		return err
++	}
++	if save != nil {
++		if err := save(); err != nil {
++			br.castMu.Unlock()
++			return err
++		}
++	}
+ 	if err := br.applyViewport(ctx, v); err != nil {
++		br.castMu.Unlock()
+ 		return err
+ 	}
+-	br.castMu.Lock()
+ 	br.mu.Lock()
+ 	casting := br.casting
+ 	var watchers []chan frame
+diff --git a/internal/box/cdp.go b/internal/box/cdp.go
+index a84fa18..f602c47 100644
+--- a/internal/box/cdp.go
++++ b/internal/box/cdp.go
+@@ -8,6 +8,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"sync"
++	"time"
+ )
+ 
+ // A Chrome DevTools Protocol client over --remote-debugging-pipe: Chromium
+@@ -16,9 +17,17 @@ import (
+ // other process on the box (an agent included) to attach to: berthd holds
+ // the only handle, and every output an agent sees goes through its caps.
+ 
++type cdpWriter interface {
++	io.WriteCloser
++	SetWriteDeadline(time.Time) error
++}
++
+ type cdpConn struct {
+-	w io.WriteCloser
+-	r *bufio.Reader
++	w         cdpWriter
++	r         *bufio.Reader
++	reader    io.Closer
++	writeMu   contextGate
++	closeOnce sync.Once
+ 
+ 	mu        sync.Mutex
+ 	next      int64
+@@ -46,8 +55,9 @@ type cdpMessage struct {
+ 	} `json:"error,omitempty"`
+ }
+ 
+-func newCDP(w io.WriteCloser, r io.Reader, onEvent func(method, session string, params json.RawMessage)) *cdpConn {
++func newCDP(w cdpWriter, r io.Reader, onEvent func(method, session string, params json.RawMessage)) *cdpConn {
+ 	c := &cdpConn{w: w, r: bufio.NewReaderSize(r, 1<<16), pending: map[int64]chan cdpReply{}, onEvent: onEvent, closed: make(chan struct{})}
++	c.reader, _ = r.(io.Closer)
+ 	go c.readLoop()
+ 	return c
+ }
+@@ -56,18 +66,7 @@ func newCDP(w io.WriteCloser, r io.Reader, onEvent func(method, session string,
+ const maxCDPMessage = 64 << 20
+ 
+ func (c *cdpConn) readLoop() {
+-	defer func() {
+-		c.mu.Lock()
+-		if c.err == nil {
+-			c.err = errors.New("the browser closed")
+-		}
+-		for id, ch := range c.pending {
+-			ch <- cdpReply{Err: c.err}
+-			delete(c.pending, id)
+-		}
+-		c.mu.Unlock()
+-		close(c.closed)
+-	}()
++	defer c.stop(errors.New("the browser closed"))
+ 	for {
+ 		raw, err := c.r.ReadBytes(0)
+ 		if err != nil {
+@@ -111,12 +110,41 @@ func (c *cdpConn) readLoop() {
+ // call sends a command (to session, or the browser when "") and waits for
+ // its reply, or ctx.
+ func (c *cdpConn) call(ctx context.Context, session, method string, params any, out any) error {
+-	return c.callNotify(ctx, session, method, params, out, nil)
++	ch := make(chan cdpReply, 1)
++	id, err := c.send(ctx, session, method, params, ch)
++	if err != nil {
++		return err
++	}
++	return c.awaitReply(ctx, method, id, ch, out)
+ }
+ 
+-// Navigation can outlive its HTTP request once Chromium has received the command.
+-func (c *cdpConn) callNotify(ctx context.Context, session, method string, params any, out any, sent chan<- struct{}) error {
+-	ch := make(chan cdpReply, 1)
++// Keeping send and reply separate lets navigation detach from its HTTP
++// request only after Chromium has received the complete command.
++func (c *cdpConn) awaitReply(ctx context.Context, method string, id int64, ch <-chan cdpReply, out any) error {
++	defer c.forget(id)
++	select {
++	case r := <-ch:
++		if r.Err != nil {
++			return fmt.Errorf("%s: %w", method, r.Err)
++		}
++		if out != nil && len(r.Result) > 0 {
++			return json.Unmarshal(r.Result, out)
++		}
++		return nil
++	case <-ctx.Done():
++		return ctx.Err()
++	case <-c.closed:
++		return errors.New("the browser closed")
++	}
++}
++
++// send owns the pipe only until this whole frame has been written. Waiting
++// for another writer must not hold the reply map or outlive the request.
++func (c *cdpConn) send(ctx context.Context, session, method string, params any, ch chan cdpReply) (int64, error) {
++	if err := c.writeMu.LockContext(ctx); err != nil {
++		return 0, err
++	}
++	defer c.writeMu.Unlock()
+ 	c.mu.Lock()
+ 	if c.err != nil || ctx.Err() != nil {
+ 		err := c.err
+@@ -124,14 +152,13 @@ func (c *cdpConn) callNotify(ctx context.Context, session, method string, params
+ 			err = ctx.Err()
+ 		}
+ 		c.mu.Unlock()
+-		if sent != nil {
+-			close(sent)
+-		}
+-		return err
++		return 0, err
+ 	}
+ 	c.next++
+ 	id := c.next
+ 	c.pending[id] = ch
++	w := c.w
++	c.mu.Unlock()
+ 	msg := map[string]any{"id": id, "method": method}
+ 	if params != nil {
+ 		msg["params"] = params
+@@ -139,41 +166,82 @@ func (c *cdpConn) callNotify(ctx context.Context, session, method string, params
+ 	if session != "" {
+ 		msg["sessionId"] = session
+ 	}
+-	b, _ := json.Marshal(msg)
+-	_, err := c.w.Write(append(b, 0))
+-	c.mu.Unlock()
+-	if sent != nil {
+-		close(sent)
+-	}
++	b, err := json.Marshal(msg)
+ 	if err != nil {
+-		return err
++		c.forget(id)
++		return 0, err
+ 	}
+-	select {
+-	case r := <-ch:
+-		if r.Err != nil {
+-			return fmt.Errorf("%s: %w", method, r.Err)
+-		}
+-		if out != nil && len(r.Result) > 0 {
+-			return json.Unmarshal(r.Result, out)
++	b = append(b, 0)
++	n, err := writeCDP(ctx, w, b)
++	if err != nil {
++		c.forget(id)
++		// A partial JSON frame cannot be followed by another command. Close
++		// the pipe so cancelled bytes can never become an executable frame.
++		// A cancelled write that sent nothing leaves the connection usable.
++		if n > 0 && n < len(b) || ctx.Err() == nil {
++			c.stop(fmt.Errorf("writing CDP command: %w", err))
+ 		}
+-		return nil
+-	case <-ctx.Done():
+-		c.mu.Lock()
+-		delete(c.pending, id)
+-		c.mu.Unlock()
+-		return ctx.Err()
+-	case <-c.closed:
+-		return errors.New("the browser closed")
++		return 0, err
+ 	}
++	return id, nil
++}
++
++func writeCDP(ctx context.Context, w cdpWriter, b []byte) (int, error) {
++	if err := ctx.Err(); err != nil {
++		return 0, err
++	}
++	if err := w.SetWriteDeadline(time.Time{}); err != nil {
++		return 0, err
++	}
++	interrupted := make(chan struct{})
++	stop := context.AfterFunc(ctx, func() {
++		w.SetWriteDeadline(time.Now())
++		close(interrupted)
++	})
++	n, err := w.Write(b)
++	if !stop() {
++		<-interrupted
++	}
++	if resetErr := w.SetWriteDeadline(time.Time{}); err == nil {
++		err = resetErr
++	}
++	if err != nil && ctx.Err() != nil {
++		err = ctx.Err()
++	}
++	if err == nil && n != len(b) {
++		err = io.ErrShortWrite
++	}
++	return n, err
++}
++
++func (c *cdpConn) forget(id int64) {
++	c.mu.Lock()
++	delete(c.pending, id)
++	c.mu.Unlock()
+ }
+ 
+ func (c *cdpConn) close() {
++	c.stop(errors.New("closed"))
++}
++
++func (c *cdpConn) stop(err error) {
+ 	c.mu.Lock()
+ 	if c.err == nil {
+-		c.err = errors.New("closed")
++		c.err = err
+ 	}
++	for id, ch := range c.pending {
++		ch <- cdpReply{Err: c.err}
++		delete(c.pending, id)
++	}
++	w := c.w
+ 	c.mu.Unlock()
+-	c.w.Close()
++	c.closeOnce.Do(func() {
++		close(c.closed)
++		w.Close()
++		if c.reader != nil {
++			c.reader.Close()
++		}
++	})
+ }
+ 
+ // A separate session keeps developer domain state away from the browser controls.
+diff --git a/internal/box/cdpcancel_test.go b/internal/box/cdpcancel_test.go
+new file mode 100644
+index 0000000..5cf8db0
+--- /dev/null
++++ b/internal/box/cdpcancel_test.go
+@@ -0,0 +1,289 @@
++package box
++
++import (
++	"bufio"
++	"context"
++	"encoding/json"
++	"errors"
++	"io"
++	"net"
++	"os"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++)
++
++type observedCDPWriter struct {
++	net.Conn
++	once    sync.Once
++	started chan struct{}
++}
++
++func (w *observedCDPWriter) Write(p []byte) (int, error) {
++	w.once.Do(func() { close(w.started) })
++	return w.Conn.Write(p)
++}
++func pendingCDP(t *testing.T, c *cdpConn) {
++	t.Helper()
++	c.mu.Lock()
++	defer c.mu.Unlock()
++	if len(c.pending) != 0 {
++		t.Fatalf("pending replies leaked: %d", len(c.pending))
++	}
++}
++func awaitCDP(t *testing.T, done <-chan error) error {
++	t.Helper()
++	select {
++	case err := <-done:
++		return err
++	case <-time.After(time.Second):
++		t.Fatal("CDP operation ignored cancellation")
++		return nil
++	}
++}
++func replyCDP(peer net.Conn, seen chan<- cdpMessage) {
++	r := bufio.NewReader(peer)
++	for {
++		raw, err := r.ReadBytes(0)
++		if err != nil {
++			return
++		}
++		var msg cdpMessage
++		if json.Unmarshal(raw[:len(raw)-1], &msg) != nil {
++			return
++		}
++		seen <- msg
++		raw, _ = json.Marshal(map[string]any{"id": msg.ID, "result": map[string]any{"result": map[string]any{"value": "ready"}}})
++		if _, err = peer.Write(append(raw, 0)); err != nil {
++			return
++		}
++	}
++}
++
++// No reader means no bytes were sent: cancellation must release the writer,
++// remove its pending reply, and leave the connection usable for another tab.
++func TestCDPCancelledWriteAndQueuedTabNeverExecuteLater(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	writer := &observedCDPWriter{Conn: client, started: make(chan struct{})}
++	c := newCDP(writer, client, nil)
++	defer c.close()
++	firstCtx, stopFirst := context.WithCancel(context.Background())
++	defer stopFirst()
++	first := make(chan error, 1)
++	go func() { first <- c.call(firstCtx, "first-tab", "blocked", nil, nil) }()
++	<-writer.started
++	queuedCtx, stopQueued := context.WithTimeout(context.Background(), 30*time.Millisecond)
++	defer stopQueued()
++	queued := make(chan error, 1)
++	go func() { queued <- c.call(queuedCtx, "second-tab", "cancelled", nil, nil) }()
++	if err := awaitCDP(t, queued); !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("queued command: %v", err)
++	}
++	stopFirst()
++	if err := awaitCDP(t, first); !errors.Is(err, context.Canceled) {
++		t.Fatalf("active command: %v", err)
++	}
++	pendingCDP(t, c)
++	seen := make(chan cdpMessage, 4)
++	go replyCDP(peer, seen)
++	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++	defer cancel()
++	for _, session := range []string{"first-tab", "second-tab"} {
++		if err := c.call(ctx, session, "ready", nil, nil); err != nil {
++			t.Fatal(err)
++		}
++		msg := <-seen
++		if msg.Method != "ready" || msg.SessionID != session {
++			t.Fatalf("cancelled bytes executed later: %+v", msg)
++		}
++	}
++	pendingCDP(t, c)
++}
++
++// A partial command cannot be repaired or followed by more JSON: closing the
++// pipe is the only way to keep its cancelled fragment from executing later.
++func TestCDPCancellationClosesAPartialFrame(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	c := newCDP(client, client, nil)
++	defer c.close()
++	prefix := make(chan []byte, 1)
++	go func() { buf := make([]byte, 8); n, _ := io.ReadFull(peer, buf); prefix <- buf[:n] }()
++	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
++	defer cancel()
++	done := make(chan error, 1)
++	go func() { done <- c.call(ctx, "tab", "blocked", nil, nil) }()
++	got := <-prefix
++	if err := awaitCDP(t, done); !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("partial write: %v", err)
++	}
++	select {
++	case <-c.closed:
++	default:
++		t.Fatal("partial frame kept the connection open")
++	}
++	rest, err := io.ReadAll(peer)
++	if err != nil || len(rest) != 0 || strings.ContainsRune(string(got), 0) {
++		t.Fatalf("partial frame completed: %q %q %v", got, rest, err)
++	}
++	if err := c.call(context.Background(), "tab", "later", nil, nil); err == nil {
++		t.Fatal("closed stream accepted another command")
++	}
++	pendingCDP(t, c)
++}
++
++// The real Chromium transport is two OS pipes. Filling its command pipe
++// must honor each deadline, and explicit close must not wait for a writer.
++func TestCDPFullOSPipeAndCloseHonorCancellation(t *testing.T) {
++	toRead, toWrite, err := os.Pipe()
++	if err != nil {
++		t.Fatal(err)
++	}
++	fromRead, fromWrite, err := os.Pipe()
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer toRead.Close()
++	defer fromWrite.Close()
++	c := newCDP(toWrite, fromRead, nil)
++	defer c.close()
++	for i := 0; i < 4; i++ {
++		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
++		done := make(chan error, 1)
++		go func() {
++			done <- c.call(ctx, "tab", "Runtime.evaluate", map[string]string{"expression": strings.Repeat("x", 32<<10)}, nil)
++		}()
++		if err := awaitCDP(t, done); err == nil {
++			t.Fatal("a silent browser replied")
++		}
++		cancel()
++	}
++	closed := make(chan error, 1)
++	go func() { c.close(); closed <- nil }()
++	awaitCDP(t, closed)
++	pendingCDP(t, c)
++}
++
++func TestCDPCloseInterruptsBlockedWriteWithoutARequestDeadline(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	writer := &observedCDPWriter{Conn: client, started: make(chan struct{})}
++	c := newCDP(writer, client, nil)
++	defer c.close()
++	done := make(chan error, 1)
++	go func() { done <- c.call(context.Background(), "tab", "blocked", nil, nil) }()
++	<-writer.started
++	closed := make(chan error, 1)
++	go func() { c.close(); closed <- nil }()
++	awaitCDP(t, closed)
++	if err := awaitCDP(t, done); err == nil {
++		t.Fatal("closed write succeeded")
++	}
++	pendingCDP(t, c)
++}
++
++// A zero-byte deadline must not linger on the writer after ownership passes.
++func TestCDPWriteDeadlineDoesNotPoisonRecovery(t *testing.T) {
++	for i := 0; i < 20; i++ {
++		client, peer := net.Pipe()
++		c := newCDP(client, client, nil)
++		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
++		if err := c.call(ctx, "tab", "cancelled", nil, nil); !errors.Is(err, context.DeadlineExceeded) {
++			t.Fatalf("cancelled: %v", err)
++		}
++		cancel()
++		seen := make(chan cdpMessage, 1)
++		go replyCDP(peer, seen)
++		next, stop := context.WithTimeout(context.Background(), time.Second)
++		err := c.call(next, "tab", "ready", nil, nil)
++		stop()
++		c.close()
++		peer.Close()
++		if err != nil {
++			t.Fatalf("recovered write %d: %v", i, err)
++		}
++		if msg := <-seen; msg.Method != "ready" {
++			t.Fatalf("late cancelled command: %+v", msg)
++		}
++		pendingCDP(t, c)
++	}
++}
++
++// A stalled writer on one tab must not prevent replies for another tab
++// from reaching their callers through the pending-reply map.
++func TestCDPRepliesContinueWhileAnotherTabCannotWrite(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	c := newCDP(client, client, nil)
++	defer c.close()
++	firstMessage := make(chan cdpMessage, 1)
++	replyNow := make(chan struct{})
++	replied := make(chan struct{})
++	go func() {
++		defer close(replied)
++		raw, err := bufio.NewReader(peer).ReadBytes(0)
++		if err != nil {
++			return
++		}
++		var msg cdpMessage
++		json.Unmarshal(raw[:len(raw)-1], &msg)
++		firstMessage <- msg
++		<-replyNow
++		raw, _ = json.Marshal(map[string]any{"id": msg.ID, "result": map[string]any{}})
++		peer.Write(append(raw, 0))
++	}()
++	first := make(chan error, 1)
++	go func() { first <- c.call(context.Background(), "first-tab", "ready", nil, nil) }()
++	<-firstMessage
++	// This peer has stopped reading. The second call remains blocked until
++	// close, while the first reply arrives independently on the other pipe.
++	second := make(chan error, 1)
++	go func() { second <- c.call(context.Background(), "second-tab", "blocked", nil, nil) }()
++	deadline := time.Now().Add(time.Second)
++	for {
++		c.mu.Lock()
++		pending := len(c.pending)
++		c.mu.Unlock()
++		if pending == 2 {
++			break
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("second command never registered")
++		}
++		time.Sleep(time.Millisecond)
++	}
++	close(replyNow)
++	if err := awaitCDP(t, first); err != nil {
++		t.Fatal(err)
++	}
++	c.close()
++	if err := awaitCDP(t, second); err == nil {
++		t.Fatal("blocked second write succeeded")
++	}
++	<-replied
++	pendingCDP(t, c)
++}
++
++func TestCDPMalformedParametersDoNotLeaveAPendingReply(t *testing.T) {
++	client, peer := net.Pipe()
++	defer peer.Close()
++	c := newCDP(client, client, nil)
++	defer c.close()
++	if err := c.call(context.Background(), "tab", "invalid", make(chan int), nil); err == nil {
++		t.Fatal("non-JSON params accepted")
++	}
++	pendingCDP(t, c)
++	seen := make(chan cdpMessage, 1)
++	go replyCDP(peer, seen)
++	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
++	defer cancel()
++	if err := c.call(ctx, "tab", "ready", nil, nil); err != nil {
++		t.Fatal(err)
++	}
++	if msg := <-seen; msg.Method != "ready" {
++		t.Fatalf("invalid command reached Chromium: %+v", msg)
++	}
++	pendingCDP(t, c)
++}
+diff --git a/internal/box/contextgate.go b/internal/box/contextgate.go
+new file mode 100644
+index 0000000..6cc27e0
+--- /dev/null
++++ b/internal/box/contextgate.go
+@@ -0,0 +1,34 @@
++package box
++
++import (
++	"context"
++	"sync"
++)
++
++// contextGate serializes operations that can wait on an external process.
++// Its zero value is ready to use. State-only critical sections use sync.Mutex.
++type contextGate struct {
++	once sync.Once
++	held chan struct{}
++}
++
++func (g *contextGate) LockContext(ctx context.Context) error {
++	g.once.Do(func() { g.held = make(chan struct{}, 1) })
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	select {
++	case g.held <- struct{}{}:
++	case <-ctx.Done():
++		return ctx.Err()
++	}
++	if err := ctx.Err(); err != nil {
++		<-g.held
++		return err
++	}
++	return nil
++}
++
++// Lock is for background cleanup which must complete even after its request.
++func (g *contextGate) Lock()   { _ = g.LockContext(context.Background()) }
++func (g *contextGate) Unlock() { <-g.held }

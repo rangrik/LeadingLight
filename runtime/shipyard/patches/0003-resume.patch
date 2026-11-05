@@ -14,18 +14,11 @@ Claude carries on with the model and effort the conversation had. Stopping
 a structured session waits for its host to let go of the socket, so a
 resume right after starts its own.
 ---
- internal/box/api.go           |  3 +++
- internal/box/claudedriver.go  | 18 +++++++++++++++---
- internal/box/codexdriver.go   | 19 +++++++++++++++----
- internal/box/conversations.go |  3 ++-
- internal/box/sessions.go      |  5 +++++
- 5 files changed, 40 insertions(+), 8 deletions(-)
-
 diff --git a/internal/box/api.go b/internal/box/api.go
-index 09f002e..88444fc 100644
+index 1bdeaec..2b6e54c 100644
 --- a/internal/box/api.go
 +++ b/internal/box/api.go
-@@ -662,6 +662,7 @@ func (b *Box) stopSessionsIn(from, dir string) {
+@@ -665,6 +665,7 @@ func (b *Box) stopSessionsIn(from, dir string) {
  			continue
  		}
  		if b.Sessions.Kill(ctx, s.Name) == nil {
@@ -33,7 +26,7 @@ index 09f002e..88444fc 100644
  			b.Events.Publish(events.Event{Type: "session.stopped", Box: b.Name, Origin: from, Data: map[string]any{"name": s.Name, "path": s.Dir}})
  		}
  	}
-@@ -907,6 +908,8 @@ func (b *Box) removeSession(w http.ResponseWriter, r *http.Request) error {
+@@ -923,6 +924,8 @@ func (b *Box) removeSession(w http.ResponseWriter, r *http.Request) error {
  	if err := b.Sessions.Kill(r.Context(), name); err != nil {
  		return err
  	}
@@ -43,10 +36,10 @@ index 09f002e..88444fc 100644
  	writeJSON(w, map[string]string{"removed": name})
  	return nil
 diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
-index 32218b7..a7d0607 100644
+index e6773e1..aeedb0c 100644
 --- a/internal/box/claudedriver.go
 +++ b/internal/box/claudedriver.go
-@@ -317,11 +317,19 @@ func (c *claudeConv) follow() {
+@@ -317,9 +317,12 @@ func (c *claudeConv) follow() {
  	var noHost time.Time
  	for {
  		c.mu.Lock()
@@ -59,17 +52,9 @@ index 32218b7..a7d0607 100644
 +		}
 +		if done && !awaitHost(c.sock, resumeGrace) {
  			// Its last word was its end, and no host has started since. (A
--			// host started again listens a moment before it says so.)
-+			// host started again listens a moment before it says so; a
-+			// resume starting is waited for.) It is followed afresh when
-+			// next asked for.
-+			c.mu.Lock()
-+			c.following = false
-+			c.mu.Unlock()
- 			return
- 		}
- 		err := agenthost.Attach(context.Background(), c.sock, from, func(e agenthost.Entry) error {
-@@ -357,6 +365,10 @@ func (c *claudeConv) follow() {
+ 			// host started again listens a moment before it says so.) Let
+ 			// go, so it is followed again when next asked for: a session
+@@ -363,6 +366,10 @@ func (c *claudeConv) follow() {
  // following its session (until it is asked about again).
  const hostGone = time.Minute
  
@@ -81,10 +66,10 @@ index 32218b7..a7d0607 100644
  func (c *claudeConv) signal() {
  	close(c.changed)
 diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
-index 056788b..514afda 100644
+index e7bb2d0..defb3db 100644
 --- a/internal/box/codexdriver.go
 +++ b/internal/box/codexdriver.go
-@@ -223,11 +223,19 @@ func (c *codexConv) follow() {
+@@ -223,9 +223,12 @@ func (c *codexConv) follow() {
  	var noHost time.Time
  	for {
  		c.mu.Lock()
@@ -97,17 +82,9 @@ index 056788b..514afda 100644
 +		}
 +		if done && !awaitHost(c.sock, resumeGrace) {
  			// Its last word was its end, and no host has started since. (A
--			// host started again listens a moment before it says so.)
-+			// host started again listens a moment before it says so; a
-+			// resume starting is waited for.) It is followed afresh when
-+			// next asked for.
-+			c.mu.Lock()
-+			c.following = false
-+			c.mu.Unlock()
- 			return
- 		}
- 		err := agenthost.Attach(context.Background(), c.sock, from, func(e agenthost.Entry) error {
-@@ -315,11 +323,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 			// host started again listens a moment before it says so.) Let
+ 			// go, so it is followed again when next asked for (as Claude's).
+@@ -319,11 +322,14 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
  		switch e.Event {
  		case "started":
  			c.busy, c.pending, c.since, c.exited, c.initialized, c.turnID = false, nil, time.Time{}, false, false, ""
@@ -124,10 +101,10 @@ index 056788b..514afda 100644
  		}
  		return
 diff --git a/internal/box/conversations.go b/internal/box/conversations.go
-index b9a627a..3071615 100644
+index 9423ad8..2333666 100644
 --- a/internal/box/conversations.go
 +++ b/internal/box/conversations.go
-@@ -256,7 +256,8 @@ func (b *Box) relaunch(ctx context.Context, location, dir, sock, sid, mode strin
+@@ -264,7 +264,8 @@ func (b *Box) relaunch(ctx context.Context, location, dir, sock, sid, mode strin
  		}
  		return b.launchCodexIn(p, firstNonEmpty(mode, meta.Mode), dir, sock)
  	}
@@ -138,10 +115,10 @@ index b9a627a..3071615 100644
  
  // presetAt is an agent preset as a location has it.
 diff --git a/internal/box/sessions.go b/internal/box/sessions.go
-index 0d94f8c..05be49c 100644
+index f3fb189..17a542f 100644
 --- a/internal/box/sessions.go
 +++ b/internal/box/sessions.go
-@@ -528,6 +528,11 @@ func (s *Sessions) Kill(ctx context.Context, name string) error {
+@@ -539,6 +539,11 @@ func (s *Sessions) Kill(ctx context.Context, name string) error {
  	if out, err := s.tmux(ctx, "kill-session", "-t", "="+name); err != nil {
  		return tmuxError("kill-session", out, err)
  	}

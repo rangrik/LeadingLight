@@ -1,0 +1,1779 @@
+diff --git a/internal/box/api.go b/internal/box/api.go
+index a760eec17b4df52ee3b807e7893b70f29fdc0052..b28492f5ebf878122f1b1b0bd6066ee09fc06760 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -515,8 +515,7 @@ func (b *Box) createWorktree(r *http.Request, loc Location, req WorktreeRequest)
+ func (b *Box) runSetup(from string, loc Location, dir, name string) {
+ 	if loc.Scripts.Setup != "" {
+ 		go b.lifecycle(from, "setup", loc, dir, name, loc.Scripts.Setup, func() error {
+-			b.startAutostart(loc.Name, name)
+-			return nil
++			return b.startAutostart(loc.Name, name)
+ 		})
+ 		return
+ 	}
+diff --git a/internal/box/helpers_test.go b/internal/box/helpers_test.go
+index 95e09536f3e2f8cdff3f45ff0ae9d46d3abebe7e..932d9ca41237c71c1f8f1cb7771131bf78b17026 100644
+--- a/internal/box/helpers_test.go
++++ b/internal/box/helpers_test.go
+@@ -453,14 +453,14 @@ type unitSpecs struct {
+ 
+ func (u *unitSpecs) ops() *serviceOps {
+ 	return &serviceOps{
+-		install: func(s service.Spec) (string, error) {
++		install: func(ctx context.Context, s service.Spec) (string, error) {
+ 			u.mu.Lock()
+ 			defer u.mu.Unlock()
+ 			u.specs[s.Name] = s
+ 			return "/fake/" + s.Name, nil
+ 		},
+-		start: func(service.Spec) error { return nil },
+-		uninstall: func(s service.Spec) (string, error) {
++		start: func(context.Context, service.Spec) error { return nil },
++		uninstall: func(ctx context.Context, s service.Spec) (string, error) {
+ 			u.mu.Lock()
+ 			defer u.mu.Unlock()
+ 			delete(u.specs, s.Name)
+@@ -468,7 +468,7 @@ func (u *unitSpecs) ops() *serviceOps {
+ 		},
+ 		installed:       func(service.Spec) bool { return false },
+ 		installedByName: func(name string) bool { u.mu.Lock(); defer u.mu.Unlock(); _, ok := u.specs[name]; return ok },
+-		running:         func(service.Spec) bool { return true },
++		running:         func(context.Context, service.Spec) (bool, error) { return true, nil },
+ 	}
+ }
+ 
+diff --git a/internal/box/secrets_test.go b/internal/box/secrets_test.go
+index 645804babac008dff43e87bfcd4862972d44dc18..2b4fa53c5728db28af511699b18fbfec6d4f742f 100644
+--- a/internal/box/secrets_test.go
++++ b/internal/box/secrets_test.go
+@@ -377,9 +377,9 @@ func TestAServiceUnitHoldsReferencesAndResolvesThemWhenItStarts(t *testing.T) {
+ 	specs := map[string]service.Spec{}
+ 	ops, _ := fakeService()
+ 	install := ops.install
+-	ops.install = func(s service.Spec) (string, error) {
++	ops.install = func(ctx context.Context, s service.Spec) (string, error) {
+ 		specs[s.Name] = s
+-		return install(s)
++		return install(ctx, s)
+ 	}
+ 	b.Units = &Units{Dir: t.TempDir(), svc: ops}
+ 	if _, err := b.StartService(ctx, "cal", "billing", "web"); err != nil {
+diff --git a/internal/box/servicetabs.go b/internal/box/servicetabs.go
+index 7f6cc5efdd4839e56d11f5e6648248cbb4c2e72c..06a7f0fb76bddd8e49025318c53927a78442f2c8 100644
+--- a/internal/box/servicetabs.go
++++ b/internal/box/servicetabs.go
+@@ -289,7 +289,7 @@ type svcKey struct {
+ func (b *Box) startTerminalService(ctx context.Context, loc Location, wt Worktree, svc WorktreeService, env, refs map[string]string) error {
+ 	// It may have run in the background before its config changed.
+ 	if b.Units != nil {
+-		if _, err := b.Units.Remove(serviceUnit(loc.Name, wt.Name, svc.Name)); err != nil && !errors.Is(err, ErrUnknownUnit) {
++		if _, err := b.Units.remove(ctx, serviceUnit(loc.Name, wt.Name, svc.Name)); err != nil && !errors.Is(err, ErrUnknownUnit) {
+ 			return err
+ 		}
+ 	}
+diff --git a/internal/box/startupcancellation_test.go b/internal/box/startupcancellation_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..71ea1cf9e92d557dbe09025cda94a135b6521ad2
+--- /dev/null
++++ b/internal/box/startupcancellation_test.go
+@@ -0,0 +1,268 @@
++package box
++
++import (
++	"context"
++	"errors"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"runtime"
++	"strconv"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/service"
++)
++
++// The fake manager blocks while replacing a unit. Cancelling Install must
++// stop that process and must not go on to bootstrap or start the service.
++func TestUnitInstallCancelsItsServiceManager(t *testing.T) {
++	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
++		t.Skip("no supported service manager")
++	}
++	dir := t.TempDir()
++	t.Setenv("HOME", dir)
++	t.Setenv("XDG_CONFIG_HOME", dir)
++	bin := filepath.Join(dir, "bin")
++	if err := os.Mkdir(bin, 0o700); err != nil {
++		t.Fatal(err)
++	}
++	marker, calls := filepath.Join(dir, "manager.pid"), filepath.Join(dir, "calls")
++	loaded := filepath.Join(dir, "loaded")
++	script := "#!/bin/sh\nprintf '%s\n' \"$*\" >> " + shellQuote(calls) + "\n" +
++		"case \"$*\" in\n" +
++		"*bootout*|*daemon-reload*) if [ ! -f " + shellQuote(marker) + " ]; then echo $$ > " + shellQuote(marker) + "; exec /bin/sleep 30; fi;;\n" +
++		"*bootstrap*|*restart*) touch " + shellQuote(loaded) + ";;\n" +
++		"*kickstart*|*' start '*) [ -f " + shellQuote(loaded) + " ] || exit 1;;\n" +
++		"*is-active*) echo active; exit;;\n" +
++		"esac\necho 'state = running'\n"
++
++	for _, name := range []string{"launchctl", "systemctl"} {
++		if err := os.WriteFile(filepath.Join(bin, name), []byte(script), 0o700); err != nil {
++			t.Fatal(err)
++		}
++	}
++	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	done := make(chan error, 1)
++	u := &Units{Dir: filepath.Join(dir, "logs")}
++	go func() {
++		_, err := u.Install(ctx, UnitRequest{Name: "berth-cancel-probe", Program: "/bin/sh"})
++		done <- err
++	}()
++	finished := false
++	t.Cleanup(func() {
++		cancel()
++		if finished {
++			return
++		}
++		if raw, err := os.ReadFile(marker); err == nil {
++			if pid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
++				if p, err := os.FindProcess(pid); err == nil {
++					_ = p.Kill()
++				}
++			}
++		}
++		select {
++		case <-done:
++		case <-time.After(2 * time.Second):
++			t.Error("service manager did not stop during cleanup")
++		}
++	})
++	waitUntil(t, "the manager to start", 5*time.Second, func() bool { _, err := os.Stat(marker); return err == nil })
++	cancel()
++	select {
++	case err := <-done:
++		finished = true
++		if !errors.Is(err, context.Canceled) {
++			t.Fatalf("Install cancellation: %v", err)
++		}
++	case <-time.After(time.Second):
++		t.Fatal("Install ignored cancellation while waiting on the service manager")
++	}
++	raw, err := os.ReadFile(calls)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if strings.Count(string(raw), "\n") != 1 {
++		t.Fatalf("manager commands continued after cancellation: %s", raw)
++	}
++	// A matching file must not make retry skip the interrupted load. The fake
++	// manager rejects kickstart/start until bootstrap/restart actually ran.
++	retryCtx, stopRetry := context.WithTimeout(context.Background(), 5*time.Second)
++	defer stopRetry()
++	unit, err := u.Install(retryCtx, UnitRequest{Name: "berth-cancel-probe", Program: "/bin/sh"})
++	if err != nil || unit.State != "running" {
++		t.Fatalf("retrying the interrupted install = %+v, %v", unit, err)
++	}
++}
++
++func TestSetupCancellationIncludesServiceDiscoveryAndStartup(t *testing.T) {
++	for _, phase := range []string{"discovery", "startup"} {
++		t.Run(phase, func(t *testing.T) {
++			t.Setenv("SHELL", "/bin/sh")
++			b, wt, _ := serviceBox(t, nil, nil)
++			b.LogDir = t.TempDir()
++			if err := b.Locations.SetLocalConfig("cal", RepoConfig{Services: []WorktreeService{
++				{Name: "web", Run: "true", Autostart: true},
++				{Name: "later", Run: "true", Autostart: true},
++			}}); err != nil {
++				t.Fatal(err)
++			}
++			loc, err := b.Locations.Get(context.Background(), "cal")
++			if err != nil {
++				t.Fatal(err)
++			}
++			ctx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			entered := make(chan struct{}, 1)
++			calls := 0
++			blocked := func(ctx context.Context) error {
++				calls++
++				entered <- struct{}{}
++				<-ctx.Done()
++				return ctx.Err()
++			}
++			if phase == "discovery" {
++				b.Units.svc.installedByName = func(string) bool { return true }
++				b.Units.svc.running = func(ctx context.Context, _ service.Spec) (bool, error) {
++					return false, blocked(ctx)
++				}
++			} else {
++				b.Units.svc.install = func(ctx context.Context, _ service.Spec) (string, error) {
++					return "", blocked(ctx)
++				}
++			}
++			seen, stop := b.Events.Subscribe()
++			defer stop()
++			done := make(chan struct{})
++			go func() {
++				defer close(done)
++				b.lifecycle("app", "setup", loc, wt.Path, wt.Name, "true", func() error {
++					return b.startAutostartContext(ctx, loc.Name, wt.Name)
++				})
++			}()
++			t.Cleanup(func() {
++				cancel()
++				select {
++				case <-done:
++				case <-time.After(3 * time.Second):
++					t.Error("setup did not stop during cleanup")
++				}
++			})
++			select {
++			case <-entered:
++			case <-time.After(5 * time.Second):
++				t.Fatal("setup did not reach service " + phase)
++			}
++			cancel()
++			select {
++			case <-done:
++			case <-time.After(2 * time.Second):
++				t.Fatal("setup did not finish after service cancellation")
++			}
++			if calls != 1 {
++				t.Fatalf("service manager called %d times; continued after cancellation", calls)
++			}
++			var order []string
++			for {
++				select {
++				case e := <-seen:
++					order = append(order, e.Type)
++					if e.Type == "worktree.setup.failed" && !strings.Contains(e.Error, context.Canceled.Error()) {
++						t.Fatalf("setup failure lost cancellation: %+v", e)
++					}
++				default:
++					want := "worktree.setup.started,worktree.setup.failed"
++					if phase == "startup" {
++						want = "worktree.setup.started,service.failed,worktree.setup.failed"
++					}
++					if got := strings.Join(order, ","); got != want {
++						t.Fatalf("setup events = %s, want %s", got, want)
++					}
++					return
++				}
++			}
++		})
++	}
++}
++
++// The request ending must not cancel background setup, and a failed service
++// must produce a setup failure instead of a success after an unbounded wait.
++func TestSetupRequestReturnsBeforeBoundedServiceStartup(t *testing.T) {
++	t.Setenv("SHELL", "/bin/sh")
++	b, wt, _ := serviceBox(t, nil, nil)
++	b.LogDir = t.TempDir()
++	if err := b.Locations.SetLocalConfig("cal", RepoConfig{Setup: "true", Services: []WorktreeService{{Name: "web", Run: "true", Autostart: true}}}); err != nil {
++		t.Fatal(err)
++	}
++	entered := make(chan context.Context, 1)
++	release := make(chan struct{})
++	b.Units.svc.install = func(ctx context.Context, _ service.Spec) (string, error) {
++		entered <- ctx
++		select {
++		case <-release:
++			return "", errors.New("service startup refused")
++		case <-ctx.Done():
++			return "", ctx.Err()
++		}
++	}
++	seen, stop := b.Events.Subscribe()
++	defer stop()
++	t.Cleanup(func() { close(release) })
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	r := httptest.NewRequest("POST", "/v1/locations/cal/worktrees/billing/setup", nil).WithContext(ctx)
++	r.SetPathValue("name", "cal")
++	r.SetPathValue("worktree", wt.Name)
++	w := httptest.NewRecorder()
++	done := make(chan error, 1)
++	go func() { done <- b.setupWorktree(w, r) }()
++	select {
++	case err := <-done:
++		if err != nil || w.Code != 200 {
++			t.Fatalf("setup request = %d, %v", w.Code, err)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("setup request waited for its background service")
++	}
++	cancel()
++	select {
++	case startupCtx := <-entered:
++		if err := startupCtx.Err(); err != nil {
++			t.Fatalf("request cancellation stopped background startup: %v", err)
++		}
++		deadline, ok := startupCtx.Deadline()
++		if !ok || time.Until(deadline) <= 0 || time.Until(deadline) > 2*time.Minute {
++			t.Fatalf("startup has no two-minute bound: %v, %v", deadline, ok)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("background service did not start")
++	}
++	// Release once, leaving cleanup to close the channel even on a failed check.
++	release <- struct{}{}
++	var order []string
++	deadline := time.After(5 * time.Second)
++	for {
++		select {
++		case e := <-seen:
++			order = append(order, e.Type)
++			if e.Type == "worktree.setup.finished" {
++				t.Fatal("setup reported success after a service failure")
++			}
++			if e.Type == "worktree.setup.failed" {
++				if !strings.Contains(e.Error, "service startup refused") {
++					t.Fatalf("setup failure lost service error: %+v", e)
++				}
++				if got, want := strings.Join(order, ","), "worktree.setup.started,service.failed,worktree.setup.failed"; got != want {
++					t.Fatalf("setup events = %s, want %s", got, want)
++				}
++				return
++			}
++		case <-deadline:
++			t.Fatalf("setup did not report service failure: %v", order)
++		}
++	}
++}
+diff --git a/internal/box/units.go b/internal/box/units.go
+index 857f6cf58c527db6e0417bde40342a2d16e71479..ad551a27cb21fed5d0eb209ea21412e291647c3b 100644
+--- a/internal/box/units.go
++++ b/internal/box/units.go
+@@ -41,9 +41,9 @@ var (
+ // serviceOps is the platform service manager, indirected so a test never
+ // installs a real launchd agent or systemd unit on the machine running it.
+ type serviceOps struct {
+-	install   func(service.Spec) (string, error)
+-	start     func(service.Spec) error
+-	uninstall func(service.Spec) (string, error)
++	install   func(context.Context, service.Spec) (string, error)
++	start     func(context.Context, service.Spec) error
++	uninstall func(context.Context, service.Spec) (string, error)
+ 	// installed answers "is the unit on disk exactly this spec?";
+ 	// installedByName answers "is there a unit with this name at all?". See
+ 	// the doc comments on service.Installed and service.InstalledByName.
+@@ -51,7 +51,7 @@ type serviceOps struct {
+ 	installedByName func(string) bool
+ 	// running answers "is it up right now?", which installed cannot: a unit
+ 	// can be written, enabled and dead.
+-	running func(service.Spec) bool
++	running func(context.Context, service.Spec) (bool, error)
+ }
+ 
+ // Units installs and reports berthd's managed units. Dir holds one log per
+@@ -67,12 +67,12 @@ func (u *Units) ops() serviceOps {
+ 		return *u.svc
+ 	}
+ 	return serviceOps{
+-		install:         service.Install,
+-		start:           service.Start,
+-		uninstall:       service.Uninstall,
++		install:         service.EnsureContext,
++		start:           service.StartContext,
++		uninstall:       service.UninstallContext,
+ 		installed:       service.Installed,
+ 		installedByName: service.InstalledByName,
+-		running:         service.Running,
++		running:         service.RunningContext,
+ 	}
+ }
+ 
+@@ -112,6 +112,9 @@ func (u *Units) logPath(name string) string { return filepath.Join(u.Dir, name+"
+ // Install writes the unit, starts it, and reports it. Installing a unit whose
+ // spec changed replaces it, so a changed program or argument takes effect.
+ func (u *Units) Install(ctx context.Context, req UnitRequest) (Unit, error) {
++	if err := ctx.Err(); err != nil {
++		return Unit{}, err
++	}
+ 	spec, err := u.spec(req)
+ 	if err != nil {
+ 		return Unit{}, err
+@@ -136,17 +139,24 @@ func (u *Units) Install(ctx context.Context, req UnitRequest) (Unit, error) {
+ 	// still called - it is a no-op on a running unit and brings back a stopped
+ 	// one.
+ 	if !ops.installed(spec) {
+-		if _, err := ops.install(spec); err != nil {
++		if _, err := ops.install(ctx, spec); err != nil {
+ 			return Unit{}, fmt.Errorf("installing unit %s: %w", req.Name, err)
+ 		}
+ 	}
+-	if err := ops.start(spec); err != nil {
++	if err := ops.start(ctx, spec); err != nil {
+ 		return Unit{}, fmt.Errorf("starting unit %s: %w", req.Name, err)
+ 	}
+-	return u.Get(req.Name)
++	return u.get(ctx, req.Name)
+ }
+ 
+ func (u *Units) Get(name string) (Unit, error) {
++	return u.get(context.Background(), name)
++}
++
++func (u *Units) get(ctx context.Context, name string) (Unit, error) {
++	if err := ctx.Err(); err != nil {
++		return Unit{}, err
++	}
+ 	if !unitName.MatchString(name) {
+ 		return Unit{}, badRequest("unit name %q must be lowercase letters, digits and dashes", name)
+ 	}
+@@ -161,7 +171,11 @@ func (u *Units) Get(name string) (Unit, error) {
+ 	// answers "is it working". Reporting installed for a dead unit is how a
+ 	// stopped Orca runtime looked healthy while nothing was listening.
+ 	state := "stopped"
+-	if ops.running(service.Spec{Name: name}) {
++	running, err := ops.running(ctx, service.Spec{Name: name})
++	if err != nil {
++		return Unit{}, err
++	}
++	if running {
+ 		state = "running"
+ 	}
+ 	return Unit{Name: name, LogPath: u.logPath(name), State: state}, nil
+@@ -205,11 +219,15 @@ func logName(file string) (string, bool) {
+ // Remove stops and uninstalls the unit. Its log is left behind, because a
+ // failed unit's log is what explains the failure.
+ func (u *Units) Remove(name string) (Unit, error) {
+-	unit, err := u.Get(name)
++	return u.remove(context.Background(), name)
++}
++
++func (u *Units) remove(ctx context.Context, name string) (Unit, error) {
++	unit, err := u.get(ctx, name)
+ 	if err != nil {
+ 		return Unit{}, err
+ 	}
+-	if _, err := u.ops().uninstall(service.Spec{Name: name}); err != nil {
++	if _, err := u.ops().uninstall(ctx, service.Spec{Name: name}); err != nil {
+ 		return Unit{}, err
+ 	}
+ 	unit.State = "removed"
+@@ -223,7 +241,7 @@ func (u *Units) Restart(name string) (Unit, error) {
+ 	if _, err := u.Get(name); err != nil {
+ 		return Unit{}, err
+ 	}
+-	if err := u.ops().start(service.Spec{Name: name}); err != nil {
++	if err := u.ops().start(context.Background(), service.Spec{Name: name}); err != nil {
+ 		return Unit{}, fmt.Errorf("restarting unit %s: %w", name, err)
+ 	}
+ 	return u.Get(name)
+diff --git a/internal/box/units_test.go b/internal/box/units_test.go
+index 4c79c3da2cf3e5d7d12f9591c264a5298beb4c54..f5fb5e348c9f7546253171626e74fd1eebe66d16 100644
+--- a/internal/box/units_test.go
++++ b/internal/box/units_test.go
+@@ -25,16 +25,16 @@ func fakeService() (*serviceOps, *[]string) {
+ 	files := map[string]service.Spec{}
+ 	calls := &[]string{}
+ 	return &serviceOps{
+-		install: func(s service.Spec) (string, error) {
++		install: func(ctx context.Context, s service.Spec) (string, error) {
+ 			files[s.Name] = s
+ 			*calls = append(*calls, "install "+s.Name+" "+s.Program)
+ 			return "/fake/" + s.Name, nil
+ 		},
+-		start: func(s service.Spec) error {
++		start: func(_ context.Context, s service.Spec) error {
+ 			*calls = append(*calls, "start "+s.Name)
+ 			return nil
+ 		},
+-		uninstall: func(s service.Spec) (string, error) {
++		uninstall: func(ctx context.Context, s service.Spec) (string, error) {
+ 			delete(files, s.Name)
+ 			*calls = append(*calls, "uninstall "+s.Name)
+ 			return "/fake/" + s.Name, nil
+@@ -47,9 +47,9 @@ func fakeService() (*serviceOps, *[]string) {
+ 			_, ok := files[name]
+ 			return ok
+ 		},
+-		running: func(s service.Spec) bool {
++		running: func(_ context.Context, s service.Spec) (bool, error) {
+ 			_, ok := files[s.Name]
+-			return ok
++			return ok, nil
+ 		},
+ 	}, calls
+ }
+@@ -237,7 +237,7 @@ func TestTailReturnsWhateverIsThereWhenTheLogIsSmallerThanTheLimit(t *testing.T)
+ func TestGetTellsRunningFromStopped(t *testing.T) {
+ 	svc, _ := fakeService()
+ 	up := true
+-	svc.running = func(service.Spec) bool { return up }
++	svc.running = func(context.Context, service.Spec) (bool, error) { return up, nil }
+ 	u := &Units{Dir: t.TempDir(), svc: svc}
+ 	if _, err := u.Install(context.Background(), UnitRequest{Name: "berth-probe", Program: "/bin/sh"}); err != nil {
+ 		t.Fatal(err)
+diff --git a/internal/box/wtservices.go b/internal/box/wtservices.go
+index ce05672e02d83b374834199da7fd3bc6d50b5378..2fe861402d4fc5899987aa08b054880bba76ef78 100644
+--- a/internal/box/wtservices.go
++++ b/internal/box/wtservices.go
+@@ -8,6 +8,7 @@ import (
+ 	"os"
+ 	"strconv"
+ 	"strings"
++	"time"
+ 
+ 	"github.com/cosscom/shipyard/internal/events"
+ 	"github.com/cosscom/shipyard/internal/groups"
+@@ -93,11 +94,17 @@ func (b *Box) WorktreeServices(ctx context.Context, location, worktree string) (
+ 	out := []ServiceStatus{}
+ 	var sessions []Session
+ 	for _, s := range cfg.Effective.Services {
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
+ 		st := ServiceStatus{Name: s.Name, Run: s.Run, Autostart: s.Autostart, State: "stopped", Unit: serviceUnit(loc.Name, wt.Name, s.Name), Port: wt.Port}
+ 		if s.Terminal {
+ 			st.Terminal, st.Title, st.Session = true, serviceTitle(s), serviceSession(loc.Name, wt.Name, s.Name)
+ 			if sessions == nil && b.Sessions != nil {
+ 				if sessions, err = b.Sessions.List(ctx); err != nil {
++					if ctx.Err() != nil {
++						return nil, ctx.Err()
++					}
+ 					sessions = []Session{}
+ 				}
+ 			}
+@@ -107,8 +114,10 @@ func (b *Box) WorktreeServices(ctx context.Context, location, worktree string) (
+ 				b.watchTerminalService(loc.Name, wt, s.Name, st.Session)
+ 			}
+ 		} else if b.Units != nil {
+-			if u, err := b.Units.Get(st.Unit); err == nil {
++			if u, err := b.Units.get(ctx, st.Unit); err == nil {
+ 				st.State = u.State
++			} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
++				return nil, err
+ 			}
+ 		}
+ 		out = append(out, st)
+@@ -197,7 +206,7 @@ func (b *Box) StopService(ctx context.Context, location, worktree, name string)
+ 		return ServiceStatus{}, err
+ 	}
+ 	if b.Units != nil {
+-		if _, err := b.Units.Remove(serviceUnit(loc.Name, wt.Name, name)); err != nil && !errors.Is(err, ErrUnknownUnit) {
++		if _, err := b.Units.remove(ctx, serviceUnit(loc.Name, wt.Name, name)); err != nil && !errors.Is(err, ErrUnknownUnit) {
+ 			return ServiceStatus{}, err
+ 		}
+ 	}
+@@ -233,24 +242,38 @@ func (b *Box) haltService(ctx context.Context, s ServiceStatus) {
+ 		return
+ 	}
+ 	if b.Units != nil {
+-		b.Units.Remove(s.Unit)
++		b.Units.remove(ctx, s.Unit)
+ 	}
+ }
+ 
+ // startAutostart starts the services that start with every new worktree.
+-func (b *Box) startAutostart(location, worktree string) {
+-	ctx := context.Background()
++// Setup completion includes this stage, so discovery and startup share a bound
++// even when there are many configured services. It is independent of the HTTP
++// request that scheduled setup, which has normally already returned.
++func (b *Box) startAutostart(location, worktree string) error {
++	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
++	defer cancel()
++	return b.startAutostartContext(ctx, location, worktree)
++}
++
++func (b *Box) startAutostartContext(ctx context.Context, location, worktree string) error {
+ 	all, err := b.WorktreeServices(ctx, location, worktree)
+ 	if err != nil {
+-		return
++		return err
+ 	}
++	var failures []error
+ 	for _, s := range all {
++		if err := ctx.Err(); err != nil {
++			return errors.Join(append(failures, err)...)
++		}
+ 		if s.Autostart {
+ 			if _, err := b.StartService(ctx, location, worktree, s.Name); err != nil {
+ 				b.Events.Publish(eventf(b, "service.failed", map[string]any{"location": location, "name": worktree, "service": s.Name, "error": err.Error()}))
++				failures = append(failures, err)
+ 			}
+ 		}
+ 	}
++	return errors.Join(failures...)
+ }
+ 
+ // stopServices stops every service of a worktree that is going away, before
+@@ -264,7 +287,7 @@ func (b *Box) stopServices(location, worktree string) {
+ 	}
+ 	for _, s := range all {
+ 		if b.Units != nil {
+-			b.Units.Remove(s.Unit)
++			b.Units.remove(ctx, s.Unit)
+ 		}
+ 		// The terminal goes with the worktree.
+ 		b.killServiceSession(ctx, location, worktree, s.Name)
+diff --git a/internal/service/cancellation_test.go b/internal/service/cancellation_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..99ef9eda33556dd161004ecb93dd718d17de90de
+--- /dev/null
++++ b/internal/service/cancellation_test.go
+@@ -0,0 +1,224 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"testing"
++	"time"
++)
++
++// Killing a manager does not guarantee EOF: a child may retain its output
++// pipes. Cancellation must bound that drain without killing managed services.
++func TestCommandCancellationBoundsInheritedPipes(t *testing.T) {
++	marker := filepath.Join(t.TempDir(), "child.pid")
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	done := make(chan error, 1)
++	go func() {
++		_, err := runCommand(ctx, "/bin/sh", "-c", `/bin/sleep 30 & echo $! > "$1"; wait`, "manager", marker)
++		done <- err
++	}()
++	finished := false
++	t.Cleanup(func() {
++		cancel()
++		if raw, err := os.ReadFile(marker); err == nil {
++			if pid, err := strconv.Atoi(strings.TrimSpace(string(raw))); err == nil {
++				if p, err := os.FindProcess(pid); err == nil {
++					_ = p.Kill()
++				}
++			}
++		}
++		if !finished {
++			select {
++			case <-done:
++			case <-time.After(3 * time.Second):
++				t.Error("test manager did not stop during cleanup")
++			}
++		}
++	})
++	deadline := time.Now().Add(5 * time.Second)
++	for {
++		if raw, err := os.ReadFile(marker); err == nil && len(raw) > 0 {
++			break
++		}
++		if time.Now().After(deadline) {
++			t.Fatal("test manager did not start its child")
++		}
++		time.Sleep(10 * time.Millisecond)
++	}
++	cancel()
++	select {
++	case err := <-done:
++		finished = true
++		if !errors.Is(err, context.Canceled) {
++			t.Fatalf("command cancellation = %v", err)
++		}
++	case <-time.After(3 * time.Second):
++		t.Fatal("manager cancellation waited for a child's inherited pipes")
++	}
++}
++
++func TestInterruptedServiceLoadStopsBeforeBootstrap(t *testing.T) {
++	for _, platform := range []string{"darwin", "linux"} {
++		t.Run(platform, func(t *testing.T) {
++			stub(t, platform)
++			calls := 0
++			command = func(context.Context, string, ...string) ([]byte, error) {
++				calls++
++				return nil, context.DeadlineExceeded
++			}
++			if err := load(context.Background(), spec, "/unused"); !errors.Is(err, context.DeadlineExceeded) {
++				t.Fatalf("load = %v; want deadline exceeded", err)
++			}
++			if calls != 1 {
++				t.Fatalf("load issued %d commands after a timeout", calls)
++			}
++			if running, err := RunningContext(context.Background(), spec); running || !errors.Is(err, context.DeadlineExceeded) {
++				t.Fatalf("RunningContext = %v, %v; want deadline exceeded", running, err)
++			}
++		})
++	}
++}
++
++func TestFailedInstallRestoresThePreviousDefinition(t *testing.T) {
++	for _, name := range []string{"new", "replacement", "restore-old"} {
++		t.Run(name, func(t *testing.T) {
++			home, calls := stub(t, "darwin")
++			original := spec
++			original.LogPath = filepath.Join(home, "service.log")
++			path, _ := UnitPath(original)
++			if name != "new" {
++				if _, err := Install(original); err != nil {
++					t.Fatal(err)
++				}
++				if err := os.Chmod(path, 0o640); err != nil {
++					t.Fatal(err)
++				}
++			}
++			updated := original
++			updated.Args = []string{"agent", "--changed"}
++			success := command
++			command = func(context.Context, string, ...string) ([]byte, error) {
++				return nil, context.Canceled
++			}
++			if _, err := EnsureContext(context.Background(), updated); !errors.Is(err, context.Canceled) {
++				t.Fatalf("EnsureContext = %v; want cancellation", err)
++			}
++			if Installed(updated) || Installed(original) {
++				t.Fatal("failed load is still marked installed; retry would skip loading it")
++			}
++			if name != "new" {
++				got, err := os.ReadFile(path)
++				want, _ := Render(original)
++				if err != nil || string(got) != string(want) {
++					t.Fatalf("failed replacement did not restore the previous definition: %q, %v", got, err)
++				}
++				info, err := os.Stat(path)
++				if err != nil || info.Mode().Perm() != 0o640 {
++					t.Fatalf("rollback did not preserve previous permissions: %v, %v", info, err)
++				}
++			} else if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
++				t.Fatalf("failed new unit remains on disk: %v", err)
++			}
++			command = success
++			before := len(*calls)
++			retry := updated
++			if name == "restore-old" {
++				retry = original
++			}
++			if _, err := EnsureContext(context.Background(), retry); err != nil {
++				t.Fatal(err)
++			}
++			if !Installed(retry) || len(*calls) == before {
++				t.Fatal("retry did not load and retain the requested definition")
++			}
++			if _, err := os.Stat(pendingUnitPath(path)); !errors.Is(err, os.ErrNotExist) {
++				t.Fatalf("successful load left its pending marker: %v", err)
++			}
++		})
++	}
++}
++
++func TestFailedInstallLeavesAnExternalEditUntouched(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	s := spec
++	s.LogPath = filepath.Join(home, "service.log")
++	path, _ := UnitPath(s)
++	external := []byte("a definition written by another owner")
++	command = func(context.Context, string, ...string) ([]byte, error) {
++		if err := os.WriteFile(path, external, 0o600); err != nil {
++			t.Fatal(err)
++		}
++		return nil, context.DeadlineExceeded
++	}
++	_, err := InstallContext(context.Background(), s)
++	if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "unit changed") {
++		t.Fatalf("installation must report both timeout and incomplete rollback: %v", err)
++	}
++	got, err := os.ReadFile(path)
++	if err != nil || string(got) != string(external) {
++		t.Fatalf("rollback overwrote an external edit: %q, %v", got, err)
++	}
++}
++
++func TestFailedInstallLeavesAnExternalSymlinkUntouched(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	s := spec
++	s.LogPath = filepath.Join(home, "service.log")
++	path, _ := UnitPath(s)
++	moved := filepath.Join(home, "external-definition")
++	command = func(context.Context, string, ...string) ([]byte, error) {
++		if err := os.Rename(path, moved); err != nil {
++			t.Fatal(err)
++		}
++		if err := os.Symlink(moved, path); err != nil {
++			t.Fatal(err)
++		}
++		return nil, context.Canceled
++	}
++	_, err := InstallContext(context.Background(), s)
++	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "unit changed") {
++		t.Fatalf("installation must report cancellation and incomplete rollback: %v", err)
++	}
++	if got, err := os.Readlink(path); err != nil || got != moved {
++		t.Fatalf("rollback replaced an external symlink to its former inode: %q, %v", got, err)
++	}
++}
++
++func TestFailedInstallLeavesExternalPermissionChangesUntouched(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	original := spec
++	original.LogPath = filepath.Join(home, "service.log")
++	path, err := Install(original)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Chmod(path, 0o640); err != nil {
++		t.Fatal(err)
++	}
++	updated := original
++	updated.Args = []string{"agent", "--changed"}
++	command = func(context.Context, string, ...string) ([]byte, error) {
++		if err := os.Chmod(path, 0o600); err != nil {
++			t.Fatal(err)
++		}
++		return nil, context.Canceled
++	}
++	_, err = InstallContext(context.Background(), updated)
++	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "unit changed") {
++		t.Errorf("installation must report cancellation and the permission change: %v", err)
++	}
++	info, err := os.Stat(path)
++	if err != nil || info.Mode().Perm() != 0o600 {
++		t.Fatalf("rollback overwrote another owner's permissions: %v, %v", info, err)
++	}
++	got, err := os.ReadFile(path)
++	want, _ := Render(updated)
++	if err != nil || string(got) != string(want) {
++		t.Fatalf("rollback replaced the definition another owner changed: %q, %v", got, err)
++	}
++}
+diff --git a/internal/service/definitionreads_test.go b/internal/service/definitionreads_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..b7ababdbcfea3876face0451f3eb8ac944099da1
+--- /dev/null
++++ b/internal/service/definitionreads_test.go
+@@ -0,0 +1,94 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"syscall"
++	"testing"
++	"time"
++)
++
++// A blocked filesystem read does not observe context cancellation. Exercise
++// special files in a disposable subprocess so a regression leaves no blocked
++// goroutine holding a unit lock in the test runner.
++func TestServiceDefinitionReadsRejectSpecialFiles(t *testing.T) {
++	if kind := os.Getenv("BERTH_TEST_SERVICE_FILE_KIND"); kind != "" {
++		home, calls := stub(t, "darwin")
++		s := spec
++		s.LogPath = filepath.Join(home, "service.log")
++		path, err := UnitPath(s)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
++			t.Fatal(err)
++		}
++		target := path
++		if kind != "fifo" {
++			target = filepath.Join(home, "external-definition")
++		}
++		if kind == "linked-regular" {
++			data, err := Render(s)
++			if err != nil {
++				t.Fatal(err)
++			}
++			if err := os.WriteFile(target, data, 0o600); err != nil {
++				t.Fatal(err)
++			}
++		} else if err := syscall.Mkfifo(target, 0o600); err != nil {
++			t.Fatal(err)
++		}
++		if kind != "fifo" {
++			if err := os.Symlink(target, path); err != nil {
++				t.Fatal(err)
++			}
++		}
++		switch os.Getenv("BERTH_TEST_SERVICE_FILE_OPERATION") {
++		case "ensure":
++			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
++			defer cancel()
++			if _, err := EnsureContext(ctx, s); err == nil {
++				t.Fatal("ensure accepted a special or linked definition")
++			}
++		case "installed-any-path":
++			if InstalledAnyPATH(s) {
++				t.Fatal("installed check accepted a special or linked definition")
++			}
++		default:
++			t.Fatal("unknown subprocess operation")
++		}
++		if len(*calls) != 0 {
++			t.Fatalf("read-only rejection invoked the service manager: %v", *calls)
++		}
++		if _, err := os.Stat(pendingUnitPath(path)); !errors.Is(err, os.ErrNotExist) {
++			t.Fatalf("rejected definition acquired a pending-install marker: %v", err)
++		}
++		if kind != "fifo" {
++			if got, err := os.Readlink(path); err != nil || got != target {
++				t.Fatalf("rejection replaced the existing symlink: %q, %v", got, err)
++			}
++		}
++		return
++	}
++	for _, kind := range []string{"fifo", "linked-fifo", "linked-regular"} {
++		for _, operation := range []string{"ensure", "installed-any-path"} {
++			t.Run(kind+"/"+operation, func(t *testing.T) {
++				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
++				defer cancel()
++				cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestServiceDefinitionReadsRejectSpecialFiles$")
++				cmd.Env = append(os.Environ(), "TMPDIR="+t.TempDir(), "BERTH_TEST_SERVICE_FILE_KIND="+kind, "BERTH_TEST_SERVICE_FILE_OPERATION="+operation)
++				cmd.WaitDelay = time.Second
++				out, err := cmd.CombinedOutput()
++				if ctx.Err() != nil {
++					t.Fatalf("%s blocked on %s past cancellation: %s", operation, kind, out)
++				}
++				if err != nil {
++					t.Fatalf("subprocess failed: %v\n%s", err, out)
++				}
++			})
++		}
++	}
++}
+diff --git a/internal/service/read.go b/internal/service/read.go
+index c99b2ba3b2b48cef179bfaa9930273fda08496a5..0b13e0e63deccd972135b67a6b7b3b8b33ed003f 100644
+--- a/internal/service/read.go
++++ b/internal/service/read.go
+@@ -6,7 +6,6 @@ import (
+ 	"encoding/xml"
+ 	"errors"
+ 	"fmt"
+-	"os"
+ 	"strings"
+ )
+ 
+@@ -42,18 +41,15 @@ func (u Unit) Arg(flag string) string {
+ 	return ""
+ }
+ 
+-// Read reads the unit installed under name; ok is false when there is none.
++// Read reads the regular unit file installed under name; ok is false when there is none.
+ // It understands what Render writes, which is all Install ever installs.
+ func Read(name string) (u Unit, ok bool, err error) {
+ 	path, err := unitPath(Spec{Name: name})
+ 	if err != nil {
+ 		return Unit{}, false, err
+ 	}
+-	data, err := os.ReadFile(path)
+-	if errors.Is(err, os.ErrNotExist) {
+-		return Unit{}, false, nil
+-	}
+-	if err != nil {
++	data, _, exists, err := readUnitFile(path)
++	if err != nil || !exists {
+ 		return Unit{}, false, err
+ 	}
+ 	if goos == "darwin" {
+diff --git a/internal/service/service.go b/internal/service/service.go
+index fdab1605e59e8673c748afd530dbc37925f74678..58e33a4a079c6242ef72243aee09c2bbd1d58864 100644
+--- a/internal/service/service.go
++++ b/internal/service/service.go
+@@ -6,6 +6,7 @@ package service
+ 
+ import (
+ 	"bytes"
++	"context"
+ 	"errors"
+ 	"fmt"
+ 	"html"
+@@ -15,6 +16,7 @@ import (
+ 	"runtime"
+ 	"sort"
+ 	"strings"
++	"time"
+ )
+ 
+ type Spec struct {
+@@ -39,15 +41,35 @@ type Spec struct {
+ 
+ // These are replaced in tests.
+ var (
+-	goos    = runtime.GOOS
+-	homeDir = os.UserHomeDir
+-	command = func(name string, args ...string) ([]byte, error) {
+-		return exec.Command(name, args...).CombinedOutput()
+-	}
++	goos       = runtime.GOOS
++	homeDir    = os.UserHomeDir
++	command    = runCommand
+ 	lookPath   = exec.LookPath
+ 	runUserDir = "/run/user"
+ )
+ 
++// A service manager should acknowledge each request promptly. Bound both the
++// command and draining its output: a child retaining a pipe must not hold setup
++// open after cancellation. Only the manager command is killed; the services it
++// supervises retain their normal ownership and lifetime.
++func runCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
++	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
++	defer cancel()
++	cmd := exec.CommandContext(ctx, name, args...)
++	cmd.WaitDelay = time.Second
++	out, err := cmd.CombinedOutput()
++	if ctx.Err() != nil {
++		return out, ctx.Err()
++	}
++	return out, err
++}
++
++// interrupted distinguishes cancellation from an ordinary manager error such
++// as querying a stopped service or unloading one that is not loaded yet.
++func interrupted(err error) bool {
++	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
++}
++
+ // UnitPath is where Install writes the service's unit or plist.
+ func UnitPath(s Spec) (string, error) { return unitPath(s) }
+ 
+@@ -63,14 +85,14 @@ func Preflight() error {
+ 				"run `berthd serve` under the supervisor you use instead")
+ 		}
+ 		findRuntimeDir()
+-		if out, err := command("systemctl", "--user", "show-environment"); err != nil {
++		if out, err := command(context.Background(), "systemctl", "--user", "show-environment"); err != nil {
+ 			return fmt.Errorf("systemd has no user session for you here (systemctl --user: %s). "+
+ 				"Log in as this user directly, over SSH or at the console, rather than through su or sudo. "+
+ 				"If you can only get here through su, run `sudo loginctl enable-linger %s` once and try again", lastLine(out, err), userName())
+ 		}
+ 		return nil
+ 	case "darwin":
+-		if out, err := command("launchctl", "print", fmt.Sprintf("gui/%d", os.Getuid())); err != nil {
++		if out, err := command(context.Background(), "launchctl", "print", fmt.Sprintf("gui/%d", os.Getuid())); err != nil {
+ 			return fmt.Errorf("launchd has no login session for you on this Mac (%s), so berthd cannot run as your launch agent. "+
+ 				"Log in at the Mac once (screen sharing counts) and try again", lastLine(out, err))
+ 		}
+@@ -210,8 +232,8 @@ func Migrate(s Spec) (bool, error) {
+ 	if err != nil || !ok || u.Program != s.Program || u.Env["BERTH_HOME"] != s.Env["BERTH_HOME"] {
+ 		return false, err
+ 	}
+-	have, err := os.ReadFile(u.Path)
+-	if err != nil {
++	have, _, exists, err := readUnitFile(u.Path)
++	if err != nil || !exists {
+ 		return false, err
+ 	}
+ 	path := u.Path
+@@ -252,8 +274,13 @@ func Installed(s Spec) bool {
+ 	if err != nil {
+ 		return false
+ 	}
+-	have, err := os.ReadFile(path)
+-	if err != nil {
++	// A restored definition can still be unloaded, or the manager may have
++	// accepted a changed definition before cancellation hid its reply.
++	if _, err := os.Lstat(pendingUnitPath(path)); !errors.Is(err, os.ErrNotExist) {
++		return false
++	}
++	have, _, exists, err := readUnitFile(path)
++	if err != nil || !exists {
+ 		return false
+ 	}
+ 	want, err := Render(s)
+@@ -300,7 +327,24 @@ func InstalledByName(name string) bool {
+ }
+ 
+ // Install writes the unit and (re)loads it, which starts the service.
+-func Install(s Spec) (string, error) {
++func Install(s Spec) (string, error) { return InstallContext(context.Background(), s) }
++
++// InstallContext writes and loads a unit, honoring cancellation while waiting
++// for the service manager.
++func InstallContext(ctx context.Context, s Spec) (string, error) {
++	return installContext(ctx, s, true)
++}
++
++// EnsureContext loads a definition only when needed. Recheck under the unit
++// lock: another installer may have completed while this caller was waiting.
++func EnsureContext(ctx context.Context, s Spec) (string, error) {
++	return installContext(ctx, s, false)
++}
++
++func installContext(ctx context.Context, s Spec, reload bool) (string, error) {
++	if err := ctx.Err(); err != nil {
++		return "", err
++	}
+ 	if !filepath.IsAbs(s.Program) {
+ 		return "", fmt.Errorf("service program must be an absolute path, got %s", s.Program)
+ 	}
+@@ -317,6 +361,26 @@ func Install(s Spec) (string, error) {
+ 	if err != nil {
+ 		return "", err
+ 	}
++	unlock, err := lockUnit(ctx, path)
++	if err != nil {
++		return "", err
++	}
++	defer unlock()
++	if err := ctx.Err(); err != nil {
++		return "", err
++	}
++	if !reload && Installed(s) {
++		return path, nil
++	}
++	previous, previousMode, hadPrevious, err := readUnitFile(path)
++	if err != nil {
++		return "", err
++	}
++	// Persist uncertainty before changing either the definition or manager.
++	// A retry of either the previous or new spec must load it again.
++	if err := markUnitPending(path); err != nil {
++		return "", err
++	}
+ 	// systemd opens the log before starting the program, and fails the
+ 	// first start when its folder does not exist yet.
+ 	if s.LogPath != "" {
+@@ -327,83 +391,175 @@ func Install(s Spec) (string, error) {
+ 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+ 		return "", err
+ 	}
+-	tmp := path + ".tmp"
+-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
++	written, err := writeUnitFile(path, data, 0o644)
++	if err != nil {
+ 		return "", err
+ 	}
+-	if err := os.Rename(tmp, path); err != nil {
+-		return "", err
++	if err := load(ctx, s, path); err != nil {
++		// Installed compares the definition on disk. Leaving a failed load's
++		// matching file there would make a retry skip loading it altogether.
++		// Restore only our own unchanged write; another writer owns its edits.
++		rollback := func() error {
++			current, statErr := os.Lstat(path)
++			if statErr != nil {
++				return statErr
++			}
++			if !current.Mode().IsRegular() || !os.SameFile(current, written) || current.Mode() != written.Mode() {
++				return errors.New("unit changed during failed installation; leaving it untouched")
++			}
++			contents, _, exists, readErr := readUnitFile(path)
++			if readErr != nil {
++				return readErr
++			}
++			if !exists || !bytes.Equal(contents, data) {
++				return errors.New("unit changed during failed installation; leaving it untouched")
++			}
++			if !hadPrevious {
++				return os.Remove(path)
++			}
++			_, restoreErr := writeUnitFile(path, previous, previousMode)
++			return restoreErr
++		}
++		if restoreErr := rollback(); restoreErr != nil {
++			return path, errors.Join(err, fmt.Errorf("restoring %s: %w", path, restoreErr))
++		}
++		return path, err
++	}
++	if err := clearUnitPending(path); err != nil {
++		return path, fmt.Errorf("finishing service installation: %w", err)
+ 	}
+-	return path, load(s, path)
++	return path, nil
+ }
+ 
+-func Uninstall(s Spec) (string, error) {
++// writeUnitFile atomically publishes a definition. Its identity lets a failed
++// install distinguish that write from an external replacement before rollback.
++func writeUnitFile(path string, data []byte, mode os.FileMode) (os.FileInfo, error) {
++	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-*")
++	if err != nil {
++		return nil, err
++	}
++	defer f.Close()
++	defer os.Remove(f.Name())
++	if err := f.Chmod(mode); err != nil {
++		return nil, err
++	}
++	if _, err := f.Write(data); err != nil {
++		return nil, err
++	}
++	info, err := f.Stat()
++	if err != nil {
++		return nil, err
++	}
++	if err := f.Close(); err != nil {
++		return nil, err
++	}
++	if err := os.Rename(f.Name(), path); err != nil {
++		return nil, err
++	}
++	return info, nil
++}
++
++func Uninstall(s Spec) (string, error) { return UninstallContext(context.Background(), s) }
++
++// UninstallContext honors cancellation while unloading a unit.
++func UninstallContext(ctx context.Context, s Spec) (string, error) {
++	if err := ctx.Err(); err != nil {
++		return "", err
++	}
+ 	path, err := unitPath(s)
+ 	if err != nil {
+ 		return "", err
+ 	}
++	unlock, err := lockUnit(ctx, path)
++	if err != nil {
++		return "", err
++	}
++	defer unlock()
+ 	if _, err := os.Stat(path); os.IsNotExist(err) {
+-		return "", nil
++		return "", clearUnitPending(path)
+ 	}
+-	unload(s)
+-	return path, os.Remove(path)
++	if err := unload(ctx, s); interrupted(err) {
++		return path, errors.Join(err, markUnitPending(path))
++	}
++	if err := os.Remove(path); err != nil {
++		return path, err
++	}
++	return path, clearUnitPending(path)
+ }
+ 
+-// Start asks the supervisor to start the service if it is not running.
+ // Running reports whether the service is up right now, which is not the same
+-// question as Installed: a unit can be written and enabled and still be dead,
+-// and telling those apart is the difference between "it is configured" and
+-// "it is working".
++// question as Installed: a unit can be written and enabled and still be dead.
+ func Running(s Spec) bool {
++	running, _ := RunningContext(context.Background(), s)
++	return running
++}
++
++// RunningContext reports cancellation separately from a stopped service.
++func RunningContext(ctx context.Context, s Spec) (bool, error) {
++	var out []byte
++	var err error
++	if goos == "darwin" {
++		out, err = command(ctx, "launchctl", "print", launchdTarget(s))
++	} else {
++		out, err = command(ctx, "systemctl", "--user", "is-active", s.Name+".service")
++	}
++	if interrupted(err) {
++		return false, err
++	}
+ 	if goos == "darwin" {
+-		out, err := command("launchctl", "print", launchdTarget(s))
+-		return err == nil && strings.Contains(string(out), "state = running")
++		return err == nil && strings.Contains(string(out), "state = running"), nil
+ 	}
+-	out, err := command("systemctl", "--user", "is-active", s.Name+".service")
+-	return err == nil && strings.TrimSpace(string(out)) == "active"
++	return err == nil && strings.TrimSpace(string(out)) == "active", nil
+ }
+ 
+-func Start(s Spec) error {
++// Start asks the supervisor to start the service if it is not running.
++func Start(s Spec) error { return StartContext(context.Background(), s) }
++
++// StartContext waits for the supervisor with the caller's context.
++func StartContext(ctx context.Context, s Spec) error {
+ 	var out []byte
+ 	var err error
+ 	if goos == "darwin" {
+-		out, err = command("launchctl", "kickstart", launchdTarget(s))
++		out, err = command(ctx, "launchctl", "kickstart", launchdTarget(s))
+ 	} else {
+-		out, err = command("systemctl", "--user", "start", s.Name+".service")
++		out, err = command(ctx, "systemctl", "--user", "start", s.Name+".service")
+ 	}
+ 	if err != nil {
+-		return fmt.Errorf("starting %s: %v: %s", s.Name, err, strings.TrimSpace(string(out)))
++		return fmt.Errorf("starting %s: %w: %s", s.Name, err, strings.TrimSpace(string(out)))
+ 	}
+ 	return nil
+ }
+ 
+ func launchdTarget(s Spec) string { return fmt.Sprintf("gui/%d/%s", os.Getuid(), s.Name) }
+ 
+-func load(s Spec, path string) error {
++func load(ctx context.Context, s Spec, path string) error {
+ 	if goos == "darwin" {
+-		command("launchctl", "bootout", launchdTarget(s))
+-		if out, err := command("launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), path); err != nil {
+-			return fmt.Errorf("launchctl bootstrap: %v: %s", err, strings.TrimSpace(string(out)))
++		if _, err := command(ctx, "launchctl", "bootout", launchdTarget(s)); interrupted(err) {
++			return err
++		}
++		if out, err := command(ctx, "launchctl", "bootstrap", fmt.Sprintf("gui/%d", os.Getuid()), path); err != nil {
++			return fmt.Errorf("launchctl bootstrap: %w: %s", err, strings.TrimSpace(string(out)))
+ 		}
+ 		return nil
+ 	}
+-	if out, err := command("systemctl", "--user", "daemon-reload"); err != nil {
+-		return fmt.Errorf("systemctl daemon-reload: %v: %s", err, strings.TrimSpace(string(out)))
++	if out, err := command(ctx, "systemctl", "--user", "daemon-reload"); err != nil {
++		return fmt.Errorf("systemctl daemon-reload: %w: %s", err, strings.TrimSpace(string(out)))
+ 	}
+ 	// restart, not start: a reinstall must pick up a changed binary or args.
+-	if out, err := command("systemctl", "--user", "enable", s.Name+".service"); err != nil {
+-		return fmt.Errorf("systemctl enable: %v: %s", err, strings.TrimSpace(string(out)))
++	if out, err := command(ctx, "systemctl", "--user", "enable", s.Name+".service"); err != nil {
++		return fmt.Errorf("systemctl enable: %w: %s", err, strings.TrimSpace(string(out)))
+ 	}
+-	if out, err := command("systemctl", "--user", "restart", s.Name+".service"); err != nil {
+-		return fmt.Errorf("systemctl restart: %v: %s", err, strings.TrimSpace(string(out)))
++	if out, err := command(ctx, "systemctl", "--user", "restart", s.Name+".service"); err != nil {
++		return fmt.Errorf("systemctl restart: %w: %s", err, strings.TrimSpace(string(out)))
+ 	}
+ 	return nil
+ }
+ 
+-func unload(s Spec) {
++func unload(ctx context.Context, s Spec) error {
+ 	if goos == "darwin" {
+-		command("launchctl", "bootout", launchdTarget(s))
+-		return
++		_, err := command(ctx, "launchctl", "bootout", launchdTarget(s))
++		return err
+ 	}
+-	command("systemctl", "--user", "disable", "--now", s.Name+".service")
++	_, err := command(ctx, "systemctl", "--user", "disable", "--now", s.Name+".service")
++	return err
+ }
+diff --git a/internal/service/service_test.go b/internal/service/service_test.go
+index 0956b6610de6a62b85cd8f4a199a6a987c9a50b9..766d5508e13aedc7eb00c6cf6604234adf8406fa 100644
+--- a/internal/service/service_test.go
++++ b/internal/service/service_test.go
+@@ -1,6 +1,7 @@
+ package service
+ 
+ import (
++	"context"
+ 	"os"
+ 	"path/filepath"
+ 	"strconv"
+@@ -15,7 +16,7 @@ func stub(t *testing.T, os_ string) (home string, calls *[]string) {
+ 	calls = &[]string{}
+ 	goos = os_
+ 	homeDir = func() (string, error) { return home, nil }
+-	command = func(name string, args ...string) ([]byte, error) {
++	command = func(_ context.Context, name string, args ...string) ([]byte, error) {
+ 		*calls = append(*calls, name+" "+strings.Join(args, " "))
+ 		return nil, nil
+ 	}
+@@ -109,12 +110,16 @@ func TestInstallIsIdempotentAndDetectsItself(t *testing.T) {
+ 		if Installed(other) {
+ 			t.Fatalf("%s: a unit for another home counted as installed", os_)
+ 		}
++		before := len(*calls)
+ 		if _, err := Install(spec); err != nil {
+ 			t.Fatalf("%s: reinstall: %v", os_, err)
+ 		}
++		if len(*calls) != 2*before {
++			t.Fatalf("%s: explicit reinstall did not reload an unchanged definition: %v", os_, *calls)
++		}
+ 		entries, _ := os.ReadDir(filepath.Dir(path))
+-		if len(entries) != 1 {
+-			t.Fatalf("%s: install left extra files: %v", os_, entries)
++		if len(entries) != 2 || entries[0].Name() != filepath.Base(path) || entries[1].Name() != filepath.Base(path)+".berth-lock" {
++			t.Fatalf("%s: install must keep only its definition and shared lock: %v", os_, entries)
+ 		}
+ 		if len(*calls) == 0 {
+ 			t.Fatalf("%s: install did not load the unit", os_)
+@@ -280,7 +285,7 @@ func TestPreflightExplainsAMissingUserSession(t *testing.T) {
+ 	}
+ 
+ 	lookPath = func(string) (string, error) { return "/usr/bin/systemctl", nil }
+-	command = func(name string, args ...string) ([]byte, error) {
++	command = func(_ context.Context, name string, args ...string) ([]byte, error) {
+ 		return []byte("Failed to connect to bus: No medium found\n"), os.ErrNotExist
+ 	}
+ 	err := Preflight()
+@@ -288,7 +293,7 @@ func TestPreflightExplainsAMissingUserSession(t *testing.T) {
+ 		t.Errorf("without a user session: %v", err)
+ 	}
+ 
+-	command = func(name string, args ...string) ([]byte, error) { return nil, nil }
++	command = func(_ context.Context, name string, args ...string) ([]byte, error) { return nil, nil }
+ 	if err := Preflight(); err != nil {
+ 		t.Errorf("with a user session: %v", err)
+ 	}
+@@ -321,7 +326,7 @@ func TestPreflightOnAMacNeedsALoginSession(t *testing.T) {
+ 	if len(*calls) != 1 || !strings.HasPrefix((*calls)[0], "launchctl print gui/") {
+ 		t.Errorf("calls = %v", *calls)
+ 	}
+-	command = func(name string, args ...string) ([]byte, error) {
++	command = func(_ context.Context, name string, args ...string) ([]byte, error) {
+ 		return []byte("Could not find domain for port identifier: 0x0\n"), os.ErrNotExist
+ 	}
+ 	if err := Preflight(); err == nil || !strings.Contains(err.Error(), "no login session") {
+diff --git a/internal/service/transaction.go b/internal/service/transaction.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..51bcbc4289db77b31d035d78d583668779c9f699
+--- /dev/null
++++ b/internal/service/transaction.go
+@@ -0,0 +1,109 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"io"
++	"os"
++	"path/filepath"
++	"syscall"
++	"time"
++)
++
++const pendingUnitContents = "berth service load pending\n"
++
++func pendingUnitPath(path string) string { return path + ".berth-pending" }
++
++// Each cooperating installer holds the same per-unit file lock across its
++// definition write, manager acknowledgement and rollback. Keep the lock file:
++// unlinking it could give another process a different inode to lock.
++func lockUnit(ctx context.Context, path string) (func(), error) {
++	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
++	defer cancel()
++	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
++		return nil, err
++	}
++	f, err := os.OpenFile(path+".berth-lock", os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
++	if err != nil {
++		return nil, err
++	}
++	info, err := f.Stat()
++	if err != nil || !info.Mode().IsRegular() {
++		f.Close()
++		if err == nil {
++			err = errors.New("service lock is not a regular file")
++		}
++		return nil, err
++	}
++	tick := time.NewTicker(20 * time.Millisecond)
++	defer tick.Stop()
++	for {
++		if err := ctx.Err(); err != nil {
++			f.Close()
++			return nil, err
++		}
++		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
++		if err == nil {
++			return func() { syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
++		}
++		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
++			f.Close()
++			return nil, err
++		}
++		select {
++		case <-ctx.Done():
++		case <-tick.C:
++		}
++	}
++}
++
++// A failed replacement must not turn a linked or special definition into a
++// regular file. Refuse those paths before any definition or manager mutation.
++func readUnitFile(path string) ([]byte, os.FileMode, bool, error) {
++	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
++	if errors.Is(err, os.ErrNotExist) {
++		return nil, 0, false, nil
++	}
++	if err != nil {
++		return nil, 0, false, err
++	}
++	defer f.Close()
++	info, err := f.Stat()
++	if err != nil {
++		return nil, 0, false, err
++	}
++	if !info.Mode().IsRegular() {
++		return nil, 0, false, fmt.Errorf("refusing to replace non-regular service file %s", path)
++	}
++	data, err := io.ReadAll(f)
++	return data, info.Mode().Perm(), true, err
++}
++
++func markUnitPending(path string) error {
++	pending := pendingUnitPath(path)
++	data, _, exists, err := readUnitFile(pending)
++	if err != nil {
++		return err
++	}
++	if exists {
++		if string(data) != pendingUnitContents {
++			return fmt.Errorf("unrecognized service installation marker %s", pending)
++		}
++		return nil
++	}
++	_, err = writeUnitFile(pending, []byte(pendingUnitContents), 0o600)
++	return err
++}
++
++func clearUnitPending(path string) error {
++	pending := pendingUnitPath(path)
++	data, _, exists, err := readUnitFile(pending)
++	if err != nil || !exists {
++		return err
++	}
++	if string(data) != pendingUnitContents {
++		return fmt.Errorf("unrecognized service installation marker %s", pending)
++	}
++	return os.Remove(pending)
++}
+diff --git a/internal/service/transaction_test.go b/internal/service/transaction_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..e188fa4531427617b7637b6528233f22e8b2613e
+--- /dev/null
++++ b/internal/service/transaction_test.go
+@@ -0,0 +1,241 @@
++package service
++
++import (
++	"context"
++	"errors"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++)
++
++func TestInstallRefusesLinkedDefinitionsAndForeignMarkers(t *testing.T) {
++	for _, kind := range []string{"linked-definition", "foreign-marker"} {
++		t.Run(kind, func(t *testing.T) {
++			home, calls := stub(t, "darwin")
++			s := spec
++			s.LogPath = filepath.Join(home, "service.log")
++			path, _ := UnitPath(s)
++			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
++				t.Fatal(err)
++			}
++			owned := filepath.Join(home, "owned-definition")
++			if kind == "foreign-marker" {
++				owned = pendingUnitPath(path)
++			}
++			if err := os.WriteFile(owned, []byte("other owner's configuration"), 0o600); err != nil {
++				t.Fatal(err)
++			}
++			if kind == "linked-definition" {
++				if err := os.Symlink(owned, path); err != nil {
++					t.Fatal(err)
++				}
++			}
++			if _, err := InstallContext(context.Background(), s); err == nil {
++				t.Fatal("installation replaced another owner's file")
++			}
++			if len(*calls) != 0 {
++				t.Fatalf("manager mutated before validating the definition: %v", *calls)
++			}
++			got, err := os.ReadFile(owned)
++			if err != nil || string(got) != "other owner's configuration" {
++				t.Fatalf("installation changed a pre-existing file: %q, %v", got, err)
++			}
++			if kind == "linked-definition" {
++				if got, err := os.Readlink(path); err != nil || got != owned {
++					t.Fatalf("installation replaced the symlink: %q, %v", got, err)
++				}
++			}
++		})
++	}
++}
++
++func TestAQueuedInstallCanCancelWithoutChangingTheActiveInstall(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	s := spec
++	s.LogPath = filepath.Join(home, "service.log")
++	path, _ := UnitPath(s)
++	entered, release := make(chan struct{}), make(chan struct{})
++	var once sync.Once
++	command = func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
++		once.Do(func() {
++			close(entered)
++			select {
++			case <-release:
++			case <-ctx.Done():
++			}
++		})
++		return nil, ctx.Err()
++	}
++	done := ensureInBackground(t, context.Background(), s)
++	select {
++	case <-entered:
++	case <-time.After(5 * time.Second):
++		t.Fatal("first install did not reach the manager")
++	}
++	changed := s
++	changed.Args = []string{"agent", "--queued"}
++	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
++	defer cancel()
++	if _, err := EnsureContext(ctx, changed); !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("queued install ignored its context: %v", err)
++	}
++	got, err := os.ReadFile(path)
++	want, _ := Render(s)
++	if err != nil || string(got) != string(want) {
++		t.Fatalf("queued install changed the active definition: %q, %v", got, err)
++	}
++	if Installed(s) {
++		t.Fatal("queued cancellation cleared the active install's pending marker")
++	}
++	close(release)
++	select {
++	case err := <-done:
++		if err != nil || !Installed(s) {
++			t.Fatalf("first install did not finish: %v", err)
++		}
++	case <-time.After(5 * time.Second):
++		t.Fatal("first install did not finish")
++	}
++}
++
++func TestConcurrentEnsuresLoadAnUnchangedDefinitionOnlyOnce(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	s := spec
++	s.LogPath = filepath.Join(home, "service.log")
++	entered, release := make(chan struct{}), make(chan struct{})
++	var once sync.Once
++	var bootstraps atomic.Int32
++	command = func(ctx context.Context, _ string, args ...string) ([]byte, error) {
++		once.Do(func() {
++			close(entered)
++			select {
++			case <-release:
++			case <-ctx.Done():
++			}
++		})
++		if len(args) > 0 && args[0] == "bootstrap" {
++			bootstraps.Add(1)
++		}
++		return nil, ctx.Err()
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++	defer cancel()
++	firstDone := ensureInBackground(t, ctx, s)
++	select {
++	case <-entered:
++	case <-ctx.Done():
++		t.Fatal("first install did not start")
++	}
++	secondDone := ensureInBackground(t, ctx, s)
++	close(release)
++	for _, done := range []<-chan error{firstDone, secondDone} {
++		select {
++		case err := <-done:
++			if err != nil {
++				t.Fatal(err)
++			}
++		case <-ctx.Done():
++			t.Fatal("concurrent installs did not complete")
++		}
++	}
++	if got := bootstraps.Load(); got != 1 {
++		t.Fatalf("loaded an unchanged definition %d times", got)
++	}
++}
++
++func TestAnEarlierInstallCannotClearALaterPendingLoad(t *testing.T) {
++	home, _ := stub(t, "darwin")
++	first := spec
++	first.LogPath = filepath.Join(home, "service.log")
++	second := first
++	second.Args = []string{"agent", "--second"}
++	path, _ := UnitPath(first)
++	firstEntered, secondEntered := make(chan struct{}), make(chan struct{})
++	firstRelease, secondRelease := make(chan struct{}), make(chan struct{})
++	var firstOnce, secondOnce sync.Once
++	command = func(ctx context.Context, _ string, _ ...string) ([]byte, error) {
++		data, err := os.ReadFile(path)
++		if err != nil {
++			return nil, err
++		}
++		if strings.Contains(string(data), "--second") {
++			secondOnce.Do(func() {
++				close(secondEntered)
++				select {
++				case <-secondRelease:
++				case <-ctx.Done():
++				}
++			})
++		} else {
++			firstOnce.Do(func() {
++				close(firstEntered)
++				select {
++				case <-firstRelease:
++				case <-ctx.Done():
++				}
++			})
++		}
++		return nil, ctx.Err()
++	}
++	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++	defer cancel()
++	firstDone := ensureInBackground(t, ctx, first)
++	select {
++	case <-firstEntered:
++	case <-ctx.Done():
++		t.Fatal("first install did not start")
++	}
++	secondDone := ensureInBackground(t, ctx, second)
++	close(firstRelease)
++	select {
++	case <-secondEntered:
++	case <-ctx.Done():
++		t.Fatal("second install did not start")
++	}
++	select {
++	case err := <-firstDone:
++		if err != nil {
++			t.Fatal(err)
++		}
++	case <-ctx.Done():
++		t.Fatal("first install did not complete")
++	}
++	if Installed(second) {
++		t.Error("first completion cleared the second install's pending marker")
++	}
++	close(secondRelease)
++	select {
++	case err := <-secondDone:
++		if err != nil || !Installed(second) {
++			t.Fatalf("second install did not finish: %v", err)
++		}
++	case <-ctx.Done():
++		t.Fatal("second install did not finish")
++	}
++}
++
++// Join every task before the stub restores process-wide service functions,
++// including when a regression makes the test fail partway through.
++func ensureInBackground(t *testing.T, parent context.Context, s Spec) <-chan error {
++	t.Helper()
++	ctx, cancel := context.WithCancel(parent)
++	done, settled := make(chan error, 1), make(chan struct{})
++	go func() {
++		defer close(settled)
++		_, err := EnsureContext(ctx, s)
++		done <- err
++	}()
++	t.Cleanup(func() {
++		cancel()
++		select {
++		case <-settled:
++		case <-time.After(3 * time.Second):
++			t.Error("test installation did not stop during cleanup")
++		}
++	})
++	return done
++}

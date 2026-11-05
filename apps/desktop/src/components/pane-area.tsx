@@ -181,7 +181,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 after={<PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
-                lead={lead && ((mobile && folding) || (rect.x < EPS && rect.y < EPS))}
+                lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
                 toggle={!windowToggle}

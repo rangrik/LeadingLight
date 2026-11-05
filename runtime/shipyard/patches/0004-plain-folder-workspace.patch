@@ -9,27 +9,21 @@ services and browser work as a checkout's do, without git init. What only
 git can do still checks Repo, and the folder can't be removed as a
 worktree.
 ---
- internal/box/locations.go      | 4 ++++
- internal/box/locations_test.go | 9 ++++++++-
- 2 files changed, 12 insertions(+), 1 deletion(-)
-
 diff --git a/internal/box/locations.go b/internal/box/locations.go
-index c936712..e8158ed 100644
+index 6ddf009..9341437 100644
 --- a/internal/box/locations.go
 +++ b/internal/box/locations.go
-@@ -438,6 +438,10 @@ func describe(ctx context.Context, s savedLocation) Location {
+@@ -448,6 +448,8 @@ func describe(ctx context.Context, s savedLocation) Location {
  	loc.RepoTrust = trust.State
- 	out, err := git(ctx, "-C", s.Path, "worktree", "list", "--porcelain")
+ 	out, err := worktreeList(ctx, s.Path)
  	if err != nil {
-+		// A folder that isn't a repository is its own one workspace, so its
-+		// sessions, ports, services and browser work as a checkout's do.
-+		// What only git can do still checks Repo.
++		// A plain folder is its own workspace.
 +		loc.Worktrees = []Worktree{{Name: s.Name, Path: s.Path, Main: true, Title: s.Titles[s.Path]}}
  		return loc
  	}
  	loc.Repo = true
 diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
-index 5898dee..b48226f 100644
+index 9488844..52ef99d 100644
 --- a/internal/box/locations_test.go
 +++ b/internal/box/locations_test.go
 @@ -112,9 +112,16 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {

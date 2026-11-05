@@ -296,6 +296,10 @@ send: the turn ledger is written before berthd exits.
 Since 2026-10-28, Quit stops the runtime when no agent is in a turn and no run is active, since
 nothing should keep running for no reason; a turn or run going keeps it, and agents wait in tmux.
 
+Since 2026-11-05, installing a runtime keeps all previous binary copies. Agents and tmux can
+outlive several app updates and still need their original executables. Keeping only two builds
+could remove files those processes still need; installation no longer prunes them.
+
 Since 2026-10-30, a message sent while the agent works is held by the runtime (a send with
 `when: idle` goes into the session's inbox) and typed once the agent is idle; Send now and ⌘↩ type
 it into the running turn, which the agent folds into that turn (Claude Code reads it after its

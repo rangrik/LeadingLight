@@ -154,15 +154,6 @@ promoting stable downloads. Intel needs separately built runtime helpers and a f
 Intel smoke test. In-app updates need their own signing keys and an update flow;
 add that when the downloadable preview distribution is proven.
 
-## 2026-10-28 — Upstream Shipyard test fixtures
-
-The optional all-workspace unit run passes 564 of 568 vendored tests. Three depend
-on upstream `internal/` fixtures absent from our vendored subset (devtools, doctor,
-and screen). One expects distinct berth-dark syntax colors but sees `#fafafa` for
-all three. The vendored tree is identical to the merged main version and cannot be
-edited here. Revisit with the next Shipyard sync and its test-fixture manifest;
-LeadingLight's desktop, image-service, and release tests are run separately.
-
 ## 2026-10-28 — Update toast over a narrow review sheet
 
 At a 520 px browser width, main's "Codex update available" toast can cover Listen
@@ -236,7 +227,6 @@ this recurs or before broad voice acceptance. It is not claimed fixed.
 | 2026-10-29 | Remote turns continuing after browser closure | The browser owns page tools and approvals. Reloading or closing interrupts the turn and keeps its partial transcript; automatic replay could repeat an edit. | Move tool execution to a durable workspace with replay-safe mutations before offering unattended remote work. |
 | 2026-10-29 | Recovering a pairing after unrecoverable delivery/storage failure | Normal received events clear from the relay, but a local queue overflow, invalid delivery or failed durable save stops work and revokes the grant. Re-pairing is the explicit recovery path. | Add replay-safe stream recovery and backpressure if real workloads hit these failures; do not silently resume uncertain edits. |
 | 2026-10-29 | Broader CLI version compatibility | Remote Codex discovers supported feature flags and restricts the current note tool set. Future provider built-ins need a fresh scope review. | Before supporting new CLI versions broadly; keep the real CLI/Keychain acceptance matrix with the release. |
-| 2026-10-29 | Inherited MCP configuration in unpaired local Codex note turns | Native pairing QA showed that an empty MCP table merges with the user's settings. Remote turns now explicitly disable inherited entries and verify the result; the older local launch remains unchanged. | Apply the same isolation to local note turns before claiming they exclude the user's configured helpers. |
 | 2026-10-29 | Keychain restore diagnostics and signed Mac updates | Rebuilding the ad-hoc dev app changed its code identity and triggered a macOS Keychain prompt. A failed restore currently omits that connection without an explanation. | Surface an actionable restore error/retry and use a stable Developer ID signature before public Mac updates. Never relax Keychain access controls. |
 | 2026-10-29 | History version-row height when timestamps wrap | Native QA showed a wrapped timestamp touching the next row in the narrow history list. Pairing, saved versions and attribution worked; this is outside the runtime repair. | Before broader UI acceptance, let history rows fit two-line timestamps and verify narrow layouts. |
 
@@ -260,3 +250,19 @@ performance pass. Evidence:
 | 2026-11-04 | Google Calendar approval and native consent verification | The service is public and consent is In production. Safari connection and event create/edit/delete passed. Google review is pending; native consent and local agent sessions have not been manually verified. | Follow the review in GOOGLE-VERIFICATION.md and repeat the native checks in CALENDAR-VALIDATION.md. |
 | 2026-11-03 | Calendar series-wide edits, calendar creation/sharing and drag grid | Day/seven-day agendas, occurrence edits and bounded new series cover the initial planning flow. Broad series operations and sharing need explicit scopes and UX. Kloq's npm package was unavailable. | Add when the daily workflow is validated, with series exceptions, permissions and keyboard/drag QA. |
 | 2026-11-03 | Background project-agent calendar access | Project agents have project-scoped context; granting personal calendar access silently would widen that boundary. Note agents already have direct calendar tools with approvals. | Add a per-project calendar grant and approval/replay contract before exposing tools to project workers. |
+
+## 2026-11-03 — Provider history after moving a project folder
+
+Claude stores conversation history under a folder-derived path. Relinking the
+same folder changes the runtime's location but does not relocate that history.
+The refreshed runtime reports a missing conversation instead of silently losing
+the resume. A new chat works in the relinked folder. Revisit when there is a
+provider-supported history move; do not rewrite the person's CLI history files.
+
+## 2026-11-03 — Larger dependency migrations
+
+Harper 3, TypeScript 7, PostgreSQL 4 and xterm 6 need dedicated compatibility
+work. Tauri's dialog patch needs native picker coverage. VitePress still uses
+Vite 5 and needs a docs-tool upgrade rather than an application-wide override.
+Revisit these as separate worktrees with their own migration and native checks;
+the current refresh takes compatible editor, rendering and build fixes.

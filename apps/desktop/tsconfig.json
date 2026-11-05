@@ -24,6 +24,7 @@
 
     "paths": {
       "~/*": ["./src/*"],
+      "@/lib/syntax-colors": ["./src/lib/syntax-colors.ts"],
       "@/lib/shortcuts.json": ["./src/lib/shortcuts.json"],
       "@/themes/builtin": ["../../packages/themes/src/builtin.ts"],
       "@/*": ["../../vendor/shipyard/app/src/*"],

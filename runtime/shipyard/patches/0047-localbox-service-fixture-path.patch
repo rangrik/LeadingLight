@@ -1,0 +1,18 @@
+diff --git a/internal/agent/localbox_e2e_test.go b/internal/agent/localbox_e2e_test.go
+index 8a4e81e..44558b7 100644
+--- a/internal/agent/localbox_e2e_test.go
++++ b/internal/agent/localbox_e2e_test.go
+@@ -78,7 +78,12 @@ func TestUseThisMacEndToEnd(t *testing.T) {
+ 	t.Setenv("BERTH_HOME", state)
+ 	t.Setenv("BERTH_USER_DIR", filepath.Join(root, "user"))
+ 	unit, _ := service.UnitPath(service.Spec{Name: service.BerthdName()})
+-	tmpl, _ := service.Render(service.Spec{Name: service.BerthdName(), Program: "__PROGRAM__", Args: []string{"serve", "--listen", "__LISTEN__"}, Env: map[string]string{"BERTH_HOME": "__HOME__"}})
++	// The real installer writes a PATH. Without it the agent treats this fresh
++	// fixture as a legacy service and restarts it at the first refresh.
++	tmpl, _ := service.Render(service.Spec{
++		Name: service.BerthdName(), Program: "__PROGRAM__", Args: []string{"serve", "--listen", "__LISTEN__"},
++		Env: map[string]string{"BERTH_HOME": "__HOME__", "PATH": service.ComposePATH(os.Getenv("PATH"), home)},
++	})
+ 	writeFile(t, filepath.Join(root, "unit.tmpl"), string(tmpl), 0o644)
+ 	t.Setenv("FAKE_UNIT", unit)
+ 	t.Setenv("FAKE_UNIT_TEMPLATE", filepath.Join(root, "unit.tmpl"))

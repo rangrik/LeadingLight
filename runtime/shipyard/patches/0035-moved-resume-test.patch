@@ -1,0 +1,45 @@
+diff --git a/internal/box/claudedriver_test.go b/internal/box/claudedriver_test.go
+index 367bdc8..0109e73 100644
+--- a/internal/box/claudedriver_test.go
++++ b/internal/box/claudedriver_test.go
+@@ -7,6 +7,7 @@ import (
+ 	"os"
+ 	"os/exec"
+ 	"path/filepath"
++	"regexp"
+ 	"strings"
+ 	"testing"
+ 	"time"
+@@ -835,8 +836,31 @@ func TestAStructuredConversationIsResumedWhenItsAgentEndsAndWhenItsSessionIsGone
+ 		}
+ 		time.Sleep(100 * time.Millisecond)
+ 	}
++	moved := repo + "-moved"
++	if err := os.Rename(repo, moved); err != nil {
++		t.Fatal(err)
++	}
++	if status := call(t, c, "POST", "/v1/conversations/"+id+"/resume", "", nil, nil); status != http.StatusGone {
++		t.Fatalf("missing folder: %d", status)
++	}
++	if _, err := bx.Locations.Add(t.Context(), "acme", moved); err != nil {
++		t.Fatal(err)
++	}
++	var refused struct{ Error, Code string }
++	if status := call(t, c, "POST", "/v1/conversations/"+id+"/resume", "", nil, &refused); status != http.StatusConflict || refused.Code != CodeAgentFailed {
++		t.Fatalf("missing Claude history: %d %+v", status, refused)
++	}
++	project := func(path string) string {
++		return filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "projects", regexp.MustCompile(`[^A-Za-z0-9]`).ReplaceAllString(path, "-"))
++	}
++	if err := os.Remove(project(moved)); err != nil {
++		t.Fatal(err)
++	}
++	if err := os.Rename(project(repo), project(moved)); err != nil {
++		t.Fatal(err)
++	}
+ 	var again Session
+-	if status := call(t, c, "POST", "/v1/conversations/"+id+"/resume", "", nil, &again); status != 200 || again.Driver != DriverClaude || again.Title != "hello" {
++	if status := call(t, c, "POST", "/v1/conversations/"+id+"/resume", "", nil, &again); status != 200 || again.Driver != DriverClaude || again.Title != "hello" || again.Dir != moved {
+ 		t.Fatalf("resume the conversation: %d %+v", status, again)
+ 	}
+ 	names = append(names, again.Name)

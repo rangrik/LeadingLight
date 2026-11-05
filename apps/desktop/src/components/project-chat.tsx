@@ -1,5 +1,5 @@
 import { ChevronDown, FileText, FileX, GitBranch, Globe, MessagesSquare, Plus, Square, X } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
@@ -50,6 +50,7 @@ const ACCESS_IN_FOLDER: Record<Agent, { value: Access; description: string }[]> 
   ],
 };
 const NAME: Record<Agent, string> = { claude: "Claude", codex: "Codex" };
+const CodePreview = lazy(() => import("@/components/files/code-editor"));
 
 // The record's items as the note chat's turns: one per prompt, its steps, its words, its end.
 // A file a turn wrote: its name, the call that wrote it, and the version the runtime kept.
@@ -534,7 +535,11 @@ function FilePreview({ file, location, worktree, conv, live, onClose }: { file: 
               ))}
             </SegmentedControl>
           )}
-          <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+          {file && text !== null && view !== "change" ? (
+            <Suspense fallback={<pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono text-xs">{text}</pre>}>
+              <CodePreview className="max-h-[60vh] min-h-0 overflow-auto rounded-md border [&_.cm-content]:pb-3!" path={file.name} readOnly text={text} wrap />
+            </Suspense>
+          ) : <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
             {view === "change" && text
               ? text.split("\n").map((l, i) => (
                   <span className={cn("block", l.startsWith("+") && "text-success-foreground", l.startsWith("-") && "text-destructive-foreground")} key={i}>
@@ -542,7 +547,7 @@ function FilePreview({ file, location, worktree, conv, live, onClose }: { file: 
                   </span>
                 ))
               : (text ?? "…")}
-          </pre>
+          </pre>}
         </DialogPanel>
       </DialogPopup>
     </Dialog>

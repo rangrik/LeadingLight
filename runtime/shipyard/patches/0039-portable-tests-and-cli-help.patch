@@ -1,0 +1,123 @@
+diff --git a/internal/box/sessions_test.go b/internal/box/sessions_test.go
+index 21ed274..bd2b5b3 100644
+--- a/internal/box/sessions_test.go
++++ b/internal/box/sessions_test.go
+@@ -250,8 +250,8 @@ func TestAttachPassesShiftEnter(t *testing.T) {
+ 	}
+ 	s := testSessions(t)
+ 	ctx := context.Background()
+-	// Asks for modifyOtherKeys, then shows the first 7 bytes it reads in hex.
+-	dump := `printf '\033[>4;2mready\n'; stty raw -echo; head -c 7 | od -An -tx1; sleep 30`
++	// Asks for modifyOtherKeys, then shows exactly 10 bytes in portable hex.
++	dump := `printf '\033[>4;2mready\n'; stty raw -echo; printf 'bytes='; head -c 10 | od -An -tx1 | tr -d '[:space:]'; printf ':end\n'; sleep 30`
+ 	if _, err := s.Create(ctx, "keys", "", t.TempDir(), dump, nil); err != nil {
+ 		t.Fatal(err)
+ 	}
+@@ -274,7 +274,8 @@ func TestAttachPassesShiftEnter(t *testing.T) {
+ 	}
+ 	master.Write([]byte("\x1b[13;2u......."))
+ 	// tmux writes it in xterm's form (CSI 27;2;13~) or as CSI 13;2u.
+-	xterm, csiu := "1b 5b 32 37 3b 32 3b", "1b 5b 31 33 3b 32 75"
++	// The latter is followed by three of the padding bytes sent above.
++	xterm, csiu := "bytes=1b5b32373b323b31337e:end", "bytes=1b5b31333b32752e2e2e:end"
+ 	for !strings.Contains(screen.String(), xterm) && !strings.Contains(screen.String(), csiu) {
+ 		if time.Now().After(deadline.Add(5 * time.Second)) {
+ 			t.Fatalf("Shift+Enter didn't reach the program as Shift+Enter: %q", screen.String())
+diff --git a/internal/boxcmd/boxcmd.go b/internal/boxcmd/boxcmd.go
+index 6cca499..1ba8219 100644
+--- a/internal/boxcmd/boxcmd.go
++++ b/internal/boxcmd/boxcmd.go
+@@ -93,7 +93,8 @@ var usageSections = []struct {
+ 		{"%[1]s browser network %[2]s[LOC/WT]", "Failed requests since the last look"},
+ 		{"%[1]s browser eval %[2]s[LOC/WT] JS", "Run JavaScript in the page (output capped at 2 KB)"},
+ 		{"%[1]s browser developer-request %[2]s[LOC/WT] REASON", "Ask the person for developer access to this page; never approve your own request"},
+-		{"%[1]s browser developer-status|developer-events %[2]s[LOC/WT] [--after N]", "Check approval or read its bounded CDP event history"},
++		{"%[1]s browser developer-status %[2]s[LOC/WT]", "Check developer access approval"},
++		{"%[1]s browser developer-events %[2]s[LOC/WT] [--after N]", "Read its bounded CDP event history"},
+ 		{"%[1]s browser cdp %[2]s[LOC/WT] METHOD [JSON_PARAMS]", "Run page-scoped CDP after explicit approval (DOM/CSS/Runtime, network and CPU profiles)"},
+ 		{"%[1]s browser status|close %[2]s[LOC/WT] [--tab NAME]", "Whether it runs, or close it (with --tab, just that tab)"},
+ 		{"%[1]s browser tabs %[2]s[LOC/WT]", "Its tabs: each its own page, cookies and size ($BERTH_BROWSER_TAB is the default)"},
+diff --git a/internal/boxcmd/browsercmd.go b/internal/boxcmd/browsercmd.go
+index dc9ac18..3300394 100644
+--- a/internal/boxcmd/browsercmd.go
++++ b/internal/boxcmd/browsercmd.go
+@@ -261,7 +261,7 @@ func browserCmd(ctx context.Context, c *box.Client, sub string, args []string, o
+ 			return usageErr("browser eval [LOC/WT] JS")
+ 		}
+ 		return browserCall(ctx, c, loc, wt, tab, "POST", "eval", map[string]string{"js": rest[0]}, out)
+-	case "developer-request", "developer-status", "developer-events", "cdp":
++	case "developer-events":
+ 		fs, _ := flags(args)
+ 		after := fs.Int64("after", 0, "event sequence to read after")
+ 		pos, err := parse(fs, args)
+@@ -272,6 +272,20 @@ func browserCmd(ctx context.Context, c *box.Client, sub string, args []string, o
+ 		if err != nil {
+ 			return err
+ 		}
++		if len(rest) != 0 || *after < 0 {
++			return usageErr("browser developer-events [LOC/WT] [--after N] [--tab NAME]")
++		}
++		return browserCall(ctx, c, loc, wt, tab, "GET", "developer/events?after="+strconv.FormatInt(*after, 10), nil, out)
++	case "developer-request", "developer-status", "cdp":
++		fs, _ := flags(args)
++		pos, err := parse(fs, args)
++		if err != nil {
++			return err
++		}
++		loc, wt, rest, err := browserWorktree(pos)
++		if err != nil {
++			return err
++		}
+ 		switch sub {
+ 		case "developer-request":
+ 			if len(rest) != 1 {
+@@ -283,11 +297,6 @@ func browserCmd(ctx context.Context, c *box.Client, sub string, args []string, o
+ 				return usageErr("browser developer-status [LOC/WT] [--tab NAME]")
+ 			}
+ 			return browserCall(ctx, c, loc, wt, tab, "GET", "developer", nil, out)
+-		case "developer-events":
+-			if len(rest) != 0 || *after < 0 {
+-				return usageErr("browser developer-events [LOC/WT] [--after N] [--tab NAME]")
+-			}
+-			return browserCall(ctx, c, loc, wt, tab, "GET", "developer/events?after="+strconv.FormatInt(*after, 10), nil, out)
+ 		default:
+ 			if len(rest) < 1 || len(rest) > 2 {
+ 				return usageErr("browser cdp [LOC/WT] METHOD [JSON_PARAMS] [--tab NAME]")
+diff --git a/internal/boxcmd/browserdeveloper_test.go b/internal/boxcmd/browserdeveloper_test.go
+index 4767d30..0f87400 100644
+--- a/internal/boxcmd/browserdeveloper_test.go
++++ b/internal/boxcmd/browserdeveloper_test.go
+@@ -1,6 +1,12 @@
+ package boxcmd
+ 
+-import "testing"
++import (
++	"bytes"
++	"context"
++	"testing"
++
++	"github.com/cosscom/shipyard/internal/box"
++)
+ 
+ // The CLI must keep the chosen tab and request approval rather than invent a grant.
+ func TestBrowserDeveloperCommands(t *testing.T) {
+@@ -17,3 +23,19 @@ func TestBrowserDeveloperCommands(t *testing.T) {
+ 		t.Fatal(r)
+ 	}
+ }
++
++// Only developer-events accepts the event cursor; other commands must not
++// silently ignore a caller's --after argument.
++func TestBrowserDeveloperAfterOnlyAppliesToEvents(t *testing.T) {
++	for _, args := range [][]string{
++		{"browser", "developer-request", "cal/billing", "inspect", "--after", "12"},
++		{"browser", "developer-status", "cal/billing", "--after", "12"},
++		{"browser", "cdp", "cal/billing", "DOM.getDocument", "--after", "12"},
++	} {
++		r := &recorder{reply: `{}`}
++		var out bytes.Buffer
++		if err := Run(context.Background(), &box.Client{Doer: r}, args, &out); err == nil || r.path != "" {
++			t.Errorf("%v: error = %v, request = %q", args, err, r.path)
++		}
++	}
++}

@@ -1,0 +1,73 @@
+diff --git a/internal/box/locations.go b/internal/box/locations.go
+index 62ada0c..4586565 100644
+--- a/internal/box/locations.go
++++ b/internal/box/locations.go
+@@ -227,14 +227,27 @@ func (l *Locations) worktreePaths(ctx context.Context) []Location {
+ 	out := make([]Location, 0, len(saved))
+ 	for _, s := range saved {
+ 		loc := Location{Name: s.Name, Path: s.Path}
+-		if b, err := worktreeList(ctx, s.Path); err == nil {
+-			loc.Worktrees = parseWorktrees(b, s.Path)
++		if st, err := os.Stat(s.Path); err == nil && st.IsDir() {
++			if b, err := locationWorktreeList(ctx, s.Path); err == nil {
++				loc.Worktrees = parseWorktrees(b, s.Path)
++			} else {
++				loc.Worktrees = []Worktree{{Name: s.Name, Path: s.Path, Main: true}}
++			}
+ 		}
+ 		out = append(out, loc)
+ 	}
+ 	return out
+ }
+ 
++// locationWorktreeList rejects a folder inside a repository, which is its own workspace.
++func locationWorktreeList(ctx context.Context, path string) ([]byte, error) {
++	out, err := worktreeList(ctx, path)
++	if _, gerr := os.Lstat(filepath.Join(path, ".git")); err == nil && gerr != nil {
++		err = gerr
++	}
++	return out, err
++}
++
+ // withPorts adds each worktree's first port.
+ func (l *Locations) withPorts(loc Location) Location {
+ 	for i := range loc.Worktrees {
+@@ -472,10 +485,7 @@ func describe(ctx context.Context, s savedLocation) Location {
+ 	}
+ 	repo, trust, _ := repoLayer(s)
+ 	loc.RepoTrust = trust.State
+-	out, err := worktreeList(ctx, s.Path)
+-	if _, gerr := os.Lstat(filepath.Join(s.Path, ".git")); err == nil && gerr != nil {
+-		err = gerr
+-	}
++	out, err := locationWorktreeList(ctx, s.Path)
+ 	if err != nil {
+ 		// A plain folder is its own workspace.
+ 		loc.Worktrees = []Worktree{{Name: s.Name, Path: s.Path, Main: true, Title: s.Titles[s.Path]}}
+diff --git a/internal/box/locations_test.go b/internal/box/locations_test.go
+index 856220d..a739187 100644
+--- a/internal/box/locations_test.go
++++ b/internal/box/locations_test.go
+@@ -151,6 +151,22 @@ func TestPlainDirectoriesAreLocationsToo(t *testing.T) {
+ 	if root, _ := l.Add(context.Background(), "root", repo); !root.Repo {
+ 		t.Fatalf("a repository's root: %+v", root)
+ 	}
++	paths := l.worktreePaths(context.Background())
++	innerPath, _ := filepath.EvalSymlinks(filepath.Join(repo, "docs"))
++	if loc, wt := worktreeFor(paths, innerPath); loc != "inner" || wt != "inner" {
++		t.Fatalf("nested folder placed in %q/%q", loc, wt)
++	}
++	if name, _ := worktreeFor(paths, loc.Path); name != "" {
++		t.Fatalf("missing folder placed in %q", name)
++	}
++	plain := t.TempDir()
++	if _, err := l.Add(context.Background(), "plain", plain); err != nil {
++		t.Fatal(err)
++	}
++	plainPath, _ := filepath.EvalSymlinks(plain)
++	if loc, wt := worktreeFor(l.worktreePaths(context.Background()), plainPath); loc != "plain" || wt != "plain" {
++		t.Fatalf("plain folder placed in %q/%q", loc, wt)
++	}
+ }
+ 
+ func TestAddRejectsMissingPathsAndBadNames(t *testing.T) {

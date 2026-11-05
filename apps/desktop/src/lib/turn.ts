@@ -5,6 +5,8 @@ import { type Access, aiPrefs, isClaude } from "~/lib/ai-prefs";
 import type { AskPage, Quote } from "~/lib/ask";
 import { buildPrompt, type NoteText, type Seen, SYSTEM } from "~/lib/ask-prompt";
 import { effortFor } from "~/lib/codex";
+import { stopStarting } from "~/lib/stop-starting";
+import { codexFailure, codexFailureMessage } from "~/lib/codex-failure";
 import { GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
 import { type Item, patchThread, type Thread, threadOf } from "~/lib/threads";
 import { action } from "~/lib/history-types";
@@ -39,9 +41,10 @@ type Turn = {
   answering?: boolean;
   stopped?: boolean;
   dispatched?: boolean;
+  starting?: Promise<void>;
   remote: boolean;
   pending?: (allow: boolean) => Promise<void>;
-  gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string };
+  gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string; failure?: ReturnType<typeof codexFailure> };
 };
 const turns = new Map<string, Turn>();
 const canWork = (id: string, turn: Turn) => turns.get(id) === turn && !turn.stopped && (!turn.remote || remoteRunCurrent(id));
@@ -98,13 +101,16 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   }
   const req: AskRequest = { id, prompt, system: SYSTEM, model, effort, access: prefs.plan ? "plan" : prefs.access, resume: s.id, provider };
   turn.dispatched = true;
-  await ask(req, (e) => {
-    if (!turns.has(id)) return;
+  turn.starting = ask(req, (e) => {
+    if (!turns.has(id) || turn.stopped) return;
     if (e.type === "error") finish(id, "failed", e.message);
-    else if (turn.stopped) return;
     else if (provider === "codex") onCodex(id, e.line);
     else onLine(id, e.line);
-  }).catch((err: unknown) => finish(id, "failed", err instanceof Error ? err.message : String(err)));
+  });
+  await turn.starting.catch((err: unknown) => {
+    if (!turn.stopped) finish(id, "failed", err instanceof Error ? err.message : String(err));
+  });
+  turn.starting = undefined;
 }
 
 // Why a tail turn didn't go, in plain words for Settings › AI › Tail.
@@ -273,11 +279,12 @@ function onCodex(id: string, line: Line) {
       if (i?.kind === "thinking") list[k] = { ...i, text: i.text + p.delta };
       return list;
     });
+  else if (m === "error") g.failure = codexFailure(p) ?? g.failure;
   else if (m === "turn/completed") {
     const status = p.turn?.status;
     t.planned = t.plan && status === "completed";
     const how = status === "completed" ? "done" : status === "interrupted" ? "stopped" : "failed";
-    finish(id, how, how === "failed" ? (p.turn?.error?.message ?? "Codex couldn't finish") : undefined, { session_id: g.thread });
+    finish(id, how, how === "failed" ? codexFailureMessage(p.turn, g.failure) : undefined, { session_id: g.thread });
   }
 }
 
@@ -364,7 +371,11 @@ export async function stopTurn(pageId: string, threadId: string) {
   if (turn) { turn.stopped = true; turn.pending = undefined; }
   patchThread(pageId, threadId, (t) => ({ ...t, stopping: true, approval: undefined, note: 'Stopping…' }));
   if (turn && !turn.dispatched) return finish(busy, "stopped");
-  try { await cancel(busy); finish(busy, "stopped"); }
+  try {
+    if (turn && !turn.remote) await stopStarting(() => cancel(busy), turn.starting);
+    else await cancel(busy);
+    finish(busy, "stopped");
+  }
   catch (error) {
     if (turns.has(busy)) patchThread(pageId, threadId, (t) => ({ ...t, stopping: false, note: `Cannot confirm the agent stopped yet. ${error instanceof Error ? error.message : String(error)}` }));
   }

@@ -196,8 +196,8 @@ pub async fn cli_update(id: String) -> Result<String, String> {
     .map_err(|e| e.to_string())?
 }
 
-// Common note-thread flags. Paired threads also disable and verify each inherited MCP server
-// in agent.rs; an empty MCP table alone does not clear the user's configured servers.
+// Each note turn also disables and verifies inherited MCP servers in agent.rs;
+// an empty MCP table alone does not clear the user's configured servers.
 pub fn codex_server(bin: &Path) -> Command {
     let mut c = tool_command(bin);
     c.arg("app-server");

@@ -33,7 +33,7 @@ The note under **Light or dark** says which two themes are in use, and in the th
 
 ## Pick a theme
 
-Below the choice is the list of themes, each drawn as a small picture of the app in its own colours. Click one to use it. Its card shows a check, and the whole app takes its colours: the sidebar, the page, the editor's text and the colours of code in code blocks. Your choice is kept when you reopen the app.
+Below the choice is the list of themes, each drawn as a small picture of the app in its own colours. Click one to use it. Its card shows a check, and the whole app takes its colours: the sidebar, the page, the editor's text and the colours of code in code blocks. Project file previews use matching syntax colours. Your choice is kept when you reopen the app.
 
 <img class="shot" src="/screenshots/settings-appearance.webp" alt="Settings › Appearance with the theme gallery" />
 

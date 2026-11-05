@@ -10,11 +10,15 @@ Feature: Browser preferences and browsing data
     And Escape dismisses suggestions without navigating
 
   Scenario: Browse in a narrow split pane
-    Given Browser is beside a note in a 520 pixel window
+    Given Browser is beside a note in an 800 pixel window
     When its pane is narrower than 420 pixels
     Then Address has its own full-width row
     And navigation, Bookmark, Ask about page and Browser menu fit below it without overlap
     And I can type and navigate from Address
+    When the window becomes 520 pixels wide
+    Then the active browser pane fills the available page area
+    And Address and every toolbar action remain visible without horizontal scrolling
+    And its sidebar button opens navigation without switching to another pane
     When I enter full view in a 320 pixel window
     Then Address and every toolbar action remain visible without horizontal scrolling
     When the pane becomes at least 420 pixels wide

@@ -17,6 +17,10 @@
     "ios:archive": "scripts/ios.sh release-archive",
     "ios:export": "scripts/ios.sh release-export",
     "runtime:build": "scripts/project-runtime/build.sh && scripts/project-runtime/build-tmux.sh",
+    "runtime:test": "scripts/project-runtime/build.sh --test",
+    "runtime:test:fixtures": "scripts/project-runtime/build.sh --test-fixtures",
+    "runtime:test:providers": "node scripts/project-runtime/test-providers.mjs",
+    "runtime:test:systemd": "scripts/project-runtime/build.sh --test-systemd",
     "runtime:probe": "node scripts/project-runtime/probe.mjs"
   }
 }

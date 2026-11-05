@@ -38,6 +38,32 @@ export function sessionState(s: Session, stats?: Stats): SessionState {
   return agentOf(s) ? "running" : "idle";
 }
 
+// onItsWork says a session shown as running is not in a turn: its turn
+// ended, and turn check read its work as running on without it (a delegated
+// task it waits on, a build, a deploy, a watcher). It is drawn with an
+// hourglass, not a live turn's spinner, and says why in ON_ITS_WORK.
+export const onItsWork = (s: Session | undefined): boolean => !!s && !s.exited && !s.service && s.agent_state === "finished" && !!s.unfinished;
+
+export const ON_ITS_WORK = "Its turn ended while its work runs on: a delegated task, a build, a deploy or a watcher. It picks up by itself.";
+
+// allOnItsWork says every session of these shown as running is on its work,
+// with no live turn among them: a row that sums them up shows the hourglass.
+export function allOnItsWork(sessions: Session[], stats?: Stats): boolean {
+  const running = sessions.filter((s) => sessionState(s, stats) === "running");
+  return running.length > 0 && running.every(onItsWork);
+}
+
+// chatState is the state a chat draws a session in: one on its work is
+// between turns, so its chat is a finished turn's (Send; no spinner, timer
+// or Stop), with the hourglass at its foot. Everywhere else it is running.
+export function chatState(s: Session, stats?: Stats): SessionState {
+  return onItsWork(s) ? "finished" : sessionState(s, stats);
+}
+
+// replyMode is what a chat's reply box does at a state: queue a message
+// for when a live turn ends, answer the agent's question, or send it.
+export const replyMode = (state: string | undefined): "send" | "queue" | "answer" => (state === "running" ? "queue" : state === "waiting" ? "answer" : "send");
+
 export function worktreeSessions(sessions: Session[] | undefined, wt: Worktree): Session[] {
   // A service's terminal is the service, not work in the worktree.
   return (sessions ?? []).filter((s) => s.dir === wt.path && !s.service);
@@ -174,16 +200,26 @@ export const agentLabel = (a: string) => labels[a] ?? a.charAt(0).toUpperCase() 
 // restartCommand is how to start an agent again: its command without the
 // first prompt it was given (berth adds it last, shell-quoted, after
 // --prompt or -i for the agents that take one), so starting again doesn't
-// run the old task a second time.
+// run the old task a second time. A structured agent's command (berthd's
+// agent host) has no prompt in it, and is never run again as it was: its
+// conversation is carried on instead (conversationOf).
 export function restartCommand(command?: string): string | undefined {
-  if (!command) return command;
+  if (!command || conversationOf(command)) return undefined;
   return command.replace(/(?:\s+(?:--prompt|-i))?\s+'(?:[^']|'\\'')*'\s*$/, "");
+}
+
+// conversationOf is the structured conversation a session's command runs
+// berthd's agent host for (its --dir is the conversation's folder), or
+// undefined for any other command.
+export function conversationOf(command?: string): string | undefined {
+  const m = command && /'agent-host'.*?\s--dir\s+'([^']+)'/.exec(command);
+  return m ? m[1].split("/").filter(Boolean).pop() : undefined;
 }
 
 // firstPrompt is that prompt, unquoted, for a session Shipyard started with
 // an agent preset (whose command it wrote); undefined for anything else.
 export function firstPrompt(s?: Pick<Session, "command" | "preset">): string | undefined {
-  if (!s?.preset || !s.command) return undefined;
+  if (!s?.preset || !s.command || conversationOf(s.command)) return undefined;
   const m = s.command.match(/\s'((?:[^']|'\\'')*)'\s*$/);
   return m ? m[1].replaceAll("'\\''", "'") : undefined;
 }
