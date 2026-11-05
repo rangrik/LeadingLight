@@ -18,7 +18,7 @@ export default defineConfig({
     { name: "gallery", grep: /@gallery/ },
     { name: "ipad-webkit", testMatch: "ipad.spec.ts", use: { browserName: "webkit" } },
     { name: "iphone-webkit", testMatch: "iphone.spec.ts", use: { browserName: "webkit", isMobile: true } },
-    { name: "safari", testMatch: /(?:history|saving|smoke|cloud(?:-guards|-large)?|offline|native-account|pairing(?:-integration)?|task-work-layout)\.spec\.ts/, use: { browserName: "webkit" } },
+    { name: "safari", testMatch: /(?:history|saving|smoke|cloud(?:-guards|-large)?|offline|calendar|browser-copy|native-account|pairing(?:-integration)?|task-work-layout|project-chat-history)\.spec\.ts/, use: { browserName: "webkit" } },
   ],
   use: {
     baseURL: `http://127.0.0.1:${port}`,

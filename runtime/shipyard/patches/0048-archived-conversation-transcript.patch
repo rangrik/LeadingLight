@@ -1,0 +1,203 @@
+From ad6fb888e1846e7d7f48319b1d253234693f1c85 Mon Sep 17 00:00:00 2001
+From: Native QA <native-qa@local>
+Date: Thu, 5 Nov 2026 15:06:11 -0800
+Subject: [PATCH] Read archived conversation transcripts without resuming
+ agents
+
+---
+ internal/box/conversation_transcript_test.go | 126 +++++++++++++++++++
+ internal/box/conversations.go                |  31 +++++
+ 2 files changed, 157 insertions(+)
+ create mode 100644 internal/box/conversation_transcript_test.go
+
+diff --git a/internal/box/conversation_transcript_test.go b/internal/box/conversation_transcript_test.go
+new file mode 100644
+index 00000000..64f93eb0
+--- /dev/null
++++ b/internal/box/conversation_transcript_test.go
+@@ -0,0 +1,126 @@
++package box
++
++import (
++	"bytes"
++	"encoding/json"
++	"fmt"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/cosscom/shipyard/internal/agenthost"
++	"github.com/cosscom/shipyard/internal/transcript"
++)
++
++// No session manager or driver is installed: reading a saved chat must never
++// look up tmux sessions, launch an agent, or change the conversation's files.
++func archivedTranscriptFixture(t *testing.T, agent string, log []byte) (*http.ServeMux, string) {
++	t.Helper()
++	root := t.TempDir()
++	dir := filepath.Join(root, "saved-chat")
++	if err := os.Mkdir(dir, 0o700); err != nil {
++		t.Fatal(err)
++	}
++	noteConversation(dir, func(c *Conversation) {
++		c.Agent, c.Dir, c.Session = agent, "/no-longer-present/project", "removed-session"
++	})
++	if err := os.WriteFile(filepath.Join(dir, agenthost.LogName), log, 0o600); err != nil {
++		t.Fatal(err)
++	}
++	b := &Box{ConversationsDir: root}
++	mux := http.NewServeMux()
++	b.mountConversations(func(pattern string, handler func(http.ResponseWriter, *http.Request) error) {
++		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
++			if err := handler(w, r); err != nil {
++				writeErr(w, err)
++			}
++		})
++	})
++	return mux, dir
++}
++
++func readArchivedTranscript(t *testing.T, mux *http.ServeMux, query string) transcript.Result {
++	t.Helper()
++	rec := httptest.NewRecorder()
++	mux.ServeHTTP(rec, httptest.NewRequest("GET", "/v1/conversations/saved-chat/transcript"+query, nil))
++	if rec.Code != http.StatusOK {
++		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
++	}
++	var result transcript.Result
++	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
++		t.Fatal(err)
++	}
++	return result
++}
++
++func TestArchivedConversationTranscriptWithoutSession(t *testing.T) {
++	for _, tc := range []struct{ agent, fixture, source, answer string }{
++		{"claude", "claude_host_ask.jsonl", "claude", "You chose Tea."},
++		{"codex", "codex_host_approve.jsonl", "codex", "REFUSED"},
++		{"opencode", "acp_host_opencode.jsonl", "acp", "DONE"},
++	} {
++		t.Run(tc.agent, func(t *testing.T) {
++			log, err := os.ReadFile(filepath.Join("..", "transcript", "testdata", tc.fixture))
++			if err != nil {
++				t.Fatal(err)
++			}
++			mux, dir := archivedTranscriptFixture(t, tc.agent, log)
++			meta, _ := os.ReadFile(filepath.Join(dir, metaName))
++			first := readArchivedTranscript(t, mux, "")
++			if first.Source != tc.source || len(first.Items) == 0 || first.Items[0].Kind != "user" || first.Items[len(first.Items)-1].Text != tc.answer {
++				t.Fatalf("saved conversation: %+v", first)
++			}
++			again := readArchivedTranscript(t, mux, fmt.Sprintf("?since=%d&gen=%s", first.Next, first.Gen))
++			if len(again.Items) != 0 || again.Next != first.Next {
++				t.Fatalf("cursor replayed items: %+v", again)
++			}
++			for name, before := range map[string][]byte{metaName: meta, agenthost.LogName: log} {
++				after, err := os.ReadFile(filepath.Join(dir, name))
++				if err != nil || !bytes.Equal(after, before) {
++					t.Fatalf("reading changed %s: %v", name, err)
++				}
++			}
++			files, _ := os.ReadDir(dir)
++			if len(files) != 2 {
++				t.Fatalf("reading created files: %v", files)
++			}
++		})
++	}
++}
++
++func TestArchivedConversationTranscriptBoundsLongRecordsAndPagesBack(t *testing.T) {
++	// More than 44 MB of protocol padding must not become an unbounded UI response.
++	var log bytes.Buffer
++	pad := strings.Repeat("x", 64<<10)
++	for i := range 700 {
++		fmt.Fprintf(&log, `{"dir":"out","padding":%q,"data":{"type":"user","uuid":"u%d","message":{"role":"user","content":"Question %d"}}}`+"\n", pad, i, i)
++		fmt.Fprintf(&log, `{"dir":"out","data":{"type":"assistant","uuid":"a%d","message":{"role":"assistant","content":[{"type":"text","text":"Answer %d"}]}}}`+"\n", i, i)
++	}
++	mux, _ := archivedTranscriptFixture(t, "claude", log.Bytes())
++	last := readArchivedTranscript(t, mux, "")
++	if !last.Truncated || len(last.Items) < 2 || len(last.Items) > 300 || last.Items[len(last.Items)-1].Text != "Answer 699" {
++		t.Fatalf("unbounded or incomplete final window: truncated=%v items=%d", last.Truncated, len(last.Items))
++	}
++	body, _ := json.Marshal(last)
++	if len(body) > 1<<20 {
++		t.Fatalf("window grew to %d bytes", len(body))
++	}
++	older := readArchivedTranscript(t, mux, fmt.Sprintf("?before=%d&limit=10", last.Start))
++	if len(older.Items) == 0 || len(older.Items) > 10 || older.Items[len(older.Items)-1].Off >= last.Start {
++		t.Fatalf("older window: %+v", older)
++	}
++}
++
++func TestArchivedConversationTranscriptRejectsMissingAndInvalidIDs(t *testing.T) {
++	mux, _ := archivedTranscriptFixture(t, "claude", nil)
++	for _, id := range []string{"missing", ".hidden", "%2E%2E", "%2Ftmp"} {
++		rec := httptest.NewRecorder()
++		mux.ServeHTTP(rec, httptest.NewRequest("GET", "/v1/conversations/"+id+"/transcript", nil))
++		if rec.Code != http.StatusNotFound {
++			t.Errorf("%s: status %d", id, rec.Code)
++		}
++	}
++}
+diff --git a/internal/box/conversations.go b/internal/box/conversations.go
+index d2812fc8..89acf9c1 100644
+--- a/internal/box/conversations.go
++++ b/internal/box/conversations.go
+@@ -15,6 +15,7 @@ import (
+ 	"github.com/cosscom/shipyard/internal/agenthost"
+ 	"github.com/cosscom/shipyard/internal/integrations/adapters"
+ 	"github.com/cosscom/shipyard/internal/statefile"
++	"github.com/cosscom/shipyard/internal/transcript"
+ )
+ 
+ // A structured agent's conversation outlives its session: its folder under
+@@ -55,6 +56,7 @@ const metaName = "meta.json"
+ 
+ func (b *Box) mountConversations(route func(string, func(http.ResponseWriter, *http.Request) error)) {
+ 	route("GET /v1/conversations", b.listConversations)
++	route("GET /v1/conversations/{id}/transcript", b.conversationTranscript)
+ 	route("POST /v1/conversations/{id}/resume", b.resumeConversation)
+ 	route("POST /v1/sessions/{name}/resume", b.resumeSession)
+ 	route("GET /v1/sessions/{name}/past", b.listPast)
+@@ -62,6 +64,35 @@ func (b *Box) mountConversations(route func(string, func(http.ResponseWriter, *h
+ 	route("GET /v1/conversations/{id}/outputs/{output}", b.outputContent)
+ }
+ 
++// conversationTranscript reads a saved record without resuming its agent or
++// requiring a tmux session. It uses the same bounded window and history pages
++// as a live chat, including generation/cursor handling after a runtime restart.
++func (b *Box) conversationTranscript(w http.ResponseWriter, r *http.Request) error {
++	dir, err := b.conversationDir(r.PathValue("id"))
++	if err != nil {
++		return err
++	}
++	meta, _ := readConversation(dir)
++	source := transcript.SourceACPHost
++	switch meta.Agent {
++	case "", "claude":
++		source = transcript.SourceClaudeHost
++	case "codex":
++		source = transcript.SourceCodexHost
++	}
++	path := filepath.Join(dir, agenthost.LogName)
++	if r.URL.Query().Has("before") {
++		return olderPage(w, r, source, path, meta.Dir)
++	}
++	since, _ := strconv.Atoi(r.URL.Query().Get("since"))
++	res, err := reader().Follow(source, path, meta.Dir, max(since, 0), r.URL.Query().Get("gen"))
++	if err != nil {
++		return err
++	}
++	writeJSON(w, res)
++	return nil
++}
++
+ // readConversation reads a conversation's meta.json.
+ func readConversation(dir string) (Conversation, bool) {
+ 	raw, err := os.ReadFile(filepath.Join(dir, metaName))
+-- 
+2.51.2
+

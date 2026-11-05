@@ -1,15 +1,17 @@
 import { defineConfig } from "vitepress";
 
 const repo = "https://github.com/rangrik/LeadingLight";
+const base = process.env.DOCS_BASE || "/";
 
 export default defineConfig({
+  base,
   title: "LeadingLight",
   description: "A local-first notes app for macOS. Every note is an object with a type, written in a block editor.",
   lang: "en-US",
-  cleanUrls: true,
+  cleanUrls: base === "/",
   lastUpdated: true,
   head: [
-    ["link", { rel: "icon", type: "image/svg+xml", href: "/logo.svg" }],
+    ["link", { rel: "icon", type: "image/svg+xml", href: `${base}logo.svg` }],
     ["meta", { name: "theme-color", content: "#15151a" }],
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:title", content: "LeadingLight documentation" }],
@@ -18,6 +20,7 @@ export default defineConfig({
   themeConfig: {
     logo: "/logo.svg",
     nav: [
+      { text: "Privacy policy", link: "/privacy-policy" },
       { text: "Guide", link: "/guide/", activeMatch: "^/guide/" },
       { text: "Features", link: "/write/editor", activeMatch: "^/(write|organize|workspace|capture|ai|sync|customize)/" },
       { text: "Developers", link: "/develop/", activeMatch: "^/develop/" },
@@ -58,6 +61,7 @@ export default defineConfig({
           { text: "Links and backlinks", link: "/organize/links" },
           { text: "Lists, tables and boards", link: "/organize/views" },
           { text: "Tags and daily notes", link: "/organize/tags-daily" },
+          { text: "Calendar", link: "/organize/calendar" },
           { text: "Tasks and new objects", link: "/organize/tasks" },
           { text: "History and authorship", link: "/organize/history" },
         ],
@@ -135,7 +139,7 @@ export default defineConfig({
     editLink: { pattern: `${repo}/edit/main/apps/docs/:path`, text: "Edit this page on GitHub" },
     outline: { level: [2, 3] },
     footer: {
-      message: "LeadingLight is MIT licensed. Preview builds are unsigned and for Apple Silicon Macs.",
+      message: `LeadingLight is MIT licensed. <a href="${base}privacy-policy${base === "/" ? "" : ".html"}">Privacy policy</a>. Preview builds are unsigned and for Apple Silicon Macs.`,
       copyright: "© 2026 Pranav Kanade",
     },
   },

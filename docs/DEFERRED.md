@@ -220,7 +220,7 @@ this recurs or before broad voice acceptance. It is not claimed fixed.
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-10-29 | Public sync rollout | Google and GitHub sign-in are verified; Google remains in testing mode. Sync access remains private. | Verify production cross-device sync and physical-device Safari, then decide who may join and review Google publishing requirements. |
+| 2026-11-04 | Public sync device acceptance | Public workspace access is enabled at the owner's request; physical-device and production cross-device acceptance remains incomplete. | Complete production cross-device sync and physical-device Safari checks before claiming those paths verified. |
 | 2026-10-28 | Dropbox, iCloud and direct-device sync adapters | Devices that reconnect at different times need durable sync storage. First implementation uses optional encrypted managed storage. | After production sync is proven; retain the journal contract for alternative transports. |
 | 2026-10-28 | Catalog changes across devices, history compaction and storage management | The initial sync copies missing definitions and adopts desktop changes to untouched starter definitions; later definition edits/deletes remain local. Full history snapshots can grow large. Cloud sync stops explicitly at its quota instead of dropping history. | Before broad release or large-library rollout; add catalog events, per-page history indexes, compaction and export/delete controls. |
 | 2026-11-05 | Mobile project extras and isolated cloud runners | Scoped native mobile project control now uses a separate Tailscale grant. Remote terminals, attachments, worktree creation, browser viewing, push notifications and automatic Mac wake are not exposed. Shared API keys and usage billing are rejected, not deferred. | Add a separately reviewed scope when those mobile workflows are needed; cloud hosting would need user-authorized CLI login, isolation and measured hosting costs. |
@@ -246,6 +246,10 @@ with p95 18.1/18.0 ms and maximum 22.1 ms. The strict 16 ms budget is not met; t
 are not a matched baseline for the authorship guard. Revisit in a separate typing
 performance pass. Evidence:
 `apps/desktop/qa/report/native-focus-2026-10-29/agent-postmerge-performance-results.json`.
+
+| 2026-11-04 | Google Calendar approval and native consent verification | The service is public and consent is In production. Safari connection and event create/edit/delete passed. Google review is pending; native consent and local agent sessions have not been manually verified. | Follow the review in GOOGLE-VERIFICATION.md and repeat the native checks in CALENDAR-VALIDATION.md. |
+| 2026-11-03 | Calendar series-wide edits, calendar creation/sharing and drag grid | Day/seven-day agendas, occurrence edits and bounded new series cover the initial planning flow. Broad series operations and sharing need explicit scopes and UX. Kloq's npm package was unavailable. | Add when the daily workflow is validated, with series exceptions, permissions and keyboard/drag QA. |
+| 2026-11-03 | Background project-agent calendar access | Project agents have project-scoped context; granting personal calendar access silently would widen that boundary. Note agents already have direct calendar tools with approvals. | Add a per-project calendar grant and approval/replay contract before exposing tools to project workers. |
 
 ## 2026-11-03 — Provider history after moving a project folder
 

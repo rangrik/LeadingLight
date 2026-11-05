@@ -37,6 +37,7 @@ export async function refreshCloud() {
 }
 export async function signIn(provider: string) {
   if (await isNative) return (await import('./native-account')).connectNativeAccount();
+  if (location.origin === 'https://leadinglight-web.vercel.app') throw new Error('Use Copy notes to leadinglight.app above your workspace before signing in at the new address. Your original notes stay here.');
   const { csrfToken } = await cloudApi<{ csrfToken: string }>('auth/csrf');
   const form = document.createElement('form'); form.method = 'POST'; form.action = `/api/auth/signin/${provider}`;
   for (const [name, value] of Object.entries({ csrfToken, callbackUrl: location.href })) {

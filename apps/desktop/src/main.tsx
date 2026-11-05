@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import App from './App';
+import { BrowserAddressEntry } from './components/browser-migration';
 import "./styles.css";
 import { platformReady } from "./lib/platform";
 
@@ -8,7 +9,7 @@ document.documentElement.dataset.authorship = localStorage.getItem("leadinglight
 
 void platformReady.then(() => ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    <BrowserAddressEntry><App /></BrowserAddressEntry>
   </React.StrictMode>,
 ));
 

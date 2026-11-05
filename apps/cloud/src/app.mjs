@@ -1,3 +1,4 @@
+import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
 import { NativeError, authenticateNative, nativePublicRequest, nativeBrowserRequest, revokeNative } from './native.mjs';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -7,21 +8,27 @@ const agentsUnavailable = () => json({ error: 'Connect the installed Mac app to 
 
 export function application({ env, sql, auth }) {
   const origin = env.APP_ORIGIN ? new URL(env.APP_ORIGIN).origin : "";
+  const origins = new Set([origin, ...(env.LEGACY_APP_ORIGINS || '').split(',').filter(Boolean).map((value) => new URL(value.trim()).origin)]);
   return async (request) => {
     try {
       const url = new URL(request.url), path = url.pathname;
-      if (origin && url.origin !== origin) return json({ error: 'Unexpected host.' }, 400);
+      if (origin && !origins.has(url.origin)) return json({ error: 'Unexpected host.' }, 400);
       if (path.startsWith('/api/relay/device/')) return await relayRequest({ request, sql, readBody: limitedBody });
       if (['/api/native/start', '/api/native/poll'].includes(path)) return auth.ready ? await nativePublicRequest({ request, sql, readBody: limitedBody, origin }) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       const native = request.headers.has('authorization') ? await authenticateNative(request, sql) : null;
-      if (!native && !['GET', 'HEAD'].includes(request.method) && request.headers.get('origin') !== origin) return json({ error: 'Unexpected origin.' }, 403);
-      if (path === '/api/config') return json({ allowed: enabled(env, (native?.user ?? await auth.user(request))?.id), ready: auth.ready, providers: auth.providers, agents: [] });
+      if (!native && !['GET', 'HEAD'].includes(request.method) && request.headers.get('origin') !== url.origin) return json({ error: 'Unexpected origin.' }, 403);
+      if (!native && url.origin !== origin && (/^\/api\/auth\/(signin|callback)(\/|$)/.test(path) || path === '/api/calendar/connect')) return json({ error: `Open ${origin} after copying your browser notes to sign in or connect another calendar.` }, 409);
+      if (path === '/api/config') return json({ allowed: enabled(env, (native?.user ?? await auth.user(request))?.id), ready: auth.ready, calendar: calendarReady(env), providers: auth.providers, agents: [] });
       if (path.startsWith('/api/auth/')) return auth.ready ? auth.handle(request) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       if (path === '/api/worker' || path === '/api/queue-worker') return agentsUnavailable();
       const user = native?.user ?? await auth.user(request);
       if (!user) return json({ error: 'Sign in to use cloud features.' }, 401);
       const expectedOwner = request.headers.get('x-leadinglight-owner');
       if (expectedOwner && expectedOwner !== user.id) return json({ error: 'The signed-in account changed. Reconnect to the original workspace and try again.' }, 409);
+      if (path.startsWith('/api/calendar/')) {
+        if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
+        return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });
+      }
       if (path === '/api/me') return json(native ? { ...user, expiresAt: native.expiresAt } : user);
       if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
       if (path.startsWith('/api/native/')) return await nativeBrowserRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });

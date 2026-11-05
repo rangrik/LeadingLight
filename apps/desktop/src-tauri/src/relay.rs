@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tauri::{AppHandle, Manager, State};
 
-const ORIGIN: &str = "https://leadinglight-web.vercel.app";
+const ORIGIN: &str = "https://leadinglight.app";
 const LEASE: u64 = 60;
 const QUEUE_LIMIT: usize = 4 * 1024 * 1024;
 

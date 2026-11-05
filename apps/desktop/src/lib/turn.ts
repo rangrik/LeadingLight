@@ -1,3 +1,4 @@
+import { cloudState } from '~/lib/cloud';
 import { type AskRequest, ask, cancel, type Line, reply } from "~/lib/agent";
 import type { Agent } from "~/lib/agents";
 import { type Access, aiPrefs, isClaude } from "~/lib/ai-prefs";
@@ -16,7 +17,7 @@ import { remoteRunCurrent, remoteTarget } from "~/lib/remote";
 // their lines become the thread's items, and their requests are answered, page tools by
 // lib/note-tools.ts and approvals by the person (answer()).
 
-const CHANGES = /^(mcp__notes__)?(edit_page|insert_text|write_page|create_page)$/;
+const CHANGES = /^(mcp__notes__)?(edit_page|insert_text|write_page|create_page|calendar_create|calendar_update|calendar_delete)$/;
 const PLANNED = "The person now sees your plan, with a button to go ahead. Stop here and wait for them.";
 const PLANNING = "Plan mode: change nothing yet. Write the plan, then call ExitPlanMode.";
 const GPT_PLAN = "Plan mode: change nothing yet. Read what you need, write a short plan, and stop; the person will say when to go ahead.";
@@ -27,6 +28,7 @@ type Provider = "claude" | "codex";
 // the prompt (and one with the note, should its thread be gone), and Codex's thread and turn.
 type Turn = {
   model: string;
+  calendarOwner: string | null;
   pageId: string;
   threadId: string;
   provider: Provider;
@@ -67,7 +69,7 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   // A mentioned agent's model wins, and with it its provider.
   const model = o.agent?.model ?? prefs.model;
   const provider: Provider = isClaude(model) ? "claude" : "codex";
-  const turn: Turn = { model, pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false, remote: target !== "local" };
+  const turn: Turn = { model, calendarOwner: cloudState().user?.id ?? null, pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false, remote: target !== "local" };
   turns.set(id, turn);
   // The answer is about the words quoted with it; a follow-up without a quote is about the
   // thread, so Replace goes away until words are quoted again.
@@ -210,7 +212,8 @@ function streamed(list: Item[], ev: Line): Item[] {
 async function control(id: string, t: Turn, line: Line) {
   const r = line.request ?? {};
   const respond = (response: object) => canWork(id, t) ? reply(id, { type: "control_response", response: { subtype: "success", request_id: line.request_id, response } }) : Promise.resolve();
-  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message, { ...action("Claude edited page", { kind: "agent", name: "Claude", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t)) });
+  if (r.subtype === "mcp_message" && t.plan && r.message?.method === "tools/call" && CHANGES.test(r.message.params?.name ?? "")) return respond({ mcp_response: { jsonrpc: "2.0", id: r.message.id, result: { isError: true, content: [{ type: "text", text: PLANNING }] } } });
+  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message, { ...action("Claude edited page", { kind: "agent", name: "Claude", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner) });
   if (r.subtype !== "can_use_tool") return reply(id, { type: "control_response", response: { subtype: "error", request_id: line.request_id, error: "Not supported here" } });
   if (r.tool_name === "ExitPlanMode") {
     t.planned = true;
@@ -314,7 +317,7 @@ function codexItem(list: Item[], item: Line, done: boolean): Item[] {
 // A page tool GPT asked for: run at once, or once the person allows it.
 async function toolCall(id: string, t: Turn, rid: string | number, name: string, input: Record<string, string>, callId: string) {
   const respond = async (allow: boolean, text = DECLINED) => {
-    const r = allow ? await runTool(t.pageId, name, input, { ...action("GPT edited page", { kind: "agent", name: "GPT", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t)).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
+    const r = allow ? await runTool(t.pageId, name, input, { ...action("GPT edited page", { kind: "agent", name: "GPT", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
     if (canWork(id, t)) await reply(id, { id: rid, result: { contentItems: r.content.map((c) => ({ type: "inputText", text: c.text })), success: !r.isError } });
   };
   if (t.plan && CHANGES.test(name)) return respond(false, GPT_PLAN);

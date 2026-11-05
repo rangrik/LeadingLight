@@ -9,6 +9,22 @@ const origin = 'https://notes.test';
 const auth = { ready: true, providers: [], user: async (req) => req.headers.has('test-user') ? { id: req.headers.get('test-user') } : null };
 const request = (app, path, user, body, method = body ? 'POST' : 'GET', source = origin) => app(new Request(origin + path, { method, headers: { origin: source, ...(user ? { 'test-user': user } : {}) }, body: body ? JSON.stringify(body) : undefined }));
 
+// Seam: domain migration keeps old sessions without trusting arbitrary hosts or cross-origin writes.
+test('legacy hosts keep sessions but new sign-ins require the canonical host', async () => {
+  const old = 'https://old.test';
+  const app = application({ env: { APP_ORIGIN: origin, LEGACY_APP_ORIGINS: old }, sql: null, auth });
+  const call = (host, path, source = host, method = 'GET') => app(new Request(host + path, { method, headers: { origin: source, 'test-user': 'owner' } }));
+  assert.equal((await call(old, '/api/me')).status, 200);
+  assert.equal((await call('https://untrusted.test', '/api/me')).status, 400);
+  assert.equal((await call(old, '/api/auth/signin/google', old, 'POST')).status, 409);
+  assert.equal((await call(old, '/api/calendar/connect', old, 'POST')).status, 409);
+  for (const host of [origin, old]) {
+    assert.equal((await call(host, '/api/jobs', 'https://untrusted.test', 'POST')).status, 403);
+    assert.equal((await call(host, '/api/jobs', host === old ? origin : old, 'POST')).status, 403);
+    assert.equal((await call(host, '/api/jobs', host, 'POST')).status, 410);
+  }
+});
+
 // Seam: stale browsers and server keys must never start paid provider work.
 test('browser agent routes refuse work without saving context or calling a provider', async (t) => {
   let queries = 0;

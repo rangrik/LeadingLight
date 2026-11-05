@@ -1,4 +1,6 @@
+import { CALENDAR_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
+import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
@@ -88,6 +90,7 @@ export default function App() {
   useEffect(watchStillness, []);
   const mobile = useMobile();
   useEffect(() => mobile ? watchViewport() : undefined, [mobile]);
+  const [calendarReturn] = useState(() => new URL(location.href).searchParams.has('calendar'));
   const view = useStore((s) => s.view);
   const settings = view.kind === "settings";
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
@@ -150,6 +153,7 @@ export default function App() {
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           return !page || list.some((p) => p.id === page);
         };
+        if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
@@ -338,6 +342,7 @@ export default function App() {
           types={navTypes}
         />
         <SidebarInset className="ll-inset relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
+          {loaded && <BrowserAddressBanner />}
           {/* The bar's panel is a card beside the pages, never over them. */}
           <div className="flex min-h-0 flex-1">
             {root ? (

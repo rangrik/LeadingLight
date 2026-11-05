@@ -105,3 +105,18 @@ CREATE TABLE IF NOT EXISTS relay_events (
   FOREIGN KEY(pair_id,turn) REFERENCES relay_runs(pair_id,id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS relay_events_pull ON relay_events(pair_id,controller,seq);
+
+CREATE TABLE IF NOT EXISTS calendar_accounts (
+  owner text NOT NULL,
+  account text NOT NULL,
+  email text NOT NULL,
+  tokens text NOT NULL,
+  PRIMARY KEY(owner, account)
+);
+CREATE TABLE IF NOT EXISTS calendar_oauth (
+  state text PRIMARY KEY,
+  owner text NOT NULL,
+  verifier text NOT NULL,
+  expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes'
+);
+CREATE INDEX IF NOT EXISTS calendar_oauth_expiry ON calendar_oauth(expires_at);

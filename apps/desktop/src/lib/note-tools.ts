@@ -1,3 +1,5 @@
+import { cloudState } from './cloud';
+import { CALENDAR_TOOLS, runCalendarTool } from './calendar-tools';
 import { htmlDoc } from "@leadinglight/editor/editor";
 import { markdownHtml } from "@/lib/markdown-html";
 import { liveContent, liveEditor } from "~/lib/live";
@@ -20,6 +22,7 @@ const text = (description: string) => ({ type: "string", description });
 const schema = (properties: Record<string, object>, required: string[] = []) => ({ type: "object", properties, required });
 
 export const TOOLS = [
+  ...CALENDAR_TOOLS,
   {
     name: "read_page",
     description: "Read a page as Markdown: this page when no page is given, or another by its id or title.",
@@ -77,7 +80,12 @@ const findPage = (ref: string) => {
 };
 const bodyOf = async (id: string) => liveContent(id) ?? (await objects.get(id))?.content ?? null;
 
-export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>, context = action("Agent edited page", { kind: "agent", name: "Agent" }), canChange?: () => boolean): Promise<Result> {
+export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>, context = action("Agent edited page", { kind: "agent", name: "Agent" }), canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null): Promise<Result> {
+  if (name.startsWith('calendar_')) {
+    if (!calendarOwner || cloudState().user?.id !== calendarOwner) return fail('The calendar workspace changed or is signed out. Start a new request after signing in.');
+    if (canChange && !canChange()) return fail('This turn has stopped.');
+    return ok(JSON.stringify(await runCalendarTool(name, a)));
+  }
   if (name === "read_page" || name === "search_pages") return executeTool(pageId, name, a, context);
   await flushAll();
   if (canChange && !canChange()) return fail("This turn stopped before the page could be changed.");
@@ -141,14 +149,14 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
 type Rpc = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: { protocolVersion?: string; name?: string; arguments?: Record<string, string> } };
 
 // One MCP message from Claude Code; notifications get the empty answer the Agent SDK gives.
-export async function serve(pageId: string, msg: Rpc, context?: ChangeContext, canChange?: () => boolean): Promise<object> {
+export async function serve(pageId: string, msg: Rpc, context?: ChangeContext, canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null): Promise<object> {
   const answer = (result: object) => ({ jsonrpc: "2.0", id: msg.id, result });
   if (msg.id === undefined) return { jsonrpc: "2.0", id: 0, result: {} };
   if (msg.method === "initialize") return answer({ protocolVersion: msg.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "notes", version: "1" } });
   if (msg.method === "tools/list") return answer({ tools: TOOLS });
   if (msg.method === "ping") return answer({});
   if (msg.method === "tools/call") {
-    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}, context, canChange).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
+    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}, context, canChange, calendarOwner).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
     return answer(result);
   }
   return { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `No method ${msg.method}` } };

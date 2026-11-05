@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // Screenshots of the main states for design review. Run: pnpm qa:gallery
-const shot = (page: Page, name: string) => page.screenshot({ path: `qa/report/${name}.png` });
+const shot = (page: Page, name: string) => page.screenshot({ path: `qa/report/${name}.png`, animations: "disabled" });
 
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 
@@ -62,8 +62,9 @@ test("gallery @gallery", async ({ page }) => {
   await page.mouse.move(10, 10);
   await shot(page, "02-document");
 
-  // Clicking right of the text puts the caret at the end of the line.
-  await body(page).getByText("Pack light").click({ position: { x: 620, y: 10 } });
+  // Inline attribution spans need not cover the paragraph's full width.
+  await body(page).locator("p").filter({ hasText: "Pack light" }).click();
+  await page.keyboard.press("Meta+ArrowRight");
   await page.waitForTimeout(50);
   await page.keyboard.press("Enter");
   await page.keyboard.type("/");
@@ -126,7 +127,8 @@ test("gallery @gallery", async ({ page }) => {
   await page.waitForTimeout(100);
   await page.mouse.move(10, 10);
   await shot(page, "10-dark");
-  await body(page).getByText("Kyoto is best").click({ position: { x: 600, y: 10 } });
+  await body(page).locator("p").filter({ hasText: "Kyoto is best" }).click();
+  await page.keyboard.press("Meta+ArrowRight");
   await page.waitForTimeout(50);
   await page.keyboard.press("Enter");
   await page.keyboard.press("Enter");

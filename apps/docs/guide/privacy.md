@@ -39,6 +39,7 @@ LeadingLight has no analytics or tracking of its own.
 | Let Tail read along | Through Claude Code or Codex, Tail sends the lines around where you paused and a short digest of what changed. Words and properties come only from the types you tick under **Settings › AI › Tail › Reads on**; the titles and types of all pages go too, so names can be linked. Sidenotes stay private. |
 | Check for Claude Code and Codex updates | The app looks up the newest version where your copy updates from (npm or Homebrew). You can turn off **Check for updates** in **Settings › AI**. |
 | Use the built-in browser | It loads the sites you or an agent open, as any browser would. Its history, site data and downloads stay on your Mac. |
+| Connect Google Calendar | Google grants calendar access separately from workspace sign-in. Our service stores encrypted refresh tokens and fetches event data on demand. Calendar data is not end-to-end encrypted. Note agents can send calendar details to your model provider when you ask them to plan. Disconnect removes our saved grant. |
 | Turn on encrypted sync | Your notes are encrypted on your device before they're uploaded. The service stores only encrypted data and can't read it. Your sign-in (Google or GitHub) identifies your account. |
 | Use agents from a browser | Your browser and your Mac exchange messages through an encrypted relay. The relay can't read prompts, answers or tool results, and your Claude Code or Codex sign-in never leaves the Mac. |
 
@@ -55,6 +56,19 @@ If you lose every device and the recovery key, your synced notes can't be decryp
 → [Accounts and encrypted sync](/sync/)
 
 ## Back up your notes
+
+### Moving to leadinglight.app
+
+Browser notes belong to the address where you wrote them. At the earlier
+`leadinglight-web.vercel.app` address, choose **Copy notes to leadinglight.app** and keep both
+tabs open. The new tab confirms when your saved notes, attachments, types and history have
+been copied directly between your browser tabs. The original workspace stays available.
+Edits you make at the old address after copying remain there.
+
+The copy refuses to overwrite an existing workspace at the new address. Use encrypted sync
+to bring existing workspaces together. Sign in with the same provider to reconnect your
+calendar accounts. Recovery keys and paired Mac credentials are not copied; reconnect sync
+with your existing recovery key and pair the Mac again when needed.
 
 In the Mac app, quit LeadingLight and copy `~/Library/Application Support/com.leadinglight.app/` somewhere safe, or let Time Machine back it up. To restore, quit the app and put the folder back.
 
