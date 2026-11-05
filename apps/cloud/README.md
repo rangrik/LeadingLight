@@ -47,7 +47,7 @@ Redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --p
 
 `TEST_DATABASE_URL=postgres://leadinglight:local-development-only@127.0.0.1:55439/leadinglight pnpm --filter @leadinglight/cloud test` checks encrypted sync durability, deduplication, account isolation and refusal of legacy agent requests. Tests inject authentication; they do not claim to validate live OAuth or local CLI accounts.
 
-For browser tests, start `test/browser-server.mjs` with that same `TEST_DATABASE_URL`, then run `CLOUD_QA=1 QA_PORT=1431 pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa cloud.spec.ts`. This test-only localhost server accepts a `qa-user` cookie and never runs in the production gateway. Remove its container with `docker compose -p leadinglight-cloud-qa -f apps/cloud/compose.yaml down`; add `-v` only to discard its test data.
+For browser tests, start `test/browser-server.mjs` with that same `TEST_DATABASE_URL`, then run `CLOUD_QA=1 QA_PORT=1431 pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa --project=safari cloud.spec.ts cloud-large.spec.ts cloud-guards.spec.ts native-account.spec.ts pairing-integration.spec.ts`. This exercises encrypted sync, account approval and the relay in Chromium and WebKit. The production-only agent check needs a separate production preview in `OFFLINE_QA`. This test-only localhost server accepts a `qa-user` cookie and never runs in the production gateway. Remove its container with `docker compose -p leadinglight-cloud-qa -f apps/cloud/compose.yaml down`; add `-v` only to discard its test data.
 
 ## Paired Mac relay
 
