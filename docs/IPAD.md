@@ -76,11 +76,12 @@ and [internal testing guide](https://developer.apple.com/help/app-store-connect/
 describe these steps.
 
 Current handoff (2026-11-05): Apple Developer membership is active, with renewal November 5, 2027.
-The earlier development installs still use Personal Team profiles expiring November 12.
 The private production app, **LeadingLight** (`com.leadinglight.app`), is installed and launches on
 both iPhone and iPad, with the correct logo and Apple Distribution signing valid to November 5, 2027.
-It uses an Ad Hoc profile covering these registered devices. The separate dev apps remain installed;
-connect the production app to the existing workspace before removing them.
+It uses an Ad Hoc profile covering these registered devices. Both production libraries match the
+Mac's 66 active objects, 600 history entries and referenced attachment bytes. The separate dev apps
+were removed after final backups and verification. The iPad's lighter bottom safe-area band is fixed.
+See [QA_IPHONE.md](QA_IPHONE.md) for the migration evidence.
 TestFlight has not been uploaded or validated by Apple. The manifest declares
 the filesystem plugin's app-container timestamp use (`C617.1`). Bundled SQLite's filesystem
 inspection calls still need review before distribution; no unrelated disk-space reason is
