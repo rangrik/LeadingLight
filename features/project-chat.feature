@@ -128,6 +128,13 @@ Feature: A project's chat
     Then each one's model menu offers only its own agent's models
     And choosing one from the chat menu shows its turns and continues with its agent
 
+  Scenario: Read a saved chat after its session is gone
+    Given a Claude or Codex chat has saved messages and its runtime session no longer exists
+    When I reopen its project chat, including after restarting the app
+    Then its saved messages appear without sending a prompt or starting an agent
+    And a long conversation is read in bounded windows
+    And a missing saved record is reported as a read error
+
   Scenario: Codex chats come back
     When I stop a Codex chat's turn, reload the app, and send again
     Then it resumes in the same folder and answers with what was said before

@@ -341,8 +341,8 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
         onScroll={(e) => (stuck.current = e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 48)}
         ref={log}
       >
-        {/* A chat whose agent session was removed reads its record again once it is picked up. */}
-        {turns.length === 0 && waitingOn.length === 0 && started && chat.synced && !chat.session && <p className="m-auto p-6 text-center text-muted-foreground">Send a message to pick this chat up again; its earlier turns come back with it.</p>}
+        {/* A saved chat's record is readable even after its agent session is gone. */}
+        {turns.length === 0 && waitingOn.length === 0 && started && chat.synced && !chat.session && <p className="m-auto p-6 text-center text-muted-foreground">No messages have been saved in this chat yet.</p>}
         {turns.length === 0 && waitingOn.length === 0 && !started && (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <MessagesSquare className="size-6 text-muted-foreground" />

@@ -128,7 +128,11 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const session = sessions.find((s) => s.name === name) ?? null;
   const before = chatOf(key).get();
   const w = before.window;
-  const page = name ? await ask<TranscriptPage>("GET", `/v1/sessions/${name}/transcript?since=${w.next}${w.gen ? `&gen=${w.gen}` : ""}`).catch(() => null) : null;
+  const cursor = `since=${w.next}${w.gen ? `&gen=${encodeURIComponent(w.gen)}` : ""}`;
+  let page = session && name ? await ask<TranscriptPage>("GET", `/v1/sessions/${name}/transcript?${cursor}`).catch(() => null) : null;
+  // The saved record outlives its session. Reading history never resumes an
+  // agent or sends a model prompt, including after an app/runtime restart.
+  if (!page || page.source === "none") page = await ask<TranscriptPage>("GET", `/v1/conversations/${encodeURIComponent(conv.id)}/transcript?${cursor}`);
   const turns = session ? await ask<Turn[]>("GET", `/v1/sessions/${name}/turns`).catch(() => []) : [];
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
   // The workers its agent started and hasn't heard back from yet.
