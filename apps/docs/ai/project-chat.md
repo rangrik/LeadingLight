@@ -17,6 +17,8 @@ Type in the field, which reads **Ask Claude to work in the folder…** (or **Ask
 
 The **Browser** button in the card's header opens the browser the chat's agent uses, beside it. See [The browser](/ai/browser).
 
+Saved chat messages remain readable after an agent session ends or the app restarts. Opening a chat reads its local record without starting an agent or sending a model prompt; sending a new message resumes the conversation.
+
 ## Follow the work
 
 Your message shows on the right at once. The agent's words appear as it writes them, under **Working for …**, and each step gets its own line, such as "Ran pwd" or "Read notes.txt", while the timer counts. If you're at the bottom of the chat, the newest words stay in view. The turn ends with **Worked for …**.
