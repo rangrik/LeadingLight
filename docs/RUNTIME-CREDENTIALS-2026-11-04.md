@@ -1,6 +1,8 @@
 # Remaining live checks — credential audit
 
 This follows the [runtime fixture validation](RUNTIME-FIXTURES-2026-11-03.md).
+The [November 5 follow-up](RUNTIME-LIVE-CHECKS-2026-11-05.md) completes the
+Claude login and live test; the findings below record the November 4 audit.
 The two remaining checks were retried using existing local credentials, with
 private temporary configuration and no changes to existing agent worktrees,
 provider logins, application settings, or running daemons.
