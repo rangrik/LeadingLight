@@ -73,3 +73,5 @@ out of date, and no changes are queued secretly while offline.
 The installation must have Google Calendar enabled by its operator. During Google's testing
 phase, only approved Google test accounts can connect. Public availability requires the
 operator's Google consent setup and any required verification.
+
+In a narrow pane, each calendar name sits below its event title so the plan stays readable beside a note.

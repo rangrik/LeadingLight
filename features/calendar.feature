@@ -59,3 +59,9 @@ Feature: Personal and work calendars in one calm plan
     Then it does not create a second event
     And signing out clears the displayed calendar data
     And a calendar request for another workspace is refused
+
+  Scenario: Read a calendar beside a note
+    Given a note and Calendar share a 1024 pixel window
+    When Calendar has a narrow pane
+    Then event titles and times remain readable without overlapping calendar details
+    And each calendar name appears below its event title until the pane has room for a column
