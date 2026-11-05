@@ -10,7 +10,9 @@ remain. Workspace administrators can restrict work accounts even after Google ap
 
 ## Verified production state
 
-- Deployment: `dpl_Em3JAyCZf8urY9E6mPBfRxCBGAHd`, promoted November 5.
+- Deployment: `dpl_DTBy4QFXqdoJWSF9hPZ2dMvtzYaM`, promoted November 5 after merging main.
+  Previous domain-cutover release: `dpl_Em3JAyCZf8urY9E6mPBfRxCBGAHd`.
+  Final Safari reload fetched both connected calendars; homepage/privacy and both hosts passed.
 - Canonical app: https://leadinglight.app; homepage: `/help/`; privacy: `/help/privacy-policy.html`.
 - `www.leadinglight.app` redirects to the apex with 308, preserving path/query.
 - https://leadinglight-web.vercel.app remains available for original browser notes and sessions.

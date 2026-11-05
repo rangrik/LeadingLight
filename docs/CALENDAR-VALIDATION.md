@@ -162,3 +162,10 @@ The user's merge/cleanup authorization covers this closeout. The installed app w
 running during verification; the merged Mac bundle must be installed only after it quits.
 Native manual checks above remain unperformed. The old development app is no longer the
 build to test; use the merged installed LeadingLight after installation completes.
+
+Final web release `dpl_DTBy4QFXqdoJWSF9hPZ2dMvtzYaM` was promoted after confirming production
+still pointed to this task's previous release. It includes the narrow-pane fix and main through
+`1f04275`. Safari reload fetched both connected calendars at 2:48 PM Pacific. Canonical/legacy
+config and public homepage/privacy requests passed; anonymous calendar accounts returned 401.
+Own test servers and isolated PostgreSQL were stopped. LeadingLight Dev 98634f and its data
+were removed. Other worktrees and servers were not stopped or changed.
