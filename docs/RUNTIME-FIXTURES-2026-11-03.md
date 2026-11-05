@@ -30,6 +30,9 @@ required credentials into private temporary directories, and removes test
 history and configuration afterward. It reports `passed`, `failed`, or
 `unavailable` for every selected provider and rejects unexpected skips.
 Select a subset with `pnpm runtime:test:providers codex acp browser`.
+Following the November 5 opt-out, the default and `all` select Codex, Claude,
+ACP and browser only. The Vercel `turncheck` group requires explicit selection.
+Add `--list` to inspect the selected checks without credentials or network calls.
 Use `node scripts/project-runtime/test-providers.mjs --help` for credential and
 model configuration. A missing credential produces exit code 2; a failed check
 produces exit code 1. No sign-in or persistent provider setup is performed.

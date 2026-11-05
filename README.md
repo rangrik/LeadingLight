@@ -41,7 +41,10 @@ and coverage limits.
 
 `pnpm runtime:test:fixtures` also provisions a private PostgreSQL cluster and
 enables the local integration checks. `pnpm runtime:test:providers` runs real
-provider checks, and `pnpm runtime:test:systemd` uses a disposable Linux machine.
+Codex, Claude, ACP and browser checks. Vercel Gateway is excluded from the default
+run and `all`; its `turncheck` group requires explicit selection. Add `--list`
+to inspect selection without contacting providers. `pnpm runtime:test:systemd`
+uses a disposable Linux machine.
 See [fixture setup and results](docs/RUNTIME-FIXTURES-2026-11-03.md).
 
 An iPad target shares this app. With Xcode and CocoaPods installed, run `pnpm ios:init`

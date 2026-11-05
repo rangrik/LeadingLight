@@ -20,13 +20,26 @@ back to chat, and remembering the original reply. The test exited successfully
 and removed its temporary credential/configuration directory. The normal
 Claude settings and credential files were unchanged by the test.
 
-## Gateway awaiting account setup
+## Gateway excluded by user choice
+
+The user declined Vercel model usage after reviewing the billing requirement.
+The live Gateway check is therefore excluded from the requested validation,
+not counted as passed. No further Gateway requests or billing setup will be
+performed for this task. The default live-provider run and `all` now select
+only Codex, Claude, ACP and browser; Gateway requires explicit `turncheck`.
+
+The existing local `~/.berth/turncheck.json` had Gateway turn checking enabled.
+Its `enabled` field was changed to `false`, preserving the other settings and
+a private backup. The runtime reads this file for each turn, so no daemon
+restart was necessary. LeadingLight's embedded runtime has no separate
+turn-check configuration. Credentials and other agents' worktrees were untouched.
+
+Before this opt-out, the following live probes established the account issue:
 
 The gateway check ran with a fresh OIDC token from LeadingLight's existing
 Vercel project. All five cases reached the service and received HTTP 403. The preceding
-audit identified `customer_verification_required`; completion of the account
-setup has not yet been confirmed. The verification page
-was opened in Safari for the user to complete directly.
+audit identified `customer_verification_required`. The verification page
+was opened in Safari before the user declined this provider.
 
 The configured `typesafe-ai/jev` model is not eligible for free Gateway
 credits, so verification alone may not be sufficient: purchased Gateway
@@ -34,9 +47,10 @@ credits may also be required. Its published input price is approximately
 $0.04 per million tokens. No payment details were submitted, credits purchased,
 or auto top-up enabled by the agent.
 
-The gateway check remains unverified. Across the original 30 skipped entries,
+The gateway check remains unverified and is no longer a completion requirement.
+Across the original 30 skipped entries,
 **28 now pass, one helper is covered by its passing parent, and one live
-gateway check remains pending**. The previously passing full fixture suite
+gateway check is excluded by user choice**. The previously passing full fixture suite
 was not rerun for this three-line change to the live Claude fixture.
 
 ## Evidence and rerun
@@ -50,8 +64,8 @@ or daemon restart is needed.
 
 ```sh
 pnpm runtime:test:providers claude
-# After Vercel setup, supply a valid Gateway key or fresh project OIDC token:
-pnpm runtime:test:providers turncheck
+# Inspect the default selection without contacting any provider:
+pnpm runtime:test:providers --list
 ```
 
 References: [Claude's fixture setting](https://code.claude.com/docs/en/settings-reference#skipdangerousmodepermissionprompt),

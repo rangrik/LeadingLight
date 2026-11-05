@@ -17,10 +17,14 @@ const tests = {
   browser: "TestRealAgentBrowserGoesWithItsSession",
   turncheck: "TestTurnCheckLive",
 };
-const args = process.argv.slice(2);
+const defaultGroups = Object.keys(tests).filter((group) => group !== "turncheck");
+const listOnly = process.argv.includes("--list");
+const args = process.argv.slice(2).filter((arg) => arg !== "--list");
 if (args.includes("--help")) {
-  console.log(`Usage: node scripts/project-runtime/test-providers.mjs [${Object.keys(tests).join("|")}|all] ...
-Runs real integrations sequentially in disposable homes. Default: all.
+  console.log(`Usage: node scripts/project-runtime/test-providers.mjs [${Object.keys(tests).join("|")}|all] ... [--list]
+Runs real integrations sequentially in disposable homes.
+Default and "all": ${defaultGroups.join(", ")}. Gateway requires explicit "turncheck".
+--list prints the selected checks without reading credentials or running providers.
 Codex: existing CODEX_HOME/auth.json; optional BERTH_LIVE_CODEX_MODEL.
 Claude: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or existing Claude credentials.
 ACP: installed opencode, existing auth if present; default model opencode/big-pickle.
@@ -34,7 +38,11 @@ No login or persistent configuration changes are performed.`);
   process.exit(0);
 }
 if (args.some((g) => g !== "all" && !(g in tests))) throw new Error("unknown provider group; use --help");
-const groups = [...new Set(args.length === 0 || args.includes("all") ? Object.keys(tests) : args)];
+const groups = [...new Set(args.length === 0 ? defaultGroups : args.flatMap((group) => group === "all" ? defaultGroups : [group]))];
+if (listOnly) {
+  console.log(JSON.stringify(groups.map((group) => ({ group, test: tests[group] }))));
+  process.exit(0);
+}
 
 const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 function executable(name) {
