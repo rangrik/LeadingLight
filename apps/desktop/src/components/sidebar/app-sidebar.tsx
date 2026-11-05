@@ -19,8 +19,8 @@ import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
 import { UsageButton } from "~/components/usage-button";
-import { openBeside } from "~/lib/panes";
-import { browserView } from "~/lib/space";
+import { openFrom, openBeside } from "~/lib/panes";
+import { CALENDAR_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -94,6 +94,7 @@ export function AppSidebar({
                 <span>Today</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
               <SidebarMenuButton onClick={select(() => openBeside(browserView("")))}>
                 <Globe className="size-4" />

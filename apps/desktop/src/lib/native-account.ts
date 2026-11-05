@@ -36,7 +36,7 @@ export async function connectNativeAccount() {
     const deviceName = await platformReady === 'ios' ? 'LeadingLight on iPad' : 'LeadingLight on Mac';
     const start = await cloudApi<{ id: string; expiresAt: string; approvalUrl: string }>('native/start', { deviceName, publicKey: await crypto.subtle.exportKey('jwk', pair.publicKey) });
     const approvalUrl = new URL(start.approvalUrl);
-    if (approvalUrl.origin !== 'https://leadinglight-web.vercel.app' || approvalUrl.searchParams.get('connect') !== start.id) throw new Error('The sign-in link was invalid. Please try again.');
+    if (approvalUrl.origin !== 'https://leadinglight.app' || approvalUrl.searchParams.get('connect') !== start.id) throw new Error('The sign-in link was invalid. Please try again.');
     nativeConnection.set({ pending: true, message: `Match code ${connectionCode(start.id)} in your browser, approve this device, then return here.` });
     await (await import('@tauri-apps/plugin-opener')).openUrl(approvalUrl.href);
     const deadline = Date.now() + 10 * 60_000;

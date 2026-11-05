@@ -21,8 +21,15 @@ hero:
     - theme: alt
       text: Take the tour
       link: /guide/first-steps
+    - theme: alt
+      text: Open the web app
+      link: https://leadinglight.app/
 
 features:
+  - title: Personal and work calendars together
+    details: Connect Google accounts, choose calendars, and plan a day or a week. Create, edit and delete events directly, or ask an agent to help you find time.
+    link: /organize/calendar
+    linkText: Calendar and permissions
   - title: A block editor that stays out of the way
     details: Markdown shortcuts, a slash menu, tables, columns, toggles, code, images, video and embeds. Drag any block to move it.
     link: /write/editor
@@ -66,3 +73,6 @@ LeadingLight is in early development. Downloads are previews for Apple Silicon M
 :::
 
 </div>
+
+LeadingLight is developed by Pranav Kanade. Read our [privacy policy](/privacy-policy)
+before connecting an account. For help or data requests, email [k.pranav.apk@gmail.com](mailto:k.pranav.apk@gmail.com).

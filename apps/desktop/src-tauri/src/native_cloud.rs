@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, State};
 
-const ORIGIN: &str = "https://leadinglight-web.vercel.app";
+const ORIGIN: &str = "https://leadinglight.app";
 const LIMIT: usize = 4_500_000;
 
 #[derive(Default)]
@@ -131,9 +131,9 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
     };
     let allowed = matches!(
         (route, method),
-        ("config" | "me" | "sync" | "sync-part", "GET")
+        ("config" | "me" | "sync" | "sync-part" | "calendar/accounts", "GET")
             | (
-                "sync" | "native/start" | "native/poll" | "native/revoke",
+                "sync" | "native/start" | "native/poll" | "native/revoke" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
@@ -423,8 +423,12 @@ mod tests {
             "config",
             "sync?after=123",
             "sync-part?id=a%3Apart%3A1",
+            "calendar/accounts",
         ] {
             assert!(endpoint(path, "GET").is_ok());
+        }
+        for action in ["connect", "disconnect", "calendars", "events", "create", "update", "delete"] {
+            assert!(endpoint(&format!("calendar/{action}"), "POST").is_ok());
         }
         for (path, method) in [
             ("https://evil.test", "GET"),
@@ -435,6 +439,8 @@ mod tests {
             ("native/approve", "POST"),
             ("sync?after=1&after=2", "GET"),
             ("sync", "DELETE"),
+            ("calendar/callback", "GET"),
+            ("calendar/create?account=other", "POST"),
         ] {
             assert!(endpoint(path, method).is_err(), "{path}");
         }

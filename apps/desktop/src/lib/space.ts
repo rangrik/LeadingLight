@@ -95,12 +95,14 @@ export const FEED_VIEW = "feed:";
 export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
 export const SUGGESTIONS_VIEW = "suggestions:";
-const VIEWS = [FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+export const CALENDAR_VIEW = "calendar:";
+const VIEWS = [CALENDAR_VIEW,FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
 // An empty view is a tab with no page yet.
 export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
+  if (view === CALENDAR_VIEW) return { title: "Calendar" };
   if (view === INBOX_VIEW) return { title: "Captures" };
   if (view === FEED_VIEW) return { title: "Feed" };
   if (view === ASK_VIEW) return { title: "Ask" };

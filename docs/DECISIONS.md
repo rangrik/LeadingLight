@@ -723,3 +723,36 @@ asset paths never leave the device: bounded attachment bundles travel inside enc
 journal events, identified by a hash of MIME type and bytes. Receivers validate before writing
 stable local files. Comparisons use these identities so a different sandbox path does not
 create a conflict. Notes remain usable offline; uploads resume with the foreground app.
+
+## 38. Google Calendar is a separate workspace connection (2026-11-03)
+
+One workspace can connect multiple Google accounts through the existing cloud service.
+Google web OAuth uses PKCE and ten-minute, one-use state bound to the signed-in workspace;
+AES-GCM binds saved grants to the workspace and Google subject. Event bodies are fetched on
+demand, not added to the encrypted notes journal. This is not end-to-end encrypted sync.
+The Mac uses its existing scoped cloud credential; Google consent opens in the system browser.
+
+The default is a day agenda, with a seven-day view and one small focus suggestion. COSS supplies
+controls and tables. Kloq's advertised npm package was unavailable when checked. Google owns
+recurrence, notifications and invitations. Edits target occurrences, use ETags, and preserve
+unmodified fields. Stable create IDs prevent duplicate delivery. No offline write replay.
+
+Note agents share these calendar actions through their existing approval controls; plan mode
+blocks writes at execution too. Project agents keep their narrower project scope. Public rollout
+still needs Google's consent publishing/verification and the service configuration documented
+in apps/cloud/README.md. A later Safari setup pass registered the calendar callback and
+saved the production token-encryption key. After approval, the Calendar API was enabled
+and its scopes saved. Deployment and live Safari consent/event tests passed; Google's public
+verification remains pending (docs/GOOGLE-VERIFICATION.md).
+
+## 39. A new browser address copies rather than redirects local notes (2026-11-05)
+
+The owner chose leadinglight.app for DNS-level Google verification. The old Vercel address
+keeps serving its origin-bound notes. An explicit copy opens the new address, checks both
+message origins, window identities and a fresh transfer code, then saves one consistent
+IndexedDB snapshot in one transaction. A populated destination refuses the copy. Original
+records stay intact. Sync ownership travels, but keys, sign-ins and device grants do not.
+
+The gateway accepts only the canonical origin and an explicit legacy allowlist. Browser
+writes require their own origin; new sign-ins and calendar grants use the canonical host.
+Existing sessions and scoped native credentials keep access during the migration.

@@ -155,7 +155,7 @@ test('failed native confirmation restores the previous workspace and paused stat
       if (command === 'plugin:opener|open_url') return null;
       if (command !== 'cloud_request') throw new Error(`Unexpected native call: ${command}`);
       let body: unknown;
-      if (args.path === 'native/start') { publicKey = args.body!.publicKey; body = { id, expiresAt: new Date(Date.now() + 600000).toISOString(), approvalUrl: `https://leadinglight-web.vercel.app/?connect=${id}` }; }
+      if (args.path === 'native/start') { publicKey = args.body!.publicKey; body = { id, expiresAt: new Date(Date.now() + 600000).toISOString(), approvalUrl: `https://leadinglight.app/?connect=${id}` }; }
       else if (args.path === 'native/poll') {
         const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
         const peer = await crypto.subtle.importKey('jwk', publicKey!, { name: 'ECDH', namedCurve: 'P-256' }, false, []);

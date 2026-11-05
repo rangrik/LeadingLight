@@ -1,3 +1,4 @@
+import { CalendarView } from '~/components/calendar-view';
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
 // with its own header (crumbs and a close button) and tab row (tab-row.tsx), no Compare tabs.
@@ -29,7 +30,7 @@ import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -220,6 +221,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               >
                 {!leaf.page ? (
                   <NoPage className="h-full" />
+                ) : leaf.page === CALENDAR_VIEW ? (
+                  <CalendarView />
                 ) : leaf.page === INBOX_VIEW ? (
                   <CaptureInbox />
                 ) : leaf.page === FEED_VIEW ? (
