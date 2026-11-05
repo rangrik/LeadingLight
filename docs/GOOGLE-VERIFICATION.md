@@ -109,3 +109,7 @@ unchanged and stops after approval plus the post-approval consent check. The bra
 user quit it. The task development app and test servers were removed. Use this record in
 `/Users/pranavkanade/work/LeadingLight`; preserve other agents' work and servers and never drive
 the native app. Original browser notes remain at the old origin and must not be erased.
+
+Cleanup note: `codex/google-calendar` was deleted after merging. Codex refused to archive
+this chat's primary checkout. Worktree `00e1` remains clean and detached; task servers and
+the development app are removed. Do not force-delete the active chat checkout.

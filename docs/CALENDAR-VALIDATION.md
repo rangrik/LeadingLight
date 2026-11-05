@@ -174,5 +174,6 @@ installed at `/Applications/LeadingLight.app`, and verified with `codesign --ver
 --strict`; the installed binary exactly matches the prepared SHA-256 recorded in the durable
 `mac-installation.json`. Both Rust native credential tests passed. Subsequent main merges changed only unrelated
 test expectations; application code remained identical.
-The agent did not open or drive the native window. The branch's checkout is ready to archive;
-Google review monitoring now uses the surviving main checkout.
+The agent did not open or drive the native window. The merged branch was deleted. Codex refused to archive this chat's primary checkout, so
+that clean detached checkout remains; its servers and development app are gone. Google review
+monitoring reads the record from the main checkout.
