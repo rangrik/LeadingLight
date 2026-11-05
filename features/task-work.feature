@@ -41,6 +41,14 @@ Feature: Following an assigned task
     When I press Continue
     Then the agent carries on with the task, and the panel says "Working"
 
+  Scenario: Following work in a narrow split pane
+    Given the task is ready for review beside another page
+    When I make its pane narrow, including with Large interface text
+    Then the agent name remains visible and the state wraps to fit
+    And the state never overlaps Chat, and Chat and Accept remain reachable
+    When I accept its report
+    Then the panel says "Done"
+
   Scenario: Reading isn't moved by updates
     Given I have scrolled down to read the report under the task
     When the agent's checklist gains three steps
