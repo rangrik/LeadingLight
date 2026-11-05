@@ -38,6 +38,8 @@ function noShikiWasm(): Plugin {
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig(() => ({
   plugins: [react(), tailwindcss(), noShikiWasm(), projectRuntime(), offlineBuild()],
+  // Keep Lucide's icon modules in one dev chunk instead of thousands of requests.
+  optimizeDeps: { rolldownOptions: { output: { codeSplitting: { groups: [{ name: "lucide", test: /\/lucide-react\//, includeDependenciesRecursively: false }] } } } },
   worker: { format: "es" as const, plugins: () => [noShikiWasm()] },
   // Two pages: the app, and the capture box's panel (src-tauri/src/capture.rs).
   build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html") } } },

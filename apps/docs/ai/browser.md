@@ -19,6 +19,7 @@ load inside your notes, and nothing of the browser's is written into your projec
   opens beside the chat, for that project's folder.
 
 A new browser shows an address field and **New tab**. No website opens until you enter an address.
+In a narrow window, the active pane fills the page area; its sidebar button keeps navigation within reach.
 
 ## Go to a page
 

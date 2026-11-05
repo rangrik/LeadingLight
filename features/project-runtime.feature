@@ -124,6 +124,12 @@ Feature: The project runtime
     And agents that were running carry on under the newer one
     And the older build's berthd and tmux are kept beside it for rolling back
 
+  Scenario: Several updates keep the binaries older agents still use
+    Given agents and tmux are still running from a runtime build older than the previous update
+    When a newer runtime is installed, or an installed build is reused
+    Then every older runtime build's berthd and tmux remain unchanged
+    And no older build is removed automatically
+
   # Recovery, and the installed app's acceptance (slice 11)
 
   Scenario: A chat whose folder moved carries on where it went

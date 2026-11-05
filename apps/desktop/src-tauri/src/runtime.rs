@@ -207,8 +207,8 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
     set(rt, &home, "failed", None, Some(last))
 }
 
-// The build's berthd and tmux, copied out of the app: an update replaces the app while they
-// run, and a tmux client must match its server. The last two builds stay, for rolling back.
+// Copy berthd and tmux out of the app before an update replaces it. Keep older builds:
+// agents can outlive several updates, and their tmux client must still match its server.
 fn install(home: &Path, build: &str, bin: &Path) -> Result<PathBuf, String> {
     let root = home.join("bin");
     let dir = root.join(build);
@@ -221,11 +221,6 @@ fn install(home: &Path, build: &str, bin: &Path) -> Result<PathBuf, String> {
             std::fs::copy(tmux, tmp.join("tmux")).map_err(|e| e.to_string())?;
         }
         std::fs::rename(&tmp, &dir).map_err(|e| e.to_string())?;
-    }
-    let mut old: Vec<_> = std::fs::read_dir(&root).map_err(|e| e.to_string())?.flatten().filter(|e| e.file_name() != build && !e.file_name().to_string_lossy().starts_with('.')).collect();
-    old.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
-    for e in old.iter().skip(1) {
-        let _ = std::fs::remove_dir_all(e.path());
     }
     Ok(dir)
 }
@@ -405,6 +400,31 @@ pub fn runtime_stream_stop(rt: State<'_, Runtime>, id: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // An update must keep every older binary: agents and tmux can outlive several app updates.
+    #[test]
+    fn keeps_older_runtime_builds_for_existing_agents() {
+        let home = std::env::temp_dir().join(format!("ll-runtime-install-{}", uuid::Uuid::new_v4()));
+        let old = ["first", "second", "third"];
+        for build in old {
+            let dir = home.join("bin").join(build);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("berthd"), build).unwrap();
+            std::fs::write(dir.join("tmux"), build).unwrap();
+        }
+        let source = home.join("bundled-berthd");
+        std::fs::write(&source, "new build").unwrap();
+        for _ in 0..2 {
+            let installed = install(&home, "new", &source).unwrap();
+            assert_eq!(std::fs::read_to_string(installed.join("berthd")).unwrap(), "new build");
+            for build in old {
+                for name in ["berthd", "tmux"] {
+                    assert_eq!(std::fs::read_to_string(home.join("bin").join(build).join(name)).unwrap(), build);
+                }
+            }
+        }
+        std::fs::remove_dir_all(home).unwrap();
+    }
 
     // berthd answers short replies with a length and long ones and its events in chunks.
     #[test]
