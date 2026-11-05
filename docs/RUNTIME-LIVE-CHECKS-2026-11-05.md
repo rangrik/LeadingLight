@@ -1,6 +1,8 @@
 # Live provider checks — 2026-11-05
 
 This continues the [credential audit](RUNTIME-CREDENTIALS-2026-11-04.md).
+The later [full runtime validation](RUNTIME-VALIDATION-2026-11-05.md) records
+the complete suite rerun and default live checks after these changes.
 
 ## Claude completed
 

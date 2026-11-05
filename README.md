@@ -45,7 +45,8 @@ Codex, Claude, ACP and browser checks. Vercel Gateway is excluded from the defau
 run and `all`; its `turncheck` group requires explicit selection. Add `--list`
 to inspect selection without contacting providers. `pnpm runtime:test:systemd`
 uses a disposable Linux machine.
-See [fixture setup and results](docs/RUNTIME-FIXTURES-2026-11-03.md).
+See [fixture setup](docs/RUNTIME-FIXTURES-2026-11-03.md) and the
+[latest full validation](docs/RUNTIME-VALIDATION-2026-11-05.md).
 
 An iPad target shares this app. With Xcode and CocoaPods installed, run `pnpm ios:init`
 and `pnpm ios:build` to create an unsigned device archive. Signing, device acceptance and
