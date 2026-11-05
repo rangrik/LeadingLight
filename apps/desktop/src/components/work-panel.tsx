@@ -58,11 +58,11 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
     <div className="flex flex-col gap-1" data-widget="activity">
       <Row>
         <Bot className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
           <button className="min-w-0 truncate font-medium underline-offset-2 hover:underline" onClick={(e) => visit(agent.id, e)} type="button">
             {name(agent.id)}
           </button>
-          <span className="shrink-0 text-muted-foreground" data-state={state}>
+          <span className="min-w-0 break-words text-muted-foreground" data-state={state}>
             {failed ? `Didn't go: ${failed}` : STATE_LABEL[state]}
           </span>
         </span>
