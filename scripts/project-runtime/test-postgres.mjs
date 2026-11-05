@@ -81,6 +81,8 @@ export async function startPostgresFixture({ stateDir, env = process.env, binDir
   // Ignore ambient libpq service files, database addresses and passwords.
   const pgEnv = Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("PG")));
   pgEnv.TZ = "UTC";
+  // macOS locale discovery can start threads before PostgreSQL forks.
+  pgEnv.LC_ALL = "C";
   const marker = randomBytes(16).toString("hex");
   const dir = await mkdtemp(join(state, "pg."));
   const mark = join(dir, ".leadinglight-postgres-fixture");
