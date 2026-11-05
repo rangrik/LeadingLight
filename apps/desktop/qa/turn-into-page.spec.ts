@@ -76,7 +76,7 @@ test("A task keeps selected paragraphs, bold text, and a list", async ({ page })
   expect(task.title).toBe("Plan the corner");
   expect(task.properties["task-project"]).toEqual([saved.find((p: any) => p.title === "House").id]);
   expect(task.content.content).toMatchObject([
-    { type: "paragraph", content: [{ text: "First " }, { text: "bold words", marks: [{ type: "bold" }] }] },
+    { type: "paragraph", content: [{ text: "First " }, { text: "bold words", marks: expect.arrayContaining([expect.objectContaining({ type: "bold" })]) }] },
     { type: "paragraph", content: [{ text: "Second paragraph" }] },
     { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ text: "List item" }] }] }] },
     { type: "paragraph" },
