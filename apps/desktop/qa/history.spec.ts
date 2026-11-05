@@ -29,8 +29,9 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await expect(body).toContainText("First draft");
   await page.getByRole("button", { name: "History and authorship" }).click();
   await page.getByRole("menuitem", { name: "Inspect authorship" }).click();
-  await expect(page.getByRole("dialog")).toContainText("You");
-  await expect(page.getByRole("dialog")).toContainText("First draft");
+  const authorship = page.getByRole("dialog", { name: "Authorship", exact: true });
+  await expect(authorship).toContainText("You");
+  await expect(authorship).toContainText("First draft");
   await page.screenshot({ path: "qa/report/authorship.png" });
 });
 
