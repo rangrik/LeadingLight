@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, State};
 
-const ORIGIN: &str = "https://leadinglight-web.vercel.app";
+const ORIGIN: &str = "https://leadinglight.app";
 const LIMIT: usize = 4_500_000;
 
 #[derive(Default)]

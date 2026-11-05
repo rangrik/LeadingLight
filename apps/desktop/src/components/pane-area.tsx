@@ -30,7 +30,7 @@ import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
 import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
-import { useMobile } from "~/lib/platform";
+import { phone, useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
@@ -131,7 +131,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
   const wide = size.w - (order.length - 1) * (STRIP + GAP);
   // Folded: strips in reading order, the pane in use taking the rest.
   const box = (id: string, rect: Rect) => {
-    if (isMobile) return { left: 0, top: 0, width: size.w, height: size.h };
+    if (isMobile || phone) return { left: 0, top: 0, width: size.w, height: size.h };
     if (!folding) return place(rect, size);
     const i = order.indexOf(id);
     const left = i * (STRIP + GAP) + (i > at ? wide - STRIP : 0);
@@ -151,12 +151,12 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           const leaf = { ...pane, page: pageIn(tab), back: front ? pane.back : undefined };
           // Opened from the Feed in its place (a narrow window): its crumb goes back there.
           const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
-          const folded = !isMobile && front && folding && order.indexOf(leaf.id) !== at;
+          const folded = !phone && !isMobile && front && folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
           return (
             <section
               aria-label={shown.title}
-              className={cn("group/card absolute flex flex-col overflow-hidden", CARD, (!front || (isMobile && pane.id !== focus)) && "hidden")}
+              className={cn("group/card absolute flex flex-col overflow-hidden", CARD, (!front || ((isMobile || phone) && pane.id !== focus)) && "hidden")}
               data-folded={folded || undefined}
               data-pane={front ? leaf.id : undefined}
               data-pane-page={leaf.page}
@@ -174,10 +174,10 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                   <span className="max-h-full truncate [writing-mode:vertical-rl]">{shown.title}</span>
                 </button>
               )}
-              {!folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
+              {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
               {!folded && (
               <PanelHeader
-                after={<PageStats id={leaf.page} />}
+                after={!phone && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
                 lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
@@ -196,7 +196,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <PageHistory className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
-                {isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
+                {!phone && isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
                   <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
                 )}
                 {split && (
@@ -241,7 +241,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
             </section>
           );
         })}
-      {!isMobile && !folding && dividers.map((d) => <DividerHandle area={area} d={d} key={d.id} limits={ratioLimits(root, d, size)} size={size} />)}
+      {!phone && !isMobile && !folding && dividers.map((d) => <DividerHandle area={area} d={d} key={d.id} limits={ratioLimits(root, d, size)} size={size} />)}
       <DropOverlay at={(r) => place(r, size)} />
       <DragGhost />
     </div>

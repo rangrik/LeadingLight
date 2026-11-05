@@ -17,6 +17,7 @@ export default defineConfig({
     { name: "qa", grepInvert: /@gallery/ },
     { name: "gallery", grep: /@gallery/ },
     { name: "ipad-webkit", testMatch: "ipad.spec.ts", use: { browserName: "webkit" } },
+    { name: "iphone-webkit", testMatch: "iphone.spec.ts", use: { browserName: "webkit", isMobile: true } },
     { name: "safari", testMatch: /(?:history|saving|smoke|cloud(?:-guards|-large)?|offline|native-account|pairing(?:-integration)?|task-work-layout)\.spec\.ts/, use: { browserName: "webkit" } },
   ],
   use: {

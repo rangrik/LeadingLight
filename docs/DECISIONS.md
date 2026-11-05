@@ -728,7 +728,23 @@ journal events, identified by a hash of MIME type and bytes. Receivers validate 
 stable local files. Comparisons use these identities so a different sandbox path does not
 create a conflict. Notes remain usable offline; uploads resume with the foreground app.
 
-## 38. Mobile project agents connect directly to the Mac over Tailscale (2026-11-05)
+## 38. iPhone uses the iPad target with a quieter front door (2026-11-03)
+
+Keep Tauri, TipTap, SQLite and encrypted sync shared. A second editor or store would risk
+changing notes when they move between devices. The universal iOS target already supports both
+device families; iPhone gets Today, Capture and Notes instead of desktop sidebars and splits.
+
+Capture asks for no classification. Today offers a return point and at most three recent captures,
+without counts or streaks. Page details collapse; sidenotes flow below the text. The live editor
+stays mounted when navigating home, and phone navigation has its own saved layout. Phone detection
+follows the device, so opening the keyboard or rotating never switches back to the desktop shell.
+
+Declare one native iOS scene using Tao's existing delegate. Without a scene, simulator rotation
+left the keyboard sideways and safe areas in portrait. The scene fixes both; it also preserves
+the iPad's single-window behavior. Keep capture Save and Close above the scrolling contents so a
+landscape keyboard cannot cover them.
+
+## 39. Mobile project agents connect directly to the Mac over Tailscale (2026-11-05)
 
 Paseo and Shipyard both keep agent processes on the host while a phone controls them.
 Shipyard's phone companion already binds to a tailnet address, but cannot start agents and

@@ -2,9 +2,10 @@ import { saveEmergency, clearEmergency } from "~/lib/store-local";
 import { carry } from "~/lib/catalog";
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
-import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
+import { AlignLeft, ChevronDown, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
 import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { markCapture } from "~/lib/capture-inbox";
 import { saveVoice } from "~/lib/capture";
@@ -21,7 +22,7 @@ import { WorkPanel } from "~/components/work-panel";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
-import { useMobile } from "~/lib/platform";
+import { phone, useMobile } from "~/lib/platform";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
 import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
@@ -411,16 +412,23 @@ export function PageView({ page }: { page: LLObject }) {
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        {!report && <PropertyPanel
+        {!report && (phone ? <Collapsible className="mt-3">
+          <CollapsibleTrigger render={<Button className="text-muted-foreground" variant="ghost" />}><ChevronDown />Page details</CollapsibleTrigger>
+          <CollapsiblePanel><PropertyPanel
+            onDescription={description === undefined ? addDescription : undefined}
+            page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
+            setProp={setProp} setType={setType} typeId={typeId} values={props}
+          /></CollapsiblePanel>
+        </Collapsible> : <PropertyPanel
           onDescription={description === undefined ? addDescription : undefined}
           page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
           setProp={setProp}
           setType={setType}
           typeId={typeId}
           values={props}
-        />}
+        />)}
         {day && <DailyBar day={day} />}
-        {day === today() && <TailToday />}
+        {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
           <BlockEditor
