@@ -48,9 +48,9 @@ scheduling and does not establish a 16 ms total rendering budget.
 
 ## Native checks still requiring manual verification
 
-1. Open **LeadingLight Dev 98634f** from Applications. Expect the separate development app
-   with traffic-light room and its own notes. Sign into the same test workspace in it and
-   in the browser used for Google consent.
+1. Open the merged **LeadingLight** from Applications and open **Calendar**. Expect the
+   calendar view in your existing workspace. Use disposable events for the checks below;
+   the development app was removed during closeout.
 2. Open **Calendar → Connect Google Calendar**. Expect the system browser, Google's account
    picker and calendar consent. Approve a disposable personal test account, return to the app,
    and press **Refresh**. Expect its calendar names and events.
@@ -69,7 +69,7 @@ scheduling and does not establish a 16 ms total rendering budget.
    account's Google events to remain untouched. Sign out of LeadingLight; expect event data
    and open drafts to disappear.
 
-The development app is installed for these checks but has not been driven or manually verified.
+The native window and real local agent sessions have not been driven or manually verified.
 Google consent is now In production and cloud access is public. Google approval remains
 pending; see GOOGLE-VERIFICATION.md for the review record. Calendar
 reminders are Google's; LeadingLight does not yet have an offline calendar or notification daemon.
@@ -134,8 +134,7 @@ re-read; only the new domain's origin and two callbacks remain.
 This new-domain run did not separately open Google Calendar's external event UI; it checked
 Google responses through LeadingLight. Earlier November 3 tests did independently verify
 Google Calendar. Native app/agent manual checks above remain unperformed; this deployment
-does not claim they passed. The older installed dev app needs rebuilding for the new origin
-before testing a new native connection.
+does not claim they passed. The merged installed app now uses the new origin; the old development app was removed.
 
 ## Submission and merge validation, November 5, 2026
 
@@ -159,7 +158,7 @@ screenshots are in the verification artifact folder's `postmerge-qa/` and
 `migration-independent-qa/` directories. The final primary suite ran after the last main merge.
 
 The user's merge/cleanup authorization covers this closeout. The installed app was still
-running during verification; the merged Mac bundle must be installed only after it quits.
+running during verification, so installation waited for the user to quit it normally.
 Native manual checks above remain unperformed. The old development app is no longer the
 build to test; use the merged installed LeadingLight after installation completes.
 
@@ -169,3 +168,11 @@ still pointed to this task's previous release. It includes the narrow-pane fix a
 config and public homepage/privacy requests passed; anonymous calendar accounts returned 401.
 Own test servers and isolated PostgreSQL were stopped. LeadingLight Dev 98634f and its data
 were removed. Other worktrees and servers were not stopped or changed.
+
+The user confirmed quitting LeadingLight. The release Mac bundle was built from main,
+installed at `/Applications/LeadingLight.app`, and verified with `codesign --verify --deep
+--strict`; the installed binary exactly matches the prepared SHA-256 recorded in the durable
+`mac-installation.json`. Both Rust native credential tests passed. Main's final additional
+`5451a4f` merge changed only an unrelated test expectation; application code remained identical.
+The agent did not open or drive the native window. The branch's checkout is ready to archive;
+Google review monitoring now uses the surviving main checkout.

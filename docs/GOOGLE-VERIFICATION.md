@@ -105,7 +105,7 @@ approval, test public consent again before claiming warning removal or completed
 Do not change audience, publishing status or requested scopes while review is pending.
 
 Heartbeat `finish-google-calendar-verification` runs every 12 hours. It stays quiet when
-unchanged and stops after approval plus the post-approval consent check. The user authorized
-merging and cleaning up this branch after submission. After closeout, use this record in
+unchanged and stops after approval plus the post-approval consent check. The branch was merged, the final web release deployed, and the Mac app installed after the
+user quit it. The task development app and test servers were removed. Use this record in
 `/Users/pranavkanade/work/LeadingLight`; preserve other agents' work and servers and never drive
 the native app. Original browser notes remain at the old origin and must not be erased.
