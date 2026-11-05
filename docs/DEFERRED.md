@@ -256,3 +256,23 @@ with p95 18.1/18.0 ms and maximum 22.1 ms. The strict 16 ms budget is not met; t
 are not a matched baseline for the authorship guard. Revisit in a separate typing
 performance pass. Evidence:
 `apps/desktop/qa/report/native-focus-2026-10-29/agent-postmerge-performance-results.json`.
+
+## 2026-11-03 — iPhone hardware acceptance and long-page typing
+
+The universal arm64 iOS archive builds. Phone flows pass in browsers and on an iPhone 17 simulator
+running iOS 26.5; the shared scene change also passes an iPad Air simulator smoke on iOS 18.6.
+Xcode component setup has completed. Simulator capture, writing, SQLite persistence, backgrounding
+and rotation are verified. On November 5, signed development builds were installed on the physical
+iPhone and iPad. The iPad's existing database and attachments remain. The earlier Personal Team
+profiles expire November 12; paid membership activated later on November 5. The user confirmed
+the phone's Today screen; the trusted iPad build also launched.
+The production release was then installed and launched on both devices with paid distribution
+signing valid to November 5, 2027; the dev apps remain available for unsynced data.
+Finish `QA_IPHONE.md` on hardware: real suspension timing, Keychain sync, Files, microphone and
+Quick Look remain unverified for this phone build.
+
+Independent 2,000-paragraph testing kept all text, but Chromium input handling measured 25–33 ms
+while other builds ran; WebKit next-frame samples also exceeded 16 ms. This extends the existing
+long-page performance issue above. Revisit with an idle-machine baseline and real iPhone trace
+before claiming the frame budget is met; do not change the editor or persistence model from noisy
+desktop timing alone.

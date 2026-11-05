@@ -84,6 +84,8 @@ html[data-ipad] {
   --ll-height: calc(var(--ll-viewport-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
   overscroll-behavior: none;
 }
+/* The home-indicator area belongs to the iPad shell, outside its safe content bounds. */
+html[data-ipad]:not([data-phone]), html[data-ipad]:not([data-phone]) body { background: var(--sidebar); }
 [data-ipad] #root { position: fixed; top: var(--ll-top); inset-inline: env(safe-area-inset-left) env(safe-area-inset-right); height: var(--ll-height); }
 [data-ipad] .ll-shell { height: var(--ll-height); min-height: 0; }
 [data-ipad] .ll-inset { height: var(--ll-height); }
@@ -99,6 +101,37 @@ html[data-ipad] {
 @media (pointer: coarse) {
   [data-slot="sidebar-menu-button"] { min-height: 44px; }
   [data-tab] [aria-label="Close tab"], [data-slot="sidebar-menu-action"] { opacity: 1; }
+}
+
+/* Phone controls fit the visible viewport, including a keyboard in landscape. */
+[data-phone] .ll-phone { height: var(--ll-height); }
+[data-phone] :is(.ll-phone, .ll-phone-capture, .ll-settings) button { min-height: 44px; }
+[data-phone] :is(.ll-phone, .ll-phone-capture) button[data-slot="button"]:has(> svg:only-child) { min-width: 44px; }
+[data-phone] :is(input, textarea:not([aria-label="Title"]), .ll-capture .ll-editor) { font-size: 16px; }
+[data-phone] textarea[aria-label="Title"] { font-size: 28px; }
+[data-phone] .ll-page { --toc: 0px; --margin: 0px; --end: 24px; padding-inline: 24px; max-width: 100%; }
+[data-phone] .ll-page[data-page-notes] > * { margin-inline-end: 0; }
+[data-phone] .ll-editor-root { margin-left: -20px; padding-left: 20px; }
+[data-phone] :is(.ll-handle, .ll-toc) { display: none; }
+[data-phone] .ll-note { position: relative; top: auto !important; left: auto !important; width: 100%; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+[data-phone] .ll-note-line { display: none; }
+[data-phone] .ll-note-remove { opacity: 1; }
+[data-phone] .ll-phone [data-pane] { border-radius: 0; }
+[data-phone] .ll-phone [data-pane] > header > div:first-child { flex: 1 1 0; padding-inline: 12px; }
+[data-phone] .ll-phone-capture {
+  position: fixed; top: var(--ll-top); inset-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+  height: var(--ll-height); max-height: var(--ll-height); width: auto; max-width: none;
+  border: 0; border-radius: 0; transform: none;
+}
+[data-phone] .ll-phone-capture .ll-capture-box { height: 100%; max-height: none; border: 0; border-radius: 0; }
+[data-phone] .ll-phone-capture .ll-capture-box::before { display: none; }
+[data-phone] .ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; }
+/* Shipyard's settings rows keep their controls in one lane on larger screens. */
+[data-phone] .ll-settings .min-h-14.gap-8 { flex-direction: column; align-items: stretch; gap: 12px; }
+[data-phone] .ll-settings .min-h-14.gap-8 > .shrink-0 { flex-wrap: wrap; min-width: 0; }
+[data-phone] .ll-settings .px-page { padding-inline: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  [data-phone] *, [data-phone] *::before, [data-phone] *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
 }
 
 html[data-authorship="true"] .ll-editor [data-origin="agent"] {

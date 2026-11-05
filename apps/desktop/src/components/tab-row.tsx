@@ -8,7 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
-import { useMobile } from "~/lib/platform";
+import { phone, useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
 import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
 import { describe } from "~/lib/space";
@@ -32,7 +32,7 @@ function KeyButton({ id, label, onClick, disabled, children }: { id: string; lab
 // way in a narrow card, as Ask does, so the title stays whole; ⌘[ and ⌘] still work.
 export function History({ pane, tab }: { pane: string; tab: Tab }) {
   return (
-    <div className="-ms-1 hidden shrink-0 items-center @[20rem]/header:flex">
+    <div className={cn("-ms-1 shrink-0 items-center", phone ? "flex" : "hidden @[20rem]/header:flex")}>
       <KeyButton disabled={tab.at === 0} id="back" label="Back" onClick={() => travel(-1, pane)}>
         <ChevronLeft className="size-4" />
       </KeyButton>

@@ -128,12 +128,12 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   return { title, icon: page && iconFor(page), parent: owner ? { title: pageLabel(owner.title), view: owner.id } : { title: type.plural, view: typeView(type.id) } };
 }
 
-export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext): Promise<void> {
+export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext, { reportError = true } = {}): Promise<void> {
   const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
     patchSummary(id, { updatedAt: Date.now() });
     markSaved();
-  }, (error) => { reportSaveError(error); throw error; });
+  }, (error) => { if (reportError) reportSaveError(error); throw error; });
 }
 
 // A page made another type (an idea filed as a task); its properties go through its open editor.

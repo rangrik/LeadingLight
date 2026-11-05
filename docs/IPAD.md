@@ -10,6 +10,19 @@ Use a Mac with Xcode, CocoaPods, pnpm and rustup. Run `pnpm install`, then `pnpm
 The official Tauri initializer generates `apps/desktop/src-tauri/gen/apple/`; that folder is
 ignored, while the iOS configuration, permissions and icons are source-controlled.
 
+The iOS icons use `icons/app-icon.svg`, matching the Mac's cream mark on an ink background.
+From the repository root, regenerate them without changing the Mac icons:
+
+```sh
+pnpm --filter @leadinglight/desktop exec tauri icon src-tauri/icons/app-icon.svg \
+  --output /tmp/leadinglight-icons --ios-color '#15151A'
+swift scripts/ios-icons.swift /tmp/leadinglight-icons/ios apps/desktop/src-tauri/icons/ios
+```
+
+The Swift helper writes opaque RGB PNGs through ImageIO. Verify the decoded artwork, not just PNG headers.
+The iOS helper copies these tracked assets into an existing Xcode catalog before every build,
+so an older generated project cannot keep Tauri's template icons. See [Tauri's icon guide](https://v2.tauri.app/develop/icons/).
+
 `pnpm ios:build` builds an unsigned arm64 device archive without launching a window, at
 `apps/desktop/src-tauri/gen/apple/build/leadinglight-desktop_iOS.xcarchive`. It needs signing
 before installation. The helper chooses rustup's toolchain because a separate Homebrew Rust
@@ -62,9 +75,13 @@ Apple Account. External testers need a separate group and Apple's beta review.
 and [internal testing guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers)
 describe these steps.
 
-Current handoff (2026-10-29): the user confirmed they do not have an Apple Developer membership,
-so TestFlight distribution is blocked. No enrollment or purchase was made. The TestFlight archive is
-unsigned and has not been uploaded or validated by Apple. The manifest declares
+Current handoff (2026-11-05): Apple Developer membership is active, with renewal November 5, 2027.
+The earlier development installs still use Personal Team profiles expiring November 12.
+The private production app, **LeadingLight** (`com.leadinglight.app`), is installed and launches on
+both iPhone and iPad, with the correct logo and Apple Distribution signing valid to November 5, 2027.
+It uses an Ad Hoc profile covering these registered devices. The separate dev apps remain installed;
+connect the production app to the existing workspace before removing them.
+TestFlight has not been uploaded or validated by Apple. The manifest declares
 the filesystem plugin's app-container timestamp use (`C617.1`). Bundled SQLite's filesystem
 inspection calls still need review before distribution; no unrelated disk-space reason is
 declared. Encryption answers must describe the final build; none is guessed in its plist.
@@ -86,6 +103,10 @@ Mode on the iPad. The separate dev bundle keeps its own data and includes the fr
 LeadingLight Dev 0.2.0 was installed and tested on that iPad on 2026-10-29 with the user's
 explicit authorization for agent-led device testing. See `QA_IPAD.md` for evidence and the
 remaining checks below.
+
+On November 5, the app was updated in place with the shared iPhone/iPad build and a renewed
+development profile. Existing database and attachment files remain. Launch succeeded after the
+owner trusted the profile on the iPad. See `QA_IPHONE.md` for the current results.
 
 ```sh
 APPLE_DEVELOPMENT_TEAM=YOUR_TEAM_ID scripts/ios.sh build --ci --target aarch64 \
@@ -117,7 +138,7 @@ its build context is required by Xcode's Rust script.
 
 ## Access to existing notes
 
-Mac, iPad and [LeadingLight Web](https://leadinglight-web.vercel.app) share the encrypted
+Mac, iPad and [LeadingLight Web](https://leadinglight.app) share the encrypted
 journal. Open **Account and sync → Account → Connect your workspace** in each native app.
 The browser approves the device using its existing account and transfers the recovery key
 with end-to-end encryption. Compare the connection code shown in both places, approve, then

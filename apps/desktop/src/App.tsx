@@ -10,6 +10,7 @@ import { useApplyTheme } from "@/hooks/use-theme";
 import { watchStillness } from "@/lib/still";
 import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
+import { Dialog, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import {
   Empty,
   EmptyContent,
@@ -31,6 +32,7 @@ import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
+import { PhoneShell } from "~/components/phone-shell";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
@@ -44,7 +46,7 @@ import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
-import { isDesktop, useMobile } from "~/lib/platform";
+import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
@@ -165,12 +167,13 @@ export default function App() {
   const [capture, setCapture] = useState(false);
   const closeCapture = useCallback(() => {
     setCapture(false);
-    if (captureFrom.current?.isConnected) captureFrom.current.focus();
+    if (!phone && captureFrom.current?.isConnected) captureFrom.current.focus();
   }, []);
   const toggleCapture = useCallback(() => {
     void isDesktop.then(async (native) => {
       if (native) return (await import("@tauri-apps/api/core")).invoke("capture_show");
-      if (capture) closeCapture();
+      if (capture && phone) window.dispatchEvent(new Event("leadinglight:close-capture"));
+      else if (capture) closeCapture();
       else setCapture(true);
     });
   }, [capture, closeCapture]);
@@ -203,7 +206,7 @@ export default function App() {
   // A click anywhere else closes the box, as the panel does; the editor's menus count as inside,
   // and the bar's button that opened it closes it itself.
   useEffect(() => {
-    if (!capture) return;
+    if (!capture || phone) return;
     const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest(`[role=dialog], ${POPUP}, [data-quick-capture]`) && closeCapture();
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -322,6 +325,7 @@ export default function App() {
         open={sidebarOpen}
         style={chrome(mac, sidebarWidth)}
       >
+        {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
@@ -364,6 +368,7 @@ export default function App() {
           {root && !mobile && <AskBar />}
         </SidebarInset>
         <BarStrip onCapture={toggleCapture} />
+        </>}
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
           onConfirm={(id) => {
@@ -390,11 +395,16 @@ export default function App() {
             </div>
           )}
           {/* The row only places the box; a click beside it reaches the page under it. */}
-          {capture && (
+          {capture && (phone ? <Dialog open onOpenChange={(open) => { if (!open) window.dispatchEvent(new Event("leadinglight:close-capture")); }}>
+            <DialogPopup aria-label="New idea" className="ll-phone-capture" finalFocus={false} showCloseButton={false}>
+              <DialogTitle className="sr-only">New idea</DialogTitle>
+              <CaptureBox className="h-full" embedded host={captureHost} />
+            </DialogPopup>
+          </Dialog> : (
             <div className="ll-capture-overlay pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center px-3">
               <CaptureBox className="pointer-events-auto h-80 max-h-[70dvh] w-full max-w-[640px] shadow-2xl" host={captureHost} />
             </div>
-          )}
+          ))}
           <ShortcutsSheet />
           {!mobile && <CliUpdates />}
           <ZoomHud />

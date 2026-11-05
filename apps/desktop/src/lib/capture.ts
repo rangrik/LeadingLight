@@ -8,7 +8,7 @@ import { pageLabel } from "./labels";
 import { editPage, liveEditor, whenLive } from "./live";
 import { docText, objects } from "./objects";
 import { openBeside } from "./panes";
-import { isDesktop } from "./platform";
+import { isDesktop, phone } from "./platform";
 import { createPage, markSaved, pageOf, patchSummary, retype, savePage, space } from "./space";
 import { PAGE_TYPE } from "./store";
 import { captureOf, captureProperties, markCapture, setCaptureProject } from "./capture-inbox";
@@ -100,7 +100,8 @@ async function saveIdea(draft: Draft): Promise<string | null> {
   const content = withLink(draft);
   if (draft.id) {
     patchSummary(draft.id, { title });
-    await savePage(draft.id, { title, ...(content && { content }) });
+    // The phone dialog owns its error; a toast would cover its retry button.
+    await savePage(draft.id, { title, ...(content && { content }) }, undefined, { reportError: !phone });
     // Through editPage, so a pane showing the idea gets its new project.
     if (projectOf(draft.id) !== draft.project) await editPage(draft.id, { properties: (props) => withProject(props, draft.project) });
     return draft.id;
