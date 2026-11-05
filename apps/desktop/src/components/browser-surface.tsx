@@ -384,7 +384,8 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
     if (command && (key === "c" || key === "x")) { channel.current?.copy(key === "x"); return; }
     const commands = command && key === "a" ? ["selectAll"] : command && key === "z" ? [event.shiftKey ? "redo" : "undo"] : undefined;
     const next: Input = { type: "keyDown", key: event.key, code: event.code, modifiers: modifiers(event), windowsVirtualKeyCode: event.keyCode, commands };
-    if (!command && event.key.length === 1) next.text = event.key;
+    if (!command && event.key === "Enter") next.text = "\r";
+    else if (!command && event.key.length === 1) next.text = event.key;
     channel.current?.send(next);
     pressed.current.set(event.code, next);
   };
