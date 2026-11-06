@@ -34,6 +34,12 @@ Feature: Control Mac project agents from iPhone and iPad
     And another account cannot replace or control an existing connection
     And relay credentials cannot read workspace notes or start agents without the pairing secret
 
+  Scenario: A signed-in native Mac manages its own connection
+    Given my installed Mac app has a valid LeadingLight account session
+    When it registers and removes a mobile connection using that session
+    Then both operations succeed for its account
+    And a browser origin, another account or a revoked session cannot reuse that authority
+
   Scenario: Start and continue work on the Mac
     Given I connected to a Mac with a shared project
     When I open that project and send a question using Claude or Codex
