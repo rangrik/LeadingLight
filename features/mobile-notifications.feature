@@ -59,7 +59,7 @@ Feature: Respond to Mac agents from an iPhone or iPad notification
     Given notifications are enabled and authorized on a registered device
     And a pending request has already alerted that device
     When LeadingLight reopens before Apple returns its notification token
-    Or Apple temporarily fails to return a token
+    And Apple has not returned a token or reports a temporary registration error
     Then LeadingLight checks the existing subscription without removing it
     When Apple returns the same token
     Then registration preserves the request's delivery receipt
