@@ -5,10 +5,12 @@
 // requests.ts) with a line saying where the answer is; number keys only inside the card, so two
 // open requests can't answer each other; "Other" as a field in the card; no Computer scopes.
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, type Ref, useRef } from "react";
+import { type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Field, FieldDescription, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
 import { Kbd } from "@leadinglight/ui/components/kbd";
+import { Textarea } from "@leadinglight/ui/components/textarea";
 import { cn } from "@leadinglight/ui/lib/utils";
 import type { Answer, Delivery, RuntimeRequest } from "~/lib/project-runtime/requests";
 
@@ -81,6 +83,8 @@ export function QuestionCard({ request, answer, index, busy, onAnswer, children,
   const qs = request.questions ?? [];
   const q = qs[index];
   const timer = useRef<number | null>(null);
+  const cancelAdvance = () => { if (timer.current) window.clearTimeout(timer.current); timer.current = null; };
+  useEffect(() => cancelAdvance, [request.id, index, busy]);
   if (!q) return null;
   const mine = answer.answers?.[index] ?? {};
   const picked = new Set(mine.picks ?? []);
@@ -89,11 +93,11 @@ export function QuestionCard({ request, answer, index, busy, onAnswer, children,
   const last = index === qs.length - 1;
   const advance = (a: Answer) => onAnswer(a, last ? index : index + 1, last);
   const pick = (label: string) => {
-    if (q.multi) return onAnswer({ answers: set({ picks: picked.has(label) ? [...picked].filter((l) => l !== label) : [...picked, label] }) }, index, false);
+    if (q.multi) return onAnswer({ answers: set({ ...mine, picks: picked.has(label) ? [...picked].filter((l) => l !== label) : [...picked, label] }) }, index, false);
     const next = { answers: set({ picks: [label] }) };
     onAnswer(next, index, false);
     // A single choice moves on by itself, as in synara, a moment after it shows.
-    if (timer.current) window.clearTimeout(timer.current);
+    cancelAdvance();
     timer.current = window.setTimeout(() => advance(next), 200);
   };
   return (
@@ -148,11 +152,11 @@ export function QuestionCard({ request, answer, index, busy, onAnswer, children,
         onSubmit={(e) => {
           e.preventDefault();
           // Enter right after a pick: the pick's own move on would send it a second time.
-          if (timer.current) window.clearTimeout(timer.current);
+          cancelAdvance();
           if (answered(index)) advance(answer);
         }}
       >
-        <Input aria-label="Your own answer" disabled={busy} onChange={(e) => onAnswer({ answers: set({ picks: q.multi ? mine.picks : [], other: e.currentTarget.value }) }, index, false)} placeholder="Or type your own answer" size="sm" value={mine.other ?? ""} />
+        <Input aria-label="Your own answer" disabled={busy} onChange={(e) => { cancelAdvance(); onAnswer({ answers: set({ picks: q.multi ? mine.picks : [], other: e.currentTarget.value }) }, index, false); }} placeholder="Or type your own answer" size="sm" value={mine.other ?? ""} />
         {(q.multi || mine.other?.trim()) && (
           <Button disabled={busy || !answered(index)} size="sm" type="submit">
             {last ? "Send" : "Next"}
@@ -195,7 +199,7 @@ function detail(r: RuntimeRequest): string {
   return s(actions[0]?.command) || s(input.command) || s(input.file_path) || s(input.plan) || rest;
 }
 
-export function ApprovalCard({ request, busy, onChoose, children, ref, allowedChoices }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement>; allowedChoices?: string[] }) {
+export function ApprovalCard({ request, busy, onChoose, children, ref, allowedChoices, feedback }: { request: RuntimeRequest; busy: boolean; onChoose: (choice: string, message?: string) => void; children?: ReactNode; ref?: Ref<HTMLDivElement>; allowedChoices?: string[]; feedback?: { value: string; onChange: (value: string) => void; separate?: boolean } }) {
   // Codex's "always" is for this very command; Claude's for steps of its kind.
   const exact = "threadId" in ((request.input ?? {}) as object) && request.tool === "Bash";
   const actions = ACTIONS[request.kind === "plan" ? "plan" : "approval"].map((a) =>
@@ -203,6 +207,7 @@ export function ApprovalCard({ request, busy, onChoose, children, ref, allowedCh
   ).filter((a) => !allowedChoices || allowedChoices.includes(a.choice));
   const text = detail(request);
   const why = s((request.input as Record<string, unknown> | undefined)?.reason);
+  const choose = (choice: string) => onChoose(choice, choice === "deny" || choice === "keep_planning" ? feedback?.value.trim() || undefined : undefined);
   return (
     <div
       aria-label="Approval"
@@ -211,7 +216,7 @@ export function ApprovalCard({ request, busy, onChoose, children, ref, allowedCh
         const n = digit(e, actions.length);
         if (n < 0 || busy) return;
         e.preventDefault();
-        onChoose(actions[n].choice);
+        choose(actions[n].choice);
       }}
       ref={ref}
       role="group"
@@ -220,9 +225,14 @@ export function ApprovalCard({ request, busy, onChoose, children, ref, allowedCh
       <p className="font-medium leading-snug">{PROMPT[request.tool ?? ""] ?? `The agent wants to use ${request.tool}`}</p>
       {why && <p className="mt-1 text-muted-foreground text-xs">{why}</p>}
       {text && <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted px-2.5 py-2 font-mono text-xs">{text}</pre>}
+      {feedback && <Field className="mt-3" disabled={busy}>
+        <FieldLabel>Feedback for agent (optional)</FieldLabel>
+        <Textarea aria-label="Feedback for agent" disabled={busy} maxLength={8000} onChange={(e) => feedback.onChange(e.currentTarget.value)} placeholder="Tell the agent what to do instead" size="sm" value={feedback.value} />
+        <FieldDescription>{feedback.separate ? "After declining, send this feedback as a separate message to Codex." : request.kind === "plan" ? "Sent when you choose Keep planning." : "Sent when you choose Decline."}</FieldDescription>
+      </Field>}
       <div className="mt-2 space-y-0.5">
         {actions.map((a, k) => (
-          <ChoiceRow description={a.description} disabled={busy} key={a.choice} label={a.label} onSelect={() => onChoose(a.choice)} shortcut={k + 1} tone={a.tone} />
+          <ChoiceRow description={a.description} disabled={busy} key={a.choice} label={a.label} onSelect={() => choose(a.choice)} shortcut={k + 1} tone={a.tone} />
         ))}
       </div>
       {children}

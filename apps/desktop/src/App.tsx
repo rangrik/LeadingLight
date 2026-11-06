@@ -35,6 +35,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
@@ -392,6 +393,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
+          {mobile && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>

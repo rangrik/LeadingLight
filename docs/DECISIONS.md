@@ -777,27 +777,30 @@ left the keyboard sideways and safe areas in portrait. The scene fixes both; it 
 the iPad's single-window behavior. Keep capture Save and Close above the scrolling contents so a
 landscape keyboard cannot cover them.
 
-## 41. Mobile project agents connect directly to the Mac over Tailscale (2026-11-05)
+## 41. Mobile project agents use an encrypted relay (2026-11-05)
 
-Paseo and Shipyard both keep agent processes on the host while a phone controls them.
-Shipyard's phone companion already binds to a tailnet address, but cannot start agents and
-grants access to the whole host. We add a separate, off-by-default gateway to our pinned
-runtime: the Mac selects project folders, and a copyable secret grants access only to their
-structured Claude/Codex conversations. Folder identity is checked as well as the project name.
+Paseo's optional relay connects its apps without requiring a VPN. LeadingLight follows that
+setup: the Mac registers a scoped connection through its existing account; the phone pairs
+inside LeadingLight. Both make outbound HTTPS requests. No agent executes in the relay.
+The earlier Tailscale-only prototype was replaced before release because it required a second app.
+Shipyard's pinned phone companion also needs Tailscale and ntfy. We reuse its agent request ledger,
+while pairing and notifications live inside LeadingLight.
 
-The host verifies its address against the running Tailscale daemon. The native client accepts
-only literal Tailscale addresses over HTTPS, pins the certificate from the connection code,
-has no redirect or proxy path, and keeps its secret in Keychain. It never shares cloud sync
-credentials. The gateway has a
-small route allowlist, forces approval mode for new agents, rejects access escalation, and
-uses durable start IDs plus existing message and answer receipts. Rotation or disabling
-revokes access; it does not cancel work already running. The runtime remains available after
-Mac app quit while sharing is enabled, and the phone reconnects by reading its conversation.
+The Mac generates a random pairing secret which never reaches the relay. AES-256-GCM protects
+requests and replies, binding the connection, request ID and direction. Commands carry a short
+expiry. The Mac records accepted IDs durably before dispatch, so replay or a restart cannot
+repeat execution. Uncertain delivery stays visible and uses existing agent-level request IDs.
+Credentials in the relay are hashed, role-scoped and account-owned; queues have size and time
+limits. The mobile secret is in Keychain. This reuses the deployed HTTPS service, not a new VPN.
 
-This is project control, not remote page editing: the existing page-agent relay retains its
-separate scope and lifecycle (36). The Mac still handles note tools. Model inference still
-uses the person's chosen provider. Tailscale provides reachability and network encryption,
-not agent hosting. See the [mobile guide](../apps/docs/sync/mobile-agents.md).
+The Mac still checks selected folder identities, route scope and approval mode. Disabling access
+or replacing the code invalidates the connection without stopping work. Sharing keeps the local
+runtime alive after app quit. Note tools still require the Mac app, and inference still uses the
+person's model provider. The page-agent relay keeps its separate scope and lifecycle (36).
 
-References: [Paseo connectivity](https://paseo.sh/docs/connectivity),
-[Shipyard phone API](https://github.com/cosscom/shipyard/blob/main/docs/reference/phone-api.mdx).
+APNs carries generic alerts and encrypted request targets. Taps fetch current state before showing
+actions; they never answer a request. Delivery receipts prevent repeated alerts per device. Offline
+disconnects retain only the credentials needed to remove old push subscriptions on reconnection.
+
+References: [Paseo connectivity](https://paseo.sh/docs/connectivity.md),
+[Paseo security](https://paseo.sh/docs/security.md).

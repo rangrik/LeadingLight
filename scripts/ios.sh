@@ -10,6 +10,7 @@ case "${1:-}" in
     # XcodeGen includes this folder as resources, so the manifest lands at the app root.
     mkdir -p src-tauri/gen/apple/leadinglight-desktop_iOS
     cp src-tauri/PrivacyInfo.xcprivacy src-tauri/gen/apple/leadinglight-desktop_iOS/
+    cp src-tauri/Entitlements.ios.plist src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
     # Existing Xcode projects otherwise keep the template's icons after source assets change.
     icon_dir=src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset
     mkdir -p "$icon_dir"
@@ -21,6 +22,13 @@ case "${1:-}" in
     fi
     ;;
 esac
+
+if [[ "${1:-}" == init ]]; then
+  pnpm tauri ios "$@"
+  # XcodeGen creates an empty file; signing/export selects the provisioned APNs environment.
+  cp src-tauri/Entitlements.ios.plist src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
+  exit 0
+fi
 
 case "${1:-}" in
   release-archive|release-export)

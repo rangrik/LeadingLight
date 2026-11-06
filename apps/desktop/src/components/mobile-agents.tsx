@@ -119,10 +119,13 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
   useEffect(() => {
     const restored = chatOf(key).get().restore;
     if (!restored) return;
-    setText((text) => text ? `${text}\n\n${restored.text}` : restored.text);
+    const next = text ? `${text}\n\n${restored.text}` : restored.text;
+    try { localStorage.setItem(`${namespace}:draft`, JSON.stringify(next)); }
+    catch { setError("Your answer is kept. Free device storage before restoring it to the message field."); return; }
+    setText(next);
     setRestoreNotice(restored.why || "Your unsent answer is back in the message field.");
     chatOf(key).set({ ...chatOf(key).get(), restore: null });
-  }, [key, chat.restore]);
+  }, [key, chat.restore, namespace, text]);
   const blockedTarget = !!target && !!pending && pending.conversation !== target.conversation;
   const conv = list.find((c) => c.id === current) ?? null;
   const mounted = useRef(true);

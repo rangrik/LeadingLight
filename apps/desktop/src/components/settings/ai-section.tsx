@@ -30,7 +30,7 @@ import { openSection } from "~/components/settings/settings-view";
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
   const mobile = useMobile();
-  return mobile ? <SettingsPage title="AI" description="Connect a Mac over Tailscale to run project agents with its Claude Code or Codex account."><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => openSection("devices")}>Connect a Mac</Button><MobileAgentsButton /></div></SettingsPage> : <DesktopAiSection />;
+  return mobile ? <SettingsPage title="AI" description="Connect a Mac inside LeadingLight to run project agents with its Claude Code or Codex account."><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => openSection("devices")}>Connect a Mac</Button><MobileAgentsButton /></div></SettingsPage> : <DesktopAiSection />;
 }
 
 function DesktopAiSection() {

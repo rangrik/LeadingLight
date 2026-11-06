@@ -13,19 +13,23 @@ import { connectMobileAgents, disconnectMobileAgents, mobileAgents, refreshMobil
 import { useMobile } from "~/lib/platform";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
+import { cloudApi, useCloud } from "~/lib/cloud";
 import { pageOf } from "~/lib/space";
+import { mobileNotifications, refreshMobileNotifications, setMobileNotifications } from "~/lib/mobile-notifications";
 
-type Host = { enabled: boolean; projects: string[]; token?: string; certificate?: string; url?: string; error?: string; name: string };
+type Host = { enabled: boolean; projects: string[]; code?: string; channel?: string; error?: string; name: string };
+type Relay = { channel: string; hostToken: string; clientToken: string };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
 export function DevicesSection() {
   const mobile = useMobile();
-  return <SettingsPage title="Devices" description="Run project agents on your Mac from iPhone or iPad over Tailscale.">
+  return <SettingsPage title="Devices" description="Run project agents on your Mac from iPhone or iPad with one encrypted connection.">
     {mobile ? <ConnectMac /> : <ShareMac />}
   </SettingsPage>;
 }
 
 function ShareMac() {
+  const cloud = useCloud();
   const linked = folders.use();
   const [host, setHost] = useState<Host | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,24 +42,36 @@ function ShareMac() {
   useEffect(read, []);
   const change = async (patch: Partial<Host> & { rotate?: boolean }) => {
     setBusy(true); setError("");
-    try { setHost(await ask<Host>("PUT", "/v1/mobile", patch)); }
-    catch (e) { setError(message(e)); }
+    let relay: Relay | undefined;
+    const owner = cloud.user?.id;
+    try {
+      if (patch.enabled || patch.rotate) {
+        if (!owner) throw new Error("Sign in on this Mac to enable mobile access.");
+        relay = await cloudApi<Relay>("mobile-relay/channels", {}, "POST", owner);
+      }
+      setHost(await ask<Host>("PUT", "/v1/mobile", { ...patch, ...(relay ? { relay } : {}) }));
+    }
+    catch (e) {
+      const current = await ask<Host>("GET", "/v1/mobile").catch(() => null);
+      if (current) setHost(current);
+      if (relay && current && current.channel !== relay.channel) await cloudApi("mobile-relay/remove", { channel: relay.channel }, "POST", owner).catch(() => {});
+      setError(message(e));
+    }
     finally { setBusy(false); }
   };
   const copy = async () => {
-    if (!host?.url || !host.token || !host.certificate) return;
-    const bytes = new TextEncoder().encode(JSON.stringify({ version: 1, name: host.name, url: host.url, token: host.token, certificate: host.certificate }));
-    const code = `llmac1:${btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
-    try { await navigator.clipboard.writeText(code); toastManager.add({ type: "success", title: "Connection code copied" }); }
+    if (!host?.code) return;
+    try { await navigator.clipboard.writeText(host.code); toastManager.add({ type: "success", title: "Connection code copied" }); }
     catch { setError("The code could not be copied. Allow clipboard access and try again."); }
   };
   return <>
-    <SettingsGroup title="This Mac" description="Install Tailscale on both devices and sign in to the same network. Keep this Mac awake. Your Claude Code and Codex accounts stay here.">
+    <SettingsGroup title="This Mac" description="Keep this Mac awake and online. LeadingLight carries encrypted messages between your devices. Your Claude Code and Codex accounts stay here.">
+      {!cloud.user && <SettingsRow label="Connect your account" description="Sign in on this Mac to enable the connection. Your phone pairs with a code; note sync is optional."><Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new Event("leadinglight:cloud-account"))}>Account and sync</Button></SettingsRow>}
       <SettingsRow label="Mobile access" description={host?.error || (host?.enabled ? `Available on ${host.name}. Paired devices can start and answer agents in the projects below.` : "Off until you enable it and choose projects to share.")}>
-        <Switch checked={host?.enabled ?? false} disabled={busy || !host} onCheckedChange={(enabled) => void change({ enabled })} />
+        <Switch checked={host?.enabled ?? false} disabled={busy || !host || (!host.enabled && (!cloud.user || !host.projects.length))} onCheckedChange={(enabled) => void change({ enabled })} />
       </SettingsRow>
-      <SettingsRow label="Connection code" description="Anyone with this code on your Tailscale network can control agents in shared projects. Replacing it disconnects every paired device.">
-        <Button size="sm" variant="outline" disabled={busy || !host?.enabled || !host.url || !host.certificate} onClick={() => void copy()}><Copy />Copy code</Button>
+      <SettingsRow label="Connection code" description="Anyone with this code can control agents in shared projects. Replacing it disconnects every paired device.">
+        <Button size="sm" variant="outline" disabled={busy || !host?.enabled || !host.code} onClick={() => void copy()}><Copy />Copy code</Button>
       </SettingsRow>
       {host?.enabled && <SettingsRow label="Replace connection code" description="Running agents keep working on this Mac. Devices need the new code to reconnect.">
         <Button size="sm" variant="outline" disabled={busy} onClick={() => setRotate(true)}>Replace code…</Button>
@@ -75,6 +91,7 @@ function ShareMac() {
 
 function ConnectMac() {
   const state = mobileAgents.use();
+  const notifications = mobileNotifications.use();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -84,19 +101,23 @@ function ConnectMac() {
     try { await work(); setCode(""); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
   return <>
-    <SettingsGroup title="Connect a Mac" description="In LeadingLight on your Mac, open Settings → Devices, choose shared projects, enable mobile access and copy its code. Both devices need Tailscale connected to the same network.">
+    <SettingsGroup title="Connect a Mac" description="In LeadingLight on your Mac, open Settings → Devices, choose shared projects, enable mobile access and copy its code. Both devices only need LeadingLight and an internet connection.">
       <form className="space-y-3 py-4" onSubmit={(e) => { e.preventDefault(); void run(() => connectMobileAgents(code)); }}>
         <Field><FieldLabel>Mac connection code</FieldLabel><Input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste connection code" /></Field>
         <Button type="submit" disabled={busy || !code.trim()}>{busy ? "Connecting…" : "Connect Mac"}</Button>
       </form>
     </SettingsGroup>
     {state.connection && <SettingsGroup title="Connected Mac">
-      <SettingsRow label={state.connection.name} description={state.online ? "Online. Agents run on this Mac and keep working when you close this app." : "Cannot reach this Mac. Check Tailscale and keep the Mac awake."}>
+      <SettingsRow label={state.connection.name} description={state.online ? "Online. Agents run on this Mac and keep working when you close this app." : "Cannot reach this Mac. Keep the Mac awake and connected to the internet."}>
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(disconnectMobileAgents)}>Disconnect</Button>
       </SettingsRow>
       <div className="py-4"><MobileAgentsButton /></div>
+      <SettingsRow label="Agent notifications" description={notifications.registered ? "Alerts are enabled for permissions and questions. Details stay inside the app." : "Get a generic alert when an agent needs your response, including when this app is closed."}>
+        <Switch aria-label="Agent notifications" checked={notifications.enabled} disabled={notifications.busy} onCheckedChange={(value) => void setMobileNotifications(value)} />
+      </SettingsRow>
     </SettingsGroup>}
+    {(notifications.error || notifications.cleanupError) && <div className="space-y-2 py-3"><p role="status" className="text-sm text-muted-foreground">{notifications.cleanupError || notifications.error}</p><Button size="sm" variant="outline" disabled={notifications.busy} onClick={() => void refreshMobileNotifications()}>Check notifications</Button></div>}
     {(error || state.error) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || state.error}</p>}
-    <p className="text-sm text-muted-foreground">No cloud account or note sync is needed. Agent processes and files stay on your Mac; Claude and Codex still contact their model providers.</p>
+    <p className="text-sm text-muted-foreground">No mobile sign-in or note sync is needed. Agent processes and files stay on your Mac; Claude and Codex still contact their model providers.</p>
   </>;
 }

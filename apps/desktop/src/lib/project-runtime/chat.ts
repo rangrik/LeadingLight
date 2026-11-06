@@ -53,10 +53,33 @@ export type Chat = {
 };
 
 const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], queued: [], steered: [], workers: [], runs: [], sessions: [], answers: {}, deliveries: {}, restore: null, error: null });
+const restoreKey = (key: string) => `ll.restore.${key}`;
+const loadRestore = (key: string): Chat["restore"] => {
+  try {
+    const value = JSON.parse(localStorage.getItem(restoreKey(key)) ?? "null");
+    return value && typeof value.text === "string" && typeof value.at === "number" ? value : null;
+  } catch { return null; }
+};
 const chats = new Map<string, ReturnType<typeof createStore<Chat>>>();
 export const chatOf = (key: string) => {
   let s = chats.get(key);
-  if (!s) chats.set(key, (s = createStore(blank())));
+  if (!s) {
+    const mobile = key.startsWith("mobile:");
+    const initial = blank();
+    if (mobile) initial.restore = loadRestore(key);
+    s = createStore(initial);
+    if (mobile) {
+      const store = s, set = store.set;
+      store.set = (next) => {
+        if (next.restore !== store.get().restore) {
+          if (next.restore) localStorage.setItem(restoreKey(key), JSON.stringify(next.restore));
+          else localStorage.removeItem(restoreKey(key));
+        }
+        set(next);
+      };
+    }
+    chats.set(key, s);
+  }
   return s;
 };
 const patch = (key: string, p: Partial<Chat>) => chatOf(key).set({ ...chatOf(key).get(), ...p });
@@ -217,8 +240,9 @@ function settleAnswers(key: string) {
       else void deliver(key, r, true);
     }
   }
+  patch(key, { restore });
   saveAnswers(key.startsWith("mobile:") ? key : c.conv.id, answers);
-  patch(key, { answers, restore });
+  patch(key, { answers });
 }
 
 const kept = new Map<string, number>();

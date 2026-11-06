@@ -1,28 +1,38 @@
 Feature: Control Mac project agents from iPhone and iPad
-  Tailscale carries a private connection to the Mac. The existing Mac runtime owns
+  LeadingLight relays encrypted messages between its apps, with no separate VPN. The Mac runtime owns
   agents, conversations and approvals; the mobile app never runs a local CLI.
 
   Scenario: The Mac chooses what a device can reach
     Given I linked two project folders in LeadingLight on my Mac
     When I open Settings > Devices and share only one project
-    And enable mobile access with Tailscale connected
+    And enable mobile access while signed in to LeadingLight on the Mac
     Then I can copy a connection code for this Mac
-    And access is bound only to the Mac's Tailscale address
+    And neither device needs a VPN app or an inbound network port
     And a device without that code cannot read or control agents
 
-  Scenario: A network with the same address cannot impersonate the Mac
-    Given another network uses addresses in Tailscale's range
-    When Tailscale is disconnected
-    Then the Mac does not listen on an unrelated interface
-    And a server without the certificate in my connection code receives no authenticated request
+  Scenario: The relay cannot read or forge agent requests
+    Given my Mac and mobile device share a connection secret that the relay never receives
+    When the relay changes an encrypted message, its direction, connection or request ID
+    Then the receiving device refuses it before any agent action
+    When the relay repeats an accepted command, including after a Mac runtime restart
+    Then the Mac does not execute it again
+    And expired commands cannot run when the Mac wakes
 
-  Scenario: Connect an iPhone or iPad without a cloud account
-    Given both devices use the same Tailscale network
+  Scenario: Pair inside LeadingLight on iPhone or iPad
+    Given the Mac registered a connection using its LeadingLight account
     When I paste the Mac's code into Settings > Devices on my iPhone or iPad
     Then I see the Mac's name and only its shared projects
     And the connection message and project list line up with the dialog heading on phone and tablet
     And the device keeps its connection secret in Keychain
-    And no workspace sign-in or note sync is required
+    And the mobile device needs no workspace sign-in or note sync
+    And agent processes and project files stay on the Mac
+
+  Scenario: Relay registration is bounded and account-owned
+    Given I have not signed in on the Mac
+    When I try to register a mobile connection
+    Then registration requires my LeadingLight sign-in
+    And another account cannot replace or control an existing connection
+    And relay credentials cannot read workspace notes or start agents without the pairing secret
 
   Scenario: Start and continue work on the Mac
     Given I connected to a Mac with a shared project
@@ -40,6 +50,12 @@ Feature: Control Mac project agents from iPhone and iPad
     And its request reaches the paired Mac rather than a local runtime
     When I close the conversation and open Today
     Then Today, Capture and Notes remain available
+
+  Scenario: Read a saved conversation after its session ends
+    Given a shared Mac conversation no longer has a running agent session
+    When I open it on my phone
+    Then I can read its saved transcript without starting an agent
+    And an unshared conversation transcript remains unavailable
 
   Scenario: Phone suspension does not stop project work
     Given a project agent is running on my Mac
@@ -65,10 +81,11 @@ Feature: Control Mac project agents from iPhone and iPad
     And a failed answer shows its explanation and retry before the card
 
   Scenario: Offline and uncertain requests remain visible
-    Given the Mac sleeps or Tailscale disconnects
+    Given the Mac sleeps or its internet connection is lost
     When I try to send a question
     Then the app explains that the Mac cannot be reached and keeps my words
-    And it never queues work to run when the Mac wakes
+    And unconfirmed requests expire after about 30 seconds
+    And reconnecting never resends them automatically
     And retrying an uncertain start with the same request ID cannot start a second agent
 
   Scenario: Release an uncertain request after checking the Mac

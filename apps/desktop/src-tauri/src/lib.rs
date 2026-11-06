@@ -30,6 +30,7 @@ mod voice;
 mod web;
 mod native_cloud;
 mod mobile_agents;
+mod mobile_notifications;
 
 const DB_URL: &str = "sqlite:leadinglight.db";
 
@@ -108,6 +109,8 @@ fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Resul
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "ios")]
+    tauri_plugin_leadinglight_notifications::bootstrap();
     let builder = tauri::Builder::default()
         .manage(native_cloud::NativeCloud::default())
         .plugin(tauri_plugin_opener::init())
@@ -119,7 +122,8 @@ pub fn run() {
                 .build(),
         );
     #[cfg(target_os = "ios")]
-    let builder = builder.plugin(tauri_plugin_leadinglight_preview::init());
+    let builder = builder.plugin(tauri_plugin_leadinglight_preview::init())
+        .plugin(tauri_plugin_leadinglight_notifications::init());
     #[cfg(not(target_os = "macos"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         native_platform,
@@ -128,6 +132,13 @@ pub fn run() {
         mobile_agents::mobile_agents_connect,
         mobile_agents::mobile_agents_disconnect,
         mobile_agents::mobile_agents_request,
+        mobile_agents::mobile_agents_notifications,
+        mobile_agents::mobile_agents_notification,
+        mobile_agents::mobile_agents_cleanup_notifications,
+        mobile_notifications::mobile_notifications_status,
+        mobile_notifications::mobile_notifications_request,
+        mobile_notifications::mobile_notifications_take_pending,
+        mobile_notifications::mobile_notifications_ack_pending,
         web::web_fetch,
         web::web_save_media
     ]);
@@ -147,6 +158,13 @@ pub fn run() {
             mobile_agents::mobile_agents_connect,
             mobile_agents::mobile_agents_disconnect,
             mobile_agents::mobile_agents_request,
+            mobile_agents::mobile_agents_notifications,
+            mobile_agents::mobile_agents_notification,
+            mobile_agents::mobile_agents_cleanup_notifications,
+            mobile_notifications::mobile_notifications_status,
+            mobile_notifications::mobile_notifications_request,
+            mobile_notifications::mobile_notifications_take_pending,
+            mobile_notifications::mobile_notifications_ack_pending,
             agent::agent_status,
             agent::agent_ask,
             agent::agent_reply,
