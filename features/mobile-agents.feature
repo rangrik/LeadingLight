@@ -84,6 +84,28 @@ Feature: Control Mac project agents from iPhone and iPad
     Then the Mac interrupts only that agent
     And the app reports failure if the stop cannot be confirmed
 
+  Scenario: Decline work with feedback without losing an uncertain answer
+    Given a Mac agent is waiting for permission
+    When I write feedback and decline
+    Then Claude receives the denial and feedback as one answer
+    And Codex receives the denial first and keeps my feedback until I explicitly send it
+    When the Mac confirms the Codex denial and I send the saved feedback
+    Then only that conversation receives it, with the same message ID on retry
+    When a reply is lost
+    Then my submitted answer cannot change while its result is uncertain
+    And retry sends the original answer rather than a different decision
+    When the request expires before my answer arrives
+    Then my words return to the message draft and remain there after reopening
+
+  Scenario: Open the request named by a mobile notification
+    Given a notification identifies a request on my currently paired Mac
+    When I open the notification
+    Then the app opens its shared project and conversation and fetches the current request
+    And no answer is sent until I choose one
+    When that request was answered, expired or replaced
+    Then the app explains that it is no longer waiting for my answer
+    And a notification from a different Mac cannot open or answer a request
+
   Scenario: Revocation and project scope are enforced on the Mac
     Given a device knows an unshared conversation or session ID
     When it asks to read, resume, answer or stop that agent

@@ -6,7 +6,7 @@ test.setTimeout(60_000);
 
 // A lost network acknowledgement must not duplicate a launch or fall back to this device's runtime.
 async function mac(page: Page, paired = true) {
-  const state = { paired, online: true, dropStart: false, dropApproval: false, failStop: false, approval: true };
+  const state = { paired, online: true, dropStart: false, dropApproval: false, dropFeedback: false, failStop: false, approval: true };
   const calls: { method: string; path: string; body: any; expectedConnection: string }[] = [];
   const starts: any[] = [], sends: any[] = [], stops: string[] = [], local: string[] = [];
   const conversations: any[] = [], sessions: any[] = [];
@@ -50,7 +50,11 @@ async function mac(page: Page, paired = true) {
       body = { request, receipt: { state: "accepted" } };
     } else if (path.endsWith("/controls")) body = { mode: "default" };
     else if (path.endsWith("/outputs") || path.endsWith("/queue") || path === "/v1/notify") body = [];
-    else if (path.endsWith("/send")) { sends.push({ ...value, session }); body = { queued: false }; transcripts.get(session)!.push({ kind: "user", id: `user-${sends.length + 1}`, text: value.text }); }
+    else if (path.endsWith("/send")) {
+      if (!sends.some((s) => s.idem_key === value.idem_key)) { sends.push({ ...value, session }); transcripts.get(session)!.push({ kind: "user", id: `user-${sends.length + 1}`, text: value.text }); }
+      body = { queued: false };
+      if (state.dropFeedback) { state.dropFeedback = false; return route.abort("connectionreset"); }
+    }
     else if (path.endsWith("/interrupt")) {
       stops.push(session);
       if (state.failStop) { status = 503; body = { error: "Stop could not be confirmed" }; }
@@ -313,6 +317,110 @@ test("a lost approval is kept across reload and retried only when the person ask
   expect(answers()[1].body.command).toBe(answers()[0].body.command);
   expect(mock.starts).toHaveLength(1);
   expect(mock.stops).toEqual([]);
+});
+
+// A lost response must preserve the exact decision; Codex feedback is a separate explicit send.
+for (const agent of ["claude", "codex"]) test(`${agent} decline feedback survives an uncertain response`, async ({ page }) => {
+  const mock = await mac(page); mock.state.dropApproval = true;
+  await page.goto("/?ipad");
+  await openAgents(page);
+  if (agent === "codex") {
+    await page.getByRole("combobox", { name: "Agent", exact: true }).click();
+    await page.getByRole("option", { name: "Codex", exact: true }).click();
+  }
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("Ask before changing this file");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const feedback = page.getByRole("textbox", { name: /^Feedback for agent/ });
+  await feedback.fill("Keep the original file; write a separate draft.");
+  await page.getByRole("button", { name: /^Decline,/ }).click();
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
+  await expect(feedback).toBeDisabled();
+  await expect(feedback).toHaveValue("Keep the original file; write a separate draft.");
+  await expect(page.getByRole("button", { name: /^Allow once,/ })).toBeDisabled();
+  await page.reload();
+  await openAgents(page);
+  await expect(feedback).toBeDisabled();
+  expect(mock.calls.filter((c) => c.path.endsWith("/respond"))).toHaveLength(1);
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
+  const responses = mock.calls.filter((c) => c.path.endsWith("/respond"));
+  expect(responses).toHaveLength(2);
+  expect(responses[1].body).toEqual(responses[0].body);
+  expect(responses[0].body.choice).toBe("deny");
+  expect(mock.sends).toHaveLength(0);
+  if (agent === "claude") expect(responses[0].body.message).toBe("Keep the original file; write a separate draft.");
+  else {
+    expect(responses[0].body).not.toHaveProperty("message");
+    mock.state.dropFeedback = true;
+    await page.getByRole("button", { name: "Send feedback", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Retry feedback", exact: true })).toBeVisible();
+    await page.reload();
+    await openAgents(page);
+    expect(mock.sends).toHaveLength(1);
+    await expect(page.getByRole("button", { name: "Retry feedback", exact: true })).toBeEnabled({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Retry feedback", exact: true }).click();
+    await expect(page.getByRole("group", { name: "Saved feedback", exact: true })).toBeHidden();
+    const sent = mock.calls.filter((c) => c.path.endsWith("/send"));
+    expect(sent).toHaveLength(2);
+    expect(sent[1].body).toEqual(sent[0].body);
+    expect(mock.sends).toHaveLength(1);
+    expect(mock.sends[0].session).toBe(mock.starts[0].name);
+  }
+});
+
+test("expired approval feedback returns to a saved message draft", async ({ page }) => {
+  const mock = await mac(page);
+  await page.goto("/?ipad");
+  await openAgents(page);
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("Ask before editing");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("textbox", { name: /^Feedback for agent/ }).fill("Keep my unsent feedback");
+  mock.requests.get(mock.starts[0].name)![0].state = "expired";
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep my unsent feedback");
+  await page.reload();
+  await openAgents(page);
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep my unsent feedback");
+  expect(mock.calls.filter((c) => c.path.endsWith("/respond"))).toHaveLength(0);
+  expect(mock.sends).toHaveLength(0);
+});
+
+// Notification navigation is a read, including from Today while Notes search hides its button.
+test("notification opens only its current Mac request without answering", async ({ page }) => {
+  const mock = await mac(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/?iphone");
+  await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Notes", exact: true }).click();
+  await openAgents(page);
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("First notification conversation");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("Second notification conversation");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => mock.starts.length).toBe(2);
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("searchbox", { name: "Search notes" }).fill("No matching notes");
+  await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Today", exact: true }).click();
+  const target = { connection: "mac-a", project: "p-shared", conversation: "conv-1", request: "request:one", generation: 1 };
+  const notify = (detail: typeof target) => page.evaluate((detail) => window.dispatchEvent(new CustomEvent("leadinglight:mobile-agent-request", { detail })), detail);
+  await notify(target);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(page.getByRole("combobox", { name: "Conversation", exact: true })).toContainText("First notification conversation");
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await notify({ ...target, generation: 2 });
+  await expect(page.getByText("This request was already handled.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
+  mock.requests.set(mock.starts[0].name, []);
+  await notify(target);
+  await expect(page.getByText("This request was already handled.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await notify({ ...target, connection: "another-mac" });
+  await expect(page.getByRole("main", { name: "Today", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(mock.calls.filter((c) => c.path.endsWith("/respond"))).toHaveLength(0);
+  expect(mock.sends).toHaveLength(0);
 });
 
 test("Mac settings share only checked projects and can disable the grant", async ({ page }) => {
