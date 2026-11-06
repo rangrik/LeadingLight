@@ -29,6 +29,9 @@ test('agent notifications keep targets opaque and deduplicate each device', { sk
     assert.equal(JSON.stringify(sent[0].payload).includes(event.command), false);
     assert.equal(JSON.stringify(await sql`SELECT * FROM mobile_push_events WHERE channel=${c.channel}`).includes(event.project), false);
     await call('native/notify', event, c.hostToken); assert.equal(sent.length, 1);
+    assert.deepEqual(await (await call('native/notification-status', device, c.clientToken)).json(), { ready: true, registered: true });
+    await call('native/register-notifications', device, c.clientToken);
+    await call('native/notify', event, c.hostToken); assert.equal(sent.length, 1);
     const another = { ...device, device: randomUUID(), token: randomBytes(32).toString('hex'), environment: 'sandbox' };
     await call('native/register-notifications', another, c.clientToken);
     assert.deepEqual(await (await call('native/notify', { ...event, envelope: { ...event.envelope, iv: randomBytes(12).toString('base64') } }, c.hostToken)).json(), { delivered: 2, pending: false });

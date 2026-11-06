@@ -91,6 +91,7 @@ If delivery is uncertain, your exact response is kept for an explicit retry.
 In Devices settings, enable **Agent notifications** to receive a generic alert while the app is
 closed. Tap it to fetch the request through the encrypted connection. Commands, file names,
 questions and answers never appear in the alert. A request already handled elsewhere stays handled.
+Reopening the app keeps its notification registration, so a pending request does not alert you again.
 iOS controls alert delivery; requests remain available in the app when alerts are denied or delayed.
 Privately installed Ad Hoc builds support these notifications; App Store submission is not required.
 

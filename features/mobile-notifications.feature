@@ -55,6 +55,18 @@ Feature: Respond to Mac agents from an iPhone or iPad notification
     When the agent replaces the question with a new generation
     Then each registered device can receive a new alert
 
+  Scenario: Keep delivery receipts while Apple restores registration
+    Given notifications are enabled and authorized on a registered device
+    And a pending request has already alerted that device
+    When LeadingLight reopens before Apple returns its notification token
+    Or Apple temporarily fails to return a token
+    Then LeadingLight checks the existing subscription without removing it
+    When Apple returns the same token
+    Then registration preserves the request's delivery receipt
+    And the pending request does not alert that device again
+    When I disable notifications or deny permission in iOS Settings
+    Then LeadingLight removes the subscription
+
   Scenario: Finish removing alerts after an offline disconnect
     Given I enabled notifications and then lost my internet connection
     When I disconnect my Mac from this device

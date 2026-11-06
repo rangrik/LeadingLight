@@ -29,7 +29,9 @@ function update(requestPermission = false): Promise<void> {
       if (!connection) { mobileNotifications.set({ ...mobileNotifications.get(), registered: false }); return; }
       const desired = mobileNotifications.get().enabled;
       const allowed = ["authorized", "provisional", "ephemeral"].includes(status.authorization);
-      const action = desired && allowed && !status.error && status.token && status.environment ? "register" : "unregister";
+      // A cold launch has no token yet; keep the subscription and its delivery receipts.
+      const action = !desired || !allowed ? "unregister"
+        : !status.error && status.token && status.environment ? "register" : "status";
       const result = await invoke<{ registered: boolean }>("mobile_agents_notifications", { action, token: status.token ?? null, environment: status.environment ?? null, expectedConnection: connection.id });
       if (mobileAgents.get().connection?.id !== connection.id) return;
       const error = !desired ? "" : status.authorization === "denied" ? "Notifications are off in iOS Settings. Requests are still available in the app." : status.error || (!status.token || !status.environment ? "Waiting for Apple to register notifications. Keep this app online and check again." : "");
