@@ -105,11 +105,13 @@ final class NotificationBridge: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completion: @escaping () -> Void) {
-        DispatchQueue.main.async { self.receive(response) }
-        if let previous = previous,
-           previous.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) {
-            previous.userNotificationCenter?(center, didReceive: response, withCompletionHandler: completion)
-        } else { completion() }
+        DispatchQueue.main.async {
+            self.receive(response)
+            if let previous = self.previous,
+               previous.responds(to: #selector(UNUserNotificationCenterDelegate.userNotificationCenter(_:didReceive:withCompletionHandler:))) {
+                previous.userNotificationCenter?(center, didReceive: response, withCompletionHandler: completion)
+            } else { completion() }
+        }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,

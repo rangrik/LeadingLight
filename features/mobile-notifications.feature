@@ -98,6 +98,7 @@ Feature: Respond to Mac agents from an iPhone or iPad notification
 
   Scenario: Retain a tap until the app handles it
     Given I opened LeadingLight by tapping an agent notification
+    Then the app saves the encrypted target before telling iOS it finished handling the tap
     When Keychain is temporarily unavailable while the app opens its encrypted target
     Then the notification remains available to retry
     When a newer notification is tapped before the old target is acknowledged
