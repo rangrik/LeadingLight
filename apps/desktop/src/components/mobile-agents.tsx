@@ -26,7 +26,7 @@ export function MobileAgentsButton({ className }: { className?: string } = {}) {
   return <>
     <Button className={className} variant="outline" size="sm" onClick={() => setOpen(true)}><Bot />Agents on Mac</Button>
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogPopup className="h-[min(850px,calc(100svh-4rem))] max-w-3xl" bottomStickOnMobile={false}>
+      <DialogPopup className="ll-mobile-agents h-[min(850px,calc(100svh-4rem))] max-w-3xl" bottomStickOnMobile={false}>
         <DialogHeader className="shrink-0 pr-12">
           <DialogTitle>Agents on {state.connection?.name || "Mac"}</DialogTitle>
           <DialogDescription>Work runs on your Mac, including while this app is closed.</DialogDescription>
@@ -60,12 +60,12 @@ function MobileProjects() {
     void refresh();
     return () => { done = true; clearTimeout(timer); };
   }, []);
-  if (!state.connection) return <p className="p-6 text-sm text-muted-foreground">Connect your Mac in Settings → Devices. No cloud account is needed.</p>;
+  if (!state.connection) return <p className="p-6 text-sm text-muted-foreground">Connect your Mac in Settings → Devices. No mobile sign-in is needed.</p>;
   return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-    {!state.online && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Mac unavailable. Check Tailscale and keep the Mac awake. Your drafts are kept.</p>}
+    {!state.online && !selected && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
     {error && !selected && <p role="alert" className="px-6 pb-3 text-sm text-destructive-foreground">{error}</p>}
     {selected ? <>
-      <div className="px-3 pb-2"><Button size="sm" variant="ghost" onClick={() => setSelected(null)}><ArrowLeft />{label(selected)}</Button></div>
+      <div className="ll-mobile-agent-back px-3 pb-2"><Button size="sm" variant="ghost" onClick={() => setSelected(null)}><ArrowLeft />{label(selected)}</Button></div>
       <MobileProjectChat key={selected.name} project={selected} host={state.connection.id} online={state.online} />
     </> : <div className="space-y-2 overflow-y-auto p-6 pt-0">
       {projects.map((p) => <Button key={p.name} variant="outline" className="w-full justify-start" disabled={p.missing} onClick={() => setSelected(p)}>{label(p)}{p.missing ? " · Folder unavailable" : ""}</Button>)}
@@ -89,6 +89,8 @@ function MobileProjectChat({ project, host, online }: { project: Project; host: 
   const chat = chatOf(key).use();
   const conv = list.find((c) => c.id === current) ?? null;
   const mounted = useRef(true);
+  const messages = useRef<HTMLDivElement>(null);
+  const request = useRef<HTMLDivElement>(null);
   const sameHost = () => {
     if (!mounted.current || mobileAgents.get().connection?.id !== host) throw new Error("The Mac connection changed. Reopen this conversation before continuing.");
   };
@@ -116,6 +118,8 @@ function MobileProjectChat({ project, host, online }: { project: Project; host: 
   const front = chat.requests.find((r) => r.state === "pending" || r.state === "recorded");
   const draft = front ? chat.answers[front.id] : undefined;
   const delivery = front ? chat.deliveries[front.id]?.delivery ?? deliveryOf(front, draft, false, false) : "pending";
+  useEffect(() => { if (request.current) request.current.scrollTop = 0; }, [front?.id, delivery, error, pollError, chat.error, online]);
+  useEffect(() => { if (messages.current) messages.current.scrollTop = 0; }, [error, pollError, chat.error, online]);
   const working = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
   const keep = (intent: Intent | null) => { localStorage.setItem(`${namespace}:pending`, JSON.stringify(intent)); if (mounted.current) setPending(intent); };
   const send = async () => {
@@ -147,29 +151,34 @@ function MobileProjectChat({ project, host, online }: { project: Project; host: 
     finally { if (mounted.current) setBusy(false); }
   };
   const turns = turnsOf(chat);
-  return <div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-agent-chat">
-    <div className="flex shrink-0 items-center gap-2 border-y px-4 py-2">
+  const notice = <>
+      {!online && <p role="status" className="text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
+      {(error || online && (pollError || chat.error)) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || pollError || chat.error}</p>}
+  </>;
+  return <div className="ll-mobile-agent-chat flex min-h-0 min-w-0 flex-1 flex-col" data-testid="mobile-agent-chat" data-request={!!front || undefined}>
+    <div className="ll-mobile-agent-toolbar flex shrink-0 items-center gap-2 border-y px-4 py-2">
       <Select value={current || "new"} onValueChange={(value) => setCurrent(value === "new" ? null : value)} disabled={busy || !!pending}>
         <SelectTrigger className="min-w-0 flex-1" aria-label="Conversation"><SelectValue placeholder="New chat">{conv?.title || "New chat"}</SelectValue></SelectTrigger>
         <SelectPopup><SelectItem value="new">New chat</SelectItem>{list.map((c) => <SelectItem key={c.id} value={c.id}>{c.title || c.agent}</SelectItem>)}</SelectPopup>
       </Select>
       <Button size="icon-sm" variant="ghost" aria-label="New chat" disabled={busy || !!pending} onClick={() => setCurrent(null)}><Plus /></Button>
-      {working && <Button size="sm" variant="outline" disabled={!online || busy} onClick={() => {
+      {working && <Button className="ll-mobile-agent-stop" size="sm" variant="outline" disabled={!online || busy} onClick={() => {
         if (!chat.conv?.session) return;
         setBusy(true); setError("");
         void macAsk("POST", `/v1/sessions/${chat.conv.session}/interrupt`).catch((e) => setError(message(e))).finally(() => setBusy(false));
       }}><Square />Stop</Button>}
     </div>
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-label="Conversation messages">
+    <div ref={messages} className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-label="Conversation messages">
+      {!front && notice}
       {turns.map((turn, i) => <Turn key={i} items={turn.items} live={!!working && i === turns.length - 1} waiting={!!front} page={label(project)} onGoAhead={() => {}} />)}
       {!turns.length && <p className="text-sm text-muted-foreground">{current ? "Loading conversation…" : "Ask an agent to work in this project on your Mac."}</p>}
-      {(error || online && (pollError || chat.error)) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || pollError || chat.error}</p>}
     </div>
-    {front && <div className="max-h-[45%] shrink-0 overflow-y-auto">
-      {front.kind === "question" ? <QuestionCard request={front} answer={draft?.answer ?? {}} index={draft?.index ?? 0} busy={!online || !["pending", "failed"].includes(delivery)} onAnswer={(a, i, submit) => answer(key, front, a, i, submit)} /> : <ApprovalCard request={front} busy={!online || !["pending", "failed"].includes(delivery)} allowedChoices={["allow", "deny", "approve_each", "keep_planning"]} onChoose={(choice) => answer(key, front, { choice }, 0, true)} />}
+    {front && <div ref={request} className="ll-mobile-agent-request min-h-0 max-h-[45%] shrink-0 overflow-y-auto">
+      <div className="px-4">{notice}</div>
       <div className="px-4 pb-2"><DeliveryLine delivery={delivery} error={chat.deliveries[front.id]?.error} onRetry={() => draft && answer(key, front, draft.answer, draft.index, true)} /></div>
+      {front.kind === "question" ? <QuestionCard request={front} answer={draft?.answer ?? {}} index={draft?.index ?? 0} busy={!online || !["pending", "failed"].includes(delivery)} onAnswer={(a, i, submit) => answer(key, front, a, i, submit)} /> : <ApprovalCard request={front} busy={!online || !["pending", "failed"].includes(delivery)} allowedChoices={["allow", "deny", "approve_each", "keep_planning"]} onChoose={(choice) => answer(key, front, { choice }, 0, true)} />}
     </div>}
-    <form className="shrink-0 space-y-2 border-t p-4" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+    <form className="ll-mobile-agent-compose shrink-0 space-y-2 border-t p-4" data-pending={!!pending || undefined} onSubmit={(e) => { e.preventDefault(); void send(); }}>
       <Field><FieldLabel className="sr-only">Message to agent</FieldLabel><Textarea aria-label="Message to agent" className="max-h-32" value={pending?.text ?? text} disabled={busy || !!pending} onChange={(e) => setText(e.target.value)} placeholder="Ask your Mac to…" /></Field>
       <div className="flex items-center gap-2">
         {!current && <Select value={agent} onValueChange={(value) => value && setAgent(value)} disabled={busy || !!pending}><SelectTrigger className="w-32 min-w-0 shrink" aria-label="Agent"><SelectValue>{agent === "codex" ? "Codex" : "Claude Code"}</SelectValue></SelectTrigger><SelectPopup><SelectItem value="claude">Claude Code</SelectItem><SelectItem value="codex">Codex</SelectItem></SelectPopup></Select>}
@@ -178,6 +187,6 @@ function MobileProjectChat({ project, host, online }: { project: Project; host: 
       <p className="text-xs text-muted-foreground">Approval required</p>
       {pending && !busy && <Button size="xs" variant="ghost" onClick={() => setDismiss(true)}>Dismiss saved request</Button>}
     </form>
-    <ConfirmDialog open={dismiss} onOpenChange={setDismiss} title="Dismiss saved request?" description="Check the conversation on your Mac first. Dismissing does not stop an agent or undo a message. Sending these words again as a new request may repeat the work." confirm="Dismiss request" onConfirm={() => { if (pending) setText(pending.text); keep(null); setError(""); }} />
+    <ConfirmDialog open={dismiss} onOpenChange={setDismiss} title="Dismiss saved request?" description={<span className="ll-mobile-agent-dismiss">Check the conversation on your Mac first. Dismissing does not stop an agent or undo a message. Sending these words again as a new request may repeat the work.</span>} confirm="Dismiss request" onConfirm={() => { if (pending) setText(pending.text); keep(null); setError(""); }} />
   </div>;
 }

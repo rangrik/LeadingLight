@@ -81,6 +81,51 @@ async function openAgents(page: Page) {
   await expect(page.getByRole("textbox", { name: "Message to agent" })).toBeVisible();
 }
 
+// Native keyboards resize visualViewport without shrinking the CSS layout viewport.
+for (const device of ["iphone", "ipad"] as const) test(`${device} agent composer follows the keyboard through rotation`, async ({ page, browserName }) => {
+  const portrait = device === "iphone" ? { width: 390, height: 844 } : { width: 820, height: 1180 };
+  await page.setViewportSize(portrait);
+  await page.addInitScript(({ width, height }) => {
+    Object.defineProperty(window, "visualViewport", { value: Object.assign(new EventTarget(), { width, height, offsetTop: 0, offsetLeft: 0, scale: 1 }) });
+  }, portrait);
+  const mock = await mac(page); mock.state.approval = false;
+  await page.goto(`/?${device}`);
+  if (device === "iphone") await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Notes", exact: true }).click();
+  await openAgents(page);
+  const dialog = page.getByRole("dialog"), field = dialog.getByRole("textbox", { name: "Message to agent" });
+  await field.fill("Keep my message through rotation");
+  const views = [
+    { ...portrait, visible: device === "iphone" ? 350 : 620, top: 12 },
+    { width: portrait.height, height: portrait.width, visible: device === "iphone" ? 150 : 320, top: 0 },
+    ...(device === "iphone" ? [{ width: 844, height: 390, visible: 110, top: 8 }, { width: 375, height: 667, visible: 350, top: 0, font: 24 }] : []),
+  ];
+  for (const view of views) {
+    await page.setViewportSize({ width: view.width, height: view.height });
+    await page.evaluate((v) => {
+      document.documentElement.style.fontSize = `${v.font || 16}px`;
+      Object.assign(window.visualViewport!, { width: v.width, height: v.visible, offsetTop: v.top });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    }, view);
+    for (const control of [field, dialog.getByRole("button", { name: "Send", exact: true }), dialog.getByRole("button", { name: "Close", exact: true })]) {
+      await expect.poll(async () => {
+        const b = await control.boundingBox();
+        return b !== null && b.y >= view.top && b.y + b.height <= view.top + view.visible + 1;
+      }).toBe(true);
+    }
+    expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
+    await expect(field).toHaveValue("Keep my message through rotation");
+    await page.screenshot({ path: `qa/report/mobile-agents/${device}-${browserName}-keyboard-${view.visible}${view.font ? "-large" : ""}.png` });
+  }
+  await dialog.getByRole("button", { name: "Send", exact: true }).tap();
+  await expect.poll(() => mock.starts.length).toBe(1);
+  expect(mock.starts[0].prompt).toBe("Keep my message through rotation");
+  await page.evaluate(() => {
+    Object.assign(window.visualViewport!, { height: innerHeight, offsetTop: 0 });
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+  });
+  await expect(dialog.getByRole("combobox", { name: "Conversation", exact: true })).toBeVisible();
+});
+
 test("connect a Mac and start, approve, continue and stop its shared project agent", async ({ page }) => {
   const mock = await mac(page, false);
   await page.goto("/?ipad");
@@ -126,7 +171,43 @@ test("connect a Mac and start, approve, continue and stop its shared project age
   await page.screenshot({ path: "qa/report/mobile-agents/ipad-stop-failure.png", fullPage: true });
 });
 
+// Keyboard compression must not hide permission failures or the way to stop work.
+test("short mobile keyboard keeps failed approvals and Stop reachable", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "visualViewport", { value: Object.assign(new EventTarget(), { width: 820, height: 1180, offsetTop: 0, offsetLeft: 0, scale: 1 }) });
+  });
+  const mock = await mac(page); mock.state.dropApproval = true;
+  await page.goto("/?ipad");
+  await openAgents(page);
+  await page.getByRole("textbox", { name: "Message to agent" }).fill("Keep approval controls available");
+  await page.getByRole("button", { name: "Send", exact: true }).tap();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.evaluate(() => {
+    Object.assign(window.visualViewport!, { width: 844, height: 110, offsetTop: 8 });
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+  });
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toBeHidden();
+  await page.getByRole("button", { name: /Allow once/ }).tap();
+  const retry = page.getByRole("button", { name: "Try again", exact: true });
+  for (const control of [retry, page.getByRole("button", { name: "Stop", exact: true })]) {
+    await expect.poll(async () => control.evaluate((el) => {
+      const b = el.getBoundingClientRect(), hit = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2);
+      return b.y >= 8 && b.bottom <= 118 && !!hit && el.contains(hit);
+    })).toBe(true);
+  }
+  await retry.tap();
+  await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
+  expect(mock.calls.filter((call) => call.path.endsWith("/respond"))).toHaveLength(2);
+  mock.sessions[0].agent_state = "running";
+  await page.getByRole("button", { name: "Stop", exact: true }).tap();
+  expect(mock.stops).toEqual([mock.starts[0].name]);
+});
+
 test("an ambiguous start is found after reopening without starting a second agent", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "visualViewport", { value: Object.assign(new EventTarget(), { width: 820, height: 1180, offsetTop: 0, offsetLeft: 0, scale: 1 }) });
+  });
   const mock = await mac(page); mock.state.dropStart = true; mock.state.approval = false;
   await page.goto("/?ipad");
   await openAgents(page);
@@ -137,6 +218,20 @@ test("an ambiguous start is found after reopening without starting a second agen
   await openAgents(page);
   await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep working while my phone is closed");
   await expect(page.getByRole("button", { name: "Check and retry", exact: true })).toBeEnabled({ timeout: 10_000 });
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.evaluate(() => {
+    Object.assign(window.visualViewport!, { width: 844, height: 110, offsetTop: 8 });
+    window.visualViewport!.dispatchEvent(new Event("resize"));
+  });
+  await page.getByRole("button", { name: "Dismiss saved request", exact: true }).tap();
+  const confirmation = page.getByRole("alertdialog");
+  for (const name of ["Cancel", "Dismiss request"]) {
+    await expect.poll(async () => {
+      const b = await confirmation.getByRole("button", { name, exact: true }).boundingBox();
+      return !!b && b.y >= 8 && b.y + b.height <= 118;
+    }).toBe(true);
+  }
+  await confirmation.getByRole("button", { name: "Cancel", exact: true }).tap();
   await page.getByRole("button", { name: "Check and retry", exact: true }).click();
   await expect(page.getByText("I found the project on your Mac.", { exact: true })).toBeVisible();
   expect(mock.starts).toHaveLength(1);

@@ -49,6 +49,21 @@ Feature: Control Mac project agents from iPhone and iPad
     Then I read the same conversation and any pending approval
     And no prompt or approval is resent automatically
 
+  Scenario: Keep agent messages usable above the mobile keyboard
+    Given I opened a shared project conversation on iPhone or iPad
+    When I type a message and rotate with the keyboard open
+    Then the message field, Send and Close stay inside the visible safe area
+    And my draft is kept in portrait and landscape, including a 110 pixel visible phone height
+    When I press Send
+    Then the Mac receives the message once
+    And dismissing the keyboard restores the conversation controls
+    When the Mac disconnects or cannot confirm a request with the keyboard open
+    Then the explanation can be scrolled into view and retry or dismissal remains reachable
+    And Stop remains reachable while an agent is running
+    When an approval or question arrives
+    Then its scrollable card replaces the disabled composer in a short viewport
+    And a failed answer shows its explanation and retry before the card
+
   Scenario: Offline and uncertain requests remain visible
     Given the Mac sleeps or Tailscale disconnects
     When I try to send a question
@@ -60,6 +75,7 @@ Feature: Control Mac project agents from iPhone and iPad
     Given the Mac cannot confirm whether a start was accepted
     When I choose "Dismiss saved request"
     Then I must confirm after being told that dismissal does not stop work on the Mac
+    And the explanation can scroll while Cancel and Dismiss request stay above the keyboard
     And my words remain available to edit
 
   Scenario: Stop only the selected agent
