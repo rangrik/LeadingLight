@@ -2,7 +2,7 @@
 import { Check, Folder, Inbox, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "@leadinglight/ui/components/table";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -17,8 +17,8 @@ const labels = { idea: "Captured idea", web: "Saved webpage", voice: "Voice reco
 const date = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const ids = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 
-// panel: in the bar, under its header, with the ticks as icons.
-export function CaptureInbox({ panel = false }: { panel?: boolean }) {
+// panel: in the bar, under its header, with the ticks as icons; onCapture opens the capture box.
+export function CaptureInbox({ panel = false, onCapture }: { panel?: boolean; onCapture?: () => void }) {
   const { pages } = space.use();
   const [tab, setTab] = useState("pending");
   const [limit, setLimit] = useState(50);
@@ -75,6 +75,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
               <EmptyTitle>{tab === "reviewed" ? "No reviewed captures yet" : "Nothing waiting here"}</EmptyTitle>
               <EmptyDescription>{tab === "reviewed" ? "Mark a capture reviewed when you are ready. Its page stays where it is." : "Ideas, webpages, and recordings from Quick capture appear here. Nothing needs doing right now."}</EmptyDescription>
             </EmptyHeader>
+            {onCapture && tab === "pending" && <EmptyContent><Button onClick={onCapture} size="sm" variant="outline">Capture something</Button></EmptyContent>}
           </Empty>)}
         </TabsPanel>)}
       </Tabs>

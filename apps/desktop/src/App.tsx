@@ -150,8 +150,19 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in before the pages load, or the Feed's first ask fails and waits a minute.
+    const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")) : undefined;
+    (demo?.then((d) => d.installFixture()) ?? Promise.resolve())
+      .then(loadSpace)
       .then(async (list) => {
+        if (demo && !list.length) {
+          await (await demo).seed();
+          location.reload();
+          return;
+        }
+        if (demo) void (await demo).suggest(list);
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -377,7 +388,7 @@ export default function App() {
                 </Empty>
               </div>
             )}
-            <BarPanel />
+            <BarPanel onCapture={toggleCapture} />
           </div>
           {/* The ask bar sits by the selected words. */}
           {root && !mobile && <AskBar />}

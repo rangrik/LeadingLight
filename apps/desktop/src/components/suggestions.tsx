@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Button } from "@leadinglight/ui/components/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@leadinglight/ui/components/empty";
 import { TailRow, useFading } from "~/components/tail";
 import { useFront } from "~/lib/bar";
+import { openSettingsAt } from "~/lib/settings-at";
 import { dayShown, today } from "~/lib/daily";
 import { openBeside } from "~/lib/panes";
 import { inPanel, type Line, saw, tail, TODAY } from "~/lib/tail";
@@ -17,7 +20,17 @@ export function Suggestions({ pane }: { pane?: boolean }) {
   useEffect(() => saw(lines.map((l) => l.id)), [lines]);
   useEffect(() => () => light(), []);
   const ref = useUnderTitle(pane);
-  if (!rows.length) return <p className="m-auto px-6 py-10 text-center text-muted-foreground text-sm">Nothing yet.</p>;
+  if (!rows.length)
+    return (
+      <Empty>
+        <EmptyHeader>
+          <EmptyDescription>Tail speaks when a block you finish reads as a task or names a page.</EmptyDescription>
+        </EmptyHeader>
+        <EmptyContent>
+          <Button onClick={() => openSettingsAt("ai", "Tail")} size="sm" variant="outline">How Tail works</Button>
+        </EmptyContent>
+      </Empty>
+    );
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-sm" ref={ref}>
       <Group front={front} lit rows={rows.filter((r) => r.line.where === front)} title="On this page" />
