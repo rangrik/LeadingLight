@@ -43,7 +43,7 @@ Feature: Project rail
     Then it is marked current and "All" is not
     And the sidebar header reads "LeadingLight" over "LeadingLight" (the project's name under the mark)
     And the sidebar starts with "Overview" and "Chat", then Today, Calendar and Browser
-    And Types lists only Tasks, Meetings and People, each with a muted count (7, 1, 1)
+    And Types lists only Pages, People, Meetings and Tasks, each with a muted count (1, 1, 1, 7)
     And Recent lists only LeadingLight's pages: the four tasks at work, "Design review with Sam",
       "Sam Rivera" and "Pricing notes"; no book, no daily note, no other project
     When I click "Overview"
@@ -54,7 +54,7 @@ Feature: Project rail
   Scenario: A project with no linked folder has no Chat row
     When I click "Home office" in the rail
     Then the sidebar starts with "Overview" alone, then Today
-    And Types lists Tasks (1) and Pages (1), and Recent lists "Desk measurements"
+    And Types lists Pages (1) and Tasks (1), and Recent lists "Desk measurements"
 
   Scenario: A type row opens its list filtered to the project
     Given "LeadingLight" is chosen in the rail
@@ -104,6 +104,7 @@ Feature: Project rail
     Then the sidebar and the rail slide away together and the card takes the full width
     When I press ⌘\ again
     Then both come back, the rail at the far left
+    And in a browser window narrower than 768 px, where the sidebar is a sheet, there is no rail
 
   Scenario: An empty space has only All
     Given an empty space opened without the demo
