@@ -1,0 +1,68 @@
+{
+ "port": 1441,
+ "name": "4B",
+ "steps": [
+  {
+   "click": {
+    "text": "Write the pricing page copy",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "Option 4B · Review mode. A report opens full width, with the brief folded to one line.",
+   "hold": 2800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Review",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Review mode: a 72-character column, the notes margin kept, a bar at the bottom for Send, Accept and Done.",
+   "hold": 3000
+  },
+  {
+   "still": "review"
+  },
+  {
+   "click": {
+    "text": "Changes",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Changes shows what moved since the first draft: removed lines struck through, added words tinted.",
+   "hold": 3000
+  },
+  {
+   "still": "changes"
+  },
+  {
+   "click": {
+    "text": "Changes",
+    "exact": true
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Select words in the report and the bar offers Keep, Change and Ask: a ticked note in one press.",
+   "hold": 2800
+  },
+  {
+   "key": "Escape",
+   "after": 1800
+  },
+  {
+   "caption": "Done brings the task back, scrolled to that report.",
+   "hold": 2200
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

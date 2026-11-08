@@ -1,0 +1,62 @@
+{
+ "port": 1457,
+ "name": "6B",
+ "steps": [
+  {
+   "caption": "Option 6B · Search with content. ⌘K searches titles and the text inside pages.",
+   "hold": 2800
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 1400
+  },
+  {
+   "type": "delays make loops oscillate",
+   "after": 1400
+  },
+  {
+   "caption": "A half-remembered phrase is enough: the page, and the line that matched, words in bold.",
+   "hold": 2800
+  },
+  {
+   "still": "phrase"
+  },
+  {
+   "key": "Enter",
+   "after": 2000
+  },
+  {
+   "caption": "Enter opens the page scrolled to that paragraph, lit for a moment.",
+   "hold": 2400
+  },
+  {
+   "still": "opened"
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 1200
+  },
+  {
+   "type": "pricing",
+   "after": 1400
+  },
+  {
+   "caption": "Results group by type, with counts; title matches first, then text, newest first.",
+   "hold": 2800
+  },
+  {
+   "still": "grouped"
+  },
+  {
+   "key": "Escape",
+   "after": 900
+  },
+  {
+   "caption": "Chips filter by type, project or “edited this week”. The index stays fresh on every save.",
+   "hold": 2400
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

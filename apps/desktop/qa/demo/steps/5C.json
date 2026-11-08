@@ -1,0 +1,75 @@
+{
+ "port": 1445,
+ "name": "5C",
+ "steps": [
+  {
+   "caption": "Option 5C · Attention in the sidebar. Feed, Suggestions and Captures become rows with counts.",
+   "hold": 3000
+  },
+  {
+   "still": "rows"
+  },
+  {
+   "hover": {
+    "text": "Attention"
+   },
+   "after": 900
+  },
+  {
+   "caption": "The counts are words in the place you already read. The strip keeps only Ask and capture.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "A row opens its panel as the strip button did, and stays highlighted while it is open.",
+   "hold": 2600
+  },
+  {
+   "still": "feed"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1200
+  },
+  {
+   "key": "Meta+Backslash",
+   "after": 1500
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "Toggle Sidebar"
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Fold the sidebar and a dot on its button says what waits: “2 need you · 4 captures”.",
+   "hold": 2800
+  },
+  {
+   "still": "folded"
+  },
+  {
+   "key": "Meta+Backslash",
+   "after": 1400
+  },
+  {
+   "caption": "Labels for free, one less strip to learn.",
+   "hold": 1800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}
