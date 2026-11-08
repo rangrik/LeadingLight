@@ -1,4 +1,4 @@
-import { ArrowDownIcon, ArrowUpIcon, CornerDownLeftIcon, Plus } from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, CornerDownLeftIcon, Plus, X } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Command,
@@ -55,7 +55,8 @@ export function SearchPanel() {
     <CommandDialog onOpenChange={(next) => searching.set(next)} open={open}>
       <CommandDialogPopup
         aria-label="Search"
-        className="max-w-[640px]"
+        // Two-line rows need more room than COSS's 420 px.
+        className="max-h-[min(36rem,80vh)] max-w-[640px]"
         finalFocus={() => {
           if (chosen.current) return false;
           const editor = back.current ? liveEditor(back.current) : null;
@@ -99,7 +100,8 @@ function SearchBody({ onChosen }: { onChosen: () => void }) {
     const go = (id: string) => (beside ? openBeside(id) : openPage(id));
     if (row.create !== undefined) {
       const type = q.filters.find((f) => f.kind === "type")?.id ?? PAGE_TYPE;
-      return void newPage(type, { title: row.create }).then((p) => go(p.id), console.error);
+      // Made to be written in: the caret goes to its body.
+      return void newPage(type, { title: row.create }).then((p) => (go(p.id), whenLive(p.id, (live) => live.focus())), console.error);
     }
     if (!row.hit) return;
     const { page, block } = row.hit;
@@ -113,19 +115,23 @@ function SearchBody({ onChosen }: { onChosen: () => void }) {
   // A key changes only the field; what is below it changes with the search, 80 ms later.
   const filters = useMemo(() => chips.length > 0 && (
     <div aria-label="Filters" className="flex flex-wrap gap-1.5 px-4 pb-2.5" role="group">
-      {chips.map((f) => (
-        <Toggle
-          key={`${f.kind}:${f.id}`}
-          // The field keeps the keyboard.
-          onMouseDown={(e) => e.preventDefault()}
-          onPressedChange={() => act.current.setNow(toggle(q, f))}
-          pressed={q.filters.some((g) => g.kind === f.kind && g.id === f.id)}
-          size="sm"
-          variant="outline"
-        >
-          {f.label}
-        </Toggle>
-      ))}
+      {chips.map((f) => {
+        const on = q.filters.some((g) => g.kind === f.kind && g.id === f.id);
+        return (
+          <Toggle
+            key={`${f.kind}:${f.id}`}
+            // The field keeps the keyboard.
+            onMouseDown={(e) => e.preventDefault()}
+            onPressedChange={() => act.current.setNow(toggle(q, f))}
+            pressed={on}
+            size="sm"
+            variant="outline"
+          >
+            {f.label}
+            {on && <X />}
+          </Toggle>
+        );
+      })}
     </div>
   ), [chips, q]);
   const list = useMemo(() => (
@@ -164,6 +170,11 @@ function SearchBody({ onChosen }: { onChosen: () => void }) {
       <CommandInput
         aria-label="Search"
         onKeyDown={(e) => {
+          // The list is always open, so its own Escape would close nothing: one Escape closes the panel.
+          if (e.key === "Escape") {
+            e.preventBaseUIHandler();
+            return searching.set(false);
+          }
           if (e.key !== "Enter" || !highlighted.current) return;
           e.preventDefault();
           e.preventBaseUIHandler();
@@ -178,8 +189,9 @@ function SearchBody({ onChosen }: { onChosen: () => void }) {
   );
 }
 
+// Relative, so its hints sit above the popup's tint rather than under it.
 const FOOTER = (
-  <CommandFooter>
+  <CommandFooter className="relative">
     <div className="flex items-center gap-4">
       <div className="flex items-center gap-2">
         <KbdGroup>
@@ -229,14 +241,15 @@ function rowsFor(q: ReturnType<typeof parse>, hits: Hit[]): Rows[] {
   });
 }
 
-// The filters on, then the types and projects the results fall in, then "Edited this week".
+// The filters on first, then the types and projects the results fall in, and "Edited this week".
 function chipsFor(q: ReturnType<typeof parse>, hits: Hit[]): Filter[] {
   const on = (kind: Filter["kind"]) => q.filters.find((f) => f.kind === kind);
   const count = new Map<string, number>();
   for (const h of hits) for (const id of [h.page.typeId, h.project?.id]) if (id) count.set(id, (count.get(id) ?? 0) + 1);
   const offered = (kind: Filter["kind"], n: number) =>
     on(kind) ? [on(kind)!] : filtersFor().filter((f) => f.kind === kind && count.has(f.id)).sort((a, b) => count.get(b.id)! - count.get(a.id)!).slice(0, n);
-  return [...offered("type", 3), ...offered("project", 2), on("week") ?? filtersFor().find((f) => f.kind === "week")!];
+  const all = [...offered("type", 3), ...offered("project", 2), on("week") ?? filtersFor().find((f) => f.kind === "week")!];
+  return [...all.filter((f) => q.filters.includes(f)), ...all.filter((f) => !q.filters.includes(f))];
 }
 
 function Bold({ text, spans }: { text: string; spans: [number, number][] }) {
@@ -259,7 +272,7 @@ function RowView({ row, terms }: { row: Row; terms: string[] }) {
         <span className="min-w-0 flex-1 basis-0 truncate">New page “{row.create}”</span>
       </>
     );
-  if (row.all) return <span className="min-w-0 flex-1 basis-0 truncate ps-6 text-muted-foreground">Show all {row.count}</span>;
+  if (row.all) return <span className="min-w-0 flex-1 basis-0 truncate ps-6 text-muted-foreground">Show all {row.count} {row.all.label.toLowerCase()}</span>;
   const { page, title, block, more, project } = row.hit!;
   const label = pageLabel(page.title);
   const line = block && snippet(block.text, marks(block.text, terms));

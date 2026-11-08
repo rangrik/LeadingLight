@@ -34,25 +34,29 @@ Feature: Search with content
 
   Scenario: A half-remembered sentence
     When I open the panel and type "delays make loops oscillate"
-    Then within 80 ms of the last key the results show "Pages · 1" with "Feedback loops"
+    Then 80 ms after the last key the results show "Pages · 1" with "Feedback loops"
     And under its title is "Delays in a loop make it oscillate. That is most of what goes wrong…"
       with "Delays", "loop", "make" and "oscillate" in bold
     And the words can be in any order and only begin a word: "oscil" finds it too
 
   Scenario: Title matches come before body matches, recent before old
     When I type "pricing"
-    Then "Pricing notes" and "Write the pricing page copy" (titles) come before pages that only say
-      "pricing" in their text, such as today's daily note
-    And within the title matches the more recently edited page is first
+    Then "Write the pricing page copy" and "Pricing notes" (titles, the task edited more recently)
+      come before pages that only say "pricing" in their text, such as today's daily note
     And the results are grouped by type with a count, in the order of each group's best result:
-      "Tasks · 1", "Pages · 1", "Daily notes · 1"
+      "Tasks · 1", "Pages · 2", "Daily notes · 1", "Projects · 1", "Meetings · 1", "Agents · 1",
+      "Reports · 1"
+    And in "Pages · 2", "Pricing notes" (title) is above "Weekly review" (text)
 
   Scenario: More than one block matches
     When I type "delays"
-    Then "Notes on Thinking in Systems" shows its first block that says "delays", and "+2 more"
-      for the other blocks that do
+    Then "Notes on Thinking in Systems" shows its first block that says "delays" ("…draws on it.
+      Overshoot comes from delays."), and "+5 more" for the other five blocks that do
 
   Scenario: Reports and agents are found by title, not by their text
+    When I type "pricing"
+    Then "Claude: Write the pricing page copy" (an agent) and "Pricing copy, first draft" (a report)
+      are listed after every page of mine, though they were edited last
     When I type "simpler to explain"
     Then "Pricing notes" is found, and the report "Pricing copy, first draft" is not
     When I type "in:reports simpler to explain"
@@ -85,7 +89,8 @@ Feature: Search with content
   Scenario: Nothing matches
     When I type "zebra crossing"
     Then the panel says "Nothing has these words."
-    And offers "New page “zebra crossing”"; Enter on it makes that page and opens it
+    And offers "New page “zebra crossing”"; Enter on it makes that page, opens it, and puts the
+      caret in its body
 
   Scenario: The index follows edits
     Given I opened the panel once, so every page's words are read

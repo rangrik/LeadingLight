@@ -49,6 +49,7 @@ test("an edit is found without reading any page again", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+k");
   await expect(panel(page).getByRole("option", { name: /Weekly review/ })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(panel(page)).toBeHidden();
 
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Weekly review" }).click();
   await page.getByRole("textbox", { name: "Page body" }).getByText("What moved this week.").click();

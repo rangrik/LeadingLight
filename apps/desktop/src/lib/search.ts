@@ -168,7 +168,9 @@ export function search(q: Query): Hit[] {
     if (title && best < words.length) block = undefined;
     hits.push({ page, title, block, more: block && best === words.length ? full - 1 : 0, project: near });
   }
-  return hits.sort((a, b) => Number(b.title) - Number(a.title) || b.page.updatedAt - a.page.updatedAt);
+  // What agents wrote comes after my own pages, unless asked for.
+  const rank = (h: Hit) => (h.title ? 0 : 1) + (!q.reports && type !== h.page.typeId && AGENTS.has(h.page.typeId) ? 2 : 0);
+  return hits.sort((a, b) => rank(a) - rank(b) || b.page.updatedAt - a.page.updatedAt);
 }
 
 // Hits by type, each group where its best hit is.
