@@ -24,8 +24,8 @@ import { sessions, watchWork } from "~/lib/work-watch";
 const ICON = { question: MessageCircleQuestion, approval: ShieldQuestion, review: CircleCheck, answer: MessageSquareReply, notice: Info };
 const title = (id?: string) => (id ? pageLabel(pageOf(id)?.title ?? "") : "");
 
-// The items, kept current as the runtime, the chats and the pages change.
-export function useFeed() {
+// The items, kept current as the runtime, the chats and the pages change; `all` ignores the Feed's project.
+export function useFeed(all = false) {
   const { pages } = space.use();
   const live = sessions.use();
   const prefs = feedPrefs.use();
@@ -37,7 +37,7 @@ export function useFeed() {
     const offs = pages.flatMap((p) => (p.properties.run ? [chatOf((p.properties.run as { conversation: string }).conversation).subscribe(() => setTick((t) => t + 1))] : []));
     return () => offs.forEach((off) => off());
   }, [pages]);
-  return useMemo(() => feedItems().filter((i) => prefs.project === "all" || i.project === prefs.project), [pages, live, prefs, tick]);
+  return useMemo(() => feedItems().filter((i) => all || prefs.project === "all" || i.project === prefs.project), [all, pages, live, prefs, tick]);
 }
 
 function TargetLink({ t, onOpen }: { t: Target; onOpen: () => void }) {

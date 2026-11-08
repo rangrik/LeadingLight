@@ -1,7 +1,7 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// skips it), our Resume rows, NavProjects as Pinned (while a page is) and Recent above our Types,
+// and the plans' usage as the footer (NavUser's place), and a Browser entry.
 // The header is its own export, so Settings' sidebar wears the same one.
 import { CalendarDays, Globe, Settings } from "lucide-react";
 import {
@@ -23,6 +23,7 @@ import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
+import { NavResume } from "./nav-resume";
 import { NavTypes } from "./nav-types";
 
 // The app mark (a t whose crossbar ends in a dot), placed as in the app icon's tile. Drawn in
@@ -104,9 +105,7 @@ export function AppSidebar({
             </SidebarMenuItem>}
           </SidebarMenu>
         </SidebarGroup>
-        <nav aria-label="Types">
-          <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect) }))} />
-        </nav>
+        <NavResume select={select} />
         {pinned.length > 0 && (
           <nav aria-label="Pinned">
             <NavProjects label="Pinned" projects={navigable(pinned)} />
@@ -114,6 +113,9 @@ export function AppSidebar({
         )}
         <nav aria-label="Recent">
           <NavProjects label="Recent" onCreate={() => { onCreate(); if (isMobile) setOpenMobile(false); }} projects={navigable(pages)} sortable />
+        </nav>
+        <nav aria-label="Types">
+          <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect) }))} />
         </nav>
       </SidebarContent>
       <CloudButton />
