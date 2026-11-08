@@ -13,7 +13,7 @@ for (const size of [13, 14]) {
     await page.route("**/api/**", (route) => route.fulfill({ json: { ready: false, providers: [] } }));
     await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
     await page.goto("/?mac");
-    await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
     await page.evaluate(async () => {
       const { createPage } = await import(String("/src/lib/space.ts"));
       const { openPage } = await import(String("/src/lib/panes.ts"));

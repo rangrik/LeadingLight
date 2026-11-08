@@ -32,10 +32,11 @@ export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent"
 export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
   recentOrder.get().by === "updated" ? b.updatedAt - a.updatedAt : b.createdAt - a.createdAt;
 
-// What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes.
+// What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes, and a
+// project's (sidebar-work-first.feature) has no menu. A child with an id shows its task's dot.
 type Actions = { onCopyLink: () => void; onDelete: () => void };
-type Child = Actions & { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void };
-type Row = Child & {
+export type Child = Partial<Actions> & { id?: string; name: string; isActive: boolean; disabled?: boolean; onSelect: (e: React.MouseEvent) => void; onDrag?: (e: React.PointerEvent<HTMLElement>) => void };
+type Row = Child & Actions & {
   id: string;
   icon: React.ReactNode;
   title: string;
@@ -59,7 +60,7 @@ const SLIDE = { type: "spring", visualDuration: 0.35, bounce: 0.12 } as const;
 const rowMiddle = (i: number) => TOP + i * ROW + 14;
 const branch = (y: number) => `M${TRUNK} ${y - BEND} Q${TRUNK} ${y} ${TRUNK + BEND} ${y} H${REACH}`;
 
-function Children({ items }: { items: Child[] }) {
+export function Children({ items }: { items: Child[] }) {
   const reduce = useReducedMotion() ?? false;
   const active = items.findIndex((c) => c.isActive);
   const tree = [`M${TRUNK} 0 V${rowMiddle(items.length - 1) - BEND}`, ...items.map((_, i) => branch(rowMiddle(i)))].join(" ");
@@ -91,18 +92,20 @@ function Children({ items }: { items: Child[] }) {
           )}
         </svg>
         {items.map((c) => (
-          <SidebarMenuSubItem key={c.name}>
+          <SidebarMenuSubItem key={c.id ?? c.name}>
             <SidebarMenuSubButton
               aria-current={c.isActive ? "page" : undefined}
-              className="pe-8"
+              className={cn("w-full", c.onDelete && "pe-8")}
               isActive={c.isActive}
               onClick={c.onSelect}
               onPointerDown={c.onDrag}
-              render={<button type="button" />}
+              render={<button disabled={c.disabled} type="button" />}
             >
               <span>{c.name}</span>
             </SidebarMenuSubButton>
-            <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" item={c} />
+            {c.onDelete && <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" item={c} />}
+            {/* Under the project row's dot, in the column of the rows' More buttons. */}
+            {c.id && <StateDot className="top-3.5 -right-3" pageId={c.id} />}
           </SidebarMenuSubItem>
         ))}
       </SidebarMenuSub>
@@ -111,7 +114,7 @@ function Children({ items }: { items: Child[] }) {
 }
 
 // A row's "More" menu. Delete is last and red, a line apart from the rest.
-function RowMenu({ item, onRename, className, showOnHover }: { item: Actions & Partial<Row>; onRename?: () => void; className?: string; showOnHover?: boolean }) {
+function RowMenu({ item, onRename, className, showOnHover }: { item: Partial<Row>; onRename?: () => void; className?: string; showOnHover?: boolean }) {
   const { isMobile } = useSidebar();
   return (
     <Menu>

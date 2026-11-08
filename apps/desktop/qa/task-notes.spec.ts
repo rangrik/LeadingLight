@@ -13,7 +13,7 @@ async function note(p: Locator, text: string, x = 4) {
 // A task with its agent and one report, open; the report shows under the task's words.
 async function seed(page: Page) {
   await page.goto("/?mac");
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
   const ids = await page.evaluate(async () => {
     const { createPage } = await import(String("/src/lib/space.ts"));
     const { openPage } = await import(String("/src/lib/panes.ts"));

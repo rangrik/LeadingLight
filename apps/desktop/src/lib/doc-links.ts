@@ -32,6 +32,10 @@ export function hasBlockLink(node: EditorDoc | null, id: string): boolean {
   return (node.type === "pageLink" && node.attrs?.id === id) || (node.content ?? []).some((c) => hasBlockLink(c, id));
 }
 
+// The pages a body links to: its mentions (tags aside) and page links.
+export const linkedIds = (node: EditorDoc | null): string[] =>
+  node ? [...((node.type === "mention" && !node.attrs?.tag) || node.type === "pageLink" ? [node.attrs?.id] : []), ...(node.content ?? []).flatMap(linkedIds)].filter((id): id is string => typeof id === "string") : [];
+
 // Lines whose plain text holds the words, as a whole word, any case.
 const wordAt = (text: string, words: string) => {
   const re = new RegExp(`(^|[^\\p{L}\\p{N}])(${words.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?=$|[^\\p{L}\\p{N}])`, "iu");

@@ -187,6 +187,14 @@ async function fill() {
     title: "Pricing notes", typeId: "page", createdAt: at(8), updatedAt: at(3, 11), properties: { tags: [design] },
     content: doc(p("Two tiers for now: Personal and Team. Personal is one Mac, one space; Team adds shared spaces."), p("Monthly is simpler to explain; yearly is what most people buy. Lead with one, show the other in smaller type."), ul(["Personal: $8 a month or $80 a year."], ["Team: $15 a seat a month."]), p("Compare with Craft, Capacities and Obsidian Sync before settling. ", m(sam), " has the competitor sheet.")),
   });
+  // The project page links its pricing notes, keeping its date (sidebar-work-first.feature).
+  await objects.update(ll, { updatedAt: mins(95), content: doc(
+    p("A local-first notes app that helps me think. Every note is an object of a type; agents work beside the notes, never in them."),
+    h(2, "This month"),
+    ul(["Ship the pricing page and the first public build; see ", m(pricing), "."], ["Make Today the place to start the day."], ["Review agent reports without leaving the task."]),
+    h(2, "Open questions"),
+    ul(["Does the sidebar lead with types or with projects?"], [m(sam), " thinks the bar needs labels."]),
+  ) });
   const untitled = await make("untitled", {
     title: "", typeId: "page", createdAt: at(2, 9, 12), updatedAt: at(2, 9, 20),
     content: doc(p("The sidebar should lead with projects, not with types. The Recent list is where I actually live, and it is at the bottom under ten rows of types I open once a week.")),

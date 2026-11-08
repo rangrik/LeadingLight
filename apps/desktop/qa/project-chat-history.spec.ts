@@ -31,7 +31,7 @@ async function archivedChat(page: Page, agent: string, exited = false, missing =
     return route.fulfill({ status: 404, json: { error: "Unused fixture route" } });
   });
   await page.goto("/?mac");
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Projects", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Projects", exact: true })).toBeVisible();
   await page.evaluate(async () => {
     const { createPage, chatView } = await import(String("/src/lib/space.ts"));
     const { objects } = await import(String("/src/lib/objects.ts"));

@@ -15,7 +15,11 @@ const both = (fn: () => void) => {
 // A task's state as a 6 px dot on its tab or sidebar row. It takes no room: the row places it in
 // the gap before its icon. Redrawn only when this task's state changes.
 export function StateDot({ pageId, className }: { pageId: string; className?: string }) {
-  const state = useSyncExternalStore(both, () => taskState(pageId));
+  return <Dot className={className} state={useSyncExternalStore(both, () => taskState(pageId))} />;
+}
+
+// The dot for a state, as for a project's most urgent task.
+export function Dot({ state, className }: { state?: TaskState; className?: string }) {
   const color = state && COLOR[state];
   if (!state || !color) return null;
   return (

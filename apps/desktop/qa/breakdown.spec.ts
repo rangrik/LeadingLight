@@ -6,7 +6,7 @@ type Seeded = { project: string; ids: Record<string, string> };
 async function seed(page: Page, pages: { title: string; typeId: string; properties?: Record<string, unknown> }[]): Promise<Seeded> {
   await page.addInitScript(() => localStorage.setItem("ll.projects", JSON.stringify({ enabled: true })));
   await page.goto("/?mac");
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
   return page.evaluate(async (list) => {
     const { createPage } = await import(String("/src/lib/space.ts"));
     const { folders } = await import(String("/src/lib/project-runtime/folders.ts"));
