@@ -17,6 +17,8 @@ export function formatDate(v: DateValue): string {
   return v.end && v.end !== v.start ? `${start} – ${day.format(fromIso(v.end))}` : start;
 }
 export const formatMoment = (ms: number) => moment.format(ms);
+const clock = new Intl.DateTimeFormat(undefined, { timeStyle: "short" });
+export const formatTime = (ms: number) => clock.format(ms);
 
 // "just now", "5 minutes ago", "yesterday": when something an agent did happened.
 const ago = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });

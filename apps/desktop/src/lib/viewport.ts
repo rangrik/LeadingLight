@@ -13,7 +13,7 @@ export function watchViewport() {
     const editor = document.activeElement;
     const selection = window.getSelection();
     if (!(editor instanceof HTMLElement) || !editor.matches(".ProseMirror") || !selection?.focusNode || !editor.contains(selection.focusNode)) return;
-    const scroller = editor.closest<HTMLElement>("[data-page-scroller], .ll-capture");
+    const scroller = editor.closest<HTMLElement>("[data-capture-scroller]") ?? editor.closest<HTMLElement>("[data-page-scroller], .ll-capture");
     if (!scroller || (view && view.scale !== 1)) return;
     const range = document.createRange();
     range.setStart(selection.focusNode, selection.focusOffset);

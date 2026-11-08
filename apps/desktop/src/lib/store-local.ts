@@ -167,6 +167,8 @@ const complete = (obj: LLObject): LLObject => ({ ...newObject(), ...obj, propert
 
 export const localStore: ObjectStore = {
   history: () => tx<HistoryEntry[]>(HISTORY, "readonly", (s) => s.getAll()),
+  // No index by time here, and reading all history is too slow for a day's note: it uses updatedAt.
+  touched: async () => [],
 
   async commit(entry) {
     const d = opened ?? await db();

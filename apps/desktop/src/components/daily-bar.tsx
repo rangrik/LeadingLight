@@ -1,6 +1,6 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Calendar } from "@leadinglight/ui/components/calendar";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
@@ -9,12 +9,13 @@ import { armDrag } from "~/components/pane-drag";
 import { visit } from "~/components/property-value";
 import { dayPage, shiftDay, today } from "~/lib/daily";
 import { hasBlockLink, linesMentioning } from "~/lib/doc-links";
-import { fromIso, isoDay } from "~/lib/format";
+import { formatTime, fromIso, isoDay } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { liveContent } from "~/lib/live";
-import type { ObjectSummary } from "~/lib/objects";
+import { parentOf } from "~/lib/linked";
+import { type ObjectSummary, objects } from "~/lib/objects";
 import { openPage } from "~/lib/panes";
-import { iconFor, listed, space } from "~/lib/space";
+import { iconFor, listed, space, typeOf } from "~/lib/space";
 
 export const goToDay = async (day: string) => openPage(await dayPage(day));
 
@@ -52,19 +53,35 @@ export function DailyBar({ day }: { day: string }) {
   );
 }
 
-// At the end of a daily note: the pages made that day (tags and daily notes have their own
-// places), except those its body links already, so nothing shows twice.
-export function CreatedThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
+// At the end of a daily note: pages made or edited that day, newest first, a page made that day once.
+// Tags, daily notes and pages under a page have their own places; agents' pages aren't the day's work;
+// pages its body links already would show twice.
+export function ThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
   const { pages } = space.use();
+  const from = fromIso(day).getTime(), to = fromIso(shiftDay(day, 1)).getTime();
+  // Edits before a page's last one are only in its history.
+  const [touched, setTouched] = useState(new Map<string, number>());
+  useEffect(() => {
+    let live = true;
+    objects.touched(from, to).then((rows) => live && setTouched(new Map(rows.map((r) => [r.id, r.at]))), console.error);
+    return () => { live = false; };
+  }, [from, to]);
   const doc = liveContent(id) ?? content;
   const linked = (p: ObjectSummary) => linesMentioning(doc, p.id).length > 0 || hasBlockLink(doc, p.id);
-  const made = pages.filter((p) => p.id !== id && listed(p) && isoDay(new Date(p.createdAt)) === day && !linked(p));
-  if (!made.length) return null;
+  const within = (at = 0) => (at >= from && at < to ? at : 0);
+  const rows = pages
+    .flatMap((p) => {
+      const made = within(p.createdAt);
+      const at = made || Math.max(within(touched.get(p.id)), within(p.updatedAt));
+      return at && p.id !== id && listed(p) && !parentOf(p) && !typeOf(p.typeId).made && !linked(p) ? [{ p, made, at }] : [];
+    })
+    .sort((a, b) => b.at - a.at);
+  if (!rows.length) return null;
   return (
-    <section aria-label="Created this day" className="mt-16 border-t pt-6 text-sm">
-      <h2 className="mb-2 font-medium text-muted-foreground">Created this day · {made.length}</h2>
+    <section aria-label="This day" className="mt-16 border-t pt-6 text-sm">
+      <h2 className="mb-2 font-medium text-muted-foreground">This day · {rows.length}</h2>
       <div className="-mx-2 flex flex-col">
-        {made.map((p) => (
+        {rows.map(({ p, made, at }) => (
           <button
             className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent"
             key={p.id}
@@ -73,7 +90,9 @@ export function CreatedThisDay({ day, id, content }: { day: string; id: string; 
             type="button"
           >
             <RowIcon icon={iconFor(p)} />
-            <span className="truncate">{pageLabel(p.title)}</span>
+            <span className="min-w-0 flex-1 truncate">{pageLabel(p.title)}</span>
+            <span className="text-muted-foreground">{made ? "made" : "edited"}</span>
+            <span className="text-muted-foreground tabular-nums">{formatTime(at)}</span>
           </button>
         ))}
       </div>

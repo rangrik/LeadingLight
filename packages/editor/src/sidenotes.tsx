@@ -21,7 +21,7 @@ export type NotesStore = {
   remove: (id: string) => void;
   // Notes chosen to go to an agent as feedback, to, and those that went already.
   // sent is how far the batch holding a note got ("Sent", "Not sent"), or nothing.
-  pick?: { to: string; on: (id: string) => boolean; set: (id: string, on: boolean) => void; sent: (id: string) => string | undefined };
+  pick?: { to: string; page: string; on: (id: string) => boolean; set: (id: string, on: boolean) => void; sent: (id: string) => string | undefined };
 };
 
 export const GUTTER = 32;
@@ -94,6 +94,12 @@ function NoteEditor({
       // nothing typed into it is lost.
       if (!store.current.read(id)) store.current.add(id, quote());
       store.current.write(id, editor.getJSON().content ?? []);
+    },
+    // A line left empty at the end (a verdict's, unused) goes when the note is left.
+    onBlur: ({ editor }) => {
+      const { doc } = editor.state;
+      const last = doc.lastChild;
+      if (doc.childCount > 1 && last?.type.name === "paragraph" && !last.content.size) editor.commands.deleteRange({ from: doc.content.size - last.nodeSize, to: doc.content.size });
     },
   });
   useEffect(() => {
@@ -294,7 +300,7 @@ export function Sidenotes({
               (notes.pick.sent(id) ? (
                 <span className="ll-note-sent">{notes.pick.sent(id)}</span>
               ) : (
-                <Checkbox aria-label={`Send note ${i + 1} to ${notes.pick.to}`} checked={notes.pick.on(id)} className="ll-note-pick" onCheckedChange={(on) => notes.pick?.set(id, !!on)} />
+                <Checkbox aria-label={`Send note ${i + 1} on “${notes.pick.page}” to ${notes.pick.to}`} checked={notes.pick.on(id)} className="ll-note-pick" onCheckedChange={(on) => notes.pick?.set(id, !!on)} />
               ))}
             <span className="ll-note-num">{i + 1}</span>
             <NoteEditor

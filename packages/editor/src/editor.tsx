@@ -2,7 +2,7 @@ import { type Editor, type Extensions, type FocusPosition, generateJSON, getSche
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
+import { AddMarkStep, RemoveMarkStep, Step } from "@tiptap/pm/transform";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -92,6 +92,8 @@ export type BlockEditorHandle = {
   cursorBlock: () => number;
   blockAt: (index: number) => EditorDoc | undefined;
   setBlock: (index: number, block: EditorDoc, count?: number) => void;
+  // Notes added or taken off in another editor of the same report (onNoteSteps there).
+  applySteps: (steps: unknown[]) => void;
 };
 
 // Where "Add to essay" sends selected words.
@@ -136,6 +138,8 @@ function locate(editor: Editor, text: string, near: number): Selected | null {
 // Annotating a page that can't change (an agent's report): its words stay as they are, and only
 // sidenotes are added to them or taken off.
 const annotating = new PluginKey("annotateOnly");
+// Steps taken from another editor, not to be sent back to it.
+const fromElsewhere = "noteSteps";
 const annotateOnly = new Plugin({
   key: annotating,
   filterTransaction: (tr) => !tr.docChanged || tr.steps.every((s) => (s instanceof AddMarkStep || s instanceof RemoveMarkStep) && s.mark.type.name === "note"),
@@ -236,6 +240,8 @@ export function BlockEditor({
   onStats,
   onFocusChange,
   onLayoutChange,
+  onNoteSteps,
+  verdicts,
   label = "Page body",
   placeholder,
   ref,
@@ -277,10 +283,16 @@ export function BlockEditor({
   // Whether the page is being written in, which Focus mode dims the rest of the page for.
   onFocusChange?: (focused: boolean) => void;
   onLayoutChange?: (layout: { notes: boolean; toc: boolean }) => void;
+  // Notes added or taken off here, as steps for another editor of the same words (annotate only).
+  onNoteSteps?: (steps: unknown[]) => void;
+  // Given, the selection toolbar offers each word as a note that starts with it, ticked to send.
+  verdicts?: string[];
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
   const onChangeRef = useRef(onChange);
+  const onNoteStepsRef = useRef(onNoteSteps);
+  onNoteStepsRef.current = onNoteSteps;
   const onExitTopRef = useRef(onExitTop);
   const notesRef = useRef(notes);
   const openRef = useRef(open);
@@ -296,6 +308,8 @@ export function BlockEditor({
   openRef.current = open;
   // The note just added, which opens with the cursor in it.
   const [newNote, setNewNote] = useState<string | null>(null);
+  // The verdict word the next new note starts with.
+  const verdict = useRef<string | null>(null);
   const [grammarReview, setGrammarReview] = useState<{ at?: number; scope?: GrammarRange } | null>(null);
 
   const extensions = useMemo(
@@ -317,6 +331,11 @@ export function BlockEditor({
             return true;
           }
           notesRef.current.add(id, quote);
+          // The word on its own line, and the cursor on the next.
+          if (verdict.current) {
+            notesRef.current.write(id, [{ type: "paragraph", content: [{ type: "text", text: verdict.current }] }, { type: "paragraph" }]);
+            notesRef.current.pick?.set(id, true);
+          }
           setNewNote(id);
           return true;
         },
@@ -370,7 +389,11 @@ export function BlockEditor({
     },
     // What the editor adds by itself after a step that changed nothing (a closing empty line as a
     // page opens, a table fixed up) isn't an edit, so it isn't saved and doesn't move Updated.
-    onUpdate: ({ editor, transaction }) => transaction.docChanged && !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
+    onUpdate: ({ editor, transaction }) => {
+      if (!transaction.docChanged || unreadable || readOnly) return;
+      onChangeRef.current?.(() => editor.getJSON());
+      if (annotate && !transaction.getMeta(fromElsewhere)) onNoteStepsRef.current?.(transaction.steps.map((s) => s.toJSON()));
+    },
   });
 
   useEffect(() => {
@@ -611,6 +634,16 @@ export function BlockEditor({
         editor.view.dispatch(closeHistory(editor.state.tr));
         touched.current = true;
       },
+      // A report's words never change, so a step from another editor of it lands in the same place.
+      applySteps: (steps) => {
+        const tr = editor.state.tr.setMeta(fromElsewhere, true).setMeta("addToHistory", false);
+        try {
+          for (const s of steps) tr.step(Step.fromJSON(editor.schema, s));
+        } catch {
+          return;
+        }
+        editor.view.dispatch(tr);
+      },
       reveal: (id) => {
         const tint = "color-mix(in srgb, var(--info) 24%, transparent)";
         // A report's block (b1, b2…), which never moves: reports don't change.
@@ -673,6 +706,12 @@ export function BlockEditor({
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       {!annotate && <BlockHandle editor={editor} />}
       <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}
+        verdicts={verdicts}
+        onVerdict={(word) => {
+          verdict.current = word;
+          editor.commands.addSidenote();
+          verdict.current = null;
+        }}
         onTurnInto={!readOnly && !annotate && onTurnInto ? () => {
           const selection = capturePageSelection(editor);
           if (!selection) return;

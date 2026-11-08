@@ -55,6 +55,12 @@ export const sqliteStore: ObjectStore = {
     const rows = await (await db()).select<{ entry: string }[]>("SELECT entry FROM page_history ORDER BY at");
     return rows.map((r) => JSON.parse(r.entry) as HistoryEntry);
   },
+  async touched(from, to) {
+    return (await db()).select<{ id: string; at: number }[]>(
+      "SELECT json_extract(c.value, '$.after.id') AS id, MAX(h.at) AS at FROM page_history AS h, json_each(h.entry, '$.changes') AS c WHERE h.at >= $1 AND h.at < $2 AND json_type(c.value, '$.after') = 'object' GROUP BY 1",
+      [from, to],
+    );
+  },
   async commit(entry) {
     try {
       await (await db()).execute("INSERT INTO page_history (id, at, entry) VALUES ($1, $2, $3) ON CONFLICT(id) DO NOTHING", [entry.id, entry.at, JSON.stringify(entry)]);
