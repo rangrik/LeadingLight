@@ -156,11 +156,11 @@ export function EvidenceWidget({ task }: { task: ObjectSummary }) {
   );
 }
 
-// The report as it shows under the task's words: unfolded, and scrolled to.
-export function toReport(from: HTMLElement, id: string) {
+// The report as it shows under the task's words: unfolded, and scrolled to (at once from review mode).
+export function toReport(from: HTMLElement, id: string, smooth = true) {
   const el = (from.closest(".ll-page") ?? from).querySelector<HTMLElement>(`[data-report="${CSS.escape(id)}"]`);
   el?.querySelector<HTMLButtonElement>("button[aria-expanded=false]")?.click();
-  requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "instant" }));
 }
 
 // Ready for review: the report to read, and Accept; once accepted, when, and anything published since.

@@ -68,6 +68,8 @@ export function installFixture() {
     const r = path.replace("/__runtime", "");
     const method = (init?.method ?? "GET").toUpperCase();
     if (r === "/status") return Promise.resolve(json({ state: "ready", version: "fixture", home: "/tmp/fixture" }));
+    // Feedback sent from a task (review mode's Send) is taken; every other write is refused.
+    if (method === "POST" && /^\/v1\/sessions\/[^/]+\/send$/.test(r)) return Promise.resolve(json({ ok: true }));
     if (method !== "GET") return Promise.resolve(json({ error: "The review fixture is read-only." }, 405));
     if (r === "/v1/locations") return Promise.resolve(json([{ name: RUNTIME.location, path: RUNTIME.path, folder_id: "f-ll" }]));
     if (r === "/v1/conversations") return Promise.resolve(json(RUNTIME.conversations));

@@ -215,22 +215,21 @@ export function Reports({ pageId, onNotes, onReview, review }: { pageId: string;
   useStreamAnchored(stream);
   return (
     <section aria-label="Reports" className="ll-reports" hidden={!list.length} ref={stream}>
-      {list
-        .filter((r) => !review || r.id === review.report)
-        .map((r) =>
-          reportOf(r) ? (
-            <ReportGroup
-              folded={task && r !== newest}
-              key={r.id}
-              onNotes={note}
-              onReview={onReview}
-              report={r}
-              review={review && { changes: review.changes ? previousOf(r.id, pages)?.id : undefined }}
-            />
-          ) : (
-            <FeedbackGroup feedback={r} key={r.id} />
-          ),
-        )}
+      {/* Reviewing, the rest stay mounted but hidden (styles.css), so Done finds the stream as it was. */}
+      {list.map((r) =>
+        reportOf(r) ? (
+          <ReportGroup
+            folded={task && r !== newest}
+            key={r.id}
+            onNotes={note}
+            onReview={onReview}
+            report={r}
+            review={review?.report === r.id ? { changes: review.changes ? previousOf(r.id, pages)?.id : undefined } : undefined}
+          />
+        ) : (
+          <FeedbackGroup feedback={r} key={r.id} />
+        ),
+      )}
     </section>
   );
 }

@@ -84,22 +84,25 @@ Feature: Reviewing a report in review mode
   Scenario: The review bar sends the ticked notes
     Given review mode is on for "Pricing copy, second draft", with notes Keep and Change ticked
     When I press "Send 2 notes" on the review bar
-    Then it is sent at once, as from the task's card (feedback.feature)
+    Then it is sent at once, as from the task's card (feedback.feature), and a toast says "Sent to Claude"
     And the bar says "No notes ticked" and the notes say "Sent"
+    And a send that fails says "Not sent" on the notes and in a toast; Try again is in the task's stream,
+      shown once review mode ends
 
   Scenario: The review bar accepts
     Given "Audit the empty states" is open, and review mode is on for "Empty states audit"
     When I press Accept on the review bar
     Then the task is done, accepted on "Empty states audit", as from the card (DECISIONS 26)
-    And the bar says "Accepted" in place of Accept, and review mode stays on
-    And on "Write the pricing page copy", whose subtasks aren't all done, Accept can't be pressed, and
-      its tooltip says so
+    And the bar says "Accepted just now" in place of Accept, and review mode stays on
+    And on "Write the pricing page copy", whose subtasks aren't all done, the bar says "Subtasks still
+      open" in place of Accept, as the card offers no Accept then either
 
   Scenario: Done leaves review mode
     Given review mode is on for "Pricing copy, first draft", which is folded on the task
     When I press Done
     Then the task shows as before: title, card, brief and its reports
-    And "Pricing copy, first draft" is unfolded and scrolled to the top of the pane
+    And "Pricing copy, first draft" is unfolded and at the top of the pane at once (as high as the
+      page lets it go, when little comes after it)
 
   Scenario: Esc is Done
     Given review mode is on for "Pricing copy, second draft"

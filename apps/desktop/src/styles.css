@@ -83,6 +83,7 @@
 .ll-page[data-review="folded"] > .ll-page-body { display: none; }
 .ll-page[data-review="open"] > .ll-page-body { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .ll-page[data-review] > .ll-page-body .ll-editor-root { padding-bottom: 0; }
+.ll-page[data-review] .ll-reports > :not([data-reviewing]) { display: none; }
 
 /* iPad's keyboard and safe areas leave one measured region for the app and its sidebars. */
 html[data-ipad] {

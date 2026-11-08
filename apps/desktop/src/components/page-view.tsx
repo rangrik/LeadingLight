@@ -105,7 +105,7 @@ export function PageView({ page }: { page: LLObject }) {
   useEffect(() => {
     const root = rootRef.current;
     if (review) root?.closest("[data-page-scroller]")?.scrollTo({ top: 0 });
-    else if (back.current && root) toReport(root, back.current);
+    else if (back.current && root) toReport(root, back.current, false);
     back.current = null;
   }, [review]);
   // Esc is Done, unless a note, a field, a popup or another pane has it.
