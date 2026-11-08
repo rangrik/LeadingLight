@@ -29,7 +29,8 @@ Feature: Connections
     When I open Connections
     Then the map shows "Notes on Thinking in Systems" in the middle, darker than the rest
     And Thinking in Systems, Stocks and flows, Feedback loops, Donella Meadows, Sam Rivera, reading, systems and yesterday's daily note sit on the ring, each 5 px across its radius and joined to the middle by a line
-    And each label is 11 px, cut to 18 characters with an ellipsis, and no two labels overlap; a label that would overlap shows only while its node is hovered
+    And each label is 11 px, cut to 18 characters with an ellipsis, outside the ring, else inside it, else beside its node
+    And no label covers another label or another node; one that cannot fit shows only while its node or row is hovered
     And every colour is a theme colour, so the map reads in light and dark
     When I hover Feedback loops on the map
     Then its row below lights, as a hovered row does
@@ -74,9 +75,10 @@ Feature: Connections
   Scenario: Names by alias
     Given Sam Rivera's Aliases are "Sam"
     When I open yesterday's daily note
-    Then "Not linked yet" lists Sam Rivera with "“Sam”" in its muted line
-    When I click Link
-    Then "Sam" in "Design review with Sam" becomes a link to Sam Rivera
+    Then "Not linked yet" lists Design review with Sam ("Meeting"), then Sam Rivera ("“Sam”")
+    When I click Sam Rivera's Link
+    Then "Sam" in "Design review with Sam in the afternoon" becomes a link to Sam Rivera
+    And Design review with Sam leaves "Not linked yet", since its words are no longer plain text
 
   Scenario: Live while I type
     When I type "@Feedback" and choose Feedback loops at the end of a paragraph
@@ -85,7 +87,7 @@ Feature: Connections
     Then within half a second Pricing notes is listed under "Links from this page" and joins the map
     When I delete that mention
     Then it leaves the list and the map, without saving first
-    And typing in a 2000-paragraph page with the panel open keeps every key under 16 ms
+    And typing in a 2000-paragraph page is no slower with the panel open than with it closed
 
   Scenario: Rows open beside
     When I click the Stocks and flows row

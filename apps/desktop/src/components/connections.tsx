@@ -256,15 +256,24 @@ function ConnectionMap({ centre, nodes, lit, onLight }: { centre: string; nodes:
     return { x: at, y, box: [at - half, y - 10, at + half, y + 3] as Box };
   };
   const middle = label(cut(centre), cx, cy + 19);
-  const taken: Box[] = [middle.box, ...(nodes.length > CAP ? [[w - 64, H - 14, w, H] as Box] : [])];
-  const placed = shown.map((p, i) => {
+  const ring = shown.map((p, i) => {
     const a = -Math.PI / 2 + (i * 2 * Math.PI) / shown.length;
-    const x = cx + (w / 2 - 16) * Math.cos(a);
-    const y = cy + (H / 2 - 24) * Math.sin(a);
-    const l = label(cut(nameOf(p)), x, Math.sin(a) <= 0.25 ? y - 9 : y + 16);
-    const free = !taken.some((b) => overlaps(b, l.box));
-    if (free) taken.push(l.box);
-    return { p, x, y, l, free, text: cut(nameOf(p)) };
+    return { p, a, x: cx + (w / 2 - 16) * Math.cos(a), y: cy + (H / 2 - 24) * Math.sin(a) };
+  });
+  // Labels keep off each other and off every other node.
+  const dot = (x: number, y: number): Box => [x - 5, y - 5, x + 5, y + 5];
+  const taken: Box[] = [middle.box, dot(cx, cy), ...(nodes.length > CAP ? [[w - 64, H - 14, w, H] as Box] : [])];
+  const placed = ring.map(({ p, a, x, y }) => {
+    const text = cut(nameOf(p));
+    const half = (text.length * CHAR) / 2;
+    const up = Math.sin(a) <= 0.25;
+    // Outside the ring first, then the other side, then beside the node facing the middle.
+    const spots = [up ? y - 9 : y + 16, up ? y + 16 : y - 9].map((ly) => label(text, x, ly));
+    spots.push(label(text, Math.cos(a) > 0 ? x - 9 - half : x + 9 + half, y + 4));
+    const others = ring.filter((o) => o.p !== p).map((o) => dot(o.x, o.y));
+    const fit = spots.find((s) => ![...taken, ...others].some((b) => overlaps(b, s.box)));
+    if (fit) taken.push(fit.box);
+    return { p, x, y, l: fit ?? spots[0], free: !!fit, text };
   });
   const halo = { paintOrder: "stroke", stroke: "var(--background)", strokeWidth: 3, strokeLinejoin: "round" } as const;
   return (
