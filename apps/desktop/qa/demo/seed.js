@@ -85,7 +85,11 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// Once per load: React's StrictMode runs the app's load effect twice in dev.
+let seeding;
+export const seed = () => (seeding ??= fill());
+
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
