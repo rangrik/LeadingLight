@@ -85,7 +85,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -147,7 +150,7 @@ export async function seed() {
     content: doc(p("A feedback loop is a closed chain of causes: a stock's level sets a flow that changes the stock."), ul([b("Balancing"), " loops seek a goal: a thermostat, a thirst, a budget."], [b("Reinforcing"), " loops compound: interest, population, a habit."]), p("Delays in a loop make it oscillate. That is most of what goes wrong in projects: the signal arrives after the decision.")),
   });
   // Fill the two mentions above now that ids exist.
-  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
+  await savePage(stocks, { updatedAt: at(5, 20, 40), content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
 
   // The long reading note, left mid-sentence yesterday
   const notes = await make("notes", {
@@ -172,7 +175,7 @@ export async function seed() {
     ),
   });
 
-  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
+  await savePage(tis, { updatedAt: at(1, 21), content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
 
   // Other pages
   const weekly = await make("weekly", {
@@ -263,7 +266,7 @@ export async function seed() {
     properties: { parent: taskD, report: { by: agentD, session: "sess-rename", to: taskD, at: at(1, 16), command: "c-d1", ready: true } },
     content: doc(p("Changed the starter type's name and plural; the docs already said note.")),
   });
-  await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } } });
+  await savePage(taskD, { updatedAt: at(1, 17), properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } } });
 
   // Captured ideas, unfiled (Tail's "4 ideas since Tuesday")
   await make("idea1", { title: "Add a weekly review page that pulls This day from each day of the week", typeId: "idea", createdAt: at(5, 14, 2), updatedAt: at(5, 14, 2), properties: { ...cap("idea", at(5, 14, 2)) } });
@@ -276,9 +279,9 @@ export async function seed() {
   ids.today = todayId;
   await savePage(todayId, { content: doc(p("Quiet morning. Reviewed ", m(pricing), " and still can't decide monthly or yearly; the agent is asking the same thing."), todo([false, "Decide monthly vs yearly before the design review"], [false, "Read chapter 3"]), p("Noticed: I open the app, look at Today, and then go hunting in Recent for where I was.")) });
   const yday = await ensureDaily(shiftDay(today(), -1));
-  await savePage(yday, { content: doc(p("Read chapter 2 of ", m(tis), ". Delays in ", m(loops), " are the key idea; see ", m(notes), "."), p("Design review with Sam in the afternoon.")) });
+  await savePage(yday, { updatedAt: at(1, 22), content: doc(p("Read chapter 2 of ", m(tis), ". Delays in ", m(loops), " are the key idea; see ", m(notes), "."), p("Design review with Sam in the afternoon.")) });
   const thu = await ensureDaily(shiftDay(today(), -3));
-  await savePage(thu, { content: doc(p("Saved the leverage points essay. Worth a page of its own.")) });
+  await savePage(thu, { updatedAt: at(3, 20), content: doc(p("Saved the leverage points essay. Worth a page of its own.")) });
 
   // The project's linked folder, and projects on
   await objects.putFolder({ pageId: ll, path: RUNTIME.path, folderId: "f-ll", location: RUNTIME.location, createdAt: at(30), updatedAt: at(30) });
