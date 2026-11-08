@@ -20,6 +20,7 @@ import { whenLive } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { iconFor, pageOf, propOf, space } from "~/lib/space";
 import { reportOf, reportsOn, subtasksOf, workOf } from "~/lib/work";
+import type { Session } from "~/lib/project-runtime/chat";
 import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
 // The Work table (features/work-table.feature): one row per task with its agent, state, steps,
@@ -45,21 +46,60 @@ function openReport(task: string, report: string, e: React.MouseEvent) {
   );
 }
 
-type Row = { task: ObjectSummary; state: RowState; at: number };
+export type Row = { task: ObjectSummary; state: RowState; at: number };
+type Ask = { id: string; reason: string };
 
-function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready: boolean; ask?: { id: string; reason: string } }) {
+// How a task's work stands, and when it last moved, as the Work table and the Desk sort it.
+export function rowOf(task: ObjectSummary, live: Map<string, Session>): Row {
+  const agent = agentOfTask(task);
+  const started = agent || subtasksOf(task.id).some((s) => agentOfTask(s));
+  const state = done(task) ? "done" : started ? stateOf(task, agent, live) : "new";
+  // Not started reads in the order it was made; the rest by their last change.
+  const at = state === "new" ? task.createdAt : Math.max(task.updatedAt, agent?.updatedAt ?? 0, reportsOn(task.id).at(-1)?.createdAt ?? 0);
+  return { task, at, state };
+}
+
+// The question waiting on a task or one of its subtasks, from the Feed.
+export const askFor = (asks: (Ask & { task?: string })[], r: Row) =>
+  r.state === "input" ? asks.find((i) => i.task === r.task.id || subtasksOf(r.task.id).some((s) => s.id === i.task)) : undefined;
+
+// The one press a task's work wants. One look for every action, so their right edges line up.
+export function workAction({ task, state }: Row, ask?: Ask, start?: () => Promise<unknown>) {
+  const agent = agentOfTask(task);
+  const own = agent && reportsOn(task.id).filter((r) => reportOf(r)?.by === agent.id).at(-1);
+  const act = (fn: () => Promise<unknown>) => () => void fn().catch(fail);
+  return state === "input" ? (
+    <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("feed"))} size="xs" variant="outline">
+      Answer
+    </Button>
+  ) : state === "review" && subtasksOf(task.id).every(done) ? (
+    <Button onClick={act(() => accept(task.id, own?.id))} size="xs" variant="outline">
+      <Check className="size-3.5" />
+      Accept
+    </Button>
+  ) : (state === "idle" || state === "stopped") && agent ? (
+    <Button onClick={act(() => carryOn(agent.id))} size="xs" variant="outline">
+      <Play className="size-3.5" />
+      Continue
+    </Button>
+  ) : state === "new" && start ? (
+    <Button onClick={act(start)} size="xs" variant="outline">
+      Start
+    </Button>
+  ) : null;
+}
+
+function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready: boolean; ask?: Ask }) {
   const { task, state } = row;
   const agent = agentOfTask(task);
   const subs = subtasksOf(task.id);
   const checklist = workOf(agent)?.checklist ?? [];
   const steps = subs.length ? `${subs.filter(done).length} of ${subs.length}` : checklist.length ? `${checklist.filter((s) => s.done).length} of ${checklist.length}` : "";
   const latest = reportsOn(task.id).at(-1);
-  const own = agent && reportsOn(task.id).filter((r) => reportOf(r)?.by === agent.id).at(-1);
   const waits = afterOf(task).filter((id) => !done(pageOf(id)!));
   const later = state === "new" && waits.length ? `after ${waits.map(name).join(", ")}` : "";
   const who = agent ? pageLabel(agent.title).split(": ")[0] : "";
   const label = state === "new" ? "Not started" : STATE_LABEL[state];
-  const act = (fn: () => Promise<unknown>) => () => void fn().catch(fail);
   // The question's own words: the row names its agent already.
   const asked = ask?.reason.replace(/^.*? (?:asks|says): /, "");
   const report = asked ? (
@@ -72,27 +112,7 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
       </button>
     )
   );
-  // One look for every action, so their right edges line up.
-  const action =
-    state === "input" ? (
-      <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("feed"))} size="xs" variant="outline">
-        Answer
-      </Button>
-    ) : state === "review" && subs.every(done) ? (
-      <Button onClick={act(() => accept(task.id, own?.id))} size="xs" variant="outline">
-        <Check className="size-3.5" />
-        Accept
-      </Button>
-    ) : (state === "idle" || state === "stopped") && agent ? (
-      <Button onClick={act(() => carryOn(agent.id))} size="xs" variant="outline">
-        <Play className="size-3.5" />
-        Continue
-      </Button>
-    ) : state === "new" && parent && ready ? (
-      <Button onClick={act(() => startReady(parent, task.id))} size="xs" variant="outline">
-        Start
-      </Button>
-    ) : null;
+  const action = workAction(row, ask, parent && ready ? () => startReady(parent, task.id) : undefined);
   const meta = [who, label, steps, report, later].filter(Boolean);
   const wide = "hidden @min-[720px]/work:table-cell";
   return (
@@ -146,19 +166,9 @@ export function WorkTable({ tasks, parent, label, className }: { tasks: ObjectSu
   const project = useProject(parent ?? "");
   useEffect(() => watchWork(), []);
   const ready = parent && project ? readySubtasks(parent).map((s) => s.id) : [];
-  const rows: Row[] = tasks
-    .map((task) => {
-      const agent = agentOfTask(task);
-      const started = agent || subtasksOf(task.id).some((s) => agentOfTask(s));
-      const state = done(task) ? "done" : started ? stateOf(task, agent, live) : "new";
-      // Not started reads in the order it was made; the rest by their last change.
-      const at = state === "new" ? task.createdAt : Math.max(task.updatedAt, agent?.updatedAt ?? 0, reportsOn(task.id).at(-1)?.createdAt ?? 0);
-      return { task, at, state } as Row;
-    })
-    .sort(byUrgency);
+  const rows = tasks.map((task) => rowOf(task, live)).sort(byUrgency);
   const finished = rows.filter((r) => r.state === "done");
-  const askOf = (r: Row) => (r.state === "input" ? asks.find((i) => i.task === r.task.id || subtasksOf(r.task.id).some((s) => s.id === i.task)) : undefined);
-  const show = (r: Row) => <WorkRow ask={askOf(r)} key={r.task.id} parent={parent} ready={ready.includes(r.task.id)} row={r} />;
+  const show = (r: Row) => <WorkRow ask={askFor(asks, r)} key={r.task.id} parent={parent} ready={ready.includes(r.task.id)} row={r} />;
   return (
     <div className={cn("@container/work", className)}>
       <Table>
@@ -207,13 +217,18 @@ export function StartReady({ parent }: { parent: string }) {
   );
 }
 
-// A project's tasks at work, under its properties: those with an agent or started subtasks.
+// A project's tasks at work: those with an agent or started subtasks.
+export function workOn(pageId: string, pages: ObjectSummary[]) {
+  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(pageId));
+  return pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+}
+
+// A project's tasks at work, under its properties.
 export function ProjectWork({ pageId }: { pageId: string }) {
   const { pages } = space.use();
   const box = useRef<HTMLDivElement>(null);
   useAnchored(box);
-  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(pageId));
-  const tasks = pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+  const tasks = workOn(pageId, pages);
   const going = tasks.filter((t) => !done(t)).length;
   return (
     <div ref={box}>

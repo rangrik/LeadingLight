@@ -671,16 +671,28 @@ async function revive() {
 type Visit = { at: number; block?: number };
 const seen = new Map<string, Visit>();
 const asking = new Set<string>();
+// Where the person stopped on a page, when that was mid-sentence: the block, its words, the last four.
+function stopIn(page: string, blocks: EditorDoc[]) {
+  const lineOf = (b?: EditorDoc) => (b ? docText({ type: "doc", content: [b] }).split("\n").at(-1)!.trim() : "");
+  // The block, not its words, which an earlier paragraph may share.
+  const at = seen.get(page)?.block ?? blocks.reduce((k, b, i) => (lineOf(b) ? i : k), -1);
+  const text = lineOf(blocks[at]);
+  return unfinished(text) ? { at, text, quote: text.split(/\s+/).slice(-4).join(" ") } : undefined;
+}
+// For the Desk's Continue rows: the same rule, on pages tail may read. With no model to judge,
+// only a paragraph: a list item ends without a stop.
+export async function stoppedAt(page: string) {
+  if (mode() === "off" || !readable(pageOf(page))) return;
+  const blocks = (await contentOf(page))?.content ?? [];
+  const stop = stopIn(page, blocks);
+  return stop && blocks[stop.at].type === "paragraph" ? stop.quote : undefined;
+}
 async function comeBack(page: string, doc: EditorDoc) {
   const was = seen.get(page);
   if (mode() === "off" || asking.has(page) || !readable(pageOf(page)) || Date.now() - (was?.at ?? pageOf(page)?.updatedAt ?? Date.now()) < ms("away")) return;
-  const blocks = doc.content ?? [];
-  const lineOf = (b?: EditorDoc) => (b ? docText({ type: "doc", content: [b] }).split("\n").at(-1)!.trim() : "");
-  // The block, not its words, which an earlier paragraph may share.
-  const at = was?.block ?? blocks.reduce((k, b, i) => (lineOf(b) ? i : k), -1);
-  const text = lineOf(blocks[at]);
-  if (!unfinished(text)) return;
-  const quote = text.split(/\s+/).slice(-4).join(" ");
+  const stop = stopIn(page, doc.content ?? []);
+  if (!stop) return;
+  const { at, text, quote } = stop;
   const id = `stopped:${page}`;
   const found: Found = { id, kind: "stopped", pages: [page], facts: { line: text.slice(-200), quote }, line: () => ({ id, where: page, words: ['You stopped at "', { text: quote, page }, '".'], nod: "Show", act: async () => liveEditor(page)?.reveal(`b${at + 1}`) }) };
   asking.add(page);

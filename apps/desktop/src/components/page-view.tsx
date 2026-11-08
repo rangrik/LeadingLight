@@ -31,12 +31,12 @@ import { useKeysFor } from "~/lib/keymap";
 import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
-import type { LLObject, ObjectPatch } from "~/lib/objects";
+import { type LLObject, type ObjectPatch, objects } from "~/lib/objects";
 import { docMarkdown } from "~/lib/page-markdown";
 import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
-import { trackFlush } from "~/lib/saving";
-import { pageOf, patchSummary, savePage, space, typeOf } from "~/lib/space";
+import { closeSave, trackFlush, whenSaved } from "~/lib/saving";
+import { draftOf, pageOf, patchSummary, savePage, space, typeOf, whenStored } from "~/lib/space";
 import { useNotesFor } from "~/lib/notes-for";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -63,7 +63,24 @@ const fit = (el: HTMLTextAreaElement | null) => {
   el.style.height = `${el.scrollHeight}px`;
 };
 
-export function PageView({ page }: { page: LLObject }) {
+// A page, read once an editor of it closing elsewhere has saved, and its draft is in.
+export function PagePane({ id, bare }: { id: string; bare?: boolean }) {
+  const [page, setPage] = useState<LLObject | null>(null);
+  useEffect(() => {
+    let stale = false;
+    Promise.all([whenSaved(id), whenStored(id)])
+      .then(() => objects.get(id))
+      .then((obj) => !stale && setPage(obj ?? draftOf(id) ?? null))
+      .catch(console.error);
+    return () => {
+      stale = true;
+    };
+  }, [id]);
+  return page?.id === id ? <PageView bare={bare} page={page} /> : null;
+}
+
+// bare: the body alone, saved as ever, for the Desk's Today card.
+export function PageView({ page, bare = false }: { page: LLObject; bare?: boolean }) {
   const mobile = useMobile();
   const [title, setTitle] = useState(page.title);
   const [typeId, setTypeId] = useState(page.typeId);
@@ -216,7 +233,7 @@ export function PageView({ page }: { page: LLObject }) {
       untrack();
       unlive();
       setPageStats(page.id, null);
-      void flush().catch(() => {});
+      closeSave(page.id, flush());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -300,10 +317,11 @@ export function PageView({ page }: { page: LLObject }) {
       onFocusCapture={() => registerPage(askPage, editorRef.current)}
       onMouseDown={onBlankMouseDown}
     >
-      {cover && <CoverBand cover={cover} onChange={setCover} />}
+      {!bare && cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
           Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
-      <div className="ll-page pb-8" data-page-notes={margins.notes || streamNotes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+      <div className={cn("ll-page", !bare && "pb-8")} data-bare={bare || undefined} data-page-notes={margins.notes || streamNotes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+        {!bare && <>
         <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")} data-tail={tailRow || undefined}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -422,7 +440,8 @@ export function PageView({ page }: { page: LLObject }) {
         {day && <DailyBar day={day} />}
         {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
-        <div className="ll-page-body pt-3" ref={bodyRef}>
+        </>}
+        <div className={cn("ll-page-body", !bare && "pt-3")} ref={bodyRef}>
           <BlockEditor
             assets={assets}
             content={page.content}
@@ -456,11 +475,13 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        {!bare && <>
         {report && <ReportSources report={current} />}
         <Reports onNotes={setStreamNotes} pageId={page.id} />
         <Linked id={page.id} />
         {day && <ThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
+        </>}
       </div>
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
       {turnInto && <TurnIntoPage selection={turnInto} onClose={() => setTurnInto(null)} />}

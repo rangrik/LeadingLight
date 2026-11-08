@@ -3,7 +3,7 @@
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
 // usage as the footer (NavUser's place), and a Browser entry.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, Settings } from "lucide-react";
+import { CalendarDays, Globe, LayoutDashboard, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,8 +20,8 @@ import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
-import { openFrom, openBeside } from "~/lib/panes";
-import { CALENDAR_VIEW, browserView } from "~/lib/space";
+import { focusedPage, openFrom, openBeside, panes } from "~/lib/panes";
+import { CALENDAR_VIEW, DESK_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -78,6 +78,8 @@ export function AppSidebar({
 }) {
   const { isMobile, state, setOpenMobile } = useSidebar();
   const mobile = useMobile();
+  panes.use();
+  const desk = focusedPage() === DESK_VIEW;
   const select = (fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
     fn(e);
     if (isMobile) setOpenMobile(false);
@@ -89,6 +91,12 @@ export function AppSidebar({
       <SidebarContent>
         <SidebarGroup className="pb-0">
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton aria-current={desk ? "page" : undefined} isActive={desk} onClick={select((e) => openFrom(DESK_VIEW, e))}>
+                <LayoutDashboard />
+                <span>Desk</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={select(onToday)}>
                 <CalendarDays />

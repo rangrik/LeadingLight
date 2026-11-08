@@ -1,4 +1,5 @@
 import { CalendarView } from '~/components/calendar-view';
+import { Desk } from '~/components/desk';
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
 // with its own header (crumbs and a close button) and tab row (tab-row.tsx), no Compare tabs.
@@ -12,13 +13,12 @@ import { AskButton } from "~/components/ask-button";
 import { PageIconView } from "~/components/page-icon";
 import { PageStats } from "~/components/page-stats";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
-import { PageView } from "~/components/page-view";
+import { PagePane } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
-import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
@@ -30,7 +30,7 @@ import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { CALENDAR_VIEW, DESK_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { phone, useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -223,6 +223,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                   <NoPage className="h-full" />
                 ) : leaf.page === CALENDAR_VIEW ? (
                   <CalendarView />
+                ) : leaf.page === DESK_VIEW ? (
+                  <Desk />
                 ) : leaf.page === INBOX_VIEW ? (
                   <CaptureInbox />
                 ) : leaf.page === FEED_VIEW ? (
@@ -249,21 +251,6 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
       <DragGhost />
     </div>
   );
-}
-
-function PagePane({ id }: { id: string }) {
-  const [page, setPage] = useState<LLObject | null>(null);
-  useEffect(() => {
-    let stale = false;
-    objects
-      .get(id)
-      .then((obj) => !stale && setPage(obj ?? draftOf(id) ?? null))
-      .catch(console.error);
-    return () => {
-      stale = true;
-    };
-  }, [id]);
-  return page?.id === id ? <PageView page={page} /> : null;
 }
 
 // The invisible grab area filling the gap between two cards.

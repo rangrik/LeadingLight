@@ -59,6 +59,7 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("seeded", "1"));
   await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Trip" })).toContainText("✈️");
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Trip" }).click();
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add description" }).click();
   await page.keyboard.type("Ten days");

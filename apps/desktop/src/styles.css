@@ -44,6 +44,11 @@
 
 /* A report in its page's stream reads to its end: no room below for drops (reports.tsx). */
 [data-report] .ll-editor-root { padding-bottom: 0; }
+/* The Desk's Today card: the body alone, its text in line with the card's title. */
+.ll-page[data-bare] { padding-inline: 0; max-width: none; }
+[data-bare] .ll-editor-root { padding-bottom: 0; }
+/* No room for the block handle in a card; "/" and ⌘/ still reach the blocks. */
+[data-bare] .ll-handle { display: none; }
 
 /* The capture box's editor (capture-box.tsx): 15 px, no handle gutter (a 640 px box has no
    room left of the text), no drop room below. */

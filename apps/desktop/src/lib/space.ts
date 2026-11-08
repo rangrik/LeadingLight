@@ -46,21 +46,27 @@ export const typeOf = (id: string) => {
 // one under the same id, so browsing never leaves empty pages behind.
 const drafts = new Map<string, LLObject>();
 const storing = new Map<string, Promise<unknown>>();
+// Drafts on their way in, still found until they land, so a day opened meanwhile is not made twice.
+const landing = new Map<string, LLObject>();
 export const draft = (obj: LLObject) => (drafts.set(obj.id, obj), obj.id);
 export const draftOf = (id: string) => drafts.get(id);
-export const findDraft = (test: (p: LLObject) => boolean) => [...drafts.values()].find(test);
+export const findDraft = (test: (p: LLObject) => boolean) => [...drafts.values(), ...landing.values()].find(test);
+// A page opened while its draft is being stored is read once it is in.
+export const whenStored = (id: string) => (storing.get(id) ?? Promise.resolve()).catch(() => {});
 // Stores a draft (with the edit that stores it); later saves wait until it is in.
 export function storeDraft(id: string, patch: ObjectPatch = {}, context?: ChangeContext): Promise<unknown> {
   const obj = drafts.get(id);
   if (!obj) return storing.get(id) ?? Promise.resolve();
   drafts.delete(id);
+  landing.set(id, obj);
   const made = createPage({ ...obj, ...patch }, context);
   storing.set(id, made);
-  void made.then(() => storing.delete(id), () => { storing.delete(id); drafts.set(id, obj); });
+  const done = () => (storing.delete(id), landing.delete(id));
+  void made.then(done, () => { done(); drafts.set(id, obj); });
   return made;
 }
 
-export const pageOf = (id: string) => space.get().pages.find((p) => p.id === id) ?? drafts.get(id);
+export const pageOf = (id: string) => space.get().pages.find((p) => p.id === id) ?? drafts.get(id) ?? landing.get(id);
 export const propOf = (id: string) => space.get().props.find((p) => p.id === id);
 
 // A page's properties: its type's in order, then its own. A key with no definition is kept in
@@ -96,13 +102,15 @@ export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
 export const SUGGESTIONS_VIEW = "suggestions:";
 export const CALENDAR_VIEW = "calendar:";
-const VIEWS = [CALENDAR_VIEW,FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+export const DESK_VIEW = "desk:";
+const VIEWS = [CALENDAR_VIEW, DESK_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
 // An empty view is a tab with no page yet.
 export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
   if (view === CALENDAR_VIEW) return { title: "Calendar" };
+  if (view === DESK_VIEW) return { title: "Desk" };
   if (view === INBOX_VIEW) return { title: "Captures" };
   if (view === FEED_VIEW) return { title: "Feed" };
   if (view === ASK_VIEW) return { title: "Ask" };

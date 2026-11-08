@@ -82,7 +82,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
   );
 }
 
-function CaptureRow({ page, panel, reviewed, onReviewed }: { page: ObjectSummary; panel: boolean; reviewed: boolean; onReviewed: (value: boolean) => void }) {
+export function CaptureRow({ page, panel, reviewed, onReviewed }: { page: ObjectSummary; panel: boolean; reviewed: boolean; onReviewed: (value: boolean) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const saving = useRef(false);

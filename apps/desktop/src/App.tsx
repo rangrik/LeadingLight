@@ -1,4 +1,4 @@
-import { CALENDAR_VIEW } from '~/lib/space';
+import { CALENDAR_VIEW, DESK_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -174,7 +174,8 @@ export default function App() {
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
-        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
+        // The phone keeps its own home; elsewhere the Desk says where things stand (features/desk.feature).
+        if (!restorePanes(exists)) showOnly(phone ? (list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null) : DESK_VIEW);
       })
       .catch(console.error);
   }, []);

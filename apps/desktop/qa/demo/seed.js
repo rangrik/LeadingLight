@@ -85,7 +85,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+let seeding;
+export const seed = () => (seeding ??= fill());
+
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -96,6 +99,9 @@ export async function seed() {
     ids[key] = obj.id;
     return obj.id;
   };
+  // Ids chosen ahead, so pages that link each other are written once, at their own times.
+  const notesId = crypto.randomUUID();
+  const loopsId = crypto.randomUUID();
   const cap = (kind, capturedAt, reviewedAt) => ({ captureInbox: { kind, capturedAt, ...(reviewedAt && { reviewedAt }) } });
 
   // Tags
@@ -128,7 +134,7 @@ export async function seed() {
   const tis = await make("tis", {
     title: "Thinking in Systems", typeId: "book", createdAt: at(12), updatedAt: at(1, 21),
     properties: { author: [meadows], rating: 5, "book-status": ["reading"], tags: [reading, systems], description: "A primer on stocks, flows, feedback and leverage." },
-    content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m("NOTES"), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")),
+    content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notesId), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")),
   });
   const doet = await make("doet", {
     title: "The Design of Everyday Things", typeId: "book", createdAt: at(50), updatedAt: at(19),
@@ -140,18 +146,16 @@ export async function seed() {
   // Concept pages
   const stocks = await make("stocks", {
     title: "Stocks and flows", typeId: "page", createdAt: at(5, 20), updatedAt: at(5, 20, 40), properties: { tags: [systems], icon: { kind: "emoji", value: "🪣" } },
-    content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(null), " for how stocks drive their own flows.")),
+    content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loopsId), " for how stocks drive their own flows.")),
   });
   const loops = await make("loops", {
-    title: "Feedback loops", typeId: "page", createdAt: at(4, 19), updatedAt: at(4, 19, 30), properties: { tags: [systems], icon: { kind: "emoji", value: "🔁" } },
+    id: loopsId, title: "Feedback loops", typeId: "page", createdAt: at(4, 19), updatedAt: at(4, 19, 30), properties: { tags: [systems], icon: { kind: "emoji", value: "🔁" } },
     content: doc(p("A feedback loop is a closed chain of causes: a stock's level sets a flow that changes the stock."), ul([b("Balancing"), " loops seek a goal: a thermostat, a thirst, a budget."], [b("Reinforcing"), " loops compound: interest, population, a habit."]), p("Delays in a loop make it oscillate. That is most of what goes wrong in projects: the signal arrives after the decision.")),
   });
-  // Fill the two mentions above now that ids exist.
-  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
 
   // The long reading note, left mid-sentence yesterday
   const notes = await make("notes", {
-    title: "Notes on Thinking in Systems", typeId: "page", createdAt: at(6, 21), updatedAt: at(1, 22, 10),
+    id: notesId, title: "Notes on Thinking in Systems", typeId: "page", createdAt: at(6, 21), updatedAt: at(1, 22, 10),
     properties: { tags: [reading, systems], icon: { kind: "emoji", value: "📘" } },
     content: doc(
       p("Reading notes on ", m(tis), " by ", m(meadows), ". One section per chapter; my own words first, quotes second."),
@@ -171,8 +175,6 @@ export async function seed() {
       p("The point about delays in a feedback loop is that"),
     ),
   });
-
-  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
 
   // Other pages
   const weekly = await make("weekly", {

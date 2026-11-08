@@ -12,6 +12,8 @@ import { reportOf, reportsOn, runOf, subtasksOf, workersOf } from "~/lib/work";
 // whichever pages are open. Read again when the runtime says an agent or a session changed.
 
 export const sessions = createStore<Map<string, Session>>(new Map());
+// Whether the runtime has answered once: before that every agent would read as stopped.
+export const heard = createStore(false);
 // Agents waiting to hear back from work they started (the runtime's watches): still at it.
 let awaiting = new Set<string>();
 
@@ -23,6 +25,7 @@ const read = () => {
     const [list, watches] = await Promise.all([ask<Session[]>("GET", "/v1/sessions").catch(() => null), ask<{ parent: string }[]>("GET", "/v1/notify").catch(() => null)]);
     if (watches) awaiting = new Set(watches.map((w) => w.parent));
     if (list) sessions.set(new Map(list.map((s) => [s.name, s])));
+    heard.set(true);
   }, 250);
 };
 
