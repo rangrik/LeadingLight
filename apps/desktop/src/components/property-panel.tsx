@@ -7,6 +7,7 @@ import { Field, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
 import {
   Menu,
+  MenuCheckboxItem,
   MenuGroup,
   MenuGroupLabel,
   MenuItem,
@@ -14,6 +15,7 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
   MenuSeparator,
+  MenuShortcut,
   MenuTrigger,
 } from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
@@ -25,6 +27,8 @@ import { KIND_ICONS, PropValue } from "~/components/property-value";
 import { type Kind, KINDS, newId, type PropDef } from "~/lib/catalog";
 import type { ObjectSummary } from "~/lib/objects";
 import { openEssay } from "~/lib/essay";
+import { useKeysFor } from "~/lib/keymap";
+import { isSource } from "~/lib/reading";
 import { pageStyle, pluralOf } from "~/lib/labels";
 import { childOf, roleOf } from "~/lib/linked";
 import { leaves, panes } from "~/lib/panes";
@@ -178,6 +182,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
   const { root } = panes.use();
   const essay = childOf({ ...page, properties: values }, "essay");
   const essayOpen = Boolean(essay && root && leaves(root).some((l) => l.page === essay));
+  const keysFor = useKeysFor();
 
   const row = (prop: PropDef, isOwn: boolean) => {
     const Icon = KIND_ICONS[prop.kind];
@@ -251,6 +256,12 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
                 <MenuItem disabled={essayOpen} onClick={() => void openEssay(page.id)}>
                   {essay ? "Open essay" : "Start an essay on this page"}
                 </MenuItem>
+                <MenuCheckboxItem checked={isSource({ typeId, properties: values })} closeOnClick onCheckedChange={(on) => setProp("reading", on)}>
+                  <span className="flex items-center">
+                    Reading layout
+                    <MenuShortcut>{keysFor("reading")}</MenuShortcut>
+                  </span>
+                </MenuCheckboxItem>
               </>
             )}
             <MenuSeparator />

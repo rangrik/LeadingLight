@@ -25,6 +25,7 @@ const ul = (...items) => ({ type: "bulletList", content: items.map((x) => (Array
 const todo = (...items) => ({ type: "taskList", content: items.map(([checked, ...xs]) => ({ type: "taskItem", attrs: { checked }, content: [p(...xs)] })) });
 const quote = (...xs) => ({ type: "blockquote", content: [p(...xs)] });
 const link = (id) => ({ type: "pageLink", attrs: { id, view: null } });
+const noted = (id, t) => text(t, [{ type: "note", attrs: { id } }]);
 const hr = () => ({ type: "horizontalRule" });
 const doc = (...blocks) => ({ type: "doc", content: blocks });
 
@@ -85,7 +86,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -104,7 +108,7 @@ export async function seed() {
   const design = await make("tagDesign", { title: "design", typeId: "tag", createdAt: at(18), updatedAt: at(18) });
 
   // People
-  const meadows = await make("meadows", { title: "Donella Meadows", typeId: "person", properties: { company: "Sustainability Institute", tags: [systems] }, createdAt: at(12), updatedAt: at(12) });
+  const meadows = await make("meadows", { title: "Donella Meadows", typeId: "person", properties: { company: "Sustainability Institute", aliases: "Meadows", tags: [systems] }, createdAt: at(12), updatedAt: at(12) });
   const norman = await make("norman", { title: "Don Norman", typeId: "person", properties: { company: "Nielsen Norman Group", tags: [design] }, createdAt: at(30), updatedAt: at(30) });
   const ahrens = await make("ahrens", { title: "Sönke Ahrens", typeId: "person", properties: {}, createdAt: at(9), updatedAt: at(9) });
   const sam = await make("sam", { title: "Sam Rivera", typeId: "person", properties: { company: "Acme Studio", email: "sam@acme.studio" }, createdAt: at(40), updatedAt: at(3) });
@@ -156,23 +160,35 @@ export async function seed() {
     content: doc(
       p("Reading notes on ", m(tis), " by ", m(meadows), ". One section per chapter; my own words first, quotes second."),
       h(2, "1. The basics"),
-      p("A system is more than the sum of its parts because of the ", b("interconnections"), ". Change the parts and little happens; change the connections and the whole thing behaves differently. This is the idea I keep coming back to for LeadingLight: the links between notes matter more than the notes."),
+      p("A system is more than the sum of its parts because of the ", b("interconnections"), ". ", noted("note0001", "Change the parts and little happens; change the connections and the whole thing behaves differently."), " This is the idea I keep coming back to for LeadingLight: the links between notes matter more than the notes."),
       p("Two building blocks: ", m(stocks), " and ", m(loops), ". Everything else in the book is built from them."),
       quote("The behavior of a system cannot be known just by knowing the elements of which the system is made."),
       h(2, "2. A brief visit to the systems zoo"),
       ul(["One stock with two competing balancing loops: a thermostat. The room never sits exactly at the set point."], ["One stock with one reinforcing and one balancing loop: population, capital, any growth that eventually meets a limit."], ["Two stocks: a renewable resource and the industry that draws on it. Overshoot comes from delays."]),
       todo([true, "Draw the thermostat loop by hand"], [false, "Reread the renewable resource example with the delay marked"], [false, "Ask ", m(sam), " whether delays explain our release slips"]),
       h(2, "3. Why systems work so well"),
-      p("Resilience, self-organization, hierarchy. Resilience is a stock too: it drains quietly and you only notice when it is gone."),
+      p("Resilience, self-organization, hierarchy. ", noted("note0002", "Resilience is a stock too: it drains quietly and you only notice when it is gone.")),
       p("The hierarchy point is useful for the app: subsystems should serve the whole, but each needs room to run itself. A project's agents are a subsystem."),
       hr(),
       h(2, "Delays"),
       p("Meadows keeps returning to delays. A delay in a balancing loop produces oscillation; a long delay in a reinforcing loop produces overshoot and collapse."),
+      p("Meadows learned the method from Jay Forrester at MIT. Her team's World3 model, built at MIT for the Club of Rome, grew out of Forrester's World2 and showed overshoot on the scale of a planet."),
       p("The point about delays in a feedback loop is that"),
     ),
   });
 
-  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
+  // Its two sidenotes keep their text in its Thoughts page (DECISIONS.md, 11).
+  const thought = (id, quote, words) => ({ type: "thought", attrs: { id, source: notes, quote }, content: [p(words)] });
+  const thoughts = await make("thoughts", {
+    title: "Thoughts", typeId: "page", createdAt: at(5, 21), updatedAt: at(1, 22), properties: { parent: notes, role: "thoughts" },
+    content: doc(
+      thought("note0001", "Change the parts and little happens; change the connections and the whole thing behaves differently.", "This is the case for links over folders."),
+      thought("note0002", "Resilience is a stock too: it drains quietly and you only notice when it is gone.", "Our release process: fine until the week it isn't."),
+    ),
+  });
+  await savePage(notes, { properties: { tags: [reading, systems], icon: { kind: "emoji", value: "📘" }, thoughts } });
+
+  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour, as Meadows puts it.")) });
 
   // Other pages
   const weekly = await make("weekly", {

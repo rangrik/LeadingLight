@@ -94,6 +94,8 @@ export type BlockEditorHandle = {
   setBlock: (index: number, block: EditorDoc, count?: number) => void;
   // Notes added or taken off in another editor of the same report (onNoteSteps there).
   applySteps: (steps: unknown[]) => void;
+  // ⇧⌘M from outside the page (a button beside it); false when the cursor isn't in the page.
+  addNote: () => boolean;
 };
 
 // Where "Add to essay" sends selected words.
@@ -456,8 +458,8 @@ export function BlockEditor({
     };
   }, [editor, counting, countGrammar]);
 
-  // Dev-only hook so QA scripts can read editor state.
-  if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
+  // Dev-only hook so QA scripts can read editor state: the page's body, not a field beside it.
+  if (import.meta.env.DEV && !readOnly && label === "Page body") (window as unknown as { __editor: unknown }).__editor = editor;
 
   // Words whose thought is gone (its Thoughts page or block was deleted) stop being noted, each
   // time the notes (re)load.
@@ -624,6 +626,7 @@ export function BlockEditor({
         editor.view.dispatch(closeHistory(editor.state.tr));
         touched.current = true;
       },
+      addNote: () => editor.view.hasFocus() && editor.commands.addSidenote(),
       // A report's words never change, so a step from another editor of it lands in the same place.
       applySteps: (steps) => {
         const tr = editor.state.tr.setMeta(fromElsewhere, true).setMeta("addToHistory", false);

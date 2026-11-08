@@ -7,7 +7,8 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
-import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
+import { closeTab, cycleTab, focusedPage, newTab, reopenTab, travel } from "~/lib/panes";
+import { toggleReading } from "~/lib/reading";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
@@ -76,6 +77,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "grammar":
         case "count":
           return toggleTool(id);
+        case "reading":
+          return useStore.getState().view.kind === "settings" ? undefined : toggleReading(focusedPage());
       }
     };
     const onKey = (e: KeyboardEvent) => {
