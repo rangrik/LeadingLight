@@ -1,5 +1,6 @@
 import { ArrowDown, ArrowUp, CalendarDays, CornerDownLeft, Globe, Plus, Settings } from "lucide-react";
-import { Fragment, type ReactNode, useMemo, useRef, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useRef } from "react";
+import { flushSync } from "react-dom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import {
@@ -35,17 +36,30 @@ import { newPage } from "~/lib/templates";
 
 // Quick open (features/search.feature): ⌘K, a few letters of a page's name, Enter.
 export const quickOpen = createStore(false);
-// Where the keyboard was, noted here: the field's autoFocus takes it before Base UI can. Base UI
-// reads finalFocus only once the switcher has gone, so chose is cleared on the next open.
+// Where the keyboard was, and the cursor in it, noted here: the field's autoFocus takes them first.
 let back: HTMLElement | null = null;
-let chose = false;
+let cursor: Range | null = null;
+// Closed with no choice (Esc, a click outside, ⌘K): the keyboard goes back at once, not after the
+// fade, and the cursor with it, so a letter typed straight away lands where it was.
+const dismiss = () => {
+  flushSync(() => quickOpen.set(false));
+  if (!back?.isConnected) return;
+  back.focus();
+  const s = getSelection();
+  if (!back.isContentEditable || !cursor || !s) return;
+  s.removeAllRanges();
+  s.addRange(cursor);
+};
+// The field, emptied on opening: a ⌘K during the last close's fade still starts afresh.
+const typed = createStore("");
 export const toggleQuickOpen = () => {
-  if (!quickOpen.get()) {
-    const a = document.activeElement;
-    back = a instanceof HTMLElement && a !== document.body ? a : null;
-    chose = false;
-  }
-  quickOpen.set(!quickOpen.get());
+  if (quickOpen.get()) return dismiss();
+  const a = document.activeElement;
+  back = a instanceof HTMLElement && a !== document.body ? a : null;
+  const s = getSelection();
+  cursor = s?.rangeCount ? s.getRangeAt(0) : null;
+  typed.set("");
+  quickOpen.set(true);
 };
 
 type How = { shiftKey: boolean; metaKey: boolean };
@@ -103,27 +117,26 @@ function groupsFor(query: string, s: Space, mobile: boolean, keys: (id: string) 
     .map((p) => ({ p, r: Math.min(...names(p).map((n) => rank(title, n) ?? Infinity)) }))
     .filter((h) => h.r < Infinity)
     .sort((a, b) => a.r - b.r || b.p.updatedAt - a.p.updatedAt);
-  const create: Row = { value: "new", label: `New page “${title}”`, icon: <Plus className="size-4 shrink-0 text-muted-foreground" />, pane: true, run: (how) => newPage(PAGE_TYPE, { title }).then((obj) => openFrom(obj.id, how)) };
+  const create: Row = { value: "new", label: `New page “${title}”`, icon: icon(Plus), pane: true, run: (how) => newPage(PAGE_TYPE, { title }).then((obj) => openFrom(obj.id, how)) };
   // Commands match by a word's start, never by scattered letters.
   const cmds = all.map((c) => ({ c, r: rank(title, c.label) ?? 3 })).filter((x) => x.r < 3).sort((a, b) => a.r - b.r);
   // Commands come second, unless one is named better than any page ("today", "sett").
   const ahead = (cmds[0]?.r ?? 3) < (hits[0]?.r ?? 3);
-  // Fifty pages are plenty to scroll; more letters narrow them.
-  const pages: Group = { value: "pages", label: ahead ? "Pages" : undefined, items: hits.slice(0, 50).map((h) => pageRow(h.p)) };
+  // Twenty rows keep each key quick to draw; more letters narrow them.
+  const pages: Group = { value: "pages", label: ahead ? "Pages" : undefined, items: hits.slice(0, 20).map((h) => pageRow(h.p)) };
   const commandsGroup: Group = { value: "commands", label: "Commands", items: cmds.map((x) => x.c) };
   const exact = hits[0]?.r === 0 || cmds[0]?.r === 0;
   return [...(ahead ? [commandsGroup, pages] : [pages, commandsGroup]), { value: "new", items: exact ? [] : [create] }].filter((g) => g.items.length);
 }
 
-// Once the switcher has gone (the page behind is inert till then), a page opened takes the
-// keyboard; anything else that left it nowhere (Captures) gives it back.
+// A page opened takes the keyboard once its editor is drawn; anything else that left it nowhere
+// once the switcher has gone (Captures) gives it back.
 function settle(pane: boolean, tries = 60) {
   const card = document.querySelector(`[data-pane="${panes.get().focus}"]`);
   const editor = card?.querySelector<HTMLElement>(".ProseMirror[contenteditable=true]");
-  const gone = !document.querySelector("[data-slot=command-dialog-popup]");
-  if (gone && !pane) return void (document.activeElement === document.body && back?.isConnected && back.focus());
-  if (gone && card?.contains(document.activeElement)) return;
-  if (gone && editor) return editor.focus();
+  if (pane && card?.contains(document.activeElement)) return;
+  if (pane && editor) return editor.focus();
+  if (!pane && !document.querySelector("[data-slot=command-dialog-popup]")) return void (document.activeElement === document.body && back?.isConnected && back.focus());
   if (tries) requestAnimationFrame(() => settle(pane, tries - 1));
 }
 
@@ -140,7 +153,7 @@ export function QuickOpen() {
   const s = space.use();
   const mobile = useMobile();
   const keys = useKeysFor();
-  const [query, setQuery] = useState("");
+  const query = typed.use();
   // Base UI runs a plain Enter itself but ignores ⇧↩ and ⌘↩, which run the highlighted row here.
   const highlighted = useRef<Row>(undefined);
   const groups = useMemo(() => (open ? groupsFor(query, s, mobile, keys) : []), [open, query, s, mobile, keys]);
@@ -149,21 +162,16 @@ export function QuickOpen() {
 
   const choose = (row: Row, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => {
     const how = { shiftKey: e.shiftKey, metaKey: e.metaKey || e.ctrlKey };
-    chose = true;
     quickOpen.set(false);
     if (row.pane && useStore.getState().view.kind === "settings") closeSettings();
     void Promise.resolve(row.run(how)).then(() => settle(row.pane), console.error);
   };
 
   return (
-    <CommandDialog onOpenChange={quickOpen.set} onOpenChangeComplete={(o) => o || setQuery("")} open={open}>
-      <CommandDialogPopup
-        aria-label="Quick open"
-        className="max-h-[min(32rem,80vh)] max-w-[560px] sm:mt-[2vh]"
-        finalFocus={() => !chose && !!back?.isConnected && back}
-        style={{ left }}
-      >
-        <Command items={groups} mode="none" onItemHighlighted={(row) => void (highlighted.current = row as Row | undefined)} onValueChange={setQuery} value={query}>
+    <CommandDialog onOpenChange={(o) => o || dismiss()} open={open}>
+      {/* The keyboard is moved by dismiss and settle, without waiting for the fade. */}
+      <CommandDialogPopup aria-label="Quick open" className="max-h-[min(32rem,80vh)] max-w-[560px] sm:mt-[2vh]" finalFocus={false} style={{ left }}>
+        <Command items={groups} mode="none" onItemHighlighted={(row) => void (highlighted.current = row as Row | undefined)} onValueChange={typed.set} value={query}>
           <CommandInput
             onKeyDown={(e) => {
               if (e.key !== "Enter" || !(e.shiftKey || e.metaKey || e.ctrlKey) || !highlighted.current) return;
