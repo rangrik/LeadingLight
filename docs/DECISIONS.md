@@ -804,3 +804,17 @@ disconnects retain only the credentials needed to remove old push subscriptions 
 
 References: [Paseo connectivity](https://paseo.sh/docs/connectivity.md),
 [Paseo security](https://paseo.sh/docs/security.md).
+
+## 42. iPhone and iPad follow Liquid Glass in CSS (2026-11-08)
+
+The iOS app is a web view, so system Liquid Glass only reaches system UI (keyboard, alerts, Quick
+Look). Our bars imitate it in CSS, scoped to iOS so the Mac is unchanged. Glass goes on controls only,
+never on content: the iPhone's floating tab bar and the round bar buttons. Its fill is the popover
+colour at 85%, so bar words stay 4.5:1 over text in every theme (`contrast.ts` checks it). Only the
+iPhone tab bar blurs; nothing typed sits beneath it. Top bars are iOS 27's opaque band with a short
+fade, not floating glass, which keeps the keyboard and caret handling as it was. The iPad sidebar
+runs edge to edge (iPadOS 27) and pages are flat. Menus, sheets and toasts stay opaque because
+muted text fails on any glass. Capture leaves the tab bar: tabs move between screens, actions don't.
+The app icon is a layered Icon Composer file, so iOS gives it the dark, clear and tinted looks.
+Real native bars (lensing, the Liquid Glass slider, Reduce Transparency) are deferred; see DEFERRED.
+

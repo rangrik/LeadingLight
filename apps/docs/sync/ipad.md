@@ -39,13 +39,21 @@ The app fits the window it is given, including a narrow window beside another ap
 
 Light and dark follow the iPad's own appearance setting.
 
+## The look
+
+The app follows iPadOS's glass design. The sidebar runs from the top edge of the screen to the
+bottom, and the page fills the rest with no frame around it. Toolbar buttons sit on round glass
+buttons: the sidebar button on its own, Back and Forward together, and the page's actions together.
+Text fades out under the toolbar as you scroll. Dialogs dim what is behind them without blurring it.
+
 ## The onscreen keyboard and rotation
 
 When the onscreen keyboard opens, the app shrinks to the space left above it, so you can scroll the
 page and keep the line you are writing in view. Controls stay clear of the status bar and the home
 indicator.
 
-The area around the home indicator matches the sidebar in both light and dark appearance.
+Above and below the sidebar its colour reaches the screen's edges; above and below the page, the
+page's colour does, in both light and dark appearance.
 
 Rotate the iPad while you write and the cursor stays in view above the keyboard, with your text,
 selection and focus kept. You don't need to type or tap again. If you scroll up to read right after

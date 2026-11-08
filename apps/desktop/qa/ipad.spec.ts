@@ -181,3 +181,20 @@ test("viewport changes reveal the caret and keep focus", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--ll-viewport-height"))).toBe("700px");
   await expect(title).toBeFocused();
 });
+
+// The safe areas must match what sits beside them; a lighter band once showed under the page.
+test("safe areas continue the sidebar and the page", async ({ page }) => {
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.goto("/?ipad");
+  await page.evaluate(() => { const s = document.documentElement.style; s.setProperty("--ll-env-top", "24px"); s.setProperty("--ll-env-bottom", "20px"); });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator(".ll-card").first()).toBeVisible();
+    const got = await page.evaluate(() => {
+      const bg = (sel: string) => getComputedStyle(document.querySelector(sel)!).backgroundColor;
+      const side = document.querySelector('[data-slot="sidebar-container"]')!.getBoundingClientRect();
+      return { top: side.top, bottom: side.bottom, height: innerHeight, side: bg('[data-slot="sidebar-container"]'), inner: bg('[data-slot="sidebar-inner"]'), body: bg("body"), card: bg(".ll-card") };
+    });
+    expect(got).toMatchObject({ top: 0, bottom: got.height, side: got.inner, body: got.card });
+  }
+});

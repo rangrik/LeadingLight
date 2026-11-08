@@ -10,8 +10,24 @@ Use a Mac with Xcode, CocoaPods, pnpm and rustup. Run `pnpm install`, then `pnpm
 The official Tauri initializer generates `apps/desktop/src-tauri/gen/apple/`; that folder is
 ignored, while the iOS configuration, permissions and icons are source-controlled.
 
-The iOS icons use `icons/app-icon.svg`, matching the Mac's cream mark on an ink background.
-From the repository root, regenerate them without changing the Mac icons:
+The iOS icon is `icons/AppIcon.icon`, an Icon Composer file: the cream mark in
+`Assets/glyph.svg` (the same place and size as `icons/app-icon.svg`) on the ink `fill` in
+`icon.json`. iOS 26 and later give it glass and the dark, clear and tinted Home Screen looks;
+Xcode makes flat icons from it for older iOS. Edit it in Icon Composer, or change those two
+files, then check every look with Xcode's own renderer:
+
+```sh
+"/Applications/Xcode.app/Contents/Applications/Icon Composer.app/Contents/Executables/ictool" \
+  apps/desktop/src-tauri/icons/AppIcon.icon --export-image --output-file /tmp/icon.png \
+  --platform iOS --rendition TintedDark --width 1024 --height 1024 --scale 1
+```
+
+`scripts/ios.sh` copies it into the generated project, and `pnpm ios:init` adds it as one file
+(XcodeGen before 2.45.1 needs a `fileTypes` option for that, which the script adds). With both
+present, Xcode uses the `.icon` over the PNG set below.
+
+The PNG set in `icons/ios` comes from `icons/app-icon.svg`. From the repository root, regenerate
+it without changing the Mac icons:
 
 ```sh
 pnpm --filter @leadinglight/desktop exec tauri icon src-tauri/icons/app-icon.svg \

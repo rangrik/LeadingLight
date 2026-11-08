@@ -48,7 +48,7 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
+import { focusedPage, openFresh, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
 import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
@@ -162,7 +162,7 @@ export default function App() {
 
   const create = useCallback(() => {
     newPage(PAGE_TYPE)
-      .then((obj) => openPage(obj.id))
+      .then((obj) => (phone ? openFresh : openPage)(obj.id))
       .catch(console.error);
   }, []);
 

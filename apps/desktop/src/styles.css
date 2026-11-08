@@ -79,23 +79,29 @@
 @container (width >= 960px) { .ll-page[data-page-toc] { --toc: 200px; } }
 @container (width < 1168px) { .ll-page[data-page-notes][data-page-toc] { --toc: 60px; } }
 
-/* iPad's keyboard and safe areas leave one measured region for the app and its sidebars. */
+/* iPad's keyboard and safe areas leave one measured region for the app and its sidebars.
+   --ll-env-* let QA stand in a notch: a browser reports every env() inset as 0. */
 html[data-ipad] {
-  --ll-top: calc(var(--ll-viewport-top, 0px) + env(safe-area-inset-top));
-  --ll-height: calc(var(--ll-viewport-height, 100dvh) - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  --ll-safe-top: var(--ll-env-top, env(safe-area-inset-top));
+  --ll-safe-bottom: var(--ll-env-bottom, env(safe-area-inset-bottom));
+  --ll-safe-left: var(--ll-env-left, env(safe-area-inset-left));
+  --ll-safe-right: var(--ll-env-right, env(safe-area-inset-right));
+  --ll-top: calc(var(--ll-viewport-top, 0px) + var(--ll-safe-top));
+  --ll-height: calc(var(--ll-viewport-height, 100dvh) - var(--ll-safe-top) - var(--ll-safe-bottom));
   overscroll-behavior: none;
 }
-/* The home-indicator area belongs to the iPad shell, outside its safe content bounds. */
-html[data-ipad]:not([data-phone]), html[data-ipad]:not([data-phone]) body { background: var(--sidebar); }
-[data-ipad] #root { position: fixed; top: var(--ll-top); inset-inline: env(safe-area-inset-left) env(safe-area-inset-right); height: var(--ll-height); }
+[data-ipad] #root { position: fixed; top: var(--ll-top); inset-inline: var(--ll-safe-left) var(--ll-safe-right); height: var(--ll-height); }
 [data-ipad] .ll-shell { height: var(--ll-height); min-height: 0; }
 [data-ipad] .ll-inset { height: var(--ll-height); }
-[data-ipad] [data-slot="sidebar-container"] { top: var(--ll-top); height: var(--ll-height); }
-[data-ipad] [data-slot="sidebar"][data-mobile] { top: var(--ll-top); height: var(--ll-height); }
+/* iPadOS 27 sidebars run edge to edge; their colour fills the safe areas above and below. */
+[data-ipad] :is([data-slot="sidebar-container"], [data-slot="sidebar"][data-mobile]) {
+  top: var(--ll-viewport-top, 0px); height: var(--ll-viewport-height, 100dvh);
+  padding-block: var(--ll-safe-top) var(--ll-safe-bottom); background: var(--sidebar);
+}
 [data-ipad] .ll-settings { top: var(--ll-top); bottom: auto; height: var(--ll-height); }
 [data-ipad] .ll-capture-overlay { top: calc(var(--ll-top) + 12px); }
 [data-ipad] .ll-capture-box { max-height: calc(var(--ll-height) - 24px); }
-[data-ipad] [data-page-scroller] { overscroll-behavior: contain; scroll-padding-bottom: 24px; }
+[data-ipad] [data-page-scroller] { overscroll-behavior: contain; scroll-padding-top: 12px; scroll-padding-bottom: 24px; }
 /* The keyboard changes the visible region without changing viewport units. */
 [data-ipad] .ll-mobile-agents {
   container: mobile-agents / size;
@@ -142,9 +148,6 @@ html[data-ipad]:not([data-phone]), html[data-ipad]:not([data-phone]) body { back
 [data-ipad] [data-slot="alert-dialog-popup"]:has(.ll-mobile-agent-dismiss) [data-slot="alert-dialog-header"] { min-height: 0; overflow-y: auto; padding: 12px; }
 [data-ipad] [data-slot="alert-dialog-popup"]:has(.ll-mobile-agent-dismiss) [data-slot="alert-dialog-footer"] { flex-direction: row; flex-shrink: 0; padding: 4px 8px; }
 [data-ipad] [data-slot="alert-dialog-popup"]:has(.ll-mobile-agent-dismiss) button { min-height: 44px; }
-@media (min-width: 768px) {
-  [data-ipad] .ll-inset { height: calc(var(--ll-height) - 1rem); }
-}
 @media (pointer: coarse) {
   [data-slot="sidebar-menu-button"] { min-height: 44px; }
   [data-tab] [aria-label="Close tab"], [data-slot="sidebar-menu-action"] { opacity: 1; }
@@ -163,15 +166,20 @@ html[data-ipad]:not([data-phone]), html[data-ipad]:not([data-phone]) body { back
 [data-phone] .ll-note { position: relative; top: auto !important; left: auto !important; width: 100%; margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
 [data-phone] .ll-note-line { display: none; }
 [data-phone] .ll-note-remove { opacity: 1; }
-[data-phone] .ll-phone [data-pane] { border-radius: 0; }
-[data-phone] .ll-phone [data-pane] > header > div:first-child { flex: 1 1 0; padding-inline: 12px; }
+[data-ipad] .ll-card { border-radius: 0; box-shadow: none; }
+[data-phone] .ll-phone [data-pane] > header > div:first-child { flex: 1 1 0; padding-inline: 16px 0; }
+/* The phone capture is a large sheet: rounded top below the status bar, attached to the other edges. */
 [data-phone] .ll-phone-capture {
-  position: fixed; top: var(--ll-top); inset-inline: env(safe-area-inset-left) env(safe-area-inset-right);
-  height: var(--ll-height); max-height: var(--ll-height); width: auto; max-width: none;
-  border: 0; border-radius: 0; transform: none;
+  position: fixed; top: var(--ll-top); inset-inline: 0;
+  height: calc(var(--ll-height) + var(--ll-safe-bottom)); max-height: none; width: auto; max-width: none;
+  padding: 0 var(--ll-safe-right) var(--ll-safe-bottom) var(--ll-safe-left);
+  border: 0; border-radius: var(--radius-2xl) var(--radius-2xl) 0 0; transform: none;
 }
-[data-phone] .ll-phone-capture .ll-capture-box { height: 100%; max-height: none; border: 0; border-radius: 0; }
-[data-phone] .ll-phone-capture .ll-capture-box::before { display: none; }
+/* The keyboard covers the home indicator, so its room goes back to the words. */
+[data-phone][data-keyboard] .ll-phone-capture { padding-bottom: 0; }
+[data-phone] .ll-phone-capture .ll-capture-box { height: 100%; max-height: none; border: 0; border-radius: inherit; }
+[data-phone] :is(.ll-phone-capture, .ll-phone-capture .ll-capture-box)::before { display: none; }
+[data-phone] .ll-phone-capture .ll-capture-box > header { padding-inline: 16px; border-bottom-color: transparent; --ll-fade: var(--popover); }
 [data-phone] .ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; }
 /* Shipyard's settings rows keep their controls in one lane on larger screens. */
 [data-phone] .ll-settings .min-h-14.gap-8 { flex-direction: column; align-items: stretch; gap: 12px; }
@@ -179,6 +187,115 @@ html[data-ipad]:not([data-phone]), html[data-ipad]:not([data-phone]) body { back
 [data-phone] .ll-settings .px-page { padding-inline: 20px; }
 @media (prefers-reduced-motion: reduce) {
   [data-phone] *, [data-phone] *::before, [data-phone] *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
+}
+
+/* iOS bars imitate Liquid Glass on controls only, never on content (decision 42).
+   85% keeps bar words at 4.5:1 over text in all 23 themes (contrast.ts GLASS). */
+html[data-ipad] {
+  --ll-glass-fill: color-mix(in srgb, var(--popover) 85%, transparent);
+  --ll-glass-blur: saturate(180%) blur(20px);
+  /* Opaque, so a selected tab's words never sit on see-through glass (contrast.ts). */
+  --ll-glass-selected: color-mix(in srgb, var(--foreground) 14%, var(--popover));
+  --ll-glass-edge: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 8%, transparent),
+                   inset 0 1px 0 color-mix(in srgb, var(--color-white) 50%, transparent);
+  --ll-glass-shadow: 0 1px 2px color-mix(in srgb, var(--color-black) 6%, transparent),
+                     0 8px 20px -6px color-mix(in srgb, var(--color-black) 18%, transparent);
+}
+html[data-ipad].dark {
+  --ll-glass-edge: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 14%, transparent),
+                   inset 0 1px 0 color-mix(in srgb, var(--color-white) 10%, transparent);
+  --ll-glass-shadow: 0 1px 2px color-mix(in srgb, var(--color-black) 30%, transparent),
+                     0 8px 20px -6px color-mix(in srgb, var(--color-black) 50%, transparent);
+}
+/* Increase Contrast: opaque, unblurred, edged in the text colour. After .dark, so it wins. */
+@media (prefers-contrast: more) {
+  html[data-ipad], html[data-ipad].dark {
+    --ll-glass-fill: var(--popover); --ll-glass-blur: none; --ll-glass-edge: inset 0 0 0 1px var(--foreground);
+  }
+  [data-phone] .ll-tabbar [aria-current="page"] { box-shadow: inset 0 0 0 1px var(--foreground); }
+}
+/* Above the bar's fade, so the fade never cuts the glass's shadow. */
+[data-ipad] :is(.ll-glass, [data-slot="sidebar-trigger"], [data-history], [data-actions]:not(:empty)) {
+  position: relative; z-index: 1;
+  background: var(--ll-glass-fill); border-color: transparent; border-radius: 9999px;
+  box-shadow: var(--ll-glass-edge), var(--ll-glass-shadow);
+}
+[data-ipad] :is(.ll-glass, [data-history], [data-actions]) > button { border-radius: 9999px; transition: background-color 150ms ease-out; }
+[data-ipad] :is(button.ll-glass, [data-slot="sidebar-trigger"], :is(.ll-glass, [data-history], [data-actions]) > button):active { background-color: var(--accent); }
+/* Live blur only where content passes beneath and nothing is typed beneath: the phone tab capsule. */
+[data-ipad] .ll-glass-live { -webkit-backdrop-filter: var(--ll-glass-blur); backdrop-filter: var(--ll-glass-blur); }
+
+/* iOS 27's top edge effect: the bar stays opaque and fades 12 px into what scrolls below it. */
+[data-ipad] :is(.ll-card, .ll-settings .ll-inset, .ll-phone-capture .ll-capture-box) > header, [data-ipad] .ll-phone-top { position: relative; z-index: 1; }
+[data-ipad] :is(.ll-card, .ll-settings .ll-inset, .ll-phone-capture .ll-capture-box) > header::after, [data-ipad] .ll-phone-top::after {
+  content: ""; position: absolute; inset-inline: 0; top: 100%; height: 12px; pointer-events: none;
+  background: linear-gradient(var(--ll-fade, var(--background)), transparent);
+}
+html[data-ipad]:not([data-phone]) [data-tab-row] { border-bottom-color: transparent; }
+
+/* Bar buttons on glass: one capsule per group, 16 px from the bar's edges (HIG Toolbars). */
+[data-ipad] [data-slot="sidebar-trigger"] { width: 44px; height: 44px; margin-inline-start: 0; }
+[data-ipad] [data-slot="sidebar-trigger"] + [data-slot="separator"] { display: none; }
+[data-ipad] [data-history] { margin-inline-start: 0; }
+[data-ipad] [data-actions] { margin-inline-end: 8px; }
+[data-ipad] :is([data-history], [data-actions]) > * { width: 44px; height: 44px; }
+html[data-ipad]:not([data-phone]) :is([data-history], [data-actions]) { padding: 4px; }
+html[data-ipad]:not([data-phone]) :is([data-history], [data-actions]) > * { width: 36px; height: 36px; }
+
+/* iPhone tab bar: a glass capsule floating over the content (HIG Tab bars). */
+html[data-phone] {
+  --ll-tabbar-height: 56px;
+  --ll-tabbar-bottom: max(16px, calc(var(--ll-safe-bottom) - 12px));
+  /* From #root's bottom (the safe line) to 16 px above the bar. */
+  --ll-tabbar-room: calc(var(--ll-tabbar-bottom) + var(--ll-tabbar-height) + 16px - var(--ll-safe-bottom));
+}
+html[data-phone][data-keyboard] { --ll-tabbar-room: 24px; }
+@media (orientation: landscape) and (max-height: 500px) {
+  html[data-phone] { --ll-tabbar-height: 52px; }
+  [data-phone] .ll-tabbar .ll-glass > button { flex-direction: row; gap: 6px; font-size: 12px; }
+}
+/* Its bottom follows the visible viewport, so a hardware keyboard's shortcut bar never covers it. */
+[data-phone] .ll-tabbar {
+  position: fixed; inset-inline: 0; bottom: calc(100% - var(--ll-viewport-top, 0px) - var(--ll-viewport-height, 100%));
+  z-index: 30; pointer-events: none;
+  display: flex; justify-content: center; align-items: center; gap: 12px;
+  padding: 0 max(16px, var(--ll-safe-right)) var(--ll-tabbar-bottom) max(16px, var(--ll-safe-left));
+  /* The bottom edge effect: opaque below the safe line, then a 24 px fade. */
+  background: linear-gradient(to top, var(--background) var(--ll-safe-bottom), transparent calc(var(--ll-safe-bottom) + 24px));
+}
+[data-phone] .ll-tabbar > * { pointer-events: auto; }
+[data-phone] .ll-tabbar [aria-current="page"] { background-color: var(--ll-glass-selected); font-weight: 600; }
+/* Only the keyboard or a modal covers the tab bar; Settings stops at the safe line, so it hides. */
+[data-phone][data-keyboard] .ll-tabbar, [data-phone] .ll-shell[inert] .ll-tabbar { visibility: hidden; }
+/* Sized here: COSS's sm: button height would make it an oval in landscape. */
+[data-phone] .ll-tabbar > [data-quick-capture] {
+  width: var(--ll-tabbar-height); height: var(--ll-tabbar-height);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 16%, transparent), var(--ll-glass-shadow);
+}
+[data-phone] .ll-phone [data-page-scroller] { padding-bottom: var(--ll-tabbar-room); scroll-padding-bottom: var(--ll-tabbar-room); }
+
+/* Sheets and alerts dim what is behind them without blurring it (HIG Sheets). */
+[data-ipad] [data-slot$="-backdrop"] { -webkit-backdrop-filter: none; backdrop-filter: none; }
+[data-ipad] :is([data-slot="menu-item"], [data-slot="menu-checkbox-item"], [data-slot="menu-radio-item"],
+  [data-slot="menu-sub-trigger"], [data-slot="menu-link-item"], [data-slot="select-item"]) { min-height: 44px; }
+/* COSS's bottom-stuck phone dialog (max-sm:rounded-none) becomes a sheet clear of the home indicator. */
+@media (max-width: 639.98px) {
+  [data-phone] [data-slot="dialog-popup"][class*="max-sm:rounded-none"]:not(.ll-phone-capture) {
+    width: 100%; border-start-start-radius: var(--radius-2xl); border-start-end-radius: var(--radius-2xl);
+    padding-bottom: var(--ll-safe-bottom);
+  }
+  /* A tinted footer reaches the bottom edge, with its buttons above the home indicator. */
+  [data-phone] [data-slot="dialog-popup"][class*="max-sm:rounded-none"]:not(.ll-phone-capture) > [data-slot="dialog-footer"].border-t {
+    margin-bottom: calc(-1 * var(--ll-safe-bottom)); padding-bottom: calc(1rem + var(--ll-safe-bottom));
+  }
+}
+/* Toasts sit above the home indicator, the tab bar and the keyboard. */
+html[data-ipad] { --ll-toast-lift: calc(var(--ll-safe-bottom) + 16px); }
+html[data-phone] { --ll-toast-lift: calc(var(--ll-tabbar-bottom) + var(--ll-tabbar-height) + 8px); }
+html[data-phone][data-keyboard] { --ll-toast-lift: 8px; }
+[data-phone] [data-slot="toast-viewport"] { --toast-inset: max(16px, var(--ll-safe-left), var(--ll-safe-right)); }
+[data-ipad] [data-slot="toast-viewport"][data-position*="bottom"] {
+  bottom: calc(100% - var(--ll-viewport-top, 0px) - var(--ll-viewport-height, 100%) + var(--ll-toast-lift));
 }
 
 html[data-authorship="true"] .ll-editor [data-origin="agent"] {

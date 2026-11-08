@@ -15,9 +15,12 @@ case "${1:-}" in
     icon_dir=src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset
     mkdir -p "$icon_dir"
     cp src-tauri/icons/ios/*.png "$icon_dir/"
+    # The layered Icon Composer icon wins over the PNGs; Xcode makes flat ones for older iOS.
+    rm -rf src-tauri/gen/apple/leadinglight-desktop_iOS/AppIcon.icon
+    cp -R src-tauri/icons/AppIcon.icon src-tauri/gen/apple/leadinglight-desktop_iOS/
     project_file=src-tauri/gen/apple/leadinglight-desktop.xcodeproj/project.pbxproj
-    if [[ "$1" != init && -f "$project_file" ]] && ! grep -q 'PrivacyInfo.xcprivacy in Resources' "$project_file"; then
-      echo "Run pnpm ios:init to include the privacy manifest in the Xcode project." >&2
+    if [[ "$1" != init && -f "$project_file" ]] && ! { grep -q 'PrivacyInfo.xcprivacy in Resources' "$project_file" && grep -q 'AppIcon.icon in Resources' "$project_file"; }; then
+      echo "Run pnpm ios:init to include the privacy manifest and app icon in the Xcode project." >&2
       exit 1
     fi
     ;;
@@ -25,6 +28,10 @@ esac
 
 if [[ "${1:-}" == init ]]; then
   pnpm tauri ios "$@"
+  # XcodeGen before 2.45.1 adds an .icon bundle's files one by one, and Xcode then ignores the icon.
+  project_spec=src-tauri/gen/apple/project.yml
+  grep -q '^  fileTypes:' "$project_spec" || perl -0pi -e 's/^options:\n/options:\n  fileTypes:\n    icon: { file: true, buildPhase: resources }\n/m' "$project_spec"
+  (cd src-tauri/gen/apple && xcodegen generate --quiet)
   # XcodeGen creates an empty file; signing/export selects the provisioned APNs environment.
   cp src-tauri/Entitlements.ios.plist src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
   exit 0

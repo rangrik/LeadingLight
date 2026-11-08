@@ -94,7 +94,7 @@ function SettingsSidebar({ current }: { current: SectionId }) {
   const mobile = useMobile();
   const { isMobile, state, setOpenMobile } = useSidebar();
   return (
-    <Sidebar inert={!isMobile && state === "collapsed"} variant="inset">
+    <Sidebar inert={!isMobile && state === "collapsed"} variant={mobile ? "sidebar" : "inset"}>
       <AppSidebarHeader subtitle="Settings" />
       <SidebarContent>
         <nav aria-label="Settings sections">

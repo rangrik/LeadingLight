@@ -134,3 +134,5 @@ on the original fixture note in portrait with the keyboard and capture box dismi
 Each immediate-background case was one trial. These passes do not establish correctness for
 every suspension timing. CaptureBox does not register with the shared lifecycle flush; that
 remains a code risk, although the capture trial did not reproduce lost text.
+
+The 2026-11-08 Liquid Glass checks for iPad and iPhone are in [QA_IPHONE.md](QA_IPHONE.md#liquid-glass--2026-11-08).

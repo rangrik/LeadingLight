@@ -78,7 +78,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           {after}
         </div>
       </div>
-      {children && <div className="ms-auto flex shrink-0 items-center">{children}</div>}
+      {children && <div className="ms-auto flex shrink-0 items-center" data-actions>{children}</div>}
     </header>
   );
 }

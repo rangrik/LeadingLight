@@ -84,7 +84,7 @@ export function AppSidebar({
   };
   const navigable = (items: typeof pages) => items.map((p) => ({ ...p, onSelect: select(p.onSelect), children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect) })) }));
   return (
-    <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
+    <Sidebar inert={!isMobile && state === "collapsed"} variant={mobile ? "sidebar" : "inset"} {...props}>
       <AppSidebarHeader subtitle="Notes" />
       <SidebarContent>
         <SidebarGroup className="pb-0">

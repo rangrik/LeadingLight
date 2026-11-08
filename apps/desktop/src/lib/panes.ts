@@ -157,6 +157,13 @@ export function openPage(page: string) {
   else showOnly(page);
 }
 
+// The phone opens a page from Today or Notes as a fresh start, so Back returns there (tab-row.tsx).
+export function openFresh(page: string) {
+  const here = paneOf(panes.get().focus);
+  if (!here) return showOnly(page);
+  if (here.page !== page) setLeaf(here.id, (l) => withTabs(l, l.tabs.map((t) => (t.id === l.active ? { ...t, pages: [page], at: 0 } : t))));
+}
+
 // ⌘-click: a new tab beside the front one, or the page where it is open.
 export function openTab(page: string) {
   if (phone) return openPage(page);

@@ -215,3 +215,29 @@ Native evidence includes `iphone-simulator-note.png`, `iphone-simulator-keyboard
 `iphone-simulator-rotation-before.jpg`, `iphone-simulator-final.jpg` and `ipad-simulator-scene-regression.png`.
 The 110px failure probes are `iphone-independent-{chromium,webkit}-110px-save-error.png`
 and `-110px-shorterror.png`.
+
+## Liquid Glass — 2026-11-08
+
+The contract is the glass scenarios in `features/iphone.feature` and `features/ipad.feature`;
+the design is decision 42. Checked in the browser build and on an iPhone 17 Pro simulator (iOS 26.5).
+
+- `iphone.spec.ts` and `ipad.spec.ts`: 26 of 26 across Chromium, iPhone WebKit and iPad WebKit,
+  including new seams for Back to the tab, the tab bar under the keyboard and a notched phone,
+  and the iPad safe-area colours. `pnpm check:themes` passes, with the new glass rows: the lowest
+  tab bar label is 4.74:1 (github-dark-dimmed).
+- Independent QA (Sonnet 5.5, xhigh) ran 30 checks at 375–1180 px in light and dark, with faked
+  notches and keyboards. It found the landscape capture button as an oval, the caret under the
+  top fade, a faint selected tab, Back walking through older notes and the fade cutting the glass
+  shadow. All were fixed and rechecked. A code review found the tab bar under a hardware
+  keyboard's shortcut bar, a strip under dialog footers and stale icon docs; also fixed.
+- The desktop app shows no design change in 112 screenshot pairs against the branch base.
+- Headless typing on a 2,000-paragraph page is no slower than before; blur on or off differs by
+  about 1 ms. Playwright WebKit does not paint `backdrop-filter`, so the blur's cost on a device
+  is unmeasured.
+- On the simulator, safe areas were real (top 62 pt, bottom 34 pt), the capsule sat 22 pt above
+  the bottom edge, only the capsule blurred, and the compiled app held the layered icon.
+- Not checked on hardware: the real keyboard hiding the tab bar, rotation, the glass beside iOS 27
+  system glass, Increase Contrast, and iPad window controls in a resized window. The device
+  steps are in the hand-off slides. The iPad simulator stuck on first boot, so iPad was checked in
+  WebKit only.
+

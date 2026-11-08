@@ -20,6 +20,7 @@ import { contrast, distance, mix, over } from "./color.ts";
 // - In a dark theme the editor's selected blocks stand clear of the page,
 //   further than a hovered row, with text on them 4.5:1, and an unticked
 //   to-do's edge is 3:1 (packages/editor/src/editor.css).
+// - iOS bar words are 4.5:1 on the bar glass, even with text of their own colour beneath it.
 
 export interface Check {
   what: string;
@@ -40,6 +41,10 @@ export const TINT = 0.16;
 export const BLOCK_TINT = 0.2;
 export const BOX_EDGE = 0.7;
 export const SEEN = 0.075;
+// The iOS bar glass: the popover at 85% (styles.css --ll-glass-fill), and its
+// selected tab: 14% of the text colour in the popover (--ll-glass-selected).
+export const GLASS = 0.85;
+export const GLASS_SELECTED = 0.14;
 
 const STATES = ["success", "warning", "destructive", "info"] as const;
 
@@ -52,6 +57,8 @@ export function checks(t: Theme): Check[] {
     text(`foreground on ${name}`, c.foreground, bg);
   }
   text("sidebarForeground on sidebar", c.sidebarForeground, c.sidebar);
+  text("foreground on iOS bar glass over text", c.foreground, over(c.popover, c.foreground, GLASS));
+  text("foreground on the iOS selected tab", c.foreground, mix(c.foreground, c.popover, GLASS_SELECTED));
   for (const [name, bg] of [["background", c.background], ["sidebar", c.sidebar], ["card", c.card], ["popover", c.popover]] as const) {
     text(`mutedForeground on ${name}`, c.mutedForeground, bg);
   }

@@ -8,6 +8,8 @@ export function watchViewport() {
     if (view && view.scale !== 1) return;
     root.style.setProperty("--ll-viewport-height", `${view?.height ?? window.innerHeight}px`);
     root.style.setProperty("--ll-viewport-top", `${view?.offsetTop ?? 0}px`);
+    // The onscreen keyboard; a hardware keyboard's shortcut bar (about 55 px) doesn't count.
+    root.toggleAttribute("data-keyboard", !!view && root.clientHeight - view.height > 120);
   };
   const reveal = () => {
     const editor = document.activeElement;
@@ -22,8 +24,10 @@ export function watchViewport() {
     const caret = range.getClientRects()[0] ?? node?.getBoundingClientRect();
     if (!caret?.height) return;
     const box = scroller.getBoundingClientRect();
-    const top = box.top + 12;
-    const bottom = box.bottom - 12;
+    // Scroll padding marks room under floating bars, such as the phone's tab bar.
+    const pad = getComputedStyle(scroller);
+    const top = box.top + (parseFloat(pad.scrollPaddingTop) || 12);
+    const bottom = box.bottom - (parseFloat(pad.scrollPaddingBottom) || 12);
     const delta = caret.bottom > bottom ? caret.bottom - bottom : caret.top < top ? caret.top - top : 0;
     if (delta) scroller.scrollTop += delta;
   };
@@ -61,5 +65,6 @@ export function watchViewport() {
     document.removeEventListener("visibilitychange", resume);
     root.style.removeProperty("--ll-viewport-height");
     root.style.removeProperty("--ll-viewport-top");
+    root.removeAttribute("data-keyboard");
   };
 }

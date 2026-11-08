@@ -1,7 +1,7 @@
 import { attachVoiceAsset, BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
 import type { Asset } from "@leadinglight/editor/assets";
 import type { LinkHost } from "@leadinglight/editor/links";
-import { CalendarDays, Check, Folder, Globe, Hash, Lightbulb, Mic } from "lucide-react";
+import { CalendarDays, Check, Folder, Globe, Hash, Lightbulb, Mic, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -327,9 +327,10 @@ export function CaptureBox({ host, className, embedded = false }: { host: Captur
             typeId="project"
           />
         </span>}
+        {/* A sheet's Close leads as a round ✕ and Save trails it (HIG Sheets). */}
         {phone && <>
-          <Button className="ms-auto" disabled={closing} onClick={() => void close()} variant="ghost">{web.busy ? "Cancel download" : "Close"}</Button>
-          <Button disabled={empty || closing || web.busy} onClick={() => webpage ? void saveWeb(false) : void close()}>{closing ? "Saving…" : "Save"}</Button>
+          <Button aria-label={web.busy ? "Cancel download" : "Close"} className="ll-glass order-first" disabled={closing} onClick={() => void close()} size="icon" variant="ghost"><X /></Button>
+          <Button className="ms-auto rounded-full" disabled={empty || closing || web.busy} onClick={() => webpage ? void saveWeb(false) : void close()}>{closing ? "Saving…" : "Save"}</Button>
         </>}
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col px-5 pt-3 pb-3.5", phone && "overflow-y-auto")} data-capture-scroller={phone || undefined}>

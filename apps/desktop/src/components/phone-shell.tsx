@@ -15,7 +15,7 @@ import { captured, captureOf } from "~/lib/capture-inbox";
 import { dayPage, dailyTitle, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
 import { docText, objects, type ObjectSummary } from "~/lib/objects";
-import { focusedPage, openPage, panes } from "~/lib/panes";
+import { focusedPage, openFresh, panes } from "~/lib/panes";
 import { flushAll, reportSaveError } from "~/lib/saving";
 import { iconFor, INBOX_VIEW, isPageView, pageOf, space, typeOf, typeView } from "~/lib/space";
 import { ABOUT } from "~/lib/tail-memory";
@@ -37,7 +37,7 @@ function NoteRows({ pages, onOpen }: { pages: ObjectSummary[]; onOpen: (id: stri
   </SidebarMenuItem>)}</SidebarMenu>;
 }
 
-function PhoneNotes({ active, onOpen, onCreate }: { active: boolean; onOpen: (id: string) => void; onCreate: () => void }) {
+function PhoneNotes({ active, onOpen }: { active: boolean; onOpen: (id: string) => void }) {
   const { pages, types } = space.use();
   const [query, setQuery] = useState("");
   const [matches, setMatches] = useState<string[]>([]);
@@ -63,10 +63,7 @@ function PhoneNotes({ active, onOpen, onCreate }: { active: boolean; onOpen: (id
   }, [needle, retry, active, pages]);
   const shown = pages.filter(visible).filter((p) => !needle || p.title.toLocaleLowerCase().includes(needle) || matches.includes(p.id)).sort(recent);
   return <>
-    <div className="flex items-center justify-between gap-3">
-      <h1 className="text-3xl font-semibold tracking-tight">Notes</h1>
-      <Button aria-label="New page" onClick={onCreate} size="icon" variant="outline"><Plus /></Button>
-    </div>
+    <h1 className="text-[34px] font-bold leading-[41px]">Notes</h1>
     <InputGroup className="mt-5">
       <InputGroupInput aria-label="Search notes" autoComplete="off" onChange={(e) => setQuery(e.target.value)} placeholder="Search your words" type="search" value={query} />
       <InputGroupAddon><Search aria-hidden="true" className="size-4" /></InputGroupAddon>
@@ -123,22 +120,32 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
       }
     });
   }, [loaded]);
-  const open = (id: string) => { openPage(id); setScreen("page"); };
+  const open = (id: string) => { openFresh(id); setScreen("page"); };
   const navigate = (next: Screen) => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     void flushAll().catch(reportSaveError);
     setScreen(next);
   };
+  // A page keeps the tab it was opened from selected, and Back at its first entry returns there.
+  const [tab, setTab] = useState<"today" | "notes">("today");
+  useEffect(() => { if (screen !== "page") setTab(screen); }, [screen]);
+  useEffect(() => {
+    const home = () => navigate(tab);
+    window.addEventListener("leadinglight:phone-home", home);
+    return () => window.removeEventListener("leadinglight:phone-home", home);
+  }, [tab]);
   const resume = pageOf(last) ?? pages.filter(visible).sort(recent)[0];
   const captures = captured(pages).sort((a, b) => captureOf(b)!.capturedAt - captureOf(a)!.capturedAt).slice(0, 3);
   return <div className="ll-phone flex min-h-0 min-w-0 flex-1 flex-col bg-background" style={{ "--header-height": "52px" } as React.CSSProperties}>
     <div className="relative flex min-h-0 flex-1 flex-col">
-    {screen !== "page" && <header className="flex h-14 shrink-0 items-center justify-between px-5">
-      <span className="text-sm font-medium text-muted-foreground">LeadingLight</span>
-      <Button aria-label="Settings" onClick={() => openSettings()} size="icon" variant="ghost"><Settings /></Button>
+    {screen !== "page" && <header className="ll-phone-top flex h-(--header-height) shrink-0 items-center justify-end px-4">
+      <div className="ll-glass flex">
+        {screen === "notes" && <Button aria-label="New page" onClick={onCreate} size="icon" variant="ghost"><Plus /></Button>}
+        <Button aria-label="Settings" onClick={() => openSettings()} size="icon" variant="ghost"><Settings /></Button>
+      </div>
     </header>}
-    {screen === "today" && <main aria-label="Today" className="min-h-0 flex-1 overflow-y-auto px-5 pb-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
+    {screen === "today" && <main aria-label="Today" className="min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-(--ll-tabbar-room) scroll-pb-(--ll-tabbar-room)">
+      <h1 className="text-[34px] font-bold leading-[41px]">Today</h1>
       <p className="mt-1 text-sm text-muted-foreground">{dailyTitle(day)}</p>
       <Button className="mt-7 min-h-12 w-full" disabled={!loaded} onClick={onCapture}><Plus />Capture a thought</Button>
       <p className="mt-2 text-center text-sm text-muted-foreground">Get it down. Sort it out later.</p>
@@ -154,18 +161,21 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
       </section>}
       {!loaded && <p className="mt-5 text-sm text-muted-foreground" role="status">Opening your notes…</p>}
     </main>}
-    <main aria-label="Notes" className={screen === "notes" ? "min-h-0 flex-1 overflow-y-auto px-5 pb-6" : "hidden"} inert={screen !== "notes" || undefined}>
-      <PhoneNotes active={screen === "notes"} onCreate={onCreate} onOpen={open} />
+    <main aria-label="Notes" className={screen === "notes" ? "min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-(--ll-tabbar-room) scroll-pb-(--ll-tabbar-room)" : "hidden"} inert={screen !== "notes" || undefined}>
+      <PhoneNotes active={screen === "notes"} onOpen={open} />
     </main>
     {/* WebKit loses scroll when display:none gives the editor a zero-height pane. */}
     <div className={`absolute inset-0 flex ${screen === "page" ? "" : "invisible pointer-events-none"}`} inert={screen !== "page" || undefined}>
       {root && <PaneArea lead={false} windowToggle={false} />}
     </div>
     </div>
-    <nav aria-label="Phone navigation" className="grid shrink-0 grid-cols-3 items-center gap-2 border-t bg-background px-4 py-2">
-      <Button aria-current={screen === "today" ? "page" : undefined} className="h-12 flex-col gap-0.5 text-xs" onClick={() => navigate("today")} variant={screen === "today" ? "secondary" : "ghost"}><CalendarDays />Today</Button>
-      <Button aria-label="Quick capture" className="h-12 flex-col gap-0.5 text-xs" data-quick-capture disabled={!loaded} onClick={onCapture}><Plus />Capture</Button>
-      <Button aria-current={screen === "notes" ? "page" : undefined} className="h-12 flex-col gap-0.5 text-xs" onClick={() => navigate("notes")} variant={screen === "notes" ? "secondary" : "ghost"}><FileText />Notes</Button>
+    {/* Tabs move between screens; Capture is an action, so it sits apart (HIG Tab bars). */}
+    <nav aria-label="Phone navigation" className="ll-tabbar">
+      <div className="ll-glass ll-glass-live grid h-(--ll-tabbar-height) max-w-[400px] flex-1 grid-cols-2 gap-1 p-1">
+        <Button aria-current={tab === "today" ? "page" : undefined} className="h-full flex-col gap-0.5 text-[10px] font-medium" onClick={() => navigate("today")} variant="ghost"><CalendarDays />Today</Button>
+        <Button aria-current={tab === "notes" ? "page" : undefined} className="h-full flex-col gap-0.5 text-[10px] font-medium" onClick={() => navigate("notes")} variant="ghost"><FileText />Notes</Button>
+      </div>
+      <Button aria-label="Quick capture" className="size-(--ll-tabbar-height) rounded-full" data-quick-capture disabled={!loaded} onClick={onCapture}><Plus /></Button>
     </nav>
   </div>;
 }

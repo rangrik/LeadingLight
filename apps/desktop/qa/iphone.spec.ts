@@ -19,6 +19,9 @@ test("phone home, offline writing, return and search", async ({ page, context, b
   await expect(page.getByRole("navigation", { name: "Bar", exact: true })).toHaveCount(0);
   await context.setOffline(true);
   await newNote(page, "Train", "Remember the headphones and charger");
+  // Back at a page's first entry returns to the tab it came from.
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("searchbox", { name: "Search notes" })).toBeVisible();
   await nav(page).getByRole("button", { name: "Today", exact: true }).click();
   await page.getByRole("button", { name: "Continue writing" }).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Remember the headphones and charger");
@@ -191,6 +194,7 @@ test("small phone, keyboard, landscape, navigation and settings", async ({ page,
   await expect(capture(page)).toBeHidden();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Keep the words in landscape too");
   await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
+  await expect(nav(page)).toBeHidden(); // the keyboard covers the tab bar
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => {
     Object.assign(window.visualViewport!, { height: 390, width: 844 });
@@ -229,4 +233,27 @@ test("iPhone user agent selects the phone shell and keeps links offline", async 
     await expect(capture(page)).toBeHidden();
     await expect(page.getByRole("region", { name: "Recent captures" })).toContainText("example.com");
   } finally { await context.close(); }
+});
+
+// A notched phone's last row must clear the floating tab bar, and the top bar must clear the notch.
+test("the tab bar floats clear of the home indicator", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 520 });
+  await page.goto("/?iphone");
+  await page.evaluate(() => { const s = document.documentElement.style; s.setProperty("--ll-env-top", "47px"); s.setProperty("--ll-env-bottom", "34px"); });
+  await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
+  await page.getByRole("main", { name: "Notes" }).evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  const sync = (await page.getByRole("button", { name: "Account and sync" }).boundingBox())!;
+  const tab = (await nav(page).getByRole("button", { name: "Notes", exact: true }).boundingBox())!;
+  expect(sync.y + sync.height).toBeLessThanOrEqual(tab.y);
+  expect(tab.y + tab.height).toBeLessThanOrEqual(520 - 16);
+  expect((await page.getByRole("button", { name: "Settings", exact: true }).boundingBox())!.y).toBeGreaterThanOrEqual(47);
+});
+
+// Pages opened from Today or Notes start a fresh history, so Back returns to the list, not an older note.
+test("Back from a second page opened in Notes returns to Notes", async ({ page }) => {
+  await page.goto("/?iphone");
+  await newNote(page, "First", "One");
+  await newNote(page, "Second", "Two");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByRole("searchbox", { name: "Search notes" })).toBeVisible();
 });

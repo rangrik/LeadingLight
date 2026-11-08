@@ -38,7 +38,7 @@ import { toolsOn, useWritingPrefs } from "~/lib/writing";
 type Size = { w: number; h: number; header: number };
 
 // A page's card: the sidebar-08 inset panel's look, one per open page.
-export const CARD = "bg-background md:rounded-xl md:shadow-sm/5";
+export const CARD = "ll-card bg-background md:rounded-xl md:shadow-sm/5";
 const GAP = 8; // between cards, as between a card and the window's edge
 // A control on a card that isn't in front: there on hover, or while it has focus or is open.
 const BACK_CARD = "opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 data-popup-open:opacity-100";
@@ -154,6 +154,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
           const folded = !phone && !isMobile && front && folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
+          // Touch has no hover: on iOS every pane shows its buttons, so none sit there invisible.
+          const backCard = !mobile && split && leaf.id !== focus && BACK_CARD;
           return (
             <section
               aria-label={shown.title}
@@ -194,16 +196,16 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
-                {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
-                {isPageView(leaf.page) && <PageHistory className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
-                {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
+                {isPageView(leaf.page) && <PageHistory className={cn(backCard)} page={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", backCard)} page={leaf.page} />}
                 {!phone && isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
-                  <WritingMenu pageId={leaf.page} className={cn(split && leaf.id !== focus && BACK_CARD)} />
+                  <WritingMenu pageId={leaf.page} className={cn(backCard)} />
                 )}
                 {split && (
                   <Button
                     aria-label="Close page"
-                    className={cn(leaf.id !== focus && BACK_CARD)}
+                    className={cn(backCard)}
                     onClick={() => closeTab(leaf.id)}
                     size="icon-xs"
                     variant="ghost"

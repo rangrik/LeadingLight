@@ -25,14 +25,17 @@ Feature: LeadingLight on iPad
     And the editor can scroll above the keyboard
     And controls avoid the status bar and home indicator
 
-  Scenario: The home-indicator area matches the iPad shell
-    Given I open the iPad app with a bottom safe area
-    Then the area below the app matches the sidebar background in light and dark mode
-    And there is no lighter horizontal band beneath the sidebar and page
+  Scenario: The safe areas continue the sidebar and the page
+    Given I open the iPad app full screen with a status bar and a home indicator, and the sidebar open
+    Then the sidebar's colour runs from the top edge of the screen to the bottom edge
+    And above and below the page the colour matches the page, in light and dark mode
+    And there is no band of another colour beneath the sidebar or the page
     And bottom controls remain above the home indicator
+    When I hide the sidebar
+    Then the whole top and bottom areas match the page
     When I rotate the device or open the keyboard
-    Then the background remains continuous and controls stay in the visible viewport
-    And the iPhone keeps its navigation background and safe spacing
+    Then the colours stay continuous and controls stay in the visible viewport
+    And the iPhone keeps its floating tab bar above its home indicator
 
   Scenario: Rotation keeps the writing position visible
     Given I am writing the fifth paragraph with the onscreen keyboard open
@@ -149,3 +152,41 @@ Feature: LeadingLight on iPad
     Then I see that the connection was already approved
     And this browser remains unlinked without a new recovery key
     And no notes are uploaded
+
+  Scenario: Sidebar and page run edge to edge
+    Given the app is 1180 pixels wide with the sidebar open
+    Then the sidebar is flush with the screen's left edge, with one thin line at its right
+    And the page fills the rest with no margin, rounded corners or shadow
+    And the sidebar's LeadingLight row and the page's toolbar share one centre line
+    When I open a second page beside it
+    Then both pages are square and separated only by the narrow gap
+    And every pane shows its toolbar buttons without needing a hover
+    When the window is 790 pixels wide
+    Then the page reaches the bottom of the window with square corners and no strip under it
+    When I open the sidebar there
+    Then it runs from the top edge of the screen to the bottom, square and opaque
+    And the page beside it is dimmed but not blurred
+
+  Scenario: Toolbar buttons sit on glass
+    Given a page is open in a window 820 pixels wide
+    Then the sidebar button is a round glass button 16 pixels from the page's left edge
+    And Back and Forward share one glass capsule, with no divider between it and the sidebar button
+    And the page's actions share one glass capsule 16 pixels from the right edge
+    And a page with two tabs has no line under its tab strip
+    When I scroll the page
+    Then the text fades out under the toolbar instead of meeting a line
+    When a view has no page actions, such as Captures
+    Then no empty capsule is shown
+    When Increase Contrast is on
+    Then the capsules are opaque with an edge in the text colour
+
+  Scenario: Dialogs dim without blur
+    When I open any dialog or sheet on an iPad or iPhone
+    Then what is behind it is dimmed, not blurred
+    And menus, popovers and lists keep their opaque surface with rows at least 44 pixels tall
+
+  Scenario: The Mac and desktop browser are unchanged
+    Given the Mac app, or a desktop browser at any width
+    Then the sidebar stays inset with each page on a rounded card
+    And no glass, fades or iOS spacing apply
+    And the tab strip keeps its divider line

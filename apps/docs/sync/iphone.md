@@ -13,15 +13,17 @@ iOS 16.4 or later. No account is needed to write or capture offline.
 **Today** is a quiet starting point. Capture a thought, continue your last note, or write about
 today. Only three recent captures appear here. There are no unread badges or streaks to catch up on.
 
-The bottom bar keeps **Today**, **Capture** and **Notes** within reach. Pages open one at a time.
-The arrows above a page take you back and forward through the pages you opened.
+**Today** and **Notes** sit in a glass bar that floats at the bottom of the screen, with a round
+**Quick capture** button beside it. The bar hides while the keyboard is open. Pages open one at a
+time. The back arrow above a page returns to the page before it, or to Today or Notes when there
+is none.
 
 ## Capture first, organize later
 
-Tap **Capture**, type your idea and tap **Save**. You do not have to choose a project, tag or type.
-Words save as you go. **Close** also keeps your words; **Open note** saves and opens the full page.
-**Save** and **Close** stay at the top while the contents scroll above the keyboard, including in
-landscape. If saving fails, the box keeps your draft and scrolls the retry message into view.
+Tap the round **+** beside the bar, type your idea and tap **Save**. You do not have to choose a
+project, tag or type. Words save as you go. The **✕** button also keeps your words; **Open note**
+saves and opens the full page. **Save** and **✕** stay at the top while the contents scroll above
+the keyboard, including in landscape. If saving fails, the box keeps your draft and scrolls the retry message into view.
 
 A lone web address defaults to **Link only**, so keeping the address does not need a connection.
 You can choose a downloaded copy instead. The mic records a voice note using the existing recorder.
@@ -31,7 +33,7 @@ Find saved ideas under **Notes › Captures**. You can organize or review them w
 ## Find and resume
 
 **Notes** searches titles and saved text on this device. Clear the search to return to recent notes,
-or use **Browse by type**. The plus button creates a new page.
+or use **Browse by type**. The **+** at the top of Notes creates a new page.
 
 Tap **Today** while writing, then **Continue writing** to return. Your editor stays open while you
 look around. Page properties sit behind **Page details**, and sidenotes appear below the text.
@@ -59,6 +61,7 @@ The phone layout also works in Safari with the web app. Safari keeps notes in In
 app uses SQLite. Connect both to your workspace if you want the same notes in both.
 
 Private release builds are named **LeadingLight**, with the cream LeadingLight mark on a dark
-background. **LeadingLight iPhone Dev** is a separate app with its own local notes. Connect the
+background. On iOS 26 and later the mark takes on the system's glass look, including the dark,
+clear and tinted Home Screen styles. **LeadingLight iPhone Dev** is a separate app with its own local notes. Connect the
 release app to the same workspace before removing a development app. A directly installed build
 works until its signing profile expires; it is not an App Store or TestFlight installation.

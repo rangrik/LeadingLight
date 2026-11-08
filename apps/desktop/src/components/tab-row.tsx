@@ -30,15 +30,17 @@ function KeyButton({ id, label, onClick, disabled, children }: { id: string; lab
 
 // Back and forward through the front tab's pages, muted when there is nowhere to go. They give
 // way in a narrow card, as Ask does, so the title stays whole; ⌘[ and ⌘] still work.
+// The phone has Back only, as iOS does; at a page's first entry it returns to the tab (phone-shell.tsx).
 export function History({ pane, tab }: { pane: string; tab: Tab }) {
+  const home = phone && tab.at === 0;
   return (
-    <div className={cn("-ms-1 shrink-0 items-center", phone ? "flex" : "hidden @[20rem]/header:flex")}>
-      <KeyButton disabled={tab.at === 0} id="back" label="Back" onClick={() => travel(-1, pane)}>
+    <div className={cn("-ms-1 shrink-0 items-center", phone ? "flex" : "hidden @[20rem]/header:flex")} data-history>
+      <KeyButton disabled={tab.at === 0 && !phone} id="back" label="Back" onClick={() => (home ? window.dispatchEvent(new Event("leadinglight:phone-home")) : travel(-1, pane))}>
         <ChevronLeft className="size-4" />
       </KeyButton>
-      <KeyButton disabled={tab.at === tab.pages.length - 1} id="forward" label="Forward" onClick={() => travel(1, pane)}>
+      {!phone && <KeyButton disabled={tab.at === tab.pages.length - 1} id="forward" label="Forward" onClick={() => travel(1, pane)}>
         <ChevronRight className="size-4" />
-      </KeyButton>
+      </KeyButton>}
     </div>
   );
 }
