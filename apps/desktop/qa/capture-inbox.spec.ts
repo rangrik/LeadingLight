@@ -4,7 +4,7 @@ const inbox = (page: Page) => page.getByRole("complementary", { name: "Captures"
 const row = (page: Page, title: string) => inbox(page).getByRole("row").filter({ has: page.getByRole("button", { name: title, exact: true }) });
 // The bar keeps its panel open across a reload, so it is opened only when it isn't.
 async function openInbox(page: Page) {
-  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  const toggle = page.getByRole("navigation", { name: "Attention" }).getByRole("button", { name: "Captures", exact: true });
   if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
   await expect(inbox(page).getByRole("tab", { name: "To review" })).toBeVisible();
 }
@@ -78,9 +78,10 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   const saved = await page.evaluate(async (id) => (await import(String("/src/lib/objects.ts"))).objects.get(id), id);
   expect(saved.properties.custom).toBe("kept");
   expect(saved.content.content[0].content[0].text).toBe("Keep these words.");
-  // Narrow, Captures is a pane beside the page.
+  // Narrow, Captures is a pane beside the page; its row is in the sidebar, a sheet this narrow.
   await page.setViewportSize({ width: 520, height: 800 });
-  await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true }).click();
+  await page.getByRole("button", { name: "Toggle Sidebar" }).first().click();
+  await page.getByRole("navigation", { name: "Attention" }).getByRole("button", { name: "Captures", exact: true }).click();
   const pane = page.getByRole("region", { name: "Captures", exact: true });
   await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-inbox-narrow.png" });
