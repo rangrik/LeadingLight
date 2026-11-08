@@ -14,10 +14,12 @@ import { PageStats } from "~/components/page-stats";
 import { armDrag, DragGhost, DropOverlay } from "~/components/pane-drag";
 import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
+import { ReviewStrip } from "~/components/review-strip";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { WritingMenu } from "~/components/writing-menu";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
+import { reviewOf } from "~/lib/review";
 import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
@@ -154,6 +156,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           const shown = leaf.back ? { ...describe(leaf.page), parent: { title: describe(leaf.back).title, view: leaf.back } } : describe(leaf.page);
           const folded = !phone && !isMobile && front && folding && order.indexOf(leaf.id) !== at;
           const b = box(leaf.id, rect);
+          // A report beside its task: the review strip under its crumbs.
+          const review = front && !folded && isPageView(leaf.page) ? reviewOf(leaf.page, leaf.id) : undefined;
           return (
             <section
               aria-label={shown.title}
@@ -194,7 +198,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
-                {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
+                {!mobile && isPageView(leaf.page) && !review && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <PageHistory className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {!phone && isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
@@ -213,6 +217,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 )}
               </PanelHeader>
               )}
+              {review && <ReviewStrip page={leaf.page} task={review} />}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
                 className={cn("@container min-h-0 flex-1 overflow-y-auto", folded && "hidden")}

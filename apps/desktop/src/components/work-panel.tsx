@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronRight, ListTree, MessagesSquare, Play, Square } from "lucide-react";
+import { Bot, Check, ChevronRight, Columns2, ListTree, MessagesSquare, Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -12,6 +12,7 @@ import { openHref } from "~/lib/essay";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { objects, type ObjectSummary } from "~/lib/objects";
+import { openReview } from "~/lib/review";
 import { pageOf, space } from "~/lib/space";
 import { reportOf, reportsOn, runOf, subtasksOf, workersOf, workOf } from "~/lib/work";
 import { agentState, sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
@@ -100,30 +101,40 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
 }
 
 // The agent's own steps; a count only from these. Subtasks are in the Work table.
-export function ChecklistWidget({ agent }: { agent: ObjectSummary }) {
+export function StepCount({ agent, open, onToggle }: { agent: ObjectSummary; open: boolean; onToggle: () => void }) {
   space.use();
-  const [open, setOpen] = useState(false);
   const steps = workOf(agent)?.checklist ?? [];
-  const total = steps.length;
-  if (!total) return null;
+  if (!steps.length) return null;
   const done = steps.filter((s) => s.done).length;
-  const item = (key: string, text: React.ReactNode, ticked: boolean) => (
-    <li className="flex min-w-0 items-center gap-2" key={key}>
-      <span className={cn("flex size-4 shrink-0 items-center justify-center rounded-[4px] border", ticked && "border-transparent bg-foreground text-background")}>{ticked && <Check className="size-3" />}</span>
-      <span className={cn("min-w-0 truncate", ticked && "text-muted-foreground line-through")}>{text}</span>
-    </li>
+  return (
+    <button aria-expanded={open} className="-ms-1 flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={onToggle} type="button">
+      <ChevronRight className={cn("size-4 transition-transform duration-150", open && "rotate-90")} />
+      {done} of {steps.length} {steps.length === 1 ? "step" : "steps"} done
+    </button>
   );
+}
+
+export function StepList({ agent, className }: { agent: ObjectSummary; className?: string }) {
+  space.use();
+  return (
+    <ul className={cn("flex flex-col gap-1", className)}>
+      {(workOf(agent)?.checklist ?? []).map((s, i) => (
+        <li className="flex min-w-0 items-center gap-2" key={i}>
+          <span className={cn("flex size-4 shrink-0 items-center justify-center rounded-[4px] border", s.done && "border-transparent bg-foreground text-background")}>{s.done && <Check className="size-3" />}</span>
+          <span className={cn("min-w-0 truncate", s.done && "text-muted-foreground line-through")}>{s.text}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function ChecklistWidget({ agent }: { agent: ObjectSummary }) {
+  const [open, setOpen] = useState(false);
+  if (!workOf(agent)?.checklist?.length) return null;
   return (
     <div className="ms-6" data-widget="checklist">
-      <button aria-expanded={open} className="-ms-1 flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={() => setOpen(!open)} type="button">
-        <ChevronRight className={cn("size-4 transition-transform duration-150", open && "rotate-90")} />
-        {done} of {total} {total === 1 ? "step" : "steps"} done
-      </button>
-      {open && (
-        <ul className="mt-1 ms-1 flex flex-col gap-1">
-          {steps.map((s, i) => item(`s${i}`, s.text, !!s.done))}
-        </ul>
-      )}
+      <StepCount agent={agent} onToggle={() => setOpen(!open)} open={open} />
+      {open && <StepList agent={agent} className="mt-1 ms-1" />}
     </div>
   );
 }
@@ -172,13 +183,27 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
   const accepted = acceptedOf(task);
   const since = accepted ? reportsOn(task.id, pages).filter((r) => r.createdAt > accepted.at) : [];
   const last = own.at(-1);
+  const read = last && (
+    <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => toReport(e.currentTarget, last.id)} type="button">
+      {pageLabel(last.title)}
+    </button>
+  );
+  const review = last && (
+    <Button onClick={() => openReview(task.id)} size="xs" variant="outline">
+      <Columns2 className="size-4" />
+      Review
+    </Button>
+  );
+  // Waiting on the person: the report to review beside the question.
+  if (state === "input" && last)
+    return (
+      <Row className="ms-6" data-widget="review">
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">Its latest report is {read}.</span>
+        {review}
+      </Row>
+    );
   // Ready, or reported and at rest: the person can accept whenever satisfied.
   if ((state === "review" || state === "idle" || state === "stopped") && last) {
-    const read = (
-      <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => toReport(e.currentTarget, last.id)} type="button">
-        {pageLabel(last.title)}
-      </button>
-    );
     // A plan is accepted once its subtasks are done; until then the line says what comes next.
     const open = subtasksOf(task.id, pages).some((s) => s.properties.done !== true);
     return (
@@ -194,6 +219,7 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
             </>
           )}
         </span>
+        {review}
         {!open && (
           <Button onClick={() => void accept(task.id, last.id)} size="xs">
             <Check className="size-3.5" />

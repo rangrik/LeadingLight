@@ -58,6 +58,10 @@ export function installFixture() {
   if (window.__llFixture) return;
   window.__llFixture = true;
   const real = window.fetch.bind(window);
+  // Open event streams, told when an answer changes an agent.
+  const streams = new Set();
+  let seq = 0;
+  const tell = (type, session) => streams.forEach((c) => c.enqueue(new TextEncoder().encode(`${JSON.stringify({ seq: ++seq, type, session, time: new Date().toISOString() })}\n`)));
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -68,13 +72,23 @@ export function installFixture() {
     const r = path.replace("/__runtime", "");
     const method = (init?.method ?? "GET").toUpperCase();
     if (r === "/status") return Promise.resolve(json({ state: "ready", version: "fixture", home: "/tmp/fixture" }));
+    let x;
+    // An answer is taken at once and the agent carries on; feedback is taken. Until a reload.
+    if (method === "POST" && (x = /^\/v1\/sessions\/([^/]+)\/requests\/([^/]+)\/respond$/.exec(r))) {
+      const req = (RUNTIME.requests[x[1]] ?? []).find((q) => q.id === decodeURIComponent(x[2]));
+      if (!req) return Promise.resolve(json({ error: "no request" }, 410));
+      Object.assign(req, { state: "resolved", command: JSON.parse(init.body).command });
+      Object.assign(RUNTIME.sessions.find((s) => s.name === x[1]), { agent_state: "running", state_since: ago(0) });
+      setTimeout(() => tell("request.changed", x[1]));
+      return Promise.resolve(json({ request: req, receipt: { state: "applied" } }));
+    }
+    if (method === "POST" && /^\/v1\/sessions\/[^/]+\/send$/.test(r)) return Promise.resolve(json({}));
     if (method !== "GET") return Promise.resolve(json({ error: "The review fixture is read-only." }, 405));
     if (r === "/v1/locations") return Promise.resolve(json([{ name: RUNTIME.location, path: RUNTIME.path, folder_id: "f-ll" }]));
     if (r === "/v1/conversations") return Promise.resolve(json(RUNTIME.conversations));
     if (r === "/v1/sessions") return Promise.resolve(json(RUNTIME.sessions));
     if (r === "/v1/notify") return Promise.resolve(json([]));
-    if (r === "/v1/events") return new Promise(() => {}); // an open stream that never speaks
-    let x;
+    if (r === "/v1/events") return Promise.resolve(new Response(new ReadableStream({ start: (c) => void streams.add(c) })));
     if ((x = /^\/v1\/sessions\/([^/]+)\/requests$/.exec(r))) return Promise.resolve(json(RUNTIME.requests[x[1]] ?? []));
     if (/^\/v1\/sessions\/[^/]+\/draft$/.test(r)) return Promise.resolve(json({ text: "" }));
     if (/^\/v1\/(sessions|conversations)\/[^/]+\/(transcript|record)$/.test(r)) return Promise.resolve(json({ source: "claude", items: [], next: 0 }));
@@ -85,7 +99,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
