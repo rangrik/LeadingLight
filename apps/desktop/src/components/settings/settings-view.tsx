@@ -1,4 +1,4 @@
-import { ArrowLeft, Boxes, Globe, Info, Keyboard, Lightbulb, Palette, PenLine, Shapes, SlidersHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Boxes, Globe, Info, Keyboard, Lightbulb, Palette, PenLine, Shapes, SlidersHorizontal, Smartphone, Sparkles } from "lucide-react";
 import { type ComponentType, useEffect } from "react";
 import { useStore } from "@/lib/store";
 import { closeSettings } from "@/views/settings/open";
@@ -28,13 +28,14 @@ import { PropertiesSection } from "~/components/settings/properties-section";
 import { ShortcutsSection } from "~/components/settings/shortcuts-section";
 import { TypesSection } from "~/components/settings/types-section";
 import { WritingSection } from "~/components/settings/writing-section";
+import { DevicesSection } from "~/components/settings/devices-section";
 import { AppSidebarHeader } from "~/components/sidebar/app-sidebar";
 import { COVERS } from "~/lib/use-shortcuts";
 import { useMobile } from "~/lib/platform";
 
 // Settings in the app's own shell: our sidebar lists the sections, the inset panel shows
 // one. Shipyard's sections about agents, machines and its own General stay out until there is ours.
-export type SectionId = "appearance" | "writing" | "types" | "properties" | "objects" | "capture" | "browser" | "ai" | "shortcuts" | "about";
+export type SectionId = "appearance" | "writing" | "types" | "properties" | "objects" | "capture" | "browser" | "ai" | "devices" | "shortcuts" | "about";
 
 const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?: string }>; Component: ComponentType }[] = [
   { id: "appearance", title: "Appearance", icon: Palette, Component: AppearanceSection },
@@ -45,6 +46,7 @@ const SECTIONS: { id: SectionId; title: string; icon: ComponentType<{ className?
   { id: "capture", title: "Capture", icon: Lightbulb, Component: CaptureSection },
   { id: "browser", title: "Browser", icon: Globe, Component: BrowserSection },
   { id: "ai", title: "AI", icon: Sparkles, Component: AiSection },
+  { id: "devices", title: "Devices", icon: Smartphone, Component: DevicesSection },
   { id: "shortcuts", title: "Shortcuts", icon: Keyboard, Component: ShortcutsSection },
   { id: "about", title: "About", icon: Info, Component: AboutSection },
 ];

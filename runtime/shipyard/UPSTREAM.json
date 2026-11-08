@@ -60,6 +60,7 @@
     "0045-diagnostic-fixtures.patch",
     "0046-route-fixture-stability.patch",
     "0047-localbox-service-fixture-path.patch",
-    "0048-archived-conversation-transcript.patch"
+    "0048-archived-conversation-transcript.patch",
+    "0049-mobile-agents.patch"
   ]
 }

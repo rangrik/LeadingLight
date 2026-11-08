@@ -38,6 +38,8 @@ const PROPS: Seed<PropDef>[] = [
   { id: "report-by", name: "By", kind: "relation", options: { type: "agent", reverse: "Reports" } },
   { id: "subtask-of", name: "Subtask of", kind: "relation", options: { reverse: "Subtasks" } },
   { id: "feedback-to", name: "To", kind: "relation", options: { type: "agent", reverse: "Feedback" } },
+  // Project 5: what a subtask waits on (DECISIONS.md, 43).
+  { id: "after", name: "After", kind: "relation", options: { many: true, reverse: "Before" } },
 ];
 
 const type = (id: string, name: string, plural: string, icon: string | undefined, color: Color, props: string[], card: string[] = []): Seed<TypeDef> => ({
@@ -62,7 +64,7 @@ const TYPES: Seed<TypeDef>[] = [
   type("book", "Book", "Books", "book-open", "orange", ["author", "rating", "book-status", "finished", "tags"], ["author", "book-status"]),
   type("meeting", "Meeting", "Meetings", "users", "green", ["when", "attendees", "project", "tags"], ["when"]),
   type("project", "Project", "Projects", "folder-kanban", "purple", ["project-status", "due", "tags"], ["project-status", "due"]),
-  type("task", "Task", "Tasks", "circle-check", "green", ["done", "due", "task-project", "tags"], ["due", "task-project"]),
+  type("task", "Task", "Tasks", "circle-check", "green", ["done", "due", "task-project", "after", "tags"], ["due", "task-project"]),
   type("idea", "Idea", "Ideas", "lightbulb", "yellow", IDEA_PROPS, ["idea-project"]),
   type("collection", "Collection", "Collections", "library", "teal", ["items", "tags"]),
   // Made by the app for a project's agents, never from New.
@@ -111,6 +113,11 @@ function later(catalog: Catalog, now: number): Catalog {
     prop("idea-project");
     const idea = catalog.types.find((t) => t.id === "idea");
     if (idea) added.types.push({ ...idea, props: [...new Set([...IDEA_PROPS, ...idea.props])], card: ["idea-project", ...idea.card] });
+  }
+  if (missing("after")) {
+    prop("after");
+    const task = catalog.types.find((t) => t.id === "task");
+    if (task) added.types.push({ ...task, props: [...task.props, "after"] });
   }
   return added;
 }

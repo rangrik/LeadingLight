@@ -7,8 +7,9 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
-import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
+import { closeTab, cycleTab, newTab, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
+import { DESK_VIEW } from "~/lib/space";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
@@ -46,6 +47,9 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return actions.newPage();
         case "new-idea":
           return actions.newIdea();
+        case "desk":
+          if (useStore.getState().view.kind === "settings") closeSettings();
+          return openPage(DESK_VIEW);
         case "save":
           return void flushAll();
         case "sidebar":

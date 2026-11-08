@@ -12,6 +12,8 @@ export type HistoryEntry = ChangeContext & {
 };
 export interface JournalStore {
   history(): Promise<HistoryEntry[]>;
+  // Each page changed in [from, to), with its last change. Empty where history has no time index.
+  touched(from: number, to: number): Promise<{ id: string; at: number }[]>;
   commit(entry: HistoryEntry): Promise<void>;
 }
 let lastTime = 0;

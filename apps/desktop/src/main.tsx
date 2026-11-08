@@ -7,7 +7,12 @@ import { platformReady } from "./lib/platform";
 
 document.documentElement.dataset.authorship = localStorage.getItem("leadinglight.authorship") || "false";
 
-void platformReady.then(() => ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+// Dev only: ?demo's fixed runtime answers before anything asks the runtime (qa/demo/seed.js).
+const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo")
+  ? import(/* @vite-ignore */ String("/qa/demo/seed.js")).then((m) => m.installFixture())
+  : undefined;
+
+void Promise.all([platformReady, demo]).then(() => ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <BrowserAddressEntry><App /></BrowserAddressEntry>
   </React.StrictMode>,

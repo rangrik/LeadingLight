@@ -1,4 +1,5 @@
 import { isDesktop, isMobile } from "~/lib/platform";
+import { mobileAgents, mobileCall, refreshMobileAgents } from "~/lib/mobile-agents";
 
 // The project runtime's API (DECISIONS.md, 18): through the app's runtime commands in the Mac
 // app (src-tauri/src/runtime.rs), through the dev server's /__runtime in a browser
@@ -11,7 +12,11 @@ export type RuntimeEvent = { seq: number; type: string; time: string; data?: Rec
 const invoke = async <T>(cmd: string, args: Record<string, unknown>) => (await import("@tauri-apps/api/core")).invoke<T>(cmd, args);
 
 export async function runtimeStatus(opts: { start?: boolean; restart?: boolean } = {}): Promise<RuntimeStatus> {
-  if (await isMobile) return { state: "failed", error: "Project agents require the Mac app.", home: "" };
+  if (await isMobile) {
+    await refreshMobileAgents();
+    const status = mobileAgents.get();
+    return { state: status.online ? "ready" : "failed", error: status.error || (!status.connected ? "Connect your Mac in Settings > Devices first." : null), home: "" };
+  }
   if (await isDesktop) return invoke("runtime_status", { start: !!opts.start, restart: !!opts.restart });
   const query = opts.restart ? "?restart=1" : opts.start ? "?start=1" : "";
   const res = await fetch(`/__runtime/status${query}`).catch(() => null);
@@ -27,7 +32,7 @@ const parse = (text: string) => {
 };
 
 export async function call<T = unknown>(method: string, path: string, body?: unknown): Promise<Reply<T>> {
-  if (await isMobile) throw new Error("Project agents require the Mac app.");
+  if (await isMobile) return mobileCall<T>(method, path, body);
   if (await isDesktop) return invoke("runtime_call", { method, path, body: body ?? null });
   const send = () => fetch(`/__runtime${path}`, { method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   let res = await send();
@@ -52,7 +57,29 @@ export function stream(method: string, path: string, body: unknown, quiet: numbe
   const read = (line: string) => line.trim() && on(line);
   void isDesktop.then(async (native) => {
     if (done) return;
-    if (await isMobile) return end();
+    if (await isMobile) {
+      if (method !== "GET" || !/^\/v1\/events(?:\?|$)/.test(path)) return end();
+      let timer = 0;
+      let sequence = Number(path.match(/[?&]since=(\d+)/)?.[1] ?? 0);
+      let polling = false;
+      const poll = async () => {
+        if (done || polling) return;
+        polling = true;
+        if (document.visibilityState !== "hidden") {
+          await refreshMobileAgents();
+          polling = false;
+          if (done) return;
+          if (mobileAgents.get().online) read(JSON.stringify({ seq: ++sequence, type: "runtime.connected", time: new Date().toISOString() }));
+        }
+        polling = false;
+        timer = window.setTimeout(() => void poll(), 2000);
+      };
+      const foreground = () => { if (document.visibilityState === "visible") { window.clearTimeout(timer); void poll(); } };
+      document.addEventListener("visibilitychange", foreground);
+      stop = () => { window.clearTimeout(timer); document.removeEventListener("visibilitychange", foreground); };
+      void poll();
+      return;
+    }
     if (native) {
       const { Channel } = await import("@tauri-apps/api/core");
       const channel = new Channel<string>();

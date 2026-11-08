@@ -133,7 +133,7 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
         (route, method),
         ("config" | "me" | "sync" | "sync-part" | "calendar/accounts", "GET")
             | (
-                "sync" | "native/start" | "native/poll" | "native/revoke" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
+                "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
