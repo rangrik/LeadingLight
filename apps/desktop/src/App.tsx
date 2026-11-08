@@ -150,8 +150,18 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
-      .then(async (list) => {
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // Installed before the space loads, since the Feed asks the runtime as soon as pages land.
+    const fixture = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")).then((d) => (d.installFixture(), d)) : Promise.resolve(null);
+    fixture
+      .then(async (demo) => [demo, await loadSpace()] as const)
+      .then(async ([demo, list]) => {
+        if (demo && !list.length) {
+          await demo.seed();
+          location.reload();
+          return;
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();

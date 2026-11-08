@@ -13,6 +13,9 @@ Feature: Following an assigned task
     table (breakdown.feature) when it has subtasks, workers, evidence, and the actions
   - actions: Stop, Continue, Chat, Accept, "Send n notes" (feedback.feature) and "Start the ready
     ones" (breakdown.feature), each shown only when it applies
+  - primary: the one filled button on the card; the rest are plain buttons or in the ⋯ menu
+  - ⋯ menu: the small button at the end of the card's first row, holding Chat, Stop, and Continue
+    when it applies but isn't the primary
   - states: Working, Needs your input, Ready for review, Idle (its turn ended, nothing to review),
     Stopped (its agent process ended), Done (I accepted it)
   - state dot: a 6 px dot before the title on the task's tab and its sidebar row: info colour
@@ -54,7 +57,7 @@ Feature: Following an assigned task
     And the worker has an Agent page "Started by" the agent, kept after its session is gone
 
   Scenario: Stop and carry on
-    When I press Stop on the card while it works
+    When I choose Stop from the card's ⋯ menu while it works
     Then the agent stops and the card says "Idle", with Continue
     When I press Continue
     Then the agent carries on with the task, and the card says "Working"
@@ -69,7 +72,7 @@ Feature: Following an assigned task
     Given the task is ready for review beside another page
     When I make its pane narrow, including with Large interface text
     Then the agent name remains visible and the state wraps to fit
-    And the state never overlaps Chat, and Chat and Accept remain reachable
+    And the state never overlaps the ⋯ button, and Accept and the ⋯ menu's Chat remain reachable
     When I accept its report
     Then the card says "Done"
 
@@ -81,6 +84,58 @@ Feature: Following an assigned task
   Scenario: Reports stay as published
     When the agent updates its checklist after publishing a report
     Then the report is as it was; only the card changed
+
+  Scenario: The question is answered on the card
+    When the agent asks "Should the summary lead with the numbers?" with options "Yes" and "No"
+    Then the card says "Needs your input" and, under what the agent is doing, shows the question
+      with both options and "Or type your own answer", as the Feed's item does
+    And the card has no filled button: the answer is the primary
+    When I pick "Yes" on the card
+    Then the question goes from the card, and the Feed's item for it goes too
+    And answering the same question in the Feed instead takes it off the card; it is sent once
+    When the runtime refuses an answer
+    Then the card says "Not sent" with the reason and Try again, and the question stays on the card
+
+  Scenario: An approval is answered on the card
+    When the agent asks to run "pnpm qa"
+    Then the card shows "The agent wants to run a command", the command, "Allow once", "Always allow
+      in this chat" and "Decline"
+    When I choose "Allow once"
+    Then it goes from the card and from the Feed
+
+  Scenario: What changed since the agent's last report
+    Given the agent published "Summary, first draft" and later "Summary, second draft"
+    And 4 of the second draft's top-level blocks have words the first draft has nowhere
+    Then the card's review line names "Summary, second draft", then a muted "· 4 paragraphs changed"
+    When I click "4 paragraphs changed"
+    Then the page scrolls to the first of the 4 in the report under the task's words
+    And each of the 4 has a 2 px bar in the info colour at its left, which fades after two seconds
+    And the report's words and notes are as they were
+    And the line shows while the agent works or waits on me too, not only when it is ready
+    And with no earlier report by the same agent, or no block changed, the line has no "changed"
+
+  Scenario: One primary action at a time
+    Then the card has at most one filled button, chosen in this order:
+      | when                                                           | primary                |
+      | a question or an approval waits                                | the answer on the card |
+      | Ready for review, or at rest with a report; no open subtasks   | Accept                 |
+      | Idle or Stopped, nothing to accept                             | Continue               |
+      | notes are ticked                                               | Send n notes           |
+      | Working with nothing ticked                                    | none                   |
+    And with notes ticked while another is primary, "Send n notes" stays on the card, not filled
+    And with Accept the primary on an Idle task, Continue is in the ⋯ menu
+
+  Scenario: Chat and Stop live in the ⋯ menu
+    Given the agent works in the worktree "summary"
+    Then the card's first row shows the agent's name, "in summary", "Working" and the ⋯ button
+    And no Chat or Stop button of its own
+    When I open the ⋯ menu
+    Then it offers Chat and Stop
+    When I choose Chat
+    Then the agent's chat opens, as the Chat button did
+    When the agent is Idle
+    Then the ⋯ menu offers Chat, and Continue when Accept is the primary, but not Stop
+    And a task whose agent has no conversation yet shows no ⋯ button
 
   Scenario: Widgets are explained in Settings
     When I open Settings › Objects
