@@ -75,7 +75,7 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
   // One look for every action, so their right edges line up.
   const action =
     state === "input" ? (
-      <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("feed"))} size="xs" variant="outline">
+      <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("inbox", "needs"))} size="xs" variant="outline">
         Answer
       </Button>
     ) : state === "review" && subs.every(done) ? (

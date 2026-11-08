@@ -63,7 +63,7 @@ import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
-import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, SUGGESTIONS_VIEW, isPageView } from "~/lib/space";
+import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -150,14 +150,25 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in before the pages load, or the Feed's first ask fails and waits a minute.
+    const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")) : undefined;
+    (demo?.then((d) => d.installFixture()) ?? Promise.resolve())
+      .then(loadSpace)
       .then(async (list) => {
+        if (demo && !list.length) {
+          await (await demo).seed();
+          location.reload();
+          return;
+        }
+        if (demo) void (await demo).suggest(list);
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
-          if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
+          if (mobile && ([ASK_VIEW, FEED_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           return !page || list.some((p) => p.id === page);
         };

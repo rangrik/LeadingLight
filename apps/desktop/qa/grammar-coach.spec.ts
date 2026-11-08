@@ -169,7 +169,7 @@ test("A failed local checker can retry without reloading or changing words", asy
 });
 
 // Seam: the Writing menu must target the active tab's editor while Tail stays in its panel.
-test("Review follows the active tab and leaves quiet drafting quiet with Suggestions open", async ({ page }) => {
+test("Review follows the active tab and leaves quiet drafting quiet with the Inbox open", async ({ page }) => {
   await newPage(page, "I recieved it.");
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("First draft");
   await page.getByRole("textbox", { name: "Title", exact: true }).press("Enter");
@@ -181,8 +181,8 @@ test("Review follows the active tab and leaves quiet drafting quiet with Suggest
   await body(page).fill("I ate a apple.");
   await recent.getByRole("button", { name: "First draft", exact: true }).click({ modifiers: ["Meta"] });
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("First draft");
-  await page.getByRole("button", { name: "Suggestions", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Pin", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Inbox", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Keep order", exact: true })).toBeVisible();
   await page.waitForTimeout(5500);
   await expect(review(page)).toHaveCount(0);
   await expect(body(page).locator(".ll-spelling, .ll-grammar")).toHaveCount(0);

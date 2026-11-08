@@ -22,15 +22,14 @@ import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
-import { FeedView } from "~/components/feed";
+import { InboxView } from "~/components/inbox";
 import { FeedbackButton } from "~/components/feedback";
 import { BrowserPane } from "~/components/agent-browser";
 import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
-import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, TYPE_VIEW } from "~/lib/space";
 import { phone, useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -228,11 +227,11 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 ) : leaf.page === INBOX_VIEW ? (
                   <CaptureInbox />
                 ) : leaf.page === FEED_VIEW ? (
-                  <FeedView paneId={leaf.id} />
+                  <div className="flex h-full flex-col pt-2">
+                    <InboxView paneId={leaf.id} />
+                  </div>
                 ) : leaf.page === ASK_VIEW ? (
                   <AskView />
-                ) : leaf.page === SUGGESTIONS_VIEW ? (
-                  <Suggestions pane />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (

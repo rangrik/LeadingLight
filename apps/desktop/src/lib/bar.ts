@@ -1,15 +1,21 @@
 import { useSyncExternalStore } from "react";
+import { createStore } from "~/lib/state";
 import { platform } from "~/lib/platform";
 import { localPrefs } from "~/lib/local-prefs";
 import { closePane, focusedPage, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
-import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
+import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView } from "~/lib/space";
 
 // The bar (features/bar.feature): the strip at the window's right edge and the panel beside it.
 // In a window 1000 px wide or less, its views open as panes beside the page instead.
-export type BarView = "suggestions" | "feed" | "captures" | "ask";
-export const NAMES: Record<BarView, string> = { suggestions: "Suggestions", feed: "Feed", captures: "Captures", ask: "Ask" };
+export type BarView = "inbox" | "ask";
+export type Section = "needs" | "suggested" | "captured";
+export const NAMES: Record<BarView, string> = { inbox: "Inbox", ask: "Ask" };
 export const PANEL = { min: 280, max: 480 };
-export const bar = localPrefs("ll.bar", { open: false, view: "feed" as BarView, pinned: false, width: 320 });
+export const bar = localPrefs("ll.bar", { open: false, view: "inbox" as BarView, pinned: false, width: 320 });
+// Before the Inbox the panel was Feed, Captures or Suggestions.
+if (!(bar.get().view in NAMES)) bar.set({ view: "inbox" });
+// The section the Inbox scrolls to once it shows.
+export const inboxAt = createStore<Section | null>(null);
 
 const NARROW = "(max-width: 1000px)";
 export const narrow = () => window.matchMedia(NARROW).matches;
@@ -23,9 +29,10 @@ export const useNarrow = () =>
     narrow,
   );
 
-const PANE: Record<BarView, string> = { feed: FEED_VIEW, captures: INBOX_VIEW, ask: ASK_VIEW, suggestions: SUGGESTIONS_VIEW };
-// A name in a sentence may be one of these views; it opens here.
-export const barViewOf = (page: string) => (Object.keys(PANE) as BarView[]).find((v) => PANE[v] === page);
+// The Inbox's pane keeps the Feed's id, so panes kept from before still open.
+const PANE: Record<BarView, string> = { inbox: FEED_VIEW, ask: ASK_VIEW };
+// A name in a sentence may be the Captures page; it opens the Inbox there.
+export const sectionOf = (page: string): Section | undefined => (page === INBOX_VIEW ? "captured" : undefined);
 const paneOf = (view?: BarView) => {
   const { root } = panes.get();
   const pages = view ? [PANE[view]] : Object.values(PANE);
@@ -41,8 +48,9 @@ export function useShowing(view: BarView) {
 }
 
 // Narrow, one pane holds the bar's view, as the panel does.
-export function showBar(view: BarView) {
-  if (!["macos", "browser"].includes(platform.get()) && view !== "captures") return;
+export function showBar(view: BarView, at?: Section) {
+  if (!["macos", "browser"].includes(platform.get()) && view !== "inbox") return;
+  if (at) inboxAt.set(at);
   if (!narrow()) return bar.set({ open: true, view });
   const open = paneOf(view) ?? paneOf();
   if (!open) return openBeside(PANE[view]);
