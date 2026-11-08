@@ -95,6 +95,12 @@ function NoteEditor({
       if (!store.current.read(id)) store.current.add(id, quote());
       store.current.write(id, editor.getJSON().content ?? []);
     },
+    // A line left empty at the end (a verdict's, unused) goes when the note is left.
+    onBlur: ({ editor }) => {
+      const { doc } = editor.state;
+      const last = doc.lastChild;
+      if (doc.childCount > 1 && last?.type.name === "paragraph" && !last.content.size) editor.commands.deleteRange({ from: doc.content.size - last.nodeSize, to: doc.content.size });
+    },
   });
   useEffect(() => {
     if (!autoFocus) return;

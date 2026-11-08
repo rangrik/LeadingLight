@@ -78,6 +78,11 @@
 .ll-page[data-page-toc] { --toc: 60px; }
 @container (width >= 960px) { .ll-page[data-page-toc] { --toc: 200px; } }
 @container (width < 1168px) { .ll-page[data-page-notes][data-page-toc] { --toc: 60px; } }
+/* Review mode (review.tsx): the task folded to its line, the brief only when unfolded, the report. */
+.ll-page[data-review] > :not(.ll-review-head, .ll-page-body, .ll-reports) { display: none; }
+.ll-page[data-review="folded"] > .ll-page-body { display: none; }
+.ll-page[data-review="open"] > .ll-page-body { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.ll-page[data-review] > .ll-page-body .ll-editor-root { padding-bottom: 0; }
 
 /* iPad's keyboard and safe areas leave one measured region for the app and its sidebars. */
 html[data-ipad] {

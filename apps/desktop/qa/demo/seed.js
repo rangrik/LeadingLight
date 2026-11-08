@@ -85,7 +85,11 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -240,6 +244,24 @@ export async function seed() {
     title: "Pricing copy, first draft", typeId: "report", createdAt: mins(80), updatedAt: mins(80),
     properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(80), command: "c-a1", sources: [{ page: pricing, quote: "Monthly is simpler to explain" }] } },
     content: doc(h(2, "Hero"), p(b("Notes that think with you."), " Every note is an object; links go both ways; agents work beside your words, never in them."), h(2, "Tiers"), ul([b("Personal"), " · one Mac, one space · $8 a month or $80 a year"], [b("Team"), " · shared spaces, roles · $15 a seat a month"]), h(2, "Open"), p("I lead with the monthly price because the notes say it is simpler to explain. If most people buy yearly, I should flip it; see my question.")),
+  });
+  // A second draft by the same agent, so review mode's Changes has something to show.
+  await make("reportA2", {
+    title: "Pricing copy, second draft", typeId: "report", createdAt: mins(25), updatedAt: mins(25),
+    properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(25), command: "c-a2", sources: [{ page: pricing, quote: "Monthly is simpler to explain" }] } },
+    content: doc(
+      h(2, "Hero"),
+      p(b("Notes that think with you."), " Every note is an object of a type; links go both ways; agents work beside your words and never write in them."),
+      p("Local-first: your notes stay on your Mac, and sync only when you ask."),
+      h(2, "Tiers"),
+      ul([b("Personal"), " · one Mac, one space · $8 a month, or $80 a year (two months free)"], [b("Team"), " · shared spaces, roles, one bill · $15 a seat a month"]),
+      h(2, "FAQ"),
+      p(b("Can I try it first?"), " Yes: try it free for 14 days, no card needed."),
+      p(b("Where are my notes kept?"), " On your Mac, in one file you can back up."),
+      p(b("Can I leave?"), " Export every note as Markdown at any time."),
+      h(2, "Open"),
+      p("Monthly still leads until you answer my question; the yearly price now says what it saves. The FAQ has three questions; tell me if you want five."),
+    ),
   });
   const agentB = await make("agentB", {
     title: "Codex: Fix the tab row overflow", typeId: "agent", createdAt: mins(45), updatedAt: mins(3),

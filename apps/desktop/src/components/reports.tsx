@@ -18,6 +18,7 @@ import { useNotesFor } from "~/lib/notes-for";
 import { type ObjectSummary, objects } from "~/lib/objects";
 import { iconFor, pageOf, savePage, space } from "~/lib/space";
 import { FeedbackGroup } from "~/components/feedback";
+import { Changes, previousOf, reviewable } from "~/components/review";
 import { batchOf } from "~/lib/feedback";
 import { reportOf } from "~/lib/work";
 
@@ -95,15 +96,26 @@ export function ReportSources({ report }: { report: ObjectSummary }) {
   );
 }
 
-const OpenButton = ({ id }: { id: string }) => (
-  <Button className="ms-auto text-muted-foreground" onClick={(e) => visit(id, e)} size="xs" variant="ghost">
-    Open
-  </Button>
+// Review and Open, at the end of a report's byline row.
+const Actions = ({ id, onReview }: { id: string; onReview?: (id: string) => void }) => (
+  <span className="ms-auto flex shrink-0 gap-1">
+    {onReview && reviewable(id) && (
+      <Button className="text-muted-foreground" onClick={() => onReview(id)} size="xs" variant="ghost">
+        Review
+      </Button>
+    )}
+    <Button className="text-muted-foreground" onClick={(e) => visit(id, e)} size="xs" variant="ghost">
+      Open
+    </Button>
+  </span>
 );
 
 type OnNotes = (id: string, on: boolean) => void;
+// Review mode: the report's words, or what changed since `changes`, the report before it.
+type Reviewing = { changes?: string };
+const VERDICTS = ["Keep", "Change", "Ask"];
 
-function ReportBody({ report, onNotes }: { report: ObjectSummary; onNotes: OnNotes }) {
+function ReportBody({ report, onNotes, review }: { report: ObjectSummary; onNotes: OnNotes; review?: Reviewing }) {
   const editor = useRef<BlockEditorHandle>(null);
   const { notes, onNoteSteps } = useNotesFor(report, editor);
   // Read as it opens, with notes its own page hasn't saved yet.
@@ -119,31 +131,46 @@ function ReportBody({ report, onNotes }: { report: ObjectSummary; onNotes: OnNot
   const title = pageLabel(report.title);
   if (doc === undefined) return null;
   return (
-    <div className="pt-2">
-      <BlockEditor
-        annotate
-        assets={assets}
-        content={doc}
-        label={`Report: ${title}`}
-        links={linkHost}
-        notes={notes}
-        onLayoutChange={layout}
-        // Its own page, when open, saves the note; else this is the only editor of it.
-        onNoteSteps={(steps) => {
-          onNoteSteps?.(steps);
-          if (!isLive(report.id) && editor.current) void savePage(report.id, { content: editor.current.getJSON() }).catch(() => {});
-        }}
-        openLink={openHref}
-        ref={editor}
-      />
-    </div>
+    <>
+      {review?.changes && <Changes after={report.id} before={review.changes} />}
+      {/* Kept while the changes show, so its notes and place come back as they were. */}
+      <div className="pt-2" hidden={!!review?.changes}>
+        <BlockEditor
+          annotate
+          assets={assets}
+          content={doc}
+          label={`Report: ${title}`}
+          links={linkHost}
+          notes={notes}
+          onLayoutChange={layout}
+          // Its own page, when open, saves the note; else this is the only editor of it.
+          onNoteSteps={(steps) => {
+            onNoteSteps?.(steps);
+            if (!isLive(report.id) && editor.current) void savePage(report.id, { content: editor.current.getJSON() }).catch(() => {});
+          }}
+          openLink={openHref}
+          ref={editor}
+          verdicts={review ? VERDICTS : undefined}
+        />
+      </div>
+    </>
   );
 }
 
-function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folded: boolean; onNotes: OnNotes }) {
+function ReportGroup({ report, folded, onNotes, onReview, review }: { report: ObjectSummary; folded: boolean; onNotes: OnNotes; onReview?: (id: string) => void; review?: Reviewing }) {
   // Opened for this visit only; a reload folds it again.
   const [open, setOpen] = useState(!folded);
   const title = pageLabel(report.title);
+  if (review)
+    return (
+      // The column is the report's now: its title reads as the page's.
+      <article aria-label={`Report: ${title}`} className="pt-6" data-report={report.id} data-reviewing>
+        <ReportByline report={report} />
+        <h1 className="mt-2 font-bold font-heading text-[2.25rem] leading-[1.2] tracking-tight">{title}</h1>
+        <ReportBody onNotes={onNotes} report={report} review={review} />
+        <ReportSources report={report} />
+      </article>
+    );
   if (!open)
     return (
       <article aria-label={`Report: ${title}`} className="mt-12 flex items-center gap-2 border-t py-2 first:mt-0 [[data-folded]+&]:mt-0" data-folded data-report={report.id}>
@@ -154,7 +181,7 @@ function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folde
         </button>
         {/* An agent named after a long task gives up its words before the title does. */}
         <ReportByline className="max-w-1/2 shrink-0 flex-nowrap whitespace-nowrap" report={report} />
-        <OpenButton id={report.id} />
+        <Actions id={report.id} onReview={onReview} />
       </article>
     );
   return (
@@ -162,7 +189,7 @@ function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folde
     <article aria-label={`Report: ${title}`} className="mt-12 scroll-mt-4 border-t pt-6 first:mt-0" data-report={report.id}>
       <div className="flex items-center gap-2">
         <ReportByline report={report} />
-        <OpenButton id={report.id} />
+        <Actions id={report.id} onReview={onReview} />
       </div>
       <h2 className="mt-3 font-heading font-semibold text-2xl leading-tight tracking-tight">{title}</h2>
       <ReportBody onNotes={onNotes} report={report} />
@@ -172,8 +199,8 @@ function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folde
 }
 
 // The page's stream after its own words: agents' reports and the feedback sent on them, in the
-// order made; on a task, newest first.
-export function Reports({ pageId, onNotes }: { pageId: string; onNotes: (on: boolean) => void }) {
+// order made; on a task, newest first. In review mode, only the report under review.
+export function Reports({ pageId, onNotes, onReview, review }: { pageId: string; onNotes: (on: boolean) => void; onReview?: (id: string) => void; review?: { report: string; changes: boolean } }) {
   const { pages } = space.use();
   const task = isTask(pages.find((p) => p.id === pageId));
   const list = pages.filter((p) => p.properties.parent === pageId && (reportOf(p) || batchOf(p))).sort((a, b) => (task ? b.createdAt - a.createdAt : a.createdAt - b.createdAt));
@@ -187,8 +214,23 @@ export function Reports({ pageId, onNotes }: { pageId: string; onNotes: (on: boo
   const stream = useRef<HTMLElement>(null);
   useStreamAnchored(stream);
   return (
-    <section aria-label="Reports" hidden={!list.length} ref={stream}>
-      {list.map((r) => (reportOf(r) ? <ReportGroup folded={task && r !== newest} key={r.id} onNotes={note} report={r} /> : <FeedbackGroup feedback={r} key={r.id} />))}
+    <section aria-label="Reports" className="ll-reports" hidden={!list.length} ref={stream}>
+      {list
+        .filter((r) => !review || r.id === review.report)
+        .map((r) =>
+          reportOf(r) ? (
+            <ReportGroup
+              folded={task && r !== newest}
+              key={r.id}
+              onNotes={note}
+              onReview={onReview}
+              report={r}
+              review={review && { changes: review.changes ? previousOf(r.id, pages)?.id : undefined }}
+            />
+          ) : (
+            <FeedbackGroup feedback={r} key={r.id} />
+          ),
+        )}
     </section>
   );
 }

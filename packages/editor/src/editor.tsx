@@ -241,6 +241,7 @@ export function BlockEditor({
   onFocusChange,
   onLayoutChange,
   onNoteSteps,
+  verdicts,
   label = "Page body",
   placeholder,
   ref,
@@ -284,6 +285,8 @@ export function BlockEditor({
   onLayoutChange?: (layout: { notes: boolean; toc: boolean }) => void;
   // Notes added or taken off here, as steps for another editor of the same words (annotate only).
   onNoteSteps?: (steps: unknown[]) => void;
+  // Given, the selection toolbar offers each word as a note that starts with it, ticked to send.
+  verdicts?: string[];
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
@@ -305,6 +308,8 @@ export function BlockEditor({
   openRef.current = open;
   // The note just added, which opens with the cursor in it.
   const [newNote, setNewNote] = useState<string | null>(null);
+  // The verdict word the next new note starts with.
+  const verdict = useRef<string | null>(null);
   const [grammarReview, setGrammarReview] = useState<{ at?: number; scope?: GrammarRange } | null>(null);
 
   const extensions = useMemo(
@@ -326,6 +331,11 @@ export function BlockEditor({
             return true;
           }
           notesRef.current.add(id, quote);
+          // The word on its own line, and the cursor on the next.
+          if (verdict.current) {
+            notesRef.current.write(id, [{ type: "paragraph", content: [{ type: "text", text: verdict.current }] }, { type: "paragraph" }]);
+            notesRef.current.pick?.set(id, true);
+          }
           setNewNote(id);
           return true;
         },
@@ -696,6 +706,12 @@ export function BlockEditor({
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       {!annotate && <BlockHandle editor={editor} />}
       <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}
+        verdicts={verdicts}
+        onVerdict={(word) => {
+          verdict.current = word;
+          editor.commands.addSidenote();
+          verdict.current = null;
+        }}
         onTurnInto={!readOnly && !annotate && onTurnInto ? () => {
           const selection = capturePageSelection(editor);
           if (!selection) return;

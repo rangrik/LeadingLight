@@ -157,8 +157,8 @@ export function EvidenceWidget({ task }: { task: ObjectSummary }) {
 }
 
 // The report as it shows under the task's words: unfolded, and scrolled to.
-function toReport(from: HTMLElement, id: string) {
-  const el = from.closest(".ll-page")?.querySelector<HTMLElement>(`[data-report="${CSS.escape(id)}"]`);
+export function toReport(from: HTMLElement, id: string) {
+  const el = (from.closest(".ll-page") ?? from).querySelector<HTMLElement>(`[data-report="${CSS.escape(id)}"]`);
   el?.querySelector<HTMLButtonElement>("button[aria-expanded=false]")?.click();
   requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
 }

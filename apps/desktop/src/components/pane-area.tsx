@@ -24,6 +24,7 @@ import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
+import { ReviewButton } from "~/components/review";
 import { BrowserPane } from "~/components/agent-browser";
 import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
@@ -194,6 +195,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
+                {!mobile && isPageView(leaf.page) && <ReviewButton className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} pane={leaf.id} />}
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(split && leaf.id !== focus && BACK_CARD)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <PageHistory className={cn(split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", split && leaf.id !== focus && BACK_CARD)} page={leaf.page} />}
