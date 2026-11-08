@@ -36,8 +36,8 @@ const ABOUT: Record<BarView, string> = {
   suggestions: "What Tail offers for the page in front and elsewhere.",
   ask: "The thread with Claude about the page in front.",
 };
-// A 48 px column: icon 8 px from its top (centre at 16, as in the 32 px buttons before), name under it.
-// The strip is 72 px because "Suggestions" is 65 px wide at 11 px; 56 px where only Captures shows.
+// A 48 px column, icon centred 16 px down (on the headers' middle line), name under it. 72 px wide:
+// "Suggestions" is 65 px at 11 px; 56 px where only Captures shows.
 const COLUMN = "h-12 w-full flex-col gap-1 px-0 text-muted-foreground data-pressed:text-foreground";
 const Name = ({ children }: { children: string }) => <span className="font-normal text-[11px] leading-3">{children}</span>;
 
