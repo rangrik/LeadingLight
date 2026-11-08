@@ -1,6 +1,7 @@
 import { CircleCheck, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader } from "@leadinglight/ui/components/empty";
 import { Input } from "@leadinglight/ui/components/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -12,6 +13,7 @@ import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
+import { openSettingsAt } from "~/lib/settings-at";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { pageOf, space } from "~/lib/space";
 import type { Target } from "~/lib/work";
@@ -182,7 +184,16 @@ export function FeedList({ paneId }: { paneId?: string }) {
     rows[Math.max(0, Math.min(rows.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
     e.preventDefault();
   };
-  const none = <p className="m-auto px-6 text-center text-muted-foreground text-sm">Nothing needs you. Questions, approvals and work ready for review show here.</p>;
+  const none = (
+    <Empty>
+      <EmptyHeader>
+        <EmptyDescription>Questions, approvals and work ready for review show here.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button onClick={() => openSettingsAt("ai", "Projects")} size="sm" variant="outline">Projects in Settings</Button>
+      </EmptyContent>
+    </Empty>
+  );
   if (!enabled) return none;
   return (
     <div className="flex min-h-0 flex-1 flex-col" ref={root}>

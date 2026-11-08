@@ -182,7 +182,7 @@ test("Review follows the active tab and leaves quiet drafting quiet with Suggest
   await recent.getByRole("button", { name: "First draft", exact: true }).click({ modifiers: ["Meta"] });
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("First draft");
   await page.getByRole("button", { name: "Suggestions", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Pin", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Keep here", exact: true })).toBeVisible();
   await page.waitForTimeout(5500);
   await expect(review(page)).toHaveCount(0);
   await expect(body(page).locator(".ll-spelling, .ll-grammar")).toHaveCount(0);

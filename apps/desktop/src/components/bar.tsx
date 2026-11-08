@@ -1,8 +1,9 @@
-import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Sparkles } from "lucide-react";
+import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Plus, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@leadinglight/ui/components/badge";
 import { Button } from "@leadinglight/ui/components/button";
 import { Kbd } from "@leadinglight/ui/components/kbd";
+import { Separator } from "@leadinglight/ui/components/separator";
 import { Toggle } from "@leadinglight/ui/components/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -23,11 +24,22 @@ import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { isPageView, space } from "~/lib/space";
 import { inPanel, suggestionsOn, tail } from "~/lib/tail";
 
-// The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
+// The bar (features/bar.feature): a strip of named icons at the window's right edge, and the panel
 // beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
 
 const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
-const ORDER: BarView[] = ["suggestions", "feed", "captures", "ask"];
+// What needs you, what you saved, what Tail offers; then Ask, apart.
+const INBOXES: BarView[] = ["feed", "captures", "suggestions"];
+const ABOUT: Record<BarView, string> = {
+  feed: "What agents need from you, from every project.",
+  captures: "What you captured in a hurry, to sort out when ready.",
+  suggestions: "What Tail offers for the page in front and elsewhere.",
+  ask: "The thread with Claude about the page in front.",
+};
+// A 48 px column: icon 8 px from its top (centre at 16, as in the 32 px buttons before), name under it.
+// The strip is 72 px because "Suggestions" is 65 px wide at 11 px.
+const COLUMN = "h-12 w-full flex-col gap-1 px-0 text-muted-foreground data-pressed:text-foreground";
+const Name = ({ children }: { children: string }) => <span className="font-normal text-[11px] leading-3">{children}</span>;
 
 // Ask goes through openAsk, so its composer takes the keyboard; the Feed's first item does.
 export function toggleView(view: BarView) {
@@ -40,7 +52,7 @@ export function toggleView(view: BarView) {
 function Count({ n, view }: { n: number; view: BarView }) {
   if (!n) return null;
   return (
-    <Badge className="pointer-events-none absolute -top-0.5 -right-0.5" id={`bar-count-${view}`} size="sm">
+    <Badge className="pointer-events-none absolute -top-2.5 left-2.5" id={`bar-count-${view}`} size="sm">
       {n}
     </Badge>
   );
@@ -71,14 +83,18 @@ function StripButton({ view }: { view: BarView }) {
   const { enabled: projectsOn } = projectPrefs.use();
   return (
     <Tooltip>
-      <TooltipTrigger render={<Toggle aria-describedby={`bar-count-${view}`} aria-label={NAMES[view]} onPressedChange={() => toggleView(view)} pressed={on} />}>
-        <Icon />
-        {view === "feed" && projectsOn && <FeedCount />}
-        {view === "captures" && <CapturesCount />}
-        {view === "suggestions" && <SuggestionsCount />}
+      <TooltipTrigger render={<Toggle aria-describedby={`bar-count-${view}`} aria-label={NAMES[view]} className={COLUMN} onPressedChange={() => toggleView(view)} pressed={on} size={null} />}>
+        {/* The count sits at the icon's top-right, clear of the name. */}
+        <span className="relative">
+          <Icon />
+          {view === "feed" && projectsOn && <FeedCount />}
+          {view === "captures" && <CapturesCount />}
+          {view === "suggestions" && <SuggestionsCount />}
+        </span>
+        <Name>{NAMES[view]}</Name>
       </TooltipTrigger>
       <TooltipPopup side="left">
-        {NAMES[view]} <Kbd>{keys}</Kbd>
+        <Kbd>{keys}</Kbd>
       </TooltipPopup>
     </Tooltip>
   );
@@ -101,39 +117,46 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
   return (
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
-    <nav aria-label="Bar" className="flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
-      {ORDER.filter((v) => !mobile || v === "captures").map((v) => (
+    // The line before Ask is 24 px from box to box: 4 + 8, half a pixel of line, 7.5 + 4.
+    <nav aria-label="Bar" className="flex w-18 shrink-0 flex-col items-center gap-1 px-0.5 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
+      {INBOXES.filter((v) => !mobile || v === "captures").map((v) => (
         <StripButton key={v} view={v} />
       ))}
+      {!mobile && (
+        <>
+          <Separator className="mt-2 mb-[7.5px] data-[orientation=horizontal]:h-[0.5px] data-[orientation=horizontal]:w-10" data-tauri-drag-region />
+          <StripButton view="ask" />
+        </>
+      )}
       <span className="flex-1" data-tauri-drag-region={!mobile || undefined} />
       <Tooltip>
-        <TooltipTrigger render={<Button aria-label="Quick capture" data-quick-capture onClick={onCapture} size="icon" variant="ghost" />}>
+        <TooltipTrigger render={<Button aria-label="Quick capture" className={COLUMN} data-quick-capture onClick={onCapture} size={null} variant="ghost" />}>
           <Plus />
+          <Name>Capture</Name>
         </TooltipTrigger>
         <TooltipPopup side="left">
-          Quick capture <Kbd>{keys}</Kbd>
+          <Kbd>{keys}</Kbd>
         </TooltipPopup>
       </Tooltip>
     </nav>
   );
 }
 
-// The view's name, a pin, and what the view adds: on the page headers' line, a window drag area.
+// The view's name, Keep here, and what the view adds: on the page headers' line, a window drag
+// area; under it, one line on what the panel is for.
 function BarHeader({ view, after, children }: { view: BarView; after?: ReactNode; children?: ReactNode }) {
   const { pinned } = bar.use();
   return (
-    <PanelHeader after={after} current={NAMES[view]} lead={false} sidebarOpen>
-      {children}
-      <Tooltip>
-        <TooltipTrigger render={<Toggle aria-label="Pin" onPressedChange={() => bar.set({ pinned: !pinned })} pressed={pinned} size="sm" />}>
-          <Pin />
-        </TooltipTrigger>
-        <TooltipPopup>
-          {pinned ? "Unpin" : "Pin"}
-          {!pinned && <span className="block text-muted-foreground">Keeps {NAMES[view]} here when a page has suggestions</span>}
-        </TooltipPopup>
-      </Tooltip>
-    </PanelHeader>
+    <>
+      <PanelHeader after={after} current={NAMES[view]} lead={false} sidebarOpen>
+        {children}
+        <Tooltip>
+          <TooltipTrigger render={<Toggle onPressedChange={() => bar.set({ pinned: !pinned })} pressed={pinned} size="sm" variant="outline" />}>Keep here</TooltipTrigger>
+          <TooltipPopup>Stay on this panel when a page has suggestions</TooltipPopup>
+        </Tooltip>
+      </PanelHeader>
+      <p className="shrink-0 text-pretty px-4 pb-2 text-muted-foreground text-xs">{ABOUT[view]}</p>
+    </>
   );
 }
 
@@ -175,7 +198,7 @@ function PanelEdge({ width, onResize }: { width: number; onResize: (w: number | 
 }
 
 // Beside the strip, pushing the pages; a pane instead in a narrow window.
-export function BarPanel() {
+export function BarPanel({ onCapture }: { onCapture: () => void }) {
   const mobile = useMobile();
   const { open, view, width } = bar.use();
   const [dragged, setDragged] = useState<number | null>(null);
@@ -196,7 +219,7 @@ export function BarPanel() {
                 <FeedList />
               ) : view === "captures" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
-                  <CaptureInbox panel />
+                  <CaptureInbox onCapture={onCapture} panel />
                 </div>
               ) : (
                 <Suggestions />

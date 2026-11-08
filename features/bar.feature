@@ -79,11 +79,11 @@ Feature: The bar
     When I open Suggestions
     Then I read "Tail speaks when a block you finish reads as a task or names a page." and a "How Tail works" button
     When I click "How Tail works"
-    Then Settings opens on AI
+    Then Settings opens on AI, scrolled to Tail and what it does
     When I go back and open Feed
     Then I read "Questions, approvals and work ready for review show here." and a "Projects in Settings" button
     When I click "Projects in Settings"
-    Then Settings opens on AI, at Projects
+    Then Settings opens on AI, scrolled to Projects
     When I go back and open Captures
     Then it keeps "Nothing waiting here" and its sentence, and adds a "Capture something" button
     When I click "Capture something"

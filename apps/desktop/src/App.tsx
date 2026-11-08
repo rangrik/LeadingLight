@@ -388,7 +388,7 @@ export default function App() {
                 </Empty>
               </div>
             )}
-            <BarPanel />
+            <BarPanel onCapture={toggleCapture} />
           </div>
           {/* The ask bar sits by the selected words. */}
           {root && !mobile && <AskBar />}
