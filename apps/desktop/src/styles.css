@@ -49,7 +49,8 @@
    room left of the text), no drop room below. Takeaways beside a source too (your-words.tsx). */
 .ll-capture .ll-editor { font-size: 15px; }
 :is(.ll-capture, .ll-takeaways) .ll-editor > * { padding-block: 3px; }
-:is(.ll-capture, .ll-takeaways) .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 8px; }
+.ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 8px; }
+.ll-takeaways .ll-editor-root { margin-left: 0; padding: 0; }
 .ll-capture .ll-handle, .ll-takeaways :is(.ll-handle, .ll-toc) { display: none; }
 .ll-takeaways .ll-editor { font-size: 14px; }
 /* Its hint shows while it is empty, not only on the line holding the cursor. */
