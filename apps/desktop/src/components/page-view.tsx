@@ -44,6 +44,7 @@ import { contentWidth, usePageLayout } from "~/lib/page-layout";
 import { TurnIntoPage } from "~/components/turn-into-page";
 import { VoiceReviewDialog } from "~/components/voice-review";
 import { TailPage, TailToday } from "~/components/tail";
+import { RecallCard } from "~/components/recall";
 import { today } from "~/lib/daily";
 import { currentEdit } from "@leadinglight/editor/authorship";
 import type { ChangeContext } from "~/lib/history-types";
@@ -422,6 +423,7 @@ export function PageView({ page }: { page: LLObject }) {
         {day && <DailyBar day={day} />}
         {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
+        {!report && role !== "thoughts" && role !== "essay" && <RecallCard notes={notes} page={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
           <BlockEditor
             assets={assets}

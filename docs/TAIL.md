@@ -80,6 +80,8 @@ too: it opens Captures in the bar, where those ideas wait.
 | A task that names a day but has none | *Call Sam about the invoice* has no day. | Set Friday | Due Friday. Undo |
 | An untitled page with words in it | An untitled page from Friday starts "Soil for the back bed…". | Name it | Named *Soil for the back bed*. Undo |
 | Back on a page after a while | You stopped at "ask Sam whether the". | Show | scrolls there, lights it |
+| Back on a page you noted things in, away three days | You noted 3 things here on Tuesday. | Recall | the Recall card above the body (features/recall.feature) |
+| Pages like that, on Today | 3 things to recall in *Notes on Thinking in Systems*. | Open | opens it beside |
 | A line that reads as a task | Make this a task? | Make task | Made a task, due Friday. Undo |
 | A word that is a page's name | *Sam* has a page. | Link | Linked. Undo |
 | Capture text that reads as a task for a project | (project button) Garden? | ⌃↩ Task in Garden | saved as a task, box closes |

@@ -152,6 +152,17 @@ export default function App() {
   useEffect(() => {
     loadSpace()
       .then(async (list) => {
+        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
+          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
+          demo.installFixture();
+          if (!list.length) {
+            await demo.seed();
+            location.reload();
+            return;
+          }
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
