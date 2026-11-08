@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1100, height: 720 } });
 
-// Seam: a task's status must fit beside native-sized chat controls in a narrow split pane.
+// Seam: a task's status must fit beside its actions and ⋯ menu in a narrow split pane.
 for (const size of [13, 14]) {
   test(`task status and actions fit a narrow split at text size ${size}`, async ({ page }, info) => {
     await page.addInitScript((uiFontSize) => {
@@ -41,20 +41,23 @@ for (const size of [13, 14]) {
           pane: await pane.boundingBox(),
           agent: await card.getByRole("button", { name: "Claude: Review layout fixture", exact: true }).boundingBox(),
           status: await status.boundingBox(),
-          chat: await card.getByRole("button", { name: "Chat", exact: true }).boundingBox(),
+          more: await card.getByRole("button", { name: "More", exact: true }).boundingBox(),
         }) });
       }
       await expect.poll(async () => {
         const a = (await status.boundingBox())!;
-        const b = (await card.getByRole("button", { name: "Chat", exact: true }).boundingBox())!;
+        const b = (await card.getByRole("button", { name: "More", exact: true }).boundingBox())!;
         return Math.min(a.x + a.width, b.x + b.width) > Math.max(a.x, b.x)
           && Math.min(a.y + a.height, b.y + b.height) > Math.max(a.y, b.y);
       }).toBe(false);
       expect((await card.getByRole("button", { name: "Claude: Review layout fixture", exact: true }).boundingBox())!.width).toBeGreaterThan(20);
       expect(await card.evaluate((el) => el.scrollWidth - el.clientWidth)).toBe(0);
-      await card.getByRole("button", { name: "Chat", exact: true }).click({ trial: true });
+      await card.getByRole("button", { name: "More", exact: true }).click({ trial: true });
       await card.getByRole("button", { name: "Accept", exact: true }).click({ trial: true });
     }
+    await card.getByRole("button", { name: "More", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Chat", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
     await card.getByRole("button", { name: "Accept", exact: true }).click();
     await expect(card.locator('[data-state="done"]')).toHaveText("Done");
   });

@@ -19,6 +19,7 @@ import { type ObjectSummary, objects } from "~/lib/objects";
 import { iconFor, pageOf, savePage, space } from "~/lib/space";
 import { FeedbackGroup } from "~/components/feedback";
 import { batchOf } from "~/lib/feedback";
+import { createStore } from "~/lib/state";
 import { reportOf } from "~/lib/work";
 
 // What agents published beside a page (features/reports.feature): after the page's own words, each
@@ -140,13 +141,63 @@ function ReportBody({ report, onNotes }: { report: ObjectSummary; onNotes: OnNot
   );
 }
 
+// The blocks of a report that changed since its agent's last one, marked a moment (work-panel.tsx).
+const marked = createStore<{ report: string; blocks: number[]; at: number; scope: Element } | null>(null);
+export const showChanges = (from: HTMLElement, report: string, blocks: number[]) => {
+  const scope = from.closest(".ll-page");
+  if (scope) marked.set({ report, blocks, at: Date.now(), scope });
+};
+
+// A 2 px bar beside each block, faded after two seconds; drawn beside the editor, never in it.
+function ChangeBars({ blocks, at }: { blocks: number[]; at: number }) {
+  const origin = useRef<HTMLDivElement>(null);
+  const [bars, setBars] = useState<React.CSSProperties[]>([]);
+  const [fade, setFade] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    let tries = 0;
+    const timers: number[] = [];
+    // The report may still be opening: its blocks are looked for each frame, for a second or two.
+    const place = () => {
+      const o = origin.current;
+      const els = blocks.map((i) => o?.parentElement?.querySelector(".ll-editor")?.children[i]);
+      if (!o || !els.every(Boolean)) return void (tries++ < 120 && (frame = requestAnimationFrame(place)));
+      const r0 = o.getBoundingClientRect();
+      setFade(false);
+      setBars(els.map((el) => { const r = el!.getBoundingClientRect(); return { top: r.top - r0.top, height: r.height, left: r.left - r0.left - 12 }; }));
+      els[0]!.scrollIntoView({ block: "center", behavior: "smooth" });
+      timers.push(window.setTimeout(() => setFade(true), 2000), window.setTimeout(() => setBars([]), 2200));
+    };
+    place();
+    return () => (cancelAnimationFrame(frame), timers.forEach(clearTimeout));
+  }, [blocks, at]);
+  return (
+    <div aria-hidden className="pointer-events-none relative h-0" data-testid="change-bars" ref={origin}>
+      {bars.map((style, i) => (
+        <span className={cn("absolute w-0.5 rounded-full bg-info transition-opacity duration-200 ease-out", fade && "opacity-0")} data-change-bar key={i} style={style} />
+      ))}
+    </div>
+  );
+}
+
 function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folded: boolean; onNotes: OnNotes }) {
   // Opened for this visit only; a reload folds it again.
   const [open, setOpen] = useState(!folded);
+  const box = useRef<HTMLElement>(null);
+  const mark = marked.use();
+  const [mine, setMine] = useState<{ blocks: number[]; at: number } | null>(null);
+  useEffect(() => {
+    // Asked from this page just now, so a later visit doesn't mark it again.
+    if (mark?.report !== report.id || !box.current || !mark.scope.contains(box.current) || Date.now() - mark.at > 1500) return;
+    setOpen(true);
+    setMine(mark);
+    const t = window.setTimeout(() => setMine(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [mark, report.id]);
   const title = pageLabel(report.title);
   if (!open)
     return (
-      <article aria-label={`Report: ${title}`} className="mt-12 flex items-center gap-2 border-t py-2 first:mt-0 [[data-folded]+&]:mt-0" data-folded data-report={report.id}>
+      <article aria-label={`Report: ${title}`} className="mt-12 flex items-center gap-2 border-t py-2 first:mt-0 [[data-folded]+&]:mt-0" data-folded data-report={report.id} ref={box}>
         {/* The title takes the room left, so every folded row keeps one line. */}
         <button aria-expanded={false} className="-ms-1 flex min-w-0 flex-1 basis-0 items-center gap-1 rounded-md px-1 font-medium text-sm hover:bg-accent" onClick={() => setOpen(true)} type="button">
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
@@ -159,7 +210,8 @@ function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folde
     );
   return (
     // The first sits below the page's own room for drops; each after it, a section's gap below.
-    <article aria-label={`Report: ${title}`} className="mt-12 scroll-mt-4 border-t pt-6 first:mt-0" data-report={report.id}>
+    <article aria-label={`Report: ${title}`} className="mt-12 scroll-mt-4 border-t pt-6 first:mt-0" data-report={report.id} ref={box}>
+      {mine && <ChangeBars at={mine.at} blocks={mine.blocks} />}
       <div className="flex items-center gap-2">
         <ReportByline report={report} />
         <OpenButton id={report.id} />

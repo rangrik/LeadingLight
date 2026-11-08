@@ -59,6 +59,28 @@ export function installFixture() {
   window.__llFixture = true;
   const real = window.fetch.bind(window);
   const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  // A stream the fixture speaks on, so views read again after the demo answers, stops or carries on.
+  const streams = new Set();
+  let seq = 0;
+  const now = (name, agent_state) => {
+    Object.assign(RUNTIME.sessions.find((s) => s.name === name) ?? {}, { agent_state, state_since: new Date().toISOString() });
+    const line = new TextEncoder().encode(`${JSON.stringify({ seq: ++seq, type: "session.changed", time: new Date().toISOString(), data: { session: name } })}\n`);
+    for (const c of streams) try { c.enqueue(line); } catch { streams.delete(c); }
+  };
+  // The demo's agents take an answer, a stop and a carry on; every other write is refused.
+  const write = (r, body) => {
+    let x;
+    if ((x = /^\/v1\/sessions\/([^/]+)\/requests\/([^/]+)\/respond$/.exec(r))) {
+      const req = (RUNTIME.requests[x[1]] ?? []).find((q) => q.id === decodeURIComponent(x[2]));
+      if (!req || req.state !== "pending") return json({ error: "Already answered.", request: req }, 409);
+      Object.assign(req, { state: "resolved", command: body.command });
+      setTimeout(() => now(x[1], "running"));
+      return json({ request: req, receipt: { state: "accepted" } });
+    }
+    if ((x = /^\/v1\/sessions\/([^/]+)\/interrupt$/.exec(r))) return (now(x[1], "idle"), json({}));
+    if ((x = /^\/v1\/sessions\/([^/]+)\/send$/.exec(r))) return (now(x[1], "running"), json({ turn: `${x[1]}#2` }));
+    return json({ error: "The review fixture is read-only." }, 405);
+  };
   window.fetch = (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const u = new URL(url, location.origin);
@@ -68,12 +90,12 @@ export function installFixture() {
     const r = path.replace("/__runtime", "");
     const method = (init?.method ?? "GET").toUpperCase();
     if (r === "/status") return Promise.resolve(json({ state: "ready", version: "fixture", home: "/tmp/fixture" }));
-    if (method !== "GET") return Promise.resolve(json({ error: "The review fixture is read-only." }, 405));
+    if (method !== "GET") return Promise.resolve(write(r, init?.body ? JSON.parse(init.body) : {}));
     if (r === "/v1/locations") return Promise.resolve(json([{ name: RUNTIME.location, path: RUNTIME.path, folder_id: "f-ll" }]));
     if (r === "/v1/conversations") return Promise.resolve(json(RUNTIME.conversations));
     if (r === "/v1/sessions") return Promise.resolve(json(RUNTIME.sessions));
     if (r === "/v1/notify") return Promise.resolve(json([]));
-    if (r === "/v1/events") return new Promise(() => {}); // an open stream that never speaks
+    if (r === "/v1/events") return Promise.resolve(new Response(new ReadableStream({ start: (c) => void streams.add(c) })));
     let x;
     if ((x = /^\/v1\/sessions\/([^/]+)\/requests$/.exec(r))) return Promise.resolve(json(RUNTIME.requests[x[1]] ?? []));
     if (/^\/v1\/sessions\/[^/]+\/draft$/.test(r)) return Promise.resolve(json({ text: "" }));
@@ -85,7 +107,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -236,10 +261,16 @@ export async function seed() {
       asks: [{ question: "Should the pricing page lead with the monthly or the yearly price?", about: [{ page: pricing, quote: "Monthly is simpler to explain" }], at: Date.now() - 6 * 60e3 }],
     },
   });
+  // Two drafts by the same agent, so the card can say what changed between them.
+  await make("reportA0", {
+    title: "Pricing copy, first draft", typeId: "report", createdAt: mins(150), updatedAt: mins(150),
+    properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(150), command: "c-a0" } },
+    content: doc(h(2, "Hero"), p(b("Your notes, finally in order."), " One place for everything you read and write."), h(2, "Tiers"), ul([b("Personal"), " · one Mac · $8 a month"], [b("Team"), " · shared spaces · $15 a seat a month"]), h(2, "FAQ"), p("Coming in the next draft.")),
+  });
   await make("reportA1", {
-    title: "Pricing copy, first draft", typeId: "report", createdAt: mins(80), updatedAt: mins(80),
+    title: "Pricing copy, second draft", typeId: "report", createdAt: mins(80), updatedAt: mins(80),
     properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(80), command: "c-a1", sources: [{ page: pricing, quote: "Monthly is simpler to explain" }] } },
-    content: doc(h(2, "Hero"), p(b("Notes that think with you."), " Every note is an object; links go both ways; agents work beside your words, never in them."), h(2, "Tiers"), ul([b("Personal"), " · one Mac, one space · $8 a month or $80 a year"], [b("Team"), " · shared spaces, roles · $15 a seat a month"]), h(2, "Open"), p("I lead with the monthly price because the notes say it is simpler to explain. If most people buy yearly, I should flip it; see my question.")),
+    content: doc(h(2, "Hero"), p(b("Notes that think with you."), " Every note is an object; links go both ways; agents work beside your words, never in them."), h(2, "Tiers"), ul([b("Personal"), " · one Mac, one space · $8 a month or $80 a year"], [b("Team"), " · shared spaces, roles · $15 a seat a month"]), h(2, "FAQ"), ul(["Is my data on your servers? No. It stays on your Mac."], ["Can I switch tiers later? Yes, at any time."], ["Is there a free trial? Thirty days, no card."]), p("Open: I lead with the monthly price because the notes say it is simpler to explain. If most people buy yearly, I should flip it; see my question.")),
   });
   const agentB = await make("agentB", {
     title: "Codex: Fix the tab row overflow", typeId: "agent", createdAt: mins(45), updatedAt: mins(3),
