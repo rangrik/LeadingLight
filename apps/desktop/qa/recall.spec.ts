@@ -4,7 +4,12 @@ import { expect, test } from "@playwright/test";
 // saved line the editor prunes as a note without a thought, or a round not kept on the Thoughts page.
 test("a recalled line is a sidenote, and the round is kept", async ({ page }) => {
   await page.goto("/?mac&demo");
-  await page.getByRole("button", { name: "Notes on Thinking in Systems", exact: true }).first().click();
+  await expect(page.getByRole("textbox", { name: "Title" })).toBeVisible();
+  await page.evaluate(async () => {
+    const { space } = await import(String("/src/lib/space.ts"));
+    const { openPage } = await import(String("/src/lib/panes.ts"));
+    openPage(space.get().pages.find((p: { title: string }) => p.title === "Notes on Thinking in Systems").id);
+  });
   await expect(page.getByText("You noted 3 things here")).toBeVisible();
   await page.getByRole("button", { name: "Recall", exact: true }).click();
 
