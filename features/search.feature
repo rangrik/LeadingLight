@@ -13,7 +13,7 @@ Feature: Quick open
   - recent: the 8 most recently edited findable pages; within a kind of match, newer pages come first
 
   Background:
-    Given the app is open in a browser at 1440x900 on the demo space, with "Weekly review" open
+    Given the app is open in a browser at 1440x900 on the demo space, with "Notes on Thinking in Systems" open
 
   Scenario: Three ways in
     When I press ⌘K
@@ -28,19 +28,22 @@ Feature: Quick open
     When I press ⌘K
     Then "Recent" heads the 8 most recently edited pages, newest first
     And no daily note, tag, report, agent page or template is among them
-    And "Weekly review" shows "open" at its right
+    And "Notes on Thinking in Systems" shows "open" at its right: it is in a tab
     And "Commands" follows, with Today, Calendar, Browser, Settings ⌘,, each type's list (Books, Tasks, …) and the bar's panels: Suggestions ⌥⌘S, Feed ⌥⌘F, Captures ⌥⌘K, Ask ⌘J
     And the first row is highlighted
 
-  Scenario: Matches come in order: start of the title, start of a word, then letters in order
+  Scenario: Matches come in order: the whole name, its start, a word's start, first letters, then letters in order
     When I press ⌘K and type "pri"
-    Then "Pricing notes" comes before "Write the pricing page copy", which comes before pages that only hold p, r and i in order
+    Then "Pricing notes" and "Priya Nair" come first (their names start so; newer first), then "Write the pricing page copy"
+    And then pages holding p, r and i in order from a word's start, closest together first
     And "Recent" is gone, and no command row shows, since no command's words start with "pri"
     When I clear the field and type "fl"
-    Then "Stocks and flows" (a word starts with "fl") comes before "Feedback loops" (f, then l)
+    Then "Stocks and flows" (a word starts with "fl") comes before "Feedback loops" (its first letters)
+    And "Ask Sam whether … by default" is not listed: f and l inside a word don't count
     When I type "tis"
-    Then "Thinking in Systems" is listed though its title does not hold "tis": its alias "TiS" does
+    Then "Thinking in Systems" comes first though its title does not hold "tis": its alias "TiS" does
     And its row says "Book" in muted text
+    And "Read chapter 3 of Thinking in Systems" and "Notes on Thinking in Systems" follow, by their words' first letters
     When I type "pricing page"
     Then "Write the pricing page copy" shows "Task" and "LeadingLight", its project
 
@@ -48,9 +51,9 @@ Feature: Quick open
     When I press ⌘K, type "stocks" and press ↓ then ↑
     Then the highlight moves down a row and back
     When I press Enter
-    Then "Stocks and flows" opens in the pane in front, in place of "Weekly review", and the switcher closes
+    Then "Stocks and flows" opens in the pane in front, in place of "Notes on Thinking in Systems", the switcher closes, and the cursor is in its body
     When I press ⌘K, type "feedback" and press ⇧Enter
-    Then "Feedback loops" opens in a new pane beside it, and that pane is in front
+    Then "Feedback loops" opens in a new pane beside it; that pane is in front with the cursor in its body
     When I press ⌘K, type "pricing notes" and press ⌘Enter
     Then "Pricing notes" opens in a new tab of the pane in front, and that tab is in front
     When I press ⌘K, type "stocks" and press Enter
@@ -59,7 +62,7 @@ Feature: Quick open
   Scenario: A page that isn't there yet
     When I press ⌘K and type "Garden plan"
     Then the last row reads New page “Garden plan”
-    When I press ↑ until it is highlighted, or click it, and press Enter
+    When I press ↓ until it is highlighted and press Enter
     Then a Page titled "Garden plan" is made and opens in the pane in front
     When I press ⌘K and type "pricing notes"
     Then there is no New page row: a page has that exact title
@@ -67,7 +70,13 @@ Feature: Quick open
     Then the list is the empty field's, and there is no New page row
 
   Scenario: Commands
-    When I press ⌘K, type "books" and press Enter
+    When I press ⌘K and type "today"
+    Then "Commands" with Today comes first, above "Pages": a command named better than any page leads
+    When I type "cal"
+    Then "Call Sam about the invoice…" comes before Calendar: both start with "cal", and pages lead a tie
+    When I type "books"
+    Then only Books shows; there is no New page row, since a command has that exact name
+    When I press Enter
     Then the Books list opens in the pane in front
     When I press ⌘K, type "feed" and press Enter
     Then the Feed panel opens in the bar, as ⌥⌘F does
