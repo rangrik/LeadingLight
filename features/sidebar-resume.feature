@@ -30,12 +30,13 @@ Feature: Resume rows in the sidebar
 
   Scenario: The demo space
     Given the demo space ("?mac&demo")
-    Then Resume shows three rows:
-      | row                          | second line                     |
-      | LeadingLight                 | 2 hours ago                     |
-      | Write the pricing page copy  | LeadingLight · Asks a question  |
-      | Read chapter 3 of Thinking in Systems | 2 hours ago            |
+    Then Resume shows three rows (the times are from just after the demo was made):
+      | row                                   | second line                    |
+      | LeadingLight                          | 2 hours ago                    |
+      | Write the pricing page copy           | LeadingLight · Asks a question |
+      | Read chapter 3 of Thinking in Systems | 2 hours ago                    |
     And "Fix the tab row overflow", edited 50 minutes ago, isn't row 1: Codex has it
+    And the question shows within seconds of opening, not after the Feed's one-minute retry
     And Recent and Pinned come before Types, and at 900 px the first Recent rows show without
       scrolling
 
