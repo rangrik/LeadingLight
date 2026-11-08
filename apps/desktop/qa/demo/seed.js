@@ -27,6 +27,9 @@ const quote = (...xs) => ({ type: "blockquote", content: [p(...xs)] });
 const link = (id) => ({ type: "pageLink", attrs: { id, view: null } });
 const hr = () => ({ type: "horizontalRule" });
 const doc = (...blocks) => ({ type: "doc", content: blocks });
+// A sidenote: its words carry a note mark; its text is a thought block on the Thoughts page (DECISIONS 11).
+const noted = (id, x) => ({ ...(typeof x === "string" ? text(x) : x), marks: [...((typeof x === "string" ? [] : x.marks) ?? []), { type: "note", attrs: { id } }] });
+const thought = (id, source, quote, words) => ({ type: "thought", attrs: { id, source, quote }, content: [p(words)] });
 
 // ---- the runtime fixture ----
 export const RUNTIME = {
@@ -85,7 +88,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -149,28 +155,39 @@ export async function seed() {
   // Fill the two mentions above now that ids exist.
   await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
 
-  // The long reading note, left mid-sentence yesterday
+  // The long reading note, with three sidenotes from five days ago and left mid-sentence then.
+  const sn = [crypto.randomUUID().slice(0, 8), crypto.randomUUID().slice(0, 8), crypto.randomUUID().slice(0, 8)];
   const notes = await make("notes", {
-    title: "Notes on Thinking in Systems", typeId: "page", createdAt: at(6, 21), updatedAt: at(1, 22, 10),
+    title: "Notes on Thinking in Systems", typeId: "page", createdAt: at(6, 21), updatedAt: at(5, 21, 40),
     properties: { tags: [reading, systems], icon: { kind: "emoji", value: "📘" } },
     content: doc(
       p("Reading notes on ", m(tis), " by ", m(meadows), ". One section per chapter; my own words first, quotes second."),
       h(2, "1. The basics"),
-      p("A system is more than the sum of its parts because of the ", b("interconnections"), ". Change the parts and little happens; change the connections and the whole thing behaves differently. This is the idea I keep coming back to for LeadingLight: the links between notes matter more than the notes."),
+      p("A system is more than the sum of its parts because of the ", noted(sn[0], b("interconnections")), ". Change the parts and little happens; change the connections and the whole thing behaves differently. This is the idea I keep coming back to for LeadingLight: the links between notes matter more than the notes."),
       p("Two building blocks: ", m(stocks), " and ", m(loops), ". Everything else in the book is built from them."),
       quote("The behavior of a system cannot be known just by knowing the elements of which the system is made."),
       h(2, "2. A brief visit to the systems zoo"),
       ul(["One stock with two competing balancing loops: a thermostat. The room never sits exactly at the set point."], ["One stock with one reinforcing and one balancing loop: population, capital, any growth that eventually meets a limit."], ["Two stocks: a renewable resource and the industry that draws on it. Overshoot comes from delays."]),
       todo([true, "Draw the thermostat loop by hand"], [false, "Reread the renewable resource example with the delay marked"], [false, "Ask ", m(sam), " whether delays explain our release slips"]),
       h(2, "3. Why systems work so well"),
-      p("Resilience, self-organization, hierarchy. Resilience is a stock too: it drains quietly and you only notice when it is gone."),
+      p("Resilience, self-organization, hierarchy. ", noted(sn[1], "Resilience is a stock too"), ": it drains quietly and you only notice when it is gone."),
       p("The hierarchy point is useful for the app: subsystems should serve the whole, but each needs room to run itself. A project's agents are a subsystem."),
       hr(),
       h(2, "Delays"),
-      p("Meadows keeps returning to delays. A delay in a balancing loop produces oscillation; a long delay in a reinforcing loop produces overshoot and collapse."),
+      p("Meadows keeps returning to delays. ", noted(sn[2], "A delay in a balancing loop produces oscillation"), "; a long delay in a reinforcing loop produces overshoot and collapse."),
       p("The point about delays in a feedback loop is that"),
     ),
   });
+
+  const thoughts = await make("notesThoughts", {
+    title: "Thoughts", typeId: "page", createdAt: at(5, 21, 5), updatedAt: at(5, 21, 40), properties: { parent: notes, role: "thoughts" },
+    content: doc(
+      thought(sn[0], notes, "interconnections", "The links are the system. Same for a team: swap the people and little changes; change how they talk and everything does."),
+      thought(sn[1], notes, "Resilience is a stock too", "Like trust on a team. Nobody measures it until the release that spends it."),
+      thought(sn[2], notes, "A delay in a balancing loop produces oscillation", "Our release slips: what users tell us arrives two weeks after we decide."),
+    ),
+  });
+  await savePage(notes, { properties: { tags: [reading, systems], icon: { kind: "emoji", value: "📘" }, thoughts }, updatedAt: at(5, 21, 40) });
 
   await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
 
