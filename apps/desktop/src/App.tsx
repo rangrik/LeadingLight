@@ -35,6 +35,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { SearchPanel } from "~/components/search-panel";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
@@ -152,6 +153,17 @@ export default function App() {
   useEffect(() => {
     loadSpace()
       .then(async (list) => {
+        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
+          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
+          demo.installFixture();
+          if (!list.length) {
+            await demo.seed();
+            location.reload();
+            return;
+          }
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -422,6 +434,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
+          {!phone && <SearchPanel />}
           {!mobile && <CliUpdates />}
           <ZoomHud />
         </TooltipProvider>
