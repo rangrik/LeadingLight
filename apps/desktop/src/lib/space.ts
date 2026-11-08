@@ -96,9 +96,12 @@ export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
 export const SUGGESTIONS_VIEW = "suggestions:";
 export const CALENDAR_VIEW = "calendar:";
+// Pages whose text has the words after it (features/search.feature).
+export const SEARCH_VIEW = "search:";
+export const searchView = (words: string) => `${SEARCH_VIEW}${words}`;
 const VIEWS = [CALENDAR_VIEW,FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
 // An empty view is a tab with no page yet.
-export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
+export const isPageView = (view: string) => !!view && ![TYPE_VIEW, CHAT_VIEW, BROWSER_VIEW, SEARCH_VIEW].some((v) => view.startsWith(v)) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
@@ -107,6 +110,7 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   if (view === FEED_VIEW) return { title: "Feed" };
   if (view === ASK_VIEW) return { title: "Ask" };
   if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
+  if (view.startsWith(SEARCH_VIEW)) return { title: `“${view.slice(SEARCH_VIEW.length)}”` };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
     if (!id) return { title: "Browser chat" };

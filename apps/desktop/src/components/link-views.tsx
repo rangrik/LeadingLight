@@ -14,6 +14,7 @@ import { madeInside } from "~/lib/assign";
 import { assets } from "~/lib/assets";
 import type { LinkView } from "~/lib/catalog";
 import { DAILY, dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
+import { aliasesOf } from "~/lib/filter";
 import { pageLabel } from "~/lib/labels";
 import { openLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
@@ -22,12 +23,6 @@ import { COLORS, readCover } from "~/lib/page-meta";
 import { focusedPage } from "~/lib/panes";
 import { iconFor, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { newPage } from "~/lib/templates";
-
-const aliasesOf = (p: ObjectSummary) =>
-  String(p.properties.aliases ?? "")
-    .split(",")
-    .map((a) => a.trim())
-    .filter(Boolean);
 
 // How a link menu makes pages: the main window does it itself; the capture panel asks it to.
 export type LinkActions = { here?: () => string | undefined; create: (title: string, typeId: string) => Promise<string>; day: (day: string) => Promise<string> };

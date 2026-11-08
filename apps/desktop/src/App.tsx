@@ -152,6 +152,17 @@ export default function App() {
   useEffect(() => {
     loadSpace()
       .then(async (list) => {
+        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
+          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
+          demo.installFixture();
+          if (!list.length) {
+            await demo.seed();
+            location.reload();
+            return;
+          }
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -276,6 +287,19 @@ export default function App() {
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
   const work = atWork(pages);
+  // A page's row: what it's called, and what a click, a drag and its menu do.
+  const pageRow = (p: ObjectSummary) => {
+    const name = roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title);
+    return {
+      id: p.id,
+      name,
+      isActive: p.id === current,
+      onSelect: opener(p.id),
+      onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: name }),
+      onCopyLink: copyLink(p.id, name),
+      onDelete: () => setPendingDelete(p),
+    };
+  };
   const navPages = pages
     // Tasks live in their type's view, too many for this list, unless at work; agents' pages too.
     .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p))
@@ -283,21 +307,14 @@ export default function App() {
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.
       const kids = pages.filter((c) => parentOf(c) === p.id && (roleOf(c) === "thoughts" || roleOf(c) === "essay")).sort((a, b) => (roleOf(a) === "thoughts" ? -1 : roleOf(b) === "thoughts" ? 1 : 0));
-      const name = roleOf(p) === "essay" && !p.title.trim() ? "Essay" : pageLabel(p.title);
       return {
-        id: p.id,
-        name,
+        ...pageRow(p),
         title: p.title,
         icon: <RowIcon icon={iconFor(p)} />,
-        isActive: p.id === current,
-        onSelect: opener(p.id),
-        onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: p.id, label: pageLabel(p.title) }),
         // Both go through the page's editor when it is open, so its own next save keeps them.
         onRename: (title: string) => void editPage(p.id, { title }),
         pinned: isPinned(p),
         onPin: () => void editPage(p.id, { properties: ({ pinned: _, ...rest }) => (isPinned(p) ? rest : { ...rest, pinned: true }) }),
-        onCopyLink: copyLink(p.id, name),
-        onDelete: () => setPendingDelete(p),
         open: p.id === current || kids.some((c) => c.id === current),
         children: kids.map((c) => {
           const name = roleOf(c) === "thoughts" ? "Thoughts" : c.title.trim() || "Essay";
@@ -344,8 +361,10 @@ export default function App() {
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         <AppSidebar
+          all={pages}
           onCreate={create}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
+          pageRow={pageRow}
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}
           todayActive={current !== undefined && current === dayShown(today())}

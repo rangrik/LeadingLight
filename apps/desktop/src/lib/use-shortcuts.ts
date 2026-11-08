@@ -5,6 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
+import { FILTER } from "~/components/sidebar/app-sidebar";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
@@ -58,6 +59,13 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return zoom(0, "ui");
         case "settings":
           return openSettings();
+        case "search": {
+          // The filter is in the pages' sidebar: Settings goes first, and the shell comes back.
+          const filter = () => window.dispatchEvent(new Event(FILTER));
+          if (useStore.getState().view.kind !== "settings") return void filter();
+          closeSettings();
+          return void setTimeout(filter);
+        }
         case "ask":
           return openAsk();
         case "feed":
