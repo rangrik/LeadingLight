@@ -6,6 +6,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@l
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "@leadinglight/ui/components/table";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@leadinglight/ui/components/tabs";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
+import { InboxSection } from "~/components/inbox-section";
 import { RowIcon } from "~/components/page-icon";
 import { PageChip, PagePicker, visit } from "~/components/property-value";
 import { captured as capturedOf, captureOf, captureProject, discoverVoiceCaptures, setCaptureProject, setCaptureProperty, setReviewed } from "~/lib/capture-inbox";
@@ -17,7 +18,7 @@ const labels = { idea: "Captured idea", web: "Saved webpage", voice: "Voice reco
 const date = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 const ids = (value: unknown): string[] => Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 
-// panel: in the bar, under its header, with the ticks as icons.
+// panel: the Inbox's Captured section, with the ticks as icons; else the full Captures page.
 export function CaptureInbox({ panel = false }: { panel?: boolean }) {
   const { pages } = space.use();
   const [tab, setTab] = useState("pending");
@@ -27,6 +28,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
   const [undone, setUndone] = useState<{ id: string; title: string; reviewed: boolean } | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [undoError, setUndoError] = useState("");
+  const [showReviewed, setShowReviewed] = useState(false);
   const alive = useRef(true);
   const load = () => {
     setLoading(true);
@@ -34,8 +36,8 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
     void discoverVoiceCaptures().catch(() => { if (alive.current) setError("Some older recordings could not be loaded."); }).finally(() => { if (alive.current) setLoading(false); });
   };
   useEffect(() => { alive.current = true; load(); return () => { alive.current = false; }; }, []);
-  const shown = capturedOf(pages).filter((page) => !!captureOf(page)!.reviewedAt === (tab === "reviewed"))
-    .sort((a, b) => captureOf(b)!.capturedAt - captureOf(a)!.capturedAt);
+  const all = capturedOf(pages).sort((a, b) => captureOf(b)!.capturedAt - captureOf(a)!.capturedAt);
+  const shown = all.filter((page) => !!captureOf(page)!.reviewedAt === (tab === "reviewed"));
   const undo = async () => {
     if (!undone || undoing) return;
     setUndoing(true);
@@ -43,20 +45,45 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
     catch { setUndoError("That review change could not be undone. Try again."); }
     finally { setUndoing(false); }
   };
+  const status = <>
+    {undone && <div className={panel ? "mb-3 flex items-center gap-2 text-sm" : "mb-3 flex flex-wrap items-center gap-2 text-sm"} role="status">
+      <span className={panel ? "min-w-0 flex-1 truncate" : "min-w-0 truncate"}>{undone.reviewed ? "Marked reviewed" : "Returned to inbox"}: {undone.title}</span>
+      <Button size="xs" variant="ghost" disabled={undoing} onClick={() => void undo()}>Undo</Button>
+    </div>}
+    {undoError && <p className="mb-3 text-sm text-destructive" role="alert">{undoError}</p>}
+    {error && <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" role="alert">
+      <span>{error}</span><Button size="xs" variant="outline" disabled={loading} onClick={load}>Retry loading</Button>
+    </div>}
+  </>;
+  const rows = (list: ObjectSummary[], reviewed: boolean) => <Table className="table-fixed">
+    <TableCaption className="sr-only">{reviewed ? "Reviewed captures" : "Captures to review"}</TableCaption>
+    <TableBody>{list.map((page) => <CaptureRow key={page.id} page={page} panel={panel} reviewed={reviewed}
+      onReviewed={(value) => { setUndoError(""); setUndone({ id: page.id, title: pageLabel(page.title), reviewed: value }); }} />)}</TableBody>
+  </Table>;
+  // In the Inbox: the captures to review, then the reviewed ones on request. Gone with nothing to show.
+  if (panel) {
+    const pending = all.filter((page) => !captureOf(page)!.reviewedAt);
+    const reviewed = all.filter((page) => captureOf(page)!.reviewedAt);
+    if (!pending.length && !undone && !(showReviewed && reviewed.length)) return null;
+    return (
+      <InboxSection count={pending.length} id="captured" title="Captured">
+        <div className="px-4">
+          {status}
+          {pending.length > 0 && rows(pending.slice(0, limit), false)}
+          {pending.length > limit && <Button className="mt-2" size="sm" variant="outline" onClick={() => setLimit(limit + 50)}>Show more</Button>}
+          {showReviewed && reviewed.length > 0 && rows(reviewed.slice(0, 50), true)}
+          {reviewed.length > 0 && <Button className="mt-1 px-0 text-muted-foreground" size="sm" variant="link" onClick={() => setShowReviewed(!showReviewed)}>
+            {showReviewed ? "Hide reviewed" : "Show reviewed"}
+          </Button>}
+        </div>
+      </InboxSection>
+    );
+  }
   return (
-    <div className={panel ? "px-4 pb-6" : "w-full max-w-[1000px] px-6 pt-10 pb-24 @sm:px-12"}>
-      {!panel && <>
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">Captures</h1>
-        <p className="mt-2 mb-6 text-sm text-muted-foreground">A place for what you save. Organise it when you are ready.</p>
-      </>}
-      {undone && <div className={panel ? "mb-3 flex items-center gap-2 text-sm" : "mb-3 flex flex-wrap items-center gap-2 text-sm"} role="status">
-        <span className={panel ? "min-w-0 flex-1 truncate" : "min-w-0 truncate"}>{undone.reviewed ? "Marked reviewed" : "Returned to inbox"}: {undone.title}</span>
-        <Button size="xs" variant="ghost" disabled={undoing} onClick={() => void undo()}>Undo</Button>
-      </div>}
-      {undoError && <p className="mb-3 text-sm text-destructive" role="alert">{undoError}</p>}
-      {error && <div className="mb-3 flex flex-wrap items-center gap-2 text-sm" role="alert">
-        <span>{error}</span><Button size="xs" variant="outline" disabled={loading} onClick={load}>Retry loading</Button>
-      </div>}
+    <div className="w-full max-w-[1000px] px-6 pt-10 pb-24 @sm:px-12">
+      <h1 className="font-heading text-3xl font-semibold tracking-tight">Captures</h1>
+      <p className="mt-2 mb-6 text-sm text-muted-foreground">A place for what you save. Organise it when you are ready.</p>
+      {status}
       <Tabs value={tab} onValueChange={(value) => { setTab(String(value)); setLimit(50); }}>
         <TabsList aria-label="Capture status">
           <TabsTab value="pending">To review</TabsTab>
@@ -64,11 +91,7 @@ export function CaptureInbox({ panel = false }: { panel?: boolean }) {
         </TabsList>
         {["pending", "reviewed"].map((value) => <TabsPanel key={value} value={value}>
           {value === tab && (shown.length ? <>
-            <Table className="table-fixed">
-              <TableCaption className="sr-only">{tab === "reviewed" ? "Reviewed captures" : "Captures to review"}</TableCaption>
-              <TableBody>{shown.slice(0, limit).map((page) => <CaptureRow key={page.id} page={page} panel={panel} reviewed={tab === "reviewed"}
-                onReviewed={(reviewed) => { setUndoError(""); setUndone({ id: page.id, title: pageLabel(page.title), reviewed }); }} />)}</TableBody>
-            </Table>
+            {rows(shown.slice(0, limit), tab === "reviewed")}
             {shown.length > limit && <Button className="mt-4" variant="outline" onClick={() => setLimit(limit + 50)}>Show more</Button>}
           </> : loading ? <p className="py-10 text-sm text-muted-foreground" role="status">Looking for saved recordings…</p> : error ? <p className="py-10 text-sm text-muted-foreground">Try loading again to check for older recordings.</p> : <Empty className="py-12">
             <EmptyHeader><EmptyMedia variant="icon"><Inbox /></EmptyMedia>
@@ -106,7 +129,7 @@ function CaptureRow({ page, panel, reviewed, onReviewed }: { page: ObjectSummary
       <TableCell className={panel ? "whitespace-normal px-0 py-3" : "whitespace-normal px-0 py-4"}>
         <div className="flex flex-wrap items-start gap-2">
           <div className="min-w-0 flex-[1_1_12rem]">
-            <Button className="h-auto w-full min-w-0 justify-start px-0 py-1 text-left" variant="ghost" onClick={(event) => visit(page.id, event)}>
+            <Button className="h-auto w-full min-w-0 justify-start px-0 py-1 text-left focus:bg-accent" data-inbox-row={panel || undefined} variant="ghost" onClick={(event) => visit(page.id, event)}>
               <RowIcon icon={iconFor(page)} /><span className="min-w-0 flex-1 truncate">{pageLabel(page.title)}</span>
             </Button>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">{labels[capture.kind]} · {date.format(capture.capturedAt)}</p>

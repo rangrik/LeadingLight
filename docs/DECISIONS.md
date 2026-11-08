@@ -501,6 +501,11 @@ the count rises quietly and the text never moves. Today keeps its rows and gets 
 what earlier days left, with Dismiss all as the pressure valve that keeps a persistent list from
 becoming a pile.
 
+2026-11-08: three of those icons were inboxes, named only in tooltips, so they are now one Inbox
+with three sections (Needs you, Suggested, Captured) and one count; the strip keeps Inbox, Ask and
+Quick capture. The panel no longer switches views by itself: a page with suggestions only lifts
+its rows to the top of the Inbox, and the pin ("Keep order") stops that.
+
 Tabs are a layer inside a pane, not a new window model: the split stays the split, a tab keeps its
 own back and forward, and the row shows only with two or more tabs so one page looks as it did.
 Panes, tabs and the active tab are restored on launch. Quick capture is one box because what comes
