@@ -1,0 +1,789 @@
+<meta charset="utf-8">
+<title>Agent Work, Three Ways</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: a short intro, four prototype tabs that share one mock LeadingLight window, a step rail under it, then the comparison. */
+:root{
+  --bg:#fbfbf9; --fg:#1b1b19; --mute:#6f6e68; --line:#e5e3dd; --soft:#f2f1ec; --hover:#eae8e2; --card:#ffffff; --sidebar:#f5f4f0;
+  --accent:#2f5fdb; --ok:#2e8b57; --warn:#c27a10; --info:#2f5fdb; --bad:#c24141;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#131312;--fg:#ececea;--mute:#9b9a93;--line:#2b2b29;--soft:#1d1d1b;--hover:#272725;--card:#191918;--sidebar:#161615;--accent:#7a9cf0;--ok:#5cbf86;--warn:#e0a24a;--info:#7a9cf0;--bad:#e07070;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#131312;--fg:#ececea;--mute:#9b9a93;--line:#2b2b29;--soft:#1d1d1b;--hover:#272725;--card:#191918;--sidebar:#161615;--accent:#7a9cf0;--ok:#5cbf86;--warn:#e0a24a;--info:#7a9cf0;--bad:#e07070;color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.45;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:28px;letter-spacing:-.02em;margin:32px 0 8px;text-wrap:balance;font-weight:600}
+.lede{color:var(--mute);max-width:66ch;margin:0 0 6px}
+.scene{font-size:13px;color:var(--mute);max-width:66ch;margin:0 0 20px;padding:8px 12px;border-left:2px solid var(--line)}
+.scene b{color:var(--fg);font-weight:500}
+.muted{color:var(--mute)}
+.sm{font-size:12px}
+.grow{flex:1 1 auto}
+.min{min-width:0}
+.trunc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+
+.opts{display:flex;gap:2px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+.opt{appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:8px 12px 10px;font:inherit;color:var(--mute);cursor:pointer;white-space:nowrap;text-align:left;margin-bottom:-1px}
+.opt b{display:block;font-weight:500}
+.opt small{display:block;font-size:11px;color:var(--mute);margin-top:1px}
+.opt.on{color:var(--fg);border-color:var(--fg)}
+.opt:hover{color:var(--fg)}
+
+.frame{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.win{min-width:1060px;height:690px;display:grid;grid-template-columns:200px minmax(0,1fr) auto 40px;position:relative;font-size:13px;overflow:hidden;background:var(--card)}
+.ic{width:16px;height:16px;flex:none}
+.ic.sm{width:13px;height:13px}
+
+/* sidebar */
+.side{background:var(--sidebar);border-right:1px solid var(--line);padding:10px 8px;overflow:auto;display:flex;flex-direction:column;gap:1px}
+.side-top{display:flex;align-items:center;gap:8px;padding:4px 8px 10px;font-weight:600}
+.logo{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--accent),var(--ok))}
+.slabel{font-size:11px;color:var(--mute);padding:12px 8px 4px;letter-spacing:.03em}
+.srow{display:flex;align-items:center;gap:8px;height:28px;padding:0 8px;border-radius:6px;border:0;background:none;color:inherit;font:inherit;text-align:left;width:100%;cursor:pointer}
+.srow:hover{background:var(--hover)}
+.srow.on{background:var(--hover)}
+.srow span{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.srow .ic{color:var(--mute)}
+.count{font-style:normal;font-size:10.5px;background:var(--fg);color:var(--bg);border-radius:9px;padding:0 5px;line-height:16px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
+
+/* panes */
+.panes{display:flex;min-width:0;background:var(--card)}
+.pane{flex:1 1 0;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--line)}
+.pane:last-child{border-right:0}
+.pane-head{height:40px;display:flex;align-items:center;gap:6px;padding:0 10px;border-bottom:1px solid var(--line);flex:none;min-width:0}
+.ph-title{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab{display:flex;align-items:center;gap:6px;height:40px;padding:0 10px;border:0;border-bottom:2px solid transparent;color:var(--mute);cursor:pointer;background:none;font:inherit;max-width:230px;margin-bottom:-1px}
+.tab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab.on{color:var(--fg);border-bottom-color:var(--fg)}
+.tab .ic{color:var(--mute)}
+.pane-body{flex:1 1 0;min-height:0;overflow:auto;padding:28px 32px 56px}
+.pane-body.flush{padding:0}
+.doc{max-width:560px}
+.doc.wide{max-width:820px}
+.title{font-size:26px;font-weight:600;letter-spacing:-.02em;margin:0;line-height:1.2;text-wrap:balance}
+.titlerow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.props{display:flex;flex-direction:column;gap:4px;margin:10px 0 14px;color:var(--mute);font-size:13px}
+.prop{display:flex;align-items:center;gap:10px;min-height:20px}
+.prop b{font-weight:500;width:64px;color:var(--mute)}
+.prop .cb{margin-left:0}
+.h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:20px 0 6px;font-weight:500}
+.h .muted{text-transform:none;letter-spacing:0}
+.body p{font-size:15px;line-height:1.6;margin:0 0 10px}
+.body h2{font-size:21px;font-weight:600;letter-spacing:-.02em;margin:0 0 8px}
+.body ul{font-size:15px;line-height:1.6;margin:0;padding-left:22px}
+.placeholder{color:var(--mute)}
+.lnk{background:none;border:0;padding:0;font:inherit;color:var(--fg);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
+.cb{width:14px;height:14px;border:1px solid var(--mute);border-radius:4px;display:inline-grid;place-items:center;flex:none}
+.cb.on{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.cbcell{width:28px}
+
+/* sentences and notes */
+.sent{border-radius:3px;padding:1px 0}
+.sent[data-act]{cursor:pointer}
+.sent[data-act]:hover{background:var(--hover)}
+.sent.noted{text-decoration:underline dotted var(--mute);text-underline-offset:3px}
+.sent.changed{background:color-mix(in srgb,var(--ok) 16%,transparent)}
+.flash{animation:flash 1.4s ease-out}
+@keyframes flash{0%{background:color-mix(in srgb,var(--info) 35%,transparent)}100%{background:color-mix(in srgb,var(--ok) 16%,transparent)}}
+.nchip{font-size:10px;vertical-align:super;color:var(--mute);margin:0 1px}
+.docgrid{display:grid;grid-template-columns:minmax(0,1fr) 196px;gap:20px;align-items:start}
+.host{position:relative}
+.margin{position:relative}
+.note{position:absolute;left:0;right:0;border-left:2px solid var(--line);padding:1px 0 2px 10px;font-size:12px;line-height:1.4}
+.note .q,.rv-note .q{color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+.note textarea,.rv-note textarea{width:100%;border:0;background:transparent;font:inherit;color:inherit;resize:none;padding:0;margin:3px 0 2px;outline:0;line-height:1.4;display:block;overflow:hidden}
+.note textarea:focus,.rv-note textarea:focus{box-shadow:0 1px 0 var(--line)}
+.row{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:wrap}
+.row.ind,.ind{margin-left:24px}
+.note .row,.rv-note .row{color:var(--mute);gap:4px}
+.note label.row,.rv-note label.row{cursor:pointer}
+.reply{margin-top:5px;padding:6px 8px;background:var(--soft);border-radius:6px;color:var(--fg);display:flex;gap:6px;align-items:flex-start;line-height:1.4}
+.reply .ic{margin-top:2px;color:var(--mute)}
+.reply b{font-weight:500}
+.reply .lnk{color:var(--mute);margin-left:4px}
+.selbar{position:absolute;display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px;box-shadow:0 4px 14px rgba(0,0,0,.12);z-index:3}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 9px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:inherit;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap;line-height:1}
+.btn:hover{background:var(--hover)}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn.primary:hover{opacity:.9;background:var(--fg)}
+.btn.ghost{border-color:transparent;background:none;color:var(--mute)}
+.btn.ghost:hover{background:var(--hover);color:var(--fg)}
+.btn.ghost.on{background:var(--hover);color:var(--fg)}
+.btn.xs{height:22px;padding:0 7px;font-size:11.5px}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,.srow:focus-visible,.tab:focus-visible,.opt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ta{width:100%;border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:inherit;font-size:12.5px;background:var(--card);color:inherit;min-width:0}
+.ta:focus{outline:0;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--mute);white-space:nowrap}
+.pill.big{font-size:12.5px;padding:2px 9px 2px 7px;border:1px solid var(--line);border-radius:999px;color:var(--fg)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--line);display:inline-block;flex:none}
+.dot.working{background:var(--info);animation:pulse 1.6s ease-in-out infinite}
+.dot.review{background:var(--ok)}
+.dot.input{background:var(--warn)}
+.dot.done{background:var(--ok)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.chip{display:inline-flex;font-size:11px;border:1px solid var(--line);border-radius:5px;padding:1px 6px;cursor:pointer;background:var(--card);color:inherit;font-family:inherit}
+.bar{display:inline-block;width:40px;height:4px;border-radius:2px;background:var(--line);vertical-align:middle;margin-right:5px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--fg)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-weight:500;color:var(--mute);font-size:11px;letter-spacing:.04em;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:middle;font-variant-numeric:tabular-nums}
+.tbl td.trunc{max-width:220px}
+.tbl tr.click{cursor:pointer}
+.tbl tr.click:hover td{background:var(--soft)}
+.tbl .acts{white-space:nowrap;text-align:right}
+.tbl .acts .btn+.btn{margin-left:4px}
+.tbl.small td{padding:5px 8px}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin-top:6px}
+.tcard{border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;text-align:left;background:var(--card);font:inherit;color:inherit;display:flex;flex-direction:column;gap:2px}
+.tcard:hover{background:var(--soft)}
+.tcard b{font-weight:500}
+.daily{display:flex;flex-direction:column;gap:2px;margin:14px 0 20px}
+.drow{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:6px}
+.drow:hover{background:var(--soft)}
+.drow .ic{color:var(--mute)}
+.drow span{flex:1}
+
+/* work panel, report groups */
+.wp{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:12px 0;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.wp b{font-weight:500}
+.stream{margin-top:28px}
+.rep{margin-top:40px;border-top:1px solid var(--line);padding-top:20px}
+.rep.emb{margin-top:16px}
+.rep:first-child{margin-top:0;border-top:0;padding-top:0}
+.byline{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:13px;min-width:0;flex-wrap:wrap}
+.byline b{color:var(--fg);font-weight:500}
+.byline .ic{color:var(--mute)}
+.rep h2{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:10px 0 8px}
+.rests{font-size:12.5px;color:var(--mute);margin:8px 0 0}
+.rests .lnk{color:var(--mute)}
+.pts{padding-left:0;list-style:none;margin:8px 0 16px;display:flex;flex-direction:column;gap:10px;font-size:14px}
+.pts li{display:flex;flex-direction:column;gap:2px}
+.pts .q{color:var(--mute);font-size:12px}
+.pts b{font-weight:600}
+.rep-fold{display:flex;align-items:center;gap:6px;border:0;border-top:1px solid var(--line);background:none;font:inherit;font-size:13px;color:var(--mute);padding:14px 0 4px;cursor:pointer;margin-top:28px;width:100%;text-align:left}
+.rep-fold:hover{color:var(--fg)}
+.evid{margin:14px 0 4px;border:1px solid var(--line);border-radius:8px;overflow:hidden;max-width:360px}
+.evid svg{display:block;width:100%;height:auto}
+.cap{font-size:12px;color:var(--mute);padding:6px 10px;border-top:1px solid var(--line)}
+.thumb{height:44px;width:80px;border:1px solid var(--line);border-radius:6px;overflow:hidden;padding:0;background:var(--card);cursor:pointer;display:block}
+.thumb svg{display:block;width:100%;height:auto}
+
+/* A: the living result */
+.result{border:1px solid var(--line);border-radius:10px;margin-top:16px;background:var(--card)}
+.result-head{display:flex;align-items:center;gap:6px;padding:7px 10px 7px 12px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--mute);position:relative;flex-wrap:wrap}
+.result-head b{color:var(--fg);font-weight:500}
+.result-head .ic{color:var(--mute)}
+.result-body{padding:18px 16px 10px}
+.result-foot{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--line);align-items:center}
+.result-foot .ta{flex:1}
+.banner{padding:6px 12px;background:var(--soft);font-size:12px;color:var(--mute);border-bottom:1px solid var(--line)}
+.pop{position:absolute;right:10px;top:34px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px;box-shadow:0 8px 24px rgba(0,0,0,.14);z-index:4;min-width:240px}
+.pop button{display:flex;width:100%;gap:12px;justify-content:space-between;border:0;background:none;font:inherit;font-size:12.5px;padding:6px 8px;border-radius:5px;cursor:pointer;color:inherit}
+.pop button:hover{background:var(--hover)}
+
+/* B: two columns and the side card */
+.twocol{display:grid;grid-template-columns:minmax(0,1fr) 248px;gap:28px;align-items:start}
+.card{position:sticky;top:0;border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;background:var(--card)}
+.card .big{font-size:13px;font-weight:600;color:var(--fg)}
+.card .kv{display:flex;justify-content:space-between;gap:8px;color:var(--mute)}
+.card .kv b{font-weight:500;color:var(--fg);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cacts{display:flex;flex-direction:column;gap:6px;padding-top:4px;border-top:1px solid var(--line)}
+.cacts .btn{justify-content:center}
+.cacts .row .btn{flex:1}
+
+/* C: work and review */
+.lede2{margin:4px 0 18px}
+.wg{margin-bottom:22px}
+.wg h4{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:0 0 2px;font-weight:500;padding:0 8px}
+.wrow{display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 8px;border-radius:8px;cursor:pointer;border:0;background:none;width:100%;text-align:left;font:inherit;color:inherit}
+.wrow:hover{background:var(--soft)}
+.wrow .t{font-weight:500}
+.wrow .s{font-size:12px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wrow .r{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:12px;white-space:nowrap}
+.rv{display:grid;grid-template-rows:auto minmax(0,1fr);height:100%}
+.rv-strip{display:flex;align-items:center;gap:8px;padding:0 12px;height:44px;border-bottom:1px solid var(--line);font-size:13px;min-width:0}
+.rv-strip b{font-weight:600}
+.rv-split{display:grid;grid-template-columns:minmax(0,1fr) 300px;min-height:0}
+.rv-doc{overflow:auto;padding:24px 32px 48px}
+.rtitle{font-size:20px;font-weight:600;letter-spacing:-.02em;margin:0 0 10px}
+.rv-notes{border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.rv-head{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);font-size:12.5px}
+.rv-list{flex:1 1 auto;overflow:auto;padding:4px 8px}
+.rv-note{border-bottom:1px solid var(--line);padding:9px 6px;font-size:12px;line-height:1.4}
+.rv-note:last-child{border-bottom:0}
+.rv-foot{border-top:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:6px;font-size:12px}
+.rv-foot .btn{justify-content:center}
+
+/* strip and panel */
+.strip{border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px;background:var(--card)}
+.sbtn{position:relative;width:32px;height:32px;border-radius:6px;border:0;background:none;color:var(--mute);cursor:pointer;display:grid;place-items:center}
+.sbtn:hover{background:var(--hover);color:var(--fg)}
+.sbtn.on{background:var(--hover);color:var(--fg)}
+.sbtn .count{position:absolute;top:-2px;right:-2px}
+.panel{width:300px;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--card)}
+.panel-head{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);font-weight:600}
+.panel-body{overflow:auto;padding:8px;display:flex;flex-direction:column;gap:2px}
+.fi-wrap{border-radius:8px}
+.fi-wrap.on{background:var(--soft)}
+.fi{display:flex;gap:9px;align-items:flex-start;width:100%;border:0;background:none;font:inherit;color:inherit;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer}
+.fi:hover{background:var(--soft)}
+.fi .ic{color:var(--mute);margin-top:2px}
+.fi .rs{display:block;line-height:1.35}
+.fi .meta{display:block;font-size:11px;color:var(--mute);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi-x{padding:0 10px 10px 35px;display:flex;flex-direction:column;gap:7px;align-items:flex-start}
+.pad{padding:8px 10px;font-size:12.5px;margin:0}
+
+/* dialog and toast */
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.28);display:grid;place-items:center;z-index:5}
+.dlg{background:var(--card);border:1px solid var(--line);border-radius:12px;width:480px;max-width:92%;padding:18px;box-shadow:0 16px 48px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:10px}
+.dlg h3{margin:0;font-size:15px;font-weight:600}
+.dlg .d{color:var(--mute);font-size:12.5px;margin:0}
+.dlg ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13px;counter-reset:n}
+.dlg li{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:start;counter-increment:n}
+.dlg li::before{content:counter(n);font-weight:600;font-variant-numeric:tabular-nums}
+.dlg li .q{display:block;color:var(--mute);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dlg .lbl{font-size:12px;font-weight:500}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;padding-top:4px}
+.toast{position:absolute;right:52px;bottom:14px;background:var(--fg);color:var(--bg);padding:7px 11px;border-radius:8px;font-size:12px;z-index:6;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+
+/* rail */
+.rail{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 4px 4px;font-size:13px}
+.step{display:inline-flex;align-items:center;gap:6px;color:var(--mute)}
+.step.done{color:var(--fg)}
+.step.now{color:var(--fg);font-weight:600}
+.step i{width:18px;height:18px;border-radius:50%;border:1px solid var(--line);display:inline-grid;place-items:center;font-style:normal;font-size:11px;font-weight:500;color:var(--mute)}
+.step.now i{border-color:var(--fg);color:var(--fg)}
+.step.done i{background:var(--ok);border-color:var(--ok);color:#fff}
+.counts{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums;font-size:12.5px}
+.hint{color:var(--mute);width:100%;font-size:13px;min-height:20px}
+.hint b{color:var(--fg);font-weight:500}
+
+/* comparison */
+h2.sec{font-size:19px;margin:40px 0 10px;letter-spacing:-.01em;font-weight:600}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin:8px 0 10px}
+.col h3{font-size:14px;margin:0 0 6px;font-weight:600}
+.col p{margin:0 0 8px;font-size:13.5px;color:var(--fg)}
+.col p.muted{color:var(--mute)}
+.cmp{width:100%;border-collapse:collapse;font-size:13px;margin:8px 0 10px}
+.cmp th,.cmp td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+.cmp th{font-weight:600}
+.cmp td:first-child,.cmp th:first-child{color:var(--mute);width:150px;font-weight:500}
+.cmp td.n{font-variant-numeric:tabular-nums}
+.tblwrap{overflow-x:auto}
+.rec{border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:14px 0;max-width:72ch}
+.rec p{margin:0 0 8px}
+.rec p:last-child{margin:0}
+.files{font-size:12.5px;color:var(--mute);columns:2;column-gap:24px;max-width:72ch;margin:0;padding-left:18px}
+.files code{font-family:var(--mono);font-size:11.5px;color:var(--fg)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <h1>Agent work, three ways</h1>
+  <p class="lede">Today one round with an agent crosses five places: the Assign dialog, the work panel on the task, the Feed, the report's own page, and the stream at the bottom of the task. Nothing shows which tasks are being worked on at a glance. Below is the same scenario in the app as built, then three other shapes. Click through each; the rail under the window counts clicks and moves.</p>
+  <p class="scene"><b>The scenario.</b> Project <b>Website relaunch</b>. Claude has published a first draft of the pricing copy and wants a review. Codex is auditing the checkout and ticks steps off as you watch. Claude is waiting for a launch date. One task went idle. In each option: find the ready work, read it, note three sentences, keep one private, send, read the answer, accept.</p>
+
+  <div id="proto">
+    <div class="opts" id="opts" role="tablist"></div>
+    <div class="frame"><div class="win" id="win"></div></div>
+    <div class="rail" id="rail"></div>
+  </div>
+
+  <h2 class="sec">What each one changes</h2>
+  <div class="cols">
+    <div class="col">
+      <h3>Today, as built</h3>
+      <p>Reports are pages appended under the task, newest last. Notes go only on the report's own page, each ticked by hand, then a dialog, then one batch. The answer is another report with Point 1, Point 2. State lives in the work panel on each task; the Feed shows a task only when it needs you.</p>
+      <p class="muted">Decisions 20, 23, 24, 25 as written. Deferred 132 (notes in the stream) is the hop you feel.</p>
+    </div>
+    <div class="col">
+      <h3>A · One living result</h3>
+      <p>The agent owns one Result on the task and revises it. Every version is kept and openable from History, so nothing published is lost, but there is one thing to read. A note goes to the agent unless you lock it. Replies land under the note; the sentences the agent touched are marked. State sits beside the title, on the tab, and as a column in Tasks.</p>
+      <p class="muted">Changes 20, 24, 25: "a report never changes" becomes "a version never changes"; batches and point-by-point responses become notes with replies. Risk: the agent must say what changed, every time; a long result makes "What changed" load-bearing.</p>
+    </div>
+    <div class="col">
+      <h3>B · The task is the dashboard</h3>
+      <p>Your sketch. The project or idea page opens with a Work table: every task, agent, state, steps, latest report, with the question or Continue inline. The task splits into breakdown and reports on the left and a side card on the right with state, steps, evidence and the actions. Reports stay immutable pages, embedded newest first, and take notes in place. The send dialog goes; the ticked count on the card is the button.</p>
+      <p class="muted">Smallest change to the model; closes Deferred 132. Risk: the busiest page of the three, and a project with twenty tasks needs the table to fold or filter.</p>
+    </div>
+    <div class="col">
+      <h3>C · Work inbox and review</h3>
+      <p>One Work view for every assigned task, grouped by what needs you. Review is its own screen: the latest version on the left, your notes as a running list on the right, Request changes and Accept in the strip. Replies thread under the notes; the new version marks its changes. Like reviewing a pull request. The Feed shrinks to questions and approvals.</p>
+      <p class="muted">Changes 23 (the Feed grows into Work) and 24, 25 as A. Risk: a second way to read a report, and heavy for a one-paragraph task.</p>
+    </div>
+  </div>
+
+  <h2 class="sec">Side by side</h2>
+  <div class="tblwrap">
+  <table class="cmp">
+    <thead><tr><th></th><th>Today</th><th>A · One living result</th><th>B · The task is the dashboard</th><th>C · Work inbox and review</th></tr></thead>
+    <tbody>
+      <tr><td>What's in flight</td><td>Each task's work panel; the Feed only for what needs you; Agents list</td><td>Tasks list with State, Steps and Latest; dots on sidebar rows and tabs</td><td>The Work table at the top of the project or idea page; the side card on the task</td><td>The Work view, grouped: Needs you, Working, Resting, Done</td></tr>
+      <tr><td>Where the result lives</td><td>A stream under the task, newest at the bottom</td><td>One Result card on the task, versioned</td><td>Reports embedded in the task, newest first, older ones folded</td><td>The left pane of the review screen, latest version</td></tr>
+      <tr><td>Talking back</td><td>Open the report, select, Add sidenote, tick, Send feedback, dialog, Send</td><td>Click a sentence; lock to keep private; one Send</td><td>Click a sentence; untick to keep private; Send on the card</td><td>Click a sentence; lock to keep private; Request changes</td></tr>
+      <tr><td>The answer</td><td>A new report at the bottom with Point 1, Point 2; a Feed item</td><td>A reply under each note; touched sentences marked; a new version</td><td>A new report at the top with the points and a second draft</td><td>Replies in the notes list; new version with changes marked</td></tr>
+      <tr><td>This scenario</td><td class="n">14 clicks · 3 moves</td><td class="n">7 clicks · 1 move</td><td class="n">7 clicks · 1 move</td><td class="n">7 clicks · 1 move</td></tr>
+      <tr><td>Model change</td><td>None</td><td>Versions instead of immutable reports; replies instead of batches</td><td>None; one editor per embedded report</td><td>Feed becomes Work; replies instead of batches; a new screen</td></tr>
+      <tr><td>Biggest risk</td><td>Stays as it is</td><td>Silent rewrites, if "what changed" is weak</td><td>A crowded task page</td><td>Two ways to read the same report</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2 class="sec">Mixing them</h2>
+  <div class="rec">
+    <p>The three options tie on clicks once the report takes notes in place and the dialog goes. What separates them is whether you can see progress without visiting, and whether the answer lands beside your note or as another document to find.</p>
+    <p>My pick for a first cut: B's Work table on the project page (it is the smallest change and answers "what is being worked on"), A's Result card on the task in place of the stream (one thing to read, replies under the notes, versions behind History), and B's side card for the actions. C's Work view is the right move later if work spans several projects, and the review screen only if results grow long.</p>
+    <p>Each piece stands alone. The table by itself removes the hunt. The Result card by itself removes the Open, tick and dialog round.</p>
+  </div>
+
+  <h2 class="sec">Where this touches the code</h2>
+  <ul class="files">
+    <li><code>components/work-panel.tsx</code> the work panel and its widgets</li>
+    <li><code>components/reports.tsx</code> the stream of reports and batches</li>
+    <li><code>components/feedback.tsx</code>, <code>lib/feedback.ts</code> ticks, the dialog, the batch</li>
+    <li><code>components/feed.tsx</code>, <code>lib/feed.ts</code> the Feed and its item kinds</li>
+    <li><code>components/page-view.tsx</code> where a report's page takes notes</li>
+    <li><code>lib/work.ts</code>, <code>lib/work-watch.ts</code> Report, Agent, task state</li>
+    <li><code>docs/DECISIONS.md</code> 20, 23, 24, 25, 26</li>
+    <li><code>docs/DEFERRED.md</code> 2026-10-24, notes on a report in its task's stream</li>
+    <li><code>features/</code> reports, feedback, response, accept, feed, task-work</li>
+  </ul>
+</div>
+
+<script>
+(function(){
+'use strict';
+const ICONS={
+ check:'<path d="M20 6 9 17l-5-5"/>',
+ x:'<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+ 'chevron-right':'<path d="m9 18 6-6-6-6"/>',
+ 'chevron-down':'<path d="m6 9 6 6 6-6"/>',
+ 'arrow-left':'<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+ bot:'<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+ 'circle-check':'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+ square:'<rect width="18" height="18" x="3" y="3" rx="2"/>',
+ play:'<polygon points="6 3 20 12 6 21 6 3"/>',
+ lock:'<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+ 'lock-open':'<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+ 'messages-square':'<path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4c0-1.1.9-2 2-2h8a2 2 0 0 1 2 2z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+ 'message-square-quote':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 12a2 2 0 0 0 2-2V8H8"/><path d="M14 12a2 2 0 0 0 2-2V8h-2"/>',
+ 'message-square-reply':'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="m10 7-3 3 3 3"/><path d="M17 13v-1a2 2 0 0 0-2-2H7"/>',
+ 'message-square-dashed':'<path d="M3 6V5c0-1.1.9-2 2-2h2"/><path d="M11 3h3"/><path d="M18 3h1c1.1 0 2 .9 2 2"/><path d="M21 9v2"/><path d="M21 15c0 1.1-.9 2-2 2h-1"/><path d="M14 17h-3"/><path d="m7 17-4 4v-5"/><path d="M3 12v-2"/>',
+ 'message-circle-question':'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+ inbox:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+ sparkles:'<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>',
+ plus:'<path d="M5 12h14"/><path d="M12 5v14"/>',
+ 'file-text':'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+ lightbulb:'<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+ folder:'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+ calendar:'<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+ users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+ history:'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+ 'rotate-ccw':'<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+ send:'<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+ 'list-todo':'<rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
+ eye:'<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+ 'corner-down-right':'<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+ info:'<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+};
+const I=(n,c)=>`<svg class="ic${c?' '+c:''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||''}</svg>`;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// The report's sentences: as drafted (t), as revised after a note (r), a suggested note (n), the agent's reply (a).
+const SENTS={
+ s1:{t:'Three plans, one line each.',r:'Three plans in one row, one line each.',n:'Can these be a row, not a list?',a:'Put the three plans in one row, so each reads as one line.'},
+ s2:{t:'Starter is free for one person.',r:'Starter is free for one person, with every block and type.',n:'Say what is in it, or free sounds thin.',a:'Added what Starter includes, so free does not read as limited.'},
+ s3:{t:'Team is $8 a seat a month, billed yearly.',r:'Team is $8 a seat a month billed yearly, or $10 monthly.',n:'Monthly price too.',a:'Added the monthly price beside the yearly one.'},
+ s4:{t:'Business adds SSO and audit logs for $16 a seat.',r:'Business adds SSO and audit logs for $14 a seat.',n:'Pricing notes says $14, not $16.',a:'Changed Business to $14 a seat. Pricing notes has $14; the draft had a typo.'},
+ s5:{t:'The headline reads “Pay for people, not for pages.”',r:'The headline reads “Pay for people, not for pages.”, set at the display size from Brand voice.',n:'Which size is the headline?',a:'Kept the headline and named its size, from Brand voice.'},
+ s6:{t:'The subline promises no limit on notes, projects or agents on any plan.',r:'The subline promises one thing: no limit on notes. Projects and agents moved to the FAQ.',n:'Too many promises in one line.',a:'Cut the subline to one promise. Projects and agents moved to the FAQ.'},
+ s7:{t:'Every plan shows a “Start free” button; Team and Business also show “Talk to us”.',r:'Every plan shows one “Start free” button. “Talk to us” sits only under Business.',n:'Two buttons per plan is a lot.',a:'One button per plan. Talk to us now only under Business.'},
+ s8:{t:'The FAQ answers billing, seats and cancellation in five questions.',r:'The FAQ answers billing, seats, cancellation and agent limits in six questions.',n:'Add agent limits to the FAQ.',a:'Added a sixth question, on agent limits.'},
+};
+const PARAS=[['s1','s2','s3','s4'],['s5','s6'],['s7','s8']];
+const LABEL={working:'Working',input:'Needs your input',review:'Ready for review',idle:'Idle',stopped:'Stopped',done:'Accepted'};
+const BRIEF='Write the copy for the pricing page: three plans, a headline and subline, and the FAQ. Read Pricing notes and Brand voice first. Keep it to one screen.';
+const TASKS={
+ pricing:{title:'Write the pricing page copy',agent:'Claude',due:'Fri 14 Nov'},
+ checkout:{title:'Audit the checkout flow',agent:'Codex',due:'Mon 17 Nov',activity:'Running the checkout in the browser'},
+ date:{title:'Pick a launch date',agent:'Claude',due:'Fri 7 Nov',activity:'Waiting for your answer',q:'Ship in May or June?',about:'“We ship in May” in Plan'},
+ blog:{title:'Migrate the blog',agent:'Claude',due:'—',activity:'Stopped before it was ready'},
+ printer:{title:'Call the printer',agent:null,due:'Tue 11 Nov'},
+};
+const HUB={Today:'today',A:'tasks',B:'project',C:'work'};
+const OPTS=[
+ {k:'Today',l:'Today, as built',s:'the baseline'},
+ {k:'A',l:'A · One living result',s:'the agent works one artifact'},
+ {k:'B',l:'B · The task is the dashboard',s:'your sketch'},
+ {k:'C',l:'C · Work inbox and review',s:'like reviewing a pull request'},
+];
+const HINTS={
+ Today:[
+  'Open the <b>Feed</b>: the speech-bubbles icon at the right edge. It counts what needs you. Tasks that are merely working are not here; for those you open each task, or Tasks, which has no state column.',
+  'Select the <b>ready for review</b> item. The report opens beside the Feed.',
+  'Click a sentence, then <b>Add sidenote</b>. Tick <b>Send note … to Claude</b> on two of the three; leave one unticked. (Clicking a sentence in the task’s own stream does nothing: notes go on the report’s page.)',
+  'Press <b>Send feedback · 2</b> in the report’s header, look over the dialog, press Send.',
+  'When the Feed says Claude answered, select the item; the response opens beside, with Point 1 and Point 2.',
+  'Accept from the Feed item, or from the work panel on the task page.'],
+ A:[
+  'You are in <b>Tasks</b>. Every assigned task shows its state, steps and latest result here; the sidebar row and the tab carry the same dot.',
+  'Open <b>Write the pricing page copy</b>.',
+  'Click three sentences in the <b>Result</b>. Each click is a note. Press <b>To Claude</b> on one to lock it as private.',
+  'Press <b>Send 2 notes</b>. Claude revises the same Result rather than publishing another page.',
+  'Read Claude’s reply under each note. <b>What changed</b> marks the sentences it touched; <b>History</b> opens v2 as it was.',
+  'Press <b>Accept</b> in the Result’s header.'],
+ B:[
+  'You are on <b>Website relaunch</b>. The Work table at the top lists every task with its state, steps and latest report; the question and Continue sit inline.',
+  'Click the <b>pricing</b> row.',
+  'Click three sentences in the embedded report. Untick <b>Send to Claude</b> on one.',
+  'Press <b>Send feedback · 2</b> on the side card. No dialog.',
+  'Claude’s answer arrives as a new report at the top; the first draft folds away under it.',
+  'Press <b>Accept</b> on the side card.'],
+ C:[
+  'You are in <b>Work</b>. What needs you comes first; working and resting tasks follow, across every project.',
+  'Press <b>Review</b> on the pricing row.',
+  'Click three sentences in the report. Notes collect on the right; press <b>To Claude</b> on one to lock it as private.',
+  'Press <b>Request changes · 2</b>.',
+  'Replies land under each note; the left pane shows the new version with its changes marked.',
+  'Press <b>Accept</b> in the strip, then go back to Work.'],
+};
+const EV=`<svg viewBox="0 0 360 200" role="img" aria-label="The pricing page at 1280 px"><rect width="360" height="200" fill="var(--card)"/><rect x="0" y="0" width="360" height="26" fill="var(--soft)"/><rect x="14" y="9" width="52" height="8" rx="3" fill="var(--line)"/><rect x="250" y="9" width="30" height="8" rx="3" fill="var(--line)"/><rect x="290" y="9" width="56" height="8" rx="3" fill="var(--fg)" opacity=".8"/><rect x="60" y="44" width="240" height="12" rx="3" fill="var(--fg)" opacity=".85"/><rect x="110" y="62" width="140" height="7" rx="3" fill="var(--line)"/>${[0,1,2].map(i=>`<g transform="translate(${28+i*106},88)"><rect width="92" height="96" rx="8" fill="none" stroke="var(--line)"/><rect x="12" y="12" width="40" height="7" rx="3" fill="var(--line)"/><rect x="12" y="26" width="30" height="12" rx="3" fill="var(--fg)" opacity=".8"/><rect x="12" y="46" width="68" height="5" rx="2" fill="var(--line)"/><rect x="12" y="56" width="60" height="5" rx="2" fill="var(--line)"/><rect x="12" y="74" width="68" height="12" rx="4" fill="${i===1?'var(--accent)':'var(--soft)'}"/></g>`).join('')}</svg>`;
+
+const STATES={}; let S=null;
+const fresh=opt=>({opt,view:HUB[opt],task:null,beside:null,panel:null,feedSel:null,sel:null,notes:[],nextNote:1,comment:'',dialog:false,version:2,revising:false,answered:false,readAnswer:false,showChanges:true,history:false,viewV:null,accepted:false,round:0,checkout:{done:3,total:5},dateAnswered:false,blogOn:false,later:false,clicks:0,moves:0,toast:null,toastT:null,hubSeen:true,openedTask:false,collapsedOld:true,focus:null,flash:null,timers:[]});
+function stateFor(opt){ if(!STATES[opt]){ const st=fresh(opt); if(opt==='Today') st.hubSeen=false; STATES[opt]=st; sim(st); } return STATES[opt]; }
+function paint(st){ if(S===st) render(); }
+function sim(st){ st.timers.push(setTimeout(()=>{st.checkout.done=4;paint(st)},8000),setTimeout(()=>{st.checkout.done=5;paint(st)},18000)); }
+function toast(m){ const st=S; st.toast=m; clearTimeout(st.toastT); st.toastT=setTimeout(()=>{st.toast=null;paint(st)},2400); }
+function reset(opt){ const old=STATES[opt]; if(old){ old.timers.forEach(clearTimeout); clearTimeout(old.toastT); delete STATES[opt]; } S=stateFor(opt); render(); }
+
+function stateOf(id){ switch(id){ case 'pricing': return S.accepted?'done':S.revising?'working':'review'; case 'checkout': return S.checkout.done>=5?'review':'working'; case 'date': return S.dateAnswered?'working':'input'; case 'blog': return S.blogOn?'working':'idle'; default: return null; } }
+function stepsOf(id){ return {pricing:[5,5],checkout:[S.checkout.done,5],date:[1,3],blog:[2,6]}[id]||[0,0]; }
+function latestOf(id){ return {pricing:S.answered?'Second draft, after your notes':'Pricing copy, first draft',checkout:S.checkout.done>=5?'Checkout audit':'—',date:'—',blog:'Blog export, notes'}[id]||'—'; }
+function ageOf(id){ return {pricing:S.answered?'just now':'12 min',checkout:'now',date:'4 min',blog:'1 h'}[id]||''; }
+function needsYou(){ return (stateOf('pricing')==='review'?1:0)+(S.dateAnswered?0:1)+(S.checkout.done>=5?1:0); }
+const pill=(s,big)=>`<span class="pill${big?' big':''}"><i class="dot ${s}"></i>${LABEL[s]||''}</span>`;
+function steps(id){ const [d,t]=stepsOf(id); return `<span class="bar"><i style="width:${Math.round(d/t*100)}%"></i></span>${d}/${t}`; }
+const notesIn=ctx=>S.notes.filter(n=>ctx==='r1'?n.round===1:ctx==='r2'?n.round>=2:true);
+const pendingNotes=()=>S.notes.filter(n=>!n.sentAt&&n.toAgent);
+
+// Navigation. Every change of view, pane or panel is one move.
+function nav(patch){
+  const before=[S.view,S.task,S.beside,S.panel].join('|');
+  Object.assign(S,patch);
+  if(S.view==='task'&&!S.task) S.task='pricing';
+  const after=[S.view,S.task,S.beside,S.panel].join('|');
+  if(before!==after) S.moves++;
+  if((S.view==='task'&&S.task==='pricing')||S.view==='review'||S.beside==='report') S.openedTask=true;
+  if(S.panel==='feed') S.hubSeen=true;
+  if(S.view===HUB[S.opt]) S.hubSeen=true;
+}
+function addNote(sid){
+  if(!sid) return;
+  const open=S.notes.find(n=>n.sent===sid&&!n.sentAt);
+  if(open){ S.focus=`n-${S.opt}-${open.id}`; S.sel=null; return; }
+  const n={id:S.nextNote++,sent:sid,text:SENTS[sid].n,toAgent:S.opt!=='Today',sentAt:0,reply:null,round:S.round+1};
+  S.notes.push(n); S.sel=null; S.focus=`n-${S.opt}-${n.id}`;
+}
+function sendRound(){
+  const out=pendingNotes(); if(!out.length) return;
+  const st=S, now=Date.now();
+  out.forEach(n=>n.sentAt=now);
+  st.round++; st.revising=true; st.dialog=false; st.sel=null; st.lastComment=st.comment; st.comment='';
+  if(st.opt==='Today'&&st.feedSel==='ready') st.feedSel=null;
+  toast(`Sent ${out.length} ${out.length===1?'note':'notes'} to Claude`);
+  st.timers.push(setTimeout(()=>{ st.revising=false; st.version++; st.answered=true; out.forEach(n=>{n.reply=SENTS[n.sent].a;}); if(st.opt==='B') st.collapsedOld=true; paint(st); },3200));
+}
+
+// Pieces
+function paras(o){
+  const changed=new Set(S.notes.filter(n=>n.reply).map(n=>n.sent));
+  const list=notesIn(o.ctx||'all');
+  return PARAS.map(p=>`<p>${p.map(id=>{
+    const s=SENTS[id]; const isChanged=o.v>=3&&changed.has(id); const txt=isChanged?s.r:s.t;
+    const mine=list.filter(n=>n.sent===id); const noted=mine.length>0&&o.numbers;
+    const cls=['sent',noted?'noted':'',isChanged&&o.marks&&S.showChanges?'changed':''].filter(Boolean).join(' ');
+    const act=o.clickable?` data-act="${o.clickAct||'note'}" data-sent="${id}"`:'';
+    return `<span class="${cls}"${act} data-sid="${id}">${esc(txt)}</span>${noted?mine.map(n=>`<sup class="nchip">${n.id}</sup>`).join(''):''}`;
+  }).join(' ')}</p>`).join('');
+}
+const evidence=()=>`<figure class="evid" style="margin-left:0;margin-right:0">${EV}<figcaption class="cap">The page at 1280 px · pricing.png</figcaption></figure>`;
+const thumb=()=>`<button class="thumb" data-act="toast" data-msg="Opens pricing.png larger" aria-label="Open pricing.png">${EV}</button>`;
+const rests=()=>`<p class="rests">Rests on <button class="lnk" data-act="noop">“Three plans, Starter free” in Pricing notes</button> · <button class="lnk" data-act="noop">Brand voice</button></p>`;
+const selbar=()=>`<div class="selbar" data-for="${S.sel}"><button class="btn xs" data-act="add-note">${I('message-square-quote','sm')} Add sidenote</button><button class="btn xs" data-act="toast" data-msg="Asks Claude about the selection">${I('sparkles','sm')} Ask</button></div>`;
+function noteInner(n,variant){
+  const s=SENTS[n.sent];
+  const ta=`<textarea id="n-${S.opt}-${n.id}" data-act-input="note" data-id="${n.id}" rows="1" aria-label="Note ${n.id}"${n.sentAt?' readonly':''}>${esc(n.text)}</textarea>`;
+  let foot;
+  const rm=`<button class="btn ghost xs" data-act="rm" data-id="${n.id}" aria-label="Remove note">${I('x','sm')}</button>`;
+  if(variant==='today'||variant==='tick'){
+    foot=n.sentAt?`<div class="row">Sent${n.reply?' · answered':''}</div>`:`<div class="row"><label class="row"><input type="checkbox" data-act="tick" data-id="${n.id}"${n.toAgent?' checked':''}> ${variant==='today'?`Send note ${n.id} to Claude`:'Send to Claude'}</label><span class="grow"></span>${rm}</div>`;
+  } else {
+    foot=n.sentAt?(n.reply?`<div class="reply">${I('corner-down-right','sm')}<span><b>Claude</b> ${esc(n.reply)}<button class="lnk" data-act="show-change" data-sid="${n.sent}">See change</button></span></div>`:`<div class="row">Sent · Claude is on it</div>`)
+      :n.toAgent?`<div class="row"><button class="btn ghost xs" data-act="lock" data-id="${n.id}">${I('lock-open','sm')} To Claude</button><span class="grow"></span>${rm}</div>`
+      :`<div class="row"><button class="btn ghost xs on" data-act="lock" data-id="${n.id}">${I('lock','sm')} Private</button><span class="grow"></span>${rm}</div>`;
+  }
+  return `<div class="q">${n.id} · “${esc(s.t)}”</div>${ta}${foot}`;
+}
+const margin=(variant,ctx)=>`<div class="margin">${notesIn(ctx||'all').map(n=>`<div class="note" data-for="${n.sent}">${noteInner(n,variant)}</div>`).join('')}</div>`;
+const propsPricing=()=>`<div class="props"><div class="prop"><b>Done</b><span class="cb${S.accepted?' on':''}">${S.accepted?I('check','sm'):''}</span></div><div class="prop"><b>Due</b>Fri 14 Nov</div><div class="prop"><b>Project</b><button class="lnk" data-act="nav" data-view="project">Website relaunch</button></div></div>`;
+const taskTitle=withPill=>`<div class="titlerow"><h1 class="title">Write the pricing page copy</h1>${withPill?pill(stateOf('pricing'),true):''}</div>`;
+function wpActivity(s){
+  return `<div class="row">${I('bot')}<b>Claude: Write the pricing page copy</b><span class="muted">${LABEL[s]}</span><span class="grow"></span>${s==='working'?`<button class="btn ghost xs" data-act="toast" data-msg="Stops the agent">${I('square','sm')} Stop</button>`:''}<button class="btn xs" data-act="toast" data-msg="Opens the project chat beside the task">${I('messages-square','sm')} Chat</button></div>${s==='working'?`<div class="ind muted">Answering your feedback · just now</div>`:''}`;
+}
+const points=()=>`<ol class="pts">${S.notes.filter(n=>n.reply).map((n,i)=>`<li><span><b>Point ${i+1}</b> · On <button class="lnk" data-act="show-change" data-sid="${n.sent}">“${esc(SENTS[n.sent].t)}”</button> in Pricing copy, first draft</span><span>${esc(n.reply)}</span></li>`).join('')}</ol>`;
+
+// Pages
+const PAGES={
+ today(){ return `<div class="doc"><h1 class="title">Thursday 6 November</h1><div class="daily"><div class="drow">${I('file-text')}<span>You left <b>Pricing notes</b> mid-sentence.</span><button class="btn ghost xs" data-act="noop">Open</button></div><div class="drow">${I('lightbulb')}<span>3 ideas since Tuesday.</span><button class="btn ghost xs" data-act="noop">Review</button></div></div><div class="body"><p class="placeholder">Write here, or press / for a block…</p></div></div>`; },
+ tasks(){
+  const A=S.opt==='A';
+  const rows=['pricing','checkout','date','blog','printer'].map(id=>{const t=TASKS[id],s=stateOf(id);
+   return `<tr class="click" data-act="open-task" data-id="${id}"><td class="cbcell"><span class="cb${id==='pricing'&&S.accepted?' on':''}">${id==='pricing'&&S.accepted?I('check','sm'):''}</span></td><td>${esc(t.title)}</td>${A?`<td>${s?pill(s):'<span class="muted">—</span>'}</td><td class="muted">${s?steps(id):''}</td><td class="muted trunc">${s?esc(latestOf(id)):''}</td>`:''}<td class="muted">${t.due}</td><td class="muted">Website relaunch</td></tr>`;}).join('');
+  return `<div class="doc wide"><div class="titlerow"><h1 class="title">Tasks</h1><span class="grow"></span><button class="btn xs" data-act="noop">${I('plus','sm')} New task</button></div><table class="tbl" style="margin-top:14px"><thead><tr><th></th><th>Title</th>${A?'<th>State</th><th>Steps</th><th>Latest</th>':''}<th>Due</th><th>Project</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+ },
+ project(){
+  const cards=['pricing','checkout','date','blog','printer'].map(id=>`<button class="tcard" data-act="open-task" data-id="${id}"><b>${esc(TASKS[id].title)}</b><span class="muted sm">Due ${TASKS[id].due}</span></button>`).join('');
+  return `<div class="doc wide"><h1 class="title">Website relaunch</h1><div class="props"><div class="prop"><b>Status</b>Building</div><div class="prop"><b>Folder</b>~/work/relaunch</div></div>${S.opt==='B'?workTable():''}<div class="body" style="margin-top:14px"><p>New marketing site for the spring launch: pricing, the docs home and the blog, on the new brand.</p></div>${S.opt==='B'?'':`<h3 class="h">Linked tasks · 5</h3><div class="cards">${cards}</div>`}</div>`;
+ },
+ task(){ if(S.task!=='pricing') return taskOther(); return ({Today:taskToday,A:taskA,B:taskB,C:taskC})[S.opt](); },
+ report(){ return `<div class="doc"><div class="byline">${I('bot')}<b>Claude</b> · 12 min ago · about <button class="lnk" data-act="nav" data-view="task">Write the pricing page copy</button></div><h1 class="title" style="margin:10px 0 14px">Pricing copy, first draft</h1><div class="docgrid"><div class="body host">${paras({clickable:!S.accepted,clickAct:'select',v:2,numbers:true,ctx:'r1'})}${evidence()}${rests()}${S.sel?selbar():''}</div>${margin('today','r1')}</div></div>`; },
+ response(){ return `<div class="doc"><div class="byline">${I('bot')}<b>Claude</b> · just now · <button class="lnk" data-act="noop">answers your feedback</button> · about <button class="lnk" data-act="nav" data-view="task">Write the pricing page copy</button></div><h1 class="title" style="margin:10px 0 14px">Second draft, after your notes</h1>${points()}<div class="docgrid"><div class="body host">${paras({clickable:!S.accepted,clickAct:'select',v:3,numbers:true,ctx:'r2'})}${rests()}${S.sel?selbar():''}</div>${margin('today','r2')}</div></div>`; },
+ work(){
+  const g={needs:[],working:[],resting:[],done:[]}; const ps=stateOf('pricing');
+  (ps==='review'?g.needs:ps==='working'?g.working:g.done).push('pricing');
+  (S.dateAnswered?g.working:g.needs).push('date');
+  (S.checkout.done>=5?g.needs:g.working).push('checkout');
+  (S.blogOn?g.working:g.resting).push('blog');
+  const grp=(k,l)=>g[k].length?`<div class="wg"><h4>${l} · ${g[k].length}</h4>${g[k].map(wrow).join('')}</div>`:'';
+  return `<div class="doc wide"><h1 class="title">Work</h1><p class="muted lede2">Every task an agent has, across your projects. What needs you comes first.</p>${grp('needs','Needs you')}${grp('working','Working')}${grp('resting','Resting')}${grp('done','Done today')}</div>`;
+ },
+ review(){
+  const s=stateOf('pricing'); const pend=pendingNotes().length; const changed=S.notes.filter(n=>n.reply).length;
+  return `<div class="rv"><div class="rv-strip"><button class="btn ghost xs" data-act="nav" data-view="work">${I('arrow-left','sm')} Work</button><b class="trunc">Write the pricing page copy</b><span class="muted">·</span>${I('bot')}<span>Claude</span><span class="muted">· v${S.version} ·</span>${pill(s)}<span class="grow"></span>${changed?`<button class="btn ghost xs${S.showChanges?' on':''}" data-act="toggle-changes">Show changes · ${changed}</button>`:''}${pend?`<button class="btn primary xs" data-act="send">${I('send','sm')} Request changes · ${pend}</button>`:''}${s==='review'?`<button class="btn xs" data-act="accept">${I('check','sm')} Accept</button>`:''}</div>
+  <div class="rv-split"><div class="rv-doc"><div class="doc"><h2 class="rtitle">Pricing page copy <span class="muted" style="font-weight:400">· v${S.version}</span></h2><div class="body">${paras({clickable:!S.accepted,clickAct:'note',v:S.version,numbers:true,marks:true})}</div>${evidence()}${rests()}</div></div>
+  <aside class="rv-notes"><div class="rv-head"><b>Notes · ${S.notes.length}</b><span class="muted">${S.notes.length?'':'Click a sentence to note it'}</span></div><div class="rv-list">${S.notes.map(n=>`<div class="rv-note">${noteInner(n,'lock')}</div>`).join('')}</div><div class="rv-foot">${pend?`<input id="c-${S.opt}" class="ta" data-act-input="comment" placeholder="Overall comment (optional)" value="${esc(S.comment)}"><button class="btn primary" data-act="send">${I('send','sm')} Request changes · ${pend}</button>`:S.revising?`<div class="muted">Claude is answering ${S.notes.filter(n=>n.sentAt&&!n.reply).length} notes…</div>`:`<div class="muted">${S.notes.length?'Nothing waiting to go. Locked notes stay yours.':'Notes you lock stay private.'}</div>`}</div></aside></div></div>`;
+ },
+};
+function wrow(id){
+  const t=TASKS[id],s=stateOf(id);
+  const sub=id==='date'?`Claude asks: ${t.q} · about ${t.about}`:id==='checkout'?(s==='working'?`Codex · ${t.activity} · ${S.checkout.done} of 5 steps`:'Codex · Ready for review · Checkout audit'):id==='blog'?'Claude · Idle · Blog export, notes':`Claude · ${LABEL[s]} · ${latestOf('pricing')}`;
+  let r=`<span>${ageOf(id)}</span>`;
+  if(id==='pricing'&&s==='review') r+=`<button class="btn xs" data-act="review">${I('eye','sm')} Review</button>`;
+  if(id==='date'&&!S.dateAnswered) r=`<button class="btn xs" data-act="answer-date">May</button><button class="btn xs" data-act="answer-date">June</button>`;
+  if(id==='blog'&&!S.blogOn) r+=`<button class="btn xs" data-act="continue-blog">${I('play','sm')} Continue</button>`;
+  if(id==='checkout'&&s==='review') r+=`<button class="btn xs" data-act="toast" data-msg="Opens the checkout audit for review">${I('eye','sm')} Review</button>`;
+  return `<div class="wrow" role="button" tabindex="0" data-act="${id==='pricing'&&s!=='done'?'review':'open-task'}" data-id="${id}"><i class="dot ${s}"></i><span class="min"><span class="t" style="display:block">${esc(t.title)}</span><span class="s" style="display:block">${esc(sub)}</span></span><span class="r">${r}</span></div>`;
+}
+function workTable(){
+  const rows=['pricing','checkout','date','blog'].map(id=>{const t=TASKS[id],s=stateOf(id); let extra='';
+   if(id==='date'&&!S.dateAnswered) extra=`<button class="btn xs" data-act="answer-date">May</button><button class="btn xs" data-act="answer-date">June</button>`;
+   if(id==='blog'&&!S.blogOn) extra=`<button class="btn xs" data-act="continue-blog">${I('play','sm')} Continue</button>`;
+   if(id==='pricing'&&s==='review') extra=`<button class="btn xs" data-act="open-task" data-id="pricing">${I('eye','sm')} Review</button>`;
+   if(id==='checkout'&&s==='review') extra=`<button class="btn xs" data-act="toast" data-msg="Opens the checkout audit">${I('eye','sm')} Review</button>`;
+   const latest=id==='date'?t.q:id==='checkout'&&s==='working'?t.activity:latestOf(id);
+   return `<tr class="click" data-act="open-task" data-id="${id}"><td><b style="font-weight:500">${esc(t.title)}</b></td><td class="muted">${t.agent}</td><td>${pill(s)}</td><td class="muted">${steps(id)}</td><td class="muted trunc">${esc(latest)}</td><td class="muted">${ageOf(id)}</td><td class="acts">${extra}</td></tr>`;}).join('');
+  const n=needsYou();
+  return `<h3 class="h">Work <span class="muted">· 4 tasks${n?` · ${n} need${n===1?'s':''} you`:''}</span></h3><table class="tbl"><thead><tr><th>Task</th><th>Agent</th><th>State</th><th>Steps</th><th>Latest</th><th>When</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function taskOther(){
+  const id=S.task,t=TASKS[id],s=stateOf(id);
+  const who=t.agent?`${t.agent}: ${t.title}`:'';
+  const panel=t.agent?`<div class="wp"><div class="row">${I('bot')}<b>${esc(who)}</b><span class="muted">${LABEL[s]}</span><span class="grow"></span>${s==='idle'?`<button class="btn ghost xs" data-act="continue-blog">${I('play','sm')} Continue</button>`:''}<button class="btn xs" data-act="toast" data-msg="Opens the project chat beside the task">${I('messages-square','sm')} Chat</button></div>${t.activity&&s!=='review'?`<div class="ind muted">${esc(s==='working'&&id==='blog'?'Picking up where it stopped':t.activity)}</div>`:''}${id==='date'&&!S.dateAnswered?`<div class="row ind"><span class="muted">${t.q}</span><button class="btn xs" data-act="answer-date">May</button><button class="btn xs" data-act="answer-date">June</button></div>`:''}<div class="ind muted">${I('chevron-right','sm')} ${stepsOf(id)[0]} of ${stepsOf(id)[1]} steps done</div></div>`:'';
+  const brief={checkout:'Walk the checkout as a new customer in the browser, note every step that asks twice, and publish a report with screenshots.',date:'Choose a launch date that clears the printer and the blog migration. Ask me if the plan is unclear.',blog:'Export the old blog, keep every address working, and bring the posts into the new site.',printer:'Confirm the quantity and the paper for the launch cards.'}[id];
+  return `<div class="doc"><div class="titlerow"><h1 class="title">${esc(t.title)}</h1>${s&&S.opt!=='Today'?pill(s,true):''}</div><div class="props"><div class="prop"><b>Done</b><span class="cb"></span></div><div class="prop"><b>Due</b>${t.due}</div><div class="prop"><b>Project</b><button class="lnk" data-act="nav" data-view="project">Website relaunch</button></div></div>${panel}<div class="body"><p>${esc(brief)}</p></div>${id==='blog'?`<section class="stream"><article class="rep"><div class="byline">${I('bot')}<b>Claude</b> · 1 h ago<span class="grow"></span><button class="btn ghost xs" data-act="noop">Open</button></div><h2>Blog export, notes</h2><div class="body"><p>The export has 212 posts and 40 broken image links. The redirect map is drafted; it stops at the posts with two slugs.</p></div></article></section>`:''}</div>`;
+}
+function taskToday(){
+  const s=stateOf('pricing');
+  const review=s==='review'?`<div class="row ind"><span class="muted trunc">Read <button class="lnk" data-act="open-report" data-kind="${S.answered?'response':'report'}">${esc(latestOf('pricing'))}</button>, then accept it or send feedback.</span><span class="grow"></span><button class="btn xs" data-act="accept">${I('check','sm')} Accept</button></div>`:s==='done'?`<div class="ind muted">Accepted just now</div>`:'';
+  const stream=`<section class="stream">${repGroup({age:'12 min ago',title:'Pricing copy, first draft',open:'report',body:paras({clickable:!S.accepted,clickAct:'stream-hint',v:2})+evidence()+rests()})}${S.round>=1?batchGroup():''}${S.answered?repGroup({age:'just now',extra:` · <button class="lnk" data-act="noop">answers your feedback</button>`,title:'Second draft, after your notes',open:'response',body:points()+paras({clickable:!S.accepted,clickAct:'stream-hint',v:3})}):''}</section>`;
+  return `<div class="doc">${taskTitle(false)}${propsPricing()}<div class="wp">${wpActivity(s)}${review}<div class="ind muted">${I('chevron-right','sm')} 5 of 5 steps done</div><div class="ind">${thumb()}</div></div><div class="body"><p>${BRIEF}</p></div>${stream}</div>`;
+}
+const repGroup=o=>`<article class="rep"><div class="byline">${I('bot')}<b>Claude</b> · ${o.age}${o.extra||''}<span class="grow"></span><button class="btn ghost xs" data-act="open-report" data-kind="${o.open}">Open</button></div><h2>${o.title}</h2><div class="body">${o.body}</div></article>`;
+function batchGroup(){
+  const sent=S.notes.filter(n=>n.sentAt&&n.round===1);
+  return `<article class="rep"><div class="byline"><b>You sent feedback</b> · ${sent.length} ${sent.length===1?'point':'points'} to Claude · just now · Sent<span class="grow"></span><button class="btn ghost xs" data-act="noop">Open</button></div><ol class="pts">${sent.map(n=>`<li><span class="q">“${esc(SENTS[n.sent].t)}”</span><span>${esc(n.text)}</span></li>`).join('')}</ol>${S.lastComment?`<p>${esc(S.lastComment)}</p>`:''}</article>`;
+}
+function taskA(){
+  const s=stateOf('pricing'); const v=S.viewV||S.version; const pend=pendingNotes(); const changed=S.notes.filter(n=>n.reply).length;
+  const head=`<header class="result-head">${I('bot')}<b>Claude</b><span>·</span><span>v${S.version}</span><span>·</span><span>${S.answered?'just now':'12 min ago'}</span><span>·</span>${pill(s)}<span class="grow"></span>${changed&&!S.viewV?`<button class="btn ghost xs${S.showChanges?' on':''}" data-act="toggle-changes">What changed · ${changed}</button>`:''}<button class="btn ghost xs${S.history?' on':''}" data-act="history">${I('history','sm')} History</button>${s==='review'&&!S.viewV?`<button class="btn xs" data-act="accept">${I('check','sm')} Accept</button>`:''}${S.history?historyPop(changed):''}</header>`;
+  const banner=S.viewV?`<div class="banner">Reading v${S.viewV} as it was. <button class="lnk" data-act="view-v" data-v="current">Back to v${S.version}</button></div>`:'';
+  const body=S.viewV===1?`<div class="body"><h2>Pricing page copy</h2><ul><li>Three plans: Starter, Team, Business</li><li>Headline from Brand voice</li><li>FAQ: billing, seats, cancellation</li></ul></div>`
+    :`<div class="docgrid"><div class="body host"><h2>Pricing page copy</h2>${paras({clickable:!S.accepted&&!S.viewV,clickAct:'note',v,numbers:!S.viewV,marks:!S.viewV})}${evidence()}${rests()}</div>${S.viewV?'':margin('lock')}</div>`;
+  const foot=pend.length&&!S.viewV?`<footer class="result-foot"><input id="c-${S.opt}" class="ta" data-act-input="comment" placeholder="Overall comment (optional)" value="${esc(S.comment)}"><button class="btn primary" data-act="send">${I('send','sm')} Send ${pend.length} ${pend.length===1?'note':'notes'}</button></footer>`:'';
+  return `<div class="doc wide">${taskTitle(true)}${propsPricing()}<div class="body"><p>${BRIEF}</p></div><section class="result" aria-label="Result">${head}${banner}<div class="result-body">${body}</div>${foot}</section></div>`;
+}
+const historyPop=changed=>`<div class="pop"><button data-act="view-v" data-v="1"><span>v1 · Outline</span><span class="muted">1 h ago</span></button><button data-act="view-v" data-v="${S.version>=3?'2':'current'}"><span>v2 · First draft</span><span class="muted">12 min ago</span></button>${S.version>=3?`<button data-act="view-v" data-v="current"><span>v3 · After your ${changed} notes</span><span class="muted">just now</span></button>`:''}</div>`;
+function taskB(){
+  const s=stateOf('pricing'); const ticked=pendingNotes().length;
+  const first=repEmbedded({title:'Pricing copy, first draft',age:'12 min ago',ctx:'r1',v:2,ev:true});
+  const resp=S.answered?repEmbedded({title:'Second draft, after your notes',age:'just now',extra:` · answers your feedback · ${S.notes.filter(n=>n.reply).length} of ${S.notes.filter(n=>n.reply).length} points`,ctx:'r2',v:3,pts:true}):'';
+  const old=S.answered?(S.collapsedOld?`<button class="rep-fold" data-act="expand-old">${I('chevron-right','sm')} Pricing copy, first draft · 12 min ago · ${notesIn('r1').length} notes</button>`:`<button class="rep-fold" data-act="expand-old">${I('chevron-down','sm')} Pricing copy, first draft · 12 min ago</button>${first}`):first;
+  const breakdown=`<table class="tbl small"><tbody>${['Read Pricing notes','Read Brand voice','Draft the three plans','Headline and subline','FAQ'].map(x=>`<tr><td class="cbcell"><span class="cb on">${I('check','sm')}</span></td><td>${x}</td><td class="muted" style="text-align:right">Done</td></tr>`).join('')}</tbody></table>`;
+  const card=`<aside class="card" aria-label="Work"><div class="row">${I('bot')}<span class="big">Claude</span><span class="grow"></span>${pill(s)}</div><div class="muted">${s==='working'?'Answering your feedback · just now':s==='review'?`Published ${esc(latestOf('pricing'))} · ${ageOf('pricing')}`:'Accepted just now'}</div><div class="kv"><span>Steps</span><b>5 of 5</b></div><div class="kv"><span>Latest</span><b>${esc(latestOf('pricing'))}</b></div><div>${thumb()}</div><div class="cacts">${ticked?`<input id="c-${S.opt}" class="ta" data-act-input="comment" placeholder="Overall comment (optional)" value="${esc(S.comment)}"><button class="btn primary" data-act="send">${I('message-square-quote','sm')} Send feedback · ${ticked}</button>`:''}${s==='review'?`<button class="btn" data-act="accept">${I('check','sm')} Accept</button>`:''}<div class="row"><button class="btn ghost xs" data-act="toast" data-msg="Opens the project chat beside the task">${I('messages-square','sm')} Chat</button>${s==='working'?`<button class="btn ghost xs" data-act="toast" data-msg="Stops the agent">${I('square','sm')} Stop</button>`:''}</div></div></aside>`;
+  return `<div class="twocol"><div class="doc">${taskTitle(false)}${propsPricing()}<h3 class="h">Description</h3><div class="body"><p>${BRIEF}</p></div><h3 class="h">Breakdown <span class="muted">· 5 of 5</span></h3>${breakdown}<h3 class="h">Reports</h3>${resp}${old}</div>${card}</div>`;
+}
+const repEmbedded=o=>`<article class="rep emb"><div class="byline">${I('bot')}<b>Claude</b> · ${o.age}${o.extra||''}</div><h2>${o.title}</h2>${o.pts?points():''}<div class="docgrid"><div class="body host">${paras({clickable:!S.accepted,clickAct:'note',v:o.v,numbers:true,ctx:o.ctx})}${o.ev?evidence():''}${rests()}</div>${margin('tick',o.ctx)}</div></article>`;
+function taskC(){
+  const s=stateOf('pricing');
+  return `<div class="doc">${taskTitle(true)}${propsPricing()}<div class="wp">${wpActivity(s)}<div class="row ind"><span class="muted trunc">${esc(latestOf('pricing'))} · ${ageOf('pricing')}</span><span class="grow"></span><button class="btn xs" data-act="review">${I('eye','sm')} Review</button></div></div><div class="body"><p>${BRIEF}</p></div></div>`;
+}
+
+// Chrome: sidebar, tabs, strip, Feed, dialog
+const TITLE={today:()=>'Today',tasks:()=>'Tasks',project:()=>'Website relaunch',task:()=>TASKS[S.task||'pricing'].title,report:()=>'Pricing copy, first draft',response:()=>'Second draft, after your notes',work:()=>'Work',review:()=>'Write the pricing page copy'};
+function sidebar(){
+  const n=needsYou(); const o=S.opt;
+  const row=(v,icon,label,extra,active,task)=>`<button class="srow${active?' on':''}" data-act="nav" data-view="${v}"${task?` data-task="${task}"`:''}>${I(icon)}<span>${esc(label)}</span>${extra||''}</button>`;
+  const dotFor=id=>o==='Today'?'':`<i class="dot ${stateOf(id)}"></i>`;
+  return `<aside class="side"><div class="side-top"><span class="logo"></span>Pranav’s notes</div>
+   ${o==='C'?row('work','list-todo','Work',n?`<i class="count">${n}</i>`:'',S.view==='work'):''}
+   ${row('today','calendar','Today','',S.view==='today')}
+   ${row('tasks','circle-check','Tasks',o==='A'&&n?`<i class="count">${n}</i>`:'',S.view==='tasks')}
+   <div class="slabel">Types</div>
+   ${['Projects','Ideas','Meetings','People'].map((t,i)=>`<button class="srow" data-act="noop">${I(['folder','lightbulb','calendar','users'][i])}<span>${t}</span></button>`).join('')}
+   <div class="slabel">Pages</div>
+   ${row('project','folder','Website relaunch','',S.view==='project')}
+   ${row('task','circle-check','Write the pricing page copy',dotFor('pricing'),S.view==='task'&&S.task==='pricing'||S.view==='review','pricing')}
+   ${row('task','circle-check','Audit the checkout flow',dotFor('checkout'),S.view==='task'&&S.task==='checkout','checkout')}
+   <button class="srow" data-act="noop">${I('file-text')}<span>Pricing notes</span></button>
+   <button class="srow" data-act="noop">${I('file-text')}<span>Brand voice</span></button>
+  </aside>`;
+}
+function tabRow(){
+  const hub=HUB[S.opt]; const list=[{v:hub,l:TITLE[hub](),icon:{today:'calendar',tasks:'circle-check',project:'folder',work:'list-todo'}[hub]}];
+  if(S.view==='today'&&hub!=='today') list.push({v:'today',l:'Today',icon:'calendar'});
+  const inTask=S.view==='task'||S.view==='review';
+  const tid=inTask?(S.task||'pricing'):S.openedTask?'pricing':null;
+  if(tid) list.push({v:S.view==='review'?'review':'task',task:tid,l:TASKS[tid].title,icon:'circle-check',dot:S.opt==='Today'?null:stateOf(tid)});
+  const on=t=>t.v===S.view&&(t.task?t.task===S.task||S.view==='review':true);
+  return `<div class="pane-head" style="padding:0 6px;gap:0">${list.map(t=>`<button class="tab${on(t)?' on':''}" data-act="nav" data-view="${t.v}"${t.task?` data-task="${t.task}"`:''}>${t.dot?`<i class="dot ${t.dot}"></i>`:I(t.icon,'sm')}<span>${esc(t.l)}</span></button>`).join('')}<span class="grow"></span>${S.view==='task'&&S.opt==='Today'&&S.notes.length?'':''}</div>`;
+}
+function besideHead(){
+  const v=S.beside; const n=pendingNotes().length;
+  return `<div class="pane-head"><span class="ph-title">${esc(TITLE[v]())}</span><span class="grow"></span>${(v==='report'||v==='response')&&n?`<button class="btn xs" data-act="open-dialog">${I('message-square-quote','sm')} Send feedback · ${n}</button>`:''}<button class="btn ghost xs" data-act="close-beside" aria-label="Close">${I('x','sm')}</button></div>`;
+}
+function feedItems(){
+  const it=[]; const ps=stateOf('pricing');
+  if(S.opt==='Today'){
+    if(ps==='review'&&!S.answered&&!S.later) it.push({id:'ready',icon:'circle-check',reason:'“Write the pricing page copy” is ready for review',meta:'Write the pricing page copy · Website relaunch · 12 min',target:'Pricing copy, first draft',open:'report',acts:`<button class="btn xs" data-act="accept">${I('check','sm')} Accept</button><button class="btn ghost xs" data-act="later">Later</button>`});
+    if(ps==='review'&&S.answered) it.push({id:'answered',icon:'message-square-reply',reason:'Claude answered your feedback · “Write the pricing page copy” is ready for review',meta:'Write the pricing page copy · Website relaunch · just now',target:'Second draft, after your notes',open:'response',acts:`<button class="btn xs" data-act="accept">${I('check','sm')} Accept</button><button class="btn ghost xs" data-act="later">Later</button>`});
+  }
+  if(!S.dateAnswered) it.push({id:'question',icon:'message-circle-question',reason:'Claude: Pick a launch date asks: Ship in May or June?',meta:'Pick a launch date · Website relaunch · 4 min',target:'“We ship in May” in Plan',acts:`<button class="btn xs" data-act="answer-date">1 May</button><button class="btn xs" data-act="answer-date">2 June</button>`});
+  if(S.opt==='Today'&&S.checkout.done>=5) it.push({id:'checkout',icon:'circle-check',reason:'“Audit the checkout flow” is ready for review',meta:'Audit the checkout flow · Website relaunch · now',target:'Checkout audit',acts:`<button class="btn xs" data-act="toast" data-msg="Accepts the checkout audit">${I('check','sm')} Accept</button><button class="btn ghost xs" data-act="noop">Later</button>`});
+  return it;
+}
+function feedPanel(){
+  const items=feedItems();
+  const fi=it=>{const open=S.feedSel===it.id; return `<div class="fi-wrap${open?' on':''}"><button class="fi" data-act="feed-sel" data-id="${it.id}" aria-expanded="${open}">${I(it.icon)}<span class="min"><span class="rs">${it.reason}</span><span class="meta">${it.meta}</span></span></button>${open?`<div class="fi-x"><button class="chip" data-act="${it.open?'open-report':'toast'}" data-kind="${it.open||''}" data-msg="Opens Plan beside the Feed, scrolled to the words">${it.target}</button><div class="row">${it.acts}</div></div>`:''}</div>`;};
+  const where={A:'in Tasks and on the task',B:'on the project page and on the task',C:'in Work'}[S.opt];
+  return `<aside class="panel"><div class="panel-head">Feed<span class="grow"></span><span class="muted sm" style="font-weight:400">All projects ${I('chevron-down','sm')}</span></div><div class="panel-body">${items.length?items.map(fi).join(''):'<p class="muted pad">Nothing needs you.</p>'}${S.opt!=='Today'?`<p class="muted pad">Work that is ready to review shows ${where}, not here. The Feed keeps questions and approvals.</p>`:''}</div></aside>`;
+}
+function strip(){
+  const n=feedItems().length;
+  const b=(v,icon,label)=>`<button class="sbtn${S.panel===v?' on':''}" data-act="strip" data-view="${v}" aria-label="${label}">${I(icon)}${v==='feed'&&n?`<i class="count">${n}</i>`:''}</button>`;
+  return `<div class="strip">${b('suggestions','message-square-dashed','Suggestions')}${b('feed','messages-square','Feed')}${b('captures','inbox','Captures')}${b('ask','sparkles','Ask')}<span class="grow"></span>${b('capture','plus','Quick capture')}</div>`;
+}
+function dialog(){
+  const list=pendingNotes();
+  return `<div class="dim" data-act="close-dialog"><div class="dlg" data-act="stop" role="dialog" aria-label="Send feedback to Claude"><h3>Send feedback to Claude</h3><p class="d">On “Write the pricing page copy”. Only these notes go, each with the words it is about; your other notes stay yours. It answers them in one new report.</p><ol>${list.map(n=>`<li><span class="min"><span class="q">“${esc(SENTS[n.sent].t)}” in Pricing copy, first draft</span>${esc(n.text)}</span><button class="btn ghost xs" data-act="leave-out" data-id="${n.id}" aria-label="Leave out">${I('x','sm')}</button></li>`).join('')}</ol><label class="lbl" for="c-${S.opt}">Overall comment</label><input id="c-${S.opt}" class="ta" data-act-input="comment" placeholder="Optional" value="${esc(S.comment)}"><div class="acts"><button class="btn ghost" data-act="close-dialog">Cancel</button><button class="btn primary" data-act="send"${list.length?'':' disabled'}>Send ${list.length} ${list.length===1?'note':'notes'}</button></div></div></div>`;
+}
+
+// Render
+function render(){
+  const win=document.getElementById('win');
+  const act=document.activeElement; const keep=act&&win.contains(act)&&act.id?{id:act.id,s:act.selectionStart,e:act.selectionEnd}:null;
+  win.dataset.opt=S.opt;
+  const main=`<section class="pane main">${tabRow()}<div class="pane-body${S.view==='review'?' flush':''}">${PAGES[S.view]()}</div></section>`;
+  const beside=S.beside?`<section class="pane beside">${besideHead()}<div class="pane-body">${PAGES[S.beside]()}</div></section>`:'';
+  win.innerHTML=sidebar()+`<main class="panes">${main}${beside}</main>`+(S.panel==='feed'?feedPanel():'')+strip()+(S.dialog?dialog():'')+(S.toast?`<div class="toast" role="status">${esc(S.toast)}</div>`:'');
+  if(S.answered&&((S.opt==='Today'&&S.beside==='response')||((S.opt==='A'||S.opt==='B')&&S.view==='task'&&S.task==='pricing')||(S.opt==='C'&&S.view==='review'))) S.readAnswer=true;
+  layoutAll();
+  if(S.focus){ const f=document.getElementById(S.focus); S.focus=null; if(f){ f.focus(); try{f.setSelectionRange(f.value.length,f.value.length)}catch(_){} } }
+  else if(keep){ const el=document.getElementById(keep.id); if(el){ el.focus(); try{el.setSelectionRange(keep.s,keep.e)}catch(_){} } }
+  if(S.flash){ const el=win.querySelector(`.pane.main [data-sid="${S.flash}"], [data-sid="${S.flash}"]`); if(el){ el.classList.add('flash'); el.scrollIntoView({block:'center',behavior:'smooth'}); } S.flash=null; }
+  rail(); optsBar();
+}
+function autosize(el){ el.style.height='auto'; el.style.height=el.scrollHeight+'px'; }
+function layoutAll(){
+  const win=document.getElementById('win');
+  win.querySelectorAll('textarea').forEach(autosize);
+  win.querySelectorAll('.docgrid').forEach(g=>{
+    const col=g.querySelector('.margin'); if(!col) return;
+    const gTop=g.getBoundingClientRect().top; let bottom=0;
+    col.querySelectorAll('.note').forEach(n=>{ const s=g.querySelector(`[data-sid="${n.dataset.for}"]`); let top=s?s.getBoundingClientRect().top-gTop-3:bottom; top=Math.max(top,bottom); n.style.top=top+'px'; bottom=top+n.offsetHeight+10; });
+    col.style.minHeight=bottom+'px';
+  });
+  win.querySelectorAll('.selbar').forEach(bar=>{ const host=bar.parentElement; const s=host.querySelector(`[data-sid="${bar.dataset.for}"]`); if(!s) return; const h=host.getBoundingClientRect(), r=s.getBoundingClientRect(); bar.style.top=(r.top-h.top-32)+'px'; bar.style.left=Math.max(0,r.left-h.left)+'px'; });
+}
+function rail(){
+  const st=S;
+  const done=[st.hubSeen,st.openedTask,st.notes.length>=3&&st.notes.some(n=>!n.toAgent),st.round>=1,st.answered&&st.readAnswer,st.accepted];
+  const now=done.findIndex(d=>!d);
+  const names=['See what’s in flight','Open what’s ready','Note three sentences, keep one private','Send','Read the answer','Accept'];
+  document.getElementById('rail').innerHTML=names.map((n,i)=>`<span class="step${done[i]?' done':''}${i===now?' now':''}"><i>${done[i]?I('check','sm'):i+1}</i>${n}</span>`).join('')
+   +`<span class="counts">Clicks ${st.clicks} · Moves ${st.moves}</span><button class="btn ghost xs" data-act="reset">${I('rotate-ccw','sm')} Start over</button>`
+   +`<div class="hint">${now<0?'Done. Switch to another option and compare the counts.':HINTS[st.opt][now]}</div>`;
+}
+function optsBar(){
+  document.getElementById('opts').innerHTML=OPTS.map(o=>`<button class="opt${S.opt===o.k?' on':''}" role="tab" aria-selected="${S.opt===o.k}" data-act="opt" data-opt="${o.k}"><b>${o.l}</b><small>${o.s}</small></button>`).join('');
+}
+
+// Events
+const proto=document.getElementById('proto');
+proto.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]'); if(!el) return;
+  const a=el.dataset.act, d=el.dataset;
+  if(a==='opt'){ S=stateFor(d.opt); render(); return; }
+  if(a==='reset'){ reset(S.opt); return; }
+  if(a==='stop') return;
+  S.clicks++;
+  switch(a){
+    case 'noop': toast('Not part of this prototype'); break;
+    case 'toast': toast(d.msg); break;
+    case 'nav': nav({view:d.view,task:d.task||(d.view==='task'?'pricing':S.task),sel:null,history:false,viewV:null}); if(d.view==='review') S.task='pricing'; break;
+    case 'open-task': nav({view:d.id==='pricing'&&S.opt==='C'?'review':'task',task:d.id,sel:null,history:false}); break;
+    case 'review': nav({view:'review',task:'pricing'}); break;
+    case 'close-beside': nav({beside:null,sel:null}); break;
+    case 'strip': if(d.view==='feed') nav({panel:S.panel==='feed'?null:'feed'}); else toast(`${el.getAttribute('aria-label')} is not part of this prototype`); break;
+    case 'feed-sel': { const was=S.feedSel; S.feedSel=was===d.id?null:d.id; if(S.feedSel==='ready') nav({beside:'report'}); if(S.feedSel==='answered') nav({beside:'response'}); } break;
+    case 'open-report': nav({beside:d.kind,sel:null}); break;
+    case 'answer-date': S.dateAnswered=true; toast('Sent. Waiting for the agent to take it.'); if(S.feedSel==='question') S.feedSel=null; break;
+    case 'later': S.later=true; S.feedSel=null; break;
+    case 'continue-blog': S.blogOn=true; toast('Claude carries on with Migrate the blog'); break;
+    case 'select': S.sel=S.sel===d.sent?null:d.sent; break;
+    case 'add-note': addNote(S.sel); break;
+    case 'note': addNote(d.sent); break;
+    case 'stream-hint': toast('Notes go on the report’s own page. Press Open.'); break;
+    case 'tick': { const n=S.notes.find(x=>x.id==d.id); if(n) n.toAgent=el.checked; } break;
+    case 'lock': { const n=S.notes.find(x=>x.id==d.id); if(n) n.toAgent=!n.toAgent; } break;
+    case 'rm': S.notes=S.notes.filter(x=>x.id!=d.id); break;
+    case 'leave-out': { const n=S.notes.find(x=>x.id==d.id); if(n) n.toAgent=false; } break;
+    case 'open-dialog': S.dialog=true; break;
+    case 'close-dialog': S.dialog=false; break;
+    case 'send': sendRound(); break;
+    case 'accept': S.accepted=true; S.history=false; S.sel=null; if(S.feedSel==='ready'||S.feedSel==='answered') S.feedSel=null; toast('Accepted · Done is ticked'); break;
+    case 'toggle-changes': S.showChanges=!S.showChanges; break;
+    case 'history': S.history=!S.history; break;
+    case 'view-v': S.viewV=d.v==='current'?null:Number(d.v); S.history=false; break;
+    case 'show-change': S.flash=d.sid; S.showChanges=true; if(S.opt==='B'&&S.collapsedOld) S.collapsedOld=false; break;
+    case 'expand-old': S.collapsedOld=!S.collapsedOld; break;
+  }
+  render();
+});
+proto.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.dataset.actInput==='note'){ const n=S.notes.find(x=>x.id==el.dataset.id); if(n) n.text=el.value; autosize(el); layoutAll(); }
+  else if(el.dataset.actInput==='comment'){ S.comment=el.value; }
+});
+proto.addEventListener('keydown',e=>{ if(e.key==='Escape'&&(S.dialog||S.history||S.sel)){ S.dialog=false; S.history=false; S.sel=null; render(); } });
+window.addEventListener('resize',layoutAll);
+
+S=stateFor('Today'); render();
+})();
+</script>

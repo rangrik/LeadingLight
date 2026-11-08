@@ -12,6 +12,7 @@ import { useApplyTheme } from "@/hooks/use-theme";
 import { watchStillness } from "@/lib/still";
 import { useStore } from "@/lib/store";
 import { Button } from "@leadinglight/ui/components/button";
+import { Dialog, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import {
   Empty,
   EmptyContent,
@@ -33,6 +34,8 @@ import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
+import { PhoneShell } from "~/components/phone-shell";
+import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
@@ -46,12 +49,13 @@ import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
-import { isDesktop, useMobile } from "~/lib/platform";
+import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
+import { AGENT, taskOfAgent } from "~/lib/work";
 import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
@@ -63,6 +67,12 @@ import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, SUGGESTIONS_VIEW, isPageV
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
+// Tasks given to an agent, their own or a subtask's, are listed like any page, with their state.
+// Found from the agents' pages in two passes; a search per task was 40 ms on 3000 pages.
+function atWork(pages: ObjectSummary[]) {
+  const given = new Set(pages.flatMap((p) => (p.typeId === AGENT && !(p.properties["agent-parent"] as unknown[] | undefined)?.length ? [taskOfAgent(p)] : [])));
+  return new Set([...given, ...pages.flatMap((p) => (given.has(p.id) ? [(p.properties["subtask-of"] as string[] | undefined)?.[0]] : []))]);
+}
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
@@ -140,8 +150,18 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
-      .then(async (list) => {
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in first, so the Feed's first ask of the runtime gets it.
+    const fixture = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")).then((d) => (d.installFixture(), d)) : Promise.resolve(null);
+    fixture
+      .then(async (demo) => [demo, await loadSpace()] as const)
+      .then(async ([demo, list]) => {
+        if (demo && !list.length) {
+          await demo.seed();
+          location.reload();
+          return;
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -152,7 +172,8 @@ export default function App() {
           return !page || list.some((p) => p.id === page);
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
-        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
+        const work = atWork(list);
+        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
@@ -169,12 +190,13 @@ export default function App() {
   const [capture, setCapture] = useState(false);
   const closeCapture = useCallback(() => {
     setCapture(false);
-    if (captureFrom.current?.isConnected) captureFrom.current.focus();
+    if (!phone && captureFrom.current?.isConnected) captureFrom.current.focus();
   }, []);
   const toggleCapture = useCallback(() => {
     void isDesktop.then(async (native) => {
       if (native) return (await import("@tauri-apps/api/core")).invoke("capture_show");
-      if (capture) closeCapture();
+      if (capture && phone) window.dispatchEvent(new Event("leadinglight:close-capture"));
+      else if (capture) closeCapture();
       else setCapture(true);
     });
   }, [capture, closeCapture]);
@@ -207,7 +229,7 @@ export default function App() {
   // A click anywhere else closes the box, as the panel does; the editor's menus count as inside,
   // and the bar's button that opened it closes it itself.
   useEffect(() => {
-    if (!capture) return;
+    if (!capture || phone) return;
     const onDown = (e: PointerEvent) => !(e.target as Element | null)?.closest(`[role=dialog], ${POPUP}, [data-quick-capture]`) && closeCapture();
     document.addEventListener("pointerdown", onDown);
     return () => document.removeEventListener("pointerdown", onDown);
@@ -263,9 +285,10 @@ export default function App() {
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
+  const work = atWork(pages);
   const navPages = pages
-    // Tasks live in their type's view; there are too many for this list. So do agents' pages.
-    .filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !isChild(p))
+    // Tasks live in their type's view, too many for this list, unless at work; agents' pages too.
+    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p))
     .sort(byRecent)
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.
@@ -326,6 +349,7 @@ export default function App() {
         open={sidebarOpen}
         style={chrome(mac, sidebarWidth)}
       >
+        {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
@@ -369,6 +393,7 @@ export default function App() {
           {root && !mobile && <AskBar />}
         </SidebarInset>
         <BarStrip onCapture={toggleCapture} />
+        </>}
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
           onConfirm={(id) => {
@@ -387,6 +412,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
+          {mobile && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
@@ -395,11 +421,16 @@ export default function App() {
             </div>
           )}
           {/* The row only places the box; a click beside it reaches the page under it. */}
-          {capture && (
+          {capture && (phone ? <Dialog open onOpenChange={(open) => { if (!open) window.dispatchEvent(new Event("leadinglight:close-capture")); }}>
+            <DialogPopup aria-label="New idea" className="ll-phone-capture" finalFocus={false} showCloseButton={false}>
+              <DialogTitle className="sr-only">New idea</DialogTitle>
+              <CaptureBox className="h-full" embedded host={captureHost} />
+            </DialogPopup>
+          </Dialog> : (
             <div className="ll-capture-overlay pointer-events-none fixed inset-x-0 top-[15vh] z-50 flex justify-center px-3">
               <CaptureBox className="pointer-events-auto h-80 max-h-[70dvh] w-full max-w-[640px] shadow-2xl" host={captureHost} />
             </div>
-          )}
+          ))}
           <ShortcutsSheet />
           {!mobile && <CliUpdates />}
           <ZoomHud />

@@ -164,6 +164,11 @@ with Project 4.
 Suggestions, Feed, Captures, Ask and Quick capture; tabs with history inside panes; one capture box
 for words, addresses and voice notes. Built, QA'd twice and installed on 2026-10-28.
 
+[Project 5 — The task is the place](PROJECT-5.md): Assign turns the page into the task; a worktree
+per task; reports read and noted on the task, Send on its card; a Work table on the project and
+state on the tab; a task broken into subtasks that start with a press; a day's note listing what
+was made and edited. Decisions 21, 22, 24, 42, 43.
+
 ## Workspace history and connected devices (2026-10-29)
 
 Atomic page history, milestones, whole-action undo and authorship share the local store.

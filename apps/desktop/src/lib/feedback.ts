@@ -1,5 +1,5 @@
 import type { EditorDoc } from "@leadinglight/editor/editor";
-import { agentOfTask, isTask, taskOfDocument } from "~/lib/assign";
+import { agentOfTask, isTask } from "~/lib/assign";
 import { pageLabel } from "~/lib/labels";
 import { editPage } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
@@ -22,18 +22,17 @@ export type Point = { id: string; note: string; page: string; text: string; quot
 export type Batch = { command: string; task: string; agent: string; conversation: string; points: Point[]; comment?: string; state: "sending" | "sent" | "failed"; error?: string; at: number; sentAt?: number; response?: string };
 export const batchOf = (p?: ObjectSummary) => p?.properties.batch as Batch | undefined;
 
-type Draft = { picks: { page: string; note: string }[]; comment: string };
+type Draft = { picks: { page: string; note: string }[] };
 export const drafts = localPrefs<Record<string, Draft>>("ll.feedback", {});
-export const draftOf = (task: string): Draft => drafts.get()[task] ?? { picks: [], comment: "" };
+export const draftOf = (task: string): Draft => drafts.get()[task] ?? { picks: [] };
 const setDraft = (task: string, d: Draft) => drafts.set({ [task]: d });
 
-// The task feedback on a page belongs to, and its agent: the task itself, the task a report is
-// about, or the task a page was assigned through.
+// The task feedback on a page belongs to, and its agent: the task itself, or the task a report is about.
 export function recipientFor(pageId: string): { task: string; agent: string } | undefined {
   const p = pageOf(pageId);
   if (!p) return;
-  const about = reportOf(p)?.to;
-  const task = isTask(p) ? p : about && isTask(pageOf(about)) ? pageOf(about) : taskOfDocument(about ?? pageId);
+  const about = pageOf(reportOf(p)?.to ?? "");
+  const task = isTask(p) ? p : isTask(about) ? about : undefined;
   const agent = agentOfTask(task);
   return task && agent ? { task: task.id, agent: agent.id } : undefined;
 }
@@ -49,7 +48,6 @@ export function pick(task: string, page: string, note: string, on: boolean) {
   const picks = d.picks.filter((x) => x.note !== note);
   setDraft(task, { ...d, picks: on ? [...picks, { page, note }] : picks });
 }
-export const setComment = (task: string, comment: string) => setDraft(task, { ...draftOf(task), comment });
 
 // A note's text and the words it is written against, as they are now.
 async function pointOf(page: string, note: string, n: number): Promise<Point | null> {
@@ -122,7 +120,7 @@ export async function deliver(feedbackId: string): Promise<void> {
   }
 }
 
-// Freezes the task's chosen notes and comment as one batch, clears the draft, and sends it.
+// Freezes the task's chosen notes as one batch, clears the draft, and sends it.
 export async function send(task: string): Promise<string> {
   const agent = agentOfTask(pageOf(task));
   const run = runOf(agent);
@@ -132,9 +130,9 @@ export async function send(task: string): Promise<string> {
   const d = draftOf(task);
   const points = (await Promise.all(d.picks.map((x, i) => pointOf(x.page, x.note, i + 1)))).filter((x): x is Point => !!x);
   if (!points.length) throw new Error("None of the chosen notes is there any more.");
-  const batch: Batch = { command: crypto.randomUUID(), task, agent: agent.id, conversation: run.conversation, points, ...(d.comment.trim() && { comment: d.comment.trim() }), state: "sending", at: Date.now() };
+  const batch: Batch = { command: crypto.randomUUID(), task, agent: agent.id, conversation: run.conversation, points, state: "sending", at: Date.now() };
   const f = summarize(await createPage({ typeId: FEEDBACK, title: `Feedback on ${title(task)}`, content: bodyOf(points, batch.comment), properties: { parent: task, role: "feedback", "feedback-to": [agent.id], batch } }));
-  setDraft(task, { picks: [], comment: "" });
+  setDraft(task, { picks: [] });
   await deliver(f.id);
   return f.id;
 }

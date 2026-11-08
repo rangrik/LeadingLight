@@ -21,8 +21,9 @@ Codex account.
 - For a GPT model, Codex must be installed and signed in on this Mac.
 
 A task is any page whose type has the **Done** property. The starter Task type works, and so does
-a type of your own (a "Chore", say), as long as it has Done and a Project relation. Assigning keeps
-the page's type and properties as they are.
+a type of your own (a "Chore", say), as long as it has Done and a Project relation. Assigning a task
+keeps its type and properties as they are; any other page of a project becomes a task when you
+assign it (see below).
 
 ## Assign a task
 
@@ -32,6 +33,10 @@ the page's type and properties as they are.
    - **Agent**: a Claude model (Fable, Opus, Sonnet, Haiku) or, when Codex is signed in, a GPT model.
    - **Profile**: **None**, or one of your agent profiles.
    - **Access**: **Ask for approval**, **Approve for me** or **Full access**.
+   - **In its own worktree**: shown when the project's folder is a Git checkout. See below.
+   - **Plan first**: the agent breaks the task into subtasks and stops. See
+     [Breaking a task down](#breaking-a-task-down).
+   - **Becomes**: shown for a page that isn't a task, when your space has more than one task type.
    - **Anything to add**: an optional note for the agent.
 4. Press **Assign**.
 
@@ -43,15 +48,34 @@ summary"). It is listed in Agents, and its **Task** is your task.
 
 ### Assign a page that isn't a task
 
-A page of a project, such as a brief, can be assigned too. Press **Assign** on it and assign it as
-above. LeadingLight makes a task with the page's name, linked to the page and to its project, and
-gives that task to the agent. The page then says "Assigned as the task …", with a link to the task.
-Assigning the page again finds that task rather than making another.
+Any page of a project, such as an idea or a meeting, can be assigned too. The dialog says what
+happens: "This idea becomes a task and is given to the agent. Its words, links and history stay."
+When you press **Assign**:
+
+- The page itself becomes a Task. It keeps its id, words, links and history, and any properties of
+  its old type stay as its own. No second page is made.
+- Its **Project** moves to the task's **Project**, so the project lists it under Tasks, no longer
+  under Ideas or Meetings.
+- It is tagged with where it came from: "From idea", "From meeting", and so on.
+- Its history shows the type change, so you can see when it happened or go back.
+
+If your space has more than one type with **Done** (a "Chore" beside Task, say), **Becomes** picks
+which one; Task is chosen at first. A space with no type with Done can't assign such a page: the
+dialog says to make one first.
+
+### In its own worktree
+
+When the project's folder is a Git checkout, turn on **In its own worktree** to keep the agent's
+changes apart from yours. LeadingLight makes a worktree named from the task's title before the
+agent starts: "Write the summary" gets `write-summary`, on the branch `ll/write-summary`. A name
+already taken gets a number (`write-summary-2`). The agent works only there and is told never to
+switch branches, and the task shows "in write-summary" after the agent's name. Merging the branch
+back is yours to do.
 
 ### Assign starts work only once
 
 - Pressing **Assign** twice quickly, reloading, or quitting while it starts still makes one Agent
-  page and one conversation.
+  page and one conversation. A page made a task is never made one twice.
 - Mentioning a task with **@** in a page, or mentioning an agent in Ask, never starts any work.
   Only **Assign** does.
 
@@ -66,7 +90,7 @@ Assigning the page again finds that task rather than making another.
 ## The brief
 
 The agent's brief is the task as you wrote it when the work starts: its title, its words and its
-project, plus anything you added in the dialog. The agent can read the project's pages and the
+project, plus anything you added in the dialog and, in its own worktree, where it works. The agent can read the project's pages and the
 files in its folder as it works.
 
 ## Follow the work
@@ -82,6 +106,11 @@ runtime that runs it; you don't need to open the chat.
 | Workers | Other agents it started, such as "Codex worker, working", then how each ended |
 | Evidence | Small views of the images and files in its reports; each opens where it sits in its report |
 
+The task's tab and its row in the sidebar carry its state as a small dot before the title: blue
+while **Working**, amber for **Needs your input**, green for **Ready for review**, and none
+otherwise. Hover over the dot to see the state's name. The sidebar lists tasks of your own task
+types, such as a "Chore"; Tasks of the starter type are in Tasks.
+
 A count shows only for steps the agent listed. There is never a guessed percentage. These lines
 change in place as the work goes, and they never move the words you are reading: if you have
 scrolled down to read a report, a growing checklist leaves the text where it is on screen.
@@ -89,8 +118,9 @@ scrolled down to read a report, a growing checklist leaves the text where it is 
 ### Subtasks
 
 An agent can split the work into subtasks. They are ordinary Tasks whose **Subtask of** is your
-task, listed on it as Subtasks and shown in the checklist with their ticks. The agent can tick its
-own subtasks. It can't tick your task, or a task you made: it is told that only you mark it done.
+task, listed on it as Subtasks and shown in the task's Work table (see
+[Breaking a task down](#breaking-a-task-down)) with their ticks. The agent can tick its own
+subtasks. It can't tick your task, or a task you made: it is told that only you mark it done.
 
 ### Workers
 
@@ -105,11 +135,58 @@ it, and that page stays after the worker's session is gone.
 - Press **Chat** to open the project's chat beside the task, on that agent's conversation and
   titled with the task's name. The chat is there when you want detail; you never need it.
 
+## Breaking a task down
+
+A big task can be split into subtasks, each worked by an agent of its own, side by side where
+nothing waits on anything else.
+
+- **Task lines.** Inside a task, type `/task`, press Enter, type a title and press Enter. The new
+  task's **Subtask of** is the task you are in, and it takes that task's **Project**. A task line in
+  a page that has a Project (a meeting, say) takes that Project and is no subtask. Anywhere else it
+  gets neither.
+- **Plan first.** Turn it on in the Assign dialog and the agent reads the task and the project,
+  makes the subtasks itself, each with a brief and what it waits on, publishes the plan as a report
+  and stops. It never starts them. The task then says **Ready for review**.
+- **After.** A task's **After** lists the tasks it waits on. The Task type has it; set it like any
+  relation.
+
+A task with subtasks shows them in a **Work table** on its card: one row each, with its agent, its
+state (**Not started** until it has an agent), its steps, its latest report, and the one press it
+wants: **Answer** (a question waits; it opens the Feed on it), **Accept**, **Continue**, or
+**Start**. A subtask that waits shows "after Copy, Layout" instead. Done rows fold under "2 done" at
+the end. In a narrow pane, the agent and the latest report go under the title.
+
+**Start the ready ones**, under the table, gives every subtask that has no agent and whose After
+tasks are done an agent of its own, with the model, access and profile the parent was given (or
+your defaults, if it wasn't assigned), each in its own worktree if the parent had one. Nothing
+starts by itself: when a subtask is done, what waited on it shows **Start** and the button comes
+back. Pressing it twice still starts each subtask once, and a subtask you assigned by hand is left
+alone.
+
+A subtask's agent is told the parent's words too, under "This is part of". You accept each subtask
+on its own. The parent's state rolls up: **Needs your input** if any of its agents asks, else
+**Working** if any works, else **Ready for review** when every started subtask is ready or done.
+Accepting every subtask never ticks the parent; that is yours. A task whose subtasks have agents
+shows no **Assign**; one with only subtasks not started still does, to give the whole to one agent.
+
+### Work on a project page
+
+A project page shows a **Work** section under its properties, "Work · 2 in flight": one row for each
+of its tasks that has an agent or started subtasks, rows that need you first. Subtasks stay on their
+parent's card. A task with neither is not listed, and with nothing at work or done the section
+isn't there.
+
 ## Reports
 
 What an agent wants you to read arrives as a report: a new page shown after the task's own words,
 with a byline naming the agent and when ("Claude · just now"), and **Open** to see it as its own
 page.
+
+On a task the newest report comes first, in full. Each older one is folded to a row with its title
+and byline; click the title to open it in place. It stays open while you read, and a reload folds
+it again. You can write sidenotes on a report right there (see [The Feed and
+feedback](/ai/feed-feedback#write-notes-on-a-report)). On a page that isn't a task, reports show in
+the order they were published.
 
 - **Your words are never touched.** A report is its own page, not part of the task's text. You can
   keep typing while one arrives: your unsaved words, the cursor and where you are scrolled stay as
@@ -162,7 +239,7 @@ refused when the agent publishes, saying which file and why. A report never show
 When the agent given the task publishes its report as ready:
 
 - The panel says **Ready for review** and "Read Summary, then accept it or send feedback.", where
-  "Summary" is the report's title and opens it.
+  "Summary" is the report's title. Click it to scroll to the report under the task.
 - The [Feed](/ai/feed-feedback) lists "“Write the summary” is ready for review", with **Accept**.
 
 Read the report, then either send feedback (see [The Feed and feedback](/ai/feed-feedback)) or
@@ -196,12 +273,10 @@ Tasks no agent was given are as before: their checkbox ticks and unticks them, w
 **Settings › Objects** lists every kind of object LeadingLight keeps, with what it is for, who makes
 it, what can change and where it shows: Project, Task, Agent profile, Agent, Report, Evidence,
 Feedback and Question or approval, and the parts shown on a task and in the Feed (Question,
-Activity, Checklist, Evidence and Review). **Show** on a row opens its pages, such as every report.
+Activity, Checklist, Work table, Evidence and Review). **Show** on a row opens its pages, such as every report.
 If you renamed Task or made your own task types, the row uses your names ("To-do, Chore").
 
 ::: info Limits
-- To add sidenotes to a report, open it as its own page with **Open**. Notes can't be added to a
-  report inside the task's stream.
 - While LeadingLight is quit, an agent can't read your pages (it can still read its folder's
   files). What it publishes is kept and appears when you open the app.
 - Evidence must come from the agent's folder or its kept outputs, up to 50 MB a file. A screenshot

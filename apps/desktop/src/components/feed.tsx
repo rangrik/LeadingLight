@@ -6,13 +6,15 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@le
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { accept } from "~/lib/assign";
-import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
+import { hideBar } from "~/lib/bar";
+import { feedFocus, feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { deliveryOf } from "~/lib/project-runtime/requests";
+import { openReview, reviewable } from "~/lib/review";
 import { pageOf, space } from "~/lib/space";
 import type { Target } from "~/lib/work";
 import { sessions, watchWork } from "~/lib/work-watch";
@@ -40,7 +42,7 @@ export function useFeed() {
   return useMemo(() => feedItems().filter((i) => prefs.project === "all" || i.project === prefs.project), [pages, live, prefs, tick]);
 }
 
-function TargetLink({ t, onOpen }: { t: Target; onOpen: () => void }) {
+export function TargetLink({ t, onOpen }: { t: Target; onOpen: () => void }) {
   const what = t.quote ? `“${t.quote.length > 60 ? `${t.quote.slice(0, 60)}…` : t.quote}” in ${title(t.page)}` : t.block ? `${title(t.page)}, block ${t.block}${t.at !== undefined ? ` at ${Math.floor(t.at / 60)}:${String(Math.floor(t.at % 60)).padStart(2, "0")}` : ""}` : title(t.page);
   return (
     <button className="max-w-full truncate rounded-md border px-1.5 py-0.5 text-left text-xs transition-colors duration-150 hover:bg-accent" onClick={onOpen} type="button">
@@ -49,7 +51,7 @@ function TargetLink({ t, onOpen }: { t: Target; onOpen: () => void }) {
   );
 }
 
-function Answer({ item }: { item: FeedItem }) {
+export function Answer({ item }: { item: FeedItem }) {
   const { key, request } = item.request!;
   const chat = chatOf(key).use();
   const r = chat.requests.find((x) => x.id === request.id) ?? request;
@@ -70,7 +72,7 @@ function Answer({ item }: { item: FeedItem }) {
 }
 
 // A reply to an agent that asked in its own words: a message to its chat, as the chat would send.
-function Reply({ item }: { item: FeedItem }) {
+export function Reply({ item }: { item: FeedItem }) {
   const { key, location } = item.reply!;
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -154,6 +156,15 @@ export function FeedList({ paneId }: { paneId?: string }) {
   const list = useRef<HTMLUListElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const projects = [...all.values()].map((f) => f.folder.pageId);
+  const want = feedFocus.use();
+  // Opened on an item: it is shown open, with the keyboard, and its project filter set aside.
+  useEffect(() => {
+    if (!want) return;
+    if (!items.some((i) => i.id === want)) return void (prefs.project !== "all" && feedPrefs.set({ project: "all" }));
+    feedFocus.set(null);
+    setSelected(want);
+    requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-feed-item="${CSS.escape(want)}"] > button`)?.focus());
+  }, [want, items]);
   useEffect(() => {
     if (!wantFocus.now) return;
     wantFocus.now = false;
@@ -163,7 +174,10 @@ export function FeedList({ paneId }: { paneId?: string }) {
   const select = (item: FeedItem) => {
     setSelected(item.id === selected ? null : item.id);
     requestAnimationFrame(() => list.current?.querySelector(`[data-feed-item="${CSS.escape(item.id)}"]`)?.scrollIntoView({ block: "nearest" }));
-    if (item.id !== selected && item.targets[0] && !paneId) showTarget(item.targets[0]);
+    // A question or a report opens its review, which takes the lane's room; else what it is about.
+    if (item.id === selected || paneId) return;
+    if (reviewable(item)) (openReview(item.task!), hideBar("feed"));
+    else if (item.targets[0]) showTarget(item.targets[0]);
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;

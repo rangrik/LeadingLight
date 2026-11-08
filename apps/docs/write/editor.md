@@ -135,7 +135,7 @@ Clicking empty parts of the page puts the cursor somewhere useful, without addin
 - **In the side margin beside a block**: the cursor goes into the line at that height. Beside a table or columns, the left margin goes to the first cell and the right margin to the end of the last cell.
 - **Beside or above the title**: the cursor goes to the end of the title.
 - **In the gap just above the body**, under the properties: the cursor goes to the start of the first block.
-- **Beside a property, the backlinks or Created this day**: nothing happens.
+- **Beside a property, the backlinks or This day**: nothing happens.
 
 If the link field is open, clicking blank space closes it and keeps the words selected.
 

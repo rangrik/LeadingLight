@@ -2,24 +2,25 @@ import { Bot } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { Field, FieldError, FieldLabel } from "@leadinglight/ui/components/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@leadinglight/ui/components/field";
 import { Form } from "@leadinglight/ui/components/form";
 import { Select, SelectGroup, SelectGroupLabel, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
+import { Switch } from "@leadinglight/ui/components/switch";
 import { Textarea } from "@leadinglight/ui/components/textarea";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { ACCESS, type Access, isClaude, MODELS, useAiPrefs } from "~/lib/ai-prefs";
 import { type Agent as Profile, listAgents } from "~/lib/agents";
-import { agentOfTask, assign, isTask, projectFor, taskOfDocument } from "~/lib/assign";
+import { agentOfTask, assign, isTask, NO_TASK_TYPE, projectFor, taskTypes } from "~/lib/assign";
 import { codex, effortFor, loadCodex } from "~/lib/codex";
 import { pageLabel } from "~/lib/labels";
 import { openBeside } from "~/lib/panes";
 import { folders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
-import { chatView, pageOf, space } from "~/lib/space";
-import { runOf } from "~/lib/work";
+import { chatView, pageOf, space, typeOf } from "~/lib/space";
+import { runOf, subtasksOf } from "~/lib/work";
 
-// Assign (features/assign.feature): a task, or a page of a project, given to an agent. The dialog is
-// COSS's "Dialog with form"; how the work goes shows under the task's title (work-panel.tsx).
+// Assign (features/assign.feature): a task, or a page of a project made the task, given to an agent.
+// The dialog is COSS's "Dialog with form"; how the work goes shows under the task's title (work-panel.tsx).
 
 // The page's project, while projects are on: what Assign needs.
 export function useProject(pageId: string) {
@@ -53,6 +54,9 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
   const [profile, setProfile] = useState("none");
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [note, setNote] = useState("");
+  const [becomes, setBecomes] = useState("task");
+  const [own, setOwn] = useState(false);
+  const [plan, setPlan] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -63,12 +67,17 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
   }, [open]);
   const page = pageOf(pageId);
   const folder = project ? folders.get().get(project)?.folder.path.split("/").at(-1) : undefined;
+  const repo = project ? folders.get().get(project)?.repo : false;
+  const types = isTask(page) ? [] : taskTypes();
+  const type = types.some((t) => t.id === becomes) ? becomes : types[0]?.id;
+  const none = !isTask(page) && !types.length;
   const gpt = cx.state === "ready" ? cx.models : [];
+  const noCodex = !isClaude(model) && cx.state !== "ready";
   const models = Object.fromEntries([...MODELS.map((m) => [m.value, m.label]), ...gpt.map((m) => [m.id, m.name])]);
   const submit = () => {
     setBusy(true);
     setError(null);
-    assign(pageId, { model, effort: effortFor(model, prefs.effort), access, note: note.trim() || undefined, profile: profiles.find((p) => p.id === profile) })
+    assign(pageId, { model, effort: effortFor(model, prefs.effort), access, note: note.trim() || undefined, profile: profiles.find((p) => p.id === profile), type, worktree: own, plan })
       .then((agent) => {
         onOpenChange(false);
         toastManager.add({ type: "success", title: `Assigned to ${pageLabel(pageOf(agent)?.title ?? "")}`, timeout: 2500 });
@@ -81,12 +90,16 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
         <DialogHeader>
           <DialogTitle>Assign “{pageLabel(page?.title ?? "")}”</DialogTitle>
           <DialogDescription>
-            {project
-              ? `An agent works on it in ${folder} with ${isTask(page) ? "this task" : "this page"} as its brief, reads the project's pages, and publishes what it did here. ${isTask(page) ? "" : "A task is made for it, linked to this page. "}You mark it done.`
-              : "This page isn't part of a project with a linked folder, so no agent can work on it. Set its project, or link a folder to it, first."}
+            {!project
+              ? "This page isn't part of a project with a linked folder, so no agent can work on it. Set its project, or link a folder to it, first."
+              : none
+                ? NO_TASK_TYPE
+                : isTask(page)
+                ? `An agent works on it in ${folder} with this task as its brief, reads the project's pages, and publishes what it did here. You mark it done.`
+                : `This ${typeOf(page?.typeId ?? "").name.toLowerCase()} becomes a task and is given to the agent. Its words, links and history stay.`}
           </DialogDescription>
         </DialogHeader>
-        <Form className="contents" onSubmit={(e) => (e.preventDefault(), project && submit())}>
+        <Form className="contents" onSubmit={(e) => (e.preventDefault(), project && !none && submit())}>
           <DialogPanel className="grid grid-cols-[minmax(0,1fr)] gap-4">
             <Field>
               <FieldLabel>Agent</FieldLabel>
@@ -147,16 +160,48 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
                 </SelectPopup>
               </Select>
             </Field>
+            {repo && (
+              <Field>
+                <FieldLabel>
+                  <Switch checked={own} onCheckedChange={setOwn} />
+                  In its own worktree
+                </FieldLabel>
+              </Field>
+            )}
+            <Field>
+              <FieldLabel>
+                <Switch checked={plan} onCheckedChange={setPlan} />
+                Plan first
+              </FieldLabel>
+              <FieldDescription>It breaks the task into subtasks and stops; you start them.</FieldDescription>
+            </Field>
+            {types.length > 1 && (
+              <Field>
+                <FieldLabel>Becomes</FieldLabel>
+                <Select items={Object.fromEntries(types.map((t) => [t.id, t.name]))} onValueChange={(v) => setBecomes(v as string)} value={type}>
+                  <SelectTrigger aria-label="Becomes">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectPopup>
+                    {types.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              </Field>
+            )}
             <Field invalid={!!error}>
               <FieldLabel>Anything to add</FieldLabel>
               <Textarea onChange={(e) => setNote(e.currentTarget.value)} placeholder="Optional" rows={2} value={note} />
               {error && <FieldError match>{error}</FieldError>}
-              {!isClaude(model) && cx.state !== "ready" && <FieldError match>Codex isn't on this Mac or isn't signed in.</FieldError>}
+              {noCodex && <FieldError match>Codex isn't on this Mac or isn't signed in.</FieldError>}
             </Field>
           </DialogPanel>
           <DialogFooter>
             <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
-            <Button disabled={busy || !project} onClick={(e) => (e.preventDefault(), submit())} type="submit">
+            <Button disabled={busy || !project || none || noCodex} onClick={(e) => (e.preventDefault(), submit())} type="submit">
               {busy ? "Assigning…" : "Assign"}
             </Button>
           </DialogFooter>
@@ -166,12 +211,14 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
   );
 }
 
-// In the line under the title, on a task or a page of a project not yet given to an agent.
+// In the line under the title, on a page of a project not yet given to an agent.
 export function AssignButton({ pageId }: { pageId: string }) {
   const [open, setOpen] = useState(false);
   const project = useProject(pageId);
   const page = pageOf(pageId);
-  if (!project || !page || agentOfTask(page) || taskOfDocument(pageId) || runOf(page) || page.properties.report || page.properties.role) return null;
+  // A task whose subtasks are at work is theirs; with none started, it can still go to one agent whole.
+  // The project itself is never the task: its pages and tasks are.
+  if (!project || project === pageId || !page || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
   return (
     <>
       <Button className="text-muted-foreground" onClick={() => setOpen(true)} size="sm" variant="ghost">
