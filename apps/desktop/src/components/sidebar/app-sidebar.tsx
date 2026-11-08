@@ -1,7 +1,7 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// usage as the footer (NavUser's place), a Browser entry, and the Attention rows.
 // The header is its own export, so Settings' sidebar wears the same one.
 import { CalendarDays, Globe, Settings } from "lucide-react";
 import {
@@ -22,6 +22,7 @@ import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, browserView } from "~/lib/space";
+import { NavAttention } from "./nav-attention";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -104,6 +105,9 @@ export function AppSidebar({
             </SidebarMenuItem>}
           </SidebarMenu>
         </SidebarGroup>
+        <nav aria-label="Attention">
+          <NavAttention onSelect={() => isMobile && setOpenMobile(false)} />
+        </nav>
         <nav aria-label="Types">
           <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect) }))} />
         </nav>

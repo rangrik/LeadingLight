@@ -21,7 +21,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@leadinglight/ui/components/empty";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
+import { SidebarInset, SidebarProvider } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider, toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AskBar } from "~/components/ask-bar";
@@ -33,7 +33,7 @@ import { makeLinkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
 import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
-import { PanelHeader } from "~/components/panel-header";
+import { PanelHeader, SidebarToggle } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
@@ -150,19 +150,19 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in before the pages load, or the Feed's first ask fails and waits a minute.
+    const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")) : undefined;
+    (demo?.then((d) => d.installFixture()) ?? Promise.resolve())
+      .then(loadSpace)
       .then(async (list) => {
-        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
-        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
-        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
-          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
-          demo.installFixture();
-          if (!list.length) {
-            await demo.seed();
-            location.reload();
-            return;
-          }
+        if (demo && !list.length) {
+          await (await demo).seed();
+          location.reload();
+          return;
         }
+        if (demo) void (await demo).suggest(list);
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -352,7 +352,7 @@ export default function App() {
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
-        {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+        {mac && <SidebarToggle className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         <AppSidebar
           onCreate={create}

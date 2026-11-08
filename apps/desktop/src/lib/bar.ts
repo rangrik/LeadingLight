@@ -3,6 +3,7 @@ import { platform } from "~/lib/platform";
 import { localPrefs } from "~/lib/local-prefs";
 import { closePane, focusedPage, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
 import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
+import { createStore } from "~/lib/state";
 
 // The bar (features/bar.feature): the strip at the window's right edge and the panel beside it.
 // In a window 1000 px wide or less, its views open as panes beside the page instead.
@@ -10,6 +11,9 @@ export type BarView = "suggestions" | "feed" | "captures" | "ask";
 export const NAMES: Record<BarView, string> = { suggestions: "Suggestions", feed: "Feed", captures: "Captures", ask: "Ask" };
 export const PANEL = { min: 280, max: 480 };
 export const bar = localPrefs("ll.bar", { open: false, view: "feed" as BarView, pinned: false, width: 320 });
+// What waits in each inbox, for the sidebar's Attention rows and the folded sidebar's dot.
+export const waiting = createStore({ feed: 0, suggestions: 0, captures: 0 });
+export type InboxView = keyof ReturnType<typeof waiting.get>;
 
 const NARROW = "(max-width: 1000px)";
 export const narrow = () => window.matchMedia(NARROW).matches;

@@ -6,7 +6,7 @@ test.use({ launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-
 test("saving another recording returns the same reviewed page to the inbox", async ({ page }) => {
   const inbox = page.getByRole("complementary", { name: "Captures", exact: true });
   const row = inbox.getByRole("row").filter({ has: page.getByRole("button", { name: "Recorded thought", exact: true }) });
-  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  const toggle = page.getByRole("navigation", { name: "Attention" }).getByRole("button", { name: "Captures", exact: true });
   const openInbox = async () => (await toggle.getAttribute("aria-pressed")) !== "true" && (await toggle.click());
   await page.goto("/");
   await openInbox();

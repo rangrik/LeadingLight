@@ -7,10 +7,32 @@ import {
   BreadcrumbSeparator,
 } from "@leadinglight/ui/components/breadcrumb";
 import { Separator } from "@leadinglight/ui/components/separator";
-import { SidebarTrigger } from "@leadinglight/ui/components/sidebar";
+import { SidebarTrigger, useSidebar } from "@leadinglight/ui/components/sidebar";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { waiting } from "~/lib/bar";
 import { useMobile } from "~/lib/platform";
 import type { ReactNode } from "react";
+
+const many = (n: number, one: string, more: string) => (n ? `${n} ${n === 1 ? one : more}` : "");
+const tally = (w: ReturnType<typeof waiting.get>) =>
+  [many(w.feed, "needs you", "need you"), many(w.suggestions, "suggestion", "suggestions"), many(w.captures, "capture", "captures")].filter(Boolean).join(" · ");
+
+// The sidebar button. Folded, a dot says something waits in the Attention rows, and its tooltip what.
+export function SidebarToggle({ className }: { className?: string }) {
+  const { state, isMobile, openMobile } = useSidebar();
+  const text = tally(waiting.use());
+  const dot = (isMobile ? !openMobile : state === "collapsed") && !!text;
+  return (
+    <span className={cn("relative inline-flex", className)}>
+      <Tooltip disabled={!dot}>
+        <TooltipTrigger render={<SidebarTrigger aria-description={dot ? text : undefined} />} />
+        <TooltipPopup>{text}</TooltipPopup>
+      </Tooltip>
+      <span aria-hidden className={cn("pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-primary transition-opacity duration-150 ease-out", !dot && "opacity-0")} data-attention-dot={dot || undefined} />
+    </span>
+  );
+}
 
 // The inset panel's top band, from sidebar-08's page.tsx: the sidebar trigger and the crumbs.
 // A window drag area. Each page's card has one; only the first (lead) makes room for the traffic
@@ -48,7 +70,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
       >
         {lead && toggle && (
           <>
-            <SidebarTrigger className="-ml-1" />
+            <SidebarToggle className="-ml-1" />
             {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
             <Separator className="mr-2 h-4" orientation="vertical" />
           </>

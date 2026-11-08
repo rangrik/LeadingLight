@@ -1,6 +1,5 @@
 import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { Badge } from "@leadinglight/ui/components/badge";
 import { Button } from "@leadinglight/ui/components/button";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { Toggle } from "@leadinglight/ui/components/toggle";
@@ -13,7 +12,7 @@ import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
 import { Suggestions } from "~/components/suggestions";
 import { closeAsk, openAsk } from "~/lib/ask";
-import { bar, type BarView, NAMES, narrow, PANEL, showing, toggleBar, useNarrow, useShowing } from "~/lib/bar";
+import { bar, type BarView, type InboxView, NAMES, narrow, PANEL, showing, toggleBar, useNarrow, useShowing, waiting } from "~/lib/bar";
 import { discoverVoiceCaptures, toReview } from "~/lib/capture-inbox";
 import { wantFocus } from "~/lib/feed";
 import { useKeysFor } from "~/lib/keymap";
@@ -23,11 +22,10 @@ import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { isPageView, space } from "~/lib/space";
 import { inPanel, suggestionsOn, tail } from "~/lib/tail";
 
-// The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
-// beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
+// The bar (features/bar.feature): Ask and Quick capture on a strip at the window's right edge, and
+// the panel beside it. The inboxes open from the sidebar's Attention rows. Narrow, a pane instead.
 
-const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
-const ORDER: BarView[] = ["suggestions", "feed", "captures", "ask"];
+export const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
 
 // Ask goes through openAsk, so its composer takes the keyboard; the Feed's first item does.
 export function toggleView(view: BarView) {
@@ -37,18 +35,16 @@ export function toggleView(view: BarView) {
   toggleBar(view);
 }
 
-function Count({ n, view }: { n: number; view: BarView }) {
-  if (!n) return null;
-  return (
-    <Badge className="pointer-events-none absolute -top-0.5 -right-0.5" id={`bar-count-${view}`} size="sm">
-      {n}
-    </Badge>
-  );
+// Counted under the strip, which is always there, so the counts stay live with the sidebar folded.
+function useTell(view: InboxView, n: number) {
+  useEffect(() => waiting.set({ ...waiting.get(), [view]: n }), [view, n]);
+  useEffect(() => () => waiting.set({ ...waiting.get(), [view]: 0 }), [view]);
 }
 
 // The Feed's count also keeps it following every agent while its panel is closed.
 function FeedCount() {
-  return <Count n={useFeed().length} view="feed" />;
+  useTell("feed", useFeed().length);
+  return null;
 }
 
 function CapturesCount() {
@@ -56,26 +52,24 @@ function CapturesCount() {
   const ready = pages.length > 0;
   // Recordings saved before the inbox existed count too; found once per session.
   useEffect(() => void (ready && discoverVoiceCaptures().catch(() => {})), [ready]);
-  return <Count n={toReview(pages).length} view="captures" />;
+  useTell("captures", toReview(pages).length);
+  return null;
 }
 
 // What tail offers that the panel has not shown yet.
 function SuggestionsCount() {
-  return <Count n={tail.use().filter((l) => inPanel(l) && !l.seen && !l.done).length} view="suggestions" />;
+  useTell("suggestions", tail.use().filter((l) => inPanel(l) && !l.seen && !l.done).length);
+  return null;
 }
 
 function StripButton({ view }: { view: BarView }) {
   const on = useShowing(view);
   const keys = useKeysFor()(view);
   const Icon = ICONS[view];
-  const { enabled: projectsOn } = projectPrefs.use();
   return (
     <Tooltip>
-      <TooltipTrigger render={<Toggle aria-describedby={`bar-count-${view}`} aria-label={NAMES[view]} onPressedChange={() => toggleView(view)} pressed={on} />}>
+      <TooltipTrigger render={<Toggle aria-label={NAMES[view]} onPressedChange={() => toggleView(view)} pressed={on} />}>
         <Icon />
-        {view === "feed" && projectsOn && <FeedCount />}
-        {view === "captures" && <CapturesCount />}
-        {view === "suggestions" && <SuggestionsCount />}
       </TooltipTrigger>
       <TooltipPopup side="left">
         {NAMES[view]} <Kbd>{keys}</Kbd>
@@ -87,6 +81,7 @@ function StripButton({ view }: { view: BarView }) {
 export function BarStrip({ onCapture }: { onCapture: () => void }) {
   const mobile = useMobile();
   const keys = useKeysFor()("new-idea");
+  const { enabled: projectsOn } = projectPrefs.use();
   // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
   useEffect(() => {
     let front = focusedPage();
@@ -102,9 +97,10 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
     <nav aria-label="Bar" className="flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
-      {ORDER.filter((v) => !mobile || v === "captures").map((v) => (
-        <StripButton key={v} view={v} />
-      ))}
+      {!mobile && <StripButton view="ask" />}
+      {projectsOn && !mobile && <FeedCount />}
+      {!mobile && <SuggestionsCount />}
+      <CapturesCount />
       <span className="flex-1" data-tauri-drag-region={!mobile || undefined} />
       <Tooltip>
         <TooltipTrigger render={<Button aria-label="Quick capture" data-quick-capture onClick={onCapture} size="icon" variant="ghost" />}>
