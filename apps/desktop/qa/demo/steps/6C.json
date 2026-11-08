@@ -1,0 +1,76 @@
+{
+ "port": 1468,
+ "name": "6C",
+ "steps": [
+  {
+   "caption": "Option 6C · Sidebar filter. Search happens where the lists already are.",
+   "hold": 2800
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 1200
+  },
+  {
+   "type": "thinking",
+   "after": 1200
+  },
+  {
+   "caption": "Type and every list narrows: Recent, and each type with a count and its matches as sub-rows.",
+   "hold": 2800
+  },
+  {
+   "still": "filtered"
+  },
+  {
+   "key": "ArrowDown",
+   "after": 600
+  },
+  {
+   "key": "ArrowDown",
+   "after": 800
+  },
+  {
+   "caption": "Arrows walk the results; Enter opens, shift-Enter opens beside.",
+   "hold": 2200
+  },
+  {
+   "key": "Shift+Enter",
+   "after": 1800
+  },
+  {
+   "still": "beside"
+  },
+  {
+   "key": "Escape",
+   "after": 800
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 900
+  },
+  {
+   "type": "delay",
+   "after": 1200
+  },
+  {
+   "click": {
+    "text": "Search in page text"
+   },
+   "after": 2200
+  },
+  {
+   "caption": "The last row searches inside pages: a results pane with the matching line, words in bold.",
+   "hold": 2800
+  },
+  {
+   "still": "results"
+  },
+  {
+   "caption": "No dialog, no new place; Esc puts the lists back exactly as they were.",
+   "hold": 2000
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

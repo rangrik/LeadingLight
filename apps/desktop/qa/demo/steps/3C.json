@@ -1,0 +1,109 @@
+{
+ "port": 1439,
+ "name": "3C",
+ "steps": [
+  {
+   "click": {
+    "role": "button",
+    "name": "Today",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "Option 3C · Recall, in Tail’s manner. One line brings your own notes back.",
+   "hold": 2800
+  },
+  {
+   "still": "today"
+  },
+  {
+   "hover": {
+    "text": "to recall"
+   },
+   "after": 900
+  },
+  {
+   "caption": "Today says: “3 things to recall in Notes on Thinking in Systems.” One button.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "within": {
+     "text": "to recall"
+    },
+    "role": "button",
+    "name": "Open",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "The page opens beside Today. Above its title: “You noted 3 things here on Tuesday.”",
+   "hold": 2800
+  },
+  {
+   "still": "row"
+  },
+  {
+   "click": {
+    "within": {
+     "text": "You noted"
+    },
+    "role": "button",
+    "name": "Recall",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "A card shows your notes one at a time, with a line for your own words.",
+   "hold": 2600
+  },
+  {
+   "still": "card"
+  },
+  {
+   "type": "Connections matter more than parts.",
+   "after": 500
+  },
+  {
+   "key": "Enter",
+   "after": 1600
+  },
+  {
+   "caption": "Enter saves your line as a new sidenote on the same words, and moves on.",
+   "hold": 2600
+  },
+  {
+   "still": "saved"
+  },
+  {
+   "key": "Enter",
+   "after": 1200
+  },
+  {
+   "key": "Enter",
+   "after": 1400
+  },
+  {
+   "caption": "At the end, Write it up opens the page’s essay beside it.",
+   "hold": 2200
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Write it up",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Nothing was added to the page itself; your lines live as notes until you write them up.",
+   "hold": 2800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

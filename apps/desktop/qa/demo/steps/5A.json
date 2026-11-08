@@ -1,0 +1,72 @@
+{
+ "port": 1443,
+ "name": "5A",
+ "steps": [
+  {
+   "caption": "Option 5A · One Inbox. Three panels become one, with one count.",
+   "hold": 2800
+  },
+  {
+   "still": "strip"
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "Inbox",
+    "exact": true
+   },
+   "after": 1300
+  },
+  {
+   "caption": "The strip is Inbox, Ask and capture. The badge adds up everything that waits.",
+   "hold": 2400
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Inbox",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "caption": "Needs you, Suggested, Captured: three sections, one place to check.",
+   "hold": 2800
+  },
+  {
+   "still": "inbox"
+  },
+  {
+   "key": "Alt+Meta+KeyK",
+   "after": 1400
+  },
+  {
+   "caption": "The old keys still work: ⌥⌘K lands on Captured. Arrows walk every row.",
+   "hold": 2600
+  },
+  {
+   "still": "captured"
+  },
+  {
+   "click": {
+    "text": "Notes on Thinking in Systems",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "A page with suggestions floats its “On this page” rows to the top. The pin keeps the order.",
+   "hold": 2800
+  },
+  {
+   "still": "onpage"
+  },
+  {
+   "caption": "One door for attention, instead of three.",
+   "hold": 1800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

@@ -1,0 +1,61 @@
+{
+ "port": 1444,
+ "name": "5B",
+ "steps": [
+  {
+   "caption": "Option 5B · Labelled strip. Same panels, now with names.",
+   "hold": 2800
+  },
+  {
+   "still": "strip"
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1200
+  },
+  {
+   "caption": "Feed, Captures, Suggestions above a line; Ask below; capture at the bottom. Tooltips keep only the key.",
+   "hold": 2800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Captures",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "caption": "Each panel says what it is for in one line, and the pin is a labelled “Keep here”.",
+   "hold": 2600
+  },
+  {
+   "still": "captures"
+  },
+  {
+   "click": {
+    "text": "Notes on Thinking in Systems",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "A page with suggestions still switches the panel to Suggestions, unless you keep it here.",
+   "hold": 2600
+  },
+  {
+   "still": "follow"
+  },
+  {
+   "caption": "Empty states now say when a place fills, with one button that leads somewhere.",
+   "hold": 2200
+  },
+  {
+   "still": "end"
+  }
+ ]
+}
