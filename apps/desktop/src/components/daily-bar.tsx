@@ -3,6 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Calendar } from "@leadinglight/ui/components/calendar";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
@@ -12,6 +13,7 @@ import { hasBlockLink, linesMentioning } from "~/lib/doc-links";
 import { formatTime, fromIso, isoDay } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { liveContent } from "~/lib/live";
+import { localPrefs } from "~/lib/local-prefs";
 import { parentOf } from "~/lib/linked";
 import { type ObjectSummary, objects } from "~/lib/objects";
 import { openPage } from "~/lib/panes";
@@ -53,49 +55,62 @@ export function DailyBar({ day }: { day: string }) {
   );
 }
 
-// At the end of a daily note: pages made or edited that day, newest first, a page made that day once.
-// Tags, daily notes and pages under a page have their own places; agents' pages aren't the day's work;
-// pages its body links already would show twice.
-export function ThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
+// Pages made or edited on a day, newest first, a page made that day once. Tags, daily notes and
+// pages under a page have their own places; agents' pages aren't the day's work; pages the day's
+// own words link (content) would show twice. ready: the day's history has been read.
+export function useDayRows(day: string, id: string, content: EditorDoc | null) {
   const { pages } = space.use();
   const from = fromIso(day).getTime(), to = fromIso(shiftDay(day, 1)).getTime();
   // Edits before a page's last one are only in its history.
-  const [touched, setTouched] = useState(new Map<string, number>());
+  const [touched, setTouched] = useState<Map<string, number> | null>(null);
   useEffect(() => {
     let live = true;
     objects.touched(from, to).then((rows) => live && setTouched(new Map(rows.map((r) => [r.id, r.at]))), console.error);
     return () => { live = false; };
   }, [from, to]);
-  const doc = liveContent(id) ?? content;
-  const linked = (p: ObjectSummary) => linesMentioning(doc, p.id).length > 0 || hasBlockLink(doc, p.id);
+  const linked = (p: ObjectSummary) => linesMentioning(content, p.id).length > 0 || hasBlockLink(content, p.id);
   const within = (at = 0) => (at >= from && at < to ? at : 0);
   const rows = pages
     .flatMap((p) => {
       const made = within(p.createdAt);
-      const at = made || Math.max(within(touched.get(p.id)), within(p.updatedAt));
+      const at = made || Math.max(within(touched?.get(p.id)), within(p.updatedAt));
       return at && p.id !== id && listed(p) && !parentOf(p) && !typeOf(p.typeId).made && !linked(p) ? [{ p, made, at }] : [];
     })
     .sort((a, b) => b.at - a.at);
+  return { rows, ready: touched !== null };
+}
+
+const thisDay = localPrefs("ll.this-day", { open: false });
+
+// Under the day bar (and Today's strip), folded to its count; open or folded is remembered.
+export function ThisDay({ day, id, content }: { day: string; id: string; content: EditorDoc | null }) {
+  const { open } = thisDay.use();
+  const { rows } = useDayRows(day, id, liveContent(id) ?? content);
   if (!rows.length) return null;
   return (
-    <section aria-label="This day" className="mt-16 border-t pt-6 text-sm">
-      <h2 className="mb-2 font-medium text-muted-foreground">This day · {rows.length}</h2>
-      <div className="-mx-2 flex flex-col">
-        {rows.map(({ p, made, at }) => (
-          <button
-            className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent"
-            key={p.id}
-            onClick={(e) => visit(p.id, e)}
-            onPointerDown={(e) => armDrag(e, { page: p.id, label: pageLabel(p.title) })}
-            type="button"
-          >
-            <RowIcon icon={iconFor(p)} />
-            <span className="min-w-0 flex-1 truncate">{pageLabel(p.title)}</span>
-            <span className="text-muted-foreground">{made ? "made" : "edited"}</span>
-            <span className="text-muted-foreground tabular-nums">{formatTime(at)}</span>
-          </button>
-        ))}
-      </div>
-    </section>
+    <Collapsible onOpenChange={(o) => thisDay.set({ open: o })} open={open} render={<section aria-label="This day" />}>
+      <CollapsibleTrigger className="flex h-6 items-center gap-2 text-muted-foreground hover:text-foreground data-panel-open:[&>svg]:rotate-90">
+        <ChevronRight className="size-4 transition-transform duration-150 ease-out" />
+        This day · {rows.length}
+      </CollapsibleTrigger>
+      <CollapsiblePanel>
+        <div className="-mx-2 flex flex-col pt-1">
+          {rows.map(({ p, made, at }) => (
+            <button
+              className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent"
+              key={p.id}
+              onClick={(e) => visit(p.id, e)}
+              onPointerDown={(e) => armDrag(e, { page: p.id, label: pageLabel(p.title) })}
+              type="button"
+            >
+              <RowIcon icon={iconFor(p)} />
+              <span className="min-w-0 flex-1 truncate">{pageLabel(p.title)}</span>
+              <span className="text-muted-foreground">{made ? "made" : "edited"}</span>
+              <span className="text-muted-foreground tabular-nums">{formatTime(at)}</span>
+            </button>
+          ))}
+        </div>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }

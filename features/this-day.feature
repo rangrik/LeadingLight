@@ -4,7 +4,8 @@ Feature: What a day's note shows of the day
   days it was touched whatever it becomes later.
 
   Names used below:
-  - "This day": the section at the end of a daily note, in place of "Created this day"
+  - "This day": the folded row "This day · N" under the day bar (today-strip.feature), which opens
+    to the rows; it was a section at the end of the note
   - row: the page's icon and title, then "made" or "edited", then the time, most recent first
 
   Background:

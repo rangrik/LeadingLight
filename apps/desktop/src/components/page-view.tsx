@@ -44,6 +44,7 @@ import { contentWidth, usePageLayout } from "~/lib/page-layout";
 import { TurnIntoPage } from "~/components/turn-into-page";
 import { VoiceReviewDialog } from "~/components/voice-review";
 import { TailPage, TailToday } from "~/components/tail";
+import { TodayStrip } from "~/components/today-strip";
 import { today } from "~/lib/daily";
 import { currentEdit } from "@leadinglight/editor/authorship";
 import type { ChangeContext } from "~/lib/history-types";
@@ -86,7 +87,8 @@ export function PageView({ page }: { page: LLObject }) {
   const [tailRow, setTailRow] = useState(false);
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
-  const counting = tools && writing.count;
+  // A daily note is a log, not writing to measure.
+  const counting = tools && writing.count && typeId !== "daily";
   useEffect(() => {
     if (!counting) setPageStats(page.id, null);
   }, [counting, page.id]);
@@ -420,6 +422,12 @@ export function PageView({ page }: { page: LLObject }) {
         />)}
         {!report && <ProjectWork pageId={page.id} />}
         {day && <DailyBar day={day} />}
+        {day && (
+          <div className="mt-3 flex flex-col gap-1 text-sm empty:hidden">
+            {!phone && day === today() && <TodayStrip />}
+            <ThisDay content={page.content} day={day} id={page.id} />
+          </div>
+        )}
         {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
@@ -459,7 +467,6 @@ export function PageView({ page }: { page: LLObject }) {
         {report && <ReportSources report={current} />}
         <Reports onNotes={setStreamNotes} pageId={page.id} />
         <Linked id={page.id} />
-        {day && <ThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}

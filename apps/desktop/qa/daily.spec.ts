@@ -45,8 +45,26 @@ test("A day lists what was made and edited that day, newest first", async ({ pag
   await page.keyboard.type("notes");
   await page.getByRole("button", { name: "Today", exact: true }).click();
   const day = page.getByRole("region", { name: "This day", exact: true });
-  await expect(day.getByRole("heading")).toHaveText("This day · 2");
-  await expect(day.getByRole("button")).toHaveText([/^Kickoffedited\d{1,2}:\d\d/, /^Pricing pagemade\d{1,2}:\d\d/]);
+  const rows = day.locator("[data-slot=collapsible-panel] button");
+  await day.getByRole("button", { name: "This day · 2" }).click();
+  await expect(rows).toHaveText([/^Kickoffedited\d{1,2}:\d\d/, /^Pricing pagemade\d{1,2}:\d\d/]);
+  // Open is remembered from day to day.
   await page.getByRole("button", { name: "Previous day" }).click();
-  await expect(day.getByRole("button")).toHaveText([/^Kickoffmade/]);
+  await expect(rows).toHaveText([/^Kickoffmade/]);
+});
+
+// Seam: TodayStrip (components/today-strip.tsx) reading task states and the Feed's asks per project.
+// Catches projects out of urgency order, a done task counted, and Accept missing or on the wrong task.
+test("Today's strip puts the project that needs me first, with one press each", async ({ page }) => {
+  await page.goto("/?mac&demo");
+  // The demo fills the space, then reloads.
+  await page.waitForFunction(() => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).type === "reload");
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  const strip = page.getByRole("region", { name: "Where things stand" });
+  await expect(strip.locator("[data-project]")).toHaveText([/^LeadingLight1 needs you · 1 ready · 1 workingAnswer$/, /^Home office1 readyAccept$/]);
+  await expect(page.getByRole("region", { name: "This day", exact: true }).locator("[data-slot=collapsible-panel]")).toHaveCount(0);
+  await strip.getByRole("button", { name: "Accept" }).click();
+  await expect(strip.locator("[data-project]")).toHaveText([/^LeadingLight/]);
+  const lamps = await page.evaluate(async () => (await import("/src/lib/" + "space.ts")).space.get().pages.find((p) => p.title === "Compare three desk lamps")?.properties);
+  expect(lamps).toMatchObject({ done: true, accepted: { report: expect.any(String) } });
 });

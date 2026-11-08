@@ -207,13 +207,18 @@ export function StartReady({ parent }: { parent: string }) {
   );
 }
 
-// A project's tasks at work, under its properties: those with an agent or started subtasks.
+// A project's tasks at work: those with an agent or started subtasks, subtasks aside.
+export const tasksAtWork = (projectId: string, pages: ObjectSummary[]) => {
+  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(projectId));
+  return pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+};
+
+// A project's tasks at work, under its properties.
 export function ProjectWork({ pageId }: { pageId: string }) {
   const { pages } = space.use();
   const box = useRef<HTMLDivElement>(null);
   useAnchored(box);
-  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(pageId));
-  const tasks = pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+  const tasks = tasksAtWork(pageId, pages);
   const going = tasks.filter((t) => !done(t)).length;
   return (
     <div ref={box}>
