@@ -85,7 +85,11 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -286,4 +290,23 @@ export async function seed() {
   localStorage.setItem("ll.ai", JSON.stringify({ model: "opus", effort: "medium", access: "ask", plan: false, tail: { mode: "normal" } }));
   window.__seed = ids;
   return ids;
+}
+
+// Tail's suggestions are never stored, so the demo puts three in at each load: two on the reading
+// note, one on the pricing notes. A nod changes nothing.
+export function suggest(pages) {
+  return import("/src/lib/tail.ts").then(({ tail }) => {
+    const id = (title) => pages.find((p) => p.title === title)?.id;
+    const [notes, loops, stocks, pricing] = ["Notes on Thinking in Systems", "Feedback loops", "Stocks and flows", "Pricing notes"].map(id);
+    if (!notes || !pricing) return;
+    const act = async () => ({ words: ["Done. The demo leaves the page as it was."] });
+    const line = (key, where, block, text, nod, words, row) => ({ id: `demo-${key}`, where, block, text, nod, words, row, act, at: Date.now() - 20 * 60e3 });
+    const name = (text, page) => ({ text, page });
+    tail.set([
+      ...tail.get().filter((l) => !l.id.startsWith("demo-")),
+      line("delays", notes, 14, "The point about delays in a feedback loop is that", "Draft it", ["You stopped mid-sentence. Finish it from ", name("Feedback loops", loops), "?"], ["“The point about delays…” in ", name("Notes on Thinking in Systems", notes), ": finish it from ", name("Feedback loops", loops), "?"]),
+      line("resilience", notes, 9, "Resilience, self-organization, hierarchy. Resilience is a stock too: it drains quietly and you only notice when it is gone.", "Make page", ["Make “resilience is a stock” a page beside ", name("Stocks and flows", stocks), "?"], ["“Resilience is a stock too…” in ", name("Notes on Thinking in Systems", notes), ": a page of its own?"]),
+      line("pricing", pricing, 1, "Monthly is simpler to explain; yearly is what most people buy. Lead with one, show the other in smaller type.", "Link task", ["The pricing agent is asking this very question. Link this to its task?"], ["“Monthly is simpler to explain…” in ", name("Pricing notes", pricing), " is what the pricing agent asks. Link it?"]),
+    ]);
+  });
 }
