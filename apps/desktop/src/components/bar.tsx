@@ -37,7 +37,7 @@ const ABOUT: Record<BarView, string> = {
   ask: "The thread with Claude about the page in front.",
 };
 // A 48 px column: icon 8 px from its top (centre at 16, as in the 32 px buttons before), name under it.
-// The strip is 72 px because "Suggestions" is 65 px wide at 11 px.
+// The strip is 72 px because "Suggestions" is 65 px wide at 11 px; 56 px where only Captures shows.
 const COLUMN = "h-12 w-full flex-col gap-1 px-0 text-muted-foreground data-pressed:text-foreground";
 const Name = ({ children }: { children: string }) => <span className="font-normal text-[11px] leading-3">{children}</span>;
 
@@ -118,7 +118,7 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
     // The line before Ask is 24 px from box to box: 4 + 8, half a pixel of line, 7.5 + 4.
-    <nav aria-label="Bar" className="flex w-18 shrink-0 flex-col items-center gap-1 px-0.5 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
+    <nav aria-label="Bar" className={cn("flex shrink-0 flex-col items-center gap-1 px-0.5 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]", mobile ? "w-14" : "w-18")} data-bar data-tauri-drag-region={!mobile || undefined}>
       {INBOXES.filter((v) => !mobile || v === "captures").map((v) => (
         <StripButton key={v} view={v} />
       ))}
