@@ -32,11 +32,12 @@ export function ReviewStrip({ task, page }: { task: string; page: string }) {
   const accepted = acceptedOf(t);
   return (
     <div className="shrink-0 border-b text-sm" data-testid="review-strip">
-      <div className="flex min-h-9 flex-wrap items-center gap-x-2 px-4 py-1">
-        <StepCount agent={agent} onToggle={() => setOpen(!open)} open={open} />
-        {state === "done" && <span className="text-muted-foreground">{accepted ? `Accepted ${formatAgo(accepted.at)}` : "Done"}</span>}
+      {/* Its ends line up with the header's first and last icons. */}
+      <div className="flex min-h-9 flex-wrap items-center gap-x-2 ps-4 pe-1 py-1">
+        <StepCount agent={agent} className="ms-0" onToggle={() => setOpen(!open)} open={open} />
         <span className="ms-auto flex items-center gap-2">
           <FeedbackButton card pageId={task} />
+          {state === "done" && <span className="text-muted-foreground text-xs">{accepted ? `Accepted ${formatAgo(accepted.at)}` : "Done"}</span>}
           {ready && (
             <Button onClick={() => void accept(task, ready.id)} size="xs">
               <Check className="size-3.5" />
@@ -48,7 +49,7 @@ export function ReviewStrip({ task, page }: { task: string; page: string }) {
               Review next
             </Button>
           ) : (
-            <span className="text-muted-foreground text-xs">Nothing else needs you</span>
+            <span className="pe-2 text-muted-foreground text-xs">Nothing else needs you</span>
           )}
         </span>
       </div>

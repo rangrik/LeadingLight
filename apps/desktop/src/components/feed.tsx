@@ -6,6 +6,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@le
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { accept } from "~/lib/assign";
+import { hideBar } from "~/lib/bar";
 import { feedFocus, feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
@@ -173,9 +174,9 @@ export function FeedList({ paneId }: { paneId?: string }) {
   const select = (item: FeedItem) => {
     setSelected(item.id === selected ? null : item.id);
     requestAnimationFrame(() => list.current?.querySelector(`[data-feed-item="${CSS.escape(item.id)}"]`)?.scrollIntoView({ block: "nearest" }));
-    // A question or a report opens its review; anything else, what it is about.
+    // A question or a report opens its review, which takes the lane's room; else what it is about.
     if (item.id === selected || paneId) return;
-    if (reviewable(item)) openReview(item.task!);
+    if (reviewable(item)) (openReview(item.task!), hideBar("feed"));
     else if (item.targets[0]) showTarget(item.targets[0]);
   };
   const onKey = (e: KeyboardEvent) => {

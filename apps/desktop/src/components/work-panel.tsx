@@ -101,13 +101,13 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
 }
 
 // The agent's own steps; a count only from these. Subtasks are in the Work table.
-export function StepCount({ agent, open, onToggle }: { agent: ObjectSummary; open: boolean; onToggle: () => void }) {
+export function StepCount({ agent, open, onToggle, className }: { agent: ObjectSummary; open: boolean; onToggle: () => void; className?: string }) {
   space.use();
   const steps = workOf(agent)?.checklist ?? [];
   if (!steps.length) return null;
   const done = steps.filter((s) => s.done).length;
   return (
-    <button aria-expanded={open} className="-ms-1 flex items-center gap-1 text-muted-foreground hover:text-foreground" onClick={onToggle} type="button">
+    <button aria-expanded={open} className={cn("-ms-1 flex items-center gap-1 text-muted-foreground hover:text-foreground", className)} onClick={onToggle} type="button">
       <ChevronRight className={cn("size-4 transition-transform duration-150", open && "rotate-90")} />
       {done} of {steps.length} {steps.length === 1 ? "step" : "steps"} done
     </button>

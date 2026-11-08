@@ -27,6 +27,8 @@ Feature: Review side by side
     When I select the item
     Then "Write the summary" opens in a new tab in front of "Plan", and "Summary" opens beside it
     And "Plan" is still in its tab, where I left it
+    And the Feed lane closes, so the two panes have its room (a page with notes needs 832 px);
+      the Feed's count stays in the bar, and Review next walks the rest of its list
 
   Scenario: Nothing opens twice
     Given "Write the summary" and "Summary" are side by side

@@ -217,7 +217,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 )}
               </PanelHeader>
               )}
-              {review && <ReviewStrip page={leaf.page} task={review} />}
+              {review && <ReviewStrip key={review} page={leaf.page} task={review} />}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
                 className={cn("@container min-h-0 flex-1 overflow-y-auto", folded && "hidden")}
