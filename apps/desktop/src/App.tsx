@@ -35,6 +35,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { SearchPanel } from "~/components/search-panel";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
@@ -433,6 +434,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
+          {!phone && <SearchPanel />}
           {!mobile && <CliUpdates />}
           <ZoomHud />
         </TooltipProvider>
