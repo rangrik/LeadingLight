@@ -78,8 +78,9 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   const saved = await page.evaluate(async (id) => (await import(String("/src/lib/objects.ts"))).objects.get(id), id);
   expect(saved.properties.custom).toBe("kept");
   expect(saved.content.content[0].content[0].text).toBe("Keep these words.");
-  // Narrow, Captures is a pane beside the page.
+  // Narrow, Captures is a pane beside the page; its row is in the sidebar, a sheet this narrow.
   await page.setViewportSize({ width: 520, height: 800 });
+  await page.getByRole("button", { name: "Toggle Sidebar" }).first().click();
   await page.getByRole("navigation", { name: "Attention" }).getByRole("button", { name: "Captures", exact: true }).click();
   const pane = page.getByRole("region", { name: "Captures", exact: true });
   await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
