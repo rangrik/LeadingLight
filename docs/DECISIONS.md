@@ -214,7 +214,7 @@ there is still one writer and nothing is made twice. Every captured idea is tagg
 click away.
 
 An idea is not written into the day's note. It shows there because it was made that day
-("Created this day"), like any page, so a busy day's note stays the person's own writing.
+("This day"), like any page, so a busy day's note stays the person's own writing.
 Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
 the page in view, never in its place.
 
@@ -344,29 +344,39 @@ the app stores it as any page's image or file, inside the report. Its content's 
 version reviewed; the folder changing or being cleaned up later leaves it as published. A file that
 can't be kept refuses the publish at once, so a report never shows a hole.
 
-## 21. Assigning work starts one agent, named after its Agent page
+## 21. Assigning turns the page into the task and starts one agent, named after its Agent page
 
-Assign is the only way work starts: a mention never does. Assigning a task makes its Agent page and
-links the task to it before the runtime is asked for anything, and the runtime session is named after
-that page. So a second press, a reload or a restart in between finds the conversation by that name
-and records it, rather than starting another; one never made is started then. A page that isn't a
-task is assigned through a task made for it once, linked to the page and its project. A task is any
-type with Done, so a space's own task types work unchanged; assigning adds only a link on the task.
-The brief the agent gets is the task as written when it starts.
+Assign is the only way work starts: a mention never does. The page assigned becomes the task. A
+page whose type has no Done is made the space's task type (the starter Task, or the one chosen when
+a space has several), keeping its id, words, links and history; its Project is carried to the task
+type's own Project property, and it is tagged "From idea" (or "From meeting", …) so where it came
+from stays visible, with the type change in its history. Nothing else is made, so there is no second
+page to find and no link to keep. A task is any type with Done, so a space's own task types work
+unchanged. Assigning makes its Agent page and links the task to it before the runtime is asked for
+anything, and the runtime session is named after that page, so a second press, a reload or a
+restart finds the conversation by that name rather than starting another; one never made is
+started then. The brief the agent gets is the task as written when it starts, and, for a subtask,
+its parent's words too (43).
 
 ## 22. A task's state comes from the runtime; only the person marks it done
 
 An assigned task reads Working, Needs your input, Ready for review, Idle or Stopped from the runtime's
 sessions for its agent and that agent's workers, the work it waits to hear back from, and its agent's
 own last report. Ready for review means the agent given the task published with ready; a worker's
-report is read like any other but changes nothing. Done is the task's Done, which only the person sets:
-an agent's task tool ticks only subtasks its own team made, and refuses the task it was given.
+report is read like any other but changes nothing. A task whose subtasks have agents of their own
+reads them too: Needs your input if any does, else Working if any works, else Ready for review when
+its own agent is ready or every started subtask is ready or done, else Idle; a task with no agent of
+its own but started subtasks shows its card for them. Done is the task's Done, which only the person
+sets: an agent's task tool ticks only subtasks its own team made, and refuses the task it was given;
+accepting every subtask never ticks the parent.
 
 What the agent says it is doing and its checklist live on its Agent page and change in place; a
 count shows only for steps it listed, never a percentage. Workers become Agent pages under the agent
-that started them, so they stay listed after the runtime forgets them. The panel under the title
-opens its checklist only on a click, and where the browser doesn't anchor scrolling the panel makes
-up for its own growth, so updates never move the words being read.
+that started them, so they stay listed after the runtime forgets them. The card under the title
+opens its checklist only on a click, and where the browser doesn't anchor scrolling the card makes
+up for its own growth, so updates never move the words being read. The state also shows as a dot
+on the task's tab and sidebar row, so a glance at the window tells what needs the person; a task
+given to an agent is listed in the sidebar like any page for that, while the rest live in Tasks.
 
 ## 23. The Feed is made from the records, not stored
 
@@ -383,13 +393,16 @@ read, so that page stays where it was; a narrow window shows the Feed as a pane 
 ## 24. Feedback is chosen sidenotes, frozen into one batch, sent once to the task's own agent
 
 A report's words can't change, but it takes sidenotes like any page: its editor drops every change
-but adding or taking off a note's mark. On a page whose task has an agent, each note can be ticked
-for sending; what is ticked is kept on this Mac per task until sent. Send freezes the ticked notes,
-each with the words it is about and its block, and an overall comment, into a Feedback page under
-the task, then sends it to that agent's own conversation with the batch's command id as the
-message key, so a retry after a lost answer is the same message. A conversation that is gone fails
-the send and says so; it never goes to another agent. A note becomes readable to agents only once
-sent; the rest stay private.
+but adding or taking off a note's mark. The report is read where it shows, on its task, and takes
+notes there; they are the same notes as on its own page, kept in the report's Thoughts page, and
+two editors on one report never lose each other's. On a page whose task has an agent, each note
+can be ticked for sending; what is ticked is kept on this Mac per task until sent. Send is one press
+on the task's card, with no dialog: it freezes the ticked notes, each with the words it is about
+and its block, into a Feedback page under the task, then sends it to that agent's own conversation
+with the batch's command id as the message key, so a retry after a lost answer is the same message.
+A remark about the whole is a note on the task's own words, ticked like any other. A conversation
+that is gone fails the send and says so; it never goes to another agent. A note becomes readable
+to agents only once sent; the rest stay private.
 
 ## 25. A response answers every point of its batch, or says it doesn't
 
@@ -805,7 +818,30 @@ disconnects retain only the credentials needed to remove old push subscriptions 
 References: [Paseo connectivity](https://paseo.sh/docs/connectivity.md),
 [Paseo security](https://paseo.sh/docs/security.md).
 
-## 42. iPhone and iPad follow Liquid Glass in CSS (2026-11-08)
+## 42. A task can be worked in a worktree of its own, named from the task (2026-11-07)
+
+The Assign dialog offers "In its own worktree" when the project's folder is a git checkout. The
+app asks the runtime for the worktree before the session starts, as the chat's own branch does,
+because a session starts in a place and can't move; so the name comes from the task's title, not
+from the model: its telling words (no articles, prepositions or lone numbers), lower case, hyphens,
+at most 30 characters, made unique with a number, on the branch `ll/<name>`. The Agent page keeps the
+worktree in its run's location, as workers in other worktrees already do, so its browser and outputs
+follow it. The brief tells the agent where it works and that it never switches branches. Merging
+back is the person's, or a later feature's.
+
+## 43. A task breaks into subtasks that start on their own (2026-11-07)
+
+A subtask is a task with Subtask of, made by the person with a task line inside the task or by the
+agent's task tool; either way it takes the parent's Project. "Plan first" at Assign asks the agent
+to break the task into subtasks, each with a brief and what it waits on (After), publish the plan
+and stop; it never starts them. "Start the ready ones" on the parent assigns every subtask with no
+agent whose After tasks are done, with the parent's model, access and profile, each in a worktree
+of its own when the parent had one. A subtask's agent gets the parent's words as context, and its
+reports go to the subtask. Each subtask is accepted on its own, by the person, and the parent's
+state rolls up (22). No subtask starts by itself when another finishes: the press is the person's,
+so nothing runs that wasn't asked for.
+
+## 44. iPhone and iPad follow Liquid Glass in CSS (2026-11-08)
 
 The iOS app is a web view, so system Liquid Glass only reaches system UI (keyboard, alerts, Quick
 Look). Our bars imitate it in CSS, scoped to iOS so the Mac is unchanged. Glass goes on controls only,
@@ -817,4 +853,3 @@ runs edge to edge (iPadOS 27) and pages are flat. Menus, sheets and toasts stay 
 muted text fails on any glass. Capture leaves the tab bar: tabs move between screens, actions don't.
 The app icon is a layered Icon Composer file, so iOS gives it the dark, clear and tinted looks.
 Real native bars (lensing, the Liquid Glass slider, Reduce Transparency) are deferred; see DEFERRED.
-

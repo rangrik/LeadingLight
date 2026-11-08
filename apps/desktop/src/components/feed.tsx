@@ -6,7 +6,7 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@le
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { accept } from "~/lib/assign";
-import { feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
+import { feedFocus, feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
@@ -154,6 +154,15 @@ export function FeedList({ paneId }: { paneId?: string }) {
   const list = useRef<HTMLUListElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const projects = [...all.values()].map((f) => f.folder.pageId);
+  const want = feedFocus.use();
+  // Opened on an item: it is shown open, with the keyboard, and its project filter set aside.
+  useEffect(() => {
+    if (!want) return;
+    if (!items.some((i) => i.id === want)) return void (prefs.project !== "all" && feedPrefs.set({ project: "all" }));
+    feedFocus.set(null);
+    setSelected(want);
+    requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-feed-item="${CSS.escape(want)}"] > button`)?.focus());
+  }, [want, items]);
   useEffect(() => {
     if (!wantFocus.now) return;
     wantFocus.now = false;

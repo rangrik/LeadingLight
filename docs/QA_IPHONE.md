@@ -219,7 +219,7 @@ and `-110px-shorterror.png`.
 ## Liquid Glass — 2026-11-08
 
 The contract is the glass scenarios in `features/iphone.feature` and `features/ipad.feature`;
-the design is decision 42. Checked in the browser build and on an iPhone 17 Pro simulator (iOS 26.5).
+the design is decision 44. Checked in the browser build and on an iPhone 17 Pro simulator (iOS 26.5).
 
 - `iphone.spec.ts` and `ipad.spec.ts`: 26 of 26 across Chromium, iPhone WebKit and iPad WebKit,
   including new seams for Back to the tab, the tab bar under the keyboard and a notched phone,

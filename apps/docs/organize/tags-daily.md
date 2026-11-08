@@ -1,11 +1,11 @@
 ---
 title: Tags and daily notes
-description: Tag pages by topic, merge tags, and keep one note for each day with everything made that day.
+description: Tag pages by topic, merge tags, and keep one note for each day with everything made or edited that day.
 ---
 
 # Tags and daily notes
 
-Tags gather pages on one topic. Daily notes give each day a page of its own, and show what you made that day. Both are ordinary pages with a type, so they work with links, lists and properties like any other page.
+Tags gather pages on one topic. Daily notes give each day a page of its own, and show what you made and edited that day. Both are ordinary pages with a type, so they work with links, lists and properties like any other page.
 
 ## Tag a page
 
@@ -60,17 +60,19 @@ Linking a day keeps it at once. Type "@today" in any page to link today's note; 
 
 Daily notes stay out of Recent. Find them all under **Daily notes** in the sidebar's Types, newest first.
 
-## What was made today
+## What happened today
 
-At the end of a daily note, **Created this day** lists the pages you made that day, with a count, such as **Created this day · 2**. Click one to open it.
+At the end of a daily note, **This day** lists the pages you made or edited that day, newest first, with a count, such as **This day · 2**. Each row says **made** or **edited** and the time. Click one to open it.
 
-- Tags and other daily notes aren't listed; they have their own places.
+- A page made that day shows once, as made, even if you edited it later.
+- A page shows on every day you edited it. In the browser, only on the last day you edited it.
+- Tags, other daily notes and Thoughts pages aren't listed; they have their own places.
 - A page the note already links in its body isn't listed again.
 - The list updates while the note is open, without a reload.
 
 ### Ideas show in their day
 
-An idea you capture with <kbd>⌃⌥I</kbd> is an Idea page, so it shows in **Created this day** on the day you had it. The note's body isn't touched: nothing is added to what you wrote. Ideas you make by hand show in their day the same way. See [Idea capture](/capture/idea-capture).
+An idea you capture with <kbd>⌃⌥I</kbd> is an Idea page, so it shows in **This day** on the day you had it. The note's body isn't touched: nothing is added to what you wrote. Ideas you make by hand show in their day the same way. See [Idea capture](/capture/idea-capture).
 
 ## A template for daily notes
 

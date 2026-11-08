@@ -189,7 +189,7 @@ html[data-ipad] {
   [data-phone] *, [data-phone] *::before, [data-phone] *::after { animation-duration: 0ms !important; transition-duration: 0ms !important; }
 }
 
-/* iOS bars imitate Liquid Glass on controls only, never on content (decision 42).
+/* iOS bars imitate Liquid Glass on controls only, never on content (decision 44).
    85% keeps bar words at 4.5:1 over text in all 23 themes (contrast.ts GLASS). */
 html[data-ipad] {
   --ll-glass-fill: color-mix(in srgb, var(--popover) 85%, transparent);

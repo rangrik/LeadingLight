@@ -24,3 +24,29 @@ test("Browsing days stores nothing; the first edit stores the day", async ({ pag
   await page.getByRole("link", { name: days[2] }).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("kept");
 });
+
+// Seam: ThisDay (components/daily-bar.tsx) reading a page's made and saved times against the day.
+// Catches an edited page missing from its day, and a page made that day listed twice.
+test("A day lists what was made and edited that day, newest first", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const { createPage } = await import("/src/lib/" + "space.ts");
+    const noon = new Date().setHours(-12, 0, 0, 0); // yesterday, noon
+    await createPage({ title: "Kickoff", createdAt: noon, updatedAt: noon });
+  });
+  const nav = page.getByRole("navigation", { name: "Recent" });
+  const body = page.getByRole("textbox", { name: "Page body" });
+  await nav.getByRole("button", { name: "New page" }).click();
+  await page.getByRole("textbox", { name: "Title" }).fill("Pricing page");
+  await page.getByRole("textbox", { name: "Title" }).press("Enter");
+  await page.keyboard.type("draft");
+  await nav.getByRole("button", { name: "Kickoff", exact: true }).click();
+  await body.click();
+  await page.keyboard.type("notes");
+  await page.getByRole("button", { name: "Today", exact: true }).click();
+  const day = page.getByRole("region", { name: "This day", exact: true });
+  await expect(day.getByRole("heading")).toHaveText("This day · 2");
+  await expect(day.getByRole("button")).toHaveText([/^Kickoffedited\d{1,2}:\d\d/, /^Pricing pagemade\d{1,2}:\d\d/]);
+  await page.getByRole("button", { name: "Previous day" }).click();
+  await expect(day.getByRole("button")).toHaveText([/^Kickoffmade/]);
+});

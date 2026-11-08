@@ -1,121 +1,44 @@
-import { MessageSquareQuote, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Send } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Dialog, DialogClose, DialogDescription, DialogFooter, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { Field, FieldError, FieldLabel } from "@leadinglight/ui/components/field";
-import { Textarea } from "@leadinglight/ui/components/textarea";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { visit } from "~/components/property-value";
-import { batchOf, deliver, draftOf, drafts, pick, recipientFor, send, setComment } from "~/lib/feedback";
+import { batchOf, deliver, drafts, recipientFor, send } from "~/lib/feedback";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
-import { liveContent } from "~/lib/live";
-import { type ObjectSummary, objects } from "~/lib/objects";
+import type { ObjectSummary } from "~/lib/objects";
 import { pageOf, space } from "~/lib/space";
 
-// Sending chosen sidenotes as one batch (features/feedback.feature): the button in a page's header
-// while notes are chosen, the dialog that shows who gets what, and the batch in its task's stream.
+// Sending ticked sidenotes as one batch (features/feedback.feature): one press on the task's card,
+// or in a report's header, and the batch in its task's stream.
 
 const title = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 // "Claude", for the agent page "Claude: Write the summary".
 const who = (id: string) => title(id).split(": ")[0];
 
-// The chosen notes' words, as the Thoughts pages hold them now.
-function useChosen(task: string) {
+// "Send 3 notes" while notes on the task are ticked: on its card, and in a report's header (the
+// task's own header leaves it to the card).
+export function FeedbackButton({ pageId, card, className }: { pageId: string; card?: boolean; className?: string }) {
+  space.use();
   const all = drafts.use();
-  const picks = (all[task] ?? draftOf(task)).picks;
-  const [shown, setShown] = useState<{ page: string; note: string; quote: string; text: string }[]>([]);
-  const key = picks.map((p) => p.note).join(" ");
-  useEffect(() => {
-    let live = true;
-    void Promise.all(
-      picks.map(async (x) => {
-        const thoughts = pageOf(x.page)?.properties.thoughts;
-        const doc = typeof thoughts === "string" ? (liveContent(thoughts) ?? (await objects.get(thoughts))?.content) : null;
-        const t = (doc?.content ?? []).find((n) => n.type === "thought" && n.attrs?.id === x.note);
-        const text = (t?.content ?? []).map((b) => (b.content ?? []).map((c) => c.text ?? "").join("")).join("\n");
-        return { ...x, quote: String(t?.attrs?.quote ?? ""), text };
-      }),
-    ).then((list) => live && setShown(list));
-    return () => void (live = false);
-  }, [key]);
-  return shown;
-}
-
-function SendDialog({ task, agent, open, onOpenChange }: { task: string; agent: string; open: boolean; onOpenChange: (open: boolean) => void }) {
-  const all = drafts.use();
-  const draft = all[task] ?? draftOf(task);
-  const chosen = useChosen(task);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const to = recipientFor(pageId);
+  const n = to ? (all[to.task]?.picks.length ?? 0) : 0;
+  if (!to || (!card && to.task === pageId) || (!n && !busy)) return null;
   const go = () => {
     setBusy(true);
-    setError(null);
-    send(task)
+    send(to.task)
       .then((id) => {
-        onOpenChange(false);
         const b = batchOf(pageOf(id));
-        toastManager.add(b?.state === "sent" ? { type: "success", title: `Sent to ${who(agent)}`, timeout: 2500 } : { type: "error", title: `Not sent: ${b?.error ?? "it didn't go"}` });
-      }, (e: Error) => setError(e.message))
+        toastManager.add(b?.state === "sent" ? { type: "success", title: `Sent to ${who(to.agent)}`, timeout: 2500 } : { type: "error", title: `Not sent: ${b?.error ?? "it didn't go"}` });
+      }, (e: Error) => toastManager.add({ type: "error", title: `Not sent: ${e.message}` }))
       .finally(() => setBusy(false));
   };
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogPopup className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Send feedback to {who(agent)}</DialogTitle>
-          <DialogDescription>
-            On “{title(task)}”. Only these notes go, each with the words it is about; your other notes stay yours. It answers them in one new report.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogPanel className="grid grid-cols-[minmax(0,1fr)] gap-4">
-          <ol className="flex flex-col gap-3 text-sm">
-            {chosen.map((c, i) => (
-              <li className="flex items-start gap-2" key={c.note}>
-                <span className="w-4 shrink-0 font-semibold tabular-nums">{i + 1}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-muted-foreground">“{c.quote}” in {title(c.page)}</span>
-                  <span className="block whitespace-pre-wrap">{c.text || <span className="text-muted-foreground">(no words yet)</span>}</span>
-                </span>
-                <Button aria-label={`Leave out note ${i + 1}`} onClick={() => pick(task, c.page, c.note, false)} size="icon-xs" variant="ghost">
-                  <X className="size-4" />
-                </Button>
-              </li>
-            ))}
-          </ol>
-          <Field invalid={!!error}>
-            <FieldLabel>Overall comment</FieldLabel>
-            <Textarea onChange={(e) => setComment(task, e.currentTarget.value)} placeholder="Optional" rows={2} value={draft.comment} />
-            {error && <FieldError match>{error}</FieldError>}
-          </Field>
-        </DialogPanel>
-        <DialogFooter>
-          <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
-          <Button disabled={busy || !draft.picks.length} onClick={go}>
-            {busy ? "Sending…" : `Send ${draft.picks.length} ${draft.picks.length === 1 ? "note" : "notes"}`}
-          </Button>
-        </DialogFooter>
-      </DialogPopup>
-    </Dialog>
-  );
-}
-
-// In a page's header while notes on its task are chosen.
-export function FeedbackButton({ pageId, className }: { pageId: string; className?: string }) {
-  space.use();
-  const all = drafts.use();
-  const [open, setOpen] = useState(false);
-  const to = recipientFor(pageId);
-  const n = to ? (all[to.task]?.picks.length ?? 0) : 0;
-  if (!to || (!n && !open)) return null;
-  return (
-    <>
-      <Button className={className} onClick={() => setOpen(true)} size="xs" variant="outline">
-        <MessageSquareQuote className="size-4" />
-        Send feedback · {n}
-      </Button>
-      <SendDialog agent={to.agent} onOpenChange={setOpen} open={open} task={to.task} />
-    </>
+    <Button className={className} disabled={busy} onClick={go} size="xs" variant="outline">
+      <Send className="size-4" />
+      {busy ? "Sending…" : `Send ${n} ${n === 1 ? "note" : "notes"}`}
+    </Button>
   );
 }
 

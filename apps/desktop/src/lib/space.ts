@@ -138,12 +138,9 @@ export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext
   }, (error) => { if (reportError) reportSaveError(error); throw error; });
 }
 
-// A page made another type (an idea filed as a task); its properties go through its open editor.
-export async function retype(id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>, context?: ChangeContext) {
-  patchSummary(id, { typeId });
-  await savePage(id, { typeId }, context);
-  await editPage(id, { properties }, context);
-}
+// A page made another type (an idea filed as a task): one write, through its open editor if any.
+export const retype = (id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>, context?: ChangeContext) =>
+  editPage(id, { typeId, properties }, context);
 
 export function patchSummary(id: string, patch: Partial<ObjectSummary>) {
   set({ pages: space.get().pages.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
