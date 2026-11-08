@@ -1,0 +1,42 @@
+{
+  "key": "000102030405060708090a0b0c0d0e0f1011121314151617",
+  "channel": "00000000-0000-4000-8000-000000000001",
+  "id": "00000000-0000-4000-8000-000000000002",
+  "cases": [
+    {
+      "direction": "request",
+      "plaintext": {
+        "deadline": 1762380000000,
+        "method": "POST",
+        "path": "/v1/sessions/mobile-fixture/requests/host%3Arequest/respond",
+        "body": {
+          "command": "00000000-0000-4000-8000-000000000004",
+          "choice": "allow",
+          "text": "Résumé 💡 <>&\nsecond line"
+        }
+      },
+      "envelope": {
+        "v": 2,
+        "iv": "AAECAwQFBgcICQoL",
+        "data": "DxNAsFA+gfSxX11GGXgBPEzHmoPF9pkuOEy7wx0s4fvROIV17MIy9jE0c99n/P+yTodEHunorVLs6MKiFSC6WsGWPjlrWgCk3huhp0TdjCoyNmCuUkMtlrljVv76JGf+0eOcWed+S7M61pcWo+LZv5BZNEkILlfdlI64w+FE2aMK3sw9orjptgZsOx+KnnBG8ZELfV6Ybijy80dIGtUPal0Du4s3DGQ63GkH0kAKYyX1Dmd7DDFs94EJyLiQ7x/svoTcqmwAcz+9xcl4S2ZW018/Nh45XBsb4x0zy0F6EBh7kQNLLgs8G38ZSmGsceLDuD8="
+      }
+    },
+    {
+      "direction": "response",
+      "plaintext": {
+        "status": 200,
+        "body": {
+          "accepted": true,
+          "text": "Résumé 💡 <>&\nsecond line",
+          "count": 2,
+          "nothing": null
+        }
+      },
+      "envelope": {
+        "v": 2,
+        "iv": "EBESExQVFhcYGRob",
+        "data": "YxZCu1tp8UdWzKP+w0EBwW/YzA937QN3zaZSoQ2n5NEc2f5zDQGc8JyYse0n5GXa1FyfXwGey/crcv4bjhDSZN4ovCixPboxPA7H/iO2cfwpJlnglecI/9xXuYjgNnByb5xZ3p7xi3Fl2UtpI1av3ywiTVWX7E7M"
+      }
+    }
+  ]
+}

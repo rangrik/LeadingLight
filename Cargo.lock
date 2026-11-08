@@ -2295,6 +2295,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tauri-plugin-global-shortcut",
+ "tauri-plugin-leadinglight-notifications",
  "tauri-plugin-leadinglight-preview",
  "tauri-plugin-opener",
  "tauri-plugin-sql",
@@ -4789,6 +4790,15 @@ dependencies = [
  "tauri",
  "tauri-plugin",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tauri-plugin-leadinglight-notifications"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

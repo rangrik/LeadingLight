@@ -1,37 +1,44 @@
-import { BlockEditor, type EditorDoc } from "@leadinglight/editor/editor";
-import { useEffect, useState } from "react";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc } from "@leadinglight/editor/editor";
+import { ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { cn } from "@leadinglight/ui/lib/utils";
 import { linkHost } from "~/components/link-views";
 import { RowIcon } from "~/components/page-icon";
 import { visit } from "~/components/property-value";
+import { useStreamAnchored } from "~/lib/anchor";
+import { isTask } from "~/lib/assign";
 import { assets } from "~/lib/assets";
 import { openHref } from "~/lib/essay";
 import { showTarget } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
+import { isLive, liveContent } from "~/lib/live";
+import { useNotesFor } from "~/lib/notes-for";
 import { type ObjectSummary, objects } from "~/lib/objects";
-import { iconFor, pageOf, space } from "~/lib/space";
+import { iconFor, pageOf, savePage, space } from "~/lib/space";
 import { FeedbackGroup } from "~/components/feedback";
 import { batchOf } from "~/lib/feedback";
 import { reportOf } from "~/lib/work";
 
-// What agents published beside a page (features/reports.feature): after the page's own words, oldest
-// first, each signed and dated and read as it was written. A report never changes.
+// What agents published beside a page (features/reports.feature): after the page's own words, each
+// signed and dated and read as it was written. On a task the newest comes first and older ones fold.
+// A report never changes, but takes sidenotes here as on its own page.
 
 const titleOf = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 
 // Who wrote it and when; on the report's own page, what it is about.
-export function ReportByline({ report, about }: { report: ObjectSummary; about?: boolean }) {
+export function ReportByline({ report, about, className }: { report: ObjectSummary; about?: boolean; className?: string }) {
   const meta = reportOf(report);
   const by = meta && pageOf(meta.by);
   if (!meta) return null;
   const go = (id: string) => (e: React.MouseEvent) => visit(id, e);
   return (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 text-muted-foreground text-sm" data-testid="report-byline">
+    <p className={cn("flex min-w-0 flex-wrap items-center gap-x-1.5 text-muted-foreground text-sm", className)} data-testid="report-byline">
       {by && (
-        <button className="-ms-1 flex items-center gap-1.5 rounded-md px-1 font-medium text-foreground hover:bg-accent" onClick={go(by.id)} type="button">
+        <button className="-ms-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 font-medium text-foreground hover:bg-accent" onClick={go(by.id)} type="button">
           <RowIcon icon={iconFor(by)} />
-          {pageLabel(by.title)}
+          <span className="truncate">{pageLabel(by.title)}</span>
         </button>
       )}
       <span>· {formatAgo(meta.at)}</span>
@@ -88,43 +95,100 @@ export function ReportSources({ report }: { report: ObjectSummary }) {
   );
 }
 
-function ReportGroup({ report }: { report: ObjectSummary }) {
-  // Its words never change, so they are read once.
+const OpenButton = ({ id }: { id: string }) => (
+  <Button className="ms-auto text-muted-foreground" onClick={(e) => visit(id, e)} size="xs" variant="ghost">
+    Open
+  </Button>
+);
+
+type OnNotes = (id: string, on: boolean) => void;
+
+function ReportBody({ report, onNotes }: { report: ObjectSummary; onNotes: OnNotes }) {
+  const editor = useRef<BlockEditorHandle>(null);
+  const { notes, onNoteSteps } = useNotesFor(report, editor);
+  // Read as it opens, with notes its own page hasn't saved yet.
   const [doc, setDoc] = useState<EditorDoc | null>();
   useEffect(() => {
     let live = true;
-    objects.get(report.id).then((o) => live && setDoc(o?.content ?? null), console.error);
+    const open = liveContent(report.id);
+    (open ? Promise.resolve(open) : objects.get(report.id).then((o) => o?.content ?? null)).then((d) => live && setDoc(d), console.error);
     return () => void (live = false);
   }, [report.id]);
+  const layout = useCallback((l: { notes: boolean }) => onNotes(report.id, l.notes), [onNotes, report.id]);
+  useEffect(() => () => onNotes(report.id, false), [onNotes, report.id]);
   const title = pageLabel(report.title);
+  if (doc === undefined) return null;
+  return (
+    <div className="pt-2">
+      <BlockEditor
+        annotate
+        assets={assets}
+        content={doc}
+        label={`Report: ${title}`}
+        links={linkHost}
+        notes={notes}
+        onLayoutChange={layout}
+        // Its own page, when open, saves the note; else this is the only editor of it.
+        onNoteSteps={(steps) => {
+          onNoteSteps?.(steps);
+          if (!isLive(report.id) && editor.current) void savePage(report.id, { content: editor.current.getJSON() }).catch(() => {});
+        }}
+        openLink={openHref}
+        ref={editor}
+      />
+    </div>
+  );
+}
+
+function ReportGroup({ report, folded, onNotes }: { report: ObjectSummary; folded: boolean; onNotes: OnNotes }) {
+  // Opened for this visit only; a reload folds it again.
+  const [open, setOpen] = useState(!folded);
+  const title = pageLabel(report.title);
+  if (!open)
+    return (
+      <article aria-label={`Report: ${title}`} className="mt-12 flex items-center gap-2 border-t py-2 first:mt-0 [[data-folded]+&]:mt-0" data-folded data-report={report.id}>
+        {/* The title takes the room left, so every folded row keeps one line. */}
+        <button aria-expanded={false} className="-ms-1 flex min-w-0 flex-1 basis-0 items-center gap-1 rounded-md px-1 font-medium text-sm hover:bg-accent" onClick={() => setOpen(true)} type="button">
+          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+          <span className="truncate">{title}</span>
+        </button>
+        {/* An agent named after a long task gives up its words before the title does. */}
+        <ReportByline className="max-w-1/2 shrink-0 flex-nowrap whitespace-nowrap" report={report} />
+        <OpenButton id={report.id} />
+      </article>
+    );
   return (
     // The first sits below the page's own room for drops; each after it, a section's gap below.
-    <article aria-label={`Report: ${title}`} className="mt-12 border-t pt-6 first:mt-0" data-report={report.id}>
+    <article aria-label={`Report: ${title}`} className="mt-12 scroll-mt-4 border-t pt-6 first:mt-0" data-report={report.id}>
       <div className="flex items-center gap-2">
         <ReportByline report={report} />
-        <Button className="ms-auto text-muted-foreground" onClick={(e) => visit(report.id, e)} size="xs" variant="ghost">
-          Open
-        </Button>
+        <OpenButton id={report.id} />
       </div>
       <h2 className="mt-3 font-heading font-semibold text-2xl leading-tight tracking-tight">{title}</h2>
-      {doc !== undefined && (
-        <div className="pt-2">
-          <BlockEditor assets={assets} content={doc} label={`Report: ${title}`} links={linkHost} openLink={openHref} readOnly />
-        </div>
-      )}
+      <ReportBody onNotes={onNotes} report={report} />
       <ReportSources report={report} />
     </article>
   );
 }
 
-// The page's stream after its own words: agents' reports and the feedback sent on them, in order.
-export function Reports({ pageId }: { pageId: string }) {
+// The page's stream after its own words: agents' reports and the feedback sent on them, in the
+// order made; on a task, newest first.
+export function Reports({ pageId, onNotes }: { pageId: string; onNotes: (on: boolean) => void }) {
   const { pages } = space.use();
-  const list = pages.filter((p) => p.properties.parent === pageId && (reportOf(p) || batchOf(p))).sort((a, b) => a.createdAt - b.createdAt);
-  if (!list.length) return null;
+  const task = isTask(pages.find((p) => p.id === pageId));
+  const list = pages.filter((p) => p.properties.parent === pageId && (reportOf(p) || batchOf(p))).sort((a, b) => (task ? b.createdAt - a.createdAt : a.createdAt - b.createdAt));
+  const newest = task ? list.find((p) => reportOf(p)) : undefined;
+  // Which reports show notes, so the page keeps its margin for them.
+  const [noted, setNoted] = useState<string[]>([]);
+  const note = useCallback((id: string, on: boolean) => setNoted((n) => (n.includes(id) === on ? n : on ? [...n, id] : n.filter((x) => x !== id))), []);
+  const any = noted.length > 0;
+  useEffect(() => onNotes(any), [onNotes, any]);
+  // Newest first puts what lands above what is being read.
+  const stream = useRef<HTMLElement>(null);
+  useStreamAnchored(stream);
   return (
-    <section aria-label="Reports">
-      {list.map((r) => (reportOf(r) ? <ReportGroup key={r.id} report={r} /> : <FeedbackGroup feedback={r} key={r.id} />))}
+    <section aria-label="Reports" hidden={!list.length} ref={stream}>
+      {list.map((r) => (reportOf(r) ? <ReportGroup folded={task && r !== newest} key={r.id} onNotes={note} report={r} /> : <FeedbackGroup feedback={r} key={r.id} />))}
     </section>
   );
 }
