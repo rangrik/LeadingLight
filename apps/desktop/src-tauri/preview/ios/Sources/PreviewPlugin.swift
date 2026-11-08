@@ -1,12 +1,18 @@
 import QuickLook
 import Tauri
 import UIKit
+import WebKit
 
 private struct PreviewArgs: Decodable { let path: String }
 
 final class PreviewPlugin: Plugin, QLPreviewControllerDataSource, QLPreviewControllerDelegate {
     private var file: NSURL?
     private var pending: Invoke?
+
+    // The web view draws its own top bars; iOS 26's edge effect dimmed the strip under the status bar.
+    override func load(webview: WKWebView) {
+        if #available(iOS 26.0, *) { webview.scrollView.topEdgeEffect.isHidden = true }
+    }
 
     @objc func preview(_ invoke: Invoke) throws {
         let args = try invoke.parseArgs(PreviewArgs.self)

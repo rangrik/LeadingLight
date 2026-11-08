@@ -30,6 +30,7 @@ Feature: LeadingLight on iPad
     Then the sidebar's colour runs from the top edge of the screen to the bottom edge
     And above and below the page the colour matches the page, in light and dark mode
     And there is no band of another colour beneath the sidebar or the page
+    And on a device the strip under the status bar is no darker than just below it, in dark mode too
     And bottom controls remain above the home indicator
     When I hide the sidebar
     Then the whole top and bottom areas match the page

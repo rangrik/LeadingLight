@@ -241,3 +241,19 @@ the design is decision 44. Checked in the browser build and on an iPhone 17 Pro 
   steps are in the hand-off slides. The iPad simulator stuck on first boot, so iPad was checked in
   WebKit only.
 
+
+### On the devices — 2026-11-08
+
+Built from main as the production app (`com.leadinglight.app` 0.2.0, build 2, Ad Hoc) and
+updated in place on the iPhone 15 Pro Max and iPad Pro 11-inch, both on iOS 27.0.1. Screenshots
+came from `devicectl device capture screenshot`; nothing on the devices was tapped.
+
+- iPhone, light: the floating tab bar, the selected Today pill, the round + and the round
+  Settings button sit where the browser tests put them.
+- iPad, dark, landscape and portrait: the sidebar runs edge to edge and the toolbar groups are on
+  glass. iOS 26's own top edge effect dimmed the strip under the status bar (to `#0e0f10` over a
+  `#18191c` sidebar), unlike Apple's Settings, whose strip stays even. Build 2 turns it off
+  (`PreviewPlugin.swift`); the strip now matches the sidebar and page to the pixel.
+- Both devices render the layered icon with its glass edge (`devicectl device info appIcon`).
+- The iPhone's portrait lock kept it from rotating. Typing, the keyboard, Increase Contrast,
+  the iPhone in dark mode and the icon's tinted looks still need a person's hands.
