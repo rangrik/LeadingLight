@@ -27,6 +27,8 @@ import { reportOf } from "~/lib/work";
 export const timelinePrefs = localPrefs("ll.timeline", { words: false });
 // A busy day shows its last entries; the morning folds above them.
 const SHOWN = 8;
+// One time column width for every day, wide enough for this locale's longest time.
+const TIME_WIDTH = `${formatTime(new Date(2000, 0, 1, 12, 59).getTime()).length}ch`;
 
 type Entry = { key: string; at: number; icon: ReactNode; line: ReactNode; page?: string; open: (e: React.MouseEvent) => void };
 
@@ -37,10 +39,10 @@ const agentName = (id?: string) => ((id && pageOf(id)?.title.trim()) || "An agen
 // In a pane under 36 rem (narrow, as for .ll-page in styles.css) the time folds under the words.
 function Row({ time, icon, line, dot = true, ...rest }: { time: string; icon: ReactNode; line: ReactNode; dot?: boolean } & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <li className="relative col-span-full grid grid-cols-subgrid before:absolute before:top-3.5 before:left-[2.5px] before:h-full before:w-px before:bg-border last:before:hidden">
+    <li className={cn("relative col-span-full grid grid-cols-subgrid before:absolute before:top-3.5 before:left-[2.5px] before:h-full before:w-px before:bg-border last:before:hidden", !dot && "before:hidden")}>
       <span className={cn("relative mt-[11px] size-1.5 rounded-full bg-muted-foreground/60", !dot && "invisible")} />
       <button className="col-[2/-1] grid grid-cols-subgrid items-baseline rounded-md px-1.5 py-1 text-left transition-colors duration-150 ease-out hover:bg-accent" type="button" {...rest}>
-        <span className="col-start-2 row-start-2 text-muted-foreground text-xs tabular-nums leading-4 @min-[36rem]:col-start-1 @min-[36rem]:row-start-1">{time}</span>
+        <span className="col-start-2 row-start-2 text-muted-foreground text-xs tabular-nums leading-4 @min-[36rem]:col-start-1 @min-[36rem]:row-start-1" style={{ minWidth: TIME_WIDTH }}>{time}</span>
         <span className="col-start-1 row-start-1 flex self-start pt-0.5 @min-[36rem]:col-start-2">{icon}</span>
         <span className="col-start-2 row-start-1 line-clamp-2 text-muted-foreground leading-5 @min-[36rem]:col-start-3 @min-[36rem]:line-clamp-1">{line}</span>
       </button>
@@ -76,12 +78,13 @@ export function DayTimeline({ day, id, content }: { day: string; id: string; con
       if (within(p.createdAt)) add(p, p.createdAt, <><Name>{agentName(report.by)}</Name> published <Name>{pageLabel(p.title)}</Name></>);
       continue;
     }
-    if (!listed(p) || parentOf(p) || typeOf(p.typeId).made || linked(p)) continue;
+    if (!listed(p) || parentOf(p) || typeOf(p.typeId).made) continue;
     // A capture shows once, as captured; a page made and edited that day, once, as made.
     const caught = within(captureOf(p)?.capturedAt);
     const made = within(p.createdAt);
     const at = caught || made || Math.max(within(touched.get(p.id)), within(p.updatedAt));
-    if (at) add(p, at, <>{caught ? "captured" : made ? "made" : "edited"} <Name>{pageLabel(p.title)}</Name></>);
+    // Reading the body for links is the slow part, so only for pages of the day.
+    if (at && !linked(p)) add(p, at, <>{caught ? "captured" : made ? "made" : "edited"} <Name>{pageLabel(p.title)}</Name></>);
   }
   // Questions are about now: they show while they wait, on today's note only.
   if (day === today())
