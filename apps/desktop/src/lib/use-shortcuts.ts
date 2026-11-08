@@ -5,6 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
+import { toggleQuickOpen } from "~/components/quick-open";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
@@ -58,6 +59,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return zoom(0, "ui");
         case "settings":
           return openSettings();
+        case "search":
+          return toggleQuickOpen();
         case "ask":
           return openAsk();
         case "feed":

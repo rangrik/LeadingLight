@@ -1,9 +1,10 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// usage as the footer (NavUser's place), a Browser entry, and Search (quick open).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, Settings } from "lucide-react";
+import { CalendarDays, Globe, Search, Settings } from "lucide-react";
+import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +19,8 @@ import {
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
+import { toggleQuickOpen } from "~/components/quick-open";
+import { useKeysFor } from "~/lib/keymap";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
@@ -78,7 +81,8 @@ export function AppSidebar({
 }) {
   const { isMobile, state, setOpenMobile } = useSidebar();
   const mobile = useMobile();
-  const select = (fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
+  const keys = useKeysFor();
+  const select =(fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
     fn(e);
     if (isMobile) setOpenMobile(false);
   };
@@ -93,6 +97,13 @@ export function AppSidebar({
               <SidebarMenuButton aria-current={todayActive ? "page" : undefined} isActive={todayActive} onClick={select(onToday)}>
                 <CalendarDays />
                 <span>Today</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={select(toggleQuickOpen)}>
+                <Search />
+                <span>Search</span>
+                <Kbd className="ms-auto">{keys("search")}</Kbd>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>

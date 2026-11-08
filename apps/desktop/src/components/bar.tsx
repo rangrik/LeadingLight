@@ -26,7 +26,7 @@ import { inPanel, suggestionsOn, tail } from "~/lib/tail";
 // The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
 // beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
 
-const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
+export const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
 const ORDER: BarView[] = ["suggestions", "feed", "captures", "ask"];
 
 // Ask goes through openAsk, so its composer takes the keyboard; the Feed's first item does.

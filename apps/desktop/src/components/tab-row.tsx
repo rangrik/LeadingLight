@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, FileText, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Plus, Search, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
@@ -8,6 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
+import { toggleQuickOpen } from "~/components/quick-open";
 import { StateDot } from "~/components/state-dot";
 import { phone, useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
@@ -104,6 +105,7 @@ function TabItem({ pane, tab }: { pane: string; tab: Tab }) {
 // What an empty tab shows, and the window with no page open.
 export function NoPage({ className }: { className?: string }) {
   const create = () => void newPage(PAGE_TYPE).then((obj) => openPage(obj.id), console.error);
+  const keys = useKeysFor();
   return (
     <Empty className={className}>
       <EmptyHeader>
@@ -114,10 +116,17 @@ export function NoPage({ className }: { className?: string }) {
         <EmptyDescription>Create a page to start writing.</EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button onClick={create}>
-          <Plus />
-          New page
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={create}>
+            <Plus />
+            New page
+          </Button>
+          <Button onClick={toggleQuickOpen} variant="outline">
+            <Search />
+            Search
+            <Kbd>{keys("search")}</Kbd>
+          </Button>
+        </div>
       </EmptyContent>
     </Empty>
   );

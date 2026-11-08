@@ -1,7 +1,6 @@
 import { CALENDAR_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
-import { FileText, Plus } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShortcutsSheet } from "@/components/shortcuts-sheet";
 import { ToastProvider as ShipyardToasts } from "@/components/ui/toast";
@@ -11,16 +10,7 @@ import { useBerthConnection } from "@/hooks/use-berth-connection";
 import { useApplyTheme } from "@/hooks/use-theme";
 import { watchStillness } from "@/lib/still";
 import { useStore } from "@/lib/store";
-import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@leadinglight/ui/components/empty";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@leadinglight/ui/components/sidebar";
 import { ToastProvider, toastManager } from "@leadinglight/ui/components/toast";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -35,6 +25,8 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { QuickOpen } from "~/components/quick-open";
+import { NoPage } from "~/components/tab-row";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
@@ -152,6 +144,17 @@ export default function App() {
   useEffect(() => {
     loadSpace()
       .then(async (list) => {
+        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
+          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
+          demo.installFixture();
+          if (!list.length) {
+            await demo.seed();
+            location.reload();
+            return;
+          }
+        }
         await foldDescriptions().catch(console.error);
         setLoaded(true);
         void startTail();
@@ -360,21 +363,7 @@ export default function App() {
             ) : (
               <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", CARD)}>
                 <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
-                <Empty className="min-h-0 flex-1">
-                  <EmptyHeader>
-                    <EmptyMedia variant="icon">
-                      <FileText />
-                    </EmptyMedia>
-                    <EmptyTitle>No page open</EmptyTitle>
-                    <EmptyDescription>Create a page to start writing.</EmptyDescription>
-                  </EmptyHeader>
-                  <EmptyContent>
-                    <Button onClick={create}>
-                      <Plus />
-                      New page
-                    </Button>
-                  </EmptyContent>
-                </Empty>
+                <NoPage className="min-h-0 flex-1" />
               </div>
             )}
             <BarPanel />
@@ -422,6 +411,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
+          <QuickOpen />
           {!mobile && <CliUpdates />}
           <ZoomHud />
         </TooltipProvider>
