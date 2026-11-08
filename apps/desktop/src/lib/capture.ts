@@ -42,9 +42,9 @@ const withLink = ({ title, body }: Draft) => {
 const projectOf = (id: string) => (pageOf(id)?.properties[PROJECT] as string[] | undefined)?.[0] ?? null;
 const withProject = ({ [PROJECT]: _, ...rest }: Record<string, unknown>, project: string | null) => (project ? { ...rest, [PROJECT]: [project] } : rest);
 
-// The tag every captured idea gets, made the first time.
+// A tag by its name, made the first time.
 export async function ensureTag(name: string): Promise<string> {
-  const found = space.get().pages.find((p) => p.typeId === "tag" && pageLabel(p.title).toLowerCase() === name);
+  const found = space.get().pages.find((p) => p.typeId === "tag" && pageLabel(p.title).toLowerCase() === name.toLowerCase());
   return found ? found.id : (await createPage({ title: name, typeId: "tag" })).id;
 }
 

@@ -8,6 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
+import { StateDot } from "~/components/state-dot";
 import { phone, useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
 import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
@@ -79,6 +80,7 @@ function TabItem({ pane, tab }: { pane: string; tab: Tab }) {
       render={<div />}
       value={tab.id}
     >
+      <StateDot className="-left-[3px]" pageId={page} />
       <RowIcon icon={shown.icon} />
       <span className="min-w-0 flex-1 truncate">{shown.title}</span>
       <Button

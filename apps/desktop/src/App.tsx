@@ -55,6 +55,7 @@ import { serveAgents } from "~/lib/project-runtime/bridge";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
+import { AGENT, taskOfAgent } from "~/lib/work";
 import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
@@ -66,6 +67,12 @@ import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, SUGGESTIONS_VIEW, isPageV
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
+// Tasks given to an agent, their own or a subtask's, are listed like any page, with their state.
+// Found from the agents' pages in two passes; a search per task was 40 ms on 3000 pages.
+function atWork(pages: ObjectSummary[]) {
+  const given = new Set(pages.flatMap((p) => (p.typeId === AGENT && !(p.properties["agent-parent"] as unknown[] | undefined)?.length ? [taskOfAgent(p)] : [])));
+  return new Set([...given, ...pages.flatMap((p) => (given.has(p.id) ? [(p.properties["subtask-of"] as string[] | undefined)?.[0]] : []))]);
+}
 
 // Settings loads on first use: most of the vendored Shipyard tree sits behind its sections.
 const SettingsView = lazy(() => import("~/components/settings/settings-view").then((m) => ({ default: m.SettingsView })));
@@ -155,7 +162,8 @@ export default function App() {
           return !page || list.some((p) => p.id === page);
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
-        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
+        const work = atWork(list);
+        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
@@ -267,9 +275,10 @@ export default function App() {
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
+  const work = atWork(pages);
   const navPages = pages
-    // Tasks live in their type's view; there are too many for this list. So do agents' pages.
-    .filter((p) => listed(p) && p.typeId !== "task" && !typeOf(p.typeId).made && !isChild(p))
+    // Tasks live in their type's view, too many for this list, unless at work; agents' pages too.
+    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p))
     .sort(byRecent)
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.

@@ -20,6 +20,7 @@ export const objects: ObjectStore = {
   update: async (id, patch, context) => (await store).update(id, patch, context),
   remove: async (id, context) => (await store).remove(id, context),
   history: async () => resolveAssetUrls(await (await store).history()),
+  touched: async (from, to) => (await store).touched(from, to),
   commit: async (entry) => (await store).commit(entry),
   containing: async (text) => resolveAssetUrls(await (await store).containing(text)),
   catalog: async () => resolveAssetUrls(await (await store).catalog()),
