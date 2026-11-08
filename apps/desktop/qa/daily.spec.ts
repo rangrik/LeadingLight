@@ -58,13 +58,13 @@ test("A day lists what was made and edited that day, newest first", async ({ pag
 test("Today's strip puts the project that needs me first, with one press each", async ({ page }) => {
   await page.goto("/?mac&demo");
   // The demo fills the space, then reloads.
-  await page.waitForFunction(() => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming).type === "reload");
+  await page.waitForFunction(() => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload");
   await page.getByRole("button", { name: "Today", exact: true }).click();
   const strip = page.getByRole("region", { name: "Where things stand" });
   await expect(strip.locator("[data-project]")).toHaveText([/^LeadingLight1 needs you · 1 ready · 1 workingAnswer$/, /^Home office1 readyAccept$/]);
   await expect(page.getByRole("region", { name: "This day", exact: true }).locator("[data-slot=collapsible-panel]")).toHaveCount(0);
   await strip.getByRole("button", { name: "Accept" }).click();
   await expect(strip.locator("[data-project]")).toHaveText([/^LeadingLight/]);
-  const lamps = await page.evaluate(async () => (await import("/src/lib/" + "space.ts")).space.get().pages.find((p) => p.title === "Compare three desk lamps")?.properties);
+  const lamps = await page.evaluate(async () => (await import("/src/lib/" + "space.ts")).space.get().pages.find((p: { title: string }) => p.title === "Compare three desk lamps")?.properties);
   expect(lamps).toMatchObject({ done: true, accepted: { report: expect.any(String) } });
 });

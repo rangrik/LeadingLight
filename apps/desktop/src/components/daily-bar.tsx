@@ -94,10 +94,10 @@ export function ThisDay({ day, id, content }: { day: string; id: string; content
         This day · {rows.length}
       </CollapsibleTrigger>
       <CollapsiblePanel>
-        <div className="-mx-2 flex flex-col pt-1">
+        <div className="-mx-2 flex flex-col pt-0.5">
           {rows.map(({ p, made, at }) => (
             <button
-              className="flex h-8 items-center gap-2 rounded-md px-2 text-left hover:bg-accent"
+              className="flex h-7 items-center gap-2 rounded-md px-2 text-left hover:bg-accent"
               key={p.id}
               onClick={(e) => visit(p.id, e)}
               onPointerDown={(e) => armDrag(e, { page: p.id, label: pageLabel(p.title) })}

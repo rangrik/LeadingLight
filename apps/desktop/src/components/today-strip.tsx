@@ -1,5 +1,5 @@
 import { History } from "lucide-react";
-import { Fragment, useEffect, useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -17,6 +17,7 @@ import { feedFocus, feedItems } from "~/lib/feed";
 import { fromIso } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { localPrefs } from "~/lib/local-prefs";
+import type { ObjectSummary } from "~/lib/objects";
 import { iconFor, pageOf, space } from "~/lib/space";
 import { reportOf, reportsOn, subtasksOf } from "~/lib/work";
 import { sessions, stateOf, type TaskState, watchWork } from "~/lib/work-watch";
@@ -93,7 +94,12 @@ export function TodayStrip() {
   const projects = useProjects();
   const was = useYesterday();
   if (!projects.length && !was.length) return null;
-  const link = "inline-block truncate align-top text-foreground underline-offset-2 hover:underline";
+  const name = (p: ObjectSummary, className: string) => (
+    <button className={cn("inline-block truncate align-top text-foreground underline-offset-2 hover:underline", className)} onClick={(e) => visit(p.id, e)} type="button">
+      {pageLabel(p.title)}
+    </button>
+  );
+  const last = was.at(-1);
   return (
     <section aria-label="Where things stand" className="flex flex-col gap-1">
       {projects.map(({ project, counts, action }) => (
@@ -106,19 +112,19 @@ export function TodayStrip() {
           {action}
         </Row>
       ))}
-      {was.length > 0 && (
+      {last && (
         <Row className="flex-nowrap text-muted-foreground" data-yesterday>
           <History className="size-4 shrink-0" />
-          <span className="min-w-0 flex-1 basis-0 truncate">
-            Yesterday you were in{" "}
-            {was.map((p, i) => (
-              <Fragment key={p.id}>
-                {i > 0 && " and "}
-                <button className={cn(link, was.length > 1 ? "max-w-[38%]" : "max-w-[70%]")} onClick={(e) => visit(p.id, e)} type="button">
-                  {pageLabel(p.title)}
-                </button>
-              </Fragment>
-            ))}
+          {/* The last name takes the room left, so it is cut only when the row is full. */}
+          <span className="flex min-w-0 flex-1 basis-0 gap-1 overflow-hidden whitespace-nowrap">
+            <span className="shrink-0">Yesterday you were in</span>
+            {was.length > 1 && (
+              <>
+                {name(was[0], "max-w-[45%] shrink-0")}
+                <span className="shrink-0">and</span>
+              </>
+            )}
+            <span className="min-w-0 flex-1 basis-0">{name(last, "max-w-full")}</span>
           </span>
         </Row>
       )}

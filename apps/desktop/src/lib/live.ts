@@ -86,6 +86,7 @@ export async function editPage(id: string, change: Change, context?: ChangeConte
   const properties = change.properties?.(obj.properties);
   const patch = { ...(title !== undefined && { title }), ...(typeId !== undefined && { typeId }), ...(properties && { properties }) };
   await objects.update(id, { ...patch, ...(content && { content }) }, context);
-  patchSummary(id, patch);
+  // The store dated the change; lists that show when a page changed (This day) follow it now.
+  patchSummary(id, { ...patch, updatedAt: Date.now() });
   markSaved();
 }
