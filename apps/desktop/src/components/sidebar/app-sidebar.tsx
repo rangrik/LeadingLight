@@ -1,7 +1,7 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
-// skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// skips it), Today then our Projects, NavProjects as Pinned (while a page is), a folded Library of
+// Calendar, Browser and our Types, NavProjects as Recent, and the plans' usage as the footer (NavUser's place).
 // The header is its own export, so Settings' sidebar wears the same one.
 import { CalendarDays, Globe, Settings } from "lucide-react";
 import {
@@ -18,11 +18,13 @@ import {
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
+import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
+import { NavWork } from "./nav-work";
 
 // The app mark (a t whose crossbar ends in a dot), placed as in the app icon's tile. Drawn in
 // currentColor so the tile's theme colours apply.
@@ -94,6 +96,17 @@ export function AppSidebar({
                 <span>Today</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroup>
+        <NavWork select={select} />
+        {pinned.length > 0 && (
+          <nav aria-label="Pinned">
+            <NavProjects label="Pinned" projects={navigable(pinned)} />
+          </nav>
+        )}
+        {/* Above Recent, which lists every page: under it the Library would be out of reach. */}
+        <nav aria-label="Library">
+          <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect) }))}>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
               <SidebarMenuButton onClick={select(() => openBeside(browserView("")))}>
@@ -101,22 +114,15 @@ export function AppSidebar({
                 <span>Browser</span>
               </SidebarMenuButton>
             </SidebarMenuItem>}
-          </SidebarMenu>
-        </SidebarGroup>
-        <nav aria-label="Types">
-          <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect) }))} />
+          </NavTypes>
         </nav>
-        {pinned.length > 0 && (
-          <nav aria-label="Pinned">
-            <NavProjects label="Pinned" projects={navigable(pinned)} />
-          </nav>
-        )}
         <nav aria-label="Recent">
           <NavProjects label="Recent" onCreate={() => { onCreate(); if (isMobile) setOpenMobile(false); }} projects={navigable(pages)} sortable />
         </nav>
       </SidebarContent>
       <CloudButton />
       <SidebarFooter>
+        {mobile && <MobileAgentsButton />}
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>
       {!mobile && <UsageButton />}

@@ -40,6 +40,7 @@ async function fixture(run) {
   };
   try { await run({ sql, owner, other, app, browser, native, start, approve, claim }); }
   finally {
+    await sql`DELETE FROM mobile_connections WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM native_requests WHERE id IN ${sql(ids.length ? ids : [randomUUID()])}`;
     await sql`DELETE FROM native_sessions WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM sync_events WHERE owner IN (${owner},${other})`;
@@ -61,6 +62,22 @@ test('native authentication preserves browser origin checks and route scope', as
     assert.equal((await call(app, path, {}, { origin, 'test-user': 'new-account', 'x-leadinglight-owner': 'previous-account' })).status, 409);
   }
 });
+
+// Native account routing must admit connection setup without admitting browser credential reuse.
+test('native Mac sessions register and remove only their own mobile connection', options, () => fixture(async ({ sql, owner, other, native, start, approve, claim }) => {
+  const pending = await start(); await approve(pending); const session = await claim(pending);
+  assert.equal((await native('mobile-relay/channels', {}, session.token, { origin })).status, 403);
+  assert.equal((await native('mobile-relay/channels', {}, session.token, { 'x-leadinglight-owner': other })).status, 409);
+  const created = await native('mobile-relay/channels', {}, session.token, { 'x-leadinglight-owner': owner });
+  assert.equal(created.status, 201); const connection = await created.json();
+  const another = await start(); await approve(another, other); const second = await claim(another);
+  assert.equal((await native('mobile-relay/remove', { channel: connection.channel }, second.token)).status, 200);
+  assert.equal((await sql`SELECT owner FROM mobile_connections WHERE id=${connection.channel}`)[0].owner, owner);
+  assert.equal((await native('mobile-relay/remove', { channel: connection.channel }, session.token)).status, 200);
+  assert.equal((await sql`SELECT id FROM mobile_connections WHERE id=${connection.channel}`).length, 0);
+  assert.equal((await native('native/revoke', {}, session.token)).status, 200);
+  assert.equal((await native('mobile-relay/channels', {}, session.token)).status, 401);
+}));
 
 // Approval transfers only encrypted key bytes; concurrent polls may issue one session.
 test('approved key handoff is encrypted, account-bound and claimed once', options, () => fixture(async ({ sql, owner, other, browser, native, start, approve }) => {

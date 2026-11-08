@@ -81,7 +81,7 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
 // or a second Description row left beside the line under the title.
 test("An old Description property joins the line under the title", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Books" })).toBeVisible();
   await page.evaluate(
     () =>
       new Promise((done) => {
@@ -119,5 +119,5 @@ test("Pages stored before types existed survive the upgrade", async ({ page }) =
   );
   await page.goto("/");
   await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "From v1" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Library" }).getByRole("button", { name: "Books" })).toBeVisible();
 });

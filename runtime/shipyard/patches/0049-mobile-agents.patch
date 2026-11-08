@@ -1,0 +1,1988 @@
+diff --git a/cmd/berthd/main.go b/cmd/berthd/main.go
+index 353add1..b2195bc 100644
+--- a/cmd/berthd/main.go
++++ b/cmd/berthd/main.go
+@@ -399,6 +399,7 @@ func serve(b boxHome, args []string) error {
+ 		Secrets:          b.boxSecrets(),
+ 		Socket:           b.socket(),
+ 		Phone:            &box.Phone{Path: filepath.Join(b.dir, "phone.json"), Addr: tailnetAddr, Log: logger},
++		Mobile:           &box.Mobile{Path: filepath.Join(b.dir, "mobile.json")},
+ 		Guard:            &box.Guard{Path: filepath.Join(userDir, "guard.json")},
+ 		Invites:          &box.Invites{Address: func() string { return pairAddress(b) }, TTL: defaultTTL},
+ 		TurnCheck:        &box.TurnCheck{Path: filepath.Join(userDir, "turncheck.json"), KeyPath: filepath.Join(b.dir, "turncheck.key"), Log: logger},
+@@ -521,6 +522,7 @@ func serve(b boxHome, args []string) error {
+ 		}
+ 	}
+ 	go bx.Phone.Run(ctx, bx)
++	go bx.Mobile.Run(ctx, bx)
+ 	go bx.Guard.Run(ctx, bx)
+ 	go bx.WatchSessionMemory(ctx)
+ 	go bx.TurnCheck.Run(ctx, bx)
+diff --git a/internal/box/api.go b/internal/box/api.go
+index b28492f..73c5f67 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -88,7 +88,8 @@ type Box struct {
+ 	// Paused remembers paused worktrees.
+ 	Paused *PauseStore
+ 	// Phone serves the phone app on the tailnet address, when turned on.
+-	Phone *Phone
++	Phone  *Phone
++	Mobile *Mobile
+ 	// Guard, when set, keeps the box usable when memory runs short.
+ 	Guard *Guard
+ 	// TurnCheck, when turned on, asks Jev whether a finished turn needs
+@@ -194,6 +195,8 @@ func (b *Box) Mount(s *wire.Server) {
+ 	route("GET /v1/locations/{name}/worktrees/{worktree}/touched", b.worktreeTouched)
+ 	route("POST /v1/locations/{name}/worktrees/{worktree}/setup", b.setupWorktree)
+ 	route("POST /v1/locations/{name}/worktrees/{worktree}/{action}", b.pauseAction)
++	route("GET /v1/mobile", b.getMobile)
++	route("PUT /v1/mobile", b.putMobile)
+ 	route("GET /v1/phone", b.getPhone)
+ 	route("PUT /v1/phone", b.putPhone)
+ 	route("GET /v1/turncheck", b.getTurnCheck)
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index e927e73..7d8ced3 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -1155,6 +1155,9 @@ func (d *codexDriver) respond(ctx context.Context, sess Session, id string, body
+ 
+ // codexResponse is the result that answers a request as body says.
+ func codexResponse(req *Request, body Respond) (any, error) {
++	if strings.TrimSpace(body.Message) != "" {
++		return nil, badRequest("send Codex feedback as a separate message after declining")
++	}
+ 	if req.Kind == "question" {
+ 		if _, err := answerFor(req.Questions, body.Answers); err != nil {
+ 			return nil, err
+diff --git a/internal/box/mobile.go b/internal/box/mobile.go
+new file mode 100644
+index 0000000..1a60c89
+--- /dev/null
++++ b/internal/box/mobile.go
+@@ -0,0 +1,610 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"crypto/rand"
++	"crypto/sha256"
++	"crypto/subtle"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"os"
++	"path/filepath"
++	"regexp"
++	"slices"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++	"github.com/cosscom/shipyard/internal/wire"
++)
++
++// LeadingLight: mobile access grants selected project agents, never the box API.
++type Mobile struct {
++	Path     string
++	mu       sync.Mutex
++	start    sync.Mutex
++	received sync.Mutex
++	ctx      context.Context
++	cancel   context.CancelFunc
++	err      string
++	failures Phone
++}
++
++type mobileConfig struct {
++	Relay    *mobileRelay      `json:"relay,omitempty"`
++	Enabled  bool              `json:"enabled"`
++	Projects []string          `json:"projects"`
++	Token    string            `json:"token,omitempty"`
++	Grants   map[string]string `json:"grants,omitempty"`
++}
++
++type mobileStatus struct {
++	Enabled  bool     `json:"enabled"`
++	Projects []string `json:"projects"`
++	Code     string   `json:"code,omitempty"`
++	Channel  string   `json:"channel,omitempty"`
++	Error    string   `json:"error,omitempty"`
++	Name     string   `json:"name"`
++}
++
++func (m *Mobile) load() mobileConfig {
++	c := mobileConfig{Projects: []string{}}
++	data, err := os.ReadFile(m.Path)
++	if err != nil || json.Unmarshal(data, &c) != nil {
++		return mobileConfig{Projects: []string{}}
++	}
++	return c
++}
++
++func (m *Mobile) status(name string) mobileStatus {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	c := m.load()
++	channel := ""
++	if c.Relay != nil {
++		channel = c.Relay.Channel
++	}
++	return mobileStatus{Enabled: c.Enabled, Projects: c.Projects, Code: mobileCode(c, name), Channel: channel, Error: m.err, Name: name}
++}
++
++func (m *Mobile) apply(b *Box) {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	if m.cancel != nil {
++		m.cancel()
++		m.cancel = nil
++	}
++	m.err = ""
++	c := m.load()
++	if !c.Enabled {
++		return
++	}
++	if c.Relay == nil {
++		m.err = "Enable mobile access again to create a built-in connection."
++		return
++	}
++	if m.ctx == nil {
++		return
++	}
++	ctx, cancel := context.WithCancel(m.ctx)
++	m.cancel = cancel
++	go m.relayLoop(ctx, b, c)
++	go m.notificationLoop(ctx, b, c)
++}
++
++func (m *Mobile) Run(ctx context.Context, b *Box) {
++	m.mu.Lock()
++	m.ctx = ctx
++	m.mu.Unlock()
++	m.apply(b)
++	<-ctx.Done()
++	m.mu.Lock()
++	if m.cancel != nil {
++		m.cancel()
++	}
++	m.mu.Unlock()
++}
++
++func (b *Box) getMobile(w http.ResponseWriter, r *http.Request) error {
++	if !wire.IsLocal(r.Context()) {
++		return httpError{http.StatusForbidden, "Manage devices on this Mac."}
++	}
++	if b.Mobile == nil {
++		return httpError{http.StatusServiceUnavailable, "Mobile access is unavailable."}
++	}
++	writeJSON(w, b.Mobile.status(b.Name))
++	return nil
++}
++
++func (b *Box) putMobile(w http.ResponseWriter, r *http.Request) error {
++	if !wire.IsLocal(r.Context()) {
++		return httpError{http.StatusForbidden, "Manage devices on this Mac."}
++	}
++	if b.Mobile == nil {
++		return httpError{http.StatusServiceUnavailable, "Mobile access is unavailable."}
++	}
++	var req struct {
++		Relay    *mobileRelay `json:"relay"`
++		Enabled  *bool        `json:"enabled"`
++		Projects *[]string    `json:"projects"`
++		Rotate   bool         `json:"rotate"`
++	}
++	if err := mobileDecode(r, &req); err != nil {
++		return err
++	}
++	m := b.Mobile
++	m.mu.Lock()
++	c := m.load()
++	previous := c.Relay
++	if req.Relay != nil {
++		if !req.Relay.valid() {
++			m.mu.Unlock()
++			return badRequest("Invalid mobile connection.")
++		}
++		c.Relay = req.Relay
++		req.Rotate = true
++	}
++	if req.Enabled != nil && *req.Enabled && c.Relay == nil {
++		m.mu.Unlock()
++		return badRequest("Sign in and enable mobile access on this Mac first.")
++	}
++	if req.Enabled != nil {
++		c.Enabled = *req.Enabled
++	}
++	if req.Projects != nil {
++		if len(*req.Projects) > 100 {
++			m.mu.Unlock()
++			return badRequest("Share at most 100 projects.")
++		}
++		c.Projects, c.Grants = []string{}, map[string]string{}
++		for _, name := range *req.Projects {
++			if !mobileName.MatchString(name) {
++				m.mu.Unlock()
++				return badRequest("Choose a linked project.")
++			}
++			loc, err := b.Locations.Get(r.Context(), name)
++			if err != nil || loc.Missing {
++				m.mu.Unlock()
++				return badRequest("Project %q is unavailable.", name)
++			}
++			if !slices.Contains(c.Projects, name) {
++				c.Projects = append(c.Projects, name)
++				c.Grants[name] = mobileIdentity(loc)
++			}
++		}
++	}
++	if c.Enabled && len(c.Projects) == 0 {
++		if req.Projects == nil {
++			m.mu.Unlock()
++			return badRequest("Choose a project to share first.")
++		}
++		c.Enabled, req.Rotate = false, true
++	}
++	if req.Rotate || c.Token == "" || (req.Enabled != nil && !*req.Enabled) {
++		secret := make([]byte, 24)
++		if _, err := rand.Read(secret); err != nil {
++			m.mu.Unlock()
++			return err
++		}
++		c.Token = hex.EncodeToString(secret)
++	}
++	if !c.Enabled {
++		c.Relay = nil
++	}
++	raw, err := json.Marshal(c)
++	if err == nil {
++		err = statefile.Write(m.Path, raw)
++	}
++	m.mu.Unlock()
++	if err != nil {
++		return err
++	}
++	if previous != nil && (c.Relay == nil || previous.Channel != c.Relay.Channel) {
++		go func() {
++			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
++			defer cancel()
++			_, _ = mobileRelayCall(ctx, previous, "revoke", map[string]any{})
++		}()
++	}
++	m.apply(b)
++	writeJSON(w, m.status(b.Name))
++	return nil
++}
++
++var mobileName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,99}$`)
++
++func mobileIdentity(loc Location) string { return firstNonEmpty(loc.FolderID, loc.Path) }
++
++func (m *Mobile) location(ctx context.Context, b *Box, ref string) (string, error) {
++	name, _, _ := strings.Cut(ref, "/")
++	c := m.load()
++	if !c.Enabled || !slices.Contains(c.Projects, name) {
++		return "", httpError{http.StatusForbidden, "This project is not shared with devices."}
++	}
++	loc, err := b.Locations.Get(ctx, name)
++	if err != nil || loc.Missing || c.Grants[name] == "" || c.Grants[name] != mobileIdentity(loc) {
++		return "", httpError{http.StatusForbidden, "Share this project again on the Mac."}
++	}
++	dir, err := b.Locations.Dir(ctx, ref)
++	if err != nil {
++		return "", httpError{http.StatusForbidden, "This project folder is unavailable."}
++	}
++	return dir, nil
++}
++
++func (m *Mobile) scoped(ctx context.Context, b *Box, location, dir string) bool {
++	expected, err := m.location(ctx, b, location)
++	return err == nil && sameDir(dir, expected)
++}
++
++func (m *Mobile) session(b *Box, r *http.Request) (Session, error) {
++	s, err := b.Sessions.Get(r.Context(), r.PathValue("name"))
++	if err != nil || !m.scoped(r.Context(), b, s.Location, s.Dir) || (s.Driver != "claude" && s.Driver != "codex") || s.conv == "" {
++		return Session{}, httpError{http.StatusForbidden, "This agent is not shared with devices."}
++	}
++	if r.Method != http.MethodGet && r.URL.Path != "/v1/sessions/"+s.Name+"/interrupt" {
++		if !mobileSessionMode(b, r, s) {
++			return Session{}, httpError{http.StatusConflict, "Set this agent to approval mode on the Mac before continuing from a device."}
++		}
++	}
++	return s, nil
++}
++
++func mobileSessionMode(b *Box, r *http.Request, s Session) bool {
++	if conversationRunning(s) {
++		controls, err := b.driverFor(s).Controls(r.Context(), s)
++		return err == nil && mobileMode(controls.Agent, controls.Mode)
++	}
++	c, ok := readConversation(s.conv)
++	return ok && mobileMode(c.Agent, c.Mode)
++}
++
++func mobilePlainPrompt(text string) bool {
++	return commandName(text) == "" && !strings.HasPrefix(strings.TrimSpace(text), "!")
++}
++
++func mobileMode(agent, mode string) bool {
++	return agent == "claude" && (mode == "" || mode == "default" || mode == "plan") || agent == "codex" && (mode == "untrusted" || mode == "plan")
++}
++
++func (m *Mobile) conversation(b *Box, r *http.Request) (string, error) {
++	dir, err := b.conversationDir(r.PathValue("id"))
++	if err != nil {
++		return "", httpError{http.StatusForbidden, "This conversation is not shared with devices."}
++	}
++	c, ok := readConversation(dir)
++	if !ok || !m.scoped(r.Context(), b, c.Location, c.Dir) || (c.Agent != "claude" && c.Agent != "codex") {
++		return "", httpError{http.StatusForbidden, "This conversation is not shared with devices."}
++	}
++	if r.Method != http.MethodGet {
++		safe := mobileMode(c.Agent, c.Mode)
++		sessions, err := b.Sessions.List(r.Context())
++		if err != nil {
++			return "", err
++		}
++		for _, sess := range sessions {
++			if sess.conv == dir && conversationRunning(sess) {
++				safe = mobileSessionMode(b, r, sess)
++			}
++		}
++		if !safe {
++			return "", httpError{http.StatusConflict, "Set this agent to approval mode on the Mac before continuing from a device."}
++		}
++	}
++	return dir, nil
++}
++
++func mobileDecode(r *http.Request, v any) error {
++	d := json.NewDecoder(io.LimitReader(r.Body, (1<<20)+1))
++	d.DisallowUnknownFields()
++	if err := d.Decode(v); err != nil {
++		return badRequest("Invalid device request: %v", err)
++	}
++	if err := d.Decode(new(any)); err != io.EOF {
++		return badRequest("Send one JSON request.")
++	}
++	return nil
++}
++
++func mobileBody(r *http.Request, body any) {
++	raw, _ := json.Marshal(body)
++	r.Body = io.NopCloser(bytes.NewReader(raw))
++	r.ContentLength = int64(len(raw))
++}
++
++func (m *Mobile) handler(b *Box, addr string) http.Handler {
++	mux := http.NewServeMux()
++	route := func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
++		mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
++			if err := h(w, r); err != nil {
++				writeErr(w, err)
++			}
++		})
++	}
++	session := func(h func(http.ResponseWriter, *http.Request) error) func(http.ResponseWriter, *http.Request) error {
++		return func(w http.ResponseWriter, r *http.Request) error {
++			if _, err := m.session(b, r); err != nil {
++				return err
++			}
++			return h(w, r)
++		}
++	}
++	conversation := func(h func(http.ResponseWriter, *http.Request) error) func(http.ResponseWriter, *http.Request) error {
++		return func(w http.ResponseWriter, r *http.Request) error {
++			if _, err := m.conversation(b, r); err != nil {
++				return err
++			}
++			return h(w, r)
++		}
++	}
++	route("GET /v1/info", func(w http.ResponseWriter, r *http.Request) error {
++		writeJSON(w, map[string]any{"mobile": true, "version": 1, "name": b.Name, "capabilities": []string{"projects", "sessions", "approvals"}})
++		return nil
++	})
++	route("GET /v1/locations", func(w http.ResponseWriter, r *http.Request) error {
++		all, err := b.Locations.List(r.Context())
++		if err != nil {
++			return err
++		}
++		out := []map[string]any{}
++		for _, loc := range all {
++			if _, err := m.location(r.Context(), b, loc.Name); err == nil {
++				out = append(out, map[string]any{"name": loc.Name, "path": loc.Path, "repo": loc.Repo, "worktrees": loc.Worktrees})
++			}
++		}
++		writeJSON(w, out)
++		return nil
++	})
++	route("GET /v1/sessions", func(w http.ResponseWriter, r *http.Request) error {
++		all, err := b.Sessions.List(r.Context())
++		if err != nil {
++			return err
++		}
++		out := []Session{}
++		for _, s := range all {
++			if m.scoped(r.Context(), b, s.Location, s.Dir) && (s.Driver == "claude" || s.Driver == "codex") && s.conv != "" {
++				out = append(out, s)
++			}
++		}
++		writeJSON(w, b.enrich(r.Context(), out))
++		return nil
++	})
++	route("GET /v1/conversations", func(w http.ResponseWriter, r *http.Request) error {
++		if _, err := m.location(r.Context(), b, r.URL.Query().Get("location")); err != nil {
++			return err
++		}
++		if r.URL.Query().Has("path") {
++			return badRequest("Choose a shared project, not a path.")
++		}
++		return m.listConversations(b, w, r)
++	})
++	route("POST /v1/sessions", func(w http.ResponseWriter, r *http.Request) error { return m.addSession(b, w, r) })
++	for pattern, h := range map[string]func(http.ResponseWriter, *http.Request) error{
++		"GET /v1/sessions/{name}/transcript":           b.transcript,
++		"GET /v1/sessions/{name}/transcript/tool/{id}": b.toolDetail,
++		"GET /v1/sessions/{name}/turns":                b.listTurns,
++		"GET /v1/sessions/{name}/requests":             b.listRequests,
++		"GET /v1/sessions/{name}/controls":             b.sessionControls,
++		"GET /v1/sessions/{name}/draft":                b.draft,
++		"GET /v1/sessions/{name}/queue":                b.listQueue,
++		"GET /v1/sessions/{name}/commands":             b.listCommands,
++		"POST /v1/sessions/{name}/interrupt":           b.interruptSession,
++		"DELETE /v1/sessions/{name}/queue/{turn}":      b.cancelQueued,
++	} {
++		route(pattern, session(h))
++	}
++	route("POST /v1/sessions/{name}/queue/{turn}/send", session(func(w http.ResponseWriter, r *http.Request) error {
++		var body struct{}
++		if err := mobileDecode(r, &body); err != nil {
++			return err
++		}
++		if b.Turns == nil {
++			return badRequest("No queued prompts are available.")
++		}
++		b.Turns.mu.Lock()
++		plain := false
++		if st := b.Turns.sess[r.PathValue("name")]; st != nil {
++			for _, it := range st.inbox {
++				if it.Turn == r.PathValue("turn") {
++					plain = mobilePlainPrompt(it.Text)
++				}
++			}
++		}
++		b.Turns.mu.Unlock()
++		if !plain {
++			return badRequest("Send this queued command from the Mac.")
++		}
++		mobileBody(r, body)
++		return b.sendQueued(w, r)
++	}))
++
++	route("POST /v1/sessions/{name}/send", session(func(w http.ResponseWriter, r *http.Request) error {
++		var body SendRequest
++		if err := mobileDecode(r, &body); err != nil {
++			return err
++		}
++		if body.Force || body.Enter != nil && !*body.Enter || strings.TrimSpace(body.IdemKey) == "" {
++			return badRequest("Send a complete prompt with a request ID; answer approvals separately.")
++		}
++		if !mobilePlainPrompt(body.Text) {
++			return badRequest("Use a plain prompt here; run agent commands on the Mac.")
++		}
++		mobileBody(r, body)
++		return b.sendToSession(w, r)
++	}))
++	route("POST /v1/sessions/{name}/requests/{id}/respond", session(func(w http.ResponseWriter, r *http.Request) error {
++		var body Respond
++		if err := mobileDecode(r, &body); err != nil {
++			return err
++		}
++		if !slices.Contains([]string{"", "allow", "deny", "approve_each", "keep_planning"}, body.Choice) {
++			return badRequest("Approve this request once, or change access on the Mac.")
++		}
++		mobileBody(r, body)
++		return b.respondRequest(w, r)
++	}))
++	route("POST /v1/sessions/{name}/resume", session(func(w http.ResponseWriter, r *http.Request) error {
++		var body struct{}
++		if err := mobileDecode(r, &body); err != nil {
++			return err
++		}
++		mobileBody(r, body)
++		return b.resumeSession(w, r)
++	}))
++	route("POST /v1/conversations/{id}/resume", conversation(func(w http.ResponseWriter, r *http.Request) error {
++		var body struct{}
++		if err := mobileDecode(r, &body); err != nil {
++			return err
++		}
++		mobileBody(r, body)
++		return b.resumeConversation(w, r)
++	}))
++	route("GET /v1/conversations/{id}/transcript", conversation(b.conversationTranscript))
++	route("GET /v1/conversations/{id}/outputs", conversation(b.conversationOutputs))
++	route("GET /v1/conversations/{id}/outputs/{output}", conversation(b.outputContent))
++	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("Cache-Control", "no-store")
++		w.Header().Set("X-Content-Type-Options", "nosniff")
++		if r.Host != addr || strings.Contains(strings.ToLower(r.URL.RawPath), "%2f") || strings.Contains(strings.ToLower(r.URL.RawPath), "%5c") || strings.Contains(strings.ToLower(r.URL.RawPath), "%25") || strings.Contains(r.URL.Path, "//") || strings.Contains(r.URL.Path, "\\") || slices.Contains(strings.Split(r.URL.Path, "/"), "..") || slices.Contains(strings.Split(r.URL.Path, "/"), ".") {
++			writeError(w, http.StatusForbidden, "Invalid device address.")
++			return
++		}
++		// The native client sends no Origin; web pages cannot exercise this grant.
++		if r.Header.Get("Origin") != "" {
++			writeError(w, http.StatusForbidden, "Use the LeadingLight device app.")
++			return
++		}
++		ip, _, _ := net.SplitHostPort(r.RemoteAddr)
++		if m.failures.limited(ip, false) {
++			writeError(w, http.StatusTooManyRequests, "Too many wrong codes. Try again in a minute.")
++			return
++		}
++		c := m.load()
++		got, bearer := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
++		if !bearer || !c.Enabled || c.Token == "" || subtle.ConstantTimeCompare([]byte(got), []byte(c.Token)) != 1 {
++			m.failures.limited(ip, true)
++			writeError(w, http.StatusUnauthorized, "This connection code is no longer valid. Pair again on the Mac.")
++			return
++		}
++		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
++		defer cancel()
++		r = r.WithContext(ctx)
++		r.Header.Set(OriginHeader, "mobile")
++		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
++		mux.ServeHTTP(w, r)
++	})
++}
++
++func (m *Mobile) listConversations(b *Box, w http.ResponseWriter, r *http.Request) error {
++	entries, err := os.ReadDir(b.ConversationsDir)
++	if err != nil && !os.IsNotExist(err) {
++		return err
++	}
++	live := map[string]string{}
++	if sessions, err := b.Sessions.List(r.Context()); err == nil {
++		for _, s := range sessions {
++			if conversationRunning(s) {
++				live[s.conv] = s.Name
++			}
++		}
++	}
++	out := []Conversation{}
++	location := r.URL.Query().Get("location")
++	for _, e := range entries {
++		if !e.IsDir() {
++			continue
++		}
++		dir := filepath.Join(b.ConversationsDir, e.Name())
++		c, ok := readConversation(dir)
++		if !ok || (c.Location != location && !strings.HasPrefix(c.Location, location+"/")) || !m.scoped(r.Context(), b, c.Location, c.Dir) || (c.Agent != "claude" && c.Agent != "codex") {
++			continue
++		}
++		if name, ok := live[dir]; ok {
++			c.Live, c.Session = true, name
++		}
++		out = append(out, c)
++	}
++	slices.SortFunc(out, func(a, b Conversation) int { return lastTime(b).Compare(lastTime(a)) })
++	if len(out) > 200 {
++		out = out[:200]
++	}
++	writeJSON(w, out)
++	return nil
++}
++
++func (m *Mobile) addSession(b *Box, w http.ResponseWriter, r *http.Request) error {
++	var body struct {
++		Name     string `json:"name"`
++		Location string `json:"location"`
++		Agent    string `json:"agent"`
++		Driver   string `json:"driver"`
++		Prompt   string `json:"prompt"`
++		Model    string `json:"model,omitempty"`
++		Effort   string `json:"effort,omitempty"`
++		Title    string `json:"title,omitempty"`
++	}
++	if err := mobileDecode(r, &body); err != nil {
++		return err
++	}
++	if !sessionName.MatchString(body.Name) || !strings.HasPrefix(body.Name, "mobile-") {
++		return badRequest("Give this start a stable mobile- request name.")
++	}
++	if body.Agent != "claude" && body.Agent != "codex" || body.Driver != body.Agent {
++		return badRequest("Choose the Claude or Codex agent.")
++	}
++	if _, err := m.location(r.Context(), b, body.Location); err != nil {
++		return err
++	}
++	if strings.TrimSpace(body.Prompt) == "" {
++		return badRequest("Write a prompt first.")
++	}
++	if !mobilePlainPrompt(body.Prompt) {
++		return badRequest("Use a plain prompt here; run agent commands on the Mac.")
++	}
++	req := SessionRequest{Name: body.Name, Location: body.Location, Agent: body.Agent, Driver: body.Driver, Prompt: body.Prompt, Model: body.Model, Effort: body.Effort, Title: body.Title, Mode: "default"}
++	if body.Agent == "codex" {
++		req.Mode = "untrusted"
++	}
++	raw, _ := json.Marshal(req)
++	sum := sha256.Sum256(raw)
++	fingerprint := hex.EncodeToString(sum[:])
++	m.start.Lock()
++	defer m.start.Unlock()
++	if _, err := m.location(r.Context(), b, body.Location); err != nil {
++		return err
++	}
++	if r.Header.Get("Authorization") != "Bearer "+m.load().Token {
++		return httpError{http.StatusUnauthorized, "Pair this device again on the Mac."}
++	}
++	ledger := filepath.Join(filepath.Dir(m.Path), "mobile-starts", body.Name)
++	previous, err := os.ReadFile(ledger)
++	if err == nil {
++		if string(previous) != fingerprint {
++			return httpError{http.StatusConflict, "This request name already belongs to another prompt."}
++		}
++		s, err := b.Sessions.Get(r.Context(), body.Name)
++		if err == nil && m.scoped(r.Context(), b, s.Location, s.Dir) && s.Driver == body.Agent {
++			writeJSON(w, b.enrich(r.Context(), []Session{s})[0])
++			return nil
++		}
++		return httpError{http.StatusConflict, "The earlier start could not be confirmed. Check the Mac before starting another agent."}
++	}
++	if !errors.Is(err, os.ErrNotExist) {
++		return err
++	}
++	if _, err := b.Sessions.Get(r.Context(), body.Name); err == nil {
++		return httpError{http.StatusConflict, "This agent name is already in use."}
++	}
++	if err := mobileDurableWrite(ledger, []byte(fingerprint)); err != nil {
++		return fmt.Errorf("keep device request: %w", err)
++	}
++	mobileBody(r, req)
++	return b.addSession(w, r)
++}
+diff --git a/internal/box/mobile_notifications.go b/internal/box/mobile_notifications.go
+new file mode 100644
+index 0000000..87046c1
+--- /dev/null
++++ b/internal/box/mobile_notifications.go
+@@ -0,0 +1,188 @@
++package box
++
++import (
++	"context"
++	"crypto/sha256"
++	"encoding/json"
++	"fmt"
++	"path/filepath"
++	"slices"
++	"strings"
++	"sync"
++	"time"
++)
++
++type mobileNotificationTarget struct {
++	Project      string `json:"project"`
++	Conversation string `json:"conversation"`
++	Request      string `json:"request"`
++	Generation   int64  `json:"generation"`
++}
++
++type mobileNotification struct {
++	id, session string
++	target      mobileNotificationTarget
++}
++
++func mobileNotificationID(channel, session string, r Request) string {
++	raw, _ := json.Marshal([]any{channel, session, r.ID, r.Generation})
++	sum := sha256.Sum256(raw)
++	sum[6], sum[8] = sum[6]&15|128, sum[8]&63|128
++	return fmt.Sprintf("%x-%x-%x-%x-%x", sum[:4], sum[4:6], sum[6:8], sum[8:10], sum[10:16])
++}
++
++// Reading a log must not keep a revoked connection waiting for catch-up.
++func mobilePending(ctx context.Context, b *Box, s Session) []Request {
++	var caught <-chan struct{}
++	var mu *sync.Mutex
++	var ledger func() (*requestLedger, bool)
++	switch d := b.driverFor(s).(type) {
++	case *claudeDriver:
++		c, err := d.conv(s)
++		if err != nil {
++			return nil
++		}
++		caught, mu = c.caught, &c.mu
++		ledger = func() (*requestLedger, bool) { return c.reqs, c.exited || c.gone }
++	case *codexDriver:
++		c, err := d.conv(s)
++		if err != nil {
++			return nil
++		}
++		caught, mu = c.caught, &c.mu
++		ledger = func() (*requestLedger, bool) { return c.reqs, c.exited || c.gone }
++	default:
++		return nil
++	}
++	select {
++	case <-ctx.Done():
++		return nil
++	case <-caught:
++	}
++	mu.Lock()
++	defer mu.Unlock()
++	l, ended := ledger()
++	if ended || l == nil {
++		return nil
++	}
++	out := []Request{}
++	for _, id := range l.order {
++		r := l.byID[id]
++		if r.Generation == l.gen && r.State == ReqPending && (r.Kind == "approval" || r.Kind == "question" || r.Kind == "plan") {
++			out = append(out, *r)
++		}
++	}
++	return out
++}
++
++func (m *Mobile) notificationSession(ctx context.Context, b *Box, c mobileConfig, s Session) bool {
++	if ctx.Err() != nil {
++		return false
++	}
++	current := m.load()
++	if !current.Enabled || current.Relay == nil || c.Relay == nil || current.Relay.Channel != c.Relay.Channel || current.Token != c.Token {
++		return false
++	}
++	if (s.Driver != "claude" && s.Driver != "codex") || !m.scoped(ctx, b, s.Location, s.Dir) || !conversationRunning(s) {
++		return false
++	}
++	dir, err := b.conversationDir(filepath.Base(s.conv))
++	return err == nil && sameDir(dir, s.conv)
++}
++
++func (m *Mobile) notificationBatch(ctx context.Context, b *Box, c mobileConfig, attempts map[string]time.Time, now time.Time, after string) []mobileNotification {
++	for id, next := range attempts {
++		if !now.Before(next) {
++			delete(attempts, id)
++		}
++	}
++	sessions, err := b.Sessions.List(ctx)
++	if err != nil {
++		return nil
++	}
++	later, earlier := []mobileNotification{}, []mobileNotification{}
++	keep := func(group *[]mobileNotification, n mobileNotification) {
++		*group = append(*group, n)
++		slices.SortFunc(*group, func(a, b mobileNotification) int { return strings.Compare(a.id, b.id) })
++		if len(*group) > 8 {
++			*group = (*group)[:8]
++		}
++	}
++	for _, s := range sessions {
++		if ctx.Err() != nil {
++			break
++		}
++		if !m.notificationSession(ctx, b, c, s) {
++			continue
++		}
++		for _, r := range mobilePending(ctx, b, s) {
++			id := mobileNotificationID(c.Relay.Channel, s.Name, r)
++			if _, waiting := attempts[id]; waiting {
++				continue
++			}
++			project, _, _ := strings.Cut(s.Location, "/")
++			n := mobileNotification{id, s.Name, mobileNotificationTarget{project, filepath.Base(s.conv), r.ID, r.Generation}}
++			if id > after {
++				keep(&later, n)
++			} else {
++				keep(&earlier, n)
++			}
++		}
++	}
++	out := append(later, earlier...)
++	if len(out) > 8 {
++		out = out[:8]
++	}
++	for _, n := range out {
++		attempts[n.id] = now.Add(30 * time.Second)
++	}
++	return out
++}
++
++func (m *Mobile) notificationEnvelope(ctx context.Context, b *Box, c mobileConfig, n mobileNotification) (mobileEnvelope, bool) {
++	s, err := b.Sessions.Get(ctx, n.session)
++	project, _, _ := strings.Cut(s.Location, "/")
++	if err != nil || !m.notificationSession(ctx, b, c, s) || project != n.target.Project || filepath.Base(s.conv) != n.target.Conversation {
++		return mobileEnvelope{}, false
++	}
++	for _, r := range mobilePending(ctx, b, s) {
++		if r.ID == n.target.Request && r.Generation == n.target.Generation {
++			envelope, err := mobileSeal(c, n.id, "notification", n.target)
++			return envelope, err == nil && ctx.Err() == nil
++		}
++	}
++	return mobileEnvelope{}, false
++}
++
++func (m *Mobile) notificationLoop(ctx context.Context, b *Box, c mobileConfig) {
++	ticker := time.NewTicker(5 * time.Second)
++	defer ticker.Stop()
++	attempts := map[string]time.Time{}
++	after := ""
++	for ctx.Err() == nil {
++		read, stop := context.WithTimeout(ctx, 4*time.Second)
++		batch := m.notificationBatch(read, b, c, attempts, time.Now(), after)
++		stop()
++		if len(batch) > 0 {
++			after = batch[len(batch)-1].id
++		}
++		var jobs sync.WaitGroup
++		for _, n := range batch {
++			jobs.Add(1)
++			go func(n mobileNotification) {
++				defer jobs.Done()
++				delivery, cancel := context.WithTimeout(ctx, 10*time.Second)
++				defer cancel()
++				if envelope, ok := m.notificationEnvelope(delivery, b, c, n); ok {
++					_, _ = mobileRelayCall(delivery, c.Relay, "notify", map[string]any{"id": n.id, "envelope": envelope})
++				}
++			}(n)
++		}
++		jobs.Wait()
++		select {
++		case <-ctx.Done():
++			return
++		case <-ticker.C:
++		}
++	}
++}
+diff --git a/internal/box/mobile_notifications_test.go b/internal/box/mobile_notifications_test.go
+new file mode 100644
+index 0000000..d1a2002
+--- /dev/null
++++ b/internal/box/mobile_notifications_test.go
+@@ -0,0 +1,174 @@
++package box
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"os"
++	"path/filepath"
++	"reflect"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++)
++
++// Only current, shared requests cross the relay, encrypted and without answering the agent.
++func TestMobileNotificationsScopePrivacyAndLifecycle(t *testing.T) {
++	for _, provider := range []string{"claude", "codex"} {
++		t.Run(provider, func(t *testing.T) {
++			bin := t.TempDir()
++			fixture, prompt, kind, mode := fakeStreamClaude, "run the tests", "approval", "default"
++			if provider == "codex" {
++				fixture, prompt, kind, mode = fakeCodexAppServer, "ask me", "question", "untrusted"
++			}
++			if err := os.WriteFile(filepath.Join(bin, provider), []byte(fixture), 0755); err != nil {
++				t.Fatal(err)
++			}
++			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
++			t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
++			t.Setenv("CODEX_HOME", t.TempDir())
++			client, b, _ := structuredBoxFor(t, conversationsDir(t), t.TempDir())
++			call(t, client, "POST", "/v1/sessions", "", SessionRequest{Name: "notifications", Location: "acme", Agent: provider, Driver: provider, Mode: mode, Prompt: prompt}, nil)
++			t.Cleanup(func() { call(t, client, "DELETE", "/v1/sessions/notifications", "", nil, nil) })
++			s, err := b.Sessions.Get(context.Background(), "notifications")
++			if err != nil {
++				t.Fatal(err)
++			}
++			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
++			defer cancel()
++			var pending []Request
++			until(t, "pending notification", func() bool { pending = mobilePending(ctx, b, s); return len(pending) == 1 })
++			if pending[0].Kind != kind {
++				t.Fatal(pending)
++			}
++			m := &Mobile{Path: filepath.Join(t.TempDir(), "mobile.json")}
++			mobileGrant(t, b, m, "acme")
++			c := m.load()
++			c.Relay = &mobileRelay{Channel: "00000000-0000-4000-8000-000000000001", HostToken: strings.Repeat("a", 43), ClientToken: strings.Repeat("b", 43)}
++			save := func() {
++				raw, _ := json.Marshal(c)
++				if err := statefile.Write(m.Path, raw); err != nil {
++					t.Fatal(err)
++				}
++			}
++			save()
++			now, attempts := time.Now(), map[string]time.Time{}
++			batch := m.notificationBatch(ctx, b, c, attempts, now, "")
++			if len(batch) != 1 {
++				t.Fatal("missing notification", batch)
++			}
++			n := batch[0]
++			envelope, ok := m.notificationEnvelope(ctx, b, c, n)
++			if !ok {
++				t.Fatal("missing envelope")
++			}
++			raw, _ := json.Marshal(envelope)
++			for _, field := range []string{`"project"`, `"request"`, `"command"`, `"questions"`, prompt} {
++				if strings.Contains(string(raw), field) {
++					t.Fatalf("plaintext leaked: %s", field)
++				}
++			}
++			var target mobileNotificationTarget
++			if err := mobileOpen(c, n.id, "notification", envelope, &target); err != nil {
++				t.Fatal(err)
++			}
++			if target.Project != "acme" || target.Conversation != filepath.Base(s.conv) || target.Request != pending[0].ID || target.Generation != pending[0].Generation {
++				t.Fatal(target)
++			}
++			if mobileOpen(c, n.id, "response", envelope, &target) == nil {
++				t.Fatal("accepted another message direction")
++			}
++			if !reflect.DeepEqual(pending, mobilePending(ctx, b, s)) {
++				t.Fatal("notification changed agent requests")
++			}
++			if batch := m.notificationBatch(ctx, b, c, attempts, now.Add(5*time.Second), ""); len(batch) != 0 {
++				t.Fatal("retry was not throttled")
++			}
++			if batch := m.notificationBatch(ctx, b, c, attempts, now.Add(30*time.Second), ""); len(batch) != 1 || batch[0].id != n.id {
++				t.Fatal("late device cannot receive pending event", batch)
++			}
++			other := pending[0]
++			other.Generation++
++			if mobileNotificationID(c.Relay.Channel, s.Name, other) == n.id {
++				t.Fatal("generation reused event identity")
++			}
++			c.Grants["acme"] = "another-folder"
++			save()
++			if batch := m.notificationBatch(ctx, b, c, map[string]time.Time{}, now, ""); len(batch) != 0 {
++				t.Fatal("unshared folder notified")
++			}
++			if _, ok := m.notificationEnvelope(ctx, b, c, n); ok {
++				t.Fatal("queued notification survived scope removal")
++			}
++			mobileGrant(t, b, m, "acme")
++			c.Grants = m.load().Grants
++			save()
++			var update func(func(*requestLedger))
++			if provider == "claude" {
++				conv, _ := b.claude().conv(s)
++				update = func(f func(*requestLedger)) { conv.mu.Lock(); defer conv.mu.Unlock(); f(conv.reqs) }
++			} else {
++				conv, _ := b.codex().conv(s)
++				update = func(f func(*requestLedger)) { conv.mu.Lock(); defer conv.mu.Unlock(); f(conv.reqs) }
++			}
++			update(func(l *requestLedger) { l.gen++ })
++			if got := mobilePending(ctx, b, s); len(got) != 0 {
++				t.Fatal("old generation notified", got)
++			}
++			update(func(l *requestLedger) { l.gen-- })
++			for _, state := range []string{ReqRecorded, ReqResolved, ReqCancelled, ReqExpired} {
++				update(func(l *requestLedger) { l.byID[pending[0].ID].State = state })
++				if _, ok := m.notificationEnvelope(ctx, b, c, n); ok {
++					t.Fatal("settled request notified", state)
++				}
++			}
++			update(func(l *requestLedger) {
++				for i := range 60 {
++					id := fmt.Sprintf("pending-%d", i)
++					l.order = append(l.order, id)
++					l.byID[id] = &Request{ID: id, Generation: l.gen, State: ReqPending, Kind: "plan"}
++				}
++			})
++			limited, seen, after := map[string]time.Time{}, map[string]bool{}, ""
++			for pass := range 8 {
++				batch := m.notificationBatch(ctx, b, c, limited, now.Add(time.Duration(pass)*5*time.Second), after)
++				if len(batch) != 8 {
++					t.Fatal("batch was not bounded", len(batch))
++				}
++				for _, n := range batch {
++					seen[n.id] = true
++				}
++				after = batch[len(batch)-1].id
++			}
++			if len(seen) != 60 {
++				t.Fatal("retries starved newer alerts", len(seen))
++			}
++			update(func(l *requestLedger) { l.byID[pending[0].ID].State = ReqPending })
++			old := c
++			c.Token = strings.Repeat("b", 48)
++			save()
++			if _, ok := m.notificationEnvelope(ctx, b, old, n); ok {
++				t.Fatal("queued notification survived rotation")
++			}
++			c.Enabled = false
++			save()
++			if batch := m.notificationBatch(ctx, b, c, map[string]time.Time{}, now, ""); len(batch) != 0 {
++				t.Fatal("disabled connection notified")
++			}
++		})
++	}
++}
++
++// Revocation cancels catch-up without leaving a goroutine waiting on the agent log.
++func TestMobileNotificationReadCancellation(t *testing.T) {
++	b := &Box{}
++	s := Session{Name: "waiting", Driver: "claude", conv: t.TempDir(), sock: "unused"}
++	b.claude().convs[s.Name] = &claudeConv{conv: s.conv, following: true, caught: make(chan struct{})}
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	if got := mobilePending(ctx, b, s); len(got) != 0 {
++		t.Fatal(got)
++	}
++}
+diff --git a/internal/box/mobile_relay.go b/internal/box/mobile_relay.go
+new file mode 100644
+index 0000000..13662cc
+--- /dev/null
++++ b/internal/box/mobile_relay.go
+@@ -0,0 +1,364 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"crypto/aes"
++	"crypto/cipher"
++	"crypto/rand"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"net/http"
++	"net/url"
++	"os"
++	"path/filepath"
++	"regexp"
++	"sync"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++)
++
++const mobileRelayOrigin = "https://leadinglight.app/api/mobile-relay/native/"
++
++var mobileUUID = regexp.MustCompile(`^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$`)
++var mobileCredential = regexp.MustCompile(`^[A-Za-z0-9_-]{43}$`)
++var mobileHTTP = &http.Client{Timeout: 25 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }, Transport: &http.Transport{Proxy: nil}}
++
++type mobileRelay struct {
++	Channel     string `json:"channel"`
++	HostToken   string `json:"hostToken"`
++	ClientToken string `json:"clientToken"`
++}
++
++func (r *mobileRelay) valid() bool {
++	return mobileUUID.MatchString(r.Channel) && mobileCredential.MatchString(r.HostToken) && mobileCredential.MatchString(r.ClientToken) && r.HostToken != r.ClientToken
++}
++
++func mobileCode(c mobileConfig, name string) string {
++	if !c.Enabled || c.Relay == nil {
++		return ""
++	}
++	raw, _ := json.Marshal(map[string]any{"version": 2, "name": name, "channel": c.Relay.Channel, "token": c.Relay.ClientToken, "key": c.Token})
++	return "llmac2:" + base64.RawURLEncoding.EncodeToString(raw)
++}
++
++type mobileEnvelope struct {
++	V    int    `json:"v"`
++	IV   string `json:"iv"`
++	Data string `json:"data"`
++}
++type mobileMessage struct {
++	ID       string         `json:"id"`
++	Envelope mobileEnvelope `json:"envelope"`
++}
++type mobileRequest struct {
++	Deadline int64           `json:"deadline"`
++	Method   string          `json:"method"`
++	Path     string          `json:"path"`
++	Body     json.RawMessage `json:"body"`
++}
++type mobileReply struct {
++	Status int             `json:"status"`
++	Body   json.RawMessage `json:"body"`
++}
++
++func mobileCipher(key string) (cipher.AEAD, error) {
++	sum := sha256.Sum256([]byte("LeadingLight mobile v2\n" + key))
++	block, err := aes.NewCipher(sum[:])
++	if err != nil {
++		return nil, err
++	}
++	return cipher.NewGCM(block)
++}
++func mobileAAD(channel, id, direction string) []byte {
++	return []byte("LeadingLight mobile v2\n" + channel + "\n" + id + "\n" + direction)
++}
++func mobileSeal(c mobileConfig, id, direction string, value any) (mobileEnvelope, error) {
++	aead, err := mobileCipher(c.Token)
++	if err != nil {
++		return mobileEnvelope{}, err
++	}
++	raw, err := json.Marshal(value)
++	if err != nil {
++		return mobileEnvelope{}, err
++	}
++	nonce := make([]byte, aead.NonceSize())
++	if _, err = rand.Read(nonce); err != nil {
++		return mobileEnvelope{}, err
++	}
++	data := aead.Seal(nil, nonce, raw, mobileAAD(c.Relay.Channel, id, direction))
++	return mobileEnvelope{2, base64.StdEncoding.EncodeToString(nonce), base64.StdEncoding.EncodeToString(data)}, nil
++}
++func mobileOpen(c mobileConfig, id, direction string, e mobileEnvelope, out any) error {
++	if e.V != 2 || len(e.Data) > 2_850_000 || !mobileUUID.MatchString(id) {
++		return errors.New("Invalid encrypted request")
++	}
++	aead, err := mobileCipher(c.Token)
++	if err != nil {
++		return err
++	}
++	nonce, err := base64.StdEncoding.Strict().DecodeString(e.IV)
++	if err != nil || len(nonce) != aead.NonceSize() {
++		return errors.New("Invalid nonce")
++	}
++	data, err := base64.StdEncoding.Strict().DecodeString(e.Data)
++	if err != nil {
++		return err
++	}
++	raw, err := aead.Open(nil, nonce, data, mobileAAD(c.Relay.Channel, id, direction))
++	if err != nil {
++		return err
++	}
++	if len(raw) > 1<<20 {
++		return errors.New("Request too large")
++	}
++	decoder := json.NewDecoder(bytes.NewReader(raw))
++	decoder.DisallowUnknownFields()
++	if err = decoder.Decode(out); err != nil {
++		return err
++	}
++	if decoder.Decode(new(any)) != io.EOF {
++		return errors.New("Invalid request")
++	}
++	return nil
++}
++
++func mobileRelayCall(ctx context.Context, c *mobileRelay, path string, body map[string]any) (json.RawMessage, error) {
++	body["channel"] = c.Channel
++	raw, err := json.Marshal(body)
++	if err != nil {
++		return nil, err
++	}
++	r, err := http.NewRequestWithContext(ctx, "POST", mobileRelayOrigin+path, bytes.NewReader(raw))
++	if err != nil {
++		return nil, err
++	}
++	r.Header.Set("Content-Type", "application/json")
++	r.Header.Set("Authorization", "Bearer "+c.HostToken)
++	res, err := mobileHTTP.Do(r)
++	if err != nil {
++		return nil, errors.New("Could not reach the connection service. Keep this Mac online.")
++	}
++	defer res.Body.Close()
++	raw, err = io.ReadAll(io.LimitReader(res.Body, 3_000_001))
++	if err != nil || len(raw) > 3_000_000 {
++		return nil, errors.New("Invalid connection service reply")
++	}
++	if res.StatusCode != 200 {
++		return nil, fmt.Errorf("Connection service returned %d. Disable and re-enable mobile access if this continues.", res.StatusCode)
++	}
++	return raw, nil
++}
++
++// Record before dispatch; a crash may lose a reply, but must never repeat a command.
++func (m *Mobile) accept(id string, deadline int64) error {
++	m.received.Lock()
++	defer m.received.Unlock()
++	now := time.Now().UnixMilli()
++	if deadline <= now || deadline > now+60_000 {
++		return errors.New("This request expired. Reconnect and check the conversation.")
++	}
++	path := m.Path + ".received"
++	ledger := struct {
++		Seen map[string]int64 `json:"seen"`
++		Time int64            `json:"time"`
++	}{Seen: map[string]int64{}}
++	raw, err := os.ReadFile(path)
++	if err == nil {
++		if json.Unmarshal(raw, &ledger) != nil {
++			return errors.New("Could not read device request history")
++		}
++	} else if !os.IsNotExist(err) {
++		return err
++	}
++	if ledger.Seen == nil || now < ledger.Time {
++		return errors.New("Check the Mac clock before reconnecting devices.")
++	}
++	seen := ledger.Seen
++	if _, ok := seen[id]; ok {
++		return errors.New("This request was already delivered. Check the conversation before retrying.")
++	}
++	for id, expires := range seen {
++		if expires < now {
++			delete(seen, id)
++		}
++	}
++	if len(seen) >= 1000 {
++		return errors.New("Too many device requests. Try again later.")
++	}
++	seen[id] = deadline
++	ledger.Time = now
++	raw, err = json.Marshal(ledger)
++	if err != nil {
++		return err
++	}
++	return mobileDurableWrite(path, raw)
++}
++
++func mobileDurableWrite(path string, raw []byte) error {
++	if err := statefile.Write(path, raw); err != nil {
++		return err
++	}
++	dir := filepath.Dir(path)
++	for range 2 {
++		f, err := os.Open(dir)
++		if err != nil {
++			return err
++		}
++		err = f.Sync()
++		f.Close()
++		if err != nil {
++			return err
++		}
++		dir = filepath.Dir(dir)
++	}
++	return nil
++}
++
++type mobileWriter struct {
++	header   http.Header
++	status   int
++	body     bytes.Buffer
++	overflow bool
++}
++
++func (w *mobileWriter) Header() http.Header { return w.header }
++func (w *mobileWriter) WriteHeader(status int) {
++	if w.status == 0 {
++		w.status = status
++	}
++}
++func (w *mobileWriter) Write(p []byte) (int, error) {
++	if w.status == 0 {
++		w.status = 200
++	}
++	if w.body.Len()+len(p) > 2<<20 {
++		w.overflow = true
++		return 0, errors.New("Mobile reply too large")
++	}
++	return w.body.Write(p)
++}
++
++func (m *Mobile) dispatch(ctx context.Context, b *Box, c mobileConfig, item mobileMessage) (mobileEnvelope, error) {
++	invalid := func() (mobileEnvelope, error) {
++		return mobileSeal(c, item.ID, "response", mobileReply{400, json.RawMessage(`{"error":"Invalid encrypted agent request."}`)})
++	}
++	if !mobileUUID.MatchString(item.ID) {
++		return mobileEnvelope{}, errors.New("Invalid request identity")
++	}
++	var req mobileRequest
++	if err := mobileOpen(c, item.ID, "request", item.Envelope, &req); err != nil {
++		return mobileEnvelope{}, err
++	}
++	reply := mobileReply{}
++	fail := func(message string) {
++		reply.Status = 503
++		reply.Body, _ = json.Marshal(map[string]string{"error": message})
++	}
++	u, err := url.ParseRequestURI(req.Path)
++	if err != nil || u.IsAbs() || u.Host != "" || (req.Method != "GET" && req.Method != "POST" && req.Method != "DELETE") {
++		return invalid()
++	}
++	if err = m.accept(item.ID, req.Deadline); err != nil {
++		fail(err.Error())
++	} else {
++		r, err := http.NewRequestWithContext(ctx, req.Method, "http://mobile.local"+req.Path, bytes.NewReader(req.Body))
++		if err != nil {
++			return mobileEnvelope{}, err
++		}
++		r.Header.Set("Authorization", "Bearer "+c.Token)
++		r.RemoteAddr = "127.0.0.1:1"
++		w := &mobileWriter{header: http.Header{}}
++		m.handler(b, "mobile.local").ServeHTTP(w, r)
++		if w.overflow {
++			fail("This reply is too large. Read this conversation on the Mac.")
++		} else if !json.Valid(w.body.Bytes()) {
++			reply.Status = 502
++			reply.Body = json.RawMessage(`{"error":"Invalid Mac reply."}`)
++		} else {
++			reply.Status = w.status
++			reply.Body = w.body.Bytes()
++		}
++	}
++	return mobileSeal(c, item.ID, "response", reply)
++}
++
++func (m *Mobile) relayLoop(ctx context.Context, b *Box, c mobileConfig) {
++	type cached struct {
++		envelope mobileEnvelope
++		until    time.Time
++	}
++	cache := map[string]cached{}
++	for ctx.Err() == nil {
++		raw, err := mobileRelayCall(ctx, c.Relay, "poll", map[string]any{})
++		m.mu.Lock()
++		if ctx.Err() == nil {
++			if err != nil {
++				m.err = err.Error()
++			} else {
++				m.err = ""
++			}
++		}
++		m.mu.Unlock()
++		if err != nil {
++			select {
++			case <-ctx.Done():
++				return
++			case <-time.After(3 * time.Second):
++				continue
++			}
++		}
++		var batch struct {
++			Messages []mobileMessage `json:"messages"`
++		}
++		if json.Unmarshal(raw, &batch) != nil || len(batch.Messages) > 8 {
++			continue
++		}
++		for id, value := range cache {
++			if time.Now().After(value.until) {
++				delete(cache, id)
++			}
++		}
++		var mu sync.Mutex
++		var jobs sync.WaitGroup
++		seen := map[string]bool{}
++		for _, item := range batch.Messages {
++			if seen[item.ID] {
++				continue
++			}
++			seen[item.ID] = true
++			jobs.Add(1)
++			go func(item mobileMessage) {
++				defer jobs.Done()
++				mu.Lock()
++				previous, ok := cache[item.ID]
++				mu.Unlock()
++				response := previous.envelope
++				if !ok {
++					var err error
++					response, err = m.dispatch(ctx, b, c, item)
++					if err != nil {
++						return
++					}
++					mu.Lock()
++					cache[item.ID] = cached{response, time.Now().Add(time.Minute)}
++					mu.Unlock()
++				}
++				_, _ = mobileRelayCall(ctx, c.Relay, "result", map[string]any{"id": item.ID, "envelope": response})
++			}(item)
++		}
++		jobs.Wait()
++		if len(batch.Messages) > 0 {
++			select {
++			case <-ctx.Done():
++				return
++			case <-time.After(250 * time.Millisecond):
++			}
++		}
++	}
++}
+diff --git a/internal/box/mobile_relay_test.go b/internal/box/mobile_relay_test.go
+new file mode 100644
+index 0000000..7b3083f
+--- /dev/null
++++ b/internal/box/mobile_relay_test.go
+@@ -0,0 +1,101 @@
++package box
++
++import (
++	"context"
++	"encoding/json"
++	"os"
++	"reflect"
++	"strings"
++	"testing"
++	"time"
++)
++
++// Only a paired device can form commands, and a restart cannot repeat an accepted request.
++func TestMobileRelayEncryptionAndDurableReplayBoundary(t *testing.T) {
++	b, m, _ := mobileFixture(t)
++	c := m.load()
++	c.Relay = &mobileRelay{Channel: "00000000-0000-4000-8000-000000000001", HostToken: strings.Repeat("a", 43), ClientToken: strings.Repeat("b", 43)}
++	id := "00000000-0000-4000-8000-000000000002"
++	req := mobileRequest{Deadline: time.Now().Add(30 * time.Second).UnixMilli(), Method: "GET", Path: "/v1/info"}
++	envelope, err := mobileSeal(c, id, "request", req)
++	if err != nil {
++		t.Fatal(err)
++	}
++	var decoded mobileRequest
++	if mobileOpen(c, id, "response", envelope, &decoded) == nil {
++		t.Fatal("accepted reflected message")
++	}
++	if mobileOpen(c, "00000000-0000-4000-8000-000000000003", "request", envelope, &decoded) == nil {
++		t.Fatal("accepted another request identity")
++	}
++	wrong := c
++	wrong.Relay = &mobileRelay{Channel: "00000000-0000-4000-8000-000000000003"}
++	if mobileOpen(wrong, id, "request", envelope, &decoded) == nil {
++		t.Fatal("accepted another connection")
++	}
++	answer, err := m.dispatch(context.Background(), b, c, mobileMessage{id, envelope})
++	if err != nil {
++		t.Fatal(err)
++	}
++	var reply mobileReply
++	if err = mobileOpen(c, id, "response", answer, &reply); err != nil || reply.Status != 200 {
++		t.Fatal(err, reply)
++	}
++	restarted := &Mobile{Path: m.Path}
++	answer, err = restarted.dispatch(context.Background(), b, c, mobileMessage{id, envelope})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err = mobileOpen(c, id, "response", answer, &reply); err != nil || reply.Status != 503 {
++		t.Fatal("replayed after restart", err, reply)
++	}
++	req.Deadline = time.Now().Add(-time.Second).UnixMilli()
++	id = "00000000-0000-4000-8000-000000000004"
++	envelope, _ = mobileSeal(c, id, "request", req)
++	answer, err = m.dispatch(context.Background(), b, c, mobileMessage{id, envelope})
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err = mobileOpen(c, id, "response", answer, &reply); err != nil || reply.Status != 503 {
++		t.Fatal("accepted expired request", err, reply)
++	}
++	req = mobileRequest{Deadline: time.Now().Add(30 * time.Second).UnixMilli(), Method: "DELETE", Path: "/v1/sessions/unshared/queue/turn"}
++	id = "00000000-0000-4000-8000-000000000005"
++	envelope, _ = mobileSeal(c, id, "request", req)
++	answer, err = m.dispatch(context.Background(), b, c, mobileMessage{id, envelope})
++	if err != nil {
++		t.Fatal("DELETE did not reach the scoped gateway", err)
++	}
++	if err = mobileOpen(c, id, "response", answer, &reply); err != nil || reply.Status != 403 {
++		t.Fatal("DELETE bypassed project scope", err, reply)
++	}
++}
++
++// The same vector guards the Rust controller and Go runtime's wire format.
++func TestMobileRelaySharedCryptoVector(t *testing.T) {
++	raw, err := os.ReadFile("testdata/mobile-relay-v2.json")
++	if err != nil {
++		t.Fatal(err)
++	}
++	var vector struct {
++		Key, Channel, ID string
++		Cases            []struct {
++			Direction string
++			Plaintext any
++			Envelope  mobileEnvelope
++		}
++	}
++	if err = json.Unmarshal(raw, &vector); err != nil {
++		t.Fatal(err)
++	}
++	c := mobileConfig{Token: vector.Key, Relay: &mobileRelay{Channel: vector.Channel}}
++	for _, item := range vector.Cases {
++		var plain any
++		if err = mobileOpen(c, vector.ID, item.Direction, item.Envelope, &plain); err != nil {
++			t.Fatal(err)
++		}
++		if !reflect.DeepEqual(plain, item.Plaintext) {
++			t.Fatal("cross-language plaintext changed", plain)
++		}
++	}
++}
+diff --git a/internal/box/mobile_test.go b/internal/box/mobile_test.go
+new file mode 100644
+index 0000000..e59c2f9
+--- /dev/null
++++ b/internal/box/mobile_test.go
+@@ -0,0 +1,246 @@
++package box
++
++import (
++	"context"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/events"
++	"github.com/cosscom/shipyard/internal/statefile"
++)
++
++const mobileAddr = "100.101.102.103:1380"
++
++func mobileFixture(t *testing.T) (*Box, *Mobile, http.Handler) {
++	t.Helper()
++	b := &Box{Name: "My Mac", Locations: NewLocations(filepath.Join(t.TempDir(), "locations.json")), Sessions: testSessions(t), ConversationsDir: t.TempDir(), Events: &events.Bus{}}
++	for _, name := range []string{"shared", "private"} {
++		if _, err := b.Locations.Add(context.Background(), name, t.TempDir()); err != nil {
++			t.Fatal(err)
++		}
++	}
++	m := &Mobile{Path: filepath.Join(t.TempDir(), "mobile.json")}
++	mobileGrant(t, b, m, "shared")
++	return b, m, m.handler(b, mobileAddr)
++}
++
++func mobileGrant(t *testing.T, b *Box, m *Mobile, projects ...string) {
++	t.Helper()
++	c := mobileConfig{Enabled: true, Token: strings.Repeat("a", 48), Projects: projects, Grants: map[string]string{}}
++	for _, name := range projects {
++		loc, err := b.Locations.Get(context.Background(), name)
++		if err != nil {
++			t.Fatal(err)
++		}
++		c.Grants[name] = mobileIdentity(loc)
++	}
++	raw, _ := json.Marshal(c)
++	if err := statefile.Write(m.Path, raw); err != nil {
++		t.Fatal(err)
++	}
++}
++
++// The seam is the network grant: neither a token nor a guessed ID bypasses project scope.
++func TestMobileAuthorizationAndScope(t *testing.T) {
++	b, m, h := mobileFixture(t)
++	token := strings.Repeat("a", 48)
++	request := func(method, path, body string) *httptest.ResponseRecorder {
++		return phoneReq(t, h, method, path, mobileAddr, token, body)
++	}
++	if w := phoneReq(t, h, "GET", "/v1/info", mobileAddr, "", ""); w.Code != 401 {
++		t.Fatal(w.Code)
++	}
++	if w := phoneReq(t, h, "GET", "/v1/info", mobileAddr, token, "", "Origin", "https://evil.example"); w.Code != 403 {
++		t.Fatal(w.Code)
++	}
++	if w := phoneReq(t, h, "GET", "/v1/info", "evil.example:1380", token, ""); w.Code != 403 {
++		t.Fatal(w.Code)
++	}
++	if w := request("GET", "/v1/info", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"mobile":true`) {
++		t.Fatal(w.Code, w.Body)
++	}
++	for _, path := range []string{"/v1/mobile", "/v1/phone", "/v1/exec", "/v1/fs", "/v1/events", "/v1/leadinglight/tools", "/v1/../v1/info", "/v1/sessions/%2fshared"} {
++		if w := request("GET", path, ""); w.Code < 400 {
++			t.Fatalf("%s: %d", path, w.Code)
++		}
++	}
++	if w := request("GET", "/v1/locations", ""); w.Code != 200 || strings.Contains(w.Body.String(), `"private"`) {
++		t.Fatal(w.Code, w.Body)
++	}
++	for _, name := range []string{"shared", "private"} {
++		loc, _ := b.Locations.Get(context.Background(), name)
++		noteConversation(filepath.Join(b.ConversationsDir, name), func(c *Conversation) { c.Agent = "claude"; c.Location = name; c.Dir = loc.Path; c.Title = name })
++	}
++	for _, path := range []string{"/v1/conversations?location=private", "/v1/conversations/private/outputs", "/v1/sessions/private/requests"} {
++		if w := request("GET", path, ""); w.Code != 403 {
++			t.Fatal(path, w.Code, w.Body)
++		}
++	}
++	for _, path := range []string{"/v1/conversations/private/resume", "/v1/sessions/private/send", "/v1/sessions/private/interrupt", "/v1/sessions/private/requests/id/respond"} {
++		if w := request("POST", path, "{}"); w.Code != 403 {
++			t.Fatal(path, w.Code, w.Body)
++		}
++	}
++	if w := request("GET", "/v1/conversations?location=shared", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `"title":"shared"`) {
++		t.Fatal(w.Code, w.Body)
++	}
++	c := m.load()
++	c.Grants["shared"] = "another-folder"
++	raw, _ := json.Marshal(c)
++	statefile.Write(m.Path, raw)
++	if w := request("GET", "/v1/conversations/shared/outputs", ""); w.Code != 403 {
++		t.Fatal(w.Code)
++	}
++	c.Token = strings.Repeat("b", 48)
++	raw, _ = json.Marshal(c)
++	statefile.Write(m.Path, raw)
++	if w := request("GET", "/v1/info", ""); w.Code != 401 {
++		t.Fatal(w.Code)
++	}
++	c.Enabled = false
++	raw, _ = json.Marshal(c)
++	statefile.Write(m.Path, raw)
++	if w := phoneReq(t, h, "GET", "/v1/info", mobileAddr, c.Token, ""); w.Code != 401 {
++		t.Fatal(w.Code)
++	}
++	if st, _ := os.Stat(m.Path); st.Mode().Perm() != 0600 {
++		t.Fatal(st.Mode())
++	}
++	w := httptest.NewRecorder()
++	r := httptest.NewRequest("GET", "http://box/v1/mobile", nil)
++	if err := b.getMobile(w, r); err == nil {
++		t.Fatal("remote admin was allowed")
++	}
++}
++
++// The seam is durable dispatch: a retry after a lost reply cannot create another agent.
++func TestMobileStartsOnceAndRequiresApprovals(t *testing.T) {
++	for _, provider := range []string{"claude", "codex"} {
++		t.Run(provider, func(t *testing.T) {
++			bin := t.TempDir()
++			fixture := strings.ReplaceAll(fakeStreamClaude, `"req_"`, `"host:req_"`)
++			if provider == "codex" {
++				fixture = strings.ReplaceAll(fakeCodexAppServer, "rid = srv[0]", `rid = "host:" + str(srv[0])`)
++			}
++			os.WriteFile(filepath.Join(bin, provider), []byte(fixture), 0755)
++			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
++			t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
++			t.Setenv("CODEX_HOME", t.TempDir())
++			exe, err := os.Executable()
++			if err != nil {
++				t.Fatal(err)
++			}
++			var b *Box
++			turns := &Turns{}
++			client, bus := servedBox(t, func(box *Box) {
++				b = box
++				b.Turns = turns
++				b.ConversationsDir = conversationsDir(t)
++				b.AgentHost = []string{"env", "BERTH_TEST_AGENT_HOST=1", exe}
++			})
++			turns.Attach(bus)
++			if _, err := b.Locations.Add(context.Background(), "shared", t.TempDir()); err != nil {
++				t.Fatal(err)
++			}
++			m := &Mobile{Path: filepath.Join(t.TempDir(), "mobile.json")}
++			mobileGrant(t, b, m, "shared")
++			h := m.handler(b, mobileAddr)
++			req := func(method, path, body string) *httptest.ResponseRecorder {
++				return phoneReq(t, h, method, path, mobileAddr, strings.Repeat("a", 48), body)
++			}
++			body := strings.ReplaceAll(`{"name":"mobile-one","location":"shared","agent":"claude","driver":"claude","prompt":"run the tests"}`, "claude", provider)
++			for _, bad := range []string{strings.Replace(body, `"prompt"`, `"mode":"bypassPermissions","prompt"`, 1), strings.Replace(body, `"driver":"`+provider+`"`, `"driver":"terminal"`, 1), strings.Replace(body, `"location":"shared"`, `"location":"private"`, 1), strings.Replace(body, "run the tests", "/permissions bypassPermissions", 1)} {
++				if w := req("POST", "/v1/sessions", bad); w.Code < 400 {
++					t.Fatal(w.Code, w.Body)
++				}
++			}
++			w := req("POST", "/v1/sessions", body)
++			if w.Code != 200 {
++				t.Fatalf("start %d %s", w.Code, w.Body)
++			}
++			t.Cleanup(func() { call(t, client, "DELETE", "/v1/sessions/mobile-one", "", nil, nil) })
++			var first Session
++			json.Unmarshal(w.Body.Bytes(), &first)
++			if w = req("POST", "/v1/sessions", body); w.Code != 200 {
++				t.Fatalf("retry %d %s", w.Code, w.Body)
++			}
++			var again Session
++			json.Unmarshal(w.Body.Bytes(), &again)
++			if first.Name != again.Name {
++				t.Fatal("duplicate launch", first.Name, again.Name)
++			}
++			if w = req("POST", "/v1/sessions", strings.Replace(body, "run the tests", "different prompt", 1)); w.Code != 409 {
++				t.Fatal(w.Code, w.Body)
++			}
++			deadline := time.Now().Add(15 * time.Second)
++			var pending []Request
++			for time.Now().Before(deadline) {
++				w = req("GET", "/v1/sessions/mobile-one/requests", "")
++				json.Unmarshal(w.Body.Bytes(), &pending)
++				if len(pending) > 0 {
++					break
++				}
++				time.Sleep(40 * time.Millisecond)
++			}
++			if len(pending) == 0 {
++				t.Fatal("agent never asked for approval")
++			}
++			if w = req("POST", "/v1/sessions/mobile-one/send", `{"text":"/permissions bypassPermissions","idem_key":"mode-1"}`); w.Code != 400 {
++				t.Fatal("slash mode", w.Code, w.Body)
++			}
++			path := "/v1/sessions/mobile-one/requests/" + strings.ReplaceAll(pending[0].ID, ":", "%3A") + "/respond"
++			if !strings.Contains(path, "%3A") {
++				t.Fatal("fixture request must include an escaped colon", path)
++			}
++			if w = req("POST", path, `{"command":"answer-1","choice":"allow_always"}`); w.Code != 400 {
++				t.Fatal(w.Code, w.Body)
++			}
++			if w = req("POST", path, `{"command":"answer-1","choice":"allow"}`); w.Code != 200 {
++				t.Fatal(w.Code, w.Body)
++			}
++			if w = req("POST", path, `{"command":"answer-1","choice":"allow"}`); w.Code != 200 {
++				t.Fatal("approval retry", w.Code, w.Body)
++			}
++			all, err := b.Sessions.List(context.Background())
++			if err != nil || len(all) != 1 {
++				t.Fatal("starts", len(all), err)
++			}
++			s, _ := b.Sessions.Get(context.Background(), "mobile-one")
++			c, _ := readConversation(s.conv)
++			wantMode := "default"
++			if provider == "codex" {
++				wantMode = "untrusted"
++			}
++			if c.Mode != wantMode {
++				t.Fatal("mode", c.Mode)
++			}
++			if provider == "claude" {
++				conv, err := b.driverFor(s).(*claudeDriver).conv(s)
++				if err != nil {
++					t.Fatal(err)
++				}
++				conv.mu.Lock()
++				conv.bypass = true
++				conv.mu.Unlock()
++			} else {
++				conv, err := b.driverFor(s).(*codexDriver).conv(s)
++				if err != nil {
++					t.Fatal(err)
++				}
++				conv.mu.Lock()
++				conv.mode = "bypassPermissions"
++				conv.mu.Unlock()
++			}
++			// The saved metadata still says default; the live driver owns its current mode.
++			if w = req("POST", "/v1/sessions/mobile-one/send", `{"text":"more","idem_key":"more-1"}`); w.Code != 409 {
++				t.Fatal("unsafe continuation", w.Code, w.Body)
++			}
++		})
++	}
++}
+diff --git a/internal/box/requests.go b/internal/box/requests.go
+index 5980527..9e0bc1a 100644
+--- a/internal/box/requests.go
++++ b/internal/box/requests.go
+@@ -168,15 +168,17 @@ func (l *requestLedger) endTurn(at int64) {
+ func (l *requestLedger) reconcile() {
+ 	dirty := false
+ 	for k, rc := range l.receipts {
+-		if rc.State != "writing" {
+-			continue
++		if rc.State == "writing" {
++			if r := l.byID[rc.Request]; r != nil && r.State != ReqPending && r.State != ReqExpired {
++				rc.State = "written"
++			} else {
++				rc.State, rc.Error = "refused", "berthd stopped before the answer was written"
++			}
++			l.receipts[k], dirty = rc, true
+ 		}
+-		if r := l.byID[rc.Request]; r != nil && r.State != ReqPending && r.State != ReqExpired {
+-			rc.State = "written"
+-		} else {
+-			rc.State, rc.Error = "refused", "berthd stopped before the answer was written"
++		if r := l.byID[rc.Request]; rc.State == "written" && r != nil && (r.State == ReqRecorded || r.State == ReqResolved) && r.Command == "" {
++			r.Command = rc.Command
+ 		}
+-		l.receipts[k], dirty = rc, true
+ 	}
+ 	if dirty {
+ 		l.save()
+diff --git a/internal/box/requests_feedback_test.go b/internal/box/requests_feedback_test.go
+new file mode 100644
+index 0000000..77fdfd5
+--- /dev/null
++++ b/internal/box/requests_feedback_test.go
+@@ -0,0 +1,129 @@
++package box
++
++import (
++	"encoding/json"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/transcript"
++)
++
++// Provider responses must preserve feedback or reject it before answering.
++func TestApprovalFeedbackUsesProviderFields(t *testing.T) {
++	for _, kind := range []string{"approval", "plan"} {
++		choice := "deny"
++		if kind == "plan" {
++			choice = "keep_planning"
++		}
++		got, err := claudeResponse(claudeRequest{}, &Request{Kind: kind}, Respond{Choice: choice, Message: "Use the test database instead"})
++		if err != nil || got["behavior"] != "deny" || got["message"] != "Use the test database instead" || got["updatedPermissions"] != nil {
++			t.Fatalf("Claude %s: %v %v", kind, got, err)
++		}
++	}
++	for _, choice := range []string{"allow", "deny"} {
++		got, err := codexResponse(&Request{Kind: "approval"}, Respond{Choice: choice})
++		encoded, _ := json.Marshal(got)
++		want := `{"decision":"decline"}`
++		if choice == "allow" {
++			want = `{"decision":"accept"}`
++		}
++		if err != nil || string(encoded) != want {
++			t.Fatalf("Codex %s: %s %v", choice, encoded, err)
++		}
++	}
++	if _, err := codexResponse(&Request{Kind: "approval"}, Respond{Choice: "deny", Message: "Do this instead"}); err == nil {
++		t.Fatal("Codex silently dropped feedback")
++	}
++}
++
++// A restart must preserve proof of our decline without answering again.
++func TestConfirmedDeclineKeepsCommandAfterReplay(t *testing.T) {
++	dir := t.TempDir()
++	before := newRequestLedger(dir)
++	before.started(1, 1)
++	before.open(&Request{native: "approval", Kind: "approval"}, 2)
++	request := before.byNative("approval")
++	before.endAnswer(before.beginAnswer(request, "my-decline"), nil)
++	after := newRequestLedger(dir)
++	after.started(1, 1)
++	after.open(&Request{native: "approval", Kind: "approval"}, 2)
++	after.mark("approval", ReqResolved, 3)
++	after.reconcile()
++	if got := after.byNative("approval"); got.Command != "my-decline" || got.State != ReqResolved {
++		t.Fatalf("lost decline identity after replay: %+v", got)
++	}
++	after.started(4, 4)
++	after.open(&Request{native: "approval", Kind: "approval"}, 5)
++	after.reconcile()
++	if got := after.byNative("approval"); got.Command != "" || got.State != ReqPending {
++		t.Fatalf("old receipt claimed a new request: %+v", got)
++	}
++}
++
++// A confirmed decline and its separate feedback must reach one Codex thread once.
++func TestCodexDeclineThenFeedback(t *testing.T) {
++	bin := t.TempDir()
++	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(fakeCodexAppServer), 0755); err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
++	exe, _ := os.Executable()
++	turns := &Turns{}
++	client, bus := servedBox(t, func(b *Box) {
++		b.Turns = turns
++		b.ConversationsDir = conversationsDir(t)
++		b.AgentHost = []string{"env", "BERTH_TEST_AGENT_HOST=1", exe}
++	})
++	turns.Attach(bus)
++	call(t, client, "POST", "/v1/locations", "", map[string]string{"name": "shared", "path": t.TempDir()}, nil)
++	var session Session
++	if status := call(t, client, "POST", "/v1/sessions", "", map[string]string{"location": "shared", "agent": "codex", "driver": "codex", "prompt": "run the tests", "mode": "untrusted"}, &session); status != 200 {
++		t.Fatalf("start: %d", status)
++	}
++	base := "/v1/sessions/" + session.Name
++	t.Cleanup(func() { call(t, client, "DELETE", base, "", nil, nil) })
++	until := func(what string, ready func() bool) {
++		t.Helper()
++		deadline := time.Now().Add(15 * time.Second)
++		for !ready() {
++			if time.Now().After(deadline) {
++				t.Fatal(what + " never arrived")
++			}
++			time.Sleep(25 * time.Millisecond)
++		}
++	}
++	var requests []Request
++	until("approval", func() bool { call(t, client, "GET", base+"/requests", "", nil, &requests); return len(requests) == 1 })
++	respond := base + "/requests/" + requests[0].ID + "/respond"
++	if status := call(t, client, "POST", respond, "", Respond{Command: "bad-feedback", Choice: "deny", Message: "Read only"}, nil); status != 400 {
++		t.Fatalf("unsupported feedback: %d", status)
++	}
++	var result struct {
++		Receipt Receipt `json:"receipt"`
++	}
++	if status := call(t, client, "POST", respond, "", Respond{Command: "decline-once", Choice: "deny"}, &result); status != 200 || result.Receipt.State != "written" {
++		t.Fatalf("decline: %d %+v", status, result)
++	}
++	until("declined turn end", func() bool { state, _ := turns.State(session.Name); return state.State == "finished" })
++	body := SendRequest{Text: "Feedback on the declined request: Read only", When: "now", IdemKey: "feedback-once"}
++	var sent SendResult
++	if status := call(t, client, "POST", base+"/send", "", body, &sent); status != 200 {
++		t.Fatalf("feedback: %d", status)
++	}
++	if status := call(t, client, "POST", base+"/send", "", body, &sent); status != 200 || !sent.Duplicate {
++		t.Fatalf("feedback retry: %d %+v", status, sent)
++	}
++	until("feedback reply", func() bool {
++		var transcriptResult transcript.Result
++		call(t, client, "GET", base+"/transcript?since=0", "", nil, &transcriptResult)
++		for _, item := range transcriptResult.Items {
++			if strings.Contains(item.Text, "echo: "+body.Text) {
++				return true
++			}
++		}
++		return false
++	})
++}
+diff --git a/internal/box/testdata/mobile-relay-v2.json b/internal/box/testdata/mobile-relay-v2.json
+new file mode 100644
+index 0000000..5638992
+--- /dev/null
++++ b/internal/box/testdata/mobile-relay-v2.json
+@@ -0,0 +1,42 @@
++{
++  "key": "000102030405060708090a0b0c0d0e0f1011121314151617",
++  "channel": "00000000-0000-4000-8000-000000000001",
++  "id": "00000000-0000-4000-8000-000000000002",
++  "cases": [
++    {
++      "direction": "request",
++      "plaintext": {
++        "deadline": 1762380000000,
++        "method": "POST",
++        "path": "/v1/sessions/mobile-fixture/requests/host%3Arequest/respond",
++        "body": {
++          "command": "00000000-0000-4000-8000-000000000004",
++          "choice": "allow",
++          "text": "Résumé 💡 <>&\nsecond line"
++        }
++      },
++      "envelope": {
++        "v": 2,
++        "iv": "AAECAwQFBgcICQoL",
++        "data": "DxNAsFA+gfSxX11GGXgBPEzHmoPF9pkuOEy7wx0s4fvROIV17MIy9jE0c99n/P+yTodEHunorVLs6MKiFSC6WsGWPjlrWgCk3huhp0TdjCoyNmCuUkMtlrljVv76JGf+0eOcWed+S7M61pcWo+LZv5BZNEkILlfdlI64w+FE2aMK3sw9orjptgZsOx+KnnBG8ZELfV6Ybijy80dIGtUPal0Du4s3DGQ63GkH0kAKYyX1Dmd7DDFs94EJyLiQ7x/svoTcqmwAcz+9xcl4S2ZW018/Nh45XBsb4x0zy0F6EBh7kQNLLgs8G38ZSmGsceLDuD8="
++      }
++    },
++    {
++      "direction": "response",
++      "plaintext": {
++        "status": 200,
++        "body": {
++          "accepted": true,
++          "text": "Résumé 💡 <>&\nsecond line",
++          "count": 2,
++          "nothing": null
++        }
++      },
++      "envelope": {
++        "v": 2,
++        "iv": "EBESExQVFhcYGRob",
++        "data": "YxZCu1tp8UdWzKP+w0EBwW/YzA937QN3zaZSoQ2n5NEc2f5zDQGc8JyYse0n5GXa1FyfXwGey/crcv4bjhDSZN4ovCixPboxPA7H/iO2cfwpJlnglecI/9xXuYjgNnByb5xZ3p7xi3Fl2UtpI1av3ywiTVWX7E7M"
++      }
++    }
++  ]
++}

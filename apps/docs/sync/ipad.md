@@ -11,6 +11,8 @@ to have your Mac's notes there too.
 
 It needs iPadOS 16.4 or later.
 
+The same iOS target also supports [iPhone](/sync/iphone), with a capture-first phone interface.
+
 ## How to get it
 
 There is no App Store or TestFlight version yet. Today there are two ways to use LeadingLight on
@@ -43,6 +45,8 @@ When the onscreen keyboard opens, the app shrinks to the space left above it, so
 page and keep the line you are writing in view. Controls stay clear of the status bar and the home
 indicator.
 
+The area around the home indicator matches the sidebar in both light and dark appearance.
+
 Rotate the iPad while you write and the cursor stays in view above the keyboard, with your text,
 selection and focus kept. You don't need to type or tap again. If you scroll up to read right after
 rotating, the app doesn't pull you back to the cursor. Coming back to the app from the background
@@ -73,9 +77,10 @@ Images, audio, video and PDFs you add are saved in the app's own storage on the 
 
 The iPad app has your pages and editor, but not the parts that run on a Mac:
 
-- **Agents.** Ask, project chats, assigning tasks and the Feed need the Claude Code or Codex on your
-  Mac. **Settings › AI** says so, and **Account and sync** has no **Agents** tab on iPad. The app
-  never shows a pretend reply.
+- **Agent execution.** Connect to a Mac in **Settings → Devices** to start and control shared
+  project chats through an encrypted connection inside LeadingLight. Agents keep running on the Mac. See
+  [Agents from iPhone and iPad](/sync/mobile-agents). Ask about selected note text, Tail, task
+  assignment and the Feed remain Mac features.
 - **The built-in browser.**
 - **Global shortcuts** such as <kbd>⌃⌥I</kbd> for idea capture, the menu bar, and opening at login.
 
@@ -84,7 +89,7 @@ The iPad app has your pages and editor, but not the parts that run on a Mac:
 To see your Mac's notes on the iPad, connect both to the same workspace account:
 
 1. On the iPad, open **Account and sync › Account** and press **Connect your workspace**.
-2. Your browser opens your workspace. Sign in with the same provider you use on your Mac, check that the
+2. Your browser opens your workspace at **leadinglight.app**. Sign in with the same provider you use on your Mac, check that the
    code matches the one on the iPad, and press **Connect this device**.
 3. Go back to LeadingLight. Wait for **Sync** to say **Up to date** before you go offline.
 

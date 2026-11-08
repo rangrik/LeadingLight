@@ -6,8 +6,8 @@ description: See what your agents need from you in one place, answer them, and s
 # The Feed and feedback <Badge type="info" text="Mac app" /> <Badge type="warning" text="Preview" />
 
 The Feed lists what your project agents need from you, from every project, whether or not their
-pages are open. Feedback is how you answer an agent's work: you write sidenotes on its report, pick
-the ones it should answer, and send them together.
+pages are open. Feedback is how you answer an agent's work: you write sidenotes on its report where
+it shows on the task, tick the ones it should answer, and send them with one press.
 
 Both need **Settings › AI › Projects › Linked folders and project chats** turned on, and a task
 given to an agent (see [Assigning tasks to agents](/ai/tasks-for-agents)).
@@ -90,33 +90,31 @@ list only its items. Choose **All projects** to see them all again.
 
 ## Write notes on a report
 
-Open the report as its own page (press **Open** on its byline, or select its review item in the
-Feed). Select a sentence and press **Add sidenote**, or press <kbd>⇧⌘M</kbd>. A note opens beside the
-sentence, as on any page.
+Read the report where it shows, under the task's own words. Select a sentence and press **Add
+sidenote**, or press <kbd>⇧⌘M</kbd>. A note opens in the margin beside the sentence, as on any page.
 
 A report's own words can't change: typing in it does nothing, and its selection bar offers only
-**Add sidenote** and **Ask**. See [Sidenotes](/write/sidenotes) for how notes work.
+**Add sidenote**. The notes are the report's: open it as its own page (**Open** on its byline) and
+they are there too, and a note written there shows on the task. With the report open beside the
+task, notes written in either are kept on both. See [Sidenotes](/write/sidenotes) for how notes work.
+
+A remark about the work as a whole is a note on the task's own words, such as its first sentence.
 
 ## Choose which notes go
 
-On a page whose task has an agent, each note has a tick at its start, labelled "Send note 1 to
-Claude" and so on. Tick the notes you want the agent to answer. Leave the rest: they are yours.
+On a task with an agent, and on its reports, each note has a tick at its start, labelled "Send note
+1 to Claude" and so on. Tick the notes you want the agent to answer. Leave the rest: they are yours.
 
-While notes are ticked, the page's header shows **Send feedback**, with how many ("Send feedback ·
-3"). Your ticks are kept on this Mac per task: they are still there when you open another page and
-come back, or reload.
+While notes are ticked, the task's card shows **Send 3 notes**, with how many ("Send 1 note" for
+one). On a report's own page the same button sits in the header. Your ticks are kept on this Mac per
+task: they are still there when you open another page and come back, or reload.
 
 ## Send feedback
 
-1. Press **Send feedback**.
-2. The dialog, "Send feedback to Claude", lists the ticked notes, each with the words it is about.
-   Press **×** on a note to leave it out.
-3. Write an **Overall comment** if you like, such as "Keep it short."
-4. Press **Send 2 notes** (the count follows what you picked).
-
-The dialog closes, saying it was sent to Claude. In the task's stream, after the report, a new
-entry reads "You sent feedback · 2 points to Claude · Sent", with both notes and your comment. The
-sent notes show **Sent** where their ticks were, and **Send feedback** goes.
+Press **Send 3 notes**. It goes at once, with no dialog, and a message says it was sent to Claude.
+In the task's stream, newest first, a new entry reads "You sent feedback · 3 points to Claude ·
+Sent", with each note and the words it is about. The sent notes show **Sent** where their ticks
+were, and the button goes.
 
 Feedback always goes to the agent given the task, in its own conversation, never to another agent
 or chat. If that conversation was removed, the send says the agent can't be told, and nothing goes
@@ -142,8 +140,8 @@ again**, and the notes say "Not sent". When it can be reached, press **Try again
 
 ## Read the response
 
-The agent answers a batch with one new report in the task's stream, after the batch, with "answers
-your feedback" in its byline. The Feed lists "Claude answered your feedback on “Write the
+The agent answers a batch with one new report at the top of the task's stream, above the batch,
+with "answers your feedback" in its byline. The Feed lists "Claude answered your feedback on “Write the
 summary”".
 
 The response has one part per point you sent: **Point 1**, **Point 2** and so on. Each says what the
