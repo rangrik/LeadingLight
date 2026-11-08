@@ -85,7 +85,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -132,7 +135,7 @@ export async function seed() {
   });
   const doet = await make("doet", {
     title: "The Design of Everyday Things", typeId: "book", createdAt: at(50), updatedAt: at(19),
-    properties: { author: [norman], rating: 4, "book-status": ["read"], finished: { start: iso(-19) }, tags: [reading, design] },
+    properties: { author: [norman], rating: 4, "book-status": ["read"], finished: { start: iso(-19) }, tags: [reading, design], aliases: "DOET" },
     content: doc(p("Affordances, signifiers, mapping, feedback. Read for the second time; the chapter on errors is the one that aged best.")),
   });
   const smart = await make("smart", { title: "How to Take Smart Notes", typeId: "book", createdAt: at(9), updatedAt: at(9), properties: { author: [ahrens], "book-status": ["to-read"], tags: [reading] } });

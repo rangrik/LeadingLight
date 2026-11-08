@@ -2,7 +2,8 @@
 // Changes: pages instead of projects, its label given (Pinned, Recent) with a New page action, a
 // Sort menu and empty text for Recent, rows select instead of linking; the row menu is Rename,
 // Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
-// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
+// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children);
+// while the sidebar is filtered a row shows its matched words in bold (features/search.feature).
 import { ArrowUpDown, Ellipsis, Link, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -34,7 +35,8 @@ export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
 
 // What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes.
 type Actions = { onCopyLink: () => void; onDelete: () => void };
-type Child = Actions & { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void };
+// A filter result also has its title with the words in bold, and the view its keys open.
+export type Child = Actions & { id?: string; name: string; label?: React.ReactNode; result?: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void };
 type Row = Child & {
   id: string;
   icon: React.ReactNode;
@@ -58,8 +60,25 @@ const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 const SLIDE = { type: "spring", visualDuration: 0.35, bounce: 0.12 } as const;
 const rowMiddle = (i: number) => TOP + i * ROW + 14;
 const branch = (y: number) => `M${TRUNK} ${y - BEND} Q${TRUNK} ${y} ${TRUNK + BEND} ${y} H${REACH}`;
+// A result row walked to by keys shows as hovered, since rows have no focus ring.
+export const RESULT = "focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground";
 
 function Children({ items }: { items: Child[] }) {
+  const reduce = useReducedMotion() ?? false;
+  return (
+    <motion.div
+      animate={{ height: "auto", opacity: 1, transition: { duration: 0.32, ease: EASE_OUT } }}
+      className="overflow-hidden"
+      exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0, transition: { duration: 0.32, ease: EASE_OUT } }}
+      initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
+    >
+      <Tree items={items} />
+    </motion.div>
+  );
+}
+
+// Unanimated, for a type's matching pages, which change with every key.
+export function Tree({ items }: { items: Child[] }) {
   const reduce = useReducedMotion() ?? false;
   const active = items.findIndex((c) => c.isActive);
   const tree = [`M${TRUNK} 0 V${rowMiddle(items.length - 1) - BEND}`, ...items.map((_, i) => branch(rowMiddle(i)))].join(" ");
@@ -71,42 +90,37 @@ function Children({ items }: { items: Child[] }) {
     else animate(y, rowMiddle(active), SLIDE);
   }, [active, reduce, y]);
   return (
-    <motion.div
-      animate={{ height: "auto", opacity: 1, transition: { duration: 0.32, ease: EASE_OUT } }}
-      className="overflow-hidden"
-      exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0, transition: { duration: 0.32, ease: EASE_OUT } }}
-      initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-    >
-      <SidebarMenuSub className="relative border-l-0 pl-4">
-        <svg aria-hidden className="pointer-events-none absolute top-0 left-0 overflow-visible" fill="none" height={items.length * ROW} strokeLinecap="round" strokeWidth={1.25} width={REACH}>
-          <path className="stroke-sidebar-border" d={tree} />
-          {active >= 0 && (
-            <motion.path
-              animate={{ pathLength: 1 }}
-              className="stroke-sidebar-primary"
-              d={lit}
-              initial={reduce ? false : { pathLength: 0 }}
-              transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.08 }}
-            />
-          )}
-        </svg>
-        {items.map((c) => (
-          <SidebarMenuSubItem key={c.name}>
-            <SidebarMenuSubButton
-              aria-current={c.isActive ? "page" : undefined}
-              className="pe-8"
-              isActive={c.isActive}
-              onClick={c.onSelect}
-              onPointerDown={c.onDrag}
-              render={<button type="button" />}
-            >
-              <span>{c.name}</span>
-            </SidebarMenuSubButton>
-            <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" item={c} />
-          </SidebarMenuSubItem>
-        ))}
-      </SidebarMenuSub>
-    </motion.div>
+    <SidebarMenuSub className="relative border-l-0 pl-4">
+      <svg aria-hidden className="pointer-events-none absolute top-0 left-0 overflow-visible" fill="none" height={items.length * ROW} strokeLinecap="round" strokeWidth={1.25} width={REACH}>
+        <path className="stroke-sidebar-border" d={tree} />
+        {active >= 0 && (
+          <motion.path
+            animate={{ pathLength: 1 }}
+            className="stroke-sidebar-primary"
+            d={lit}
+            initial={reduce ? false : { pathLength: 0 }}
+            transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.08 }}
+          />
+        )}
+      </svg>
+      {items.map((c) => (
+        <SidebarMenuSubItem key={c.id ?? c.name}>
+          <SidebarMenuSubButton
+            aria-current={c.isActive ? "page" : undefined}
+            // w-full: COSS's sub row is an <a>; as a button it would shrink to its text and never truncate.
+            className={cn("w-full pe-8", c.result && RESULT)}
+            data-filter-result={c.result}
+            isActive={c.isActive}
+            onClick={c.onSelect}
+            onPointerDown={c.onDrag}
+            render={<button type="button" />}
+          >
+            <span>{c.label ?? c.name}</span>
+          </SidebarMenuSubButton>
+          <RowMenu className="top-0.5 opacity-0 group-hover/menu-sub-item:opacity-100" item={c} />
+        </SidebarMenuSubItem>
+      ))}
+    </SidebarMenuSub>
   );
 }
 
@@ -182,9 +196,9 @@ function PageRow({ item }: { item: Row }) {
   return (
     <SidebarMenuItem>
       <StateDot className="-left-2" pageId={item.id} />
-      <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
+      <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} className={cn(item.result && RESULT)} data-filter-result={item.result} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
         {item.icon}
-        <span>{item.name}</span>
+        <span>{item.label ?? item.name}</span>
       </SidebarMenuButton>
       <RowMenu item={item} onRename={() => setRenaming(true)} showOnHover />
       <RenameField
