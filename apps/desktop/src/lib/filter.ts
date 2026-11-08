@@ -67,7 +67,8 @@ export function everySpan(text: string, words: string[]): Span[] {
 
 export type Found = { page: ObjectSummary; line: string; spans: Span[] };
 
-// The line with most of the words, cut so the first one shows in a narrow row.
+// The line with most of the words, cut so the first one shows in a narrow row: at the start of
+// its sentence when that is near, else a few words before it.
 function lineFor(text: string, words: string[]) {
   let best = "";
   let most = -1;
@@ -78,7 +79,8 @@ function lineFor(text: string, words: string[]) {
     if (n === words.length) break;
   }
   const first = everySpan(best, words)[0]?.[0] ?? 0;
-  const cut = best.lastIndexOf(" ", first - 24);
+  const sentence = best.lastIndexOf(". ", first);
+  const cut = sentence > 0 && first - sentence < 80 ? sentence + 1 : best.lastIndexOf(" ", first - 24);
   const line = first > 48 && cut > 0 ? `…${best.slice(cut + 1)}` : best;
   return { line, spans: everySpan(line, words) };
 }

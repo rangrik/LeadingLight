@@ -143,9 +143,10 @@ export function AppSidebar({
     if (v) v.scrollTop = filtering ? 0 : scroll.current;
   }, [filtering]);
 
+  // Results aren't marked open, so the one highlighted row is the one the keys are on.
   const byId = new Map(filtering ? all.map((p) => [p.id, p]) : []);
   const narrowed = (rows: typeof pages) =>
-    narrow(rows, (r) => byId.get(r.id), words).map(({ item, hit }) => ({ ...item, label: labelOf(byId.get(item.id)!, hit), result: item.id, open: false }));
+    narrow(rows, (r) => byId.get(r.id), words).map(({ item, hit }) => ({ ...item, label: labelOf(byId.get(item.id)!, hit), result: item.id, isActive: false, open: false }));
   const shownPinned = filtering ? narrowed(pinned) : pinned;
   const shownPages = filtering ? narrowed(pages) : pages;
   const latest = filtering ? all.filter((p) => !p.properties.templateOf).sort((a, b) => b.updatedAt - a.updatedAt) : [];
@@ -153,7 +154,7 @@ export function AppSidebar({
     ? types
     : types.flatMap((t) => {
         const hits = narrow(latest, (p) => (p.typeId === t.id ? p : undefined), words);
-        const pages = hits.slice(0, UNDER_TYPE).map(({ item, hit }) => ({ ...pageRow(item), label: labelOf(item, hit), result: item.id }));
+        const pages = hits.slice(0, UNDER_TYPE).map(({ item, hit }) => ({ ...pageRow(item), label: labelOf(item, hit), result: item.id, isActive: false }));
         return hits.length ? [{ ...t, found: { count: hits.length, pages, view: typeView(t.id) } }] : [];
       });
   const none = filtering && !shownPinned.length && !shownPages.length && !shownTypes.length;
