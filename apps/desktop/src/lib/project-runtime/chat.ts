@@ -7,6 +7,7 @@ import { acceptMessageSubmission, beginMessageSubmission, getActiveMessageSubmis
 import { emptyWindow, merge, said, type TranscriptPage, type Window } from "~/lib/project-runtime/transcript";
 import { ask, call, type RuntimeEvent } from "~/lib/project-runtime/transport";
 import { createStore } from "~/lib/state";
+import { mobileCall } from "~/lib/mobile-agents";
 
 // A project's chats (features/project-chat.feature): conversations the runtime keeps, working in
 // the page's folder. A chat is its conversation ID, which outlives the agent sessions it runs
@@ -52,13 +53,42 @@ export type Chat = {
 };
 
 const blank = (): Chat => ({ conv: null, session: null, window: emptyWindow, draft: "", turns: [], submissions: [], texts: {}, requests: [], outputs: [], queued: [], steered: [], workers: [], runs: [], sessions: [], answers: {}, deliveries: {}, restore: null, error: null });
+const restoreKey = (key: string) => `ll.restore.${key}`;
+const loadRestore = (key: string): Chat["restore"] => {
+  try {
+    const value = JSON.parse(localStorage.getItem(restoreKey(key)) ?? "null");
+    return value && typeof value.text === "string" && typeof value.at === "number" ? value : null;
+  } catch { return null; }
+};
 const chats = new Map<string, ReturnType<typeof createStore<Chat>>>();
 export const chatOf = (key: string) => {
   let s = chats.get(key);
-  if (!s) chats.set(key, (s = createStore(blank())));
+  if (!s) {
+    const mobile = key.startsWith("mobile:");
+    const initial = blank();
+    if (mobile) initial.restore = loadRestore(key);
+    s = createStore(initial);
+    if (mobile) {
+      const store = s, set = store.set;
+      store.set = (next) => {
+        if (next.restore !== store.get().restore) {
+          if (next.restore) localStorage.setItem(restoreKey(key), JSON.stringify(next.restore));
+          else localStorage.removeItem(restoreKey(key));
+        }
+        set(next);
+      };
+    }
+    chats.set(key, s);
+  }
   return s;
 };
 const patch = (key: string, p: Partial<Chat>) => chatOf(key).set({ ...chatOf(key).get(), ...p });
+const callIn: (key: string, ...args: Parameters<typeof call>) => ReturnType<typeof call> = (key, method, path, body) => key.startsWith("mobile:") ? mobileCall(method, path, body, key.split(":")[1]) : call(method, path, body);
+async function askIn<T>(key: string, method: string, path: string, body?: unknown): Promise<T> {
+  const response = await callIn(key, method, path, body);
+  if (response.status >= 400) throw new Error((response.body as { error?: string })?.error || `The runtime answered ${response.status}`);
+  return response.body as T;
+}
 // A new chat takes its own key once the runtime names it; the new-chat key starts afresh. A send
 // that waited on the new-chat key follows it, and its own end adopts nothing again: the new-chat
 // key is blank by then.
@@ -121,7 +151,17 @@ const loadAnswers = (conv: string): Record<string, AnswerDraft> => {
 const saveAnswers = (conv: string, answers: Record<string, AnswerDraft>) => localStorage.setItem(answersKey(conv), JSON.stringify(answers));
 
 // The chat as the runtime has it now: its session, record, turns and requests.
-export async function sync(key: string, conv: Conversation): Promise<void> {
+const mobileSyncs = new Map<string, Promise<void>>();
+export function sync(key: string, conv: Conversation): Promise<void> {
+  if (!key.startsWith("mobile:")) return syncChat(key, conv);
+  const pending = mobileSyncs.get(key);
+  if (pending) return pending;
+  const work = syncChat(key, conv).finally(() => mobileSyncs.delete(key));
+  mobileSyncs.set(key, work);
+  return work;
+}
+async function syncChat(key: string, conv: Conversation): Promise<void> {
+  const ask = <T,>(method: string, path: string, body?: unknown) => askIn<T>(key, method, path, body);
   const name = conv.session;
   const at0 = Date.now();
   const sessions = await ask<Session[]>("GET", "/v1/sessions");
@@ -136,9 +176,9 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const turns = session ? await ask<Turn[]>("GET", `/v1/sessions/${name}/turns`).catch(() => []) : [];
   const fresh = session ? await ask<RuntimeRequest[]>("GET", `/v1/sessions/${name}/requests`).catch(() => []) : [];
   // The workers its agent started and hasn't heard back from yet.
-  const watches = name ? await ask<{ parent: string; kind?: string; session?: string; run?: string }[]>("GET", "/v1/notify").catch(() => null) : null;
+  const watches = name && !key.startsWith("mobile:") ? await ask<{ parent: string; kind?: string; session?: string; run?: string }[]>("GET", "/v1/notify").catch(() => null) : null;
   // What its agents wrote, kept with the conversation; there with no session too.
-  const outputs = await ask<Output[]>("GET", `/v1/conversations/${conv.id}/outputs`).catch(() => null);
+  const outputs = key.startsWith("mobile:") ? [] : await ask<Output[]>("GET", `/v1/conversations/${conv.id}/outputs`).catch(() => null);
   // The session's own mode: approving a plan changes it without the conversation's record.
   const controls = session && !session.exited ? await ask<{ mode?: string }>("GET", `/v1/sessions/${name}/controls`).catch(() => null) : null;
   // What the runtime holds for after its turn; read only while one side says it holds something.
@@ -175,7 +215,8 @@ export async function sync(key: string, conv: Conversation): Promise<void> {
   const mine = (watches ?? []).filter((x) => x.parent === name);
   const workers = [...new Set(mine.filter((x) => x.session).map((x) => x.session as string))];
   const runs = [...new Set(mine.filter((x) => x.kind === "run" && x.run).map((x) => x.run as string))];
-  patch(key, { synced: true, sessions, workers, runs, outputs: outputs ?? chatOf(key).get().outputs, queued: held, steered, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(conv.id) });
+  patch(key, { synced: true, sessions, workers, runs, outputs: outputs ?? chatOf(key).get().outputs, queued: held, steered, conv: latest, session, window, turns, requests, draft, submissions: observeMessageSubmissionCanonical(now.submissions, seen), answers: Object.keys(now.answers).length ? now.answers : loadAnswers(key.startsWith("mobile:") ? key : conv.id) });
+  if (key.startsWith("mobile:")) patch(key, { error: null });
   settleAnswers(key);
 }
 
@@ -194,10 +235,14 @@ function settleAnswers(key: string) {
       const text = restoreDraft(a);
       if (text && !(r.command && r.command === a.command)) restore = { text, at: Date.now(), why: "The agent stopped before you answered, so your answer is back here." };
       delete answers[r.id];
-    } else if (a.sent && r.state === "pending" && !r.command && !c.deliveries[r.id]) void deliver(key, r, true);
+    } else if (a.sent && r.state === "pending" && !r.command && !c.deliveries[r.id]) {
+      if (key.startsWith("mobile:")) patch(key, { deliveries: { ...chatOf(key).get().deliveries, [r.id]: { delivery: "failed", error: "The Mac has not confirmed this answer. Retry when connected." } } });
+      else void deliver(key, r, true);
+    }
   }
-  saveAnswers(c.conv.id, answers);
-  patch(key, { answers, restore });
+  patch(key, { restore });
+  saveAnswers(key.startsWith("mobile:") ? key : c.conv.id, answers);
+  patch(key, { answers });
 }
 
 const kept = new Map<string, number>();
@@ -226,12 +271,13 @@ export function watch(key: string, conv: Conversation, { reply = true } = {}): (
   void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
   const poll = reply
     ? window.setInterval(async () => {
+        if (key.startsWith("mobile:") && document.visibilityState === "hidden") return;
         const c = chatOf(key).get();
         if (c.session?.agent_state !== "running" || !c.conv?.session) return;
-        const d = await ask<{ text?: string }>("GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
+        const d = await askIn<{ text?: string }>(key, "GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
         // An agent clears its draft as a message ends, before the record has it: the words stay till then.
         if (d?.text && d.text !== c.draft) patch(key, { draft: d.text });
-      }, 250)
+      }, key.startsWith("mobile:") ? 1500 : 250)
     : 0;
   return () => {
     window.clearInterval(poll);
@@ -349,7 +395,7 @@ export function answer(key: string, r: RuntimeRequest, value: Answer, index: num
   const prev = c.answers[r.id];
   const draft: AnswerDraft = { command: prev?.command ?? crypto.randomUUID(), answer: value, questions: r.questions, index, sent: prev?.sent || submit };
   const answers = { ...c.answers, [r.id]: draft };
-  saveAnswers(c.conv.id, answers);
+  saveAnswers(key.startsWith("mobile:") ? key : c.conv.id, answers);
   patch(key, { answers });
   if (submit) void deliver(key, r, false);
 }
@@ -362,14 +408,18 @@ async function deliver(key: string, r: RuntimeRequest, again: boolean) {
   if (!draft || !session || c.deliveries[r.id]?.delivery === "sending") return;
   const set = (delivery: Delivery, error?: string) => patch(key, { deliveries: { ...chatOf(key).get().deliveries, [r.id]: { delivery, error } } });
   set("sending");
-  const outcome = again ? await reconcile(call, session, r, draft) : await sendAnswer(call, session, r, draft);
+  const bound = (method: string, path: string, body?: unknown) => callIn(key, method, path, body);
+  const outcome = again ? await reconcile(bound, session, r, draft) : await sendAnswer(bound, session, r, draft);
   if (outcome.request) patch(key, { requests: mergeRequests(chatOf(key).get().requests, [outcome.request]) });
   set(outcome.delivery, outcome.error);
   // A known refusal: the next try is a new command. A lost reply: asked again shortly.
   if (outcome.delivery === "failed") {
     const answers = { ...chatOf(key).get().answers, [r.id]: { ...draft, command: crypto.randomUUID(), sent: false } };
     patch(key, { answers });
-  } else if (outcome.delivery === "sending") window.setTimeout(() => (set("pending"), void deliver(key, r, true)), 1500);
+  } else if (outcome.delivery === "sending") {
+    if (key.startsWith("mobile:")) set("failed", outcome.error || "The Mac has not confirmed this answer. Retry when connected.");
+    else window.setTimeout(() => (set("pending"), void deliver(key, r, true)), 1500);
+  }
   settleAnswers(key);
 }
 
@@ -388,6 +438,6 @@ export const setModel = (key: string, model: string, effort: string) => change(k
 
 export async function stop(key: string): Promise<void> {
   const name = chatOf(key).get().conv?.session;
-  if (name) await ask("POST", `/v1/sessions/${name}/interrupt`).catch((err) => patch(key, { error: String(err.message ?? err) }));
+  if (name) await askIn(key, "POST", `/v1/sessions/${name}/interrupt`).catch((err) => patch(key, { error: String(err.message ?? err) }));
 }
 

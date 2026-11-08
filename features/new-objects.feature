@@ -88,3 +88,14 @@ Feature: Making a task, project or person from the slash menu
     When I type "/task", press Enter, type "Buy tiles" and press Enter
     Then a Task "Buy tiles" exists, and the idea's body has a task line for it
     # In the app the main window makes the task, as it does for "@" (DECISIONS.md, 14).
+
+  Scenario: A task inside a task, or inside a page with a Project
+    Given "Pricing page" is a Task whose Project is "Research", open with its body focused
+    When I type "/task", press Enter, type "Copy" and press Enter
+    Then "Copy" is a Task whose "Subtask of" is "Pricing page" and whose Project is "Research"
+    Given "Kickoff" is a Meeting whose Project is "Research"
+    When I make a task inside it the same way
+    Then the task's Project is "Research" and it has no Subtask of
+    Given "Notes" is a Page with no Project
+    When I make a task inside it the same way
+    Then the task has no Subtask of and no Project, as before; nothing is guessed

@@ -25,6 +25,7 @@ import {
 } from "@leadinglight/ui/components/sidebar";
 import { localPrefs } from "~/lib/local-prefs";
 import type { ObjectSummary } from "~/lib/objects";
+import { StateDot } from "~/components/state-dot";
 
 // How Recent is ordered, newest first either way; kept on this Mac.
 export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent", { by: "created" });
@@ -180,6 +181,7 @@ function PageRow({ item }: { item: Row }) {
   const [renaming, setRenaming] = useState(false);
   return (
     <SidebarMenuItem>
+      <StateDot className="-left-2" pageId={item.id} />
       <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
         {item.icon}
         <span>{item.name}</span>

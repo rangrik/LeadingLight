@@ -2,6 +2,7 @@ import { acceptedOf, agentOfTask, isTask } from "~/lib/assign";
 import { batchOf } from "~/lib/feedback";
 import { liveEditor, whenLive } from "~/lib/live";
 import { localPrefs } from "~/lib/local-prefs";
+import { createStore } from "~/lib/state";
 import { focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
 import { chatOf, type Conversation, watch } from "~/lib/project-runtime/chat";
 import { said } from "~/lib/project-runtime/transcript";
@@ -10,7 +11,7 @@ import type { RuntimeRequest } from "~/lib/project-runtime/requests";
 import { ask } from "~/lib/project-runtime/transport";
 import { FEED_VIEW, pageOf, space } from "~/lib/space";
 import { type Ask, reportOf, reportsOn, runOf, type Target, taskOfAgent } from "~/lib/work";
-import { sessions, stateOf } from "~/lib/work-watch";
+import { agentState, sessions, stateOf } from "~/lib/work-watch";
 
 // The Feed (features/feed.feature): what needs the person from every project's agents, whichever
 // pages are open. Questions and approvals are the runtime's requests, answered through the same
@@ -37,6 +38,8 @@ export type FeedItem = {
 export const feedPrefs = localPrefs("ll.feed", { open: false, project: "all", dismissed: [] as string[] });
 // Opened from the keyboard: its first item takes the focus once it shows.
 export const wantFocus = { now: false };
+// An item to open once the Feed shows it (Answer on a Work table row).
+export const feedFocus = createStore<string | null>(null);
 
 // An assigned agent is "Claude: its task"; the Feed names its task apart, so just "Claude".
 const name = (id?: string) => ((id && pageOf(id)?.title.trim()) || "An agent").split(": ")[0];
@@ -94,12 +97,14 @@ export function feedItems(): FeedItem[] {
   for (const task of pages.filter((p) => isTask(p))) {
     const agent = agentOfTask(task);
     if (!agent) continue;
+    // Ready for review counts its subtasks; what the agent itself said, or that it stopped, doesn't.
     const state = stateOf(task, agent, live);
+    const own = agentState(task, agent, live);
     const base = { agent: agent.id, task: task.id, project: projectOf(runOf(agent)?.location) };
     // Stopped to ask in its own words (Codex outside Plan mode has no question tool): its last words,
     // with what it said they are about, until it works again.
     const run = runOf(agent);
-    const last = state === "idle" && run ? lastWords(run.conversation, Date.parse(live.get(run.session)?.state_since ?? "") || task.updatedAt) : undefined;
+    const last = own === "idle" && run ? lastWords(run.conversation, Date.parse(live.get(run.session)?.state_since ?? "") || task.updatedAt) : undefined;
     if (last) {
       const asked = ((agent.properties.asks as Ask[] | undefined) ?? []).filter((a) => words(last.text).includes(words(a.question).slice(0, 60))).at(-1);
       items.push({ ...base, id: `said:${run!.conversation}:${last.id}`, kind: "question", reason: `${name(agent.id)} ${last.text.includes("?") ? "asks" : "says"}: ${last.text.length > 220 ? `${last.text.slice(0, 220)}…` : last.text}`, at: last.at, targets: asked?.about ?? [{ page: task.id }], reply: { key: run!.conversation, location: run!.location } });
@@ -112,7 +117,7 @@ export function feedItems(): FeedItem[] {
       // Published after it was accepted: told, never undoing it.
       const late = reportsOn(task.id, pages).filter((r) => r.createdAt > acceptedOf(task)!.at).at(-1);
       if (late) items.push({ ...base, id: `late:${late.id}`, kind: "notice", reason: `${name(agent.id)} published after you accepted “${name(task.id)}”`, at: late.createdAt, targets: [{ page: late.id }] });
-    } else if (state === "stopped") {
+    } else if (own === "stopped") {
       items.push({ ...base, id: `stopped:${agent.id}:${runOf(agent)!.session}`, kind: "notice", reason: `${name(agent.id)} stopped before “${name(task.id)}” was ready`, at: task.updatedAt, targets: [{ page: task.id }] });
     }
   }

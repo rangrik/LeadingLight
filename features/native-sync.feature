@@ -1,6 +1,13 @@
 Feature: Connect the installed app to the same encrypted workspace
   Notes stay on each device while a signed-in browser approves a native connection.
 
+  Scenario: Production devices connect at the current workspace address
+    Given workspace sign-in is available at https://leadinglight.app
+    When I connect the installed iPhone or iPad app
+    Then its approval page opens at https://leadinglight.app with the matching code
+    And its sync requests use that same fixed HTTPS origin
+    And an approval URL for another origin is rejected
+
   Scenario: Approve the iPad from the existing account
     Given the iPad has local notes and no cloud session
     And the browser is signed into my workspace with its recovery key

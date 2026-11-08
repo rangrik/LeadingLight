@@ -130,3 +130,17 @@ key after signing in with the same provider. Pair browser agents again; credenti
 The owner verified leadinglight.app through a Search Console DNS Domain Property on November 5.
 The older URL-prefix HTML proof did not meet Google's OAuth domain requirement. Public OAuth
 verification is still pending; see docs/GOOGLE-VERIFICATION.md.
+
+## Mobile Mac agents and notifications
+
+The mobile relay stores only encrypted requests, replies and notification targets. Agent execution
+and permission decisions stay on the Mac. Enable mobile access through the Mac's existing account;
+the phone needs only its pairing code. `schema.sql` adds the connection, queue and push receipt tables.
+
+Set `APNS_KEY_ID`, `APNS_TEAM_ID` and the `.p8` contents as sensitive `APNS_PRIVATE_KEY` in the
+production deployment. Restrict the key to `com.leadinglight.app` and set `APNS_ENVIRONMENT=production`.
+Never put the key in the app bundle or repository. Alerts contain generic text and an encrypted target.
+The signed iOS app needs `aps-environment`; its actual signature chooses the APNs environment.
+Ad Hoc installations on registered personal devices support production push without App Store review.
+Development builds require a separately enabled sandbox key/environment; do not register their tokens
+against a production-only key. Missing configuration leaves in-app requests available and reports an error.

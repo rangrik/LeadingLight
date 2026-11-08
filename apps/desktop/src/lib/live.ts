@@ -19,6 +19,7 @@ type Live = {
   properties: () => Record<string, unknown>;
   setProperties: (props: Record<string, unknown>) => void;
   setTitle: (title: string) => void;
+  setType: (typeId: string) => void;
   // Quotes into an essay, and scrolls to an anchor (DECISIONS.md, 11).
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
@@ -61,15 +62,16 @@ export function whenLive(id: string, fn: (page: Live) => void) {
   waiting.set(id, [...(waiting.get(id) ?? []), fn]);
 }
 
-type Change = { title?: string; content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };
+type Change = { title?: string; typeId?: string; content?: (doc: EditorDoc) => EditorDoc; properties?: (props: Record<string, unknown>) => Record<string, unknown> };
 
 export async function editPage(id: string, change: Change, context?: ChangeContext) {
-  const { title } = change;
+  const { title, typeId } = change;
   const open = live.get(id);
   if (open) {
     await open.flush();
     const apply = () => {
       if (title !== undefined) open.setTitle(title);
+      if (typeId !== undefined) open.setType(typeId);
       if (change.content) open.setContent(change.content(open.content()));
       if (change.properties) open.setProperties(change.properties(open.properties()));
     };
@@ -82,7 +84,8 @@ export async function editPage(id: string, change: Change, context?: ChangeConte
   // A page never written in has no body yet; the change starts one.
   const content = change.content?.(obj.content ?? { type: "doc", content: [] });
   const properties = change.properties?.(obj.properties);
-  await objects.update(id, { ...(title !== undefined && { title }), ...(content && { content }), ...(properties && { properties }) }, context);
-  patchSummary(id, { ...(title !== undefined && { title }), ...(properties && { properties }) });
+  const patch = { ...(title !== undefined && { title }), ...(typeId !== undefined && { typeId }), ...(properties && { properties }) };
+  await objects.update(id, { ...patch, ...(content && { content }) }, context);
+  patchSummary(id, patch);
   markSaved();
 }

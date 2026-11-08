@@ -82,7 +82,12 @@ export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.pr
 
 // What a pane shows: a page by its id, or a type's list of pages.
 export const TYPE_VIEW = "type:";
-export const typeView = (id: string) => `${TYPE_VIEW}${id}`;
+export const typeView = (id: string, project?: string) => `${TYPE_VIEW}${id}${project ? `@${project}` : ""}`;
+// A type's list, and the project it is narrowed to (features/project-rail.feature).
+export const readTypeView = (view: string) => {
+  const [type, project] = view.slice(TYPE_VIEW.length).split("@");
+  return { type, project };
+};
 // A page's project chat (features/project-chat.feature), crumbed under its page.
 export const CHAT_VIEW = "chat:";
 export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
@@ -118,8 +123,10 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
     return { title: "Browser", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(TYPE_VIEW)) {
-    const type = typeOf(view.slice(TYPE_VIEW.length));
-    return { title: type.plural, icon: type.icon };
+    const { type: id, project } = readTypeView(view);
+    const type = typeOf(id);
+    const owner = project ? pageOf(project) : undefined;
+    return { title: type.plural, icon: type.icon, ...(owner && { parent: { title: pageLabel(owner.title), view: owner.id } }) };
   }
   const page = pageOf(view);
   // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
@@ -130,20 +137,17 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   return { title, icon: page && iconFor(page), parent: owner ? { title: pageLabel(owner.title), view: owner.id } : { title: type.plural, view: typeView(type.id) } };
 }
 
-export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext): Promise<void> {
+export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext, { reportError = true } = {}): Promise<void> {
   const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
     patchSummary(id, { updatedAt: Date.now() });
     markSaved();
-  }, (error) => { reportSaveError(error); throw error; });
+  }, (error) => { if (reportError) reportSaveError(error); throw error; });
 }
 
-// A page made another type (an idea filed as a task); its properties go through its open editor.
-export async function retype(id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>, context?: ChangeContext) {
-  patchSummary(id, { typeId });
-  await savePage(id, { typeId }, context);
-  await editPage(id, { properties }, context);
-}
+// A page made another type (an idea filed as a task): one write, through its open editor if any.
+export const retype = (id: string, typeId: string, properties: (props: Record<string, unknown>) => Record<string, unknown>, context?: ChangeContext) =>
+  editPage(id, { typeId, properties }, context);
 
 export function patchSummary(id: string, patch: Partial<ObjectSummary>) {
   set({ pages: space.get().pages.map((p) => (p.id === id ? { ...p, ...patch } : p)) });

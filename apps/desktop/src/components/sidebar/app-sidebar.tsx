@@ -1,9 +1,10 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// usage as the footer (NavUser's place), and a Browser entry. Narrowed to a project on the rail,
+// its name under the logo and its Overview and Chat on top (features/project-rail.feature).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, Settings } from "lucide-react";
+import { CalendarDays, Globe, MessageSquareText, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +19,7 @@ import {
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
+import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, browserView } from "~/lib/space";
@@ -59,15 +61,19 @@ export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
   );
 }
 
+type Row = { isActive: boolean; onSelect: (e: React.MouseEvent) => void };
+
 export function AppSidebar({
   pinned,
   pages,
   types,
+  project,
   onCreate,
   onToday,
   todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  project?: { name: string; icon: React.ReactNode; overview: Row; chat?: Row };
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
@@ -84,8 +90,28 @@ export function AppSidebar({
   const navigable = (items: typeof pages) => items.map((p) => ({ ...p, onSelect: select(p.onSelect), children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect) })) }));
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant="inset" {...props}>
-      <AppSidebarHeader subtitle="Notes" />
+      <AppSidebarHeader subtitle={project?.name ?? "Notes"} />
       <SidebarContent>
+        {project && (
+          <SidebarGroup className="pb-0">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton aria-current={project.overview.isActive ? "page" : undefined} isActive={project.overview.isActive} onClick={select(project.overview.onSelect)}>
+                  {project.icon}
+                  <span>Overview</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              {project.chat && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton aria-current={project.chat.isActive ? "page" : undefined} isActive={project.chat.isActive} onClick={select(project.chat.onSelect)}>
+                    <MessageSquareText />
+                    <span>Chat</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
         <SidebarGroup className="pb-0">
           <SidebarMenu>
             <SidebarMenuItem>
@@ -117,6 +143,7 @@ export function AppSidebar({
       </SidebarContent>
       <CloudButton />
       <SidebarFooter>
+        {mobile && <MobileAgentsButton />}
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>
       {!mobile && <UsageButton />}

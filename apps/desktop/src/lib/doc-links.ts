@@ -27,6 +27,13 @@ export function firstLineText(doc: EditorDoc | null, title: (id: string) => stri
 export const linesMentioning = (doc: EditorDoc | null, id: string) =>
   doc ? [...textblocks(doc)].filter((b) => b.content?.some((n) => n.type === "mention" && n.attrs?.id === id)) : [];
 
+// Every page the body links to, by mention or block link.
+export function linksIn(node: EditorDoc | null, out: string[] = []): string[] {
+  if ((node?.type === "mention" || node?.type === "pageLink") && node.attrs?.id) out.push(node.attrs.id);
+  for (const c of node?.content ?? []) linksIn(c, out);
+  return out;
+}
+
 export function hasBlockLink(node: EditorDoc | null, id: string): boolean {
   if (!node) return false;
   return (node.type === "pageLink" && node.attrs?.id === id) || (node.content ?? []).some((c) => hasBlockLink(c, id));

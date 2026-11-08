@@ -110,9 +110,18 @@ export function ShortcutsSection() {
       {grouped.length === 0 && <p className="text-muted-foreground text-body">No shortcut matches “{query}”.</p>}
       {grouped.map((g) => (
         <SettingsGroup key={g.title} title={g.title}>
-          {g.items.map((s) => (
-            <ShortcutRow className="min-h-10 py-2" id={s.id} key={s.id} label={describe(s)} />
-          ))}
+          {g.items.map((s) =>
+            // A numbered row (⌘1–9) keeps its keys.
+            s.count ? (
+              <SettingsRow className="min-h-10 py-2" key={s.id} label={describe(s)}>
+                <Button className="min-w-24 font-normal" disabled size="sm" variant="outline">
+                  {keysFor(s.id)}
+                </Button>
+              </SettingsRow>
+            ) : (
+              <ShortcutRow className="min-h-10 py-2" id={s.id} key={s.id} label={describe(s)} />
+            ),
+          )}
         </SettingsGroup>
       ))}
     </SettingsPage>

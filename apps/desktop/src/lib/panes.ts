@@ -2,6 +2,7 @@
 // Changes: a leaf holds tabs of pages, each with its history (lib/tabs.ts); worktrees, swap and
 // neighbours dropped; a small store holds the tree instead of zustand.
 import { createStore } from "./state";
+import { phone } from "./platform";
 import { go, type Leaf, newId, type PaneNode, pageIn, prune, readLayout, step, type Tab, tab } from "./tabs.ts";
 
 export { pageIn, type Leaf, type PaneNode, type Tab } from "./tabs.ts";
@@ -158,6 +159,7 @@ export function openPage(page: string) {
 
 // ⌘-click: a new tab beside the front one, or the page where it is open.
 export function openTab(page: string) {
+  if (phone) return openPage(page);
   const open = holder(page);
   const here = paneOf(panes.get().focus);
   if (open) return showTab(open.leaf.id, open.tab.id);
@@ -172,6 +174,7 @@ export const openFrom = (page: string, e: { shiftKey: boolean; metaKey: boolean 
 
 // ⌘T and "+": a new empty tab at the end of the pane.
 export function newTab(pane = panes.get().focus) {
+  if (phone) return openPage("");
   const t = tab("");
   setLeaf(pane, (l) => withTabs(l, [...l.tabs, t], t.id), pane);
 }
@@ -245,6 +248,7 @@ export function dropped(root: PaneNode, page: string, target: string, side: Side
 
 // Puts a page (or one tab) beside a pane: moved there if it is open, else opened there.
 export function placePage(page: string, target: string, side: Side, id?: string) {
+  if (phone) return openPage(page);
   const { root } = panes.get();
   if (!root) return;
   const d = dropped(root, page, target, side, id);
@@ -291,6 +295,7 @@ export function resizePanes(split: string, ratio: number) {
 
 // Shift-click: show a page next to the focused one, or focus it where it is already open.
 export function openBeside(page: string) {
+  if (phone) return openPage(page);
   const open = holder(page);
   const here = paneOf(panes.get().focus);
   if (open) showTab(open.leaf.id, open.tab.id);
@@ -298,20 +303,39 @@ export function openBeside(page: string) {
   else showOnly(page);
 }
 
+// The panes are kept per scope (features/project-rail.feature): All under the old key, a project under its id.
+let key = "";
+const keyOf = (scope: string) => `${phone ? "ll.phone.panes" : "ll.panes"}${scope && `:${scope}`}`;
+function read(exists: (page: string) => boolean) {
+  try {
+    return readLayout(JSON.parse(localStorage.getItem(key) ?? "null"), exists);
+  } catch {
+    return null; // Damaged: opened as before.
+  }
+}
+
+// Shows a scope's own panes; with none kept, first alone. The last scope's are kept already.
+export function switchPanes(scope: string, exists: (page: string) => boolean, first: string | null) {
+  key = keyOf(scope);
+  const kept = read(exists);
+  if (kept) panes.set(kept);
+  else showOnly(first);
+}
+
 // Opens the panes kept from last time (localStorage, as other layout state is), then keeps every
 // change. False when nothing was kept, so the caller opens a page as before.
-export function restorePanes(exists: (page: string) => boolean) {
-  const KEY = "ll.panes";
-  let kept: ReturnType<typeof readLayout> = null;
-  try {
-    kept = readLayout(JSON.parse(localStorage.getItem(KEY) ?? "null"), exists);
-  } catch {
-    // Damaged: opened as before.
+export function restorePanes(exists: (page: string) => boolean, scope = "") {
+  key = keyOf(scope);
+  let kept = read(exists);
+  if (kept && phone) {
+    const { root, focus } = kept;
+    const current = leaves(root).find((l) => l.id === focus) ?? leaves(root)[0];
+    kept = { root: withTabs(current, [frontTab(current)]), focus: current.id };
   }
   if (kept) panes.set(kept);
   panes.subscribe(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(panes.get()));
+      localStorage.setItem(key, JSON.stringify(panes.get()));
     } catch {
       // Remembering is a convenience; losing it is fine.
     }

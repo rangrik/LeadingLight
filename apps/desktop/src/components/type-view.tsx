@@ -15,12 +15,13 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { ObjectList } from "~/components/object-list";
 import { IconPicker, PageIconView, RowIcon } from "~/components/page-icon";
 import { AddProperty } from "~/components/property-panel";
-import { KIND_ICONS } from "~/components/property-value";
+import { KIND_ICONS, PageChip } from "~/components/property-value";
 import { type LinkView, newId, type TypeDef, type ViewSettings } from "~/lib/catalog";
 import { pageLabel, pluralOf } from "~/lib/labels";
 import { type Color, COLORS } from "~/lib/page-meta";
 import { openPage } from "~/lib/panes";
-import { deleteType, propOf, putType, space, typeOf, typeView } from "~/lib/space";
+import { ALL, inProject, useLinks } from "~/lib/scope";
+import { deleteType, pageOf, propOf, putType, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { goToDay } from "~/components/daily-bar";
 import { DAILY, today } from "~/lib/daily";
@@ -43,12 +44,13 @@ const ABOUT: Record<string, string> = {
   collection: "Collections gather pages into a list of their own.",
 };
 
-// A type's home: its name, a New button, its settings and its pages.
-export function TypeView({ typeId }: { typeId: string }) {
+// A type's home: its name, a New button, its settings and its pages; from a project's sidebar, only its pages.
+export function TypeView({ type: typeId, project }: { type: string; project?: string }) {
   const { pages } = space.use();
   const [editing, setEditing] = useState(false);
+  const linked = useLinks(project ?? ALL);
   const type = typeOf(typeId);
-  const items = pages.filter((p) => p.typeId === type.id && !p.properties.templateOf);
+  const items = pages.filter((p) => p.typeId === type.id && !p.properties.templateOf && (!project || inProject(p, project, linked)));
   const templates = templatesOf(type.id);
   // Daily notes are one per day: "New" opens today's.
   const create = async (template?: string) => (type.id === DAILY ? goToDay(today()) : openPage((await newPage(type.id, {}, template)).id));
@@ -61,6 +63,11 @@ export function TypeView({ typeId }: { typeId: string }) {
       {/* A type without an icon (Pages) shows the page symbol its rows show. */}
       <div className="mb-3">{type.icon ? <PageIconView icon={type.icon} large /> : <FileText className="size-16 text-muted-foreground [&_*]:stroke-[1.5]" />}</div>
       <h1 className="font-bold font-heading text-[36px] leading-[1.2] tracking-tight">{type.plural}</h1>
+      {project && pageOf(project) && (
+        <div className="mt-3">
+          <PageChip id={project} onRemove={() => openPage(typeView(type.id))} />
+        </div>
+      )}
       <div className="-ms-2 mt-3 flex flex-wrap items-center gap-1">
         {/* Agents and reports are the app's to make. */}
         {!type.made && (

@@ -15,7 +15,7 @@ import { assets } from "~/lib/assets";
 import { type Draft, type Guess, TAG, type WebSaved } from "~/lib/capture";
 import { readText } from "~/lib/capture-text";
 import { isKey, useKeysFor } from "~/lib/keymap";
-import { useMobile } from "~/lib/platform";
+import { phone, useMobile } from "~/lib/platform";
 import { pageLabel } from "~/lib/labels";
 import { COLORS } from "~/lib/page-meta";
 import { iconFor, pageOf } from "~/lib/space";
@@ -54,24 +54,30 @@ const MODES: [SourceMode, string][] = [["link", "Link only"], ["text", "Text onl
 
 // The capture box (features/capture.feature, quick-capture.feature): a header bar over a title
 // line and the block editor, saving as you type; a lone address saves a webpage instead.
-export function CaptureBox({ host, className }: { host: CaptureHost; className?: string }) {
+export function CaptureBox({ host, className, embedded = false }: { host: CaptureHost; className?: string; embedded?: boolean }) {
   const mobile = useMobile();
   const [title, setTitle] = useState("");
   const [bodyText, setBodyText] = useState("");
   // A voice block in the body, and its audio saved.
   const [hasVoice, setHasVoice] = useState(false);
   const [voice, setVoice] = useState(false);
-  const [mode, setMode] = useState<SourceMode>("media");
+  const [mode, setMode] = useState<SourceMode>(phone ? "link" : "media");
   // The webpage's save: under way, failed, or done with media it couldn't keep.
   const [web, setWeb] = useState<{ busy?: boolean; error?: string; beside?: boolean; done?: string; missing?: number }>({});
   const request = useRef<AbortController | null>(null);
   const [project, setProject] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [closing, setClosing] = useState(false);
   // Tail's read of the words (docs/TAIL.md): a task, and the project it seems to be for.
   const [guess, setGuess] = useState<Guess>({ task: false, project: null });
   const keysFor = useKeysFor();
   const titleRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<BlockEditorHandle>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    if (phone && saveError) errorRef.current?.scrollIntoView({ block: "nearest" });
+  }, [saveError, closing]);
   // Saves run one after another: the first names the page the rest update. The body is read
   // only when a save runs.
   const id = useRef<string | null>(null);
@@ -117,16 +123,19 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     clearTimeout(timer.current);
     const at = version.current;
     if (at !== savedVersion.current && !address()) {
-      chain.current = chain.current
+      chain.current = chain.current.catch(() => {})
         .then(async () => {
           const got = await host.save({ ...draft.current, id: id.current, body: draft.current.body?.() ?? null });
           if (got) id.current = got;
           savedVersion.current = at;
           setSaved(Boolean(got));
+          setSaveError(false);
         })
         .catch((err) => {
           console.error(err);
           setSaved(false);
+          setSaveError(true);
+          throw err;
         });
     }
     return chain.current.then(() => id.current);
@@ -135,7 +144,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     version.current++;
     clearTimeout(timer.current);
     // An address being typed waits: it may yet be a webpage.
-    if (now().kind === "words" || draft.current.voice) timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
+    if (now().kind === "words" || draft.current.voice) timer.current = setTimeout(() => void save().catch(() => {}), SAVE_DELAY_MS);
     clearTimeout(pause.current);
     pause.current = setTimeout(() => !draft.current.project && paused(), GUESS_DELAY_MS);
     if (!request.current) setWeb({});
@@ -149,7 +158,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   // link), anything else as an idea, its words as they are.
   const keep = () => {
     const url = address();
-    if (!url) return void save();
+    if (!url) return void save().catch(() => {});
     if (request.current || kept.current) return;
     kept.current = true;
     const { project } = draft.current;
@@ -163,9 +172,17 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       .catch(console.error);
   };
   gone.current = keep;
-  // Closing never waits: a save under way finishes on its own. Escape during ⌘↩'s webpage save
-  // cancels it, and nothing more is saved of the address (web-sources.feature).
-  const close = () => {
+  // The phone keeps failures in the dialog; the desktop panel saves after hiding.
+  const close = async () => {
+    if (phone) {
+      if (closing) return;
+      if (request.current) { request.current.abort(); setWeb({}); return; }
+      if (isWeb()) return saveWeb(false);
+      setClosing(true);
+      try { await save(); host.close(); } catch { /* Keep the draft visible so it can be retried. */ }
+      finally { setClosing(false); }
+      return;
+    }
     if (request.current) {
       request.current.abort();
       kept.current = true;
@@ -173,7 +190,20 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
     keep();
     host.close();
   };
-  const open = () => void save().then((got) => got && host.open(got));
+  const open = () => void save().then((got) => got && host.open(got)).catch(() => {});
+  const flush = useRef(() => Promise.resolve<string | null>(null));
+  flush.current = save;
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    const background = () => { if (document.visibilityState === "hidden") void flush.current().catch(() => {}); };
+    const hide = () => { void flush.current().catch(() => {}); };
+    const requested = () => { void closeRef.current(); };
+    document.addEventListener("visibilitychange", background);
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("leadinglight:close-capture", requested);
+    return () => { document.removeEventListener("visibilitychange", background); window.removeEventListener("pagehide", hide); window.removeEventListener("leadinglight:close-capture", requested); };
+  }, []);
   // ⌘↩ on an address: saved as Save webpage saved it, then closed, or opened beside with ⇧.
   // Media it couldn't keep holds the box open to say so.
   const saveWeb = async (beside: boolean, choice = mode) => {
@@ -194,7 +224,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
       else host.close();
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      if (!stop.signal.aborted) setWeb({ beside, error: error === "Failed to fetch" ? "The browser could not fetch this website. Try in the Mac app, or save the link instead." : error });
+      if (!stop.signal.aborted) setWeb({ beside, error: error === "Failed to fetch" ? "Couldn’t download this webpage. Try again when connected, or save the link instead." : error });
     } finally {
       request.current = null;
     }
@@ -250,7 +280,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
   const offer = !webpage && guess.project && (guess.task || !project) ? (project ?? guess.project) : null;
 
   return (
-    <div aria-label="New idea" className={cn(SURFACE, "ll-capture-box @container/capture flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role="dialog">
+    <div aria-label={embedded ? undefined : "New idea"} className={cn(SURFACE, "ll-capture-box @container/capture flex flex-col", className)} onKeyDownCapture={onKeyDownCapture} role={embedded ? undefined : "dialog"}>
       <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-1.5 border-b px-5 py-1.5 text-[13px] text-muted-foreground leading-5">
         {webpage ? (
           <>
@@ -280,7 +310,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
           </>
         )}
         {/* Takes only the room left, so a long project name gives way, not the words before it. */}
-        <span className="flex min-w-0 flex-1 justify-end">
+        {!phone && <span className="flex min-w-0 flex-1 justify-end">
           <PagePicker
             create={host.create}
             exclude={project ? [project] : []}
@@ -296,13 +326,17 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
             }
             typeId="project"
           />
-        </span>
+        </span>}
+        {phone && <>
+          <Button className="ms-auto" disabled={closing} onClick={() => void close()} variant="ghost">{web.busy ? "Cancel download" : "Close"}</Button>
+          <Button disabled={empty || closing || web.busy} onClick={() => webpage ? void saveWeb(false) : void close()}>{closing ? "Saving…" : "Save"}</Button>
+        </>}
       </header>
-      <div className="flex min-h-0 flex-1 flex-col px-5 pt-3 pb-3.5">
+      <div className={cn("flex min-h-0 flex-1 flex-col px-5 pt-3 pb-3.5", phone && "overflow-y-auto")} data-capture-scroller={phone || undefined}>
         <input
           aria-label="Idea"
           autoComplete="off"
-          className="h-7 w-full bg-transparent font-semibold text-[18px] leading-7 outline-none placeholder:text-muted-foreground/60"
+          className="h-7 w-full shrink-0 bg-transparent font-semibold text-[18px] leading-7 outline-none placeholder:text-muted-foreground/60"
           onChange={(e) => {
             draft.current.title = e.currentTarget.value;
             setTitle(e.currentTarget.value);
@@ -318,7 +352,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
           value={title}
         />
         {/* data-web: the body's hint is about ideas, so a webpage hides it. */}
-        <div className="ll-capture mt-1 min-h-0 flex-1 overflow-y-auto" data-web={webpage || undefined} onMouseDown={onBlankMouseDown}>
+        <div className={cn("ll-capture mt-1", phone ? "min-h-20 flex-[1_0_auto]" : "min-h-0 flex-1 overflow-y-auto")} data-web={webpage || undefined} onMouseDown={onBlankMouseDown}>
           <BlockEditor
             assets={assets}
             content={null}
@@ -337,7 +371,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
               touched();
             }}
             onVoiceDetached={async (recordingId, asset) => {
-              await chain.current;
+              await chain.current.catch(() => {});
               if (id.current) return host.saveVoice(id.current, recordingId, asset);
               const body = draft.current.body?.();
               const next = body && attachVoiceAsset(body, recordingId, asset);
@@ -351,6 +385,7 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
             ref={editorRef}
           />
         </div>
+        {saveError && <p className="mt-2 shrink-0 text-sm text-destructive" ref={errorRef} role="alert">Couldn’t save on this device. Your words are still here. Try saving again.</p>}
         {webpage && (web.error || web.missing) && (
           <div className="mt-2 flex items-center gap-3 text-[13px] leading-5" role={web.error ? "alert" : "status"}>
             <p className="min-w-0 flex-1">{web.error ?? `Saved. ${web.missing} media file${web.missing === 1 ? "" : "s"} could not be downloaded; the page marks each one.`}</p>
@@ -401,10 +436,10 @@ export function CaptureBox({ host, className }: { host: CaptureHost; className?:
           {mobile ? (
             <div className="ms-auto flex items-center gap-2">
               {!empty && <>
-                <Button disabled={web.busy} onClick={() => webpage ? void saveWeb(true) : open()} size="sm" variant="outline">Open beside</Button>
-                <Button disabled={web.busy} onClick={() => webpage ? void saveWeb(false) : close()} size="sm">Save</Button>
+                <Button disabled={closing || web.busy} onClick={() => webpage ? void saveWeb(true) : open()} size="sm" variant="outline">{phone ? "Open note" : "Open beside"}</Button>
+                {!phone && <Button disabled={closing || web.busy} onClick={() => webpage ? void saveWeb(false) : void close()} size="sm">{closing ? "Saving…" : "Save"}</Button>}
               </>}
-              <Button onClick={close} size="sm" variant="ghost">Close</Button>
+              {!phone && <Button onClick={() => void close()} size="sm" variant="ghost">Close</Button>}
             </div>
           ) : <span className="ms-auto flex items-center gap-3">
             {!empty && (
