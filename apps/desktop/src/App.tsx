@@ -37,6 +37,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { ProjectRail } from "~/components/sidebar/project-rail";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
@@ -56,7 +57,8 @@ import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { AGENT, taskOfAgent } from "~/lib/work";
-import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { ALL, inProject, railProjects, scope, useLinks } from "~/lib/scope";
+import { chatView, createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
@@ -139,7 +141,8 @@ export default function App() {
 
   useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
-  const linkedFolders = folders.use().size > 0;
+  const folderOf = folders.use();
+  const linkedFolders = folderOf.size > 0;
   useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
@@ -150,15 +153,16 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in first: the Feed asks the runtime as soon as the pages are in.
+    const demo = import.meta.env.DEV && new URLSearchParams(location.search).has("demo") ? import(/* @vite-ignore */ String("/qa/demo/seed.js")) : undefined;
+    void demo?.then((d) => d.installFixture());
+    Promise.resolve(demo).then(loadSpace)
       .then(async (list) => {
-        // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
-        // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
-        if (import.meta.env.DEV && new URLSearchParams(location.search).has("demo")) {
-          const demo = await import(/* @vite-ignore */ String("/qa/demo/seed.js"));
-          demo.installFixture();
+        if (demo) {
           if (!list.length) {
-            await demo.seed();
+            await (await demo).seed();
             location.reload();
             return;
           }
@@ -174,6 +178,10 @@ export default function App() {
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
+        // The last scope comes back with its panes, unless its project has left the rail since.
+        if (mobile || !railProjects(list).some((p) => p.id === scope.get().id)) scope.set({ id: ALL });
+        const at = scope.get().id;
+        if (at !== ALL) return void (restorePanes(exists, at) || showOnly(at));
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
@@ -287,9 +295,14 @@ export default function App() {
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
   const work = atWork(pages);
+  // A project chosen on the rail narrows the sidebar to its pages (features/project-rail.feature).
+  const { id: scopeId } = scope.use();
+  const project = scopeId === ALL ? undefined : pages.find((p) => p.id === scopeId);
+  const linked = useLinks(scopeId);
+  const mine = (p: ObjectSummary) => !project || inProject(p, project.id, linked);
   const navPages = pages
     // Tasks live in their type's view, too many for this list, unless at work; agents' pages too.
-    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p))
+    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p) && mine(p))
     .sort(byRecent)
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.
@@ -326,14 +339,22 @@ export default function App() {
     });
   // The app's own types (agents, reports, feedback) are listed once there is one of them; tail's
   // page about you is reached from Settings and search, so tail never adds a row here.
-  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).map((t) => ({
-    id: t.id,
-    name: t.plural,
-    icon: <RowIcon icon={t.icon} />,
-    isActive: current === typeView(t.id),
-    onSelect: opener(typeView(t.id)),
-    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
-  }));
+  // Narrowed to a project, a type shows only while it has some of its pages, and how many.
+  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).flatMap((t) => {
+    const view = typeView(t.id, project?.id);
+    const count = project && pages.filter((p) => p.typeId === t.id && !p.properties.templateOf && mine(p)).length;
+    return count === 0 ? [] : [{
+      id: t.id,
+      name: t.plural,
+      icon: <RowIcon icon={t.icon} />,
+      count,
+      isActive: current === view,
+      onSelect: opener(view),
+      onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: view, label: t.plural }),
+    }];
+  });
+  const row = (view: string) => ({ isActive: current === view, onSelect: opener(view) });
+  const scoped = project && { name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined };
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
   // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
@@ -348,14 +369,17 @@ export default function App() {
         inert={settings || undefined}
         onOpenChange={(open) => !settings && setSidebarOpen(open)}
         open={sidebarOpen}
-        style={chrome(mac, sidebarWidth)}
+        style={{ ...chrome(mac, sidebarWidth), "--rail-width": mobile ? "0px" : "44px" } as React.CSSProperties}
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
+        {!mobile && <ProjectRail />}
         <AppSidebar
+          className="left-(--rail-width)"
           onCreate={create}
+          project={scoped}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}

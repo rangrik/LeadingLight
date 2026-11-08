@@ -85,7 +85,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -122,7 +125,9 @@ export async function seed() {
       ul(["Does the sidebar lead with types or with projects?"], [m(sam), " thinks the bar needs labels."]),
     ),
   });
-  const office = await make("office", { title: "Home office", typeId: "project", createdAt: at(25), updatedAt: at(6), properties: { "project-status": ["planned"], tags: [] }, content: doc(p("A quieter desk, a second screen, better light.")) });
+  const desk = await make("desk", { title: "Desk measurements", typeId: "page", createdAt: at(24), updatedAt: at(24), content: doc(p("Wall to wall 182 cm; the window starts at 95 cm.")) });
+  const office = await make("office", { title: "Home office", typeId: "project", createdAt: at(25), updatedAt: at(6), properties: { "project-status": ["planned"], tags: [] }, content: doc(p("A quieter desk, a second screen, better light. See ", m(desk), ".")) });
+  await make("lamp", { title: "Order a desk lamp", typeId: "task", createdAt: at(6), updatedAt: at(6), properties: { "task-project": [office] } });
 
   // Books
   const tis = await make("tis", {
@@ -225,6 +230,8 @@ export async function seed() {
   });
   await make("taskE", { title: "Read chapter 3 of Thinking in Systems", typeId: "task", createdAt: mins(130), updatedAt: mins(130), properties: { due: { start: iso(0) } } });
   await make("taskF", { title: "Call Sam about the invoice before Friday", typeId: "task", createdAt: at(4, 9), updatedAt: at(4, 9), properties: { "task-project": [ll] } });
+  // The project's notes link its pricing page, so the rail's LeadingLight lists it (project-rail.feature).
+  await savePage(ll, { content: doc(p("A local-first notes app that helps me think. Every note is an object of a type; agents work beside the notes, never in them."), h(2, "This month"), ul(["Ship the pricing page and the first public build: ", m(pricing), "."], ["Make Today the place to start the day."], ["Review agent reports without leaving the task."]), h(2, "Open questions"), ul(["Does the sidebar lead with types or with projects?"], [m(sam), " thinks the bar needs labels."])) });
 
   // Agents and reports (the runtime fixture names these sessions)
   const run = (conversation, session, location, agent) => ({ conversation, session, location, agent });

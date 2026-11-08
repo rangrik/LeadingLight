@@ -18,7 +18,8 @@ import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { whenLive } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { iconFor, pageOf, propOf, space } from "~/lib/space";
+import { inProject } from "~/lib/scope";
+import { iconFor, pageOf, space } from "~/lib/space";
 import { reportOf, reportsOn, subtasksOf, workOf } from "~/lib/work";
 import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
@@ -212,8 +213,7 @@ export function ProjectWork({ pageId }: { pageId: string }) {
   const { pages } = space.use();
   const box = useRef<HTMLDivElement>(null);
   useAnchored(box);
-  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(pageId));
-  const tasks = pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+  const tasks = pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && inProject(p, pageId) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
   const going = tasks.filter((t) => !done(t)).length;
   return (
     <div ref={box}>

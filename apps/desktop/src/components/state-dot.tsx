@@ -12,10 +12,10 @@ const both = (fn: () => void) => {
   return () => (a(), b());
 };
 
-// A task's state as a 6 px dot on its tab or sidebar row. It takes no room: the row places it in
-// the gap before its icon. Redrawn only when this task's state changes.
-export function StateDot({ pageId, className }: { pageId: string; className?: string }) {
-  const state = useSyncExternalStore(both, () => taskState(pageId));
+// A task's state as a 6 px dot on its tab or sidebar row, or a given one (a project's on the rail).
+// It takes no room: the row places it in the gap before its icon. Redrawn only when the state changes.
+export function StateDot({ pageId = "", state: given, className }: { pageId?: string; state?: TaskState; className?: string }) {
+  const state = useSyncExternalStore(both, () => given ?? taskState(pageId));
   const color = state && COLOR[state];
   if (!state || !color) return null;
   return (

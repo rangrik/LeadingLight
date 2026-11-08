@@ -303,16 +303,30 @@ export function openBeside(page: string) {
   else showOnly(page);
 }
 
+// The panes are kept per scope (features/project-rail.feature): All under the old key, a project under its id.
+let key = "";
+const keyOf = (scope: string) => `${phone ? "ll.phone.panes" : "ll.panes"}${scope && `:${scope}`}`;
+function read(exists: (page: string) => boolean) {
+  try {
+    return readLayout(JSON.parse(localStorage.getItem(key) ?? "null"), exists);
+  } catch {
+    return null; // Damaged: opened as before.
+  }
+}
+
+// Shows a scope's own panes; with none kept, first alone. The last scope's are kept already.
+export function switchPanes(scope: string, exists: (page: string) => boolean, first: string | null) {
+  key = keyOf(scope);
+  const kept = read(exists);
+  if (kept) panes.set(kept);
+  else showOnly(first);
+}
+
 // Opens the panes kept from last time (localStorage, as other layout state is), then keeps every
 // change. False when nothing was kept, so the caller opens a page as before.
-export function restorePanes(exists: (page: string) => boolean) {
-  const KEY = phone ? "ll.phone.panes" : "ll.panes";
-  let kept: ReturnType<typeof readLayout> = null;
-  try {
-    kept = readLayout(JSON.parse(localStorage.getItem(KEY) ?? "null"), exists);
-  } catch {
-    // Damaged: opened as before.
-  }
+export function restorePanes(exists: (page: string) => boolean, scope = "") {
+  key = keyOf(scope);
+  let kept = read(exists);
   if (kept && phone) {
     const { root, focus } = kept;
     const current = leaves(root).find((l) => l.id === focus) ?? leaves(root)[0];
@@ -321,7 +335,7 @@ export function restorePanes(exists: (page: string) => boolean) {
   if (kept) panes.set(kept);
   panes.subscribe(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(panes.get()));
+      localStorage.setItem(key, JSON.stringify(panes.get()));
     } catch {
       // Remembering is a convenience; losing it is fine.
     }
