@@ -5,6 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-08 | On the Desk's Today card, the block menu (⌘/) opens left of the card, over the sidebar | The editor places it left of the block handle, and a card has no room for the handle, so the handle is hidden. Moving it is an editor change for one card. | The Desk is chosen and people use blocks in its Today card. |
+| 2026-11-08 | The Desk's Today card moving to the new day at midnight | The card finds today's note when the Desk opens; left open past midnight it shows yesterday's until reopened. | The Desk is chosen and someone keeps it open overnight. |
 | 2026-11-07 | "This day" in the browser build and on iPad lists a page only on the day of its last edit | The IndexedDB history store has no index by time, so every earlier day would mean reading all history. Adding the index bumps the database version, which `browser-copy.ts` opens at version 5, and a second open tab would stall during the upgrade. The Mac app (SQLite) covers every day. | Someone on iPad looks for a page under a day it was edited but not last edited; then add the index with a version bump both openers handle. |
 | 2026-11-07 | A worktree name chosen by the model | The session must start in the worktree, and a model call before it would cost a whole session; the app names it from the title (DECISIONS 42). | The names read badly for real tasks, or the runtime gets a cheap one-shot completion. |
 | 2026-11-07 | Merging a subtask's worktree branch back, and cleaning the worktree up | Out of Project 5: the person or the parent's agent merges. | Someone asks, or branches pile up. |
