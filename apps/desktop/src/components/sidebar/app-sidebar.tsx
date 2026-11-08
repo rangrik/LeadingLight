@@ -37,7 +37,7 @@ import { NavTypes } from "./nav-types";
 // ⌘K (lib/use-shortcuts.ts) asks the sidebar to open and focus its filter field.
 export const FILTER = "ll:filter";
 // Matching pages listed under a type row; its count says how many there are in all.
-const UNDER_TYPE = 8;
+const UNDER_TYPE = 5;
 const RESULTS = "[data-filter-result]";
 
 // A title with the words bold, or the title and the alias that matched, muted.
@@ -131,13 +131,16 @@ export function AppSidebar({
     window.addEventListener(FILTER, focus);
     return () => window.removeEventListener(FILTER, focus);
   }, [isMobile, setOpen, setOpenMobile]);
-  // The lists come back scrolled where they were; results start at the top.
+  // The lists come back scrolled where they were, kept before results replace them; results start at the top.
+  const viewport = () => content.current?.closest<HTMLElement>("[data-slot=scroll-area-viewport]");
   const scroll = useRef(0);
+  const type = (value: string) => {
+    if (!filtering) scroll.current = viewport()?.scrollTop ?? 0;
+    setQuery(value);
+  };
   useLayoutEffect(() => {
-    const viewport = content.current?.closest<HTMLElement>("[data-slot=scroll-area-viewport]");
-    if (!viewport) return;
-    if (filtering) [scroll.current, viewport.scrollTop] = [viewport.scrollTop, 0];
-    else viewport.scrollTop = scroll.current;
+    const v = viewport();
+    if (v) v.scrollTop = filtering ? 0 : scroll.current;
   }, [filtering]);
 
   const byId = new Map(filtering ? all.map((p) => [p.id, p]) : []);
@@ -200,7 +203,7 @@ export function AppSidebar({
             autoComplete="off"
             // Its text starts where the rows' titles do.
             className="*:[input]:ps-2.5!"
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => type(e.target.value)}
             onFocus={(e) => {
               const from = e.relatedTarget instanceof HTMLElement ? e.relatedTarget : null;
               if (!from?.closest(`${RESULTS}, [data-slot=input-group]`)) back.current = from;

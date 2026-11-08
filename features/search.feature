@@ -53,7 +53,8 @@ Feature: Filter the sidebar, and search page text
     And the Tasks row shows "1" with "Read chapter 3 of Thinking in Systems"
     And the Ideas row shows "1" with "Try reading Thinking in Systems chapter 4 on paper first"
     And types with no matching page (People, Meetings, Projects, …) are hidden
-    And a type with more than 8 matches lists 8, then a muted row "N more" that opens its list
+    And a type with more than 5 matches lists 5, then a muted row "N more" that opens its list
+      (type "a": Tasks shows 7, five tasks and "2 more")
     When I click the Books row itself
     Then the Books list opens, as it does without a filter
 
@@ -85,10 +86,12 @@ Feature: Filter the sidebar, and search page text
 
   Scenario: Search in page text
     When I type "delay" and click "Search in page text for “delay”"
-    Then the results pane opens, its header saying “delay” and "3 pages"
+    Then the results pane opens, its header saying “delay” and "4 pages with these words"
     And each result shows its page's icon and title, with the line holding the word under it and
-      "delay" bold in that line
-    And "Feedback loops", "Notes on Thinking in Systems" and "Weekly review" are among them
+      "delay" bold in that line, newest page first
+    And "Feedback loops", "Notes on Thinking in Systems", "Weekly review" and yesterday's daily
+      note are among them
+    And a mention in a line reads as the page's title ("Delays in Feedback loops are the key idea")
     When I click "Feedback loops" in the results
     Then it opens in that pane; ⇧-click opens beside, ⌘-click in a new tab
 
