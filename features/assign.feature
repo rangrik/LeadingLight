@@ -42,7 +42,7 @@ Feature: Assign a page to an agent
       "From idea"
     And no other page was made: Tasks lists "Pricing page" once, and nothing says "Assigned as the task"
     And its history has the type change, and the card shows its agent
-    And it still shows on the day it was captured (this-day.feature)
+    And it still shows on the day it was captured (today-timeline.feature)
 
   Scenario: Any page converts the same way
     Given "Kickoff" is a Meeting whose Project is "Research"

@@ -85,7 +85,10 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -146,8 +149,8 @@ export async function seed() {
     title: "Feedback loops", typeId: "page", createdAt: at(4, 19), updatedAt: at(4, 19, 30), properties: { tags: [systems], icon: { kind: "emoji", value: "🔁" } },
     content: doc(p("A feedback loop is a closed chain of causes: a stock's level sets a flow that changes the stock."), ul([b("Balancing"), " loops seek a goal: a thermostat, a thirst, a budget."], [b("Reinforcing"), " loops compound: interest, population, a habit."]), p("Delays in a loop make it oscillate. That is most of what goes wrong in projects: the signal arrives after the decision.")),
   });
-  // Fill the two mentions above now that ids exist.
-  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
+  // Fill the two mentions above now that ids exist; a fix-up keeps the page's own time (the day's timeline).
+  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")), updatedAt: at(5, 20, 40) });
 
   // The long reading note, left mid-sentence yesterday
   const notes = await make("notes", {
@@ -172,7 +175,7 @@ export async function seed() {
     ),
   });
 
-  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
+  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")), updatedAt: at(1, 21) });
 
   // Other pages
   const weekly = await make("weekly", {
@@ -263,13 +266,15 @@ export async function seed() {
     properties: { parent: taskD, report: { by: agentD, session: "sess-rename", to: taskD, at: at(1, 16), command: "c-d1", ready: true } },
     content: doc(p("Changed the starter type's name and plural; the docs already said note.")),
   });
-  await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } } });
+  await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } }, updatedAt: at(1, 17) });
 
   // Captured ideas, unfiled (Tail's "4 ideas since Tuesday")
   await make("idea1", { title: "Add a weekly review page that pulls This day from each day of the week", typeId: "idea", createdAt: at(5, 14, 2), updatedAt: at(5, 14, 2), properties: { ...cap("idea", at(5, 14, 2)) } });
   await make("idea2", { title: "Fix the LeadingLight tab close button jumping on hover", typeId: "idea", createdAt: at(4, 16, 40), updatedAt: at(4, 16, 40), properties: { ...cap("idea", at(4, 16, 40)) } });
   await make("idea3", { title: "Try reading Thinking in Systems chapter 4 on paper first", typeId: "idea", createdAt: at(3, 21, 15), updatedAt: at(3, 21, 15), properties: { ...cap("idea", at(3, 21, 15)) } });
   await make("idea4", { title: "Ask Sam whether LeadingLight should show word counts by default", typeId: "idea", createdAt: at(1, 11, 5), updatedAt: at(1, 11, 5), properties: { ...cap("idea", at(1, 11, 5)) } });
+  // Today's, for the day's timeline (features/today-timeline.feature).
+  await make("idea5", { title: "Ask Priya which projects she would want on Today", typeId: "idea", createdAt: mins(35), updatedAt: mins(35), properties: { ...cap("idea", mins(35)) } });
 
   // Daily notes
   const todayId = await ensureDaily(today());

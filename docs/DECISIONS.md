@@ -214,7 +214,7 @@ there is still one writer and nothing is made twice. Every captured idea is tagg
 click away.
 
 An idea is not written into the day's note. It shows there because it was made that day
-("This day"), like any page, so a busy day's note stays the person's own writing.
+(its timeline, today-timeline.feature), like any page, so a busy day's note stays the person's own writing.
 Bullets an older build added are left alone. ⌘↩ saves and closes; ⇧⌘↩ opens the idea beside
 the page in view, never in its place.
 

@@ -11,7 +11,8 @@ import { markCapture } from "~/lib/capture-inbox";
 import { saveVoice } from "~/lib/capture";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
-import { DailyBar, ThisDay } from "~/components/daily-bar";
+import { DailyBar } from "~/components/daily-bar";
+import { DayTimeline } from "~/components/day-timeline";
 import { linkHost } from "~/components/link-views";
 import { CoverBand, CoverPicker } from "~/components/page-cover";
 import { IconPicker, PageIconView } from "~/components/page-icon";
@@ -280,7 +281,7 @@ export function PageView({ page }: { page: LLObject }) {
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
     if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
-    // Level with the sections after the body (backlinks, what was made that day) is theirs too.
+    // Level with a section (the day's timeline, backlinks) is theirs too.
     const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
       const r = s.getBoundingClientRect();
       return e.clientY >= r.top && e.clientY <= r.bottom;
@@ -421,6 +422,7 @@ export function PageView({ page }: { page: LLObject }) {
         {!report && <ProjectWork pageId={page.id} />}
         {day && <DailyBar day={day} />}
         {!phone && day === today() && <TailToday />}
+        {day && <DayTimeline content={page.content} day={day} id={page.id} />}
         {typeId === "tag" && <TagPanel id={page.id} />}
         <div className="ll-page-body pt-3" ref={bodyRef}>
           <BlockEditor
@@ -459,7 +461,6 @@ export function PageView({ page }: { page: LLObject }) {
         {report && <ReportSources report={current} />}
         <Reports onNotes={setStreamNotes} pageId={page.id} />
         <Linked id={page.id} />
-        {day && <ThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
