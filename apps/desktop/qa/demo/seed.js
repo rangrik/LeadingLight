@@ -143,11 +143,11 @@ async function fill() {
 
   // Concept pages
   const stocks = await make("stocks", {
-    title: "Stocks and flows", typeId: "page", createdAt: at(5, 20), updatedAt: at(5, 20, 40), properties: { tags: [systems], icon: { kind: "emoji", value: "🪣" } },
+    title: "Stocks and flows", typeId: "page", createdAt: at(5, 20), updatedAt: at(5, 20, 40), properties: { tags: [systems], icon: { kind: "emoji", emoji: "🪣" } },
     content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(null), " for how stocks drive their own flows.")),
   });
   const loops = await make("loops", {
-    title: "Feedback loops", typeId: "page", createdAt: at(4, 19), updatedAt: at(4, 19, 30), properties: { tags: [systems], icon: { kind: "emoji", value: "🔁" } },
+    title: "Feedback loops", typeId: "page", createdAt: at(4, 19), updatedAt: at(4, 19, 30), properties: { tags: [systems], icon: { kind: "emoji", emoji: "🔁" } },
     content: doc(p("A feedback loop is a closed chain of causes: a stock's level sets a flow that changes the stock."), ul([b("Balancing"), " loops seek a goal: a thermostat, a thirst, a budget."], [b("Reinforcing"), " loops compound: interest, population, a habit."]), p("Delays in a loop make it oscillate. That is most of what goes wrong in projects: the signal arrives after the decision.")),
   });
   // Fill the two mentions above now that ids exist.
@@ -156,7 +156,7 @@ async function fill() {
   // The long reading note, left mid-sentence yesterday
   const notes = await make("notes", {
     title: "Notes on Thinking in Systems", typeId: "page", createdAt: at(6, 21), updatedAt: at(1, 22, 10),
-    properties: { tags: [reading, systems], icon: { kind: "emoji", value: "📘" } },
+    properties: { tags: [reading, systems], icon: { kind: "emoji", emoji: "📘" } },
     content: doc(
       p("Reading notes on ", m(tis), " by ", m(meadows), ". One section per chapter; my own words first, quotes second."),
       h(2, "1. The basics"),
