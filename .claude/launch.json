@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "connections-panel",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "apps/desktop", "exec", "vite", "--port", "1438", "--strictPort", "--host", "127.0.0.1"],
+      "port": 1438
+    }
+  ]
+}

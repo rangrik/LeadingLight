@@ -85,7 +85,11 @@ export function installFixture() {
   };
 }
 
-export async function seed() {
+// StrictMode runs App's load twice in dev; both wait for one fill.
+let seeding;
+export const seed = () => (seeding ??= fill());
+
+async function fill() {
   const { createPage, savePage } = await import("/src/lib/space.ts");
   const { objects } = await import("/src/lib/objects.ts");
   const { projectPrefs } = await import("/src/lib/project-runtime/prefs.ts");
@@ -107,7 +111,7 @@ export async function seed() {
   const meadows = await make("meadows", { title: "Donella Meadows", typeId: "person", properties: { company: "Sustainability Institute", tags: [systems] }, createdAt: at(12), updatedAt: at(12) });
   const norman = await make("norman", { title: "Don Norman", typeId: "person", properties: { company: "Nielsen Norman Group", tags: [design] }, createdAt: at(30), updatedAt: at(30) });
   const ahrens = await make("ahrens", { title: "Sönke Ahrens", typeId: "person", properties: {}, createdAt: at(9), updatedAt: at(9) });
-  const sam = await make("sam", { title: "Sam Rivera", typeId: "person", properties: { company: "Acme Studio", email: "sam@acme.studio" }, createdAt: at(40), updatedAt: at(3) });
+  const sam = await make("sam", { title: "Sam Rivera", typeId: "person", properties: { company: "Acme Studio", email: "sam@acme.studio", aliases: "Sam" }, createdAt: at(40), updatedAt: at(3) });
   const priya = await make("priya", { title: "Priya Nair", typeId: "person", properties: { company: "Acme Studio" }, createdAt: at(40), updatedAt: at(10) });
 
   // Projects

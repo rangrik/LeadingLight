@@ -2,12 +2,12 @@ import { useSyncExternalStore } from "react";
 import { platform } from "~/lib/platform";
 import { localPrefs } from "~/lib/local-prefs";
 import { closePane, focusedPage, focusPane, leaves, openBeside, panes, showIn } from "~/lib/panes";
-import { ASK_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
+import { ASK_VIEW, CONNECTIONS_VIEW, FEED_VIEW, INBOX_VIEW, isPageView, SUGGESTIONS_VIEW } from "~/lib/space";
 
 // The bar (features/bar.feature): the strip at the window's right edge and the panel beside it.
 // In a window 1000 px wide or less, its views open as panes beside the page instead.
-export type BarView = "suggestions" | "feed" | "captures" | "ask";
-export const NAMES: Record<BarView, string> = { suggestions: "Suggestions", feed: "Feed", captures: "Captures", ask: "Ask" };
+export type BarView = "suggestions" | "feed" | "captures" | "connections" | "ask";
+export const NAMES: Record<BarView, string> = { suggestions: "Suggestions", feed: "Feed", captures: "Captures", connections: "Connections", ask: "Ask" };
 export const PANEL = { min: 280, max: 480 };
 export const bar = localPrefs("ll.bar", { open: false, view: "feed" as BarView, pinned: false, width: 320 });
 
@@ -23,7 +23,7 @@ export const useNarrow = () =>
     narrow,
   );
 
-const PANE: Record<BarView, string> = { feed: FEED_VIEW, captures: INBOX_VIEW, ask: ASK_VIEW, suggestions: SUGGESTIONS_VIEW };
+const PANE: Record<BarView, string> = { feed: FEED_VIEW, captures: INBOX_VIEW, ask: ASK_VIEW, suggestions: SUGGESTIONS_VIEW, connections: CONNECTIONS_VIEW };
 // A name in a sentence may be one of these views; it opens here.
 export const barViewOf = (page: string) => (Object.keys(PANE) as BarView[]).find((v) => PANE[v] === page);
 const paneOf = (view?: BarView) => {
