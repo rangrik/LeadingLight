@@ -25,7 +25,7 @@ Feature: Idea capture
     showing "⌃⌥I"; "click New idea" below means it. The same box takes addresses and recordings
     (quick-capture.feature)
   - Today: the daily note for the current day (features/everyday-objects.feature), whose
-    "Created this day" list shows what was made that day
+    timeline shows what was made and captured that day
   - the app: the Mac app, where the box is a floating panel of its own. The browser build has
     no global shortcut: there the row, and ⌃⌥I while the window has focus, open the same box
     inside the window.
@@ -146,13 +146,13 @@ Feature: Idea capture
   Scenario: Every idea shows in its day
     Given the Idea page "Old idea" was made by hand, not from the box, yesterday
     When I open yesterday's note
-    Then "Created this day" lists "Old idea"
+    Then that day's timeline lists "made Old idea"
     And "Old idea" shows Created and Updated rows, as every Idea page does
 
   Scenario: Only the body typed takes its first line as the title
     When I click "New idea", press Enter and type "Buy a kite" in the body
     Then an Idea page exists titled "Buy a kite", whose body is "Buy a kite"
-    And Today's "Created this day" lists "Buy a kite"
+    And Today's timeline lists "captured Buy a kite"
 
   Scenario: An empty box saves nothing
     When I click "New idea" and press Escape
@@ -162,7 +162,7 @@ Feature: Idea capture
 
   Scenario: Emptying the box after a save keeps the page
     When I click "New idea", type "x", wait a second, press Backspace and press Escape
-    Then an Idea page named "Untitled" remains, listed in Today's "Created this day"
+    Then an Idea page named "Untitled" remains, listed in Today's timeline
     # The keystroke was saved, and the box never deletes a page. Delete it like any page.
 
   Scenario: Escape closes the box and gives focus back
@@ -220,12 +220,12 @@ Feature: Idea capture
     When I click "New idea" and type a 300-character title with no spaces
     Then the title line stays one line and scrolls; nothing wraps or spills out of the box
     And the page's title is the whole 300 characters
-    And in Today's "Created this day" the title is cut with an ellipsis, on one line
+    And in Today's timeline the title is cut with an ellipsis, on one line
 
   Scenario: Today is open while an idea is captured
     Given Today is open in a pane and I typed "morning" in its body
     When I capture "Live one"
-    Then "Created this day" in the open pane lists "Live one" at once, without a reload
+    Then the timeline in the open pane lists "captured Live one" at once, without a reload
     And Today's body still reads "morning" and nothing else, before and after a reload
 
   Scenario: Ideas an older build linked in Today don't show twice
@@ -257,13 +257,13 @@ Feature: Idea capture
     And that app stays in front: its menu bar stays, and LeadingLight's window does not come forward
     When I type and press Escape
     Then the box is gone and the keyboard is back in that app
-    And the idea is in LeadingLight: its page, listed in Today's "Created this day"
+    And the idea is in LeadingLight: its page, listed in Today's timeline
 
   Scenario: ⌘↩ over another app saves and stays out of the way
     Given the box is open over another app with "Call Sam" typed
     When I press ⌘↩
     Then the box is gone, the keyboard is back in that app, and LeadingLight stays behind it
-    And "Call Sam" is saved, listed in Today's "Created this day"
+    And "Call Sam" is saved, listed in Today's "This day"
 
   Scenario: ⇧⌘↩ brings LeadingLight forward with the idea beside
     Given LeadingLight shows "Home" and the box is open over another app with "Call Sam" typed

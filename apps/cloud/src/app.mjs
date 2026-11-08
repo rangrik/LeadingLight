@@ -1,5 +1,6 @@
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
+import { mobileRelayRequest } from './mobile-relay.mjs';
 import { NativeError, authenticateNative, nativePublicRequest, nativeBrowserRequest, revokeNative } from './native.mjs';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const enabled = (env, id) => env.CLOUD_ACCESS === 'public' || (env.CLOUD_ALLOWED_USERS || '').split(',').map((v) => v.trim()).includes(id);
@@ -13,6 +14,7 @@ export function application({ env, sql, auth }) {
     try {
       const url = new URL(request.url), path = url.pathname;
       if (origin && !origins.has(url.origin)) return json({ error: 'Unexpected host.' }, 400);
+      if (path.startsWith('/api/mobile-relay/native/')) return await mobileRelayRequest({ request, sql, readBody: limitedBody, env });
       if (path.startsWith('/api/relay/device/')) return await relayRequest({ request, sql, readBody: limitedBody });
       if (['/api/native/start', '/api/native/poll'].includes(path)) return auth.ready ? await nativePublicRequest({ request, sql, readBody: limitedBody, origin }) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       const native = request.headers.has('authorization') ? await authenticateNative(request, sql) : null;
@@ -25,6 +27,7 @@ export function application({ env, sql, auth }) {
       if (!user) return json({ error: 'Sign in to use cloud features.' }, 401);
       const expectedOwner = request.headers.get('x-leadinglight-owner');
       if (expectedOwner && expectedOwner !== user.id) return json({ error: 'The signed-in account changed. Reconnect to the original workspace and try again.' }, 409);
+      if (['/api/mobile-relay/channels','/api/mobile-relay/remove'].includes(path)) return await mobileRelayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path.startsWith('/api/calendar/')) {
         if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
         return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });

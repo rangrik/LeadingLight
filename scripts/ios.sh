@@ -10,6 +10,11 @@ case "${1:-}" in
     # XcodeGen includes this folder as resources, so the manifest lands at the app root.
     mkdir -p src-tauri/gen/apple/leadinglight-desktop_iOS
     cp src-tauri/PrivacyInfo.xcprivacy src-tauri/gen/apple/leadinglight-desktop_iOS/
+    cp src-tauri/Entitlements.ios.plist src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
+    # Existing Xcode projects otherwise keep the template's icons after source assets change.
+    icon_dir=src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset
+    mkdir -p "$icon_dir"
+    cp src-tauri/icons/ios/*.png "$icon_dir/"
     project_file=src-tauri/gen/apple/leadinglight-desktop.xcodeproj/project.pbxproj
     if [[ "$1" != init && -f "$project_file" ]] && ! grep -q 'PrivacyInfo.xcprivacy in Resources' "$project_file"; then
       echo "Run pnpm ios:init to include the privacy manifest in the Xcode project." >&2
@@ -17,6 +22,13 @@ case "${1:-}" in
     fi
     ;;
 esac
+
+if [[ "${1:-}" == init ]]; then
+  pnpm tauri ios "$@"
+  # XcodeGen creates an empty file; signing/export selects the provisioned APNs environment.
+  cp src-tauri/Entitlements.ios.plist src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
+  exit 0
+fi
 
 case "${1:-}" in
   release-archive|release-export)

@@ -60,17 +60,26 @@ The browser build is the quickest way to work on the interface, and it is what t
 
 A global key such as <kbd>⌃⌥I</kbd> belongs to whichever copy of the app started first, so quit the other copy when you test one.
 
-## Build for iPad
+## Build for iPhone and iPad
 
-The iPad app shares the desktop app's editor, page model, themes and local SQLite store. You need a Mac with Xcode, CocoaPods, pnpm and rustup.
+One universal iOS app supports iPhone and iPad. It shares the desktop app's editor, page model, themes and local SQLite store. You need a Mac with Xcode, CocoaPods, pnpm and rustup.
 
 | Command | What it does |
 | --- | --- |
 | `pnpm ios:init` | Generates the Xcode project. Run it once, and again after you update the checkout. |
 | `pnpm ios:build` | Builds an unsigned archive for a device. It needs signing before it can be installed. |
+| `pnpm ios:build:iphone` | Builds a separate unsigned **LeadingLight iPhone Dev** archive, with its own app data after signing and installation. |
 | `pnpm ios:build:sim` | Builds for the simulator, which needs a simulator runtime that matches Xcode's SDK. |
 
-The target needs iPadOS 16.4 or later. No signing team, certificate or profile is stored in the repository; choose your own in Xcode. Signing, installing on a device and TestFlight are covered in [docs/IPAD.md](https://github.com/rangrik/LeadingLight/blob/main/docs/IPAD.md).
+The target needs iOS or iPadOS 16.4 or later. No signing team, certificate or profile is stored in the repository; choose your own in Xcode. Signing, installing on a device and TestFlight are covered in [docs/IPAD.md](https://github.com/rangrik/LeadingLight/blob/main/docs/IPAD.md).
+
+For the phone interface, open the browser build with `?iphone` in development, or use an iPhone.
+Run its Chromium and WebKit scenarios with:
+
+```sh
+QA_PORT=1437 pnpm --filter @leadinglight/desktop exec playwright test \
+  -c qa/playwright.config.ts iphone.spec.ts --project=qa --project=iphone-webkit
+```
 
 ## Run the cloud service locally
 

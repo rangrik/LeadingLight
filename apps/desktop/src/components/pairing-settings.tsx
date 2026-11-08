@@ -18,7 +18,7 @@ export function PairingSettings() {
   const mobile = useMobile();
   const [desktop, setDesktop] = useState<boolean | null>(null);
   useEffect(() => { void isDesktop.then(setDesktop); }, []);
-  if (mobile) return <p className="text-sm text-muted-foreground">Agents are not available in the iPad app. Your notes and sync still work.</p>;
+  if (mobile) return <p className="text-sm text-muted-foreground">For Mac project agents, connect in Settings → Devices. This page-agent connection is for browsers.</p>;
   if (desktop === null) return <p className="text-sm text-muted-foreground">Checking this device…</p>;
   return desktop ? <MacPairing /> : <BrowserPairing />;
 }

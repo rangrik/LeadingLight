@@ -33,7 +33,8 @@ Feature: Tasks
     When I click "Tasks", then "New task", and title it "Call the plumber"
     Then its property rows are Done (unticked), Due, Project and Tags, in that order
     And the Tasks view lists it
-    And it is not listed under Pages in the sidebar; tasks live in Tasks
+    And it is not listed under Pages in the sidebar; tasks live in Tasks until it is given to an agent;
+      then it is listed like any page, with its state
 
   Scenario: Ticking a task off where it is written
     Given the page "Home" has a task line for "Call the plumber"

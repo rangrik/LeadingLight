@@ -10,6 +10,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { PageIconView, RowIcon } from "~/components/page-icon";
 import { ValueView, visit } from "~/components/property-value";
 import { LINK_VIEWS } from "~/components/type-view";
+import { madeInside } from "~/lib/assign";
 import { assets } from "~/lib/assets";
 import type { LinkView } from "~/lib/catalog";
 import { DAILY, dailyTitle, ensureDaily, shiftDay, today } from "~/lib/daily";
@@ -256,5 +257,5 @@ export const makeLinkHost = (actions: LinkActions): LinkHost => ({
   Block: LinkBlock,
 });
 
-// A new page starts from its type's default template, as "New" does.
-export const linkHost = makeLinkHost({ here: focusedPage, create: async (title, typeId) => (await newPage(typeId, { title })).id, day: ensureDaily });
+// A new page starts from its type's default template, as "New" does; a task takes the page it is made in.
+export const linkHost = makeLinkHost({ here: focusedPage, create: async (title, typeId) => (await newPage(typeId, { title, properties: madeInside(focusedPage(), typeId) })).id, day: ensureDaily });

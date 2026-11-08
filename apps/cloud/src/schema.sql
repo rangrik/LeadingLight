@@ -120,3 +120,49 @@ CREATE TABLE IF NOT EXISTS calendar_oauth (
   expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes'
 );
 CREATE INDEX IF NOT EXISTS calendar_oauth_expiry ON calendar_oauth(expires_at);
+CREATE TABLE IF NOT EXISTS mobile_connections (
+  id uuid PRIMARY KEY,
+  owner text NOT NULL,
+  host_hash text NOT NULL,
+  client_hash text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  last_seen timestamptz
+);
+CREATE INDEX IF NOT EXISTS mobile_connections_owner ON mobile_connections(owner);
+CREATE TABLE IF NOT EXISTS mobile_messages (
+  channel uuid NOT NULL REFERENCES mobile_connections(id) ON DELETE CASCADE,
+  id uuid NOT NULL,
+  envelope jsonb NOT NULL,
+  response jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT now()+interval '35 seconds',
+  PRIMARY KEY(channel,id)
+);
+CREATE INDEX IF NOT EXISTS mobile_messages_expiration ON mobile_messages(expires_at);
+CREATE TABLE IF NOT EXISTS mobile_push_devices (
+  channel uuid NOT NULL REFERENCES mobile_connections(id) ON DELETE CASCADE,
+  id uuid NOT NULL,
+  token text NOT NULL,
+  environment text NOT NULL CHECK(environment IN ('sandbox','production')),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(channel,id),
+  UNIQUE(environment,token)
+);
+CREATE TABLE IF NOT EXISTS mobile_push_events (
+  channel uuid NOT NULL REFERENCES mobile_connections(id) ON DELETE CASCADE,
+  id uuid NOT NULL,
+  envelope jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(channel,id)
+);
+CREATE INDEX IF NOT EXISTS mobile_push_events_age ON mobile_push_events(channel,created_at);
+CREATE TABLE IF NOT EXISTS mobile_push_deliveries (
+  channel uuid NOT NULL,
+  event uuid NOT NULL,
+  device uuid NOT NULL,
+  claimed_at timestamptz,
+  sent_at timestamptz,
+  PRIMARY KEY(channel,event,device),
+  FOREIGN KEY(channel,event) REFERENCES mobile_push_events(channel,id) ON DELETE CASCADE,
+  FOREIGN KEY(channel,device) REFERENCES mobile_push_devices(channel,id) ON DELETE CASCADE
+);
