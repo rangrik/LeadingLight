@@ -43,7 +43,7 @@ test.beforeEach(async ({ page }) => {
 test("First run shows an empty state", async ({ page }) => {
   await expect(sidebar(page).getByText("No pages yet")).toBeVisible();
   const main = page.getByRole("main");
-  await expect(main.getByText("Your desk fills as you write")).toBeVisible();
+  await expect(main.getByText("No page open")).toBeVisible();
   await expect(main.getByRole("button", { name: "New page" })).toBeVisible();
 });
 
@@ -167,7 +167,7 @@ test("Deleting the last page shows the empty state", async ({ page }) => {
   await chooseDelete(page, "Only");
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(sidebar(page).getByText("No pages yet")).toBeVisible();
-  await expect(page.getByRole("main").getByText("Your desk fills as you write")).toBeVisible();
+  await expect(page.getByRole("main").getByText("No page open")).toBeVisible();
 });
 
 test("Long titles are truncated in the sidebar, not wrapped", async ({ page }) => {

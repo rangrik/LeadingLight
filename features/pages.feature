@@ -17,8 +17,7 @@ Feature: Pages
 
   Scenario: First run shows an empty state
     Then the sidebar shows the text "No pages yet"
-    And the main area shows the Desk (desk.feature), saying "Your desk fills as you write, capture
-      ideas and hand work to agents." with a "New page" button
+    And the main area shows "No page open" and a "New page" button
 
   Scenario: Creating a page from the sidebar
     When I click "New page" in the sidebar
@@ -109,7 +108,7 @@ Feature: Pages
     Given I have created a page titled "Only"
     When I delete the page "Only" and confirm
     Then the sidebar shows "No pages yet"
-    And the main area shows the empty Desk it was opened from
+    And the main area shows "No page open"
 
   Scenario: A row's menu
     Given I have created a page titled "Draft"

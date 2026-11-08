@@ -95,6 +95,7 @@ test("An old Description property joins the line under the title", async ({ page
       }),
   );
   await page.reload();
+  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Dune" }).click();
   await expect(page.getByRole("textbox", { name: "Description" })).toHaveValue("A desert planet");
   await expect(page.getByRole("button", { name: "Description", exact: true })).toHaveCount(0);
 });

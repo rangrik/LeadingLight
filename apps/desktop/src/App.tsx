@@ -174,8 +174,9 @@ export default function App() {
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
-        // The phone keeps its own home; elsewhere the Desk says where things stand (features/desk.feature).
-        if (!restorePanes(exists)) showOnly(phone ? (list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null) : DESK_VIEW);
+        const newest = list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null;
+        // The Desk in place of the newest page (features/desk.feature); the phone keeps its own home.
+        if (!restorePanes(exists)) showOnly(phone || !newest ? newest : DESK_VIEW);
       })
       .catch(console.error);
   }, []);

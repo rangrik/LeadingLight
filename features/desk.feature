@@ -136,13 +136,15 @@ Feature: Desk
 
   Scenario: An empty space
     Given the app is open with no stored data
+    Then it shows "No page open" with New page, as before: there is no newest page to replace
+    When I click "Desk" in the sidebar
     Then the Desk shows "Your desk fills as you write, capture ideas and hand work to agents."
       and a "New page" button
     When I click "New page" on the Desk
     Then a new page opens in its place, its title focused
 
   Scenario: Launch opens the Desk
-    Given no panes were kept from last time
+    Given no panes were kept from last time, and the space has pages
     When the app opens
     Then the Desk shows, not the newest page
     Given panes were kept from last time
