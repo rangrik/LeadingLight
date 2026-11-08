@@ -105,7 +105,9 @@ export default defineConfig({
         items: [
           { text: "Accounts and encrypted sync", link: "/sync/" },
           { text: "Agents from a browser", link: "/sync/pairing" },
+          { text: "Agents from iPhone and iPad", link: "/sync/mobile-agents" },
           { text: "LeadingLight on iPad", link: "/sync/ipad" },
+          { text: "LeadingLight on iPhone", link: "/sync/iphone" },
         ],
       },
       {

@@ -23,6 +23,21 @@ Feature: Reports an agent publishes
     And the report's title and text are the agent's, and "Brief"'s own words are as they were
     And the chat's steps say "Published a report"
 
+  Scenario: On a task, the newest first and the rest folded
+    Given "Write the summary" is a task assigned to Claude (assign.feature)
+    When its agent publishes "First draft", then "Second draft"
+    Then under the task's words "Second draft" shows in full, and "First draft" below it folded to
+      its byline and title
+    When I click "First draft"
+    Then it unfolds in place, and stays open while I read; a reload folds it again
+    And on a page that is not a task, reports show in the order published, as before
+
+  Scenario: A report takes notes where it shows
+    Given "Second draft" shows on "Write the summary"
+    When I select one of its sentences and press Add sidenote
+    Then the note opens in the margin level with the sentence, and the report's own page shows it too
+    And the task's own words take notes as before; a note on the report never lands in the task's Thoughts
+
   Scenario: Published while the page is closed
     Given "Brief" is not open in any pane
     When an agent publishes a report to "Brief"

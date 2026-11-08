@@ -209,11 +209,14 @@ async function project(c: Caller) {
   if (!folder) throw new Refusal("This chat's folder isn't linked to a page in LeadingLight any more.");
   const you = agentOf(c);
   const task = ids(you?.properties["agent-task"]).find((id) => pageOf(id));
+  // A subtask's agent knows the whole it is part of (DECISIONS.md, 43).
+  const whole = task && ids(pageOf(task)!.properties["subtask-of"]).find((id) => pageOf(id));
   return {
     project: named(folder.pageId),
     folder: folder.path,
     ...(you && { you: named(you.id) }),
     ...(task && { task: { ...named(task), brief: part(await bodyOf(task), 0).text, done: pageOf(task)!.properties.done === true } }),
+    ...(whole && { partOf: { ...named(whole), brief: part(await bodyOf(whole), 0).text } }),
     ...(c.conversation && { outputs: ((await ask<{ id: string; path: string; kept: boolean }[]>("GET", `/v1/conversations/${c.conversation}/outputs`).catch(() => [])) ?? []).filter((o) => o.kept).slice(-20).map((o) => ({ output: o.id, path: o.path })) }),
     how: "read and search cover the project's pages; the folder's files are yours to read as usual. publish adds a report beside your task, or the page you name.",
   };
@@ -341,13 +344,17 @@ async function task(c: Caller, a: Args, call: AgentCall) {
     const title = str(a.title).trim();
     if (!title) throw new Refusal("Give the subtask a title.");
     const parent = pageOf(main)!;
+    // What it waits on: subtasks of the same task, named by the refs create gave.
+    const after = ids(a.after).map((x) => parseHref(x)?.page ?? x);
+    const wrong = after.filter((id) => !ids(pageOf(id)?.properties["subtask-of"]).includes(main));
+    if (wrong.length) throw new Refusal(`Nothing was made: after names ${wrong.map((x) => (pageOf(x) ? `“${titleOf(x)}”, which isn't a subtask of “${titleOf(main)}”` : `"${x}", which is no page`)).join(", and ")}. Give the refs create returned for subtasks of the same task.`);
     // Its project, as its task has it.
     const projectProp = typeOf(parent.typeId).props.find((id) => propOf(id)?.kind === "relation" && ids(parent.properties[id]).some((x) => folders.get().has(x)));
     const brief = str(a.brief).trim();
     const made2 = await createPage({
       typeId: parent.typeId,
       title,
-      properties: { "subtask-of": [main], madeBy: agent.id, command: call.id, ...(projectProp && { [projectProp]: parent.properties[projectProp] }) },
+      properties: { "subtask-of": [main], madeBy: agent.id, command: call.id, ...(projectProp && { [projectProp]: parent.properties[projectProp] }), ...(after.length && { after }) },
       ...(brief && { content: htmlDoc(markdownHtml(brief).html) }),
     }, { ...historyAction("Created subtask", { kind: "agent", name: agent.title, run: c.session }), action: call.id });
     return { subtask: ref(made2.id), title };

@@ -263,6 +263,10 @@ pub fn quit(app: &AppHandle) {
     let home = home(app);
     let sock = socket(&home);
     let read = |path: &str| get(&sock, path, Duration::from_secs(1));
+    // Paired devices must be able to start their next task while the Mac window is closed.
+    if read("/v1/mobile").is_some_and(|m| m["enabled"] == true) {
+        return;
+    }
     if idle(read("/v1/sessions"), read("/v1/runs?status=active")) {
         stop(&home, &sock, Duration::ZERO);
     }

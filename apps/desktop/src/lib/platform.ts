@@ -14,14 +14,17 @@ export const isNative: Promise<boolean> = (async () => {
 })();
 
 // Device capabilities are separate from storage: an iPad is native, but has no Mac processes.
-const preview = import.meta.env.DEV && new URLSearchParams(location.search).has("ipad");
+const params = new URLSearchParams(location.search);
+export const phone = /iPhone|iPod|Android.+Mobile/i.test(navigator.userAgent) || (import.meta.env.DEV && params.has("iphone"));
+const preview = import.meta.env.DEV && (params.has("ipad") || params.has("iphone"));
 export const platform = createStore(preview ? "ios" : "browser");
 export const platformReady = isNative.then(async (native) => {
   const os = native ? await (await import("@tauri-apps/api/core")).invoke<string>("native_platform").catch(() => "unknown") : preview ? "ios" : "browser";
   platform.set(os);
-  document.documentElement.toggleAttribute("data-ipad", os === "ios");
+  document.documentElement.toggleAttribute("data-ipad", os === "ios" || phone);
+  document.documentElement.toggleAttribute("data-phone", phone);
   return os;
 });
 export const isDesktop = platformReady.then((os) => os === "macos");
-export const isMobile = platformReady.then((os) => os !== "macos" && os !== "browser");
-export const useMobile = () => !["browser", "macos"].includes(platform.use());
+export const isMobile = platformReady.then((os) => phone || (os !== "macos" && os !== "browser"));
+export const useMobile = () => !["browser", "macos"].includes(platform.use()) || phone;

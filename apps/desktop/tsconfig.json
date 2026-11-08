@@ -35,5 +35,6 @@
     }
   },
   "include": ["src", "qa", "../../vendor/shipyard/app/src/vite-env.d.ts"],
+  "exclude": ["qa/report/**", "qa/.results*/**"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
