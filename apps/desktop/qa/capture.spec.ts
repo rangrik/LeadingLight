@@ -6,7 +6,7 @@ const notes = (page: Page) => box(page).getByRole("textbox", { name: "Notes" });
 const pane = (page: Page, name: string) => page.getByRole("region", { name, exact: true });
 
 // Seam: the box's drafts through lib/capture.ts into the space and the panes, and its body is the
-// block editor. Catches an idea written into Today's body or missing from "Created this day", a
+// block editor. Catches an idea written into Today's body or missing from "This day", a
 // lost project or tag, Escape closing the box under an open menu, and ⇧⌘↩ replacing the page in view.
 test("A captured idea keeps its project, shows in Today and opens beside", async ({ page }) => {
   await page.goto("/");
@@ -43,7 +43,7 @@ test("A captured idea keeps its project, shows in Today and opens beside", async
   await page.getByRole("button", { name: "Today", exact: true }).click();
   await expect(body(page)).toHaveAttribute("contenteditable", "true");
   await expect(body(page)).toHaveText("");
-  await expect(page.getByRole("region", { name: "Created this day" })).toContainText("Walk the long way");
+  await expect(page.getByRole("region", { name: "This day", exact: true })).toContainText("Walk the long way");
 
   // ⌘↩ saves and gives the keyboard back; ⇧⌘↩ opens the idea beside, Today staying in view.
   await body(page).click();
@@ -56,7 +56,7 @@ test("A captured idea keeps its project, shows in Today and opens beside", async
   await box(page).getByRole("textbox", { name: "Idea" }).pressSequentially("Third");
   await page.keyboard.press("Shift+Meta+Enter");
   await expect(pane(page, "Third").getByRole("textbox", { name: "Page body" })).toBeFocused();
-  await expect(page.getByRole("region", { name: "Created this day" })).toContainText("Second");
+  await expect(page.getByRole("region", { name: "This day", exact: true })).toContainText("Second");
   await expect(body(page).first()).toHaveText("");
 
   await page.waitForTimeout(800);

@@ -145,7 +145,13 @@ export const Note = Mark.create<{ onAdd: ((id: string, quote: string, existing?:
     };
   },
   addKeyboardShortcuts() {
-    return { "Mod-Shift-m": () => this.editor.commands.addSidenote() };
+    return {
+      "Mod-Shift-m": () => {
+        // A key right after a double-click can beat the browser's selectionchange: read the selection now.
+        (this.editor.view as unknown as { domObserver: { flush: () => void } }).domObserver.flush();
+        return this.editor.commands.addSidenote();
+      },
+    };
   },
 });
 

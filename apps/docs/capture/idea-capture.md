@@ -73,10 +73,10 @@ Clicking the empty space under the body puts the cursor at the end of the body.
 
 ## Ideas show in Today
 
-An idea isn't written into the day's note. It shows in Today's **Created this day** list, with its icon,
+An idea isn't written into the day's note. It shows in Today's **This day** list, with its icon,
 because it was made that day, like any page. Today's own words stay yours.
 
-If Today is open while you capture, its **Created this day** list shows the new idea at once. Ideas you
+If Today is open while you capture, its **This day** list shows the new idea at once. Ideas you
 make by hand, not from the box, show in their day the same way.
 
 If you used an earlier version of LeadingLight, ideas it added to Today as bullets under an "Ideas"

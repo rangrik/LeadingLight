@@ -25,6 +25,15 @@ Feature: LeadingLight on iPad
     And the editor can scroll above the keyboard
     And controls avoid the status bar and home indicator
 
+  Scenario: The home-indicator area matches the iPad shell
+    Given I open the iPad app with a bottom safe area
+    Then the area below the app matches the sidebar background in light and dark mode
+    And there is no lighter horizontal band beneath the sidebar and page
+    And bottom controls remain above the home indicator
+    When I rotate the device or open the keyboard
+    Then the background remains continuous and controls stay in the visible viewport
+    And the iPhone keeps its navigation background and safe spacing
+
   Scenario: Rotation keeps the writing position visible
     Given I am writing the fifth paragraph with the onscreen keyboard open
     When I rotate the iPad from portrait to landscape

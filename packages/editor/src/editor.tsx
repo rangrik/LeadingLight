@@ -2,7 +2,7 @@ import { type Editor, type Extensions, type FocusPosition, generateJSON, getSche
 import type { Node as PMNode, Schema } from "@tiptap/pm/model";
 import { closeHistory } from "@tiptap/pm/history";
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection, type Transaction } from "@tiptap/pm/state";
-import { AddMarkStep, RemoveMarkStep } from "@tiptap/pm/transform";
+import { AddMarkStep, RemoveMarkStep, Step } from "@tiptap/pm/transform";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { TriangleAlert } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -92,6 +92,10 @@ export type BlockEditorHandle = {
   cursorBlock: () => number;
   blockAt: (index: number) => EditorDoc | undefined;
   setBlock: (index: number, block: EditorDoc, count?: number) => void;
+  // Notes added or taken off in another editor of the same report (onNoteSteps there).
+  applySteps: (steps: unknown[]) => void;
+  // ⇧⌘M from outside the page (a button beside it); false when the cursor isn't in the page.
+  addNote: () => boolean;
 };
 
 // Where "Add to essay" sends selected words.
@@ -136,6 +140,8 @@ function locate(editor: Editor, text: string, near: number): Selected | null {
 // Annotating a page that can't change (an agent's report): its words stay as they are, and only
 // sidenotes are added to them or taken off.
 const annotating = new PluginKey("annotateOnly");
+// Steps taken from another editor, not to be sent back to it.
+const fromElsewhere = "noteSteps";
 const annotateOnly = new Plugin({
   key: annotating,
   filterTransaction: (tr) => !tr.docChanged || tr.steps.every((s) => (s instanceof AddMarkStep || s instanceof RemoveMarkStep) && s.mark.type.name === "note"),
@@ -236,6 +242,7 @@ export function BlockEditor({
   onStats,
   onFocusChange,
   onLayoutChange,
+  onNoteSteps,
   label = "Page body",
   placeholder,
   ref,
@@ -277,10 +284,14 @@ export function BlockEditor({
   // Whether the page is being written in, which Focus mode dims the rest of the page for.
   onFocusChange?: (focused: boolean) => void;
   onLayoutChange?: (layout: { notes: boolean; toc: boolean }) => void;
+  // Notes added or taken off here, as steps for another editor of the same words (annotate only).
+  onNoteSteps?: (steps: unknown[]) => void;
   ref?: Ref<BlockEditorHandle>;
 }) {
   // Callbacks live in refs so the editor is created once per mount.
   const onChangeRef = useRef(onChange);
+  const onNoteStepsRef = useRef(onNoteSteps);
+  onNoteStepsRef.current = onNoteSteps;
   const onExitTopRef = useRef(onExitTop);
   const notesRef = useRef(notes);
   const openRef = useRef(open);
@@ -370,7 +381,11 @@ export function BlockEditor({
     },
     // What the editor adds by itself after a step that changed nothing (a closing empty line as a
     // page opens, a table fixed up) isn't an edit, so it isn't saved and doesn't move Updated.
-    onUpdate: ({ editor, transaction }) => transaction.docChanged && !unreadable && !readOnly && onChangeRef.current?.(() => editor.getJSON()),
+    onUpdate: ({ editor, transaction }) => {
+      if (!transaction.docChanged || unreadable || readOnly) return;
+      onChangeRef.current?.(() => editor.getJSON());
+      if (annotate && !transaction.getMeta(fromElsewhere)) onNoteStepsRef.current?.(transaction.steps.map((s) => s.toJSON()));
+    },
   });
 
   useEffect(() => {
@@ -443,8 +458,8 @@ export function BlockEditor({
     };
   }, [editor, counting, countGrammar]);
 
-  // Dev-only hook so QA scripts can read editor state.
-  if (import.meta.env.DEV && !readOnly) (window as unknown as { __editor: unknown }).__editor = editor;
+  // Dev-only hook so QA scripts can read editor state: the page's body, not a field beside it.
+  if (import.meta.env.DEV && !readOnly && label === "Page body") (window as unknown as { __editor: unknown }).__editor = editor;
 
   // Words whose thought is gone (its Thoughts page or block was deleted) stop being noted, each
   // time the notes (re)load.
@@ -610,6 +625,17 @@ export function BlockEditor({
           .run();
         editor.view.dispatch(closeHistory(editor.state.tr));
         touched.current = true;
+      },
+      addNote: () => editor.view.hasFocus() && editor.commands.addSidenote(),
+      // A report's words never change, so a step from another editor of it lands in the same place.
+      applySteps: (steps) => {
+        const tr = editor.state.tr.setMeta(fromElsewhere, true).setMeta("addToHistory", false);
+        try {
+          for (const s of steps) tr.step(Step.fromJSON(editor.schema, s));
+        } catch {
+          return;
+        }
+        editor.view.dispatch(tr);
       },
       reveal: (id) => {
         const tint = "color-mix(in srgb, var(--info) 24%, transparent)";

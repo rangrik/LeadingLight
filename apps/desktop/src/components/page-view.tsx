@@ -1,16 +1,18 @@
 import { saveEmergency, clearEmergency } from "~/lib/store-local";
 import { carry } from "~/lib/catalog";
-import { BlockEditor, type BlockEditorHandle, type EditorDoc, type NotesStore, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
+import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
-import { AlignLeft, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { AlignLeft, ChevronDown, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
+import { Tabs, TabsList, TabsTab } from "@leadinglight/ui/components/tabs";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { markCapture } from "~/lib/capture-inbox";
 import { saveVoice } from "~/lib/capture";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Backlinks, Linked } from "~/components/backlinks";
-import { CreatedThisDay, DailyBar } from "~/components/daily-bar";
+import { DailyBar, ThisDay } from "~/components/daily-bar";
 import { linkHost } from "~/components/link-views";
 import { CoverBand, CoverPicker } from "~/components/page-cover";
 import { IconPicker, PageIconView } from "~/components/page-icon";
@@ -18,15 +20,17 @@ import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
 import { ReportByline, Reports, ReportSources } from "~/components/reports";
 import { WorkPanel } from "~/components/work-panel";
+import { usePane, YourWords } from "~/components/your-words";
+import { ProjectWork } from "~/components/work-table";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
 import { setPageStats } from "~/components/page-stats";
-import { useMobile } from "~/lib/platform";
+import { phone, useMobile } from "~/lib/platform";
 import { openAsk, registerPage, unregisterPage } from "~/lib/ask";
 import { assets } from "~/lib/assets";
-import { makeRoom, openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
+import { openHref, quoteInto, reportQuotes, useQuotes } from "~/lib/essay";
 import { useKeysFor } from "~/lib/keymap";
-import { pageLabel, pageStyle } from "~/lib/labels";
+import { pageStyle } from "~/lib/labels";
 import { childOf, parentOf, roleOf } from "~/lib/linked";
 import { registerLive, touchLive } from "~/lib/live";
 import type { LLObject, ObjectPatch } from "~/lib/objects";
@@ -35,8 +39,8 @@ import { focusedPage, panes } from "~/lib/panes";
 import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-meta";
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, space, typeOf } from "~/lib/space";
-import { draftOf, drafts, noteStates, pick, recipientFor } from "~/lib/feedback";
-import { useThoughts } from "~/lib/thoughts";
+import { useNotesFor } from "~/lib/notes-for";
+import { isSource } from "~/lib/reading";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 import { contentWidth, usePageLayout } from "~/lib/page-layout";
@@ -77,10 +81,14 @@ export function PageView({ page }: { page: LLObject }) {
   const writing = useWritingPrefs();
   const layout = usePageLayout();
   const [margins, setMargins] = useState({ notes: false, toc: false });
+  // A report under the page with notes needs the margin too.
+  const [streamNotes, setStreamNotes] = useState(false);
   const [inBody, setInBody] = useState(false);
   const [turnInto, setTurnInto] = useState<PageSelection | null>(null);
   const [voiceReview, setVoiceReview] = useState<VoiceReview | null>(null);
   const [tailRow, setTailRow] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [readingTab, setReadingTab] = useState("page");
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
   const counting = tools && writing.count;
@@ -164,30 +172,31 @@ export function PageView({ page }: { page: LLObject }) {
   const role = roleOf(page);
   const parent = parentOf(page);
   const current = { ...page, properties: props };
-  const notes = useThoughts(current, (thoughts) => {
-    if (thoughts) setProp("thoughts", thoughts.id);
-    makeRoom();
-  });
+  const { notes, onNoteSteps } = useNotesFor(current, editorRef);
   const essay = childOf(current, "essay");
   // An agent's report reads as it was published (features/reports.feature), taking only sidenotes.
   const report = !!reportOf(current);
-  // Notes on a task's pages can go to its agent as feedback (features/feedback.feature): only when
-  // this page's task or sent notes change does the page draw again.
-  const pickKey = useSyncExternalStore(space.subscribe, () => {
-    const to = recipientFor(page.id);
-    return to ? `${to.task} ${to.agent} ${JSON.stringify([...noteStates()])}` : "";
-  });
-  const chosen = drafts.use();
-  const shared = useMemo<NotesStore | undefined>(() => {
-    if (!notes || !pickKey) return notes;
-    const [task, agent, ...rest] = pickKey.split(" ");
-    const states = new Map<string, string>(JSON.parse(rest.join(" ")));
-    const to = pageLabel(pageOf(agent)?.title ?? "").split(": ")[0];
-    return { ...notes, pick: { to, on: (id) => draftOf(task).picks.some((x) => x.note === id), set: (id, on) => pick(task, page.id, id, on), sent: (id) => states.get(id) } };
-  }, [notes, pickKey, chosen]);
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
   const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
+  // A source gets Your words beside its text, or in a tab when the pane is narrow (reading-layout.feature).
+  const reading = isSource({ typeId, properties: props });
+  const pane = usePane(rootRef, reading);
+  const folded = reading && !pane.wide;
+  const takeaways = props.takeaways && typeof props.takeaways === "object" ? (props.takeaways as EditorDoc) : null;
+  const yourWords = reading && (
+    <YourWords
+      editor={editorRef}
+      onTakeaways={(doc) => setProp("takeaways", doc)}
+      page={{ ...current, title, typeId }}
+      quotes={quotes?.length ?? 0}
+      reveal={(note) => {
+        setReadingTab("page");
+        requestAnimationFrame(() => editorRef.current?.reveal(note));
+      }}
+      takeaways={takeaways}
+    />
+  );
 
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
@@ -216,6 +225,12 @@ export function PageView({ page }: { page: LLObject }) {
       properties: () => latest.current,
       setProperties: replaceProps,
       setTitle: rename,
+      // Retyped from elsewhere (Assign): its properties come with it, so nothing is carried.
+      setType: (next) => {
+        setTypeId(next);
+        patchSummary(page.id, { typeId: next });
+        queue({ typeId: next });
+      },
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
       focus: () => editorRef.current?.focus("end"),
@@ -284,10 +299,10 @@ export function PageView({ page }: { page: LLObject }) {
   const onBlankMouseDown = (e: React.MouseEvent) => {
     const editor = editorRef.current;
     const title = titleRef.current;
-    if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus() || bodyRef.current?.hidden) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
+    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, .ll-reading, .ll-your-words, textarea, input, button, a, [role]")) return;
     // Level with the sections after the body (backlinks, what was made that day) is theirs too.
     const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
       const r = s.getBoundingClientRect();
@@ -307,11 +322,12 @@ export function PageView({ page }: { page: LLObject }) {
       className={cn("ll-page-root min-h-full", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
       onFocusCapture={() => registerPage(askPage, editorRef.current)}
       onMouseDown={onBlankMouseDown}
+      ref={rootRef}
     >
       {cover && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
           Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
-      <div className="ll-page pb-8" data-page-notes={margins.notes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+      <div className="ll-page pb-8" data-page-notes={margins.notes || streamNotes || undefined} data-page-reading={(reading && !folded) || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
         <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")} data-tail={tailRow || undefined}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -411,18 +427,35 @@ export function PageView({ page }: { page: LLObject }) {
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        {!report && <PropertyPanel
+        {!report && (phone ? <Collapsible className="mt-3">
+          <CollapsibleTrigger render={<Button className="text-muted-foreground" variant="ghost" />}><ChevronDown />Page details</CollapsibleTrigger>
+          <CollapsiblePanel><PropertyPanel
+            onDescription={description === undefined ? addDescription : undefined}
+            page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
+            setProp={setProp} setType={setType} typeId={typeId} values={props}
+          /></CollapsiblePanel>
+        </Collapsible> : <PropertyPanel
           onDescription={description === undefined ? addDescription : undefined}
           page={{ ...page, ...pageOf(page.id), title, typeId, properties: props }}
           setProp={setProp}
           setType={setType}
           typeId={typeId}
           values={props}
-        />}
+        />)}
+        {!report && <ProjectWork pageId={page.id} />}
         {day && <DailyBar day={day} />}
-        {day === today() && <TailToday />}
+        {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
-        <div className="ll-page-body pt-3" ref={bodyRef}>
+        {folded && (
+          <Tabs className="mt-4" onValueChange={setReadingTab} value={readingTab}>
+            {/* The tab's words line up with the text, as Backlinks' tabs do. */}
+            <TabsList className="-ms-2.5" variant="underline">
+              <TabsTab value="page">Page</TabsTab>
+              <TabsTab value="words">Your words</TabsTab>
+            </TabsList>
+          </Tabs>
+        )}
+        <div className="ll-page-body pt-3" hidden={folded && readingTab === "words"} ref={bodyRef}>
           <BlockEditor
             assets={assets}
             content={page.content}
@@ -440,10 +473,14 @@ export function PageView({ page }: { page: LLObject }) {
               touchLive(page.id);
             }}
             links={linkHost}
-            notes={role === "thoughts" || role === "essay" ? undefined : shared}
+            notes={role === "thoughts" || role === "essay" ? undefined : notes}
+            onNoteSteps={onNoteSteps}
             onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
-            onFocusChange={setInBody}
+            onFocusChange={(on) => {
+              setInBody(on);
+              if (on) setReadingTab("page");
+            }}
             onLayoutChange={setMargins}
             onStats={counting ? (stats) => setPageStats(page.id, stats) : undefined}
             openLink={openHref}
@@ -455,10 +492,16 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        {folded && readingTab === "words" && <div className="pt-3">{yourWords}</div>}
+        {reading && !folded && (
+          <aside aria-label="Your words" className="ll-reading">
+            <div style={{ maxHeight: pane.height || undefined }}>{yourWords}</div>
+          </aside>
+        )}
         {report && <ReportSources report={current} />}
-        <Reports pageId={page.id} />
+        <Reports onNotes={setStreamNotes} pageId={page.id} />
         <Linked id={page.id} />
-        {day && <CreatedThisDay content={page.content} day={day} id={page.id} />}
+        {day && <ThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
