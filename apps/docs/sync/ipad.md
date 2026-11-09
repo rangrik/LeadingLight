@@ -28,6 +28,13 @@ an iPad:
 Everything you write is saved on the iPad straight away. Saving never waits for the network. Create
 a page with no connection, leave the app and come back: the page and its words are there.
 
+### Mermaid diagrams
+
+The same [Mermaid diagrams](/write/blocks#mermaid-diagram) work in every object's body on iPad.
+Paste a fenced `mermaid` block or type `/mermaid` and tap **Mermaid diagram**. Edit its source above
+the live preview; **Language**, **Copy code** and **Download code** stay visible without hovering.
+Diagrams render locally in the installed app, including offline, and follow light and dark appearance.
+
 ## Narrow windows
 
 The app fits the window it is given, including a narrow window beside another app.

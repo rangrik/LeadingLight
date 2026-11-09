@@ -187,6 +187,9 @@
 
 /* Code */
 .ll-editor .ll-code { padding: 0; }
+.ll-editor .ll-code[data-mermaid] pre { border-top-left-radius: 0; border-top-right-radius: 0; }
+.ll-editor .ll-mermaid { overflow: auto; max-width: 100%; padding: 16px; }
+.ll-editor .ll-mermaid svg { display: block; max-width: 100%; height: auto; margin: auto; }
 .ll-editor pre {
   background: var(--muted);
   border-radius: var(--radius);

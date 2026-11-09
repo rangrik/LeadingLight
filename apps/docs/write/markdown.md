@@ -48,12 +48,15 @@ Click into the body and paste. A heading on the first line stays a Heading 1 in 
 | `- [ ] task`, `- [x] task` | A to-do list, open and done |
 | `> words` | A quote |
 | A fenced code block | A code block, in its language |
+| A fenced `mermaid` block | Editable source with a live diagram preview |
 | A table, its columns split by pipes | A table |
 | `---` | A divider |
 
 ### Code fence languages
 
 A code fence's language name sets the block's **Language**. Short and mixed-case names work: `tsx` and `TS` read as **TypeScript**, `yml` as **YAML**, `Python` as **Python**, and `text` as **Plain text**.
+
+`mermaid` fences render automatically, including in Markdown pages an agent creates and in any object type's body. See [Mermaid diagrams](/write/blocks#mermaid-diagram).
 
 ## What stays as written
 

@@ -10,8 +10,11 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Select, SelectItem, SelectPopup, SelectPrimitive, SelectValue } from "@leadinglight/ui/components/select";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { insertMarkdown } from "./markdown";
+import { MermaidPreview } from "./mermaid-preview";
 
 const lowlight = createLowlight(common);
+// Mermaid is rendered separately; guessing another language adds work and misleading colours.
+lowlight.registerAlias({ plaintext: ["mermaid", "mmd"] });
 
 const LANGUAGES: [string, string, string][] = [
   ["plaintext", "Plain text", "txt"],
@@ -29,6 +32,7 @@ const LANGUAGES: [string, string, string][] = [
   ["json", "JSON", "json"],
   ["kotlin", "Kotlin", "kt"],
   ["markdown", "Markdown", "md"],
+  ["mermaid", "Mermaid", "mmd"],
   ["objectivec", "Objective-C", "m"],
   ["php", "PHP", "php"],
   ["python", "Python", "py"],
@@ -110,12 +114,14 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
   };
 
   return (
-    <NodeViewWrapper className="ll-code group/code relative" data-inside={inside || undefined}>
+    <NodeViewWrapper className="ll-code group/code relative" data-inside={inside || undefined} data-mermaid={language === "mermaid" || undefined}>
       <TooltipProvider delay={500}>
         <div
           // top-2.5 centres the 24px buttons on the code's first line (12px padding + half a line).
           // While hidden they ignore the pointer, so clicks there reach the code.
-          className="absolute top-2.5 right-2 z-10 flex items-center gap-0.5 pointer-events-none opacity-0 transition-opacity duration-150 group-hover/code:pointer-events-auto group-hover/code:opacity-100 group-data-inside/code:pointer-events-auto group-data-inside/code:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100"
+          className={language === "mermaid"
+            ? "flex items-center justify-end gap-0.5 rounded-t-[var(--radius)] bg-muted px-2 pt-2"
+            : "absolute top-2.5 right-2 z-10 flex items-center gap-0.5 pointer-events-none opacity-0 transition-opacity duration-150 group-hover/code:pointer-events-auto group-hover/code:opacity-100 group-data-inside/code:pointer-events-auto group-data-inside/code:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100"}
           contentEditable={false}
         >
           <Select
@@ -155,6 +161,7 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
       <pre spellCheck={false}>
         <NodeViewContent<"code"> as="code" className={`language-${language}`} />
       </pre>
+      {language === "mermaid" && <MermaidPreview source={node.textContent} />}
     </NodeViewWrapper>
   );
 }

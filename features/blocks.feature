@@ -24,7 +24,7 @@ Feature: Block kinds
     Then the slash menu shows these sections and items, in order:
       | Basic  | Text, Small text, Heading 1, Heading 2, Heading 3, Heading 4, Quote, Toggle, Emoji |
       | Lists  | Bullet list, Numbered list, Alphabetical list, Roman list, To-do list             |
-      | Blocks | Code block, Table, Columns, Group, Divider                                          |
+      | Blocks | Code block, Mermaid diagram, Table, Columns, Group, Divider                         |
       | Media  | Image, Video, Audio, File, Embed                                                    |
 
   Scenario Outline: Markdown shortcuts for the new text kinds

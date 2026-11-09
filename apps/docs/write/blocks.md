@@ -32,6 +32,7 @@ A page is made of blocks: text, headings, lists, code, tables, media and more. T
 | Roman list | **Roman list** | `i.` | |
 | To-do list | **To-do list** | `[]` | <kbd>⇧⌘9</kbd> |
 | Code block | **Code block** | ` ``` ` then <kbd>Return</kbd> | <kbd>⌥⌘C</kbd> |
+| Mermaid diagram | **Mermaid diagram** | ` ```mermaid ` then <kbd>Return</kbd> | |
 | Table | **Table** | | |
 | Columns | **Columns** | | |
 | Group | **Group** | | <kbd>⌘G</kbd> on selected blocks |
@@ -96,6 +97,23 @@ When you point at the block, or the cursor is inside it, three controls show:
 - **Download code**: saves the code as a file named for its language, such as `snippet.js`.
 
 A code block in Markdown also has **Turn into formatted text**. See [Pasting Markdown](/write/markdown).
+
+### Mermaid diagram
+
+Type `/mermaid` and press <kbd>Return</kbd>, choose **Mermaid** from a code block's **Language** menu, or paste a fenced `mermaid` block. Write the diagram's source in the block; its preview updates below after a short pause. For example:
+
+````text
+```mermaid
+flowchart LR
+  A[Draft] --> B[Review] --> C[Publish]
+```
+````
+
+Flowcharts, sequence diagrams and other Mermaid diagrams render locally, and work offline in the Mac, iPad and iPhone apps. The preview follows the app's theme. If the source is incomplete or invalid, an error replaces the preview; keep editing to fix it. Your source is always kept, including when you reopen the page or undo an edit.
+
+Mermaid fences are recognized automatically in pages created from Markdown, including pages an agent writes. This works in every object's body: pages, tasks, ideas, projects and custom types.
+
+**Copy code** copies the source. **Download code** saves it as `snippet.mmd`.
 
 ### Table
 

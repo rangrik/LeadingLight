@@ -6,6 +6,7 @@ import {
   Code,
   Columns2,
   Film,
+  GitBranch,
   Globe,
   Heading1,
   Heading2,
@@ -95,6 +96,7 @@ export const SLASH_ITEMS: SlashItem[] = [
   ),
   kind("todo", "To-do list", "Lists", "todo task checkbox check", SquareCheck, (c) => c.toggleTaskList(), "[]"),
   kind("code", "Code block", "Blocks", "pre snippet", Code, (c) => c.setCodeBlock(), "```"),
+  kind("mermaid", "Mermaid diagram", "Blocks", "flowchart sequence chart", GitBranch, (c) => c.setCodeBlock({ language: "mermaid" })),
   item("table", "Table", "Blocks", "grid rows columns", Table, (e, r) =>
     e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
   ),

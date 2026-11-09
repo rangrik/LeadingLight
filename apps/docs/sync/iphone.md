@@ -38,6 +38,13 @@ or use **Browse by type**. The **+** at the top of Notes creates a new page.
 Tap **Today** while writing, then **Continue writing** to return. Your editor stays open while you
 look around. Page properties sit behind **Page details**, and sidenotes appear below the text.
 
+### Mermaid diagrams
+
+[Mermaid diagrams](/write/blocks#mermaid-diagram) work in every object's body on iPhone, including
+pages created from Markdown. Paste a `mermaid` fence or choose **Mermaid diagram** from `/mermaid`.
+The source stays editable above the live preview, with its controls on a separate row for touch.
+Diagrams fit the phone's width, follow its appearance and render offline in the installed app.
+
 ## Settings and sync
 
 Open **Settings** from Today or Notes. Light and dark follow the device's system setting by default.

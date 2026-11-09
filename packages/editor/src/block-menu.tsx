@@ -30,7 +30,7 @@ const KIND: Record<string, (node: PMNode) => string> = {
   bulletList: () => "bullet",
   orderedList: (n) => (n.attrs.type === "a" ? "alpha" : n.attrs.type === "i" ? "roman" : "numbered"),
   taskList: () => "todo",
-  codeBlock: () => "code",
+  codeBlock: (n) => (["mermaid", "mmd"].includes(String(n.attrs.language).toLowerCase()) ? "mermaid" : "code"),
 };
 
 // The selected blocks with their kinds. List items take their list's kind.

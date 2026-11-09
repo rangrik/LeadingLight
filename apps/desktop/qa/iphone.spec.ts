@@ -1,6 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mermaidTouch } from "./mermaid-touch";
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+test("Mermaid supports iPhone touch editing and offline saves", async ({ page }) => {
+  await mermaidTouch(page, "iphone");
+});
 const nav = (page: Page) => page.getByRole("navigation", { name: "Phone navigation" });
 const capture = (page: Page) => page.getByRole("dialog", { name: "New idea" });
 async function newNote(page: Page, title: string, text: string) {

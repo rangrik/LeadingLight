@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { mermaidTouch } from "./mermaid-touch";
 
 // Native storage and desktop capabilities must not be confused when a new platform is added.
 test("iPad uses native storage without Mac capabilities", async ({ page }) => {
@@ -76,6 +77,10 @@ test("saved attachments follow the current iOS data directory", async ({ page })
 });
 
 test.use({ viewport: { width: 600, height: 900 }, hasTouch: true });
+
+test("Mermaid supports iPad touch editing and offline saves", async ({ page }) => {
+  await mermaidTouch(page, "ipad");
+});
 
 // Sheet navigation must hand focus back to a writable page, including after offline saves.
 test("touch navigation, offline edits, settings and capture", async ({ page, context, browserName }) => {
