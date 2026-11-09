@@ -28,9 +28,10 @@ import { BrowserPane } from "~/components/agent-browser";
 import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
+import { Connections } from "~/components/connections";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, CONNECTIONS_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { phone, useMobile } from "~/lib/platform";
 import { PAGE_TYPE } from "~/lib/store";
 import { toolsOn, useWritingPrefs } from "~/lib/writing";
@@ -233,6 +234,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                   <AskView />
                 ) : leaf.page === SUGGESTIONS_VIEW ? (
                   <Suggestions pane />
+                ) : leaf.page === CONNECTIONS_VIEW ? (
+                  <Connections />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
                   <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (

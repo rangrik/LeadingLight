@@ -23,7 +23,7 @@ import { focusedPage } from "~/lib/panes";
 import { iconFor, pageOf, propOf, space, typeOf } from "~/lib/space";
 import { newPage } from "~/lib/templates";
 
-const aliasesOf = (p: ObjectSummary) =>
+export const aliasesOf = (p: ObjectSummary) =>
   String(p.properties.aliases ?? "")
     .split(",")
     .map((a) => a.trim())

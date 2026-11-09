@@ -27,6 +27,14 @@ export function firstLineText(doc: EditorDoc | null, title: (id: string) => stri
 export const linesMentioning = (doc: EditorDoc | null, id: string) =>
   doc ? [...textblocks(doc)].filter((b) => b.content?.some((n) => n.type === "mention" && n.attrs?.id === id)) : [];
 
+// Every page the body links, by mention or on its own line, in the order they first appear.
+export function linksIn(node: EditorDoc | null, ids: string[] = []): string[] {
+  const id = node && (node.type === "mention" || node.type === "pageLink") ? node.attrs?.id : undefined;
+  if (id && !ids.includes(id)) ids.push(id);
+  for (const child of node?.content ?? []) linksIn(child, ids);
+  return ids;
+}
+
 export function hasBlockLink(node: EditorDoc | null, id: string): boolean {
   if (!node) return false;
   return (node.type === "pageLink" && node.attrs?.id === id) || (node.content ?? []).some((c) => hasBlockLink(c, id));

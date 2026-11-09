@@ -1,4 +1,4 @@
-import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Sparkles } from "lucide-react";
+import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Sparkles, Waypoints } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@leadinglight/ui/components/badge";
 import { Button } from "@leadinglight/ui/components/button";
@@ -8,6 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { AskView } from "~/components/agent-panel";
 import { CaptureInbox } from "~/components/capture-inbox";
+import { Connections, FrontTitle } from "~/components/connections";
 import { FeedList, useFeed } from "~/components/feed";
 import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
@@ -26,8 +27,8 @@ import { inPanel, suggestionsOn, tail } from "~/lib/tail";
 // The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
 // beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
 
-const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, ask: Sparkles };
-const ORDER: BarView[] = ["suggestions", "feed", "captures", "ask"];
+const ICONS: Record<BarView, LucideIcon> = { suggestions: MessageSquareDashed, feed: MessagesSquare, captures: Inbox, connections: Waypoints, ask: Sparkles };
+const ORDER: BarView[] = ["suggestions", "feed", "captures", "connections", "ask"];
 
 // Ask goes through openAsk, so its composer takes the keyboard; the Feed's first item does.
 export function toggleView(view: BarView) {
@@ -88,14 +89,15 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
   const mobile = useMobile();
   const keys = useKeysFor()("new-idea");
   // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
+  // Connections follows the page itself, so it stays.
   useEffect(() => {
     let front = focusedPage();
     return panes.subscribe(() => {
       const now = focusedPage();
       if (now === front) return;
       front = now;
-      const { open, pinned } = bar.get();
-      if (now && open && !pinned && !narrow() && isPageView(now) && suggestionsOn(now).length) bar.set({ view: "suggestions" });
+      const { open, pinned, view } = bar.get();
+      if (now && open && !pinned && view !== "connections" && !narrow() && isPageView(now) && suggestionsOn(now).length) bar.set({ view: "suggestions" });
     });
   }, []);
   return (
@@ -190,10 +192,12 @@ export function BarPanel() {
           <AskView head={(menu) => <BarHeader after={<div className="ms-1 flex min-w-0">{menu}</div>} view="ask" />} />
         ) : (
           <>
-            <BarHeader view={view} />
+            <BarHeader after={view === "connections" && <FrontTitle />} view={view} />
             <div className="flex min-h-0 flex-1 flex-col">
               {view === "feed" ? (
                 <FeedList />
+              ) : view === "connections" ? (
+                <Connections />
               ) : view === "captures" ? (
                 <div className="min-h-0 flex-1 overflow-y-auto">
                   <CaptureInbox panel />
