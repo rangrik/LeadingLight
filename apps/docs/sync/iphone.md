@@ -40,9 +40,9 @@ look around. Page properties sit behind **Page details**, and sidenotes appear b
 
 ### Mermaid diagrams
 
-[Mermaid diagrams](/write/blocks#mermaid-diagram) work in every object's body on iPhone, including
+[Mermaid diagrams](/write/blocks#mermaid-diagram) work in document bodies on iPhone, including
 pages created from Markdown. Paste a `mermaid` fence or choose **Mermaid diagram** from `/mermaid`.
-The source stays editable above the live preview, with its controls on a separate row for touch.
+The source stays editable above the live preview. Tap **Hide source** for more room to read the diagram.
 Diagrams fit the phone's width, follow its appearance and render offline in the installed app.
 
 ## Settings and sync

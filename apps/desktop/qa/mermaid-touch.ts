@@ -15,6 +15,12 @@ export async function mermaidTouch(page: Page, device: "ipad" | "iphone") {
   await page.keyboard.type("A[Plan] --> B[Done]");
   const diagram = page.getByRole("img", { name: "Mermaid diagram", exact: true });
   await expect(diagram).toContainText("Done");
+  const codeSource = page.locator(".ll-code code");
+  await page.getByRole("button", { name: "Hide source" }).tap();
+  await expect(codeSource).toBeHidden();
+  await expect(diagram).toBeVisible();
+  await page.getByRole("button", { name: "Show source" }).tap();
+  await expect(codeSource).toContainText("A[Plan] --> B[Done]");
   const language = page.getByRole("combobox", { name: "Language" });
   await language.tap();
   await page.getByRole("option", { name: "Plain text", exact: true }).tap();
@@ -24,7 +30,7 @@ export async function mermaidTouch(page: Page, device: "ipad" | "iphone") {
   await expect(diagram).toContainText("Plan");
 
   await page.context().setOffline(true);
-  await page.locator(".ll-code code").tap();
+  await codeSource.tap();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type("flowchart LR; A[Offline] --> B[Saved]");
   await expect(diagram).toContainText("Offline");
@@ -38,6 +44,6 @@ export async function mermaidTouch(page: Page, device: "ipad" | "iphone") {
   await page.context().setOffline(false);
   await page.reload();
   if (device === "iphone") await page.getByRole("button", { name: "Continue writing" }).tap();
-  await expect(page.locator(".ll-code code")).toHaveText("flowchart LR; A[Offline] --> B[Saved]");
+  await expect(codeSource).toHaveText("flowchart LR; A[Offline] --> B[Saved]");
   await expect(diagram).toContainText("Offline");
 }

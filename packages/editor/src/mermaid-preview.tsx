@@ -78,7 +78,7 @@ export function MermaidPreview({ source }: { source: string }) {
 
   const current = result.source === source && result.theme === theme;
   return (
-    <div ref={preview} className="ll-mermaid" contentEditable={false}>
+    <div ref={preview} className="ll-mermaid" contentEditable={false} role="group" aria-label="Diagram preview" tabIndex={current && result.svg ? 0 : undefined}>
       {current && result.svg ? (
         <div role="img" aria-label="Mermaid diagram" dangerouslySetInnerHTML={{ __html: result.svg }} />
       ) : (

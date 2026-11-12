@@ -5,6 +5,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-12 | Keep unsent project chat drafts after closing a tab, as in [Paseo #9079](https://github.com/getpaseo/paseo/pull/9079) | Saving unsent text and attachments needs a local draft store and a clear way to discard them. The first-send fix only keeps the draft in the open chat. | When people need to resume drafts after closing or switching chats. |
 | 2026-11-08 | Native UIKit glass bars over the iOS web view: real lensing, the light/dark flip, the iOS 27 Liquid Glass slider and Reduce Transparency | Our bars are CSS (decision 44). Native bars split the shared React layout and can't be tested in the browser. WebKit has no `prefers-reduced-transparency` (bug 175497); the 85% fill keeps AA with no blur. | The CSS glass reads as fake next to system UI on a device, or someone needs Reduce Transparency: start with a small Swift plugin that sets `html[data-reduce-transparency]`. |
 | 2026-11-08 | Refraction, morphing and moving highlights on iOS glass | WebKit's `backdrop-filter` drops SVG `url()` filters (bug 297770); the rest is motion beyond the 150–200 ms rule. | WebKit ships `url()` backdrops. |
 | 2026-11-08 | Translucent menus, popovers, selects, toasts and the narrow iPad sidebar sheet | Muted text fails at 85% glass in 22 of 23 themes; sidebar text needs 92%. They stay opaque. | `contrast.ts` gains a checked muted-on-glass colour. |

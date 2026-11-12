@@ -109,9 +109,9 @@ flowchart LR
 ```
 ````
 
-Flowcharts, sequence diagrams and other Mermaid diagrams render locally, and work offline in the Mac, iPad and iPhone apps. The preview follows the app's theme. If the source is incomplete or invalid, an error replaces the preview; keep editing to fix it. Your source is always kept, including when you reopen the page or undo an edit.
+Flowcharts, sequence diagrams and other Mermaid diagrams render locally, and work offline in the Mac, iPad and iPhone apps. Tall diagrams scroll inside their preview. Choose **Hide source** to read the diagram by itself, and **Show source** to edit it again. The preview follows the app's theme. If the source is incomplete or invalid, an error replaces the preview; keep editing to fix it. Your source is always kept, including when you reopen the page or undo an edit.
 
-Mermaid fences are recognized automatically in pages created from Markdown, including pages an agent writes. This works in every object's body: pages, tasks, ideas, projects and custom types.
+Mermaid fences are recognized automatically in pages created from Markdown, including pages an agent writes. This works in document bodies: pages, tasks, ideas, projects and custom document types.
 
 **Copy code** copies the source. **Download code** saves it as `snippet.mmd`.
 

@@ -30,9 +30,9 @@ a page with no connection, leave the app and come back: the page and its words a
 
 ### Mermaid diagrams
 
-The same [Mermaid diagrams](/write/blocks#mermaid-diagram) work in every object's body on iPad.
+The same [Mermaid diagrams](/write/blocks#mermaid-diagram) work in document bodies on iPad.
 Paste a fenced `mermaid` block or type `/mermaid` and tap **Mermaid diagram**. Edit its source above
-the live preview; **Language**, **Copy code** and **Download code** stay visible without hovering.
+the live preview. Tap **Hide source** to read the diagram by itself, or **Show source** to edit again.
 Diagrams render locally in the installed app, including offline, and follow light and dark appearance.
 
 ## Narrow windows

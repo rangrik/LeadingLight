@@ -29,6 +29,13 @@ Feature: A project's chat
     And the answer says the folder is "~/LL QA/My Project" and notes.txt says "hello"
     And the turn ends with "Worked for …"
 
+  Scenario: Start a chat and keep typing
+    Given a new chat that has not yet started an agent
+    When I click Send and start typing a second message before the first reply arrives
+    Then the field keeps focus and the second draft when the chat gets its saved conversation
+    When I switch to a different conversation
+    Then the other conversation does not show that draft
+
   Scenario: A named output opens from the chat
     Given access is Full access
     When I send "Write a short summary of notes.txt to summary.md"

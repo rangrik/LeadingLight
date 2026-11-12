@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { chromium, expect, test as base, type Page } from "@playwright/test";
+import type { RuntimeRequest } from "../src/lib/project-runtime/requests";
 
 // Seam: browser controls to runtime HTTP and global shortcuts; catches wrong-tab actions and note-tab collisions.
 type Tab = { name: string; url: string; title: string; history: string[]; at: number; viewport?: { width: number; height: number; scale: number }; refusedHosts?: string[]; error?: string };
@@ -375,7 +376,7 @@ test("A delayed state response cannot replace the newly selected tab", async ({ 
   await expect(tabList(page).getByRole("tab", { name: "Beta", exact: true })).toHaveAttribute("aria-selected", "true");
 });
 
-async function mockChat(page: Page) {
+async function mockChat(page: Page, { pending, project }: { pending?: RuntimeRequest; project?: boolean } = {}) {
   let session: Record<string, unknown> | null = null;
   let conversation: Record<string, unknown> | null = null;
   const messages: string[] = [];
@@ -384,6 +385,7 @@ async function mockChat(page: Page) {
     const action = new URL(request.url()).pathname.split("/").pop();
     const body = request.postDataJSON() as Record<string, unknown> | null;
     const reply = (json: unknown) => route.fulfill({ json });
+    if (project && action === "locations") return reply([{ name: "personal", path: "/tmp/browser-qa", folder_id: "fixture-folder" }]);
     if (action === "sessions") {
       if (request.method() === "POST") {
         session = { name: body!.name, agent: body!.agent, driver: body!.driver, agent_state: "idle" };
@@ -397,13 +399,74 @@ async function mockChat(page: Page) {
     if (action === "send") { messages.push(String(body!.text)); return reply({}); }
     if (action === "attachments") return reply({ path: `/tmp/browser-qa/attachments/${body!.name}` });
     if (action === "transcript") return reply({ items: messages.flatMap((text, i) => [{ kind: "user", id: `user-${i}`, text }, { kind: "text", id: `answer-${i}`, text: `Fixture reply ${i + 1}` }]), next: messages.length, source: "claude" });
-    if (["turns", "requests", "notify", "outputs"].includes(action ?? "")) return reply([]);
+    if (action === "requests") return reply(pending ? [pending] : []);
+    if (action === "respond" && pending) {
+      pending = { ...pending, state: "resolved" };
+      return reply({ request: pending });
+    }
+    if (["turns", "notify", "outputs"].includes(action ?? "")) return reply([]);
     if (action === "controls") return reply({ mode: "default" });
     if (action === "commands") return reply({ commands: [] });
+    if (project) return route.fulfill({ status: 404, json: { error: "Unused fixture route" } });
     return route.fallback();
   });
   return messages;
 }
+
+async function openProjectChat(page: Page) {
+  await page.goto("/?mac");
+  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Projects", exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const { createPage, chatView } = await import(String("/src/lib/space.ts"));
+    const { objects } = await import(String("/src/lib/objects.ts"));
+    const { projectPrefs } = await import(String("/src/lib/project-runtime/prefs.ts"));
+    const { openPage } = await import(String("/src/lib/panes.ts"));
+    const project = await createPage({ title: "Project fixture", typeId: "project" });
+    await objects.putFolder({ pageId: project.id, path: "/tmp/browser-qa", folderId: "fixture-folder", location: "personal", createdAt: 1, updatedAt: 1 });
+    projectPrefs.set({ enabled: true });
+    openPage(chatView(project.id));
+  });
+  return page.getByTestId("project-chat");
+}
+
+test("A new project chat keeps the next draft when its first send is accepted", async ({ page }) => {
+  await mockChat(page, { project: true });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/__runtime/v1/sessions", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.fallback();
+  });
+  const chat = await openProjectChat(page);
+  const field = chat.getByRole("textbox", { name: "Question" });
+  try {
+    await field.fill("First message");
+    await chat.getByRole("button", { name: "Send", exact: true }).click();
+    await page.keyboard.type("Second draft");
+  } finally { release(); }
+  await expect(chat.getByText("Fixture reply 1", { exact: true })).toBeVisible();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveText("Second draft");
+  await chat.getByRole("button", { name: "Chats", exact: true }).click();
+  await page.getByRole("menuitem", { name: "New chat", exact: true }).click();
+  await expect(field).toBeEmpty();
+});
+
+test("A recommended choice keeps the agent's exact label when sent", async ({ page }) => {
+  await mockChat(page, { project: true, pending: {
+    id: "drink", kind: "question", blocking: true, generation: 1, state: "pending", opened: 1,
+    questions: [{ question: "Which drink?", options: [{ label: "Tea (Recommended)" }, { label: "Coffee" }] }],
+  } });
+  const chat = await openProjectChat(page);
+  await chat.getByRole("textbox", { name: "Question" }).fill("Ask me which drink.");
+  await chat.getByRole("button", { name: "Send", exact: true }).click();
+  const card = chat.getByRole("group", { name: "Question" });
+  await expect(card.getByRole("button", { name: "Tea (Recommended)", exact: true }).getByText("Recommended", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Coffee", exact: true }).getByText("Recommended")).toHaveCount(0);
+  const reply = page.waitForRequest("**/requests/drink/respond");
+  await card.press("1");
+  expect((await reply).postDataJSON().answers).toEqual([{ picks: ["Tea (Recommended)"] }]);
+});
 
 test("Ask about page sends the selected tab on initial and follow-up messages until detached", async ({ page, runtime }) => {
   const messages = await mockChat(page);

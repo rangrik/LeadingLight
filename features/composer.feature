@@ -51,6 +51,13 @@ Feature: The ask bar, the composer and agents
       nothing wraps or overlaps
     And with Plan mode on, the access button drops its words at any width, to make room for the chip
 
+  Scenario: Send a message with a mouse or touch
+    Given the agent panel has a question ready to send
+    When I click Send with a mouse
+    Then the question is sent and I can type the next draft without clicking the field again
+    When I tap Send on a touch screen after leaving the field
+    Then the question is sent without returning focus to the field
+
   Scenario: The + menu
     When I click +
     Then a menu opens above it with "Page or agent", "Command" and a "Plan mode" switch

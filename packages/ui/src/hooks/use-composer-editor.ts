@@ -252,7 +252,8 @@ export function useComposerEditor({
       };
     }
     if (!equalValue(readValue(input), expected)) {
-      const selection = readSelection(input);
+      // LeadingLight: restoring a blurred selection brings back the touch keyboard.
+      const selection = input === document.activeElement ? readSelection(input) : null;
       writeValue(input, expected);
       restoreSelection(input, selection);
       setQuery(null);

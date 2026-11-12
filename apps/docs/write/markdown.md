@@ -56,7 +56,7 @@ Click into the body and paste. A heading on the first line stays a Heading 1 in 
 
 A code fence's language name sets the block's **Language**. Short and mixed-case names work: `tsx` and `TS` read as **TypeScript**, `yml` as **YAML**, `Python` as **Python**, and `text` as **Plain text**.
 
-`mermaid` fences render automatically, including in Markdown pages an agent creates and in any object type's body. See [Mermaid diagrams](/write/blocks#mermaid-diagram).
+`mermaid` fences render automatically in document bodies, including Markdown pages an agent creates. See [Mermaid diagrams](/write/blocks#mermaid-diagram).
 
 ## What stays as written
 

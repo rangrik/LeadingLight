@@ -30,7 +30,7 @@ Feature: Mermaid diagrams in notes
     When an agent creates a page from Markdown containing a fenced mermaid block
     Then opening the page shows its rendered diagram automatically
     And reading the page as Markdown keeps the mermaid fence and source
-    When that content belongs to a task, idea, project or custom object type
+    When that content belongs to a task, idea, project or custom document type
     Then its diagram renders in the object's body without changing its language manually
 
   Scenario: Recover from invalid source
@@ -40,6 +40,14 @@ Feature: Mermaid diagrams in notes
     And the source remains editable
     When I replace it with "flowchart LR; A --> B"
     Then the diagram appears again without an error
+
+  Scenario: Read a tall diagram without showing its source
+    Given a Mermaid block shows a tall diagram
+    Then its preview scrolls within the block and the toolbar is outside the scroll area
+    When I press Hide source
+    Then the source leaves the keyboard navigation order and the diagram stays visible
+    When I press Show source
+    Then the same source is editable again and the diagram has not re-rendered
 
   Scenario: Read diagrams in different layouts
     Given a page contains multiple Mermaid diagrams

@@ -5,7 +5,7 @@ import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { NodeViewContent, type NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer, useEditorState } from "@tiptap/react";
 import { Check, ChevronsUpDown, Copy, Download, Pilcrow } from "lucide-react";
 import { common, createLowlight } from "lowlight";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Select, SelectItem, SelectPopup, SelectPrimitive, SelectValue } from "@leadinglight/ui/components/select";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -80,6 +80,8 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
   const language = languageOf((node.attrs.language as string | null) ?? "plaintext");
   const ext = LANGUAGES.find(([id]) => id === language)?.[2] ?? "txt";
   const [copied, setCopied] = useState(false);
+  const [folded, setFolded] = useState(false);
+  const sourceId = useId();
   // Controls show while the cursor is inside the block, as well as on hover.
   const inside = useEditorState({
     editor,
@@ -89,6 +91,15 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
       return pos !== undefined && from > pos && from < pos + node.nodeSize;
     },
   });
+  const sourceHidden = language === "mermaid" && folded && !inside;
+  const toggleSource = () => {
+    const pos = getPos();
+    if (!sourceHidden && inside && pos !== undefined) {
+      // Leave the source selection before hiding its caret.
+      editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos)));
+    }
+    setFolded(!sourceHidden);
+  };
 
   const copy = async () => {
     await navigator.clipboard.writeText(node.textContent);
@@ -120,10 +131,15 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
           // top-2.5 centres the 24px buttons on the code's first line (12px padding + half a line).
           // While hidden they ignore the pointer, so clicks there reach the code.
           className={language === "mermaid"
-            ? "flex items-center justify-end gap-0.5 rounded-t-[var(--radius)] bg-muted px-2 pt-2"
+            ? `flex flex-wrap items-center justify-end gap-0.5 bg-muted px-2 pt-2 ${sourceHidden ? "rounded-[var(--radius)] pb-2" : "rounded-t-[var(--radius)]"}`
             : "absolute top-2.5 right-2 z-10 flex items-center gap-0.5 pointer-events-none opacity-0 transition-opacity duration-150 group-hover/code:pointer-events-auto group-hover/code:opacity-100 group-data-inside/code:pointer-events-auto group-data-inside/code:opacity-100 has-data-popup-open:pointer-events-auto has-data-popup-open:opacity-100"}
           contentEditable={false}
         >
+          {language === "mermaid" && (
+            <Button aria-controls={sourceId} aria-expanded={!sourceHidden} className="me-auto text-muted-foreground" onClick={toggleSource} size="xs" variant="ghost">
+              {sourceHidden ? "Show source" : "Hide source"}
+            </Button>
+          )}
           <Select
             disabled={!editor.isEditable}
             items={LABELS}
@@ -158,7 +174,7 @@ function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps
           </IconAction>
         </div>
       </TooltipProvider>
-      <pre spellCheck={false}>
+      <pre hidden={sourceHidden} id={language === "mermaid" ? sourceId : undefined} spellCheck={false}>
         <NodeViewContent<"code"> as="code" className={`language-${language}`} />
       </pre>
       {language === "mermaid" && <MermaidPreview source={node.textContent} />}

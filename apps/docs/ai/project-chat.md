@@ -15,6 +15,8 @@ Click **Chat** in the page's folder row. A card titled with the page's name and 
 
 Type in the field, which reads **Ask Claude to work in the folder…** (or **Ask Codex…** in a Codex chat), and press <kbd>↩</kbd>.
 
+Click **Send** with a mouse and you can keep typing. If you start a follow-up while your first message is sending, its draft stays in the field when the conversation opens.
+
 The **Browser** button in the card's header opens the browser the chat's agent uses, beside it. See [The browser](/ai/browser).
 
 Saved chat messages remain readable after an agent session ends or the app restarts. Opening a chat reads its local record without starting an agent or sending a model prompt; sending a new message resumes the conversation.
@@ -95,6 +97,8 @@ With Codex, the card shows the command Codex wants to run, such as `echo … > d
 ### Questions
 
 When the agent asks a question with choices, the card shows it in the agent's words, with numbered options. Press an option, or its number key.
+
+If the agent marks an option as recommended, it has a **Recommended** badge.
 
 - A question that takes several answers says **Choose one or more.**, and **Next** waits until you've chosen.
 - You can type your own answer instead of choosing.

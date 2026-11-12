@@ -125,7 +125,10 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
   const prefs = useAiPrefs();
   const [list, setList] = useState<Conversation[]>([]);
   const [listLoaded, setListLoaded] = useState(false);
-  const [current, setCurrent] = useState<string | null>(() => localStorage.getItem(CHOSEN(pageId)));
+  const [selection, setSelection] = useState(() => ({ id: localStorage.getItem(CHOSEN(pageId)), draft: 0 }));
+  const current = selection.id;
+  const setCurrent = (id: string | null) => setSelection((s) => s.id === id ? s : { id, draft: s.draft + 1 });
+  const draftKey = `${pageId}:${selection.draft}`;
   const [file, setFile] = useState<Written | null>(null);
   // A file an answer links to opens as it is now. One handler, so finished turns don't redraw.
   const roots = useRef<string[]>([]);
@@ -156,8 +159,8 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
       if (!target) { setFresh(defaults()); setBranch(false); }
     } else bindBrowserContext(pageId, key);
   }, [attachment, key, list, listLoaded, pageId]);
-  // Files and words in the composer are this chat's: another chat starts without them.
-  useEffect(() => setAttached([]), [key]);
+  // Changing chats clears the draft; getting a saved ID for this chat doesn't.
+  useEffect(() => setAttached([]), [draftKey]);
   const cx = codex.use();
   // The browser opens in this chat's workspace, even before an agent opens a tab.
   const own = (chat.conv ?? list.find((c) => c.id === current))?.location?.split("/")[1];
@@ -261,7 +264,7 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
       if (!current) {
         adopt(key, c.id);
         bindBrowserContext(pageId, c.id, key);
-        setCurrent(c.id);
+        setSelection((s) => s.id === null && s.draft === selection.draft ? { ...s, id: c.id } : s);
       }
       refresh();
     }, () => {});
@@ -450,7 +453,7 @@ export function ProjectChat({ pageId, browserWorkspace }: { pageId: string; brow
         {browser && <div className="mx-3 mb-2 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs" data-testid="browser-chat-context"><Globe className="size-4 shrink-0 text-muted-foreground" /><div className="min-w-0 flex-1"><p className="truncate font-medium">{browser.title || browser.url}</p><p className="truncate text-muted-foreground">{browser.url}</p>{browserAnnotations(browser).length > 0 && <p className="line-clamp-2 break-words text-muted-foreground">{browserAnnotations(browser).length === 1 ? (browserAnnotations(browser)[0].element ? "Element feedback" : "Area feedback") : `${browserAnnotations(browser).length} comments`}: {browserAnnotations(browser).map((note) => note.comment || "Style preview").join(" · ")}{browserContextImages(browser).length > 0 ? ` · ${browserContextImages(browser).length} saved screenshot${browserContextImages(browser).length === 1 ? "" : "s"}` : ""}</p>}</div><Tooltip><TooltipTrigger render={<Button aria-label="Remove browser page" onClick={() => detachBrowser(pageId)} size="icon-xs" variant="ghost" />}><X className="size-4" /></TooltipTrigger><TooltipPopup>Remove browser page</TooltipPopup></Tooltip></div>}
         <Composer
           agents={[]}
-          key={key}
+          key={draftKey}
           busy={busy}
           commands={commands}
           fieldRef={field}

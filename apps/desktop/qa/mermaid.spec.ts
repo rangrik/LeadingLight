@@ -37,6 +37,32 @@ test("Mermaid insertion, editing, invalid source, undo and language changes", as
   await expect(diagram).toContainText("Reviewed");
 });
 
+// Seam: folding source must keep the editable document and the rendered SVG intact.
+test("Tall diagrams scroll and keep their preview when source is folded", async ({ page }) => {
+  const source = "flowchart TD; " + Array.from({ length: 22 }, (_, i) => `N${i}[Step ${i}]`).join(" --> ");
+  await page.keyboard.type("/mermaid");
+  await page.getByRole("option", { name: "Mermaid diagram" }).click();
+  await page.keyboard.insertText(source);
+  const block = page.locator(".ll-code");
+  const preview = block.locator(".ll-mermaid");
+  const svg = preview.locator("svg");
+  await expect(svg).toContainText("Step 21");
+  const id = await svg.getAttribute("id");
+  expect(await preview.evaluate((el) => el.scrollHeight > el.clientHeight && el.clientHeight < innerHeight)).toBe(true);
+  await preview.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+  expect(await preview.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const hide = block.getByRole("button", { name: "Hide source" });
+  await expect(hide).toBeVisible();
+  await hide.click();
+  const code = block.locator("code");
+  await expect(code).toBeHidden();
+  await expect(svg).toHaveAttribute("id", id!);
+  await block.getByRole("button", { name: "Show source" }).press("Enter");
+  await expect(code).toBeVisible();
+  await expect(code).toHaveText(source);
+  await expect(svg).toHaveAttribute("id", id!);
+});
+
 // Seam: clipboard fences and saved JSON must keep their language and source, never preview markup.
 test("Pasted Mermaid renders, copies, downloads and survives reopening", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -60,7 +86,7 @@ test("Pasted Mermaid renders, copies, downloads and survives reopening", async (
 });
 
 // Seam: agents parse Markdown separately from paste; all object types must use the same node view.
-test("Agent-created Markdown renders automatically across object types and round-trips", async ({ page }) => {
+test("Agent-created Markdown renders across document types and round-trips", async ({ page }) => {
   const created = await page.evaluate(async () => {
     const { runTool } = await import("/src/lib/" + "note-tools.ts");
     const { space } = await import("/src/lib/" + "space.ts");
@@ -71,8 +97,9 @@ test("Agent-created Markdown renders automatically across object types and round
   await expect(page.getByRole("img", { name: "Mermaid diagram", exact: true })).toContainText("Automatic");
   const types = await page.evaluate(async () => {
     const { space, putType } = await import("/src/lib/" + "space.ts");
+    const { NOTEBOOK_TYPE } = await import("/src/lib/" + "page-format.ts");
     await putType({ id: "custom-diagram-type", name: "Diagram note", plural: "Diagram notes", props: [], card: [], linkView: "line", createdAt: Date.now() });
-    return space.get().types.map((t: any) => t.id);
+    return space.get().types.map((t: any) => t.id).filter((id: string) => id !== NOTEBOOK_TYPE);
   });
   for (const typeId of types) {
     await page.evaluate(async ({ id, typeId }) => {

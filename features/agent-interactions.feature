@@ -48,6 +48,12 @@ Feature: An agent's questions and approvals
     Then the card says "Sent. Waiting for the agent to take it." and then the question shows answered "Coffee"
     And the agent goes on: it asks to write drink.txt
 
+  Scenario: The agent recommends one option
+    Given an agent question with "Tea (Recommended)" and "Coffee"
+    Then Tea has a Recommended badge and Coffee has none
+    When I pick Tea with its number key
+    Then the answer sent to the agent is "Tea (Recommended)"
+
   Scenario: A multiple-choice question and my own words
     When the agent asks one question that takes several answers, and a second question
     Then the first says "Choose one or more." and Next waits until something is chosen

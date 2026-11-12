@@ -6,6 +6,7 @@
 // open requests can't answer each other; "Other" as a field in the card; no Computer scopes.
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, type Ref, useEffect, useRef } from "react";
+import { Badge } from "@leadinglight/ui/components/badge";
 import { Button } from "@leadinglight/ui/components/button";
 import { Field, FieldDescription, FieldLabel } from "@leadinglight/ui/components/field";
 import { Input } from "@leadinglight/ui/components/input";
@@ -17,6 +18,7 @@ import type { Answer, Delivery, RuntimeRequest } from "~/lib/project-runtime/req
 type Tone = "neutral" | "primary" | "destructive";
 
 function ChoiceRow({ shortcut, label, description, selected, tone = "neutral", disabled, trailing, onSelect }: { shortcut: number | null; label: string; description?: string; selected?: boolean; tone?: Tone; disabled?: boolean; trailing?: ReactNode; onSelect: () => void }) {
+  const recommended = selected === undefined ? null : label.match(/^(.+?)\s+\(recommended\)\s*$/i);
   return (
     <button
       aria-label={description && description !== label ? `${label}, ${description}` : label}
@@ -32,7 +34,8 @@ function ChoiceRow({ shortcut, label, description, selected, tone = "neutral", d
     >
       {shortcut !== null && <Kbd className={cn(selected && "bg-foreground text-background", tone === "primary" && !selected && "text-primary", tone === "destructive" && !selected && "text-destructive-foreground")}>{shortcut}</Kbd>}
       <span className="min-w-0 flex-1 leading-snug">
-        <span className="font-medium">{label}</span>
+        <span className="font-medium">{recommended?.[1] ?? label}</span>
+        {recommended && <Badge className="ms-1.5 align-middle" size="sm" variant="info">Recommended</Badge>}
         {description && description !== label && <span className="ms-1.5 text-muted-foreground">{description}</span>}
       </span>
       {trailing}

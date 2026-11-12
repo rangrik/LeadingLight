@@ -109,6 +109,7 @@ export function Composer({
   const prefs = useAiPrefs();
   const s = settings ?? { ...prefs, onChange: setAiPrefs };
   const [value, setValue] = useState<ComposerValue>([]);
+  const sendPointer = useRef("");
   useEffect(() => void (restore && setValue([{ type: "text", text: restore.text }])), [restore?.at]);
   const can = ready && (!busy || !!queue);
   const triggers: ComposerTrigger[] = [
@@ -127,6 +128,17 @@ export function Composer({
     setValue([]);
     onSend(question, mentionsIn(draft), now);
   };
+  const sendButton = (
+    <ComposerSubmit
+      onPointerDown={(event) => { sendPointer.current = event.pointerType; }}
+      onClick={(event) => {
+        if (!event.detail) return;
+        if (sendPointer.current === "mouse") fieldRef.current?.focus({ preventScroll: true });
+        else if (sendPointer.current) fieldRef.current?.blur();
+      }}
+      render={<Button aria-label="Send" className={round} size="icon-sm"><ArrowUp /></Button>}
+    />
+  );
 
   return (
     <Frame
@@ -194,30 +206,10 @@ export function Composer({
           )}
           {busy && queue ? (
             <Tooltip>
-              <TooltipTrigger
-                render={
-                  <ComposerSubmit
-                    render={
-                      <Button aria-label="Send" className={round} size="icon-sm">
-                        <ArrowUp />
-                      </Button>
-                    }
-                  />
-                }
-              />
+              <TooltipTrigger render={sendButton} />
               <TooltipPopup>Sends when {queue.who} finishes. ⌘↩ sends now.</TooltipPopup>
             </Tooltip>
-          ) : (
-            !busy && (
-              <ComposerSubmit
-                render={
-                  <Button aria-label="Send" className={round} size="icon-sm">
-                    <ArrowUp />
-                  </Button>
-                }
-              />
-            )
-          )}
+          ) : !busy && sendButton}
         </ComposerActionGroup>
       </ComposerActions>
     </Frame>

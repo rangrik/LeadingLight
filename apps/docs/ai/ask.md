@@ -38,6 +38,8 @@ The ask bar's field is a single line. For mentions and commands, use **Quote in 
 
 Your message sits on the right, with any quoted words above it. While Claude works, a line reads **Working for 1s**, counting up, and **Stop** takes the place of **Send**. When it's done, the line reads **Worked for** and the time, and the answer is under it.
 
+Click **Send** with a mouse and you can type a follow-up without clicking the question field again.
+
 Claude's work folds under that one line. Click it to see each step on its own row, such as "Thought for 1s" or "Read" and the page's name. Click a step to see what was asked and what came back. A turn that only answered, with no steps, shows just the answer.
 
 Under the answer are **Insert below**, **Replace** and a copy button.

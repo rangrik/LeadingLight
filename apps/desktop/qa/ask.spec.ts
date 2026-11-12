@@ -201,6 +201,29 @@ test("Stop ends a streaming answer", async ({ page }) => {
   await expect(panel(page)).toContainText("Stopped after");
 });
 
+for (const hasTouch of [false, true]) {
+  test.describe(hasTouch ? "Touch" : "Mouse", () => {
+    test.use({ hasTouch });
+    test("Send only returns focus to the question for a mouse", async ({ page }) => {
+      await pageWith(page, "A line.");
+      await page.keyboard.press("Meta+J");
+      const field = question(page);
+      const send = panel(page).getByRole("button", { name: "Send", exact: true });
+      await field.fill("First question");
+      await field.blur();
+      if (hasTouch) await send.tap();
+      else await send.click();
+      await expect(panel(page)).toContainText("First question");
+      if (hasTouch) await expect(field).not.toBeFocused();
+      else {
+        await expect(field).toBeFocused();
+        await page.keyboard.type("Follow-up");
+        await expect(field).toHaveText("Follow-up");
+      }
+    });
+  });
+}
+
 test("Not signed in: the panel says how, and Send waits", async ({ page }) => {
   await pageWith(page, "A line.", "/?agent=signed-out");
   await page.keyboard.press("Meta+J");
