@@ -32,6 +32,22 @@ Feature: Sidenotes, thoughts and essays
     When I press ⌘⇧M in an empty paragraph
     Then nothing happens
 
+  Scenario: Finish a sidenote without leaving the keyboard
+    Given I am typing in a sidenote
+    When I press Command+Enter
+    Then the thought keeps my latest words
+    And the cursor returns just after the note's anchor in the document
+    And typing continues in the document without extending the note's anchor
+    When I save and immediately reload before the delayed write finishes
+    Then the sidenote still contains my latest words
+    And the sidenote remains available to edit again
+
+  Scenario: Finish a sidenote on a touch screen
+    Given I am typing in a sidenote on iPad or iPhone
+    When I tap "Finish sidenote"
+    Then my thought is kept and focus returns to its document
+    And an attached keyboard can use Command+Enter for the same action
+
   Scenario: Notes are numbered in reading order and never overlap
     Given I add a note on paragraph 3, then a long note on paragraph 1, then one on paragraph 2
     Then the notes are numbered 1, 2, 3 from the top

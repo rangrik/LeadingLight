@@ -1,8 +1,9 @@
 import type { BlockEditorHandle, EditorDoc } from "@leadinglight/editor/editor";
 import { objects } from "./objects";
-import { markSaved, patchSummary } from "./space";
+import { markSaved, patchSummary, pageOf } from "./space";
 import { authored } from "@leadinglight/editor/authorship";
 import type { ChangeContext } from "./history-types";
+import { checkNotebookType } from "./page-format";
 import type { LLObject } from "./store";
 
 // Pages open in a pane. A change to one of them from elsewhere (linking a mention, merging a
@@ -66,6 +67,8 @@ type Change = { title?: string; typeId?: string; content?: (doc: EditorDoc) => E
 
 export async function editPage(id: string, change: Change, context?: ChangeContext) {
   const { title, typeId } = change;
+  const before = pageOf(id);
+  if (before) checkNotebookType(before.typeId, typeId);
   const open = live.get(id);
   if (open) {
     await open.flush();

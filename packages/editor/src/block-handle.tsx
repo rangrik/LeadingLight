@@ -60,8 +60,9 @@ function findBlock(editor: Editor, root: HTMLElement, clientY: number): Target |
     // A block owns its bottom margin too, so a 1px divider is easy to hover.
     if (clientY > rect.bottom + (parseFloat(getComputedStyle(el).marginBottom) || 0)) continue;
     if (clientY < rect.top - 16) return null;
-    const li = itemAt(el, clientY);
-    const pos = li ? itemPos(view, li) : topLevelOf(view.state.doc, view.posAtDOM(el, 0));
+    const block = topLevelOf(view.state.doc, view.posAtDOM(el, 0));
+    const li = view.state.doc.nodeAt(block)?.type.name === "annotatedBlock" ? null : itemAt(el, clientY);
+    const pos = li ? itemPos(view, li) : block;
     if (pos === null || !view.state.doc.nodeAt(pos)) return null;
     // The handle sits in the page's gutter; only a nested item's handle steps in, beside its list.
     const column = (li?.parentElement?.closest("li") ? li.parentElement : el).getBoundingClientRect().left;

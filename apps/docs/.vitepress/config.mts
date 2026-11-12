@@ -45,6 +45,7 @@ export default defineConfig({
           { text: "Block kinds", link: "/write/blocks" },
           { text: "Selecting and moving blocks", link: "/write/selecting-blocks" },
           { text: "Pasting Markdown", link: "/write/markdown" },
+          { text: "Reading and handwriting", link: "/capture/reading" },
           { text: "Sidenotes, thoughts and essays", link: "/write/sidenotes" },
           { text: "Writing tools", link: "/write/writing-tools" },
           { text: "Writing coach", link: "/write/writing-coach" },

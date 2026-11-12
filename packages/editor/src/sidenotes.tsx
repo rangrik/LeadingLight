@@ -5,10 +5,11 @@
 import type { JSONContent } from "@tiptap/core";
 import type { Editor } from "@tiptap/core";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { anchors } from "./anchors";
 import type { AssetStore } from "./assets";
 import { createExtensions } from "./extensions";
@@ -66,6 +67,7 @@ function NoteEditor({
   autoFocus,
   onAutoFocus,
   quote,
+  finish,
 }: {
   id: string;
   label: string;
@@ -76,6 +78,7 @@ function NoteEditor({
   onAutoFocus: () => void;
   // The words the note is written against, now.
   quote: () => string;
+  finish: () => void;
 }) {
   const store = useRef(notes);
   store.current = notes;
@@ -88,7 +91,16 @@ function NoteEditor({
     content: { type: "doc", content: notes.read(id) ?? [{ type: "paragraph" }] },
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
-    editorProps: { attributes: { class: "ll-editor", role: "textbox", "aria-label": label } },
+    editorProps: {
+      attributes: { class: "ll-editor", role: "textbox", "aria-label": label },
+      handleKeyDown: (_view, event) => {
+        if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.isComposing) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        finish();
+        return true;
+      },
+    },
     onUpdate: ({ editor }) => {
       // A note brought back without its thought (by undo, redo or paste) gets one again, so
       // nothing typed into it is lost.
@@ -243,6 +255,15 @@ export function Sidenotes({
     timer.current = setTimeout(() => setHovered(null), HOVER_GRACE);
   };
 
+  const finish = (id: string) => {
+    const anchor = anchors(editor.state.doc, "note").find((item) => item.id === id);
+    clearTimeout(timer.current);
+    setHovered(null);
+    setFocused(null);
+    if (anchor) editor.chain().setTextSelection(anchor.to).unsetMark("note").run();
+    editor.view.focus();
+  };
+
   const remove = (id: string) => {
     const type = editor.schema.marks.note;
     const tr = editor.state.tr;
@@ -301,6 +322,7 @@ export function Sidenotes({
               assets={assets}
               autoFocus={focusId === id && autoFocused.current !== id}
               id={id}
+              finish={() => finish(id)}
               label={`Sidenote ${i + 1}`}
               notes={notes}
               onAutoFocus={() => (autoFocused.current = id)}
@@ -310,9 +332,16 @@ export function Sidenotes({
                 return a ? editor.state.doc.textBetween(a.from, a.to, " ").trim() : "";
               }}
             />
-            <Button aria-label="Remove sidenote" className="ll-note-remove" onClick={() => remove(id)} size="icon-xs" variant="ghost">
-              <X />
-            </Button>
+            <div className="ll-note-actions flex flex-col">
+              <Tooltip>
+                <TooltipTrigger render={<Button aria-label="Finish sidenote" onClick={() => finish(id)} size="icon-xs" variant="ghost" />}><Check /></TooltipTrigger>
+                <TooltipPopup>Finish sidenote · ⌘Enter</TooltipPopup>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger render={<Button aria-label="Remove sidenote" onClick={() => remove(id)} size="icon-xs" variant="ghost" />}><X /></TooltipTrigger>
+                <TooltipPopup>Remove sidenote</TooltipPopup>
+              </Tooltip>
+            </div>
           </aside>
         ) : null,
       )}

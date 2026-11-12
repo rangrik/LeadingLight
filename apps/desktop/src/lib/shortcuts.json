@@ -6,6 +6,7 @@
     { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },
     { "id": "close-tab", "group": "File", "label": "Close tab", "keys": "⌘W", "accel": "CmdOrCtrl+W", "sep": true },
     { "id": "reopen-tab", "group": "File", "label": "Reopen closed tab", "keys": "⇧⌘T", "accel": "CmdOrCtrl+Shift+T" },
+    { "id": "quick-record", "group": "File", "label": "Quick record", "keys": "⇧⌘R", "accel": "CmdOrCtrl+Shift+R", "what": "Start or stop a voice note in this page" },
     { "id": "save", "group": "File", "label": "Save", "keys": "⌘S", "accel": "CmdOrCtrl+S", "what": "Save now", "sep": true },
     { "id": "sidebar", "group": "View", "label": "Show or hide the sidebar", "keys": "⌘\\", "accel": "CmdOrCtrl+\\" },
     { "id": "zoom-in", "group": "View", "label": "Zoom in", "keys": "⌘+", "accel": "CmdOrCtrl+=", "sep": true },

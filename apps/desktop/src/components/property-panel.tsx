@@ -1,3 +1,4 @@
+import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { AssignButton } from "~/components/assign";
 import { AlignLeft, ChevronsUpDown, Ellipsis, Plus } from "lucide-react";
 import { type ReactElement, useRef, useState } from "react";
@@ -173,7 +174,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
   const type = typeOf(typeId);
   const { type: typeProps, own } = propsOf(typeId, values);
   const shown = [...typeProps, ...own];
-  const choosable = types.filter((t) => t.id !== "daily" && !t.made);
+  const choosable = types.filter((t) => t.id !== "daily" && t.id !== NOTEBOOK_TYPE && !t.made);
   // A page's essay opens beside it (DECISIONS.md, 11); a Thoughts page or an essay has none.
   const { root } = panes.use();
   const essay = childOf({ ...page, properties: values }, "essay");
@@ -214,7 +215,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
   return (
     <div className="mt-3 text-sm">
       <div className="-ms-2 flex flex-wrap items-center gap-1">
-        <Select items={Object.fromEntries(choosable.map((t) => [t.id, t.name]))} onValueChange={(v) => setType(v as string)} value={typeId}>
+        {typeId === NOTEBOOK_TYPE ? <span className="flex h-8 items-center gap-2 px-2 text-muted-foreground"><RowIcon icon={type.icon} />{type.name}</span> : <Select items={Object.fromEntries(choosable.map((t) => [t.id, t.name]))} onValueChange={(v) => setType(v as string)} value={typeId}>
           <SelectPrimitive.Trigger aria-label="Type" render={<Button className="text-muted-foreground" size="sm" variant="ghost" />}>
             <RowIcon icon={type.icon} />
             {type.name}
@@ -230,7 +231,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
               </SelectItem>
             ))}
           </SelectPopup>
-        </Select>
+        </Select>}
         <AddProperty exclude={shown.map((p) => p.id)} onAdd={(p) => setProp(p.id, values[p.id] ?? null)} onDescription={onDescription}>
           <Button aria-label="Add property" className="text-muted-foreground" size="sm" variant="ghost">
             <Plus />
@@ -243,8 +244,8 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
             <Ellipsis />
           </MenuTrigger>
           <MenuPopup align="start">
-            <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>
-            {!roleOf(page) && (
+            {typeId !== NOTEBOOK_TYPE && <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>}
+            {typeId !== NOTEBOOK_TYPE && !roleOf(page) && (
               <>
                 <MenuSeparator />
                 {/* Says who writes it: you do, quoting this page. */}

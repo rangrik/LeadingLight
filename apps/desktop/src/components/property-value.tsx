@@ -139,7 +139,7 @@ export function PropValue({ prop, value, page, onChange }: EditProps) {
     case "select":
       return <SelectValue onChange={onChange} prop={prop} value={asIds(value)} />;
     case "relation":
-      return <RelationValue onChange={onChange} prop={prop} value={asIds(value)} />;
+      return <RelationValue pageId={page.id} onChange={onChange} prop={prop} value={asIds(value)} />;
     case "link":
       return <LinkValue name={prop.name} onChange={onChange} value={typeof value === "string" ? value : ""} />;
     case "file":
@@ -359,7 +359,9 @@ export function PagePicker({
   );
 }
 
-function RelationValue({ prop, value, onChange }: { prop: PropDef; value: string[]; onChange: (v?: string[]) => void }) {
+function RelationValue({ prop, value, onChange, pageId }: { prop: PropDef; value: string[]; pageId: string; onChange: (v?: string[]) => void }) {
+  const { pages } = space.use();
+  const exclude = prop.id === "notebook-source" ? [...value, pageId, ...pages.filter((p) => p.typeId === "tag" || p.typeId === "notebook").map((p) => p.id)] : value;
   const set = (next: string[]) => onChange(next.length ? next : undefined);
   return (
     <div className={cn("flex min-h-8 w-full flex-wrap items-center gap-1", value.length > 0 && "py-1")}>
@@ -369,7 +371,7 @@ function RelationValue({ prop, value, onChange }: { prop: PropDef; value: string
       {(prop.options.many || value.length === 0) && (
         <PagePicker
           empty={value.length === 0}
-          exclude={value}
+          exclude={exclude}
           label={`Add to ${prop.name}`}
           onPick={(id) => set(prop.options.many ? [...value, id] : [id])}
           typeId={prop.options.type}

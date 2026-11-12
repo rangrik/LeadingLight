@@ -22,6 +22,8 @@
     <string>UIInterfaceOrientationLandscapeLeft</string>
     <string>UIInterfaceOrientationLandscapeRight</string>
   </array>
+  <key>NSCameraUsageDescription</key>
+  <string>Photograph a passage or idea and add it to the page you are writing.</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>LeadingLight records voice notes and keeps their audio in your pages.</string>
   <key>UISupportedInterfaceOrientations~ipad</key>

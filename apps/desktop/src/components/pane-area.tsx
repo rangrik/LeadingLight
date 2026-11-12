@@ -16,7 +16,7 @@ import { PageView } from "~/components/page-view";
 import { PanelHeader } from "~/components/panel-header";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
-import { WritingMenu } from "~/components/writing-menu";
+import { reportOf } from "~/lib/work";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
@@ -31,9 +31,8 @@ import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
 import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { readPaper } from "~/lib/paper";
 import { phone, useMobile } from "~/lib/platform";
-import { PAGE_TYPE } from "~/lib/store";
-import { toolsOn, useWritingPrefs } from "~/lib/writing";
 
 type Size = { w: number; h: number; header: number };
 
@@ -105,7 +104,6 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
   const { root, focus } = panes.use();
   const { open: sidebarOpen, isMobile } = useSidebar();
   space.use(); // titles and icons follow edits
-  const writing = useWritingPrefs();
   useLayoutEffect(() => {
     const el = area.current;
     if (!el) return;
@@ -180,7 +178,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
               {!folded && (
               <PanelHeader
-                after={!phone && <PageStats id={leaf.page} />}
+                after={!phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={shown.icon && <PageIconView icon={shown.icon} />}
                 lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
@@ -197,11 +195,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
-                {isPageView(leaf.page) && <PageHistory className={cn(backCard)} page={leaf.page} />}
+                {isPageView(leaf.page) && (reportOf(pageOf(leaf.page)) ? <PageHistory className={cn(backCard)} page={leaf.page} /> : <div className="ll-page-actions" data-page-actions />)}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", backCard)} page={leaf.page} />}
-                {!phone && isPageView(leaf.page) && toolsOn(writing, pageOf(leaf.page)?.typeId ?? PAGE_TYPE) && (
-                  <WritingMenu pageId={leaf.page} className={cn(backCard)} />
-                )}
                 {split && (
                   <Button
                     aria-label="Close page"

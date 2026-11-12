@@ -19,6 +19,12 @@ pub async fn voice_transcribe(
         .map_err(|e| e.to_string())?
 }
 
+#[tauri::command]
+pub async fn image_text(app: tauri::AppHandle, filename: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || run(app, filename, "--image".into()))
+        .await.map_err(|e| e.to_string())?
+}
+
 fn run(app: tauri::AppHandle, filename: String, language: String) -> Result<String, String> {
     let _busy = TRANSCRIBING
         .try_lock()

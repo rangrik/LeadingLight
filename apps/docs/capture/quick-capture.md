@@ -93,7 +93,7 @@ However the box closes, what you typed is kept.
 
 The audio is saved in the body, and **Captures** lists the page as **Voice recording**.
 
-- In the Mac app, the transcript follows the audio and names the page.
+- In the native Mac, iPad and iPhone apps on OS 26 or newer, the transcript follows the audio.
 - In a browser, the block says that transcription needs the Mac app. The audio is still saved.
 
 While the body holds a recording, the mic in the footer is turned off. To record another take, use the
@@ -145,3 +145,5 @@ See [Tail](/ai/tail).
 - [Voice notes](/capture/voice)
 - [The capture inbox](/capture/inbox)
 - [Tail](/ai/tail)
+
+For one-click recording, handwriting and photos directly into a page, see [Capture while reading](/capture/reading).

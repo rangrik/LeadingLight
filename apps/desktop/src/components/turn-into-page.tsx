@@ -20,7 +20,7 @@ import { newPage } from "~/lib/templates";
 
 export function TurnIntoPage({ selection, onClose, recording }: { selection: PageSelection; onClose: () => void; recording?: { pageId: string; id: string } }) {
   const { types, props } = space.use();
-  const choices = types.filter((type) => type.id !== "daily" && !type.made);
+  const choices = types.filter((type) => type.id !== "daily" && type.id !== "notebook" && !type.made);
   const suggested = selection.text.trim().split(/\s+/).slice(0, 3).join(" ");
   const [typeId, setTypeId] = useState(() => choices.find((type) => type.id === "idea")?.id ?? choices[0]?.id ?? "page");
   const [title, setTitle] = useState(suggested);

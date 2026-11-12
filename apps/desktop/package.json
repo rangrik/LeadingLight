@@ -25,9 +25,11 @@
     "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-sql": "^2.6.0",
+    "fflate": "^0.8.3",
     "katex": "^0.19.1",
     "lucide-react": "^1.61.0",
     "motion": "^14.6.0",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

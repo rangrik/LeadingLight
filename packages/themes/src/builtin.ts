@@ -236,7 +236,20 @@ export const paper: Theme = {
   },
 };
 
+export const eInk: Theme = {
+  ...paper,
+  id: "e-ink",
+  name: "E-ink",
+  colors: {
+    ...paper.colors,
+    background: "#f5f3ed", foreground: "#242424", sidebar: "#eeece6", sidebarForeground: "#555550",
+    muted: "#e8e6df", mutedForeground: "#595952", border: "#d2d0c8", accent: "#e1dfd7", accentForeground: "#242424",
+    successForeground: "#2c6519", warningForeground: "#804c00", destructiveForeground: "#9a301d",
+    primary: "#242424", primaryForeground: "#f5f3ed", card: "#f5f3ed", popover: "#f5f3ed", ring: "#77776e",
+  },
+};
+
 // Our own, which the picker lists first.
-export const berthThemes: Theme[] = [berthDark, berthLight, midnight, paper];
+export const berthThemes: Theme[] = [berthDark, berthLight, midnight, paper, eInk];
 
 export const builtinThemes: Theme[] = [...berthThemes, ...vscodeThemes];

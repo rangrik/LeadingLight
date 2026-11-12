@@ -9,6 +9,8 @@ import { unlinkFolder } from "./project-runtime/folders";
 import { createStore } from "./state";
 import { starter } from "./starter";
 import { PAGE_TYPE, summarize } from "./store";
+import { checkNotebookType, NOTEBOOK_SOURCE } from "./page-format";
+import { readPaper } from "./paper";
 import { ABOUT } from "./tail-memory";
 import type { ChangeContext } from "./history-types";
 
@@ -78,7 +80,7 @@ export function propsOf(typeId: string, values: Record<string, unknown>) {
 }
 
 // A page's own icon, else its type's.
-export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.properties.icon) ?? typeOf(p.typeId).icon;
+export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.properties.icon) ?? (p.typeId === PAGE_TYPE && readPaper(p.properties.paper) ? { kind: "icon", name: "notebook-pen", color: "gray" } : typeOf(p.typeId).icon);
 
 // What a pane shows: a page by its id, or a type's list of pages.
 export const TYPE_VIEW = "type:";
@@ -125,12 +127,16 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
   // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
   const title = page?.properties.role === "essay" && !page.title.trim() ? "Essay" : pageLabel(page?.title ?? "");
   // A Thoughts page or an essay is crumbed under its page.
-  const owner = typeof page?.properties.parent === "string" ? pageOf(page.properties.parent) : undefined;
+  const source = page?.properties[NOTEBOOK_SOURCE];
+  const parent = (Array.isArray(source) ? source[0] : undefined) ?? page?.properties.parent;
+  const owner = typeof parent === "string" ? pageOf(parent) : undefined;
   const type = typeOf(page?.typeId ?? PAGE_TYPE);
   return { title, icon: page && iconFor(page), parent: owner ? { title: pageLabel(owner.title), view: owner.id } : { title: type.plural, view: typeView(type.id) } };
 }
 
 export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext, { reportError = true } = {}): Promise<void> {
+  const before = pageOf(id);
+  if (before) checkNotebookType(before.typeId, patch.typeId);
   const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
     patchSummary(id, { updatedAt: Date.now() });

@@ -25,6 +25,7 @@ import { type NotesStore, Sidenotes } from "./sidenotes";
 import { TableToolbar } from "./table";
 import { TableOfContents } from "./toc";
 import { pageLayout } from "./page-layout";
+import { DocumentInkInput, finishPendingInk, getInkState, hasPendingInk, inkAction, type InkAction, type InkState } from "./document-ink";
 import { type Count, countText, OFF, onFound, type Writing, writingKey } from "./writing";
 
 export type { NotesStore } from "./sidenotes";
@@ -33,6 +34,7 @@ export type { VoiceReview } from "./voice-review";
 export { attachVoiceAsset } from "./voice-save";
 export { Player as MediaPlayer } from "./player";
 export { citesIn } from "./anchors";
+export type { InkAction, InkState } from "./document-ink";
 
 export type EditorDoc = JSONContent;
 
@@ -51,6 +53,10 @@ function known(schema: Schema, node: JSONContent): JSONContent | null {
   if (!node.type || !schema.nodes[node.type]) return null;
   const content = node.content?.map((c) => known(schema, c)).filter((c) => c !== null);
   return { ...node, marks: node.marks?.filter((m) => schema.marks[m.type]), content };
+}
+
+function supported(schema: Schema, doc: EditorDoc): boolean {
+  try { schema.nodeFromJSON(doc); return true; } catch { return false; }
 }
 
 export type Selected = { text: string; from: number; to: number };
@@ -81,6 +87,12 @@ export type BlockEditorHandle = {
   text: () => string;
   // The capture box's mic: a voice block at the end that records at once.
   record: () => void;
+  captureImage: (kind: "photo" | "drawing") => Promise<void>;
+  inkAction: (action: InkAction) => void;
+  finishPendingInk: () => void;
+  hasPendingInk: () => boolean;
+  inkState: () => InkState;
+  rangeHasInk: (from: number, to: number) => boolean;
   // HTML (an answer as Markdown, converted) after the top-level block holding pos. Neither
   // takes focus: the panel that inserts keeps the keyboard.
   insertAfter: (pos: number, html: string) => void;
@@ -341,21 +353,18 @@ export function BlockEditor({
 
   // A page holding blocks this version doesn't know shows the rest, read-only, and is never
   // saved from here, so nothing stored is lost.
-  const { unreadable, start } = useMemo(() => {
-    if (!content) return { unreadable: false, start: content };
+  const initialContent = useMemo(() => {
+    if (!content) return { original: null, start: content };
     const schema = getSchema(extensions);
-    try {
-      schema.nodeFromJSON(content);
-      return { unreadable: false, start: content };
-    } catch {
-      return { unreadable: true, start: known(schema, content) };
-    }
+    return supported(schema, content) ? { original: null, start: content } : { original: structuredClone(content), start: known(schema, content) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const preservedContent = useRef<EditorDoc | null>(initialContent.original);
+  const [unreadable, setUnreadable] = useState(!!initialContent.original);
 
   const editor = useEditor({
     extensions,
-    content: start ?? undefined,
+    content: initialContent.start ?? undefined,
     editable: !unreadable && !readOnly,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
@@ -380,8 +389,8 @@ export function BlockEditor({
     // What the editor adds by itself after a step that changed nothing (a closing empty line as a
     // page opens, a table fixed up) isn't an edit, so it isn't saved and doesn't move Updated.
     onUpdate: ({ editor, transaction }) => {
-      if (!transaction.docChanged || unreadable || readOnly) return;
-      onChangeRef.current?.(() => editor.getJSON());
+      if (!transaction.docChanged || preservedContent.current || readOnly) return;
+      onChangeRef.current?.(() => preservedContent.current ? structuredClone(preservedContent.current) : editor.getJSON());
       if (annotate && !transaction.getMeta(fromElsewhere)) onNoteStepsRef.current?.(transaction.steps.map((s) => s.toJSON()));
     },
   });
@@ -520,8 +529,24 @@ export function BlockEditor({
         const { from, to, empty } = editor.state.selection;
         setGrammarReview({ scope: !empty && editor.state.selection instanceof TextSelection ? { from, to } : undefined });
       },
-      getJSON: () => editor.getJSON(),
-      setContent: (doc) => editor.chain().setMeta("preserveOrigin", true).setContent(doc).run(),
+      getJSON: () => preservedContent.current ? structuredClone(preservedContent.current) : editor.getJSON(),
+      setContent: (doc) => {
+        if (editor.isDestroyed) return;
+        if (!supported(editor.schema, doc)) {
+          inkAction(editor, "finish");
+          preservedContent.current = structuredClone(doc);
+          setUnreadable(true); editor.setEditable(false, false);
+          editor.chain().setMeta("preserveOrigin", true).setMeta("addToHistory", false).setContent(known(editor.schema, doc) ?? { type: "doc", content: [] }, { emitUpdate: false }).run();
+          return;
+        }
+        const wasUnreadable = !!preservedContent.current;
+        preservedContent.current = null;
+        setUnreadable(false); editor.setEditable(!readOnly, false);
+        const chain = editor.chain().setMeta("preserveOrigin", true);
+        // The read-only preview must never become an undoable replacement.
+        if (wasUnreadable) chain.setMeta("addToHistory", false);
+        chain.setContent(doc).run();
+      },
       attachVoiceAsset: (recordingId, asset) => {
         if (editor.isDestroyed) return false;
         const tr = editor.state.tr;
@@ -554,10 +579,43 @@ export function BlockEditor({
       },
       text: () => editor.getText(),
       record: () => {
+        if (!editor.isEditable || annotate) return;
+        inkAction(editor, "finish");
+        const stop = editor.view.dom.querySelector<HTMLButtonElement>("[data-voice-stop]");
+        if (stop) { stop.click(); return; }
+        if (editor.view.dom.querySelector('[data-voice-phase="starting"], [data-voice-phase="saving"], [data-voice-phase="transcribing"]')) return;
+        const retry = editor.view.dom.querySelector<HTMLButtonElement>("[data-voice-save], [data-voice-start]");
+        if (retry) { retry.click(); return; }
+        let starting = false;
+        editor.state.doc.descendants((node) => { if (node.type.name === "voiceRecording" && node.attrs.autostart) starting = true; });
+        if (starting) return;
         const { doc } = editor.state;
         const from = isEmptyLine(doc.lastChild) ? doc.content.size - doc.lastChild!.nodeSize : doc.content.size;
         // A line after it holds the cursor, so the block isn't left selected.
         editor.commands.insertContentAt({ from, to: doc.content.size }, [{ type: "voiceRecording", attrs: { autostart: true } }, { type: "paragraph" }]);
+      },
+      captureImage: async (kind) => {
+        if (!editor.isEditable || annotate || !assets.capture) return;
+        inkAction(editor, "finish");
+        const result = await assets.capture(kind);
+        if (!result || editor.isDestroyed || !editor.isEditable) return;
+        const { image, drawing } = result;
+        editor.commands.insertContentAt(editor.state.doc.content.size, [
+          { type: "image", attrs: { src: image.url, name: image.name, size: image.size, mime: image.mime, drawing: drawing ?? null, autoExtract: kind === "photo" } },
+          { type: "paragraph" },
+        ]);
+      },
+      inkAction: (action) => { if (!readOnly && !annotate && editor.isEditable) inkAction(editor, action); },
+      finishPendingInk: () => finishPendingInk(editor),
+      hasPendingInk: () => hasPendingInk(editor),
+      inkState: () => getInkState(editor),
+      rangeHasInk: (from, to) => {
+        let found = false;
+        editor.state.doc.nodesBetween(Math.max(0, from), Math.min(to, editor.state.doc.content.size), (node) => {
+          if (node.type.name === "annotatedBlock" || node.type.name === "handwriting") found = true;
+          return !found;
+        });
+        return found;
       },
       insertAfter: (pos, html) => {
         const doc = editor.state.doc;
@@ -693,6 +751,7 @@ export function BlockEditor({
       {/* Before the text, so Tab from the title reaches it (the text keeps Tab for itself). */}
       {!readOnly && !annotate && <TableOfContents editor={editor} />}
       <EditorContent editor={editor} />
+      {!readOnly && !annotate && !unreadable && <DocumentInkInput editor={editor} />}
       {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
       {!annotate && <BlockHandle editor={editor} />}
       <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}

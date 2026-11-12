@@ -218,7 +218,7 @@ export function AssignButton({ pageId }: { pageId: string }) {
   const page = pageOf(pageId);
   // A task whose subtasks are at work is theirs; with none started, it can still go to one agent whole.
   // The project itself is never the task: its pages and tasks are.
-  if (!project || project === pageId || !page || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
+  if (!project || project === pageId || !page || page.typeId === "notebook" || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
   return (
     <>
       <Button className="text-muted-foreground" onClick={() => setOpen(true)} size="sm" variant="ghost">

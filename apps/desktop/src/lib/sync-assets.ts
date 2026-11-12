@@ -97,11 +97,23 @@ export function nativeAssetFilename(src: string, directory: string, relocatedIos
   return filename;
 }
 
+type InkPoint = { x: number; y: number; pressure: number };
+const inkPoints = (value: unknown[]): value is InkPoint[] => value.length > 0 && value.length <= 4096 && value.every((item) => {
+  if (!item || typeof item !== "object" || Object.keys(item).length !== 3 || !["x", "y", "pressure"].every((key) => Object.hasOwn(item, key))) return false;
+  const point = item as InkPoint;
+  return [point.x, point.y, point.pressure].every((n) => typeof n === "number" && Number.isFinite(n) && Math.abs(n) <= 50000) && point.pressure >= 0 && point.pressure <= 1;
+});
+
 async function walkMedia<T>(value: T, resolve: (src: string, mime?: string) => Promise<string>): Promise<T> {
-  let nodes = 0;
-  const walk = async (item: unknown, depth: number): Promise<unknown> => {
+  let nodes = 0, samples = 0;
+  const walk = async (item: unknown, depth: number, key?: string): Promise<unknown> => {
     if (++nodes > 500_000 || depth > 100) throw new Error("The sync event is too complex.");
     if (Array.isArray(item)) {
+      // Plain stroke samples cannot contain assets; count them separately from document structure.
+      if (key === "points" && inkPoints(item)) {
+        if ((samples += item.length) > 2_000_000) throw new Error("The sync event has too many handwriting samples.");
+        return item.map(({ x, y, pressure }) => ({ x, y, pressure }));
+      }
       const result = [];
       for (const child of item) result.push(await walk(child, depth + 1));
       return result;
@@ -111,7 +123,7 @@ async function walkMedia<T>(value: T, resolve: (src: string, mime?: string) => P
     const mime = typeof record.mime === "string" && record.mime ? record.mime : typeof record.name === "string" ? mimeFromName(record.name) : undefined;
     const entries: [string, unknown][] = [];
     for (const [key, child] of Object.entries(record)) entries.push([
-      key, (key === "src" || key === "url") && typeof child === "string" ? await resolve(child, mime) : await walk(child, depth + 1),
+      key, (key === "src" || key === "url") && typeof child === "string" ? await resolve(child, mime) : await walk(child, depth + 1, key),
     ]);
     return Object.fromEntries(entries);
   };

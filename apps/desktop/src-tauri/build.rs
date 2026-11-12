@@ -1,5 +1,6 @@
 fn main() {
     println!("cargo:rerun-if-changed=swift/Transcribe.swift");
+    println!("cargo:rerun-if-changed=preview/ios/Sources/Recognition.swift");
     println!("cargo:rerun-if-changed=Info.macos.plist");
     println!("cargo:rerun-if-changed=Info.ios.plist");
     println!("cargo:rerun-if-changed=Entitlements.plist");
@@ -19,6 +20,7 @@ fn main() {
                 "-target",
                 &format!("{architecture}-apple-macosx11.0"),
                 "swift/Transcribe.swift",
+                "preview/ios/Sources/Recognition.swift",
                 "-o",
                 &format!("binaries/leadinglight-transcribe-{target}"),
             ])

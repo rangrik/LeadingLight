@@ -189,6 +189,7 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
     if (!editor || !final) return;
     const hit = target();
     if (!hit) return patchThread(id, thread.id, (t) => ({ ...t, note: "Those words have changed since, so nothing was replaced." }));
+    if (editor.rangeHasInk(hit.from, hit.to)) return patchThread(id, thread.id, (t) => ({ ...t, note: "These words have handwriting attached. Insert the answer below, or edit the text directly to review its annotation." }));
     editor.replaceRange(hit.from, hit.to, inlineHtml(final.text));
     // Replaced once: the words are gone, so the next insert goes below instead.
     patchThread(id, thread.id, (t) => ({ ...t, quote: null }));

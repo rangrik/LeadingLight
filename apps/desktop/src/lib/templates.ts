@@ -1,3 +1,4 @@
+import { NOTEBOOK_TYPE } from "./page-format";
 import type { LLObject } from "./objects";
 import { objects } from "./objects";
 import { createPage, space, typeOf } from "./space";
@@ -12,10 +13,11 @@ const fill = (title: string) => title.replaceAll("{date}", day.format(new Date()
 
 // What a new page of the type starts as: the chosen template or the type's default one.
 export async function pageInit(typeId: string, init: Partial<LLObject> = {}, templateId?: string): Promise<Partial<LLObject>> {
+  if (typeId === NOTEBOOK_TYPE) return { title: "Untitled notebook", ...init, typeId };
   const id = templateId ?? typeOf(typeId).template;
   const template = id ? await objects.get(id) : null;
   if (!template) return { typeId, ...init };
-  const { templateOf: _, ...properties } = template.properties;
+  const { templateOf: _, paper: _paper, "notebook-source": _source, ...properties } = template.properties;
   return {
     typeId,
     title: fill(template.title),
@@ -27,5 +29,7 @@ export async function pageInit(typeId: string, init: Partial<LLObject> = {}, tem
 
 export const newPage = async (typeId: string, init: Partial<LLObject> = {}, templateId?: string, context?: ChangeContext) => createPage(await pageInit(typeId, init, templateId), context);
 
-export const newTemplate = (typeId: string) =>
-  createPage({ typeId, title: `${typeOf(typeId).name} template`, properties: { templateOf: typeId } });
+export const newTemplate = (typeId: string) => {
+  if (typeId === NOTEBOOK_TYPE) throw new Error("Notebook templates are not supported yet.");
+  return createPage({ typeId, title: `${typeOf(typeId).name} template`, properties: { templateOf: typeId } });
+};

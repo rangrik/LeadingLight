@@ -19,11 +19,13 @@ import { Dots } from "@/views/settings/theme-preview";
 import { closeSettings } from "@/views/settings/open";
 import { NumberField, NumberFieldDecrement, NumberFieldGroup, NumberFieldIncrement, NumberFieldInput } from "@leadinglight/ui/components/number-field";
 import { Switch } from "@leadinglight/ui/components/switch";
+import { setReadingMode, useReadingMode } from "~/lib/reading-mode";
 import { contentWidth, setPageLayout, usePageLayout } from "~/lib/page-layout";
 
 const OWN = new Set(berthThemes.map((t) => t.id));
 
 export function AppearanceSection() {
+  const reading = useReadingMode();
   const themes = useThemes();
   const themeId = useStore((s) => s.themeId);
   const uiFontSize = usePrefs((p) => p.uiFontSize);
@@ -110,6 +112,9 @@ export function AppearanceSection() {
       </section>
 
       <SettingsGroup title="Interface">
+        <SettingsRow label="E-ink appearance" description="Paper colours, flat surfaces and no motion. Your previous theme returns when turned off.">
+          <Switch aria-label="E-ink appearance" checked={reading.enabled} onCheckedChange={setReadingMode} />
+        </SettingsRow>
         <SettingsRow label="Full width" description="Let page content fill the available space.">
           <Switch checked={layout.fullWidth} onCheckedChange={(fullWidth) => setPageLayout({ fullWidth })} />
         </SettingsRow>
@@ -151,7 +156,7 @@ export function AppearanceSection() {
 
 // The themes each group leads with, the rest after them in the list's order.
 const ROW = 4;
-const OWN_FIRST = ["berth-light", "berth-dark", "midnight", "paper"];
+const OWN_FIRST = ["berth-light", "berth-dark", "midnight", "paper", "e-ink"];
 const LIGHT_FIRST = ["github-light", "one-light", "catppuccin-latte", "solarized-light"];
 const DARK_FIRST = ["dracula", "tokyo-night", "catppuccin-mocha", "nord"];
 

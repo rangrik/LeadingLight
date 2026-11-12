@@ -49,7 +49,7 @@ export function TypeView({ typeId }: { typeId: string }) {
   const [editing, setEditing] = useState(false);
   const type = typeOf(typeId);
   const items = pages.filter((p) => p.typeId === type.id && !p.properties.templateOf);
-  const templates = templatesOf(type.id);
+  const templates = type.id === "notebook" ? [] : templatesOf(type.id);
   // Daily notes are one per day: "New" opens today's.
   const create = async (template?: string) => (type.id === DAILY ? goToDay(today()) : openPage((await newPage(type.id, {}, template)).id));
   const view = type.view ?? (type.id === DAILY ? DAILY_VIEW : DEFAULT_VIEW);
@@ -254,7 +254,7 @@ export function TypeSettings({ type, onClose, onDelete }: { type?: TypeDef; onCl
               </AddProperty>
             </div>
           </div>
-          {type && (
+          {type && type.id !== "notebook" && (
           <div className="flex flex-col gap-2">
             <p className="font-medium text-sm">Templates</p>
             <div className="flex w-full flex-col">

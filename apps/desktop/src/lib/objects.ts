@@ -1,3 +1,5 @@
+import { blankPaper } from "./paper";
+import { checkNotebookType, NOTEBOOK_TYPE } from "./page-format";
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import { resolveAssetUrls } from "./assets";
 import { isNative } from "./platform";
@@ -16,8 +18,15 @@ const store = isNative.then((native) => withHistory(native ? sqliteStore : local
 export const objects: ObjectStore = {
   list: async () => resolveAssetUrls(await (await store).list()),
   get: async (id) => resolveAssetUrls(await (await store).get(id)),
-  create: async (init, context) => resolveAssetUrls(await (await store).create(init, context)),
-  update: async (id, patch, context) => (await store).update(id, patch, context),
+  create: async (init, context) => resolveAssetUrls(await (await store).create(init?.typeId === NOTEBOOK_TYPE ? { ...init, properties: { paper: blankPaper(), ...init.properties } } : init, context)),
+  update: async (id, patch, context) => {
+    const db = await store;
+    if (patch.typeId !== undefined) {
+      const before = await db.get(id);
+      if (before) checkNotebookType(before.typeId, patch.typeId);
+    }
+    return db.update(id, patch, context);
+  },
   remove: async (id, context) => (await store).remove(id, context),
   history: async () => resolveAssetUrls(await (await store).history()),
   touched: async (from, to) => (await store).touched(from, to),

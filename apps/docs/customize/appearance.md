@@ -1,6 +1,6 @@
 ---
 title: Appearance and themes
-description: Choose light or dark, pick one of 23 themes, and set the text size and page width.
+description: Choose light or dark, pick one of 24 themes, and set the text size and page width.
 ---
 
 # Appearance and themes
@@ -41,7 +41,7 @@ Picking a theme by hand leaves **Match system**. To follow your Mac again, choos
 
 The themes come in three groups:
 
-- **LeadingLight**: the app's own four themes.
+- **LeadingLight**: the app's own five themes.
 - **Light** and **Dark**: themes from popular code editors. Each group shows four at first, plus the one you use. The line below the list, such as **Show 11 more**, names the hidden ones; click it to see them all, and **Show fewer** to fold them away again.
 
 ### Find a theme
@@ -55,6 +55,7 @@ Type part of a name into **Find a theme**, at the top right of the list. Only ma
 | LeadingLight Light | Light |
 | LeadingLight Dark | Dark |
 | Paper | Light |
+| E-ink | Light |
 | Midnight | Dark |
 | Dracula | Dark |
 | One Dark Pro | Dark |
@@ -121,3 +122,10 @@ A narrow pane always fits the text to the space it has, so you never need to scr
 - [Settings reference](/customize/settings)
 - [Writing tools](/write/writing-tools)
 - [Sidebar, panes and tabs](/workspace/layout)
+
+## E-ink appearance
+
+Press **E-ink** (the sun) in a page's reading toolbar, or turn on **E-ink appearance**
+in Settings. The app uses a quiet paper palette, flat surfaces and no animation or
+translucent glass. Photos keep their colours; status colours remain distinguishable.
+The setting survives a restart. Turn it off to restore the previous theme.

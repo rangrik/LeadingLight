@@ -855,3 +855,51 @@ sheets and toasts stay opaque because muted text fails on any glass. Capture lea
 tabs move between screens, actions don't. The app icon is a layered Icon Composer file, so iOS gives
 it the dark, clear and tinted looks. Real native bars (lensing, the Liquid Glass slider, Reduce
 Transparency) are deferred; see DEFERRED.
+
+
+## 45. Reading capture keeps the source (2026-11-10)
+
+Handwriting is a page format: PencilKit ink and positioned text share a full paper
+surface. Page properties hold its layout and nested assets; encrypted sync carries
+editable strokes, an ink preview, photos and recordings. Native drafts recover edits
+if the app stops before the database save. Earlier document notes remain available.
+Vision OCR and speech recognition add editable text without replacing the original.
+Mac and iOS share the speech helper's recognition code; speech needs OS 26 or newer.
+
+PDFs and unencrypted EPUBs become linked reading sections, using the existing editor
+and sidenotes. The original file stays on the Book page. Protected Kindle purchases
+and Libby loans stay in their authorized readers, with a linked notebook alongside.
+E-ink is a reversible local appearance choice, not another document format.
+
+## 46. Notebooks are created separately; drawing never converts a document (2026-11-11)
+
+A tool previously added `paper` to any page and hid its blocks and metadata. The
+content survived, but the interaction broke trust. New notebooks use the fixed
+Notebook type. Type changes cannot cross this boundary, including live and direct
+writes. Documents retain their normal types; notebook metadata stays editable.
+“Notes on” is a normal relation, with Notebooks listed on the source. Deleting a
+source never deletes its notebooks. Creating one never writes to the source.
+
+No automatic migration runs. Existing mixed pages show their blocks and metadata
+before their original paper. New document templates do not inherit paper. Capture
+uses the existing header and writes into the current document or notebook. Notebook
+details open in a sheet; zoom and ruling live in its menu. Text on iPad is armed for
+one note, with an explicit finish action. Pencil double tap follows the system choice.
+
+## 47. Document handwriting travels with its blocks (2026-11-11)
+
+Write on this page leaves the document open. Its first stroke wraps only the drawn
+block in an annotated block; handwriting between blocks is a document block too.
+Moving, copying, deleting and undoing therefore carry ink and content together.
+Enabling writing alone changes no stored content, type or metadata. Existing paper
+and notebook data are not migrated. Older clients treat these new nodes as read-only.
+
+Text marks attach drawings to their words. An unchanged range with the same line
+shape can move; changed words or incompatible reflow retain the original ink and
+context for review instead of silently drawing over different text. Images scale
+their ink with the image. Complete strokes use the editor's normal save and history.
+Broad agent rewrites cannot discard annotated content.
+
+The DOM owns inline ink and its geometry. A narrow iOS gesture bridge captures only
+Pencil input; fingers keep scrolling the existing document. Standalone notebooks
+continue using PencilKit. No new native editor or page conversion is involved.

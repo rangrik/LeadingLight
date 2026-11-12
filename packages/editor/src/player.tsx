@@ -21,7 +21,8 @@ export function Player({
   overlay,
   actions,
   onError,
-}: { kind: "video" | "audio"; src: string; overlay?: ReactNode; actions?: ReactNode; onError?: () => void }) {
+  compact = false,
+}: { kind: "video" | "audio"; src: string; overlay?: ReactNode; actions?: ReactNode; onError?: () => void; compact?: boolean }) {
   const root = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLMediaElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -29,7 +30,7 @@ export function Player({
   const [duration, setDuration] = useState(0);
   const [muted, setMuted] = useState(false);
   const [full, setFull] = useState(false);
-  const hours = duration >= 3600;
+  const hours = Number.isFinite(duration) && duration >= 3600;
 
   useEffect(() => {
     const onChange = () => setFull(document.fullscreenElement === root.current);
@@ -54,8 +55,15 @@ export function Player({
   };
   const toggle = () => {
     const el = ref.current;
-    if (el) void (el.paused ? el.play() : el.pause());
+    if (el?.paused) void el.play().catch(() => onError?.());
+    else el?.pause();
   };
+
+  if (compact && kind === "audio") return <div className="ll-paper-source-player" ref={root}>
+    <audio {...media} />
+    <Button aria-label={playing ? "Pause recording" : "Play recording"} onClick={toggle} size="icon" variant="ghost">{playing ? <Pause /> : <Play />}</Button>
+    <span className="text-xs tabular-nums text-muted-foreground">{clock(playing ? time : duration, hours)}</span>
+  </div>;
 
   return (
     <div className={cn("ll-player rounded-lg border", cardEdge)} ref={root}>

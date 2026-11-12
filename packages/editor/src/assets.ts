@@ -1,9 +1,13 @@
 // How the editor stores and opens files. The app supplies an implementation.
 export type Asset = { url: string; name: string; size: number; mime: string };
 
+export type CapturedImage = { image: Asset; drawing?: Asset };
+
 export interface AssetStore {
   put(file: File): Promise<Asset>;
   open(asset: Asset): void;
+  capture?(kind: "photo" | "drawing", drawing?: Asset): Promise<CapturedImage | null>;
+  recognizeText?(asset: Asset): Promise<string>;
   transcribe?(asset: Asset, language: string): Promise<string>;
 }
 

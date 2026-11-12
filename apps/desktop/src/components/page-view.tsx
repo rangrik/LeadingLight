@@ -1,15 +1,19 @@
+import { checkNotebookType, NOTEBOOK_TYPE } from "~/lib/page-format";
 import { saveEmergency, clearEmergency } from "~/lib/store-local";
 import { carry } from "~/lib/catalog";
 import { BlockEditor, type BlockEditorHandle, type EditorDoc, type QuoteTarget, type PageSelection, type VoiceReview } from "@leadinglight/editor/editor";
 import { splitTitle } from "@leadinglight/editor/markdown";
 import { AlignLeft, ChevronDown, Hash, ImageIcon, LayoutTemplate, Smile } from "lucide-react";
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, type RefObject, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
+import { Sheet, SheetPopup, SheetHeader, SheetTitle, SheetDescription, SheetPanel } from "@leadinglight/ui/components/sheet";
 import { Button } from "@leadinglight/ui/components/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { markCapture } from "~/lib/capture-inbox";
 import { saveVoice } from "~/lib/capture";
 import { cn } from "@leadinglight/ui/lib/utils";
+import { BookNavigation } from "~/components/reading-library";
 import { Backlinks, Linked } from "~/components/backlinks";
 import { DailyBar, ThisDay } from "~/components/daily-bar";
 import { linkHost } from "~/components/link-views";
@@ -47,6 +51,9 @@ import { TailPage, TailToday } from "~/components/tail";
 import { today } from "~/lib/daily";
 import { currentEdit } from "@leadinglight/editor/authorship";
 import type { ChangeContext } from "~/lib/history-types";
+import { ReadingToolbar } from "~/components/reading-toolbar";
+import { PaperPage } from "~/components/paper-page";
+import { readPaper, registerPaper, type PaperAction } from "~/lib/paper";
 
 // The body is read only when a save runs, not on every keystroke.
 type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string; context?: ChangeContext };
@@ -62,17 +69,35 @@ const fit = (el: HTMLTextAreaElement | null) => {
   el.style.height = "0px";
   el.style.height = `${el.scrollHeight}px`;
 };
+const watchFit = (ref: RefObject<HTMLTextAreaElement | null>, el: HTMLTextAreaElement | null) => {
+  ref.current = el;
+  if (!el) return;
+  fit(el);
+  let width = el.offsetWidth;
+  const observer = new ResizeObserver(() => {
+    if (!el.offsetWidth || el.offsetWidth === width) return;
+    width = el.offsetWidth;
+    fit(el);
+  });
+  observer.observe(el);
+  return () => { observer.disconnect(); ref.current = null; };
+};
 
 export function PageView({ page }: { page: LLObject }) {
   const mobile = useMobile();
   const [title, setTitle] = useState(page.title);
+  const latestTitle = useRef(title); latestTitle.current = title;
   const [typeId, setTypeId] = useState(page.typeId);
   const keysFor = useKeysFor();
   const [props, setProps] = useState(page.properties);
   const latest = useRef(page.properties);
+  const [paperDetails, setPaperDetails] = useState(false);
+  const [paperRequest, setPaperRequest] = useState<{ action: PaperAction; count: number } | null>(null);
   const [adding, setAdding] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const titleField = useCallback((el: HTMLTextAreaElement | null) => watchFit(titleRef, el), []);
+  const descriptionField = useCallback((el: HTMLTextAreaElement | null) => watchFit(descriptionRef, el), []);
   const editorRef = useRef<BlockEditorHandle>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const writing = useWritingPrefs();
@@ -96,7 +121,8 @@ export function PageView({ page }: { page: LLObject }) {
   const saving = useRef<Promise<void>>(Promise.resolve());
   const restoring = useRef(false);
 
-  const flush = (): Promise<void> => {
+  const flush = (finishInk = true): Promise<void> => {
+    if (finishInk) editorRef.current?.finishPendingInk();
     clearTimeout(timer.current);
     const batch = pending.current;
     const { content, context, ...rest } = batch;
@@ -117,7 +143,7 @@ export function PageView({ page }: { page: LLObject }) {
     if (restoring.current) return;
     Object.assign(pending.current, patch, { context: currentEdit() });
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => void flush().catch(() => {}), SAVE_DELAY_MS);
+    timer.current = setTimeout(() => void flush(false).catch(() => {}), SAVE_DELAY_MS);
   };
 
   // Every other stored property, including ones this version doesn't know, is kept as it was.
@@ -134,6 +160,7 @@ export function PageView({ page }: { page: LLObject }) {
     replaceProps(next);
   };
   const setType = (next: string) => {
+    checkNotebookType(pageOf(page.id)?.typeId ?? page.typeId, next);
     setTypeId(next);
     patchSummary(page.id, { typeId: next });
     queue({ typeId: next });
@@ -171,6 +198,15 @@ export function PageView({ page }: { page: LLObject }) {
   const essay = childOf(current, "essay");
   // An agent's report reads as it was published (features/reports.feature), taking only sidenotes.
   const report = !!reportOf(current);
+  const paper = readPaper(props.paper);
+  const unavailablePaper = typeId === NOTEBOOK_TYPE && !paper;
+  const [documentNotes, setDocumentNotes] = useState(!!page.content?.content?.some((node) => node.type !== "paragraph" || node.content?.length));
+  const showDetails = !paper || documentNotes;
+  useEffect(() => registerPaper(page.id, (action) => {
+    if (report || !readPaper(latest.current.paper)) return;
+    (document.activeElement as HTMLElement | null)?.blur();
+    setPaperRequest((value) => ({ action, count: (value?.count ?? 0) + 1 }));
+  }), [page.id, report]);
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
   const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
@@ -178,13 +214,14 @@ export function PageView({ page }: { page: LLObject }) {
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
   useEffect(() => {
-    if (!page.title && !page.content) titleRef.current?.focus();
+    if (!page.title && !page.content && !paper && !unavailablePaper) titleRef.current?.focus();
+    const leavingEditor = editorRef.current;
     const untrack = trackFlush(flush);
     const unlive = registerLive(page.id, {
       flush,
-      dirty: () => Object.keys(pending.current).length > 0,
+      dirty: () => Object.keys(pending.current).length > 0 || !!editorRef.current?.hasPendingInk(),
       discard: () => { clearTimeout(timer.current); pending.current = {}; },
-      snapshot: () => ({ title: titleRef.current?.value ?? page.title, content: editorRef.current?.getJSON() ?? page.content, properties: latest.current }),
+      snapshot: () => ({ typeId: pageOf(page.id)?.typeId ?? page.typeId, title: latestTitle.current, content: editorRef.current?.getJSON() ?? page.content, properties: latest.current }),
       restore: (next) => {
         restoring.current = true;
         clearTimeout(timer.current);
@@ -194,6 +231,7 @@ export function PageView({ page }: { page: LLObject }) {
         latest.current = next.properties;
         setProps(next.properties);
         editorRef.current?.setContent(next.content ?? { type: "doc", content: [] });
+        setDocumentNotes(!!next.content?.content?.some((node) => node.type !== "paragraph" || node.content?.length));
         restoring.current = false;
       },
       editor: () => editorRef.current,
@@ -204,15 +242,17 @@ export function PageView({ page }: { page: LLObject }) {
       setTitle: rename,
       // Retyped from elsewhere (Assign): its properties come with it, so nothing is carried.
       setType: (next) => {
+        checkNotebookType(pageOf(page.id)?.typeId ?? page.typeId, next);
         setTypeId(next);
         patchSummary(page.id, { typeId: next });
         queue({ typeId: next });
       },
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
-      focus: () => editorRef.current?.focus("end"),
+      focus: () => { if (bodyRef.current?.offsetParent) editorRef.current?.focus("end"); },
     });
     return () => {
+      leavingEditor?.finishPendingInk();
       untrack();
       unlive();
       setPageStats(page.id, null);
@@ -223,7 +263,7 @@ export function PageView({ page }: { page: LLObject }) {
 
   // The agent panel asks about this page while it is in front (lib/ask.ts); with panes side
   // by side, that is the page last worked in.
-  const askPage = { id: page.id, title: () => titleRef.current?.value ?? "", text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
+  const askPage = { id: page.id, title: () => latestTitle.current, text: () => docMarkdown(editorRef.current?.getJSON(), (id) => pageOf(id)?.title ?? "") };
   useEffect(() => {
     registerPage(askPage, editorRef.current);
     // Its pane can come to the front with no focus in it: its sidebar row, or the pane beside closed.
@@ -237,30 +277,22 @@ export function PageView({ page }: { page: LLObject }) {
 
   useLayoutEffect(() => fit(titleRef.current), [title]);
   useLayoutEffect(() => fit(descriptionRef.current), [description]);
-  // They wrap again when the pane changes width; not in a tab behind, which has none.
-  useLayoutEffect(() => {
-    const el = titleRef.current;
-    if (!el) return;
-    let width = el.offsetWidth;
-    const ro = new ResizeObserver(() => {
-      if (!el.offsetWidth || el.offsetWidth === width) return;
-      width = el.offsetWidth;
-      fit(el);
-      fit(descriptionRef.current);
-    });
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
 
   const toBody = (e: React.KeyboardEvent) => {
     if (e.key !== "Enter" && e.key !== "ArrowDown") return;
     e.preventDefault();
+    if (paper || unavailablePaper) { (e.currentTarget as HTMLElement).blur(); setPaperDetails(false); return; }
     editorRef.current?.focus("start");
   };
 
   // A whole page pasted into the title: a heading on its first line names the page, and the
   // rest (all of it, with no heading) goes into the body.
   const pasteTitle = (e: React.ClipboardEvent) => {
+    if (typeId === NOTEBOOK_TYPE) {
+      e.preventDefault();
+      document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s*\n\s*/g, " "));
+      return;
+    }
     const html = e.clipboardData.getData("text/html");
     const { title, body } = splitTitle(e.clipboardData.getData("text/plain").trim(), html);
     if (title === undefined && !body.includes("\n")) return;
@@ -276,7 +308,7 @@ export function PageView({ page }: { page: LLObject }) {
   const onBlankMouseDown = (e: React.MouseEvent) => {
     const editor = editorRef.current;
     const title = titleRef.current;
-    if (!editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    if (paper || !editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
     if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
@@ -293,17 +325,7 @@ export function PageView({ page }: { page: LLObject }) {
     } else if (e.clientY >= (bodyRef.current?.getBoundingClientRect().top ?? 0) && editor.placeAt(e.clientX, e.clientY)) e.preventDefault();
   };
 
-  return (
-    // Focus mode fades the rest of the page too while the body is written in (styles.css).
-    <div
-      className={cn("ll-page-root min-h-full", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
-      onFocusCapture={() => registerPage(askPage, editorRef.current)}
-      onMouseDown={onBlankMouseDown}
-    >
-      {cover && <CoverBand cover={cover} onChange={setCover} />}
-      {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
-          Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
-      <div className="ll-page pb-8" data-page-notes={margins.notes || streamNotes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+  const pageDetails = <>
         <div className={cn("group/head @container/page-title", !(cover && icon) && "pt-10")} data-tail={tailRow || undefined}>
           {icon && (
             <IconPicker icon={icon} onChange={setIcon}>
@@ -372,7 +394,7 @@ export function PageView({ page }: { page: LLObject }) {
               onPaste={pasteTitle}
               placeholder={role === "essay" ? "Essay title" : "Untitled"}
               readOnly={report}
-              ref={titleRef}
+              ref={titleField}
               rows={1}
               value={title}
             />
@@ -389,7 +411,7 @@ export function PageView({ page }: { page: LLObject }) {
               onChange={(e) => setProp("description", e.currentTarget.value.replace(/\n/g, ""))}
               onKeyDown={toBody}
               placeholder="Add a description"
-              ref={descriptionRef}
+              ref={descriptionField}
               rows={1}
               value={description}
             />
@@ -403,7 +425,7 @@ export function PageView({ page }: { page: LLObject }) {
             Template for {typeOf(templateOf).plural}: new ones start as a copy of this page.
           </p>
         )}
-        {!report && (phone ? <Collapsible className="mt-3">
+        {!report && (phone && !paper ? <Collapsible className="mt-3">
           <CollapsibleTrigger render={<Button className="text-muted-foreground" variant="ghost" />}><ChevronDown />Page details</CollapsibleTrigger>
           <CollapsiblePanel><PropertyPanel
             onDescription={description === undefined ? addDescription : undefined}
@@ -418,12 +440,30 @@ export function PageView({ page }: { page: LLObject }) {
           typeId={typeId}
           values={props}
         />)}
+        <BookNavigation page={current} />
         {!report && <ProjectWork pageId={page.id} />}
         {day && <DailyBar day={day} />}
         {!phone && day === today() && <TailToday />}
         {typeId === "tag" && <TagPanel id={page.id} />}
-        <div className="ll-page-body pt-3" ref={bodyRef}>
+  </>;
+
+  return (
+    // Focus mode fades the rest of the page too while the body is written in (styles.css).
+    <div
+      className={cn("ll-page-root min-h-full", paper && "ll-notebook-root", paper && showDetails && "ll-notebook-with-details", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
+      onFocusCapture={() => registerPage(askPage, editorRef.current)}
+      onMouseDown={onBlankMouseDown}
+    >
+      {!paper && !report && <ReadingToolbar pageId={page.id} paper={unavailablePaper} unavailable={unavailablePaper} />}
+      {showDetails && cover && <CoverBand cover={cover} onChange={setCover} />}
+      {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
+          Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
+      <div className={cn("ll-page pb-8", paper && "ll-notebook-page")} data-page-notes={margins.notes || streamNotes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${paper ? 900 : contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+        {showDetails && <div className={paper ? "ll-notebook-details" : "contents"}>{pageDetails}</div>}
+        {unavailablePaper && <Alert className="my-4"><AlertTitle>Notebook unavailable</AlertTitle><AlertDescription>This version cannot read the notebook’s paper. Open it with the app version that saved it, or restore a version from history. Your saved content is unchanged.</AlertDescription></Alert>}
+        <div className={cn("ll-page-body pt-3", (paper || unavailablePaper) && !documentNotes && "hidden")} ref={bodyRef}>
           <BlockEditor
+            readOnly={unavailablePaper}
             assets={assets}
             content={page.content}
             onAsk={mobile ? undefined : openAsk}
@@ -437,6 +477,7 @@ export function PageView({ page }: { page: LLObject }) {
             askKeys={keysFor("ask")}
             onChange={(read) => {
               queue({ content: read });
+              if (paper) setDocumentNotes(!!read().content?.some((node) => node.type !== "paragraph" || node.content?.length));
               touchLive(page.id);
             }}
             links={linkHost}
@@ -456,12 +497,23 @@ export function PageView({ page }: { page: LLObject }) {
             writing={editorWriting(writing, typeId)}
           />
         </div>
+        {paper && <PaperPage onDetails={() => { if (documentNotes) titleRef.current?.scrollIntoView({ block: "start" }); else setPaperDetails(true); }} mixed={documentNotes} id={page.id} title={title} paper={paper} request={paperRequest} onChange={async (value, immediate) => {
+          setProp("paper", value); touchLive(page.id);
+          if (immediate) await flush();
+          else saveEmergency(page, { properties: latest.current }, currentEdit());
+        }} />}
         {report && <ReportSources report={current} />}
         <Reports onNotes={setStreamNotes} pageId={page.id} />
         <Linked id={page.id} />
         {day && <ThisDay content={page.content} day={day} id={page.id} />}
         <Backlinks id={page.id} title={title} />
       </div>
+      {paper && !documentNotes && <Sheet open={paperDetails} onOpenChange={setPaperDetails}>
+        <SheetPopup side={phone ? "bottom" : "right"} className="w-full max-w-lg pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" closeProps={{ style: { top: "calc(env(safe-area-inset-top) + 0.5rem)" } }} initialFocus={false}>
+          <SheetHeader><SheetTitle>Notebook details</SheetTitle><SheetDescription>Title, properties and links for this notebook.</SheetDescription></SheetHeader>
+          <SheetPanel>{cover && <CoverBand cover={cover} onChange={setCover} />}{pageDetails}<Linked id={page.id} /><Backlinks id={page.id} title={title} /></SheetPanel>
+        </SheetPopup>
+      </Sheet>}
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
       {turnInto && <TurnIntoPage selection={turnInto} onClose={() => setTurnInto(null)} />}
     </div>

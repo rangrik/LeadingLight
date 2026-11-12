@@ -9,6 +9,7 @@ const choices = (...list: [string, Color][]): Choice[] => list.map(([name, color
 type Seed<T> = Omit<T, "createdAt">;
 
 const PROPS: Seed<PropDef>[] = [
+  { id: "notebook-source", name: "Notes on", kind: "relation", options: { reverse: "Notebooks" } },
   { id: "tags", name: "Tags", kind: "relation", options: { many: true, type: "tag" } },
   { id: "aliases", name: "Aliases", kind: "text", options: {} },
   { id: "created", name: "Created", kind: "created", options: {} },
@@ -58,6 +59,7 @@ const IDEA_PROPS = ["idea-project", "tags", "created", "updated"];
 
 const TYPES: Seed<TypeDef>[] = [
   { ...type("page", "Page", "Pages", undefined, "gray", []), system: true },
+  { ...type("notebook", "Notebook", "Notebooks", "notebook-pen", "gray", ["notebook-source", "tags"]), system: true },
   { ...type("tag", "Tag", "Tags", "hash", "gray", []), system: true },
   { ...type("daily", "Daily note", "Daily notes", "calendar-days", "blue", []), system: true },
   type("person", "Person", "People", "user", "blue", ["email", "phone", "company", "birthday", "tags"], ["company"]),
@@ -119,5 +121,7 @@ function later(catalog: Catalog, now: number): Catalog {
     const task = catalog.types.find((t) => t.id === "task");
     if (task) added.types.push({ ...task, props: [...task.props, "after"] });
   }
+  if (missing("notebook-source")) prop("notebook-source");
+  if (!catalog.types.some((t) => t.id === "notebook")) added.types.push({ ...TYPES.find((t) => t.id === "notebook")!, createdAt: now });
   return added;
 }

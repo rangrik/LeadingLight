@@ -27,13 +27,56 @@ mod ios {
             .await.map(|_| ()).map_err(|e| e.to_string())
     }
 
+    #[tauri::command]
+    async fn asset_capture<R: Runtime>(app: AppHandle<R>, preview: State<'_, Preview<R>>, kind: String, filename: Option<String>) -> Result<serde_json::Value, String> {
+        if kind != "photo" && kind != "drawing" { return Err("Unknown capture kind.".into()); }
+        let folder = app.path().app_data_dir().map_err(|e| e.to_string())?.join("assets");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let path = filename.map(|name| super::asset_path(&folder, &name)).transpose()?;
+        preview.0.run_mobile_plugin_async("capture", serde_json::json!({ "folder": folder, "kind": kind, "path": path }))
+            .await.map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    async fn paper_edit<R: Runtime>(app: AppHandle<R>, preview: State<'_, Preview<R>>, id: String, title: String, action: String, paper: serde_json::Value, appearance: Option<serde_json::Value>, on_change: tauri::ipc::Channel<serde_json::Value>) -> Result<serde_json::Value, String> {
+        if id.is_empty() || id.len() > 80 || !id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-') { return Err("Invalid page.".into()); }
+        let folder = app.path().app_data_dir().map_err(|e| e.to_string())?.join("assets");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        preview.0.run_mobile_plugin_async("editPaper", serde_json::json!({ "folder": folder, "id": id, "title": title, "action": action, "paper": paper, "appearance": appearance, "onChange": on_change }))
+            .await.map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    async fn document_ink<R: Runtime>(_app: AppHandle<R>, preview: State<'_, Preview<R>>, enabled: bool, bounds: Option<serde_json::Value>, on_event: tauri::ipc::Channel<serde_json::Value>) -> Result<(), String> {
+        preview.0.run_mobile_plugin_async::<serde_json::Value>("documentInk", serde_json::json!({ "enabled": enabled, "bounds": bounds, "onEvent": on_event }))
+            .await.map(|_| ()).map_err(|e| e.to_string())
+    }
+
+    async fn recognize<R: Runtime>(app: AppHandle<R>, preview: State<'_, Preview<R>>, filename: String, language: String, method: &str) -> Result<serde_json::Value, String> {
+        let folder = app.path().app_data_dir().map_err(|e| e.to_string())?.join("assets");
+        let path = super::asset_path(&folder, &filename)?;
+        if path.metadata().map_err(|e| e.to_string())?.len() > 32 * 1024 * 1024 { return Err("This attachment exceeds 32 MiB.".into()); }
+        preview.0.run_mobile_plugin_async(method, serde_json::json!({ "path": path, "language": language }))
+            .await.map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    async fn asset_text<R: Runtime>(app: AppHandle<R>, preview: State<'_, Preview<R>>, filename: String) -> Result<serde_json::Value, String> {
+        recognize(app, preview, filename, String::new(), "recognizeText").await
+    }
+
+    #[tauri::command]
+    async fn voice_transcribe<R: Runtime>(app: AppHandle<R>, preview: State<'_, Preview<R>>, filename: String, language: String) -> Result<serde_json::Value, String> {
+        recognize(app, preview, filename, language, "transcribe").await
+    }
+
     pub fn init<R: Runtime>() -> TauriPlugin<R> {
         tauri::plugin::Builder::new("leadinglight-preview")
             .setup(|app, api| {
                 app.manage(Preview(api.register_ios_plugin(init_plugin_leadinglight_preview)?));
                 Ok(())
             })
-            .invoke_handler(tauri::generate_handler![asset_preview])
+            .invoke_handler(tauri::generate_handler![asset_preview, asset_capture, asset_text, voice_transcribe, paper_edit, document_ink])
             .build()
     }
 }

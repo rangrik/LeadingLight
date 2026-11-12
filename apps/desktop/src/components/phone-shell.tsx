@@ -1,5 +1,5 @@
 // COSS sidebar-08 lists and p-input-group-1, composed for one-handed navigation.
-import { CalendarDays, ChevronRight, FileText, Inbox, PenLine, Plus, Search, Settings, X } from "lucide-react";
+import { CalendarDays, ChevronRight, FileText, Inbox, NotebookPen, PenLine, Plus, Search, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { openSettings } from "@/views/settings/open";
 import { Button } from "@leadinglight/ui/components/button";
@@ -18,6 +18,8 @@ import { docText, objects, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFresh, panes } from "~/lib/panes";
 import { flushAll, reportSaveError } from "~/lib/saving";
 import { iconFor, INBOX_VIEW, isPageView, pageOf, space, typeOf, typeView } from "~/lib/space";
+import { newNotebook } from "~/lib/notebooks";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { ABOUT } from "~/lib/tail-memory";
 
 type Screen = "today" | "notes" | "page";
@@ -140,6 +142,7 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
     <div className="relative flex min-h-0 flex-1 flex-col">
     {screen !== "page" && <header className="ll-phone-top flex h-(--header-height) shrink-0 items-center justify-end px-4">
       <div className="ll-glass flex">
+        {screen === "notes" && <Tooltip><TooltipTrigger render={<Button aria-label="New notebook" onClick={() => void newNotebook().then((page) => openFresh(page.id)).catch(reportSaveError)} size="icon" variant="ghost" />}><NotebookPen /></TooltipTrigger><TooltipPopup>New notebook</TooltipPopup></Tooltip>}
         {screen === "notes" && <Button aria-label="New page" onClick={onCreate} size="icon" variant="ghost"><Plus /></Button>}
         <Button aria-label="Settings" onClick={() => openSettings()} size="icon" variant="ghost"><Settings /></Button>
       </div>

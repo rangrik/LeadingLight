@@ -17,6 +17,25 @@
   caret-color: var(--foreground);
 }
 
+/* Ink stays in each block's coordinates as the document moves around it. */
+.ll-editor .node-annotatedBlock { padding: 0; }
+.ll-annotated-block, .ll-ink-block-surface, .ll-handwriting-surface { position: relative; min-width: 0; }
+.ll-editor :where(.ll-ink-content, .ll-ink-content > [data-node-view-content-react]) > * { margin: 0; padding: 5px 0; }
+.ll-ink-content > [data-node-view-content-react] { padding: 0; }
+.ll-ink-overlay { position: absolute; inset: 0; color: var(--foreground); pointer-events: none; }
+.ll-handwriting { position: relative; color: var(--foreground); }
+.ll-handwriting-surface { border-block: 1px solid transparent; }
+.ll-ink-space-hint { position: absolute; top: 12px; left: 0; color: var(--muted-foreground); font-size: .875rem; pointer-events: none; }
+.ll-ink-space-actions { display: flex; justify-content: flex-end; min-height: 28px; }
+.ll-ink-review { margin-block: 8px; }
+.ll-ink-original { color: var(--foreground); background: var(--background); }
+.ll-ink-write-below { position: absolute; z-index: 10; }
+[data-document-ink] .ll-editor { caret-color: transparent; cursor: crosshair; user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+[data-document-ink][data-ink-finger] .ll-editor { touch-action: none; }
+[data-document-ink] .ll-handwriting-surface { border-color: var(--border); }
+[data-document-ink] .ll-handle { visibility: hidden; }
+[data-document-ink] .ll-editor :is(.ll-selected, .ProseMirror-selectednode) { background: none; box-shadow: none; }
+
 /* Every top-level element is a block; nested containers lay their blocks out the same way.
    Spacing is padding, never margin, so blocks touch and a run of selected blocks tints as one
    shape. Each block keeps its visible edge 5 px in, so visible edges sit 10 px apart. :where
@@ -36,11 +55,12 @@
   line-height: 1.25;
 }
 /* The space above a heading is padding too, so it tints with the heading. */
-.ll-editor h1 { font-size: 1.625em; padding-top: calc(5px + 1.25em); }
-.ll-editor h2 { font-size: 1.375em; padding-top: calc(5px + 1.1em); }
-.ll-editor h3 { font-size: 1.1875em; padding-top: calc(5px + 0.9em); }
-.ll-editor h4 { font-size: 1.0625em; padding-top: calc(5px + 0.8em); font-weight: 600; }
+.ll-editor h1 { --ll-heading-gap: 1.25em; font-size: 1.625em; padding-top: calc(5px + var(--ll-heading-gap)); }
+.ll-editor h2 { --ll-heading-gap: 1.1em; font-size: 1.375em; padding-top: calc(5px + var(--ll-heading-gap)); }
+.ll-editor h3 { --ll-heading-gap: 0.9em; font-size: 1.1875em; padding-top: calc(5px + var(--ll-heading-gap)); }
+.ll-editor h4 { --ll-heading-gap: 0.8em; font-size: 1.0625em; padding-top: calc(5px + var(--ll-heading-gap)); font-weight: 600; }
 .ll-editor :is(h1, h2, h3, h4):first-child { padding-top: 5px; }
+.ll-editor > .node-annotatedBlock:not(:first-child) .ll-ink-content > [data-node-view-content-react] > :is(h1, h2, h3, h4):first-child { padding-top: calc(5px + var(--ll-heading-gap)); }
 .ll-editor p[data-small] { font-size: 0.875em; line-height: 1.55; }
 
 /* Nested text (list items, to-dos, quotes, toggle titles) starts one 24px inset in.
@@ -498,8 +518,8 @@
 .ll-note-pick { margin-top: 1.75px; }
 .ll-note-sent { font-size: 11px; line-height: 19.5px; color: var(--muted-foreground); }
 .ll-note[data-pick="sent"] .ll-editor { opacity: 0.7; }
-.ll-note-remove { margin-top: -2px; opacity: 0; transition: opacity 150ms ease-out; }
-.ll-note:is(:hover, :focus-within) .ll-note-remove { opacity: 1; }
+.ll-note-actions { margin-top: -2px; opacity: 0; transition: opacity 150ms ease-out; }
+.ll-note:is(:hover, :focus-within) .ll-note-actions { opacity: 1; }
 .ll-note[data-new] { animation: ll-note-in 240ms cubic-bezier(0.23, 1, 0.32, 1); }
 @keyframes ll-note-in {
   from { opacity: 0; translate: -8px 0; filter: blur(4px); }
@@ -627,3 +647,10 @@
 /* The slash and link menus mount on <body> (TipTap's suggestion), so they sit above fixed
    surfaces holding an editor, such as the capture box. */
 body > .react-renderer { z-index: 50; }
+
+@media (hover: none) { .ll-note-actions { opacity: 1; } }
+@media (pointer: coarse) {
+  .ll-note-actions { gap: 8px; }
+  .ll-note-actions button { min-width: 44px; min-height: 44px; }
+  .ll-media [data-controls] button { min-width: 44px; min-height: 44px; }
+}

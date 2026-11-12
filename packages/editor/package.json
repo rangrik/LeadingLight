@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit"
   },
   "exports": {
+    "./player": "./src/player.tsx",
     "./editor": "./src/editor.tsx",
     "./authorship": "./src/authorship.ts",
     "./assets": "./src/assets.ts",

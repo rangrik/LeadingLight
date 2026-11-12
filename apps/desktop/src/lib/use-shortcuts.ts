@@ -7,7 +7,11 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
-import { closeTab, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
+import { liveContent, liveEditor, liveProperties } from "~/lib/live";
+import { pageOf } from "~/lib/space";
+import { NOTEBOOK_TYPE } from "~/lib/page-format";
+import { openPaper, readPaper } from "~/lib/paper";
+import { closeTab, focusedPage, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
@@ -46,6 +50,13 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return actions.newPage();
         case "new-idea":
           return actions.newIdea();
+        case "quick-record": {
+          if (useStore.getState().view.kind === "settings" || shown(COVERS)) return;
+          const id = focusedPage();
+          if (id && pageOf(id)?.typeId === NOTEBOOK_TYPE && !readPaper(liveProperties(id)?.paper)) return;
+          if (id && readPaper(liveProperties(id)?.paper) && !liveContent(id)?.content?.some((node) => node.type !== "paragraph" || node.content?.length)) return openPaper(id, "record");
+          return id ? liveEditor(id)?.record() : undefined;
+        }
         case "save":
           return void flushAll();
         case "sidebar":

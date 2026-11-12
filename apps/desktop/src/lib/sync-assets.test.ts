@@ -121,3 +121,46 @@ test("baseline upload retries keep the original page identity", () => {
   const ordinary = { ...entry, id: "edit:fixture" };
   assert.equal(portableHistoryEntry(ordinary), ordinary);
 });
+
+// Pencil strokes and their preview must both survive sync to a different device's asset folder.
+test("handwriting carries its nested editable asset with the preview", async () => {
+  const image = "data:image/png;base64,AQID";
+  const ink = "data:application/octet-stream;base64,BAUG";
+  const document = { type: "image", attrs: { src: image, mime: "image/png", drawing: { url: ink, name: "Ink.drawing", mime: "application/octet-stream", size: 3 } } };
+  const packed = await packAssets(document, async () => { throw new Error("Inline assets need no native read"); });
+  assert.equal(packed.assets.items.length, 2);
+  const restored = await unpackAssets(packed.value, packed.assets, async (file) => `asset://localhost/iPad/assets/${file.id}.bin`);
+  assert.match(restored.attrs.drawing.url, /^asset:\/\/localhost\/iPad\/assets\//);
+  assert.notEqual(restored.attrs.src, restored.attrs.drawing.url);
+});
+
+// History carries two dense documents; point data must not exhaust the asset traversal budget.
+test("dense document ink syncs before and after with original image context", async () => {
+  const image = "data:image/png;base64,AQID", box = { x: 0, y: 0, width: 700, height: 220 };
+  const strokes = Array.from({ length: 16 }, (_, id) => ({
+    id: String(id), points: Array.from({ length: 4096 }, (_, i) => ({ x: i % 600, y: i % 200, pressure: 0.5 })),
+    anchor: { kind: "image", box, text: "", lines: [], src: image },
+    snapshot: { width: 700, height: 220, lines: [], text: "", fontSize: 16, image: { src: image, box } },
+  }));
+  const before = { title: "Before", content: { type: "doc", content: [{ type: "handwriting", attrs: { width: 700, height: 220, ink: { version: 1, strokes } } }] } };
+  const entry = { changes: [{ before, after: { ...before, title: "After" } }] };
+  const packed = await packAssets(entry, async () => { throw new Error("No native read"); });
+  assert.equal(packed.assets.items.length, 1);
+  assert.deepEqual(await unpackAssets(packed.value, packed.assets, browser), entry);
+  assert.equal(before.content.content[0].attrs.ink.strokes[0].snapshot.image.src, image);
+
+  let writes = 0;
+  await assert.rejects(unpackAssets({ points: [{ x: 0, y: 0, pressure: 0.5, src: "file:///private/hidden.png" }] }, undefined, async () => { writes++; return "unexpected"; }), /device-only/);
+  assert.equal(writes, 0);
+});
+
+// Paper layout must stay separate from ink while both assets change device paths.
+test("paper sync keeps positioned text with editable ink", async () => {
+  const paper = { version: 1, width: 900, height: 1400, ink: { url: "data:application/octet-stream;base64,BAUG", mime: "application/octet-stream", size: 3 }, preview: { url: "data:image/png;base64,AQID", mime: "image/png", size: 3 }, items: [{ id: "text", kind: "text", x: 80, y: 400, width: 500, height: 120, text: "Between ink" }] };
+  const packed = await packAssets({ properties: { paper } }, async () => { throw new Error("No native read"); });
+  const restored = await unpackAssets(packed.value, packed.assets, async (file) => `asset://localhost/OtherDevice/assets/${file.id}.bin`);
+  assert.equal(packed.assets.items.length, 2);
+  assert.deepEqual(restored.properties.paper.items, paper.items);
+  assert.match(restored.properties.paper.ink.url, /OtherDevice/);
+  assert.notEqual(restored.properties.paper.ink.url, restored.properties.paper.preview.url);
+});

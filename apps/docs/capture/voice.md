@@ -1,6 +1,6 @@
 ---
 title: Voice notes
-description: Record a voice note on any page, get the words written out on your Mac, and turn passages into ideas and tasks.
+description: Record a voice note on any page, get the words written out on your Apple device, and turn passages into ideas and tasks.
 ---
 
 # Voice notes
@@ -11,10 +11,11 @@ and its transcript stay as they were.
 
 ## Record a voice note
 
-1. On a page, type <kbd>/</kbd> and choose **Voice recording**.
-2. Click **Record**. The first time, allow LeadingLight to use the microphone.
-3. Speak. The block shows **Recording** with the time.
-4. Click **Stop and transcribe**.
+1. Click **Record** in the page toolbar, or press **⇧⌘R**. Allow the microphone on first use.
+2. Speak. The block shows **Recording** with the time.
+3. Click **Stop and transcribe**, **Stop** in the toolbar, or press **⇧⌘R** again.
+
+You can also insert a **Voice recording** through the slash menu and click **Record**.
 
 The audio is saved in the block first, then the transcript is added as ordinary, editable text just
 below it. Reopening the page keeps both.
@@ -29,19 +30,19 @@ There the recording starts as soon as you press the mic.
 | **Waiting for microphone…** | The microphone is starting, or waiting for your permission |
 | **Recording · 0:12** | Recording, with the time so far |
 | **Saving audio…** | The audio is being saved |
-| **Transcribing on this Mac…** | The words are being written out |
+| **Transcribing on this device…** | The words are being written out |
 | **Voice recording · transcript added below** | Done |
 
-## Transcription happens on your Mac <Badge type="info" text="Mac app" />
+## Transcription happens on your device
 
-The words are written out on your Mac with Apple's speech recognition, which needs **macOS 26 or newer**.
-Your audio isn't sent anywhere to be transcribed. The first time, macOS may download its speech model,
+The native Mac, iPad and iPhone apps use Apple's speech recognition on **macOS, iPadOS or iOS 26 or newer**.
+Your audio isn't sent anywhere to be transcribed. The first time, the device may download its speech model,
 which can take a moment.
 
 ### Recording in a browser <Badge type="info" text="Browser" />
 
 In a browser you can record, and the audio is saved and plays back. The block explains that
-transcription needs the Mac app on macOS 26 or newer.
+transcription needs a native Apple app on OS 26 or newer.
 
 ## Cancel a recording
 

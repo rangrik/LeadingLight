@@ -190,6 +190,7 @@ pub fn run() {
             web::web_fetch,
             web::web_save_media,
             voice::voice_transcribe,
+            voice::image_text,
             browser_menu::browser_menu_focus,
             browser_menu::browser_clipboard,
             shortcuts_set

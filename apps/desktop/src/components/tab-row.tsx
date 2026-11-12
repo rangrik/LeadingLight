@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, FileText, Plus, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, NotebookPen, Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
@@ -14,14 +14,16 @@ import { useKeysFor } from "~/lib/keymap";
 import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
 import { describe } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
+import { newNotebook } from "~/lib/notebooks";
+import { reportSaveError } from "~/lib/saving";
 import { newPage } from "~/lib/templates";
 
 // A header button with its tooltip and key, as the card's others have.
-function KeyButton({ id, label, onClick, disabled, children }: { id: string; label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+function KeyButton({ id, label, onClick, disabled, children, className }: { className?: string; id: string; label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
   const keys = useKeysFor()(id);
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button aria-label={label} disabled={disabled} onClick={onClick} size="icon-xs" variant="ghost" />}>{children}</TooltipTrigger>
+      <TooltipTrigger render={<Button aria-label={label} className={className} disabled={disabled} onClick={onClick} size="icon-xs" variant="ghost" />}>{children}</TooltipTrigger>
       <TooltipPopup>
         {label} <Kbd>{keys}</Kbd>
       </TooltipPopup>
@@ -39,7 +41,7 @@ export function History({ pane, tab }: { pane: string; tab: Tab }) {
       <KeyButton disabled={tab.at === 0 && !phone} id="back" label="Back" onClick={() => (home ? window.dispatchEvent(new Event("leadinglight:phone-home")) : travel(-1, pane))}>
         <ChevronLeft className="size-4" />
       </KeyButton>
-      {!phone && <KeyButton disabled={tab.at === tab.pages.length - 1} id="forward" label="Forward" onClick={() => travel(1, pane)}>
+      {!phone && <KeyButton className="hidden @[44rem]/header:inline-flex" disabled={tab.at === tab.pages.length - 1} id="forward" label="Forward" onClick={() => travel(1, pane)}>
         <ChevronRight className="size-4" />
       </KeyButton>}
     </div>
@@ -118,6 +120,7 @@ export function NoPage({ className }: { className?: string }) {
           <Plus />
           New page
         </Button>
+        <Button variant="outline" onClick={() => void newNotebook().then((page) => openPage(page.id)).catch(reportSaveError)}><NotebookPen />New notebook</Button>
       </EmptyContent>
     </Empty>
   );

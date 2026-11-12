@@ -126,8 +126,33 @@ export const assets: AssetStore = {
     if ((error instanceof Error && error.name === "AbortError") || /\b(?:user cancel(?:led|ed)|cancel(?:led|ed) by (?:the )?user)\b/i.test(message)) return;
     toastManager.add({ type: "error", title: "Couldn't open the attachment", description: message });
   }),
+  async capture(kind, drawing) {
+    if (!(await isNative) || await platformReady !== "ios") throw new Error("Handwriting and camera capture are available in the iPad and iPhone apps.");
+    const [{ invoke, convertFileSrc }, { appDataDir, join }] = await Promise.all([import("@tauri-apps/api/core"), import("@tauri-apps/api/path")]);
+    const folder = await join(await appDataDir(), "assets");
+    const filename = drawing ? nativeAssetFilename(drawing.url, folder, true) : undefined;
+    const result = await invoke<{ cancelled?: boolean; filename: string; name: string; mime: string; size: number; drawingFilename?: string; drawingSize?: number }>("plugin:leadinglight-preview|asset_capture", { kind, filename });
+    if (result.cancelled) return null;
+    const image = { url: convertFileSrc(await join(folder, result.filename)), name: result.name, mime: result.mime, size: result.size };
+    const ink = result.drawingFilename ? { url: convertFileSrc(await join(folder, result.drawingFilename)), name: "Handwriting.drawing", mime: "application/octet-stream", size: result.drawingSize! } : undefined;
+    return { image, drawing: ink };
+  },
+  async recognizeText(asset) {
+    if (!(await isNative)) throw new Error("Text recognition is available in the Mac, iPad and iPhone apps. Your image is saved.");
+    const [{ invoke }, { appDataDir, join }] = await Promise.all([import("@tauri-apps/api/core"), import("@tauri-apps/api/path")]);
+    const os = await platformReady;
+    const filename = nativeAssetFilename(asset.url, await join(await appDataDir(), "assets"), os === "ios");
+    return os === "ios"
+      ? (await invoke<{ text: string }>("plugin:leadinglight-preview|asset_text", { filename })).text
+      : invoke<string>("image_text", { filename });
+  },
   async transcribe(asset, language) {
-    if (!(await isDesktop)) throw new Error("Transcription requires the Mac app on macOS 26 or newer. Your audio is saved.");
+    if (await isNative && await platformReady === "ios") {
+      const [{ invoke }, { appDataDir, join }] = await Promise.all([import("@tauri-apps/api/core"), import("@tauri-apps/api/path")]);
+      const filename = nativeAssetFilename(asset.url, await join(await appDataDir(), "assets"), true);
+      return (await invoke<{ text: string }>("plugin:leadinglight-preview|voice_transcribe", { filename, language })).text;
+    }
+    if (!(await isDesktop)) throw new Error("Transcription requires the Mac app, iPad app or iPhone app on OS 26 or newer. Your audio is saved.");
     const { invoke } = await import("@tauri-apps/api/core");
     const filename = decodeURIComponent(new URL(asset.url).pathname).split("/").pop();
     return invoke<string>("voice_transcribe", { filename, language });

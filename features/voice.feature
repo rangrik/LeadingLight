@@ -32,7 +32,7 @@ Feature: Voice recordings
     Given I am editing a page in the browser
     When I record and stop a voice block
     Then the audio is saved and playable
-    And the block explains that transcription requires the Mac app
+    And the block explains that transcription requires a native Apple app on OS 26 or newer
 
   Scenario: Saving the audio fails
     Given I have stopped a recording

@@ -40,7 +40,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
     <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region={!mobile || undefined}>
       <div
         className={cn(
-          "flex min-w-0 items-center gap-2 overflow-hidden px-4 transition-[padding] duration-200 ease-linear",
+          "flex min-w-0 flex-1 items-center gap-2 overflow-hidden ps-4 pe-1 transition-[padding] duration-200 ease-linear",
           // Past the lights, or past the lights and the window's sidebar button (12 px after it).
           lead && !sidebarOpen && !under && (toggle ? "ps-[calc(var(--traffic-left)_+_1rem)]" : "ps-[calc(var(--traffic-left)_+_50px)]"),
         )}
@@ -60,13 +60,13 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               {root && (
-                <BreadcrumbItem className="hidden shrink-0 md:@[24rem]/header:block">
+                <BreadcrumbItem className="hidden shrink-0 md:@[48rem]/header:block">
                   {onRoot ? <BreadcrumbLink render={<button onClick={onRoot} type="button" />}>{root}</BreadcrumbLink> : root}
                 </BreadcrumbItem>
               )}
               {current !== null && (
                 <>
-                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[24rem]/header:block" />}
+                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[48rem]/header:block" />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
                     <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>

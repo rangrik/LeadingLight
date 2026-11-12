@@ -1,3 +1,5 @@
+import { PaperPage } from "./paper-page";
+import { readPaper } from "~/lib/paper";
 import { reportOf } from "~/lib/work";
 import { Clock3, Flag, ScanText, Sparkles, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -7,7 +9,7 @@ import { Button } from "@leadinglight/ui/components/button";
 import { Input } from "@leadinglight/ui/components/input";
 import { Label } from "@leadinglight/ui/components/label";
 import { Badge } from "@leadinglight/ui/components/badge";
-import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Menu, MenuCheckboxItem, MenuItem, MenuPopup, MenuSeparator, MenuTrigger, MenuSub, MenuSubTrigger, MenuSubPopup } from "@leadinglight/ui/components/menu";
 import { Sheet, SheetDescription, SheetHeader, SheetPopup, SheetTitle } from "@leadinglight/ui/components/sheet";
 import { Tabs, TabsList, TabsTab, TabsPanel } from "@leadinglight/ui/components/tabs";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -22,7 +24,7 @@ import { createPage } from "~/lib/space";
 
 const date = (at: number) => new Date(at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-export function PageHistory({ page, className }: { page: string; className?: string }) {
+export function PageHistory({ page, className, submenu = false }: { page: string; className?: string; submenu?: boolean }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"history" | "authorship">("history");
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
@@ -73,24 +75,26 @@ export function PageHistory({ page, className }: { page: string; className?: str
   const change = lastChange && !selected?.milestone && firstChange ? { ...lastChange, before: firstChange.before } : lastChange;
   const snapshot = change?.after ?? change?.before;
   const originRows = origins(current?.content ?? null);
+  const Root = submenu ? MenuSub : Menu;
+  const Popup = submenu ? MenuSubPopup : MenuPopup;
   return <>
-    <Menu>
-      <MenuTrigger render={<Button aria-label="History and authorship" className={cn("size-7", className)} size="icon" variant="ghost" />}><Clock3 className="size-4" /></MenuTrigger>
-      <MenuPopup align="end">
+    <Root>
+      {submenu ? <MenuSubTrigger><Clock3 className="size-4" />History and authorship</MenuSubTrigger> : <MenuTrigger render={<Button aria-label="History and authorship" className={cn("size-7", className)} size="icon" variant="ghost" />}><Clock3 className="size-4" /></MenuTrigger>}
+      <Popup align="end">
         <MenuItem onClick={() => void show("history")}><Clock3 className="size-4" />Page history</MenuItem>
         <MenuItem onClick={() => void show("history", true)}><Flag className="size-4" />Save milestone…</MenuItem>
         <MenuSeparator />
         <MenuCheckboxItem checked={highlight} onCheckedChange={(on) => { setHighlight(on); document.documentElement.dataset.authorship = String(on); localStorage.setItem("leadinglight.authorship", String(on)); window.dispatchEvent(new Event("leadinglight:authorship")); }}>Show authorship</MenuCheckboxItem>
         <MenuItem onClick={() => void show("authorship")}><ScanText className="size-4" />Inspect authorship</MenuItem>
-      </MenuPopup>
-    </Menu>
+      </Popup>
+    </Root>
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetPopup className="w-full max-w-3xl sm:w-[min(92vw,56rem)]">
+      <SheetPopup className="w-full max-w-3xl pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:w-[min(92vw,56rem)]" closeProps={{ style: { top: "calc(env(safe-area-inset-top) + 0.5rem)" } }}>
         <SheetHeader>
           <SheetTitle>{mode === "history" ? "Page history" : "Authorship"}</SheetTitle>
           <SheetDescription>{mode === "history" ? "Saved automatically. Restore a moment without losing what came after." : "Who added these words in LeadingLight. This does not detect text composed in other apps."}</SheetDescription>
         </SheetHeader>
-        {error && <div className="mx-4 space-y-2 rounded-lg bg-destructive/10 p-3 text-sm"><p className="text-destructive" role="alert">{error}</p><Button size="sm" variant="outline" onClick={() => void run(async () => { const source = await objects.get(page); if (!source) return; const { id: _id, revision: _revision, ...copy } = { ...source, ...liveSnapshot(page) }; const saved = await createPage({ ...copy, title: `${copy.title || "Untitled"} (unsaved copy)` }, { ...action("Kept unsaved edits"), preserveOrigin: true }); openPage(saved.id); setOpen(false); })}>Keep my unsaved edits as a new page</Button></div>}
+        {error && <div className="mx-4 space-y-2 rounded-lg bg-destructive/10 p-3 text-sm"><p className="text-destructive" role="alert">{error}</p><Button size="sm" variant="outline" onClick={() => void run(async () => { const source = await objects.get(page); if (!source) return; const { id: _id, revision: _revision, ...copy } = { ...source, ...liveSnapshot(page) }; const saved = await createPage({ ...copy, title: `${copy.title || "Untitled"} (unsaved copy)`, createdAt: Date.now() }, { ...action("Kept unsaved edits"), preserveOrigin: true }); openPage(saved.id); setOpen(false); })}>Keep my unsaved edits as a new page</Button></div>}
         {mode === "authorship" ? <div className="min-h-0 flex-1 space-y-5 overflow-auto p-5">
           <p className="text-muted-foreground text-sm">Agent text is tinted when Show authorship is on. Words you add are recorded separately; older untracked words remain unknown.</p>
           {originRows.length === 0 && <p className="text-muted-foreground text-sm">There are no words on this page yet.</p>}
@@ -117,17 +121,20 @@ export function PageHistory({ page, className }: { page: string; className?: str
                 <div className="mb-4 space-y-2"><h2 className="break-words font-semibold text-lg">{snapshot.title || "Untitled"}</h2><p className="text-muted-foreground text-xs">{selected.author.name}{selected.author.model ? ` · ${selected.author.model}` : ""} · {date(selected.at)}</p></div>
                 <Tabs defaultValue="preview">
                   <TabsList><TabsTab value="preview">Preview</TabsTab><TabsTab value="changes">Changes</TabsTab></TabsList>
-                  <TabsPanel value="preview"><BlockEditor assets={assets} content={snapshot.content} key={selected.id} label="Version preview" readOnly /></TabsPanel>
+                  <TabsPanel value="preview">
+                    {readPaper(snapshot.properties.paper) ? <div aria-label="Notebook version preview" className="flex h-[min(65dvh,48rem)] flex-col"><p className="sr-only">{readPaper(snapshot.properties.paper)!.items.map((item) => item.text || item.asset?.name || item.kind).join(". ")}</p><PaperPage key={selected.id} id={snapshot.id} title={snapshot.title} paper={readPaper(snapshot.properties.paper)!} request={null} onChange={async () => {}} onDetails={() => {}} readOnly /></div> : null}
+                    {snapshot.content && <BlockEditor assets={assets} content={snapshot.content} key={selected.id} label="Version preview" readOnly />}
+                  </TabsPanel>
                   <TabsPanel value="changes" className="space-y-4 pt-3">
-                    <VersionText label="Before" text={docText(change?.before?.content ?? null)} />
-                    <VersionText label="After" text={docText(change?.after?.content ?? null)} />
+                    <VersionText label="Before" text={[docText(change?.before?.content ?? null), ...(readPaper(change?.before?.properties.paper)?.items.map((item) => item.text || item.asset?.name || item.kind) ?? [])].join("\n")} />
+                    <VersionText label="After" text={[docText(change?.after?.content ?? null), ...(readPaper(change?.after?.properties.paper)?.items.map((item) => item.text || item.asset?.name || item.kind) ?? [])].join("\n")} />
                     {change?.before?.title !== change?.after?.title && <p className="text-sm">Title: {change?.before?.title || "Untitled"} → {change?.after?.title || "Deleted"}</p>}
                     {JSON.stringify(change?.before?.properties) !== JSON.stringify(change?.after?.properties) && <p className="text-muted-foreground text-sm">This version also changed page properties. Restoring includes those values.</p>}
                   </TabsPanel>
                 </Tabs>
                 <div className="mt-5 flex flex-wrap gap-2 border-t pt-4">
                   <Button disabled={busy || Boolean(reportOf(snapshot))} onClick={() => void run(() => restoreVersion(snapshot))} size="sm">Restore this version</Button>
-                  <Button disabled={busy} onClick={() => void run(async () => { const { id: _id, revision: _revision, ...copy } = snapshot; const made = await createPage({ ...copy, title: `${copy.title || "Untitled"} (copy)`, ...(reportOf(snapshot) ? { typeId: "page", properties: {} } : {}), createdAt: Date.now() }, { ...action("Kept version as copy"), preserveOrigin: true }); openPage(made.id); })} size="sm" variant="outline">Keep a copy</Button>
+                  <Button disabled={busy} onClick={() => void run(async () => { const { id: _id, revision: _revision, ...copy } = snapshot; const made = await createPage({ ...copy, title: `${copy.title || "Untitled"} (copy)`, ...(reportOf(snapshot) ? { typeId: "page", properties: {} } : {}), createdAt: Date.now() }, { ...action("Kept version as copy"), preserveOrigin: true }); openPage(made.id); setOpen(false); })} size="sm" variant="outline">Keep a copy</Button>
                   {selected.author.kind === "agent" && !entries.some((e) => e.undoOf === selected.action) && <Button disabled={busy} onClick={() => void run(() => undoAction(selected.action))} size="sm" variant="outline">Undo entire action</Button>}
                 </div>
               </>}

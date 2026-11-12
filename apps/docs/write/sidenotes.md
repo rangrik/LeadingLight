@@ -81,3 +81,10 @@ Sidenotes need words to sit on, so images, video, files, embeds, code blocks and
 - [Pages](/organize/pages)
 - [Window layout and panes](/workspace/layout)
 - [Feed and feedback](/ai/feed-feedback)
+
+## Finish a thought
+
+Press **⌘Enter** while writing a sidenote, or tap its **Finish sidenote** checkmark.
+The latest words stay saved, and the cursor returns just after the noted passage in the
+main document. The sidenote stays editable. The checkmark works on iPad and iPhone;
+an attached keyboard can use the same shortcut.

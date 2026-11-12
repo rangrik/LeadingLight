@@ -13,7 +13,7 @@ type VoiceOptions = { assets: AssetStore; onReview?: (review: VoiceReview) => vo
 type Phase = "idle" | "starting" | "recording" | "saving" | "transcribing";
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const microphoneErrors: Record<string, string> = {
-  NotAllowedError: "Microphone access is off. Allow LeadingLight in System Settings → Privacy & Security → Microphone, or allow this site in your browser.",
+  NotAllowedError: "Microphone access is off. Allow LeadingLight in Settings (System Settings on Mac) → Privacy & Security → Microphone, or allow this site in your browser.",
   NotFoundError: "No microphone was found. Connect a microphone and try again.",
   NotReadableError: "Your microphone could not be started. Check your input device and close other apps using it, then try again.",
 };
@@ -43,6 +43,13 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
       stream.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
+  useEffect(() => {
+    editor.view.dom.dispatchEvent(new CustomEvent("ll:recording-state", { bubbles: true, detail: phase }));
+    return () => { if (!editor.isDestroyed) editor.view.dom.dispatchEvent(new CustomEvent("ll:recording-state", { bubbles: true, detail: "idle" })); };
+  }, [editor, phase]);
+  useEffect(() => {
+    if (error) editor.view.dom.dispatchEvent(new CustomEvent("ll:recording-error", { bubbles: true, detail: error }));
+  }, [editor, error]);
   // Added by the capture box's mic: it records at once, and only the once. A timer, so React's
   // dev double mount starts it a single time.
   useEffect(() => {
@@ -72,7 +79,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   const transcribe = async (asset: Asset) => {
     setPhase("transcribing");
     try {
-      if (!assets.transcribe) throw new Error("Transcription is available in the Mac app on macOS 26 or newer. Your audio is saved.");
+      if (!assets.transcribe) throw new Error("Transcription is available in the Mac, iPad and iPhone apps on OS 26 or newer. Your audio is saved.");
       const text = (await assets.transcribe(asset, navigator.language)).trim();
       if (!alive.current || editor.isDestroyed) return;
       if (!text) throw new Error("No speech was found. Your audio is saved; you can retry transcription.");
@@ -136,7 +143,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
     setPhase("starting");
     try {
       if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-        throw new Error("Recording is unavailable in this browser. Open LeadingLight on your Mac.");
+        throw new Error("Recording is unavailable in this browser. Open LeadingLight in its Mac, iPad or iPhone app.");
       }
       const input = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!alive.current || cancelled.current || started !== attempt.current) {
@@ -196,7 +203,7 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
   };
 
   return (
-    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" data-voice-id={node.attrs.recordingId ? `voice-${node.attrs.recordingId}` : undefined} contentEditable={false}>
+    <NodeViewWrapper className="ll-media space-y-2" data-media="voice" data-voice-phase={phase} data-voice-id={node.attrs.recordingId ? `voice-${node.attrs.recordingId}` : undefined} contentEditable={false}>
       {node.attrs.src && <Player kind="audio" src={node.attrs.src} onError={() => setError("The saved recording cannot be played. The audio file may have been moved or deleted.")} />}
       {editable && <div className="ll-row flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2.5 text-sm" data-controls>
         <Mic className="size-4 shrink-0 text-muted-foreground" />
@@ -204,17 +211,17 @@ function VoiceView({ node, editor, extension, updateAttributes, getPos }: NodeVi
           {phase === "recording" ? `Recording · ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
             : phase === "starting" ? "Waiting for microphone…"
             : phase === "saving" ? "Saving audio…"
-            : phase === "transcribing" ? "Transcribing on this Mac… The speech model may download on first use."
+            : phase === "transcribing" ? "Transcribing on this device… The speech model may download on first use."
             : node.attrs.transcribed ? "Voice recording · transcript added below" : node.attrs.src ? "Voice recording" : "Record a voice note"}
         </span>
-        {phase === "recording" && <Button size="xs" variant="outline" onClick={() => {
+        {phase === "recording" && <Button data-voice-stop size="xs" variant="outline" onClick={() => {
           commit();
           setPhase("saving");
           if (recorder.current?.state !== "inactive") recorder.current?.stop();
         }}><Square className="size-4 fill-current" />Stop and transcribe</Button>}
         {(phase === "recording" || phase === "starting") && <Button size="xs" variant="ghost" onClick={cancel}>Cancel</Button>}
-        {phase === "idle" && pending.current && <Button size="xs" variant="outline" onClick={() => { if (!busy.current) void save(); }}>Save recording</Button>}
-        {phase === "idle" && !pending.current && !node.attrs.src && <Button size="xs" variant="outline" onClick={() => void start()}>Record</Button>}
+        {phase === "idle" && pending.current && <Button data-voice-save size="xs" variant="outline" onClick={() => { if (!busy.current) void save(); }}>Save recording</Button>}
+        {phase === "idle" && !pending.current && !node.attrs.src && <Button data-voice-start size="xs" variant="outline" onClick={() => void start()}>Record</Button>}
         {phase === "idle" && node.attrs.src && !node.attrs.transcribed && <Button size="xs" variant="outline" onClick={() => {
           if (busy.current) return;
           busy.current = true;

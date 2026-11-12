@@ -1,9 +1,10 @@
 import { type Editor, mergeAttributes, Node, nodePasteRule } from "@tiptap/core";
+import { closeHistory } from "@tiptap/pm/history";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { type NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import { AudioLines, File as FileIcon, Film, Image as ImageIcon, ImageOff, Link as LinkIcon, Trash, Upload, VideoOff, VolumeOff } from "lucide-react";
-import { type FormEvent, type ReactNode, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Input } from "@leadinglight/ui/components/input";
 import { Toolbar, ToolbarPrimitive, ToolbarSeparator } from "@leadinglight/ui/components/toolbar";
@@ -159,6 +160,54 @@ function ImageView(props: NodeViewProps) {
   const selected = isSelected(props);
   const { assets, put } = useAsset(props);
   const { failed, onError } = useFailed(node.attrs.src);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const running = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const currentPosition = (src: string) => {
+    if (!alive.current || props.editor.isDestroyed || fixed(props.editor)) return undefined;
+    const pos = props.getPos();
+    return pos !== undefined && props.editor.state.doc.nodeAt(pos)?.attrs.src === src ? pos : undefined;
+  };
+  const extract = async () => {
+    if (running.current || !assets.recognizeText) return;
+    running.current = true;
+    setBusy(true);
+    setMessage("");
+    const source = node.attrs.src;
+    try {
+      const text = (await assets.recognizeText({ url: source, name: node.attrs.name, size: node.attrs.size, mime: node.attrs.mime })).trim();
+      const pos = currentPosition(source);
+      if (pos === undefined) return;
+      if (!text) { setMessage("No text was found. The original is still saved."); return; }
+      const { editor } = props;
+      const block = editor.state.doc.nodeAt(pos)!;
+      const paragraphs = text.split(/\n+/).filter(Boolean).map((line) => editor.schema.nodes.paragraph.create(null, editor.schema.text(line)));
+      editor.view.dispatch(closeHistory(editor.state.tr).insert(pos + block.nodeSize, paragraphs));
+      editor.view.dispatch(closeHistory(editor.state.tr));
+      setMessage("Text added below. You can edit it in the page.");
+    } catch (error) {
+      if (currentPosition(source) !== undefined) setMessage(error instanceof Error ? error.message : String(error));
+    } finally { running.current = false; if (alive.current) setBusy(false); }
+  };
+  const editDrawing = async () => {
+    if (running.current || !assets.capture) return;
+    running.current = true;
+    setBusy(true);
+    setMessage("");
+    const source = node.attrs.src;
+    try {
+      const result = await assets.capture("drawing", node.attrs.drawing);
+      if (result && currentPosition(source) !== undefined) updateAttributes({ src: result.image.url, name: result.image.name, size: result.image.size, mime: result.image.mime, drawing: result.drawing });
+    } catch (error) { if (currentPosition(source) !== undefined) setMessage(error instanceof Error ? error.message : String(error)); }
+    finally { running.current = false; if (alive.current) setBusy(false); }
+  };
+  useEffect(() => {
+    if (!node.attrs.autoExtract || fixed(props.editor)) return;
+    const timer = window.setTimeout(() => { updateAttributes({ autoExtract: false }); void extract(); });
+    return () => window.clearTimeout(timer);
+  }, []);
   // There, a click shows the image itself, larger, as a file opens.
   const view = fixed(props.editor) ? () => assets.open({ url: node.attrs.src, name: node.attrs.name, size: node.attrs.size, mime: node.attrs.mime }) : undefined;
   return (
@@ -179,7 +228,7 @@ function ImageView(props: NodeViewProps) {
                 </ToolButton>
               ))}
               <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />
-              <ReplaceAndRemove accept="image/*" onFile={put} onRemove={deleteNode} />
+              <ReplaceAndRemove accept="image/*" onFile={async (file) => { await put(file); updateAttributes({ drawing: null }); }} onRemove={deleteNode} />
             </MediaToolbar>
           )}
         </div>
@@ -188,6 +237,11 @@ function ImageView(props: NodeViewProps) {
           <ChooseFile accept="image/*" onFile={put} />
         </Placeholder>
       )}
+      {!fixed(props.editor) && node.attrs.src && (selected || busy || message) && <div className="flex flex-wrap items-center gap-2 py-2 text-sm" data-controls contentEditable={false}>
+        {node.attrs.drawing && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void editDrawing()}>Edit handwriting</Button>}
+        {assets.recognizeText && <Button size="sm" variant="ghost" disabled={busy} onClick={() => void extract()}>{busy ? "Working…" : "Extract text"}</Button>}
+        {message && <span className="text-muted-foreground" role="status">{message}</span>}
+      </div>}
     </NodeViewWrapper>
   );
 }
@@ -196,13 +250,13 @@ export const ImageBlock = Node.create<MediaOptions>({
   name: "image",
   ...mediaNode,
   addOptions: () => ({ assets: null as unknown as AssetStore }),
-  addAttributes: () => ({ ...mediaAttrs, width: { default: "medium" } }),
+  addAttributes: () => ({ ...mediaAttrs, width: { default: "medium" }, drawing: { default: null, rendered: false }, autoExtract: { default: false, rendered: false } }),
   parseHTML: () => [{ tag: "img[src]" }],
   renderHTML: ({ HTMLAttributes, node }) => [
     "img",
     mergeAttributes(HTMLAttributes, { src: node.attrs.src, alt: node.attrs.name, "data-width": node.attrs.width }),
   ],
-  addNodeView: () => ReactNodeViewRenderer(ImageView),
+  addNodeView: () => ReactNodeViewRenderer(ImageView, { stopEvent }),
 });
 
 // --- Video, audio and file ----------------------------------------------------

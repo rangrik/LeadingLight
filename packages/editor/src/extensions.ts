@@ -29,6 +29,7 @@ import { Todo } from "./todo";
 import { WritingAids } from "./writing";
 import { CaretScroll } from "./caret-scroll";
 import { Origin } from "./authorship";
+import { DocumentInk } from "./document-ink";
 
 // ArrowUp on the first line, or Backspace in a lone empty block, hands focus back to the title.
 // Low priority so menus get the keys first.
@@ -291,6 +292,7 @@ export function createExtensions(opts: {
     Thought,
     Cite,
     Origin,
+    ...DocumentInk,
     opts.placeholder ? Placeholder.configure({ paragraph: opts.placeholder }) : Placeholder,
     BlurSelection,
     WritingAids,

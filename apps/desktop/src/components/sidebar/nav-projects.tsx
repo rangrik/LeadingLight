@@ -1,9 +1,9 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
 // Changes: pages instead of projects, its label given (Pinned, Recent) with a New page action, a
-// Sort menu and empty text for Recent, rows select instead of linking; the row menu is Rename,
+// Sort menu, New notebook and empty text for Recent, rows select instead of linking; the row menu is Rename,
 // Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
 // beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
-import { ArrowUpDown, Ellipsis, Link, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
+import { ArrowUpDown, Ellipsis, Link, NotebookPen, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -25,6 +25,10 @@ import {
 } from "@leadinglight/ui/components/sidebar";
 import { localPrefs } from "~/lib/local-prefs";
 import type { ObjectSummary } from "~/lib/objects";
+import { newNotebook } from "~/lib/notebooks";
+import { openPage } from "~/lib/panes";
+import { reportSaveError } from "~/lib/saving";
+import { Tooltip, TooltipTrigger, TooltipPopup } from "@leadinglight/ui/components/tooltip";
 import { StateDot } from "~/components/state-dot";
 
 // How Recent is ordered, newest first either way; kept on this Mac.
@@ -227,6 +231,7 @@ export function NavProjects({ label, projects, onCreate, sortable }: { label: st
           </MenuPopup>
         </Menu>
       )}
+      {onCreate && <Tooltip><TooltipTrigger render={<SidebarGroupAction aria-label="New notebook" className={sortable ? "right-17" : "right-9"} onClick={() => void newNotebook().then((page) => openPage(page.id)).catch(reportSaveError)} />}><NotebookPen /></TooltipTrigger><TooltipPopup>New notebook</TooltipPopup></Tooltip>}
       {onCreate && (
         <SidebarGroupAction aria-label="New page" onClick={onCreate}>
           <Plus />

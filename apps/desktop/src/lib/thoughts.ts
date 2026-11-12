@@ -4,6 +4,7 @@ import { childOf, createChild } from "./linked";
 import { editPage, isLive, liveContent, watchLive } from "./live";
 import { type LLObject, type ObjectSummary, objects } from "./objects";
 import { reportSaveError, trackFlush } from "./saving";
+import { clearEmergency, saveEmergency } from "./store-local";
 
 const SAVE_DELAY_MS = 500;
 
@@ -36,6 +37,7 @@ const readable = (doc: EditorDoc): EditorDoc => (doc.content?.length ? doc : { t
 // task (DECISIONS.md, 24). One queue writes the Thoughts page, so neither saves over the other.
 type Shared = {
   id?: string;
+  snapshot?: LLObject;
   // The Thoughts page as loaded, with the changes since; null while it loads.
   doc: EditorDoc;
   version: number | null;
@@ -60,14 +62,19 @@ function sharedFor(page: string): Shared {
 function flush(s: Shared): Promise<void> {
   clearTimeout(s.timer);
   const target = s.id;
+  if (!target && s.creating) return s.creating.then(() => flush(s));
   if (!target || !s.changes.length) return s.saving;
   const batch = s.changes.splice(0);
+  const recovery = !isLive(target) && s.snapshot ? saveEmergency(s.snapshot, { content: readable(s.doc) }) : undefined;
   const run = (d: EditorDoc) => readable(batch.reduce((acc, change) => change(acc), d));
   s.saving = s.saving.then(async () => {
     if (isLive(target)) return editPage(target, { content: run });
     const obj = await objects.get(target);
     if (obj) await objects.update(target, { content: run(obj.content ?? { type: "doc", content: [] }) });
-  }).catch(reportSaveError);
+  }).then(() => clearEmergency(target, recovery)).catch((error) => {
+    s.changes.unshift(...batch);
+    reportSaveError(error);
+  });
   return s.saving;
 }
 
@@ -115,6 +122,7 @@ export function useThoughts(page: ObjectSummary, onNote: (thoughts?: LLObject) =
     if (linked === s.id && (s.version !== null || s.loading)) return;
     void flush(s);
     s.id = linked;
+    s.snapshot = undefined;
     s.creating = undefined;
     s.changes = [];
     s.doc = { type: "doc", content: [] };
@@ -129,8 +137,11 @@ export function useThoughts(page: ObjectSummary, onNote: (thoughts?: LLObject) =
     if (!linked) return done();
     s.version = null;
     s.hosts.forEach((h) => h());
-    const open = liveContent(linked);
-    (open ? Promise.resolve({ content: open }) : objects.get(linked)).then((obj) => done(obj?.content ?? undefined)).catch(console.error);
+    objects.get(linked).then((obj) => {
+      if (s.id !== linked) return;
+      s.snapshot = obj ?? undefined;
+      done(liveContent(linked) ?? obj?.content ?? undefined);
+    }).catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linked, s]);
 
@@ -170,6 +181,7 @@ export function useThoughts(page: ObjectSummary, onNote: (thoughts?: LLObject) =
                 ? Promise.resolve()
                 : createChild(page.id, "thoughts").then((thoughts) => {
                     s.id = thoughts.id;
+                    s.snapshot = thoughts;
                     noted.current(thoughts);
                     void flush(s);
                   });

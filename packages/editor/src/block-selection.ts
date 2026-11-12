@@ -16,11 +16,17 @@ import { slashMenuOpen } from "./slash-menu";
 // The nodes that count as blocks: top-level nodes, and list items (each to-do or bullet).
 export const ITEMS = new Set(["listItem", "taskItem"]);
 const holdsBlocks = (node: PMNode) => node.type.name === "doc" || /List$/.test(node.type.name);
+const annotationAt = ($pos: ResolvedPos): number | null => {
+  for (let depth = 1; depth <= $pos.depth; depth++) if ($pos.node(depth).type.name === "annotatedBlock") return $pos.before(depth);
+  return null;
+};
 
 // Whole sibling blocks (top-level blocks, or items of one list), from the anchor block to the
 // head block. Invisible to the browser; a decoration draws it.
 export class BlockSelection extends Selection {
   static create(doc: PMNode, anchorBlock: number, headBlock: number): BlockSelection {
+    anchorBlock = annotationAt(doc.resolve(anchorBlock)) ?? anchorBlock;
+    headBlock = annotationAt(doc.resolve(headBlock)) ?? headBlock;
     const sizeAt = (pos: number) => doc.nodeAt(pos)?.nodeSize ?? 0;
     if (anchorBlock <= headBlock) {
       return new BlockSelection(doc.resolve(anchorBlock), doc.resolve(headBlock + sizeAt(headBlock)));
@@ -29,6 +35,13 @@ export class BlockSelection extends Selection {
   }
 
   static between($anchor: ResolvedPos, $head: ResolvedPos): Selection {
+    const anchor = annotationAt($anchor), head = annotationAt($head);
+    if (anchor !== null || head !== null) {
+      const forward = $anchor.pos <= $head.pos, doc = $anchor.doc;
+      const a = anchor === null ? $anchor.pos : anchor + (forward ? 0 : doc.nodeAt(anchor)!.nodeSize);
+      const h = head === null ? $head.pos : head + (forward ? doc.nodeAt(head)!.nodeSize : 0);
+      return BlockSelection.between(doc.resolve(a), doc.resolve(h));
+    }
     if ($anchor.pos !== $head.pos && $anchor.sameParent($head) && holdsBlocks($anchor.parent)) {
       return new BlockSelection($anchor, $head);
     }
@@ -82,9 +95,11 @@ class BlockBookmark implements SelectionBookmark {
   }
 }
 
-// The position before the block that holds pos: its innermost list item, else its top-level block.
+// Ink and its whole block stay together; ordinary lists still select individual items.
 export function blockPosAt(doc: PMNode, pos: number): number {
   const $p = doc.resolve(pos);
+  const annotation = annotationAt($p);
+  if (annotation !== null) return annotation;
   for (let d = $p.depth; d > 0; d--) if (ITEMS.has($p.node(d).type.name)) return $p.before(d);
   if ($p.depth > 0) return $p.before(1);
   return $p.nodeAfter ? pos : pos - ($p.nodeBefore?.nodeSize ?? 0);
@@ -102,6 +117,7 @@ export function selectedBlocks(selection: Selection): { from: number; to: number
 // The position of a list item's node, from its <li>.
 export function itemPos(view: EditorView, li: HTMLElement): number | null {
   const p = view.posAtDOM(li, 0);
+  if (annotationAt(view.state.doc.resolve(p)) !== null) return null;
   for (const q of [p, p - 1]) if (q >= 0 && view.nodeDOM(q) === li) return q;
   return null;
 }
@@ -131,7 +147,7 @@ export function duplicateBlocks(view: EditorView): boolean {
   const copy = doc.slice(range.from, range.to).content;
   tr.insert(range.to, copy);
   // Selected blocks hand the selection to the copy, so ⌘D again copies the copy.
-  if (selectedBlocks(selection)) tr.setSelection(BlockSelection.between(tr.doc.resolve(range.to), tr.doc.resolve(range.to + copy.size)));
+  if (selectedBlocks(selection) || doc.nodeAt(range.from)?.type.name === "annotatedBlock") tr.setSelection(BlockSelection.between(tr.doc.resolve(range.to), tr.doc.resolve(range.to + copy.size)));
   view.dispatch(tr.scrollIntoView());
   return true;
 }

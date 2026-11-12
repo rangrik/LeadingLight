@@ -121,6 +121,7 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
   }
 
   // The rest change this page, through its editor. A report stays as its agent published it.
+  if (pageOf(pageId)?.typeId === "notebook") return fail("This notebook holds ink and positioned text. Create a document for block text instead.");
   if (isReport(pageId)) return fail(`${quoted(pageId)} is an agent's report, which isn't changed once published.`);
   const ed = liveEditor(pageId);
   if (!ed) return fail(`${quoted(pageId)} is not open any more, so it can't be changed. Ask the person to open it.`);
@@ -130,6 +131,7 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
     if (!hit) return fail(`"${find}" is not in ${quoted(pageId)}. Read the page again and use its words as they are.`);
     const times = hit.text.includes("\n") ? 1 : ed.text().split(hit.text).length - 1;
     if (times > 1) return fail(`"${hit.text}" is in the page ${times} times. Include more of the words around it.`);
+    if (ed.rangeHasInk(hit.from, hit.to)) return fail("These words have handwriting attached. Edit them directly in the page so you can review the annotation.");
     ed.replaceRange(hit.from, hit.to, inlineHtml(a.replace ?? ""));
     return ok(`Changed "${hit.text}" in ${quoted(pageId)}.`);
   }
@@ -140,6 +142,7 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
     return ok(`Added to ${quoted(pageId)}${after ? ` after "${after.text}"` : " at the end"}.`);
   }
   if (name === "write_page") {
+    if (ed.rangeHasInk(0, Number.MAX_SAFE_INTEGER)) return fail("This page contains handwriting. Add new blocks or edit unannotated text instead of replacing its whole body.");
     ed.setContent(stampDoc(htmlDoc(html(a.markdown ?? "")), context.author)!);
     return ok(`Rewrote ${quoted(pageId)}.`);
   }
