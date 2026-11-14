@@ -5,6 +5,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-14 | `cloud.spec.ts` "web workspace fits 390px/820px" fails: it clicks a History and authorship header button that `2251046` moved into the page's ⋯ menu | A stale test, not a product fault, and not in CI's browser smoke. Found while merging the device approval work. | The next change to `cloud.spec.ts` or the page header. |
 | 2026-11-14 | Ask for Touch ID or the Mac password before the installed app shows the recovery key or approves a device | Not needed for the sign-out fix: the notes are open in the app, and the key was already on disk and shown while signed in. It needs native code the browser can't test. | The next round of sync security work. |
 | 2026-11-14 | Replacing the recovery key after a device is lost, by re-encrypting and re-uploading from a device that still has the notes | Large: the cloud copy is replaced and every other device has to rejoin. | A device is lost, or with the Touch ID row above. |
 | 2026-11-14 | On the device approval page, a pasted key that is not base64 shows the browser's own `atob` error, and a link that expires while the page is open leaves Connect this device enabled | Both are older than the wording fix and both fail safely: nothing is saved and the request stays pending. | The next change to `native-approval.tsx` or `enableSync`. |
