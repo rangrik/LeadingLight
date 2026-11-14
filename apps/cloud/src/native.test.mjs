@@ -137,10 +137,14 @@ test('expiry, revocation and encrypted sync stay isolated between accounts', opt
   assert.equal((await (await native('sync', undefined, first.token)).json()).events.length, 1);
   assert.deepEqual((await (await native('sync', undefined, second.token)).json()).events, []);
   assert.equal((await (await native('me', undefined, first.token)).json()).id, owner);
+  // Use renews a sign-in that is close to its end; one that ended stays ended.
+  await sql`UPDATE native_sessions SET expires_at=now()+interval '1 day' WHERE owner=${owner}`;
+  assert.ok(new Date((await (await native('me', undefined, first.token)).json()).expiresAt).getTime() > Date.now() + 29 * 86400000);
   assert.equal((await native('native/revoke', {}, first.token)).status, 200);
   assert.equal((await native('me', undefined, first.token)).status, 401);
   await sql`UPDATE native_sessions SET expires_at=now()-interval '1 second' WHERE owner=${other}`;
   assert.equal((await native('me', undefined, second.token)).status, 401);
+  assert.ok((await sql`SELECT expires_at<now() AS ended FROM native_sessions WHERE owner=${other}`)[0].ended);
   assert.equal((await native('config', undefined, second.token)).status, 401);
   assert.equal((await (await native('config')).json()).ready, true);
 }));

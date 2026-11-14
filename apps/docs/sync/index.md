@@ -77,6 +77,9 @@ Either way the recovery key reaches the new device encrypted, so the service nev
 device keeps its sign-in in the system Keychain. A request is good for ten minutes and can be
 approved once; after that, start again in the app. Only ten codes can be tried in ten minutes.
 
+A device stays signed in while you use it. If it is not opened for 30 days, its sign-in ends and
+it asks you to connect again; your notes and recovery key stay on the device.
+
 Signing in to your workspace is separate from Claude Code and Codex. Agents keep using the CLI
 account already signed in on your Mac. See [Overview and setup](/ai/).
 
@@ -110,6 +113,11 @@ still sync.
 
 The recovery key unlocks your encrypted notes on a new device. Press **Show recovery key** on the
 **Sync** tab to see it, under "Recovery key — save this somewhere private".
+
+A device that has synced keeps its key after it is signed out, and the **Sync** tab still shows
+it: "Sign in on the Account tab to sync this device again. If your browser asks for a recovery
+key, use the one kept here." Anyone who can open the app on that device can read the key, as they
+can read the notes.
 
 ::: danger Keep it safe
 LeadingLight can't recover your notes for you. If you lose the recovery key **and** every device

@@ -96,6 +96,17 @@ Feature: Connect the installed app to the same encrypted workspace
     And that credential cannot read synced notes again
     And the local notes remain available
 
+  Scenario: A device in use stays signed in
+    Given the installed app's sign-in would end in 1 day
+    When the app makes any request to the cloud
+    Then its sign-in ends 30 days from that request
+
+  Scenario: A sign-in that ended is not brought back
+    Given the installed app was not used for 30 days and its sign-in ended 1 second ago
+    When the app makes a request to the cloud
+    Then it reads "This connection expired or was revoked. Reconnect this device."
+    And the sign-in's end time has not moved
+
   Scenario: Initial sync crosses multiple history pages without missing notes
     Given the account has 121 encrypted history events numbered 1 through 121
     When a new device fetches them in pages of at most 50 events

@@ -15,7 +15,8 @@ const keyName = (owner: string) => `leadinglight.sync-key:${owner}`;
 const cursorName = (owner: string) => `leadinglight.sync-cursor:${owner}`;
 const b64 = (data: Uint8Array) => { let text = ''; for (let i = 0; i < data.length; i += 32768) text += String.fromCharCode(...data.subarray(i, i + 32768)); return btoa(text); };
 const bytes = (value: string) => Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
-export const syncKey = () => cloudState().user ? localStorage.getItem(keyName(cloudState().user!.id)) ?? '' : '';
+// Signed out, this is the key of the library this device is bound to, so it can still be shown.
+export const syncKey = () => { const owner = cloudState().user?.id ?? localStorage.getItem('leadinglight.sync-owner'); return owner ? localStorage.getItem(keyName(owner)) ?? '' : ''; };
 export const syncEnabled = () => ownsSyncLibrary(cloudState().user?.id, localStorage.getItem('leadinglight.sync-owner')) && Boolean(syncKey()) && localStorage.getItem(`leadinglight.sync-paused:${cloudState().user?.id}`) !== 'true';
 const assertOwner = (owner: string) => {
   if (cloudState().verifying || cloudState().user?.id !== owner || !ownsSyncLibrary(owner, localStorage.getItem('leadinglight.sync-owner'))) throw new Error('The account changed. Sync stopped to protect this local library.');

@@ -29,8 +29,10 @@ export async function authenticateNative(request, sql) {
   require(!request.headers.has('origin') && nativeRoute(request), 403, 'This native session cannot use this route.');
   const token = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('authorization') || '')?.[1];
   require(token, 401, 'Reconnect this device to your account.');
-  const [session] = await sql`SELECT id,owner,account_name,expires_at FROM native_sessions WHERE credential_hash=${hash(token)} AND revoked_at IS NULL AND expires_at>now()`;
+  const [session] = await sql`SELECT id,owner,account_name,expires_at,expires_at<now()+interval '29 days' AS renew FROM native_sessions WHERE credential_hash=${hash(token)} AND revoked_at IS NULL AND expires_at>now()`;
   require(session, 401, 'This connection expired or was revoked. Reconnect this device.');
+  // A device in use stays signed in. One write a day at most, not one per request.
+  if (session.renew) [{ expires_at: session.expires_at }] = await sql`UPDATE native_sessions SET expires_at=now()+interval '30 days' WHERE id=${session.id} RETURNING expires_at`;
   return { user: { id: session.owner, name: session.account_name }, sessionId: session.id, expiresAt: session.expires_at };
 }
 

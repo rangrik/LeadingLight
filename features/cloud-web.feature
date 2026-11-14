@@ -65,6 +65,35 @@ Feature: A local-first web app with optional accounts and sync
     And resuming uses the same key
     And a wrong key can be replaced from the Sync panel
 
+  Scenario: A signed-out device still shows its recovery key
+    Given this device synced notes with a recovery key
+    And its sign-in has ended, or I signed out
+    When I open Account and sync, Sync
+    Then I read "Sign in on the Account tab to sync this device again. If your browser asks for a recovery key, use the one kept here."
+    And Show recovery key shows the same key as before
+    When I start signing in again and a browser without the key asks for it
+    And I paste that key and press Connect this device
+    Then I read "Device approved"
+    And after signing in the Sync tab reads "Up to date" with the same notes
+
+  Scenario: Starting offline does not tell a signed-in device to sign in
+    Given this device synced notes and its sign-in is still good
+    When the app starts with no network and I open Account and sync, Sync
+    Then I read "You’re offline. Your local notes still work; cloud will reconnect when the network returns."
+    And I do not read "Sign in on the Account tab to sync this device again."
+    And Show recovery key still shows the key
+
+  Scenario: A device that never synced has no key to show
+    Given this device has no recovery key and no sign-in
+    When I open Account and sync, Sync
+    Then there is no Show recovery key button
+    And I read "Sign in to connect devices. Your local notes remain available."
+
+  Scenario: Another account does not see this device's key
+    Given this device synced notes as one account and that sign-in ended
+    When I sign in as a different account and open Account and sync, Sync
+    Then there is no Show recovery key button
+
   Scenario: Cloud access is private by default
     Given the service has not enabled my account
     When I sign in
