@@ -903,3 +903,19 @@ Broad agent rewrites cannot discard annotated content.
 The DOM owns inline ink and its geometry. A narrow iOS gesture bridge captures only
 Pencil input; fingers keep scrolling the existing document. Standalone notebooks
 continue using PencilKit. No new native editor or page conversion is involved.
+
+## 48. A device keeps its sign-in while in use, and shows its key when signed out (2026-11-14)
+
+A device sign-in ended 30 days after approval, used or not. A signed-out app then hid its
+recovery key, while signing back in asked a browser for that key. With no browser holding
+the key, the app held a key it would not show and could not use.
+
+Two changes, chosen on purpose. The server moves a sign-in's end to 30 days from now when it
+is used with under 29 days left: one write a day at most. A sign-in that ended or was revoked
+is never brought back. And the Sync tab shows the key of the library the device is bound to
+when no one is signed in.
+
+What this costs. The key was already stored unencrypted on the device beside the notes, so
+showing it gives a person at an unlocked device nothing new; signing out never removed it. A
+lost device that stays in use now stays signed in, and only the device itself can sign out.
+Signing a device out from elsewhere is deferred.

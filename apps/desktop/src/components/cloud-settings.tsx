@@ -36,6 +36,8 @@ export function CloudSettings() {
     try { await fn(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
   const key = syncKey();
+  const keyButton = <Button onClick={() => setShowKey(!showKey)} size="sm" variant="outline">{showKey ? 'Hide' : 'Show'} recovery key</Button>;
+  const keyField = showKey && <><Label htmlFor="sync-key">Recovery key — save this somewhere private</Label><Input id="sync-key" readOnly value={key} onFocus={(e) => e.target.select()} /><p className="text-muted-foreground text-xs">We cannot recover encrypted notes if you lose this key and every connected device.{cloud.user && ' Pausing keeps your recovery key, local notes and encrypted cloud copies intact.'}</p></>;
   const shownError = error || (tab === 'agents' ? '' : cloud.error);
   return <>
     {!native && <NativeApprovalDialog />}
@@ -60,8 +62,13 @@ export function CloudSettings() {
               <p className="text-muted-foreground text-sm">If two offline devices change the same page, both versions are kept. Images and file attachments sync with notes. Linked project folders remain on the Mac.</p>
               {key && syncEnabled() ? <>
                 <p className="font-medium">{cloud.sync}</p>
-                <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void run(syncNow)} size="sm"><RefreshCw className="size-4" />Sync now</Button><Button onClick={() => setShowKey(!showKey)} size="sm" variant="outline">{showKey ? 'Hide' : 'Show'} recovery key</Button><Button onClick={() => { disableSync(); setShowKey(false); }} size="sm" variant="ghost">Pause sync on this device</Button></div>
-                {showKey && <><Label htmlFor="sync-key">Recovery key — save this somewhere private</Label><Input id="sync-key" readOnly value={key} onFocus={(e) => e.target.select()} /><p className="text-muted-foreground text-xs">We cannot recover encrypted notes if you lose this key and every connected device. Pausing keeps your recovery key, local notes and encrypted cloud copies intact.</p></>}
+                <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void run(syncNow)} size="sm"><RefreshCw className="size-4" />Sync now</Button>{keyButton}<Button onClick={() => { disableSync(); setShowKey(false); }} size="sm" variant="ghost">Pause sync on this device</Button></div>
+                {keyField}
+              </> : key && cloud.initialized && !cloud.user ? <>
+                {/* A failed check (offline) is not a sign-out, so it must not say to sign in. */}
+                {!cloud.error && <p className="text-sm">Sign in on the Account tab to sync this device again. If your browser asks for a recovery key, use the one kept here.</p>}
+                <div>{keyButton}</div>
+                {keyField}
               </> : <>
                 <Label htmlFor="recovery-key">Connecting another device?</Label><Input autoComplete="off" id="recovery-key" onChange={(e) => setRecovery(e.target.value)} placeholder="Paste the recovery key from your other device" value={recovery} />
                 <Button disabled={!cloud.user || !cloud.config.allowed || busy} onClick={() => void run(async () => { await enableSync(recovery); setShowKey(true); await syncNow(); })}>{recovery.trim() ? 'Connect this device' : key ? 'Resume sync' : 'Set up encrypted sync'}</Button>

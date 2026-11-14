@@ -6,8 +6,8 @@ The approval encrypts the recovery key with ECDH-P256 and AES-GCM. The private p
 verifier and native bearer credential remain in Rust. Keychain persistence happens only
 after key verification; failure restores the earlier local key and login.
 
-Requests expire after ten minutes and can be claimed once. Native sessions expire after
-30 days and sign-out revokes them. Only config, identity and encrypted sync routes accept
+Requests expire after ten minutes and can be claimed once. Native sessions end 30 days
+after their last use and sign-out revokes them. Only config, identity and encrypted sync routes accept
 native credentials. Expected-account headers reject a session change during a sync.
 The browser's existing origin checks remain in place.
 
