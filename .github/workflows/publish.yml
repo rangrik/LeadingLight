@@ -28,7 +28,8 @@ concurrency:
 
 jobs:
   draft:
-    if: github.ref == 'refs/heads/main'
+    # A rehearsal publishes nothing, so a branch may run one to prove its packaging.
+    if: inputs.rehearsal || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -91,8 +92,8 @@ jobs:
         env:
           REHEARSAL: ${{ inputs.rehearsal }}
         run: |
-          git merge-base --is-ancestor HEAD origin/main
           if [ "$REHEARSAL" != true ]; then
+            git merge-base --is-ancestor HEAD origin/main
             test "$(git rev-parse "$TAG^{commit}")" = "$(git rev-parse HEAD)"
           fi
           node scripts/release/check-version.mjs "$TAG"
@@ -112,8 +113,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build pinned runtime and tmux
         run: pnpm runtime:build
-      - name: Build the app and disk image
-        run: pnpm --filter @leadinglight/desktop tauri build --bundles app,dmg -- --locked
+      # Built apart from signing, so no dependency's build script runs beside the signing secrets.
+      - name: Build the app
+        run: pnpm --filter @leadinglight/desktop tauri build --no-bundle -- --locked
+      - name: Sign, notarize and make the disk image
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # Part of the name is enough: Tauri refuses a certificate of any other kind.
+          APPLE_SIGNING_IDENTITY: Developer ID Application
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+        run: |
+          : "${APPLE_CERTIFICATE:?Add the signing secrets listed in docs/RELEASING.md}" "${APPLE_API_KEY_P8:?Add the signing secrets listed in docs/RELEASING.md}"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          pnpm --filter @leadinglight/desktop tauri bundle --bundles app,dmg
+          # Tauri notarizes the app; the disk image people download needs its own ticket.
+          dmg=(target/release/bundle/dmg/*.dmg)
+          xcrun notarytool submit "${dmg[0]}" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "${dmg[0]}"
+          rm "$APPLE_API_KEY_PATH"
       - name: Verify and package downloads
         run: scripts/release/package-macos.sh "$TAG"
       - name: Preserve build artifacts
@@ -174,8 +195,7 @@ jobs:
           Apple Silicon (M-series), macOS 13 or later. Voice transcription requires macOS 26.
           Use the DMG to install, or the ZIP for the app bundle. SHA256SUMS.txt verifies either download.
 
-          **Unsigned preview:** this build is ad-hoc signed, without an Apple Developer ID or notarization.
-          macOS may block it or require approval in Privacy & Security. It is intended for early testing.
+          Signed with an Apple Developer ID and notarized by Apple.
           NOTES
-          gh release edit "$TAG" --title "LeadingLight $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --draft=false --prerelease --latest=false
+          gh release edit "$TAG" --title "LeadingLight $TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --draft=false --latest
           gh release view "$TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"

@@ -7,7 +7,7 @@ Early development: expect rough edges. Notes stay on your device; optional image
 search sends search terms and photo selections to the shared Unsplash service.
 
 [Download previews](https://github.com/rangrik/LeadingLight/releases) for Apple Silicon.
-Builds are currently unsigned and not notarized by Apple. Version bumps, release
+Builds are signed and notarized by Apple. Version bumps, release
 notes, checks and downloads are managed by [GitHub Actions](docs/RELEASING.md).
 
 ## Layout

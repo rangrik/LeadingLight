@@ -16,6 +16,8 @@ test -d "$app/Contents/Resources/licenses/app"
 test -f "$app/Contents/Resources/licenses/shipyard/LICENSE"
 test -f "$app/Contents/Resources/licenses/leadinglight/LICENSE"
 codesign --verify --deep --strict "$app"
+# A stapled ticket proves Apple notarized this exact build, which takes a Developer ID signature.
+xcrun stapler validate "$app"
 "$app/Contents/MacOS/berthd" version
 "$app/Contents/MacOS/tmux" -V
 mkdir -p release-assets
@@ -23,6 +25,7 @@ name="LeadingLight_${tag#v}_macos-arm64"
 dmgs=(target/release/bundle/dmg/*.dmg)
 test "${#dmgs[@]}" -eq 1
 hdiutil verify "${dmgs[0]}"
+xcrun stapler validate "${dmgs[0]}"
 cp "${dmgs[0]}" "release-assets/$name.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$app" "release-assets/$name.app.zip"
 (cd release-assets && shasum -a 256 "$name.dmg" "$name.app.zip" > SHA256SUMS.txt)

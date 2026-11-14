@@ -2,7 +2,8 @@
 
 [GitHub Releases](https://github.com/rangrik/LeadingLight/releases) hosts the app.
 GitHub Actions builds on a fresh Apple Silicon Mac; standard hosted runners are
-free for this public repository. No personal access token or paid service is needed.
+free for this public repository. No personal access token or paid service is needed;
+the Mac build is signed with the Apple secrets listed under Downloads and signing.
 
 ## Normal release
 
@@ -18,7 +19,7 @@ free for this public repository. No personal access token or paid service is nee
 3. Approve and run **Checks** on the bot's PR when GitHub requests approval, or run
    **Checks** manually on its branch. Merge the release PR once those checks pass.
    The workflow creates a tag and draft, validates
-   that exact commit, then builds and checks the app. It uploads a DMG, ZIP and
+   that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, ZIP and
    `SHA256SUMS.txt` before publishing. Until every step succeeds, the draft stays private.
 
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
@@ -46,15 +47,17 @@ The retained tag gives the release bot a baseline. Never move or reuse a publish
 For a failure in workflow infrastructure, fix the workflow on `main` and retry;
 the app source remains the draft's pinned commit.
 
-To test packaging before a release, run **Publish release** on `main` with
-**rehearsal** enabled and the tag blank. It builds and verifies the same downloads,
-stores them as workflow artifacts for seven days, and publishes nothing.
+To test packaging before a release, run **Publish release** with **rehearsal**
+enabled and the tag blank, on `main` or on a branch
+(`gh workflow run publish.yml --ref my-branch`). It builds, signs and verifies the same
+downloads, stores them as workflow artifacts for seven days, and publishes nothing.
+Only `main` can publish.
 
 ## Downloads and signing
 
-Current downloads are **unsigned previews**, ad-hoc signed but without Developer ID
-signing or Apple notarization. macOS may block them or require approval in Privacy &
-Security. They are marked as prereleases and never promoted to GitHub's latest stable.
+Downloads are signed with a Developer ID and notarized by Apple. The app and the disk
+image both carry Apple's ticket, so they open on a Mac that is offline. Releases are
+normal releases and the newest is GitHub's latest; 0.2.0 was an unsigned preview.
 Download from the release's **Assets** section. Quit LeadingLight before replacing
 the app; its data remains in the user's application data directory.
 
@@ -62,10 +65,26 @@ Only Apple Silicon is supported by the pinned runtime build. The app requires
 macOS 13 or later; on-device transcription needs macOS 26. Intel builds and in-app
 automatic updates are not part of this workflow.
 
-For Developer ID distribution, add signing and notarization to the macOS job once
-an Apple Developer membership and certificate are available. Never commit a signing
-key or put it in a PR; use GitHub Actions secrets. See
+The macOS job needs these repository secrets. Only the Apple account holder can make
+them. Add each with `gh secret set NAME`; never put one in a commit, a PR or a chat.
+
+| Secret | What it is |
+| --- | --- |
+| `APPLE_CERTIFICATE` | The Developer ID Application certificate with its key, exported from Keychain Access as `.p12`: `base64 -i file.p12 \| gh secret set APPLE_CERTIFICATE` |
+| `APPLE_CERTIFICATE_PASSWORD` | The password chosen at that export |
+| `APPLE_API_KEY_P8` | An App Store Connect team key with Developer access, for notarization: `gh secret set APPLE_API_KEY_P8 < AuthKey_XXXX.p8` |
+| `APPLE_API_KEY` | That key's Key ID |
+| `APPLE_API_ISSUER` | The Issuer ID shown above the keys |
+
+A missing secret stops the build before anything is signed. The certificate lasts five
+years; after replacing it or the key, set the secrets again and run a rehearsal. The app
+is compiled first and signed in a later step, so the secrets never sit beside a
+dependency's build script. See
 [Tauri's signing instructions](https://v2.tauri.app/distribute/sign/macos/).
+
+A local `pnpm install:app` build stays ad-hoc signed. macOS treats it as a different app
+from the signed one, so installing it over a release asks again for the microphone and
+the Keychain.
 
 ## Maintenance
 

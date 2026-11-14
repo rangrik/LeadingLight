@@ -484,8 +484,11 @@ Release Please keeps one version across Cargo, Tauri and the desktop package, wi
 notes from conventional commits. Merging its PR creates a draft; GitHub Actions
 checks and builds that exact commit, verifies helpers and licenses, and uploads
 downloads before publishing. Failed builds stay drafts and can be retried by tag.
-The first distribution is an unsigned Apple Silicon preview, matching the runtime
-we can build today. No personal token or signing secret is needed for that path.
+The first distribution, 0.2.0, was an unsigned Apple Silicon preview. Since 2026-11-14 the
+build is signed with a Developer ID and notarized, and releases are normal releases, because
+"unsigned" was the only reason to call them prereleases. The signing secrets live in GitHub
+Actions and reach only the step that signs; the app is compiled before it. A branch may
+rehearse a build, and only `main` publishes.
 
 ## 30. One bar for what wants a glance; tabs inside panes; one box for capture
 
