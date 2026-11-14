@@ -12,6 +12,7 @@ import { disableSync, enableSync, syncKey, syncNow, syncEnabled } from '~/lib/sy
 import { platform, useMobile } from '~/lib/platform';
 import { nativeConnection } from '~/lib/native-account';
 import { NativeApprovalDialog } from './native-approval';
+import { DeviceAccess } from './connect-device';
 
 export function CloudButton() {
   return <SidebarGroup className="py-1"><SidebarMenu><SidebarMenuItem><SidebarMenuButton aria-haspopup="dialog" onClick={() => window.dispatchEvent(new Event('leadinglight:cloud-account'))}><Cloud className="size-4" /><span>Account and sync</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroup>;
@@ -27,7 +28,7 @@ export function CloudSettings() {
   const [recovery, setRecovery] = useState(''), [showKey, setShowKey] = useState(false);
   useEffect(() => {
     startCloud();
-    const account = (event: Event) => { setTab(event instanceof CustomEvent && event.detail === 'agents' ? 'agents' : 'account'); setOpen(true); if (isMobile) setOpenMobile(false); void refreshCloud(); };
+    const account = (event: Event) => { setError(''); setTab(event instanceof CustomEvent && event.detail === 'agents' ? 'agents' : 'account'); setOpen(true); if (isMobile) setOpenMobile(false); void refreshCloud(); };
     window.addEventListener('leadinglight:cloud-account', account);
     return () => window.removeEventListener('leadinglight:cloud-account', account);
   }, [isMobile, setOpenMobile]);
@@ -44,10 +45,11 @@ export function CloudSettings() {
         <DialogHeader><DialogTitle>Your workspace, everywhere</DialogTitle><DialogDescription>Notes stay on this device. Choose when to connect them.</DialogDescription></DialogHeader>
         <div className="space-y-4 px-6 pb-6">
           {shownError && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{shownError}</p>}
-          <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
+          <Tabs value={tab} onValueChange={(value) => { setTab(String(value)); setError(''); }}>
             <TabsList><TabsTab value="account">Account</TabsTab><TabsTab value="sync">Sync</TabsTab>{!mobile && <TabsTab value="agents">Agents</TabsTab>}</TabsList>
             <TabsPanel value="account" className="space-y-4 pt-4">
-              {cloud.user ? <><p className="font-medium">{cloud.user.name}</p><p className="text-muted-foreground text-sm">This account owns your encrypted sync storage. Sign in with the same provider on each device.</p><Button disabled={busy} variant="outline" onClick={() => void run(signOut)}>Sign out</Button></> : <>
+              {cloud.user ? <><p className="font-medium">{cloud.user.name}</p><p className="text-muted-foreground text-sm">This account owns your encrypted sync storage. Sign in with the same provider on each device.</p>
+                <DeviceAccess account={cloud.user} browser={!native} busy={busy} run={run}><Button disabled={busy} variant="outline" onClick={() => void run(signOut)}>Sign out</Button></DeviceAccess></> : <>
                 <p className="text-sm">You can keep writing without an account. Sign in to connect another device.</p>
                 {native ? <><Button disabled={busy || connection.pending || !cloud.config.ready} onClick={() => void run(() => signIn(''))}>Connect your workspace</Button>{connection.pending && connection.message && <p role="status" className="text-sm text-muted-foreground">{connection.message}</p>}</> : cloud.config.providers.map((p) => <Button className="mr-2" disabled={busy} key={p.id} onClick={() => void run(() => signIn(p.id))} variant="outline">Continue with {p.name}</Button>)}
                 {!cloud.config.providers.length && <p className="text-muted-foreground text-sm">{navigator.onLine ? 'Cloud accounts are not configured in this installation yet.' : 'Sign-in is available when you are back online. Your local notes still work.'}</p>}

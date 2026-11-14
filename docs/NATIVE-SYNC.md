@@ -1,15 +1,22 @@
 # Native workspace sync
 
-Mac and iPad use the existing cloud journal. Account connection opens the system browser;
-the signed-in workspace approves the named device after checking its displayed code.
+Mac and iPad use the existing cloud journal. Account connection shows a code and opens the
+system browser. Either the signed-in workspace approves the named device after checking the
+code, or a device that already syncs approves it after the code is typed there.
 The approval encrypts the recovery key with ECDH-P256 and AES-GCM. The private polling
 verifier and native bearer credential remain in Rust. Keychain persistence happens only
 after key verification; failure restores the earlier local key and login.
 
 Requests expire after ten minutes and can be claimed once. Native sessions expire after
-30 days and sign-out revokes them. Only config, identity and encrypted sync routes accept
-native credentials. Expected-account headers reject a session change during a sync.
-The browser's existing origin checks remain in place.
+30 days and sign-out revokes them. Config, identity, encrypted sync, calendar and device
+approval routes accept native credentials. Expected-account headers reject a session change
+during a sync. The browser's existing origin checks remain in place.
+
+A typed code is the first eight characters of the request id. Each account may look up ten
+codes in ten minutes, and a code shared by two waiting requests is refused. A device sign-in
+can therefore approve more sign-ins for its own account and no longer runs out by itself.
+The browser's "Sign out all devices" ends every device sign-in and removes approvals not yet
+claimed; an installed app cannot call it. See decision 48.
 
 Attachments travel inside the encrypted, compressed journal payload. Stable content hashes
 avoid device-specific paths; receivers validate the complete bundle before writing local
@@ -24,7 +31,9 @@ are not yet journaled across devices; page content and property values do sync.
 ## Deployment
 
 Apply `apps/cloud/src/schema.sql` through the production build environment before deploying
-the matching web client and native apps. The new tables are additive. The upgraded web
+the matching web client and native apps. The new tables are additive. Approving from a device
+needs the server first, then a new build on the approving device only; a new device on an
+older build already shows its code. The upgraded web
 client must be deployed before native clients send attachment references. Keep production
 secrets in the existing deployment environment.
 

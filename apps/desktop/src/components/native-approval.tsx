@@ -41,7 +41,7 @@ export function NativeApprovalDialog() {
         {done ? <Button onClick={close}>Done</Button> : cloud.user ? <>
           <p className="min-w-0 break-words text-sm">{approval ? `${approval.deviceName} will connect to ${cloud.user.name} and receive the key for your encrypted notes.` : error ? 'Start a new connection in the LeadingLight app.' : 'Checking this connection…'}</p>
           {approval && <p className="text-sm">Check that code <strong className="font-mono">{connectionCode(approval.id)}</strong> matches the code in your app before approving.</p>}
-          {!syncKey() && <><Label htmlFor="device-recovery">Recovery key, if you already use sync</Label><Input id="device-recovery" type="password" autoComplete="off" value={recovery} onChange={(event) => setRecovery(event.target.value)} /><p className="text-muted-foreground text-sm">Leave this blank to set up sync for the first time.</p></>}
+          {!syncKey() && <><Label htmlFor="device-recovery">Recovery key, if you already use sync</Label><Input id="device-recovery" type="password" autoComplete="off" value={recovery} onChange={(event) => setRecovery(event.target.value)} /><p className="text-muted-foreground text-sm">Leave this blank to set up sync for the first time. If LeadingLight already syncs on another device, you can skip this page: type the code there, under Account and sync.</p></>}
           <div className="flex gap-2"><Button disabled={!approval || busy || !cloud.config.allowed} onClick={() => void approve()}>Connect this device</Button><Button variant="outline" onClick={close}>Cancel</Button></div>
           {!cloud.config.allowed && <p className="text-muted-foreground text-sm">Cloud access is not enabled for this account.</p>}
         </> : <>

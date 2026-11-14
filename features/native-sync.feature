@@ -1,5 +1,5 @@
 Feature: Connect the installed app to the same encrypted workspace
-  Notes stay on each device while a signed-in browser approves a native connection.
+  Notes stay on each device. A signed-in browser, or an app that already syncs, approves a new device.
 
   Scenario: Production devices connect at the current workspace address
     Given workspace sign-in is available at https://leadinglight.app
@@ -17,6 +17,37 @@ Feature: Connect the installed app to the same encrypted workspace
     And its session credential is stored in the system Keychain
     And the cloud never receives the recovery key in plaintext
     And the local notes remain available
+
+  Scenario: Approve a new Mac from an app that already syncs
+    Given LeadingLight on my first Mac is signed in and syncing
+    And my new Mac shows code "3F9A1C07" after I press "Connect your workspace"
+    When I open "Account and sync" on the first Mac and type "3f9a 1c07" under "Connect another device"
+    And I press "Continue"
+    Then it says "LeadingLight on Mac will connect to" my account "and receive the key for your encrypted notes"
+    When I press "Connect this device"
+    Then it says "LeadingLight on Mac is connected. It will finish syncing by itself."
+    And the new Mac receives the same account and the recovery key, encrypted for it alone
+    And no recovery key was typed on either Mac or in a browser
+
+  Scenario: A wrong or guessed code approves nothing
+    Given LeadingLight on my Mac is signed in and syncing
+    When I type a code that no waiting device shows and press "Continue"
+    Then it says "No device is waiting with that code. Check the code on your new device."
+    And after ten codes in ten minutes it says "Too many codes tried. Wait ten minutes, then try again."
+    And a code shared by two waiting devices is refused until one of them starts again
+
+  Scenario: A device that does not sync cannot approve another
+    Given LeadingLight is signed in but sync is off or paused on this device
+    When I open "Account and sync"
+    Then there is no "Connect another device"
+
+  Scenario: Sign out all devices from the browser
+    Given my Mac and iPad are connected and a third device is approved but has not finished connecting
+    When I press "Sign out all devices" at leadinglight.app and confirm
+    Then the Mac and iPad can no longer read synced notes
+    And the third device cannot finish connecting
+    And the notes on each device remain available
+    And an installed app cannot sign out other devices
 
   Scenario: An unapproved or expired connection cannot obtain a session
     Given a native connection request is waiting for approval
@@ -39,7 +70,8 @@ Feature: Connect the installed app to the same encrypted workspace
     Given two accounts have different native sessions
     When one account requests synced notes
     Then it receives only that account's encrypted events
-    And its native session cannot approve another device or use browser agent routes
+    And its native session can approve a device only into its own account
+    And its native session cannot use browser agent routes or sign out other devices
     And a browser request cannot bypass its origin check using a native credential
 
   Scenario: Sign out revokes this native session

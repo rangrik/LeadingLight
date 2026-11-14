@@ -903,3 +903,20 @@ Broad agent rewrites cannot discard annotated content.
 The DOM owns inline ink and its geometry. A narrow iOS gesture bridge captures only
 Pencil input; fingers keep scrolling the existing document. Standalone notebooks
 continue using PencilKit. No new native editor or page conversion is involved.
+
+## 48. A device that already syncs can approve another (2026-11-14)
+
+Decision 37 kept approval in the browser, so a stolen device sign-in could not make more.
+That failed its owner: after the web address moved, no browser held the sync key, and adding
+a second Mac needed a recovery key nobody expected to type. A signed-in device that syncs may
+now approve the request whose 8-character code is typed there. The key still travels only
+inside the ECDH + AES-GCM envelope; requests still last ten minutes and are claimed once.
+
+The cost is accepted on purpose: a stolen device sign-in can approve a device of its own and
+so outlast its 30 days. It still cannot read notes without the sync key. Two guards. Each
+account may look up ten codes in ten minutes, because a guessed code would attach someone's
+new device to the guesser's account. A browser-only "Sign out all devices" ends every device
+sign-in and removes unclaimed approvals under a table lock, so nothing in flight survives it.
+
+The page layer of an installed app can now approve without a system prompt. On the Mac it can
+already run agents, so no alert was added; see `docs/DEFERRED.md`.

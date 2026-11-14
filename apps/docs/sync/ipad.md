@@ -103,9 +103,12 @@ The iPad app has your pages and editor, but not the parts that run on a Mac:
 
 To see your Mac's notes on the iPad, connect both to the same workspace account:
 
-1. On the iPad, open **Account and sync › Account** and press **Connect your workspace**.
-2. Your browser opens your workspace at **leadinglight.app**. Sign in with the same provider you use on your Mac, check that the
-   code matches the one on the iPad, and press **Connect this device**.
+1. On the iPad, open **Account and sync › Account** and press **Connect your workspace**. It shows
+   a code and opens your browser.
+2. On your Mac, if LeadingLight already syncs there, open **Account and sync › Account**, type the
+   code under **Connect another device**, press **Continue**, then **Connect this device**.
+   Otherwise use the browser page that opened at **leadinglight.app**: sign in with the same
+   provider you use on your Mac, check that the code matches, and press **Connect this device**.
 3. Go back to LeadingLight. Wait for **Sync** to say **Up to date** before you go offline.
 
 Your notes, history, images and files then download to the iPad and stay there for offline use.
