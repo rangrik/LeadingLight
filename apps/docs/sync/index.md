@@ -26,7 +26,7 @@ Press **Account and sync** in the sidebar. The window, "Your workspace, everywhe
 
 | Tab | What it is for |
 | --- | --- |
-| **Account** | Sign in, see who you are signed in as, and sign out |
+| **Account** | Sign in, see who you are signed in as, connect another device, and sign out |
 | **Sync** | Turn on encrypted sync, see its status, and keep your recovery key |
 | **Agents** | Connect a browser and a Mac so agents can run from the browser. Not shown on iPad. See [Agents from a browser](/sync/pairing) |
 
@@ -46,24 +46,36 @@ On the **Account** tab, press **Continue with Google** or **Continue with GitHub
 
 ### In the Mac or iPad app
 
-The installed app signs in through your browser, using the account you already have there:
+On the **Account** tab, press **Connect your workspace**. The app shows an 8-character code and
+opens your browser. Approve the device in one of two ways.
 
-1. On the **Account** tab, press **Connect your workspace**. Your browser opens.
-2. The app shows a code: "Match code … in your browser, approve this device, then return here."
-3. In the browser, sign in if you need to, with the same provider you use for your workspace. A
+**From a device that already syncs.** No recovery key is needed.
+
+1. On a Mac or iPad where LeadingLight already syncs, open **Account and sync › Account**.
+2. Under **Connect another device**, type the code and press **Continue**.
+3. It names the device: "LeadingLight on Mac will connect to … and receive the key for your
+   encrypted notes." Press **Connect this device**.
+4. Go back to the new device. It says "Connected. Your notes are syncing with this account."
+
+You can close the browser page that opened. A signed-in browser that already syncs has the same
+**Connect another device** field. A device where sync is off or paused does not.
+
+**From your browser.** Use this for your first device.
+
+1. In the browser, sign in if you need to, with the same provider you use for your workspace. A
    **Connect your device** window names the device ("LeadingLight on Mac" or "LeadingLight on
    iPad") and shows a code. Check that it matches the code in the app.
-4. If this browser already syncs, its recovery key is used. If not, paste your recovery key in
+2. If this browser already syncs, its recovery key is used. If not, paste your recovery key in
    **Recovery key, if you already use sync**. Find it in the app on a device that already syncs:
    **Account and sync**, **Sync**, **Show recovery key**. Leave it blank only if you have never set
    up sync. Signing in is not enough on its own: the service never holds your key, so a browser
    that has not synced at this address cannot hand it over.
-5. Press **Connect this device**. The browser says **Device approved**.
-6. Go back to the app. It says "Connected. Your notes are syncing with this account."
+3. Press **Connect this device**. The browser says **Device approved**.
+4. Go back to the app. It says "Connected. Your notes are syncing with this account."
 
-The browser hands the recovery key to the device encrypted, so the service never sees it. The
+Either way the recovery key reaches the new device encrypted, so the service never sees it. The
 device keeps its sign-in in the system Keychain. A request is good for ten minutes and can be
-approved once; after that, start again in the app.
+approved once; after that, start again in the app. Only ten codes can be tried in ten minutes.
 
 Signing in to your workspace is separate from Claude Code and Codex. Agents keep using the CLI
 account already signed in on your Mac. See [Overview and setup](/ai/).
@@ -123,6 +135,14 @@ Press **Sign out** on the **Account** tab. Your local notes stay on the device.
   removed from the Keychain.
 - If signing out fails, your account stays shown so you can try again. Only a sign-out that
   succeeds brings back the sign-in buttons.
+
+### Sign out all devices
+
+If a Mac or iPad is lost, open **leadinglight.app** in a browser, then **Account and sync ›
+Account**, and press **Sign out all devices**. Every installed app stops syncing until you connect
+it again, and a device that was approved but had not finished connecting cannot finish. Notes stay
+on each device, and the browser stays signed in. Unless that browser syncs, connecting the first
+device again needs your recovery key, so save it first. The installed apps do not have this button.
 
 A device's notes belong to the account they first synced with. If you sign in to a different
 account, sync stays off for those notes, so one account's notes are never sent to another.

@@ -21,8 +21,8 @@ function envelope(value) {
 
 export function nativeRoute(request) {
   const path = new URL(request.url).pathname;
-  return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts'].includes(path)
-    || request.method === 'POST' && ['/api/sync', '/api/native/revoke', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
+  return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts', '/api/native/approval'].includes(path)
+    || request.method === 'POST' && ['/api/sync', '/api/native/revoke', '/api/native/approve', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
 }
 
 export async function authenticateNative(request, sql) {
@@ -64,22 +64,48 @@ export async function nativePublicRequest({ request, sql, readBody, origin }) {
   });
 }
 
-export async function nativeBrowserRequest({ request, sql, user, allowed, readBody }) {
-  require(allowed, 403, 'Cloud access has not been enabled for this account yet.');
+// A code is short enough to guess, so each account gets ten tries in ten minutes.
+async function byCode(sql, owner, code) {
+  require(/^[\da-f]{8}$/i.test(code), 400, 'Enter the 8-character code from your new device.');
+  require(await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${`native-code:${owner}`},0))`;
+    await tx`DELETE FROM native_code_lookups WHERE at<now()-interval '10 minutes'`;
+    const [{ count }] = await tx`SELECT count(*)::int AS count FROM native_code_lookups WHERE owner=${owner}`;
+    if (count < 10) await tx`INSERT INTO native_code_lookups(owner) VALUES(${owner})`;
+    return count < 10;
+  }), 429, 'Too many codes tried. Wait ten minutes, then try again.');
+  const rows = await sql`SELECT id FROM native_requests WHERE id BETWEEN ${`${code}-0000-0000-0000-000000000000`} AND ${`${code}-ffff-ffff-ffff-ffffffffffff`} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL LIMIT 2`;
+  require(rows.length, 404, 'No device is waiting with that code. Check the code on your new device.');
+  require(rows.length === 1, 409, 'Two devices show this code. Start again on your new device.');
+  return rows[0].id;
+}
+
+export async function nativeAccountRequest({ request, sql, user, session, allowed, readBody }) {
   const url = new URL(request.url);
+  if (request.method === 'POST' && url.pathname === '/api/native/revoke-all') {
+    return sql.begin(async (tx) => {
+      // Wait out claims and approvals in flight, so none lands between the two writes.
+      await tx`LOCK TABLE native_requests IN EXCLUSIVE MODE`;
+      await tx`UPDATE native_sessions SET revoked_at=now() WHERE owner=${user.id} AND revoked_at IS NULL`;
+      await tx`DELETE FROM native_requests WHERE owner=${user.id}`;
+      return json({ ok: true });
+    });
+  }
+  require(allowed, 403, 'Cloud access has not been enabled for this account yet.');
   if (request.method === 'GET' && url.pathname === '/api/native/approval') {
-    const id = url.searchParams.get('id');
+    const code = url.searchParams.get('code'), id = code === null ? url.searchParams.get('id') : await byCode(sql, user.id, code);
     require(uuid(id), 400, 'Invalid connection.');
     const [pending] = await sql`SELECT id,device_name,public_key,expires_at FROM native_requests WHERE id=${id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL`;
-    require(pending, 410, 'This connection expired or was already approved. Start again in the app.');
+    require(pending, 410, 'This connection expired or was already approved. Start again on your new device.');
     return json({ id: pending.id, deviceName: pending.device_name, publicKey: pending.public_key, expiresAt: pending.expires_at });
   }
   require(request.method === 'POST' && url.pathname === '/api/native/approve', 404, 'Not found.');
   const body = await readBody(request, 4096);
   require(uuid(body.id), 400, 'Invalid connection.');
-  const key = envelope(body.keyEnvelope);
-  const rows = await sql`UPDATE native_requests SET owner=${user.id},account_name=${String(user.name || 'Your account').slice(0,80)},key_envelope=${sql.json(key)} WHERE id=${body.id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL RETURNING id`;
-  require(rows.length === 1, 410, 'This connection expired or was already approved. Start again in the app.');
+  const key = envelope(body.keyEnvelope), device = session ?? null;
+  // A device sign-in ended while this ran must not leave an approval behind.
+  const rows = await sql`UPDATE native_requests SET owner=${user.id},account_name=${String(user.name || 'Your account').slice(0,80)},key_envelope=${sql.json(key)} WHERE id=${body.id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL AND (${device}::uuid IS NULL OR EXISTS(SELECT 1 FROM native_sessions WHERE id=${device} AND revoked_at IS NULL)) RETURNING id`;
+  require(rows.length === 1, 410, 'This connection expired or was already approved. Start again on your new device.');
   return json({ ok: true });
 }
 

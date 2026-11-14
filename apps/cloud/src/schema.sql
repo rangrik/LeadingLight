@@ -47,6 +47,10 @@ CREATE TABLE IF NOT EXISTS native_sessions (
   revoked_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS native_sessions_owner ON native_sessions(owner);
+CREATE TABLE IF NOT EXISTS native_code_lookups (
+  owner text NOT NULL,
+  at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS relay_pairs (
   id uuid PRIMARY KEY,
   owner text NOT NULL,

@@ -14,6 +14,7 @@ export function snapshotSyncSettings(owner: string) {
 const encoded = (value: ArrayBuffer | Uint8Array) => btoa(String.fromCharCode(...new Uint8Array(value)));
 const decoded = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 const aad = (id: string, owner: string) => new TextEncoder().encode(`leadinglight-native:${id}:${owner}`);
+export const findNativeApproval = (code: string) => cloudApi<NativeApproval>(`native/approval?code=${code}`);
 async function sharedKey(privateKey: CryptoKey, publicKey: JsonWebKey, usage: KeyUsage) {
   const peer = await crypto.subtle.importKey('jwk', publicKey, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
   return crypto.subtle.deriveKey({ name: 'ECDH', public: peer }, privateKey, { name: 'AES-GCM', length: 256 }, false, [usage]);
@@ -37,7 +38,7 @@ export async function connectNativeAccount() {
     const start = await cloudApi<{ id: string; expiresAt: string; approvalUrl: string }>('native/start', { deviceName, publicKey: await crypto.subtle.exportKey('jwk', pair.publicKey) });
     const approvalUrl = new URL(start.approvalUrl);
     if (approvalUrl.origin !== 'https://leadinglight.app' || approvalUrl.searchParams.get('connect') !== start.id) throw new Error('The sign-in link was invalid. Please try again.');
-    nativeConnection.set({ pending: true, message: `Match code ${connectionCode(start.id)} in your browser, approve this device, then return here.` });
+    nativeConnection.set({ pending: true, message: `Code ${connectionCode(start.id)}. To approve this device, type the code in LeadingLight on a device that already syncs (Account and sync), or match it in the browser page that opened. Then come back here.` });
     await (await import('@tauri-apps/plugin-opener')).openUrl(approvalUrl.href);
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {

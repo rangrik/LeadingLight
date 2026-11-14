@@ -1,7 +1,7 @@
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
 import { mobileRelayRequest } from './mobile-relay.mjs';
-import { NativeError, authenticateNative, nativePublicRequest, nativeBrowserRequest, revokeNative } from './native.mjs';
+import { NativeError, authenticateNative, nativePublicRequest, nativeAccountRequest, revokeNative } from './native.mjs';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const enabled = (env, id) => env.CLOUD_ACCESS === 'public' || (env.CLOUD_ALLOWED_USERS || '').split(',').map((v) => v.trim()).includes(id);
 const bounded = (value, max) => typeof value === 'string' && value.length <= max;
@@ -34,7 +34,7 @@ export function application({ env, sql, auth }) {
       }
       if (path === '/api/me') return json(native ? { ...user, expiresAt: native.expiresAt } : user);
       if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
-      if (path.startsWith('/api/native/')) return await nativeBrowserRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
+      if (path.startsWith('/api/native/')) return await nativeAccountRequest({ request, sql, user, session: native?.sessionId, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path.startsWith('/api/relay/')) return await relayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path === '/api/jobs' && request.method === 'GET') return json({ jobs: [] });
       if (path === '/api/jobs' || path.startsWith('/api/jobs/')) return agentsUnavailable();

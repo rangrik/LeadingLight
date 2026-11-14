@@ -15,6 +15,12 @@ async function device() {
   const started = await response.json() as { id: string; approvalUrl: string };
   return { ...started, verifier, pair, poll: () => post('native/poll', { id: started.id, verifier }) };
 }
+async function handedKey(request: Awaited<ReturnType<typeof device>>, envelope: { publicKey: JsonWebKey; iv: string; data: string }, id: string) {
+  const peer = await crypto.subtle.importKey('jwk', envelope.publicKey, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const secret = await crypto.subtle.deriveKey({ name: 'ECDH', public: peer }, request.pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: Buffer.from(envelope.iv, 'base64'), additionalData: new TextEncoder().encode(`leadinglight-native:${request.id}:${id}`) }, secret, Buffer.from(envelope.data, 'base64'));
+  return new TextDecoder().decode(plain);
+}
 
 test.beforeEach(async ({ context }) => {
   test.skip(!process.env.CLOUD_QA, 'Requires isolated browser-server and PostgreSQL.');
@@ -40,10 +46,7 @@ test('browser approval hands the existing recovery key to exactly one native req
   const approved = await (await request.poll()).json();
   expect(approved.status).toBe('approved');
   expect(approved.user.id).toBe(id);
-  const peer = await crypto.subtle.importKey('jwk', approved.keyEnvelope.publicKey, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
-  const secret = await crypto.subtle.deriveKey({ name: 'ECDH', public: peer }, request.pair.privateKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: Buffer.from(approved.keyEnvelope.iv, 'base64'), additionalData: new TextEncoder().encode(`leadinglight-native:${request.id}:${id}`) }, secret, Buffer.from(approved.keyEnvelope.data, 'base64'));
-  expect(new TextDecoder().decode(plain)).toBe(recovery);
+  expect(await handedKey(request, approved.keyEnvelope, id)).toBe(recovery);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(approved.token);
   expect((await request.poll()).status).toBe(410);
   const session = { Authorization: `Bearer ${approved.token}` };
@@ -53,6 +56,31 @@ test('browser approval hands the existing recovery key to exactly one native req
     await expect(page.getByRole('alert')).toContainText('already approved');
     await expect(page.getByRole('button', { name: 'Connect this device', exact: true })).toBeDisabled();
   } finally { expect((await post('native/revoke', {}, session)).ok).toBe(true); }
+});
+
+// Seam: a client that syncs must hand its key to the device whose code was typed; the browser must end every sign-in.
+test('a syncing client approves a device by its code, then signs every device out', async ({ page, context }) => {
+  const id = owner(), recovery = randomBytes(32).toString('base64'), request = await device();
+  await account(context, id);
+  await context.addInitScript(({ id, recovery }) => {
+    localStorage.setItem('leadinglight.sync-owner', id);
+    localStorage.setItem(`leadinglight.sync-key:${id}`, recovery);
+  }, { id, recovery });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Account and sync', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Your workspace, everywhere' });
+  await dialog.getByRole('textbox', { name: 'Connect another device' }).click();
+  await page.keyboard.type(`${request.id.slice(0, 4)} ${request.id.slice(4, 8)}`);
+  await page.keyboard.press('Enter');
+  await expect(dialog).toContainText('QA iPad will connect to QA account');
+  await dialog.getByRole('button', { name: 'Connect this device', exact: true }).click();
+  await expect(dialog).toContainText('QA iPad is connected');
+  const approved = await (await request.poll()).json();
+  expect(await handedKey(request, approved.keyEnvelope, id)).toBe(recovery);
+  await dialog.getByRole('button', { name: 'Sign out all devices', exact: true }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out all devices', exact: true }).click();
+  await expect(dialog).toContainText('is signed out');
+  expect((await fetch(`${api}/me`, { headers: { Authorization: `Bearer ${approved.token}` } })).status).toBe(401);
 });
 
 // Seam: changing the browser account must not give away or replace another workspace's key.

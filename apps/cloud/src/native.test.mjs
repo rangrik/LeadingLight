@@ -25,13 +25,13 @@ async function fixture(run) {
     const pending = await response.json(); ids.push(pending.id);
     return { ...pending, verifier, keys };
   };
-  const approve = async (pending, user = owner) => {
+  const approve = async (pending, user = owner, token) => {
     const keys = await webcrypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
     const key = await webcrypto.subtle.deriveKey({ name: 'ECDH', public: pending.keys.publicKey }, keys.privateKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt']);
     const iv = randomBytes(12), recovery = randomBytes(32).toString('base64');
     const data = await webcrypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: Buffer.from(`leadinglight-native:${pending.id}:${user}`) }, key, Buffer.from(recovery));
     const keyEnvelope = { publicKey: await webcrypto.subtle.exportKey('jwk', keys.publicKey), iv: iv.toString('base64'), data: Buffer.from(data).toString('base64') };
-    assert.equal((await browser('native/approve', { id: pending.id, keyEnvelope }, user)).status, 200);
+    assert.equal((await (token ? native('native/approve', { id: pending.id, keyEnvelope }, token) : browser('native/approve', { id: pending.id, keyEnvelope }, user))).status, 200);
     return { keyEnvelope, recovery };
   };
   const claim = async (pending) => {
@@ -43,6 +43,7 @@ async function fixture(run) {
     await sql`DELETE FROM mobile_connections WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM native_requests WHERE id IN ${sql(ids.length ? ids : [randomUUID()])}`;
     await sql`DELETE FROM native_sessions WHERE owner IN (${owner},${other})`;
+    await sql`DELETE FROM native_code_lookups WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM sync_events WHERE owner IN (${owner},${other})`;
     await sql.end();
   }
@@ -54,7 +55,7 @@ test('native authentication preserves browser origin checks and route scope', as
   assert.equal((await call(app, 'native/start', {}, { origin })).status, 403);
   assert.equal((await call(app, 'native/approve', {}, { origin: 'https://evil.test', 'test-user': 'owner' })).status, 403);
   assert.equal((await call(app, 'native/approve', {}, { origin })).status, 401);
-  for (const path of ['relay/pairs', 'native/approve', 'auth/signout']) {
+  for (const path of ['relay/pairs', 'native/revoke-all', 'auth/signout']) {
     assert.equal((await call(app, path, {}, { authorization: `Bearer ${randomBytes(32).toString('base64url')}` })).status, 403);
   }
   assert.equal((await call(app, 'sync', {}, { authorization: `Bearer ${randomBytes(32).toString('base64url')}`, origin })).status, 403);
@@ -102,6 +103,23 @@ test('approved key handoff is encrypted, account-bound and claimed once', option
   const persisted = JSON.stringify({ stored, credential });
   for (const secret of [pending.verifier, session.token, recovery]) assert.ok(!persisted.includes(secret));
   assert.ok(new Date(session.expiresAt).getTime() > Date.now() + 29 * 86400000);
+}));
+
+// A device sign-in approves into its own account only, cannot guess codes, and ends when the browser says so.
+test('a syncing device approves by code and the browser signs every device out', options, () => fixture(async ({ owner, browser, native, start, approve, claim }) => {
+  const first = await start(); await approve(first); const { token } = await claim(first);
+  const second = await start(), code = second.id.slice(0, 8).toUpperCase();
+  assert.equal((await (await native(`native/approval?code=${code}`, undefined, token)).json()).id, second.id);
+  await approve(second, owner, token);
+  const joined = await claim(second);
+  assert.equal(joined.user.id, owner);
+  const waiting = await start(); await approve(waiting, owner, joined.token);
+  for (let tries = 2; tries <= 10; tries++) assert.equal((await native('native/approval?code=00000000', undefined, token)).status, 404);
+  assert.equal((await native(`native/approval?code=${code}`, undefined, token)).status, 429);
+  assert.equal((await native('native/revoke-all', {}, token)).status, 403);
+  assert.equal((await browser('native/revoke-all', {})).status, 200);
+  for (const ended of [token, joined.token]) assert.equal((await native('me', undefined, ended)).status, 401);
+  assert.equal((await native('native/poll', { id: waiting.id, verifier: waiting.verifier })).status, 403);
 }));
 
 // An expired request, expired session or revoked device must not regain access.

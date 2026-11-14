@@ -127,13 +127,19 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
                 && !params[0].1.is_empty()
                 && params[0].1.len() <= 200
         }
+        ("native/approval", "GET") => {
+            params.len() == 1
+                && params[0].0 == "code"
+                && params[0].1.len() == 8
+                && params[0].1.bytes().all(|c| c.is_ascii_hexdigit())
+        }
         _ => params.is_empty(),
     };
     let allowed = matches!(
         (route, method),
-        ("config" | "me" | "sync" | "sync-part" | "calendar/accounts", "GET")
+        ("config" | "me" | "sync" | "sync-part" | "calendar/accounts" | "native/approval", "GET")
             | (
-                "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
+                "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
@@ -424,9 +430,11 @@ mod tests {
             "sync?after=123",
             "sync-part?id=a%3Apart%3A1",
             "calendar/accounts",
+            "native/approval?code=3F9A1c07",
         ] {
             assert!(endpoint(path, "GET").is_ok());
         }
+        assert!(endpoint("native/approve", "POST").is_ok());
         for action in ["connect", "disconnect", "calendars", "events", "create", "update", "delete"] {
             assert!(endpoint(&format!("calendar/{action}"), "POST").is_ok());
         }
@@ -436,7 +444,9 @@ mod tests {
             ("me#x", "GET"),
             ("me?other=1", "GET"),
             ("relay/pairs", "POST"),
-            ("native/approve", "POST"),
+            ("native/revoke-all", "POST"),
+            ("native/approval?id=3f9a1c07-0000-4000-8000-000000000000", "GET"),
+            ("native/approval?code=3F9A1C0", "GET"),
             ("sync?after=1&after=2", "GET"),
             ("sync", "DELETE"),
             ("calendar/callback", "GET"),
