@@ -31,6 +31,8 @@ export async function enableSync(recovery?: string) {
   if (key !== previous) {
     const { events } = await cloudApi<{ events: { id: string; envelope: Envelope }[] }>('sync?after=0', undefined, 'GET', user.id);
     if (events.length) {
+      // A blank field means a fresh key here, which can never open existing notes.
+      if (!recovery?.trim()) throw new Error('This account already has synced notes. Enter its recovery key to connect.');
       const first = events[0], envelope = await readEnvelope(first.envelope, user.id);
       try { await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(envelope.iv), additionalData: new TextEncoder().encode(`${user.id}:${first.id}`) }, await cryptKey(key), bytes(envelope.data)); }
       catch { throw new Error(previous ? 'This recovery key does not match the synced notes. Your existing key has been kept.' : 'This recovery key does not match the synced notes. Enter the key from a connected device.'); }

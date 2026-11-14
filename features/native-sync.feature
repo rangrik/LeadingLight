@@ -18,6 +18,21 @@ Feature: Connect the installed app to the same encrypted workspace
     And the cloud never receives the recovery key in plaintext
     And the local notes remain available
 
+  Scenario: The approving browser has no recovery key
+    Given the browser is signed into my workspace and has never synced at this address
+    And the account already has synced notes
+    When I open the approval link
+    Then the page says the key is in the app on a device that already syncs, under Account and sync, Sync, Show recovery key
+    When I press Connect this device with the key left blank
+    Then I read "This account already has synced notes. Enter its recovery key to connect."
+    And the request stays pending and the browser saves no key
+
+  Scenario: An expired approval link asks for nothing
+    Given a native connection request has expired
+    When I open its approval link in a signed-in browser with no recovery key
+    Then I read that the connection expired and to start again in the app
+    And no recovery key field is shown and Connect this device is disabled
+
   Scenario: An unapproved or expired connection cannot obtain a session
     Given a native connection request is waiting for approval
     When a different polling verifier is used or ten minutes pass

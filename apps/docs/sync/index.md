@@ -54,7 +54,10 @@ The installed app signs in through your browser, using the account you already h
    **Connect your device** window names the device ("LeadingLight on Mac" or "LeadingLight on
    iPad") and shows a code. Check that it matches the code in the app.
 4. If this browser already syncs, its recovery key is used. If not, paste your recovery key in
-   **Recovery key, if you already use sync**, or leave it blank to set up sync for the first time.
+   **Recovery key, if you already use sync**. Find it in the app on a device that already syncs:
+   **Account and sync**, **Sync**, **Show recovery key**. Leave it blank only if you have never set
+   up sync. Signing in is not enough on its own: the service never holds your key, so a browser
+   that has not synced at this address cannot hand it over.
 5. Press **Connect this device**. The browser says **Device approved**.
 6. Go back to the app. It says "Connected. Your notes are syncing with this account."
 
