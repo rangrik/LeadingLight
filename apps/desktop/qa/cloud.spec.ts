@@ -7,9 +7,15 @@ const create = async (page: Page, title: string, words: string) => {
   await page.getByRole('textbox', { name: 'Title' }).press('Enter');
   await page.keyboard.type(words);
 };
-const settings = async (page: Page, tab: string) => {
-  await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('tab', { name: tab, exact: true }).click();
+const settings = (page: Page) => page.getByRole('button', { name: 'Account and sync' }).click();
+// Turning sync on shows the new key once; it is read there, and ticked as saved.
+const turnOn = async (page: Page) => {
+  await page.getByRole('button', { name: 'Turn on sync', exact: true }).click();
+  const key = (await page.getByTestId('recovery-key').textContent())!;
+  await page.getByRole('checkbox', { name: 'I saved it somewhere safe' }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+  return key;
 };
 
 // Seam: separate browser databases exchange only encrypted events, preserving offline conflicts.
@@ -22,18 +28,17 @@ test('two devices sync encrypted history and preserve conflicting edits', async 
   const one = await a.newPage(), two = await b.newPage();
   await one.goto('http://127.0.0.1:1431'); await two.goto('http://127.0.0.1:1431');
   await create(one, 'Shared note', 'Original words.');
-  await settings(one, 'Sync');
-  await one.getByRole('button', { name: 'Set up encrypted sync' }).click();
-  await expect(one.getByText('Up to date', { exact: true })).toBeVisible();
-  const key = await one.getByLabel('Recovery key — save this somewhere private').inputValue();
+  await settings(one);
+  const key = await turnOn(one);
   const stored = await one.evaluate(async () => (await (await fetch('/api/sync')).json()).events);
   expect(JSON.stringify(stored)).not.toContain('Original words');
-  await settings(two, 'Sync');
-  await two.getByLabel('Connecting another device?').fill(key);
-  await two.getByRole('button', { name: 'Connect this device', exact: true }).click();
+  await settings(two);
+  await two.getByRole('button', { name: 'Turn on sync', exact: true }).click();
+  await two.getByLabel('Recovery key', { exact: true }).fill(key);
+  await two.getByRole('button', { name: 'Unlock notes', exact: true }).click();
   await expect(two.getByText('Up to date', { exact: true })).toBeVisible();
-  await one.getByRole('button', { name: 'Close', exact: true }).click();
-  await two.getByRole('button', { name: 'Close', exact: true }).click();
+  await one.getByRole('button', { name: 'Back to app' }).click();
+  await two.getByRole('button', { name: 'Back to app' }).click();
   await two.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'Shared note', exact: true }).click();
   await expect(two.getByRole('textbox', { name: 'Page body' })).toContainText('Original words.');
   await a.setOffline(true); await b.setOffline(true);
@@ -54,24 +59,21 @@ test('wrong recovery keys and server errors preserve the saved key', async ({ pa
   const owner = `qa-key-${Date.now()}`;
   await account(context, owner); await page.goto('/');
   await create(page, 'Key recovery', 'Words protected by the original key.');
-  await settings(page, 'Sync');
-  await page.getByRole('button', { name: 'Set up encrypted sync' }).click();
-  await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
-  const key = await page.getByLabel('Recovery key — save this somewhere private').inputValue();
-  await page.getByRole('button', { name: 'Pause sync on this device' }).click();
-  await page.getByLabel('Connecting another device?').fill(Buffer.alloc(32, 7).toString('base64'));
-  await page.getByRole('button', { name: 'Connect this device', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Your existing key has been kept');
+  await settings(page);
+  const key = await turnOn(page);
+  await page.getByRole('switch', { name: 'Sync this browser' }).click();
+  // The page offers another key only when sync reports a mismatch, so the check itself is called here.
+  const use = (other: string) => page.evaluate(async (other) => { try { await (await import('/src/lib/' + 'sync.ts')).enableSync(other); return ''; } catch (e) { return String(e); } }, other);
+  expect(await use(Buffer.alloc(32, 7).toString('base64'))).toContain('Your existing key has been kept');
   expect(await page.evaluate((id) => localStorage.getItem(`leadinglight.sync-key:${id}`), owner)).toBe(key);
   await page.route('**/api/sync?after=0', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'Temporarily unavailable' }) }));
-  await page.getByRole('button', { name: 'Connect this device', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('Temporarily unavailable');
+  expect(await use(Buffer.alloc(32, 7).toString('base64'))).toContain('Temporarily unavailable');
   expect(await page.evaluate((id) => localStorage.getItem(`leadinglight.sync-key:${id}`), owner)).toBe(key);
   await page.unroute('**/api/sync?after=0');
-  await page.getByLabel('Connecting another device?').fill('');
-  await page.getByRole('button', { name: 'Resume sync', exact: true }).click();
+  await page.getByRole('switch', { name: 'Sync this browser' }).click();
   await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Recovery key — save this somewhere private')).toHaveValue(key);
+  await page.getByRole('button', { name: 'Show…', exact: true }).click();
+  await expect(page.getByTestId('recovery-key')).toHaveText(key);
 });
 
 // Seam: phone layout and touch navigation must reach the same editor, history and account UI.
@@ -81,19 +83,18 @@ for (const width of [390, 820]) test(`web workspace fits ${width}px`, async ({ p
   await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Mobile note');
   await page.getByRole('textbox', { name: 'Title' }).press('Enter'); await page.keyboard.type('A thought on the go.');
-  await page.getByRole('button', { name: 'History and authorship' }).click();
+  await page.getByRole('button', { name: 'Page actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'History and authorship', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Inspect authorship' }).click();
   await expect(page.getByRole('dialog')).toContainText('A thought on the go.');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: `qa/report/authorship-${width}.png` });
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   if (width < 768) await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
-  await settings(page, 'Account');
-  await expect(page.getByRole('button', { name: 'Continue on this device' })).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: `qa/report/account-${width}.png` });
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Agents', exact: true })).toContainText('already signed in on your Mac');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: `qa/report/agents-${width}.png`, animations: 'disabled' });
+  await settings(page);
+  const section = page.getByTestId('settings-account');
+  await expect(section.getByRole('heading', { name: 'Account and devices' })).toBeVisible();
+  await expect(section).toContainText('already signed in on your Mac');
+  expect(await section.evaluate((el) => el.scrollWidth <= el.clientWidth && document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: `qa/report/account-${width}.png`, animations: 'disabled' });
 });

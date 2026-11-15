@@ -67,20 +67,49 @@ test('a syncing client approves a device by its code, then signs every device ou
     localStorage.setItem(`leadinglight.sync-key:${id}`, recovery);
   }, { id, recovery });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Account and sync', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Your workspace, everywhere' });
-  await dialog.getByRole('textbox', { name: 'Connect another device' }).click();
+  await page.getByRole('button', { name: 'Account and sync' }).click();
+  await page.getByRole('button', { name: 'Add a device', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('textbox', { name: 'Code from the new device' }).click();
   await page.keyboard.type(`${request.id.slice(0, 4)} ${request.id.slice(4, 8)}`);
   await page.keyboard.press('Enter');
-  await expect(dialog).toContainText('QA iPad will connect to QA account');
-  await dialog.getByRole('button', { name: 'Connect this device', exact: true }).click();
+  await expect(dialog).toContainText('Let QA iPad open your notes?');
+  await dialog.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(dialog).toContainText('QA iPad is connected');
   const approved = await (await request.poll()).json();
   expect(await handedKey(request, approved.keyEnvelope, id)).toBe(recovery);
-  await dialog.getByRole('button', { name: 'Sign out all devices', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Done', exact: true }).click();
+  // The device list is the sign-ins the server holds: listed once joined, gone once signed out.
+  const section = page.getByTestId('settings-account');
+  await expect(section.getByText('QA iPad', { exact: true })).toBeVisible();
+  await section.getByRole('button', { name: 'Sign out all devices', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out all devices', exact: true }).click();
-  await expect(dialog).toContainText('is signed out');
+  await expect(section).toContainText('No app is signed in yet');
   expect((await fetch(`${api}/me`, { headers: { Authorization: `Bearer ${approved.token}` } })).status).toBe(401);
+});
+
+// Seam: Remove in the browser must end that device's sign-in on the server, not just hide its row.
+test('the browser removes one device and leaves the other signed in', async ({ page, context }) => {
+  const id = owner();
+  const join = async () => {
+    const request = await device();
+    await post('native/approve', { id: request.id, keyEnvelope: { publicKey: await crypto.subtle.exportKey('jwk', request.pair.publicKey), iv: randomBytes(12).toString('base64'), data: randomBytes(32).toString('base64') } }, { Origin: origin, Cookie: `qa-user=${id}` });
+    return { Authorization: `Bearer ${(await (await request.poll()).json()).token}` };
+  };
+  const lost = await join(), kept = await join();
+  expect((await post('devices/name', { name: 'Lost iPad' }, lost)).status).toBe(200);
+  await account(context, id);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Account and sync' }).click();
+  const section = page.getByTestId('settings-account');
+  await expect(section.getByText('QA iPad', { exact: true })).toBeVisible();
+  await section.getByRole('button', { name: 'Remove', exact: true }).first().click();
+  await expect(page.getByRole('alertdialog')).toContainText('Remove Lost iPad?');
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Remove Lost iPad', exact: true }).click();
+  await expect(section.getByText('Lost iPad', { exact: true })).toHaveCount(0);
+  expect((await fetch(`${api}/me`, { headers: lost })).status).toBe(401);
+  expect((await fetch(`${api}/me`, { headers: kept })).status).toBe(200);
+  expect((await post('native/revoke', {}, kept)).ok).toBe(true);
 });
 
 // Seam: changing the browser account must not give away or replace another workspace's key.
@@ -153,16 +182,15 @@ test('iPad account settings fit a narrow window and omit agent controls', async 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/?ipad');
   await page.getByRole('button', { name: 'Toggle Sidebar', exact: true }).click();
-  await page.getByRole('button', { name: 'Account and sync', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Your workspace, everywhere' });
-  await expect(dialog).toBeVisible();
-  await expect(page.locator('[data-slot="sidebar"][data-mobile]')).toBeHidden();
-  await expect(dialog.getByRole('tab', { name: 'Agents', exact: true })).toHaveCount(0);
-  await expect(dialog.getByRole('button', { name: 'Connect your workspace', exact: true })).toBeEnabled();
-  const box = await dialog.boundingBox();
+  await page.getByRole('button', { name: 'Account and sync' }).click();
+  const section = page.getByTestId('settings-account');
+  await expect(section.getByRole('heading', { name: 'Account and devices' })).toBeVisible();
+  await expect(section.getByText('Agents from a browser')).toHaveCount(0);
+  await expect(section.getByRole('button', { name: 'Connect this iPad', exact: true })).toBeEnabled();
+  const box = await section.boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);
-  expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await section.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.screenshot({ path: `qa/report/native-account-ipad-${test.info().project.name}.png`, animations: 'disabled' });
 });
 

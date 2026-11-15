@@ -77,8 +77,8 @@ Feature: LeadingLight on iPhone
 
   Scenario: Identify the phone when connecting a workspace
     Given I open Account and sync in the installed iPhone app
-    When I choose Connect your workspace
-    Then the browser approval names the device "LeadingLight on iPhone"
+    When I choose Connect this iPhone
+    Then the device that approves it names it "LeadingLight on iPhone"
     And the connection code matches the one shown on the phone
     And the iPad and Mac keep their own device names
 
@@ -156,10 +156,10 @@ Feature: LeadingLight on iPhone
     And there is no line under its header
     And Save, Close and the text stay clear of the status bar, camera cutout and home indicator in portrait and landscape
 
-  Scenario: Account and sync opens as a bottom sheet
+  Scenario: Account and sync opens Settings on Account and devices
     When I open Account and sync on an iPhone in portrait
-    Then it rises from the bottom edge across the full width with rounded top corners
-    And its last control sits above the home indicator
+    Then Settings opens on Account and devices across the full width
+    And nothing scrolls sideways and its last control sits above the home indicator
 
   Scenario: Glass stays readable in every theme and setting
     Given each of the 23 built-in themes, in light and in dark

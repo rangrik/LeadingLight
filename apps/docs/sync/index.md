@@ -20,81 +20,118 @@ running the service enable your account. Until then, your notes keep working on 
 device, and sync says "Cloud access has not been enabled for this account yet."
 :::
 
-## Account and sync
+## Account and devices
 
-Press **Account and sync** in the sidebar. The window, "Your workspace, everywhere", has three tabs:
+Press **Account and sync** in the sidebar. It opens **Settings › Account and devices**, the one
+place for your account:
 
-| Tab | What it is for |
+| Part | What it is for |
 | --- | --- |
-| **Account** | Sign in, see who you are signed in as, connect another device, and sign out |
-| **Sync** | Turn on encrypted sync, see its status, and keep your recovery key |
-| **Agents** | Connect a browser and a Mac so agents can run from the browser. Not shown on iPad. See [Agents from a browser](/sync/pairing) |
+| **Account** | Who you are signed in as, and **Sign out** |
+| **Sync** | Whether this device syncs, its status, and **Sync now** |
+| **Devices** | The apps signed in to your account, and **Add a device** |
+| **Recovery key** | **Show…** the key, and tick it as saved |
+| **Agents** | Connections that let a browser, iPhone or iPad run agents on your Mac. See [Agents from a browser](/sync/pairing) and [Agents from iPhone and iPad](/sync/mobile-agents) |
 
-To keep going without an account, press **Continue on this device**.
+The sidebar row also says where sync stands: **Synced**, **Syncing**, **Offline**, **Sync off**,
+**Paused**, **Sign in** when a sign-in has ended, or **Check** when something needs a look. It
+says nothing if you never signed in.
+
+## Which account am I using?
+
+Under your name the page shows your email and how you signed in, such as
+`alex@example.com · Google`. Every device on the account shows the same line.
+
+A Google account and a GitHub account are two separate LeadingLight accounts with separate notes,
+even if they have the same email address. Use the same one on every device.
+
+An account that last signed in at leadinglight.app before this was added shows its name alone.
+Sign out and in again in a browser once, and every device shows the line.
 
 ## Sign in
 
 ### In a browser
 
-On the **Account** tab, press **Continue with Google** or **Continue with GitHub**, and sign in.
+Press **Continue with Google** or **Continue with GitHub**. The one you used in this browser
+before says **Last used here**.
 
-- Use the same provider on every device. A Google account and a GitHub account are two separate
-  LeadingLight accounts, even if they have the same email address.
 - Google sign-in is still in testing, so only people added as testers can use it for now.
-- If sign-in isn't set up where you opened the app, the tab says "Cloud accounts are not configured
-  in this installation yet." Offline, it says sign-in will be there when you are back online.
+- If sign-in isn't set up where you opened the app, the page says "Cloud accounts are not
+  configured in this installation yet." Offline, it says sign-in will be there when you are back
+  online.
 
-### In the Mac or iPad app
+### In the Mac, iPad or iPhone app
 
-On the **Account** tab, press **Connect your workspace**. The app shows an 8-character code and
-opens your browser. Approve the device in one of two ways.
+Press **Connect this Mac** (or iPad, or iPhone). The app shows a code of 8 characters and waits.
+There are two ways in.
 
-**From a device that already syncs.** No recovery key is needed.
+**From a device that already syncs.** No recovery key is needed and no browser opens.
 
-1. On a Mac or iPad where LeadingLight already syncs, open **Account and sync › Account**.
-2. Under **Connect another device**, type the code and press **Continue**.
-3. It names the device: "LeadingLight on Mac will connect to … and receive the key for your
-   encrypted notes." Press **Connect this device**.
-4. Go back to the new device. It says "Connected. Your notes are syncing with this account."
+1. On a Mac, iPad, iPhone or browser where LeadingLight already syncs, open **Account and
+   devices** and press **Add a device**.
+2. Type the code and press **Continue**.
+3. It asks "Let LeadingLight on Mac open your notes?" with your account and the code. Check the
+   code is the one on the new device, then press **Approve**.
+4. The new device says "Connected". It appears in **Devices**, marked **New**.
 
-You can close the browser page that opened. A signed-in browser that already syncs has the same
-**Connect another device** field. A device where sync is off or paused does not.
+**Add a device** is off on a device where sync is off or paused, because that device has no key
+to hand over.
 
-**From your browser.** Use this for your first device.
+**From your browser.** Use this for your first device. Press **Continue in the browser** under the
+code.
 
-1. In the browser, sign in if you need to, with the same provider you use for your workspace. A
-   **Connect your device** window names the device ("LeadingLight on Mac" or "LeadingLight on
-   iPad") and shows a code. Check that it matches the code in the app.
+1. In the browser, sign in if you need to. A **Connect your device** window names the device and
+   shows the code. Check that it matches the code in the app.
 2. If this browser already syncs, its recovery key is used. If not, paste your recovery key in
-   **Recovery key, if you already use sync**. Find it in the app on a device that already syncs:
-   **Account and sync**, **Sync**, **Show recovery key**. Leave it blank only if you have never set
-   up sync. Signing in is not enough on its own: the service never holds your key, so a browser
-   that has not synced at this address cannot hand it over.
+   **Recovery key, if you already use sync**. Leave it blank only if you have never set up sync.
+   Signing in is not enough on its own: the service never holds your key, so a browser that has
+   not synced at this address cannot hand it over.
 3. Press **Connect this device**. The browser says **Device approved**.
-4. Go back to the app. It says "Connected. Your notes are syncing with this account."
 
 Either way the recovery key reaches the new device encrypted, so the service never sees it. The
-device keeps its sign-in in the system Keychain. A request is good for ten minutes and can be
-approved once; after that, start again in the app. Only ten codes can be tried in ten minutes.
-
-A device stays signed in while you use it. If it is not opened for 30 days, its sign-in ends and
-it asks you to connect again; your notes and recovery key stay on the device.
+device keeps its sign-in in the system Keychain. A code is good for ten minutes and can be
+approved once; after that, press Connect again. Only ten codes can be tried in ten minutes.
 
 Signing in to your workspace is separate from Claude Code and Codex. Agents keep using the CLI
 account already signed in on your Mac. See [Overview and setup](/ai/).
 
+## Your devices
+
+**Devices** lists the installed apps signed in to your account: this device first, then the
+others with when each was last online. A device that joined in the last day is marked **New**.
+Browsers are not listed.
+
+- **Rename.** Press **Rename** on this device's own row. Your other devices list it by the new
+  name.
+- **Remove.** At **leadinglight.app**, press **Remove** on a device and confirm. It is signed out
+  at once and gets nothing new. Notes already on it stay on it. The installed apps do not remove
+  other devices; they say "To remove a device, sign in at leadinglight.app."
+- **Sign out all devices.** Also at leadinglight.app, under the list. Every installed app stops
+  syncing until you connect it again, and a device that was approved but had not finished
+  connecting cannot finish. The browser stays signed in. Unless that browser syncs, connecting the
+  first device again needs your recovery key, so save it first.
+
+## When a sign-in ends
+
+A device stays signed in while you use it. If it is not opened for 30 days, or it is removed, its
+sign-in ends. The sidebar row then says **Sign in**, and the page says "This Mac is signed out of
+sync", names the account it was using, and offers **Sign in again**. Your notes and recovery key
+stay on the device.
+
+Being offline is not the same thing. The row says **Offline**, the page still shows your account,
+and sync carries on when the network is back.
+
 ## Turn on sync
 
-On the **Sync** tab:
+- **First device.** Press **Turn on sync**. LeadingLight makes your recovery key and shows it
+  once, with **Copy**. Tick **I saved it somewhere safe** to finish.
+- **A browser on an account that already syncs.** **Turn on sync** asks for the recovery key.
+  On a device that syncs, open **Account and devices**, press **Show…** on **Recovery key**, and
+  paste the key. (The apps get the key when you add them, as above.)
 
-- **First device.** Press **Set up encrypted sync**. LeadingLight makes your recovery key and shows
-  it. Save it somewhere private.
-- **Another device.** Paste the recovery key from your other device in **Connecting another
-  device?** and press **Connect this device**. (The Mac and iPad apps get the key when you approve
-  them, as above.)
-
-Sync then runs in the background. The tab shows its status: **Connecting…**, **Syncing…**, **Up to
-date**, **Some pages need attention** or **Needs attention**. Press **Sync now** to sync at once.
+Sync then runs in the background. The page shows its status: **Connecting…**, **Syncing…**, **Up
+to date**, **Some pages need attention** or **Needs attention**. Press **Sync now** to sync at
+once.
 
 ### What syncs
 
@@ -111,13 +148,12 @@ still sync.
 
 ## Your recovery key
 
-The recovery key unlocks your encrypted notes on a new device. Press **Show recovery key** on the
-**Sync** tab to see it, under "Recovery key — save this somewhere private".
+The recovery key is the only way back in if you lose every device. Adding a device from one that
+syncs does not need it. Press **Show…** on **Recovery key** to see the whole key, with **Copy**.
+Until you tick **I saved it somewhere safe**, the row reads **Save your recovery key**.
 
-A device that has synced keeps its key after it is signed out, and the **Sync** tab still shows
-it: "Sign in on the Account tab to sync this device again. If your browser asks for a recovery
-key, use the one kept here." Anyone who can open the app on that device can read the key, as they
-can read the notes.
+A device that has synced keeps its key after it is signed out, and the row still shows it. Anyone
+who can open the app on that device can read the key, as they can read the notes.
 
 ::: danger Keep it safe
 LeadingLight can't recover your notes for you. If you lose the recovery key **and** every device
@@ -126,39 +162,35 @@ manager or another private place. Save it before you clear a browser's storage o
 devices.
 :::
 
-If a device has the wrong key, the tab says "The recovery key does not match this account's synced
-notes." Paste the right one under **Recovery key from another device** and press **Use this recovery
-key**. A wrong key, or a failure while it is checked, never replaces the key that already works.
+If a device has the wrong key, the page says "The recovery key does not match this account's
+synced notes." Paste the right one under **Recovery key** and press **Use this recovery key**. A
+wrong key, or a failure while it is checked, never replaces the key that already works.
 
 ## Pause sync
 
-Press **Pause sync on this device**. The device keeps its notes and its recovery key, and the
-encrypted copies stay in your account. Press **Resume sync** to carry on with the same key.
+Turn off **Sync this Mac** (or iPad, iPhone, browser). The device keeps its notes and its recovery
+key, and the encrypted copies stay in your account. Turn it on to carry on with the same key.
 
 ## Sign out
 
-Press **Sign out** on the **Account** tab. Your local notes stay on the device.
+Press **Sign out** and confirm. Your notes and the recovery key stay on the device.
 
-- In the Mac or iPad app, signing out also ends that device's connection, and its saved sign-in is
-  removed from the Keychain.
+- In the Mac, iPad or iPhone app, signing out also ends that device's connection, and its saved
+  sign-in is removed from the Keychain.
 - If signing out fails, your account stays shown so you can try again. Only a sign-out that
   succeeds brings back the sign-in buttons.
-
-### Sign out all devices
-
-If a Mac or iPad is lost, open **leadinglight.app** in a browser, then **Account and sync ›
-Account**, and press **Sign out all devices**. Every installed app stops syncing until you connect
-it again, and a device that was approved but had not finished connecting cannot finish. Notes stay
-on each device, and the browser stays signed in. Unless that browser syncs, connecting the first
-device again needs your recovery key, so save it first. The installed apps do not have this button.
+- A sign-out you chose leaves no warning behind. The page just says which account these notes
+  sync with.
 
 A device's notes belong to the account they first synced with. If you sign in to a different
-account, sync stays off for those notes, so one account's notes are never sent to another.
+account, the page says "These notes sync with alex@example.com · Google" and which account you
+are signed in as, and sync stays off for those notes, so one account's notes are never sent to
+another.
 
 ## Use the web app on a phone or tablet
 
 The web app works in a phone's or tablet's browser, by touch: you can write and edit pages, open
-history, see who wrote what, and open **Account and sync**. No app needs installing.
+history, see who wrote what, and open **Account and devices**. No app needs installing.
 
 Once you have opened it, it works offline. Open it again with no connection and you can read and
 edit your notes; sync waits until you are back online.

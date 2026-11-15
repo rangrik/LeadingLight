@@ -12,13 +12,13 @@ conversation. You only need LeadingLight on each device. Note sync is optional.
 ## Connect
 
 1. Open LeadingLight on your Mac and mobile device with an internet connection. Sign in to your
-   LeadingLight account on the Mac through **Account and sync**. Your mobile device pairs with a
+   LeadingLight account on the Mac in **Settings → Account and devices**. Your mobile device pairs with a
    code; it does not need a separate account or VPN app.
 2. On the Mac, enable project chats in **Settings → AI**, then link a page to a project folder.
-3. In **Settings → Devices**, choose the projects to share, then enable **Mobile access**.
-4. Press **Copy code**. In LeadingLight on your iPhone or iPad, open **Settings → Devices**,
+3. Further down that page, under **Agents from iPhone and iPad**, choose the projects to share, then enable **Mobile access**.
+4. Press **Copy code**. In LeadingLight on your iPhone or iPad, open **Settings → Account and devices**,
    paste it into **Mac connection code**, and press **Connect Mac**.
-5. Open **Agents on Mac** from **Notes** on iPhone, the sidebar on iPad, or Devices settings. Choose a project and a conversation,
+5. Open **Agents on Mac** from **Notes** on iPhone, the sidebar on iPad, or Account and devices. Choose a project and a conversation,
    or start **New chat** with Claude Code or Codex. The provider must already be installed and
    signed in on the Mac.
 
@@ -88,7 +88,7 @@ or answer from either device. Claude accepts feedback with Decline or Keep plann
 records the decline first, then offers a separate **Send feedback** message in that conversation.
 If delivery is uncertain, your exact response is kept for an explicit retry.
 
-In Devices settings, enable **Agent notifications** to receive a generic alert while the app is
+In Account and devices, enable **Agent notifications** to receive a generic alert while the app is
 closed. Tap it to fetch the request through the encrypted connection. Commands, file names,
 questions and answers never appear in the alert. A request already handled elsewhere stays handled.
 Reopening the app keeps its notification registration, so a pending request does not alert you again.
