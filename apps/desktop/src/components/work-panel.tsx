@@ -1,10 +1,13 @@
-import { Bot, Check, ChevronRight, ListTree, MessagesSquare, Play, Square } from "lucide-react";
+import { Bot, Check, ChevronRight, Ellipsis, ListTree, MessagesSquare, Play, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { openChat } from "~/components/assign";
+import { Answer, useFeed } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
 import { visit } from "~/components/property-value";
+import { showChanges } from "~/components/reports";
 import { StartReady, WorkTable } from "~/components/work-table";
 import { useAnchored } from "~/lib/anchor";
 import { accept, acceptedOf, agentOfTask, carryOn, isTask, readySubtasks, start, stopAgent, syncWorkers } from "~/lib/assign";
@@ -28,7 +31,14 @@ export const Row = ({ children, className, ...rest }: { children: React.ReactNod
   </div>
 );
 
+// The agent's reports on the task, and whether its subtasks still keep it from being accepted.
+function reviewOf(task: ObjectSummary, agent: ObjectSummary, pages: ObjectSummary[]) {
+  const own = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id);
+  return { last: own.at(-1), previous: own.at(-2), open: subtasksOf(task.id, pages).some((s) => s.properties.done !== true) };
+}
+
 export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: ObjectSummary }) {
+  const { pages } = space.use();
   const live = sessions.use();
   const [failed, setFailed] = useState<string | null>(null);
   const run = runOf(agent)!;
@@ -37,7 +47,19 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
   const own = agentState(task, agent, live);
   const work = workOf(agent);
   const workers = workersOf(agent.id);
+  // What waits on the person, as the Feed has it whatever its project filter; the oldest first.
+  const ask = useFeed(true).filter((i) => i.task === task.id && i.request).at(-1)?.request;
+  const { last, open } = reviewOf(task, agent, pages);
   const act = (fn: () => Promise<unknown>) => () => void fn().catch((e: Error) => setFailed(e.message));
+  // One filled button at a time: the answer, else Accept, else Continue, else Send n notes.
+  const acceptable = !!last && !open && (state === "review" || state === "idle" || state === "stopped");
+  const resting = own === "idle" || own === "stopped";
+  const primary = ask ? "answer" : acceptable ? "accept" : resting ? "continue" : "send";
+  const more = [
+    run.conversation && { label: "Chat", icon: MessagesSquare, go: () => openChat(run.location, run.conversation) },
+    own === "working" && { label: "Stop", icon: Square, go: act(() => stopAgent(agent.id)) },
+    resting && primary !== "continue" && { label: "Continue", icon: Play, go: act(() => carryOn(agent.id)) },
+  ].filter((x) => !!x);
   return (
     <div className="flex flex-col gap-1" data-widget="activity">
       <Row>
@@ -56,24 +78,33 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
             Try again
           </Button>
         )}
-        {own === "working" && (
-          <Button onClick={act(() => stopAgent(agent.id))} size="xs" variant="ghost">
-            <Square className="size-2.5 fill-current" />
-            Stop
+        {primary === "accept" && (
+          <Button onClick={() => void accept(task.id, last!.id)} size="xs">
+            <Check className="size-3.5" />
+            Accept
           </Button>
         )}
-        {(own === "idle" || own === "stopped") && (
-          <Button onClick={act(() => carryOn(agent.id))} size="xs" variant="ghost">
+        {primary === "continue" && (
+          <Button onClick={act(() => carryOn(agent.id))} size="xs">
             <Play className="size-3.5" />
             Continue
           </Button>
         )}
-        <FeedbackButton card pageId={task.id} />
-        {run.conversation && (
-          <Button onClick={() => openChat(run.location, run.conversation)} size="xs" variant="outline">
-            <MessagesSquare className="size-4" />
-            Chat
-          </Button>
+        <FeedbackButton card pageId={task.id} primary={primary === "send"} />
+        {more.length > 0 && (
+          <Menu>
+            <MenuTrigger render={<Button aria-label="More" className="text-muted-foreground aria-expanded:bg-accent" size="icon-xs" variant="ghost" />}>
+              <Ellipsis className="size-4" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              {more.map((m) => (
+                <MenuItem key={m.label} onClick={m.go}>
+                  <m.icon />
+                  {m.label}
+                </MenuItem>
+              ))}
+            </MenuPopup>
+          </Menu>
         )}
       </Row>
       {/* What it is doing, while it does; at rest the line would be stale. */}
@@ -94,6 +125,12 @@ export function ActivityWidget({ task, agent }: { task: ObjectSummary; agent: Ob
             );
           })}
         </p>
+      )}
+      {/* The question itself, answered here as in the Feed, so either settles both. */}
+      {ask && (
+        <div className="-me-2 -mb-2 ms-4 pt-1" data-widget="question">
+          <Answer chat={ask.key} request={ask.request} />
+        </div>
       )}
     </div>
   );
@@ -163,28 +200,61 @@ function toReport(from: HTMLElement, id: string) {
   requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
 }
 
-// Ready for review: the report to read, and Accept; once accepted, when, and anything published since.
+type Block = { type?: string; text?: string; attrs?: Record<string, unknown>; content?: Block[] };
+// A block's words, with the pages it links and the files it shows.
+const said = (n: Block): string =>
+  [n.text, n.attrs?.src, (n.type === "mention" || n.type === "pageLink") && n.attrs?.id, ...(n.content ?? []).map(said)].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+
+// The newer report's top-level blocks whose words the older one has nowhere; reports never change.
+function useChanged(older?: ObjectSummary, newer?: ObjectSummary) {
+  const [blocks, setBlocks] = useState<number[]>([]);
+  useEffect(() => {
+    if (!older || !newer) return setBlocks([]);
+    let live = true;
+    void Promise.all([objects.get(older.id), objects.get(newer.id)]).then(([a, b]) => {
+      const before = new Set((a?.content?.content ?? []).map(said));
+      if (live) setBlocks((b?.content?.content ?? []).flatMap((n, i) => (said(n) && !before.has(said(n)) ? [i] : [])));
+    });
+    return () => void (live = false);
+  }, [older?.id, newer?.id]);
+  return blocks;
+}
+
+// The latest report to read, and what changed since the one before; once accepted, when, and
+// anything published since. Accept itself is the card's primary, in its first row.
 export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: ObjectSummary }) {
   const { pages } = space.use();
   const live = sessions.use();
   const state = stateOf(task, agent, live);
-  const own = reportsOn(task.id, pages).filter((r) => reportOf(r)?.by === agent.id);
+  const { last, previous, open } = reviewOf(task, agent, pages);
+  const changed = useChanged(previous, last);
   const accepted = acceptedOf(task);
   const since = accepted ? reportsOn(task.id, pages).filter((r) => r.createdAt > accepted.at) : [];
-  const last = own.at(-1);
-  // Ready, or reported and at rest: the person can accept whenever satisfied.
-  if ((state === "review" || state === "idle" || state === "stopped") && last) {
+  if (state !== "done" && last) {
     const read = (
-      <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => toReport(e.currentTarget, last.id)} type="button">
-        {pageLabel(last.title)}
-      </button>
+      <>
+        <button className="text-foreground underline-offset-2 hover:underline" onClick={(e) => toReport(e.currentTarget, last.id)} type="button">
+          {pageLabel(last.title)}
+        </button>
+        {changed.length > 0 && (
+          <>
+            {" · "}
+            <button className="underline-offset-2 hover:text-foreground hover:underline" onClick={(e) => showChanges(e.currentTarget, last.id, changed)} type="button">
+              {changed.length} {changed.length === 1 ? "paragraph" : "paragraphs"} changed
+            </button>
+          </>
+        )}
+      </>
     );
-    // A plan is accepted once its subtasks are done; until then the line says what comes next.
-    const open = subtasksOf(task.id, pages).some((s) => s.properties.done !== true);
+    const rest = state === "review" || state === "idle" || state === "stopped";
     return (
       <Row className="ms-6" data-widget="review">
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">
-          {open ? (
+        {/* Wraps, so a narrow pane still shows what changed. */}
+        <span className="min-w-0 flex-1 break-words text-muted-foreground">
+          {!rest ? (
+            <>Its latest report is {read}</>
+          ) : open ? (
+            // A plan is accepted once its subtasks are done; until then the line says what comes next.
             readySubtasks(task.id, pages).length ? <>Read {read}, then start the ready ones.</> : "Its subtasks are at work."
           ) : (
             <>
@@ -194,12 +264,6 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
             </>
           )}
         </span>
-        {!open && (
-          <Button onClick={() => void accept(task.id, last.id)} size="xs">
-            <Check className="size-3.5" />
-            Accept
-          </Button>
-        )}
       </Row>
     );
   }

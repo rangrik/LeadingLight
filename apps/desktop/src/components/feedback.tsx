@@ -18,7 +18,7 @@ const who = (id: string) => title(id).split(": ")[0];
 
 // "Send 3 notes" while notes on the task are ticked: on its card, and in a report's header (the
 // task's own header leaves it to the card).
-export function FeedbackButton({ pageId, card, className }: { pageId: string; card?: boolean; className?: string }) {
+export function FeedbackButton({ pageId, card, primary, className }: { pageId: string; card?: boolean; primary?: boolean; className?: string }) {
   space.use();
   const all = drafts.use();
   const [busy, setBusy] = useState(false);
@@ -35,7 +35,7 @@ export function FeedbackButton({ pageId, card, className }: { pageId: string; ca
       .finally(() => setBusy(false));
   };
   return (
-    <Button className={className} disabled={busy} onClick={go} size="xs" variant="outline">
+    <Button className={className} disabled={busy} onClick={go} size="xs" variant={primary ? "default" : "outline"}>
       <Send className="size-4" />
       {busy ? "Sending…" : `Send ${n} ${n === 1 ? "note" : "notes"}`}
     </Button>
