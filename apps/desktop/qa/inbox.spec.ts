@@ -8,15 +8,16 @@ test("the Inbox counts all three, opens at a section and walks across them", asy
   const section = (name: string) => inbox.getByRole("region", { name, exact: true });
   const n = async (name: string) => Number((await section(name).getByRole("heading").first().textContent())?.match(/\d+$/)?.[0]);
   const count = page.locator("#bar-count-inbox");
-  // The demo seeds, then reloads itself; one more load waits that out.
-  await expect(count).toBeVisible({ timeout: 20_000 });
-  await page.reload();
+  // The demo seeds, then reloads itself. A reload of ours before that would cut the seed short.
+  await page.waitForFunction(() => (performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined)?.type === "reload", null, { timeout: 20_000 });
   await expect(count).toBeVisible();
   await page.keyboard.press("Meta+Alt+k");
   await expect(section("Captured").locator(":focus")).toHaveCount(1);
   await expect(section("Needs you").getByRole("heading")).toHaveText(/2$/);
   // Suggestions shown are seen, so only the other two sections count now.
   await expect(count).toHaveText(String((await n("Needs you")) + (await n("Captured"))));
+  // Tail's own rows land a moment after the load; a row added mid-walk would take the next ↓.
+  await expect(section("Suggested")).toContainText("4 ideas");
   await page.keyboard.press("ArrowUp");
   await expect(inbox.locator("[data-section=suggested], [data-section=here]").locator(":focus")).toHaveCount(1);
   await page.keyboard.press("ArrowDown");
