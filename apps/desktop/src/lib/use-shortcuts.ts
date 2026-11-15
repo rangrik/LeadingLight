@@ -14,6 +14,7 @@ import { openPaper, readPaper } from "~/lib/paper";
 import { closeTab, focusedPage, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
 import { isDesktop, useMobile } from "~/lib/platform";
 import { pick } from "~/lib/scope";
+import { toggleReading } from "~/lib/reading";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
@@ -92,6 +93,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "grammar":
         case "count":
           return toggleTool(id);
+        case "reading":
+          return useStore.getState().view.kind === "settings" ? undefined : toggleReading(focusedPage());
       }
     };
     const onKey = (e: KeyboardEvent) => {

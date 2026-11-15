@@ -46,11 +46,17 @@
 [data-report] .ll-editor-root { padding-bottom: 0; }
 
 /* The capture box's editor (capture-box.tsx): 15 px, no handle gutter (a 640 px box has no
-   room left of the text), no drop room below. */
+   room left of the text), no drop room below. Takeaways beside a source too (your-words.tsx). */
 .ll-capture .ll-editor { font-size: 15px; }
-.ll-capture .ll-editor > * { padding-block: 3px; }
+:is(.ll-capture, .ll-takeaways) .ll-editor > * { padding-block: 3px; }
 .ll-capture .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 8px; }
-.ll-capture .ll-handle { display: none; }
+.ll-takeaways .ll-editor-root { margin-left: 0; padding: 0; }
+.ll-capture .ll-handle, .ll-takeaways :is(.ll-handle, .ll-toc) { display: none; }
+.ll-takeaways .ll-editor { font-size: 14px; }
+/* Its hint shows while it is empty, not only on the line holding the cursor. */
+.ll-takeaways[data-empty] .ll-editor:not(:focus) > p:only-child::before {
+  content: "In your own words…"; color: var(--muted-foreground); opacity: 0.55; float: left; height: 0; pointer-events: none;
+}
 .ll-capture[data-web] .is-empty::before { content: none; }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
@@ -84,6 +90,17 @@
 .ll-page[data-review="open"] > .ll-page-body { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 .ll-page[data-review] > .ll-page-body .ll-editor-root { padding-bottom: 0; }
 .ll-page[data-review] .ll-reports > :not([data-reviewing]) { display: none; }
+/* Reading layout (your-words.tsx): 320px more on the right for Your words, beyond the sidenotes'
+   margin when the page has one. The column keeps 32px from them, as notes do from the text. */
+.ll-page[data-page-reading] { position: relative; --margin: 320px; --end: 16px; }
+.ll-page[data-page-reading][data-page-notes] { --margin: 576px; }
+.ll-page[data-page-reading] > :not(.ll-reading) { margin-inline-end: 320px; }
+.ll-page[data-page-reading][data-page-notes] > :not(.ll-reading) { margin-inline-end: 576px; }
+/* The title and properties sit in a wrapper with no box (page-view.tsx); here it takes that margin. */
+.ll-page[data-page-reading] > .contents { display: block; }
+.ll-page > .ll-reading { position: absolute; top: 0; bottom: 0; right: var(--end); width: 288px; margin: 0; }
+/* Room at its sides for rows' hover tint, so a focused row can't scroll it sideways. */
+.ll-reading > div { position: sticky; top: 0; overflow-y: auto; padding: 40px 8px 24px; margin-inline: -8px; }
 
 /* iPad's keyboard and safe areas leave one measured region for the app and its sidebars.
    --ll-env-* let QA stand in a notch: a browser reports every env() inset as 0. */

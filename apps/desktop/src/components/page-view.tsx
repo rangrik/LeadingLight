@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components
 import { Sheet, SheetPopup, SheetHeader, SheetTitle, SheetDescription, SheetPanel } from "@leadinglight/ui/components/sheet";
 import { Button } from "@leadinglight/ui/components/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
+import { Tabs, TabsList, TabsTab } from "@leadinglight/ui/components/tabs";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { markCapture } from "~/lib/capture-inbox";
 import { saveVoice } from "~/lib/capture";
@@ -24,6 +25,7 @@ import { PropertyPanel } from "~/components/property-panel";
 import { ReportByline, Reports, ReportSources } from "~/components/reports";
 import { toReport, WorkPanel } from "~/components/work-panel";
 import { clearPending, pendingReview, ReviewBar, ReviewHead } from "~/components/review";
+import { usePane, YourWords } from "~/components/your-words";
 import { ProjectWork } from "~/components/work-table";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
@@ -43,6 +45,7 @@ import { type PageCover, type PageIcon, readCover, readIcon } from "~/lib/page-m
 import { trackFlush } from "~/lib/saving";
 import { pageOf, patchSummary, savePage, space, typeOf } from "~/lib/space";
 import { useNotesFor } from "~/lib/notes-for";
+import { isSource } from "~/lib/reading";
 import { reportOf } from "~/lib/work";
 import { editorWriting, toolsOn, useWritingPrefs } from "~/lib/writing";
 import { contentWidth, usePageLayout } from "~/lib/page-layout";
@@ -150,6 +153,7 @@ export function PageView({ page }: { page: LLObject }) {
     return () => window.removeEventListener("keydown", key, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review]);
+  const [readingTab, setReadingTab] = useState("page");
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
   // A daily note is a log, not writing to measure.
@@ -252,6 +256,24 @@ export function PageView({ page }: { page: LLObject }) {
   const quotes = useQuotes(page.id, essay);
   const quoteTo: QuoteTarget | undefined = essay ? { essay, add: (text, id) => void quoteInto(page.id, { text, id }) } : undefined;
   const onCites = role === "essay" && parent ? (ids: string[]) => reportQuotes(parent, ids) : undefined;
+  // A source gets Your words beside its text, or in a tab when the pane is narrow (reading-layout.feature).
+  const reading = !paper && !review && isSource({ typeId, properties: props });
+  const pane = usePane(rootRef, reading);
+  const folded = reading && !pane.wide;
+  const takeaways = props.takeaways && typeof props.takeaways === "object" ? (props.takeaways as EditorDoc) : null;
+  const yourWords = reading && (
+    <YourWords
+      editor={editorRef}
+      onTakeaways={(doc) => setProp("takeaways", doc)}
+      page={{ ...current, title, typeId }}
+      quotes={quotes?.length ?? 0}
+      reveal={(note) => {
+        setReadingTab("page");
+        requestAnimationFrame(() => editorRef.current?.reveal(note));
+      }}
+      takeaways={takeaways}
+    />
+  );
 
   // A brand new page starts in the title. Pending edits are saved when leaving the page, and
   // whenever the app is about to go away (see App).
@@ -351,10 +373,10 @@ export function PageView({ page }: { page: LLObject }) {
     const editor = editorRef.current;
     const title = titleRef.current;
     // Reviewing, the title and often the body are hidden, so blank space is nobody's.
-    if (paper || !editor || !title || review || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    if (paper || !editor || !title || review || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus() || bodyRef.current?.hidden) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
-    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
+    if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, .ll-reading, .ll-your-words, textarea, input, button, a, [role]")) return;
     // Level with the sections after the body (backlinks, what was made that day) is theirs too.
     const besideSection = [...e.currentTarget.querySelectorAll("section")].some((s) => {
       const r = s.getBoundingClientRect();
@@ -512,6 +534,7 @@ export function PageView({ page }: { page: LLObject }) {
       <div
         className={cn("ll-page pb-8", paper && "ll-notebook-page")}
         data-page-notes={!!review || margins.notes || streamNotes || undefined}
+        data-page-reading={(reading && !folded) || undefined}
         data-page-toc={margins.toc || undefined}
         data-review={review ? (unfold ? "open" : "folded") : undefined}
         style={(review ? { "--content-width": "72ch" } : { "--content-width": `${paper ? 900 : contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) }) as CSSProperties}
@@ -519,7 +542,16 @@ export function PageView({ page }: { page: LLObject }) {
         {review && <ReviewHead changes={changes} content={editorRef.current?.getJSON() ?? page.content} onChanges={setChanges} onOpen={setUnfold} open={unfold} report={review} task={page.id} />}
         {showDetails && <div className={paper ? "ll-notebook-details" : "contents"}>{pageDetails}</div>}
         {unavailablePaper && <Alert className="my-4"><AlertTitle>Notebook unavailable</AlertTitle><AlertDescription>This version cannot read the notebook’s paper. Open it with the app version that saved it, or restore a version from history. Your saved content is unchanged.</AlertDescription></Alert>}
-        <div className={cn("ll-page-body pt-3", (paper || unavailablePaper) && !documentNotes && "hidden")} ref={bodyRef}>
+        {folded && (
+          <Tabs className="mt-4" onValueChange={setReadingTab} value={readingTab}>
+            {/* The tab's words line up with the text, as Backlinks' tabs do. */}
+            <TabsList className="-ms-2.5" variant="underline">
+              <TabsTab value="page">Page</TabsTab>
+              <TabsTab value="words">Your words</TabsTab>
+            </TabsList>
+          </Tabs>
+        )}
+        <div className={cn("ll-page-body pt-3", (paper || unavailablePaper) && !documentNotes && "hidden")} hidden={folded && readingTab === "words"} ref={bodyRef}>
           <BlockEditor
             readOnly={unavailablePaper}
             assets={assets}
@@ -543,7 +575,10 @@ export function PageView({ page }: { page: LLObject }) {
             onNoteSteps={onNoteSteps}
             onCites={onCites}
             onExitTop={() => titleRef.current?.focus()}
-            onFocusChange={setInBody}
+            onFocusChange={(on) => {
+              setInBody(on);
+              if (on) setReadingTab("page");
+            }}
             onLayoutChange={setMargins}
             onStats={counting ? (stats) => setPageStats(page.id, stats) : undefined}
             openLink={openHref}
@@ -560,6 +595,12 @@ export function PageView({ page }: { page: LLObject }) {
           if (immediate) await flush();
           else saveEmergency(page, { properties: latest.current }, currentEdit());
         }} />}
+        {folded && readingTab === "words" && <div className="pt-3">{yourWords}</div>}
+        {reading && !folded && (
+          <aside aria-label="Your words" className="ll-reading">
+            <div style={{ maxHeight: pane.height || undefined }}>{yourWords}</div>
+          </aside>
+        )}
         {report && <ReportSources report={current} />}
         <Reports onNotes={setStreamNotes} onReview={startReview} pageId={page.id} review={review ? { report: review, changes } : undefined} />
         <Linked id={page.id} />
