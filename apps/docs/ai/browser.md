@@ -88,7 +88,7 @@ Press it again to put LeadingLight away and go back to the app you were in.
 | <kbd>⌘R</kbd>, <kbd>⌘[</kbd> <kbd>⌘]</kbd> | Reload, Back and Forward |
 | <kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd> | Zoom the page |
 | <kbd>⌘D</kbd> | Save the page, or stop saving it |
-| <kbd>⌘\</kbd> | Hide or show the sidebar |
+| <kbd>⌘&#92;</kbd> | Hide or show the sidebar |
 | <kbd>⌥⌘B</kbd> | Back to your notes |
 | <kbd>⌃⌥B</kbd> | The browser from any app, or away again |
 
