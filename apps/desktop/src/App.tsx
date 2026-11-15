@@ -425,6 +425,7 @@ export default function App() {
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}
           todayActive={current !== undefined && current === dayShown(today())}
+          current={current}
           types={navTypes}
         />
         <SidebarInset className="ll-inset relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">

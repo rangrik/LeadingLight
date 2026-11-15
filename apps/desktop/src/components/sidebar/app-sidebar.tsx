@@ -108,6 +108,7 @@ export function AppSidebar({
   onCreate,
   onToday,
   todayActive,
+  current,
   browser,
   native,
   ...props
@@ -117,6 +118,8 @@ export function AppSidebar({
   native: boolean;
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
+  // The focused pane's view, so Calendar and Mail show as current as Today does.
+  current?: string;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
   pages: React.ComponentProps<typeof NavProjects>["projects"];
   types: React.ComponentProps<typeof NavTypes>["types"];
@@ -180,8 +183,8 @@ export function AppSidebar({
                 {!mobile && <Kbd className="ms-auto">{searchKeys}</Kbd>}
               </SidebarMenuButton>
             </SidebarMenuItem>
-            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
-            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton aria-current={current === CALENDAR_VIEW ? "page" : undefined} isActive={current === CALENDAR_VIEW} onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton aria-current={current?.startsWith(MAIL_VIEW) ? "page" : undefined} isActive={!!current?.startsWith(MAIL_VIEW)} onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
               <SidebarMenuButton onClick={select(() => (native ? enter() : openBeside(browserView(""))))}>
                 <Globe className="size-4" />
