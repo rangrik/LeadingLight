@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.0](https://github.com/rangrik/LeadingLight/compare/v0.4.1...v0.5.0) (2026-11-15)
+
+
+### Features
+
+* a native browser space with Ask on a page ([5a26595](https://github.com/rangrik/LeadingLight/commit/5a265950605ab07f6287eefe2e0f487f4ab3f0af))
+
+
+### Fixes
+
+* write ⌘\ so the docs site builds ([61c3e56](https://github.com/rangrik/LeadingLight/commit/61c3e564fa9a8530a5d8e4a3214c62bb693fad30))
+
 ## [0.4.1](https://github.com/rangrik/LeadingLight/compare/v0.4.0...v0.4.1) (2026-11-15)
 
 
