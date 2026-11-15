@@ -1,0 +1,1148 @@
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -32,9 +32,10 @@
+ var validOrigin = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
+ 
+ type Box struct {
+-	Name      string
+-	Locations *Locations
+-	Sessions  *Sessions
++	browserAccess browserAccess
++	Name          string
++	Locations     *Locations
++	Sessions      *Sessions
+ 	// AgentBrowsers closes the agent-browser sessions berth sessions
+ 	// leave behind; nil leaves them alone.
+ 	AgentBrowsers *AgentBrowsers
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -143,6 +143,7 @@
+ 	viewport    Viewport
+ 	recapturing bool // a sharp frame is being taken
+ 	dirty       bool // and the page changed again since
++	grants      map[string]browserGrant
+ 	controls    browserControls
+ 	developer   browserDeveloper
+ }
+@@ -291,7 +292,7 @@
+ 		if err == nil {
+ 			var c *chromium
+ 			// A proxy that refuses everything: the page is about:blank.
+-			if c, err = m.start(ctx, bin, "127.0.0.1:9", "", DefaultViewport); err == nil {
++			if c, err = m.start(ctx, bin, "127.0.0.1:9", "", DefaultViewport, "127.0.0.1:9"); err == nil {
+ 				c.shutdown()
+ 			}
+ 		}
+@@ -313,7 +314,7 @@
+ 
+ // start runs Chromium with its only way out through proxy, for the
+ // worktree at path (where downloads go), its main tab at the size v.
+-func (m *Browsers) start(ctx context.Context, bin, proxy, path string, v Viewport) (*chromium, error) {
++func (m *Browsers) start(ctx context.Context, bin, proxy, path string, v Viewport, restrictedProxy string) (*chromium, error) {
+ 	profile, persistent, err := m.browserProfile(path)
+ 	if err != nil {
+ 		return nil, err
+@@ -344,6 +345,7 @@
+ 	toChrome.Close()
+ 	fromChrome.Close()
+ 	c := &chromium{m: m, cmd: cmd, path: path, profile: profile, persistent: persistent, started: time.Now(), done: make(chan struct{}), tabs: map[string]*browser{}, sessions: map[string]*browser{}}
++	c.agentProxy = restrictedProxy
+ 	c.cdp = newCDP(ours, theirs, c.onEvent)
+ 	go func() {
+ 		cmd.Wait()
+@@ -478,11 +480,16 @@
+ 		}
+ 		br.mu.Lock()
+ 		br.url = p.Frame.URL
++		for session, grant := range br.grants {
++			if browserSite(br.url) != grant.Site {
++				delete(br.grants, session)
++			}
++		}
+ 		// A new document: new elements, new refs.
+ 		br.refs, br.nextRef, br.lastSnap, br.title = map[int64]string{}, 0, nil, ""
+ 		br.mu.Unlock()
+ 		if !strings.HasPrefix(p.Frame.URL, "about:") {
+-			br.m.b.Events.Publish(events.Event{Type: "browser.navigated", Box: br.m.b.Name, Origin: "browser", Data: map[string]any{"location": br.location, "name": br.worktree, "path": br.path, "tab": br.tab, "url": p.Frame.URL}})
++			br.m.b.Events.Publish(events.Event{Type: "browser.navigated", Box: br.m.b.Name, Origin: "browser", Data: map[string]any{"location": br.location, "name": br.worktree, "path": br.path, "tab": br.tab, "url": browserEventURL(br.tab, p.Frame.URL)}})
+ 		}
+ 	case "Page.navigatedWithinDocument":
+ 		var p struct {
+@@ -905,7 +912,7 @@
+ 
+ // refusedNote names what the proxy refused since the last note.
+ func (br *browser) refusedNote() string {
+-	px, err := br.m.b.BrowserProxies.For(br.m.b, br.path)
++	px, err := br.m.b.BrowserProxies.forMode(br.m.b, br.path, userBrowserTab(br.tab))
+ 	if err != nil {
+ 		return ""
+ 	}
+@@ -1370,7 +1377,7 @@
+ 	}
+ 	pruneShots(dir, keepShots)
+ 	cur := br.currentURL()
+-	br.m.b.Events.Publish(events.Event{Type: "browser.shot", Box: br.m.b.Name, Origin: "browser", Data: map[string]any{"location": br.location, "name": br.worktree, "path": br.path, "tab": br.tab, "file": name, "url": cur}})
++	br.m.b.Events.Publish(events.Event{Type: "browser.shot", Box: br.m.b.Name, Origin: "browser", Data: map[string]any{"location": br.location, "name": br.worktree, "path": br.path, "tab": br.tab, "file": name, "url": browserEventURL(br.tab, cur)}})
+ 	pw, ph := pngSize(raw)
+ 	if pw == 0 {
+ 		pw, ph = int(math.Round(w*scale*dpr)), int(math.Round(h*scale*dpr))
+--- a/internal/box/browserapi.go
++++ b/internal/box/browserapi.go
+@@ -2,6 +2,7 @@
+ 
+ import (
+ 	"bufio"
++	"context"
+ 	"encoding/json"
+ 	"fmt"
+ 	"net/http"
+@@ -136,8 +137,11 @@
+ 	if _, err := browserControlURL(target); err != nil {
+ 		return badRequest("%v", err)
+ 	}
+-	if err := b.before(r, "browser.open", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": tab, "url": target}); err != nil {
+-		return err
++	if err := b.beforeBrowser(r, "browser.open", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": tab, "url": target}); err != nil {
++		return err
++	}
++	if userBrowserTab(tab) && !b.browserIdentity(r).owner && size != nil {
++		return httpError{http.StatusForbidden, "The person controls this tab size."}
+ 	}
+ 	// The size first: a browser that starts, starts at it.
+ 	if size != nil {
+@@ -147,6 +151,12 @@
+ 	}
+ 	br, _, _, err := b.browserFor(r, true)
+ 	if err != nil {
++		return err
++	}
++	if !b.browserIdentity(r).owner && userBrowserTab(tab) && (req.As != "" || size != nil) {
++		return httpError{http.StatusForbidden, "The person controls this tab's login and size."}
++	}
++	if err := b.browserSharedNavigation(r, br, target); err != nil {
+ 		return err
+ 	}
+ 	if req.As != "" {
+@@ -364,7 +374,7 @@
+ 		}
+ 		res := map[string]any{"running": false, "viewport": v, "size": v.String(), "text": what + "; it opens at " + v.String()}
+ 		if c != nil {
+-			res["tabs"] = c.status().Tabs
++			res["tabs"] = b.browserVisibleTabs(r, wt.Path, c.status().Tabs)
+ 		}
+ 		if h := b.Browsers.Health(); h.State != "ok" && c == nil {
+ 			res["health"], res["text"] = h, "no browser open; "+h.Text
+@@ -373,6 +383,7 @@
+ 		return nil
+ 	}
+ 	st := c.status()
++	st.Tabs = b.browserVisibleTabs(r, wt.Path, st.Tabs)
+ 	ts := br.tabStatus()
+ 	// The status's page is the tab asked for.
+ 	st.URL, st.Viewport, st.Size = ts.URL, ts.Viewport, ts.Size
+@@ -399,6 +410,7 @@
+ 		return nil
+ 	}
+ 	st := c.status()
++	st.Tabs = b.browserVisibleTabs(r, wt.Path, st.Tabs)
+ 	writeJSON(w, map[string]any{"tabs": st.Tabs, "text": tabsText(st.Tabs)})
+ 	return nil
+ }
+@@ -431,7 +443,7 @@
+ 	if err != nil {
+ 		return err
+ 	}
+-	if tab != "" {
++	if tab != "" || !b.browserIdentity(r).owner {
+ 		closed := b.Browsers.CloseTab(wt.Path, tab, "closed")
+ 		writeJSON(w, map[string]any{"closed": closed, "text": map[bool]string{true: "closed tab " + tab, false: "no tab " + tab + " was open"}[closed]})
+ 		return nil
+@@ -452,7 +464,7 @@
+ 	if err != nil {
+ 		return err
+ 	}
+-	if err := b.before(r, "browser.watch", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": tab}); err != nil {
++	if err := b.beforeBrowser(r, "browser.watch", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": tab}); err != nil {
+ 		return err
+ 	}
+ 	br := b.Browsers.Lookup(wt.Path, tab)
+@@ -550,7 +562,17 @@
+ 		writeJSON(w, []BrowserStatus{})
+ 		return nil
+ 	}
+-	writeJSON(w, b.Browsers.List())
++	list := b.Browsers.List()
++	for i := range list {
++		list[i].Tabs = b.browserVisibleTabs(r, list[i].Path, list[i].Tabs)
++		if !b.browserIdentity(r).owner {
++			list[i].URL = ""
++			if len(list[i].Tabs) > 0 {
++				list[i].URL = list[i].Tabs[0].URL
++			}
++		}
++	}
++	writeJSON(w, list)
+ 	return nil
+ }
+ 
+@@ -573,6 +595,22 @@
+ }
+ 
+ func (b *Box) mountBrowser(route func(string, func(http.ResponseWriter, *http.Request) error)) {
++	rawRoute := route
++	route = func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
++		rawRoute(pattern, func(w http.ResponseWriter, r *http.Request) error {
++			r = r.WithContext(context.WithValue(r.Context(), browserIdentityKey{}, b.browserIdentity(r)))
++			if err := b.browserGuard(r); err != nil {
++				return err
++			}
++			return b.browserAnswer(w, r, h)
++		})
++	}
++	route("GET /v1/browser/owner", func(w http.ResponseWriter, r *http.Request) error {
++		writeJSON(w, map[string]bool{"ok": true})
++		return nil
++	})
++	route("POST /v1/worktrees/{loc}/{wt}/browser/handoff", b.browserHandoff)
++	route("DELETE /v1/worktrees/{loc}/{wt}/browser/handoff", b.browserHandoff)
+ 	b.mountBrowserControls(route)
+ 	b.mountBrowserDeveloper(route)
+ 	p := "/v1/worktrees/{loc}/{wt}/browser/"
+--- a/internal/box/browsercontrols.go
++++ b/internal/box/browsercontrols.go
+@@ -62,6 +62,7 @@
+ }
+ 
+ type BrowserControlState struct {
++	Shared       bool           `json:"shared,omitempty"`
+ 	Running      bool           `json:"running"`
+ 	URL          string         `json:"url"`
+ 	Title        string         `json:"title"`
+@@ -164,6 +165,12 @@
+ 	br.mu.Lock()
+ 	c := br.controls
+ 	s := BrowserControlState{Running: !c.closed, URL: br.url, Title: br.title, Loading: c.loading, Zoom: c.zoom, Error: c.failure, Dialog: c.dialog, Viewport: br.viewport}
++	for _, grant := range br.grants {
++		if time.Now().Before(grant.Expires) {
++			s.Shared = true
++			break
++		}
++	}
+ 	s.RefusedHosts = []string{}
+ 	if !c.closed {
+ 		for host := range c.refusedHosts {
+@@ -171,6 +178,9 @@
+ 		}
+ 	}
+ 	sort.Strings(s.RefusedHosts)
++	if userBrowserTab(br.tab) && s.Error != "" && len(s.RefusedHosts) > 0 {
++		s.Error = "This browser cannot open private network addresses or unrelated local ports."
++	}
+ 	if c.chooser != 0 {
+ 		s.FileChooser = &struct {
+ 			Multiple bool   `json:"multiple"`
+@@ -270,7 +280,10 @@
+ 	var params any
+ 	switch req.Action {
+ 	case "open":
+-		if err := b.before(r, "browser.open", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": br.tab, "url": next}); err != nil {
++		if err := b.browserSharedNavigation(r, br, next); err != nil {
++			return err
++		}
++		if err := b.beforeBrowser(r, "browser.open", map[string]any{"location": loc.Name, "name": wt.Name, "path": wt.Path, "tab": br.tab, "url": next}); err != nil {
+ 			return err
+ 		}
+ 		method += "navigate"
+@@ -287,6 +300,9 @@
+ 		i, available := browserHistoryStep(h, direction)
+ 		if !available {
+ 			return badRequest("there is no page in that direction")
++		}
++		if err := b.browserSharedNavigation(r, br, h.Entries[i].URL); err != nil {
++			return err
+ 		}
+ 		method += "navigateToHistoryEntry"
+ 		params = map[string]any{"entryId": h.Entries[i].ID}
+@@ -595,7 +611,7 @@
+ 	if !ok || len(br.controls.refusedHosts) >= 32 {
+ 		return
+ 	}
+-	px, err := br.m.b.BrowserProxies.For(br.m.b, br.path)
++	px, err := br.m.b.BrowserProxies.forMode(br.m.b, br.path, userBrowserTab(br.tab))
+ 	if err != nil || !px.refusedAfter(r.host, r.started) {
+ 		return
+ 	}
+@@ -1404,6 +1420,9 @@
+ 		b.BrowserProxies.mu.Lock()
+ 		proxies := []*worktreeProxy{}
+ 		for _, p := range b.BrowserProxies.proxies {
++			if p.personal {
++				continue
++			}
+ 			proxies = append(proxies, p)
+ 		}
+ 		b.BrowserProxies.mu.Unlock()
+--- a/internal/box/browserproxy.go
++++ b/internal/box/browserproxy.go
+@@ -47,10 +47,11 @@
+ }
+ 
+ type worktreeProxy struct {
+-	path string
+-	ln   net.Listener
+-	srv  *http.Server
+-	port int
++	personal bool
++	path     string
++	ln       net.Listener
++	srv      *http.Server
++	port     int
+ 	// refused counts what it turned away, for the browser's status.
+ 	refused     int
+ 	mu          sync.Mutex
+@@ -103,17 +104,25 @@
+ 
+ // For returns the proxy of the worktree at path, starting it if need be.
+ func (bp *BrowserProxies) For(b *Box, path string) (*worktreeProxy, error) {
++	return bp.forMode(b, path, false)
++}
++
++func (bp *BrowserProxies) forMode(b *Box, path string, personal bool) (*worktreeProxy, error) {
+ 	path = filepath.Clean(path)
++	key := path
++	if personal {
++		key += "\x00personal"
++	}
+ 	bp.mu.Lock()
+ 	defer bp.mu.Unlock()
+ 	bp.load()
+ 	bp.b = b
+-	if p := bp.proxies[path]; p != nil {
++	if p := bp.proxies[key]; p != nil {
+ 		return p, nil
+ 	}
+ 	var ln net.Listener
+ 	var err error
+-	if port := bp.saved[path]; port > 0 {
++	if port := bp.saved[key]; port > 0 {
+ 		ln, err = net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+ 	}
+ 	if ln == nil {
+@@ -122,12 +131,12 @@
+ 			return nil, err
+ 		}
+ 	}
+-	p := &worktreeProxy{path: path, ln: ln, port: ln.Addr().(*net.TCPAddr).Port}
++	p := &worktreeProxy{path: path, personal: personal, ln: ln, port: ln.Addr().(*net.TCPAddr).Port}
+ 	p.srv = &http.Server{Handler: p.handler(b), ReadHeaderTimeout: 30 * time.Second}
+ 	go p.srv.Serve(ln)
+-	bp.proxies[path] = p
+-	if bp.saved[path] != p.port {
+-		bp.saved[path] = p.port
++	bp.proxies[key] = p
++	if bp.saved[key] != p.port {
++		bp.saved[key] = p.port
+ 		if raw, err := json.Marshal(bp.saved); err == nil && bp.Path != "" {
+ 			statefile.Write(bp.Path, raw)
+ 		}
+@@ -156,15 +165,15 @@
+ 	defer bp.mu.Unlock()
+ 	bp.load()
+ 	path = filepath.Clean(path)
+-	if p := bp.proxies[path]; p != nil {
+-		p.close()
+-		delete(bp.proxies, path)
+-	}
+-	if _, ok := bp.saved[path]; ok {
+-		delete(bp.saved, path)
+-		if raw, err := json.Marshal(bp.saved); err == nil && bp.Path != "" {
+-			statefile.Write(bp.Path, raw)
+-		}
++	for _, key := range []string{path, path + "\x00personal"} {
++		if p := bp.proxies[key]; p != nil {
++			p.close()
++			delete(bp.proxies, key)
++		}
++		delete(bp.saved, key)
++	}
++	if raw, err := json.Marshal(bp.saved); err == nil && bp.Path != "" {
++		statefile.Write(bp.Path, raw)
+ 	}
+ }
+ 
+@@ -219,11 +228,12 @@
+ // scope is what a worktree's browser may reach, read fresh per request (a
+ // cheap read of locations and the port block).
+ type browserScope struct {
+-	loc   Location
+-	wt    Worktree
+-	ports []int // the worktree's port block, then any other port it serves
+-	dev   int   // the port its names lead to: the lowest it listens on
+-	allow []string
++	personal bool
++	loc      Location
++	wt       Worktree
++	ports    []int // the worktree's port block, then any other port it serves
++	dev      int   // the port its names lead to: the lowest it listens on
++	allow    []string
+ }
+ 
+ func (b *Box) browserScope(ctx context.Context, path string) (browserScope, bool) {
+@@ -377,6 +387,9 @@
+ 		}
+ 		return route{}, false
+ 	}
++	if s.personal {
++		return route{public: true}, true
++	}
+ 	for _, a := range s.allow {
+ 		if allowHost(a) == host {
+ 			return route{public: true}, true
+@@ -397,10 +410,15 @@
+ 		if r.Method == http.MethodConnect {
+ 			host = r.RequestURI
+ 		}
++		s.personal = p.personal
+ 		rt, ok := s.route(host)
+ 		if !ok {
+ 			p.refuse(hostOnly(host))
+-			http.Error(w, browserRefused, http.StatusForbidden)
++			message := browserRefused
++			if p.personal {
++				message = "This browser cannot open private network addresses or unrelated local ports."
++			}
++			http.Error(w, message, http.StatusForbidden)
+ 			return
+ 		}
+ 		if r.Method == http.MethodConnect {
+@@ -409,7 +427,7 @@
+ 		}
+ 		switch {
+ 		case rt.public:
+-			publicForward(w, r, b)
++			p.publicForward(w, r, b)
+ 		case rt.rewrite:
+ 			// Any box label is this box: the route was decided above, and
+ 			// the Host stays, so redirects map back to the name the page
+@@ -453,7 +471,7 @@
+ 
+ // publicForward fetches an allowed public origin over plain HTTP, through
+ // the netguard check on the address actually dialled.
+-func publicForward(w http.ResponseWriter, r *http.Request, b *Box) {
++func (p *worktreeProxy) publicForward(w http.ResponseWriter, r *http.Request, b *Box) {
+ 	out := r.Clone(r.Context())
+ 	out.RequestURI = ""
+ 	if out.URL.Host == "" {
+@@ -467,6 +485,15 @@
+ 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+ 	resp, err := c.Do(out)
+ 	if err != nil {
++		if p.personal {
++			message := "Could not load this page. Check the address and try again."
++			if strings.Contains(err.Error(), "refusing to connect") {
++				p.refuse(hostOnly(r.Host))
++				message = "This browser cannot open private network addresses."
++			}
++			http.Error(w, message, http.StatusBadGateway)
++			return
++		}
+ 		http.Error(w, "berth: "+err.Error(), http.StatusBadGateway)
+ 		return
+ 	}
+@@ -497,6 +524,7 @@
+ 		// A TLS tunnel to an allowed origin: dialled through netguard.
+ 		target, err := guardedDial(r.Context(), b.browserPolicy(), r.RequestURI)
+ 		if err != nil {
++			p.refuse(hostOnly(r.RequestURI))
+ 			rw.WriteString("HTTP/1.1 403 Forbidden\r\n\r\n")
+ 			rw.Flush()
+ 			conn.Close()
+@@ -504,6 +532,7 @@
+ 		}
+ 		browserPermissionsMu.Lock()
+ 		scope, exists := b.browserScope(r.Context(), p.path)
++		scope.personal = p.personal
+ 		_, allowed := scope.route(r.RequestURI)
+ 		if !exists || !allowed {
+ 			browserPermissionsMu.Unlock()
+--- a/internal/box/browsertabs.go
++++ b/internal/box/browsertabs.go
+@@ -47,6 +47,7 @@
+ 	cdp        *cdpConn
+ 	profile    string
+ 	persistent bool
++	agentProxy string
+ 	dmu        sync.Mutex
+ 	downloads  map[string]BrowserDownload
+ 	exports    int
+@@ -180,7 +181,14 @@
+ 	if err != nil {
+ 		return nil, err
+ 	}
+-	c, err := m.start(ctx, bin, px.Addr(), wt.Path, v)
++	pageProxy := px
++	if EmbeddedFiles != "" {
++		pageProxy, err = m.b.BrowserProxies.forMode(m.b, wt.Path, true)
++		if err != nil {
++			return nil, err
++		}
++	}
++	c, err := m.start(ctx, bin, pageProxy.Addr(), wt.Path, v, px.Addr())
+ 	if err != nil {
+ 		return nil, err
+ 	}
+@@ -302,6 +310,13 @@
+ 
+ // --- a worktree's Chromium -------------------------------------------------
+ 
++func (c *chromium) agentContextParams() map[string]any {
++	if c.agentProxy == "" {
++		return map[string]any{"proxyServer": "127.0.0.1:9", "proxyBypassList": "<-loopback>"}
++	}
++	return map[string]any{"proxyServer": c.agentProxy, "proxyBypassList": "<-loopback>"}
++}
++
+ // Embedded agents start privately; personal tabs alone use the saved default profile.
+ func (c *chromium) attachMain(ctx context.Context, v Viewport) error {
+ 	var targets struct {
+@@ -318,7 +333,7 @@
+ 		var isolated struct {
+ 			ID string `json:"browserContextId"`
+ 		}
+-		if err := c.cdp.call(ctx, "", "Target.createBrowserContext", nil, &isolated); err != nil {
++		if err := c.cdp.call(ctx, "", "Target.createBrowserContext", c.agentContextParams(), &isolated); err != nil {
+ 			return err
+ 		}
+ 		var created struct {
+@@ -437,7 +452,7 @@
+ 	}
+ 	// LeadingLight: personal tabs share a saved profile; agents keep isolated contexts.
+ 	if !userBrowserTab(name) {
+-		if err := c.cdp.call(ctx, "", "Target.createBrowserContext", map[string]any{}, &bc); err != nil {
++		if err := c.cdp.call(ctx, "", "Target.createBrowserContext", c.agentContextParams(), &bc); err != nil {
+ 			return nil, fmt.Errorf("opening tab %s: %w", name, err)
+ 		}
+ 	}
+--- /dev/null
++++ b/internal/box/browseraccess.go
+@@ -0,0 +1,274 @@
++package box
++
++import (
++	"bytes"
++	"context"
++	"net/http"
++	"net/url"
++	"os"
++	"os/exec"
++	"strconv"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/cosscom/shipyard/internal/wire"
++	"golang.org/x/net/publicsuffix"
++)
++
++type browserIdentity struct {
++	owner   bool
++	session string
++	until   time.Time
++}
++type browserIdentityKey struct{}
++type browserAccess struct {
++	mu      sync.Mutex
++	callers map[int]browserIdentity
++}
++type browserGrant struct {
++	Site    string    `json:"site"`
++	Expires time.Time `json:"expires"`
++}
++
++// Only the app process is the owner; a detached or unknown process stays restricted.
++func (b *Box) browserIdentity(r *http.Request) browserIdentity {
++	if who, ok := r.Context().Value(browserIdentityKey{}).(browserIdentity); ok {
++		return who
++	}
++	if EmbeddedFiles == "" {
++		return browserIdentity{owner: true}
++	}
++	conn := wire.LocalConn(r.Context())
++	if conn == nil {
++		return browserIdentity{}
++	}
++	pid := peerPid(conn)
++	if pid < 2 {
++		return browserIdentity{}
++	}
++	b.browserAccess.mu.Lock()
++	cached := b.browserAccess.callers[pid]
++	b.browserAccess.mu.Unlock()
++	if time.Now().Before(cached.until) {
++		return cached
++	}
++	who := browserIdentity{until: time.Now().Add(2 * time.Second)}
++	if ownerPID, _ := strconv.Atoi(os.Getenv("BERTH_OWNER_PID")); ownerPID > 1 {
++		who.owner = pid == ownerPID
++	} else if owner := os.Getenv("BERTH_OWNER_EXE"); owner != "" {
++		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
++		out, err := exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
++		cancel()
++		who.owner = err == nil && strings.TrimSpace(string(out)) == owner
++	}
++	if !who.owner && b.Sessions != nil {
++		if caller, err := b.llCaller(r); err == nil {
++			who.session = caller.Session
++		}
++	}
++	b.browserAccess.mu.Lock()
++	defer b.browserAccess.mu.Unlock()
++	if len(b.browserAccess.callers) > 256 {
++		b.browserAccess.callers = nil
++	}
++	if b.browserAccess.callers == nil {
++		b.browserAccess.callers = map[int]browserIdentity{}
++	}
++	b.browserAccess.callers[pid] = who
++	return who
++}
++
++func browserSite(raw string) string {
++	u, err := url.Parse(raw)
++	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
++		return ""
++	}
++	host := strings.ToLower(u.Hostname())
++	if host == "localhost" || strings.HasSuffix(host, ".localhost") || host == "127.0.0.1" || host == "::1" {
++		return u.Scheme + "://" + u.Host
++	}
++	if site, err := publicsuffix.EffectiveTLDPlusOne(host); err == nil {
++		return site
++	}
++	return host
++}
++
++func (br *browser) sharedWith(session string) (browserGrant, bool) {
++	br.mu.Lock()
++	defer br.mu.Unlock()
++	grant := br.grants[session]
++	return grant, session != "" && time.Now().Before(grant.Expires) && grant.Site != "" && browserSite(br.url) == grant.Site
++}
++
++func (b *Box) browserGuard(r *http.Request) error {
++	who := b.browserIdentity(r)
++	if who.owner {
++		return nil
++	}
++	path := r.URL.Path
++	if strings.HasPrefix(path, "/v1/browser/") {
++		if r.Method == "GET" && (path == "/v1/browser/health" || path == "/v1/browser/permissions") {
++			return nil
++		}
++		return httpError{http.StatusForbidden, "Only the app can change browser permissions or settings."}
++	}
++	// Files and downloads are workspace-wide; their names do not prove which tab made them.
++	if strings.Contains(path, "/shots/") || strings.Contains(path, "/downloads") || strings.HasSuffix(path, "/profile") || strings.HasSuffix(path, "/developer/decide") || strings.HasSuffix(path, "/handoff") {
++		return httpError{http.StatusForbidden, "This browser action belongs to the person using the app."}
++	}
++	tab, err := browserTab(r)
++	if err != nil {
++		return err
++	}
++	if !userBrowserTab(tab) {
++		return nil
++	}
++	_, wt, err := b.browserTarget(r)
++	if err != nil {
++		return err
++	}
++	br := b.Browsers.Lookup(wt.Path, tab)
++	if br == nil {
++		return httpError{http.StatusForbidden, "Only the app can create personal tabs."}
++	}
++	if _, ok := br.sharedWith(who.session); !ok {
++		return httpError{http.StatusForbidden, "This personal tab is not shared with this chat on its current site. Ask the user to attach it again."}
++	}
++	action := path[strings.LastIndex(path, "/")+1:]
++	switch action {
++	case "snapshot", "act", "wait", "shot", "state", "status", "open", "navigate", "selection", "find":
++		return nil
++	}
++	return httpError{http.StatusForbidden, "Sharing a personal tab allows reading and page actions, not changing its profile, size or developer access."}
++}
++
++func (b *Box) browserSharedNavigation(r *http.Request, br *browser, target string) error {
++	if !userBrowserTab(br.tab) || b.browserIdentity(r).owner {
++		return nil
++	}
++	grant, ok := br.sharedWith(b.browserIdentity(r).session)
++	if !ok || browserSite(target) != grant.Site {
++		return httpError{http.StatusForbidden, "That address is outside the shared site. Ask the user to open it and share it again."}
++	}
++	return nil
++}
++
++func (b *Box) browserVisibleTabs(r *http.Request, path string, tabs []TabStatus) []TabStatus {
++	who := b.browserIdentity(r)
++	if who.owner {
++		return tabs
++	}
++	visible := []TabStatus{}
++	for _, tab := range tabs {
++		if !userBrowserTab(tab.Name) {
++			visible = append(visible, tab)
++			continue
++		}
++		if br := b.Browsers.Lookup(path, tab.Name); br != nil {
++			if _, ok := br.sharedWith(who.session); ok {
++				visible = append(visible, tab)
++			}
++		}
++	}
++	return visible
++}
++
++func (b *Box) browserHandoff(w http.ResponseWriter, r *http.Request) error {
++	var req struct {
++		Session string `json:"session"`
++		URL     string `json:"url"`
++	}
++	if err := decode(r, &req); err != nil {
++		return err
++	}
++	_, wt, err := b.browserTarget(r)
++	if err != nil {
++		return err
++	}
++	tab, err := browserTab(r)
++	if err != nil {
++		return err
++	}
++	br := b.Browsers.Lookup(wt.Path, tab)
++	if r.Method == "DELETE" {
++		if br != nil {
++			br.mu.Lock()
++			if req.Session == "" {
++				br.grants = nil
++			} else {
++				delete(br.grants, req.Session)
++			}
++			br.mu.Unlock()
++		}
++		writeJSON(w, map[string]bool{"ok": true})
++		return nil
++	}
++	if br == nil || !userBrowserTab(tab) {
++		return badRequest("open a personal tab before sharing it")
++	}
++	if req.Session == "" {
++		return badRequest("choose a chat to share this tab")
++	}
++	if _, err := b.Sessions.Get(r.Context(), req.Session); err != nil {
++		return err
++	}
++	br.mu.Lock()
++	defer br.mu.Unlock()
++	site := browserSite(br.url)
++	if site == "" {
++		return badRequest("open a website before sharing this tab")
++	}
++	if browserSite(req.URL) != site {
++		return httpError{http.StatusConflict, "The page moved to another site. Attach it again before sending."}
++	}
++	grant := browserGrant{Site: site, Expires: time.Now().Add(30 * time.Minute)}
++	if br.grants == nil {
++		br.grants = map[string]browserGrant{}
++	}
++	br.grants[req.Session] = grant
++	writeJSON(w, grant)
++	return nil
++}
++
++func (b *Box) beforeBrowser(r *http.Request, event string, data map[string]any) error {
++	if userBrowserTab(r.URL.Query().Get("tab")) {
++		return nil
++	}
++	return b.before(r, event, data)
++}
++
++func browserEventURL(tab, raw string) string {
++	if userBrowserTab(tab) {
++		return ""
++	}
++	return raw
++}
++
++// A page can leave the shared site during an action; withhold the resulting contents.
++type browserAnswer struct {
++	header http.Header
++	status int
++	bytes.Buffer
++}
++
++func (w *browserAnswer) Header() http.Header  { return w.header }
++func (w *browserAnswer) WriteHeader(code int) { w.status = code }
++func (b *Box) browserAnswer(w http.ResponseWriter, r *http.Request, h func(http.ResponseWriter, *http.Request) error) error {
++	if !userBrowserTab(r.URL.Query().Get("tab")) || b.browserIdentity(r).owner {
++		return h(w, r)
++	}
++	answer := &browserAnswer{header: make(http.Header), status: 200}
++	if err := h(answer, r); err != nil {
++		return err
++	}
++	if err := b.browserGuard(r); err != nil {
++		return err
++	}
++	for key, values := range answer.header {
++		w.Header()[key] = values
++	}
++	w.WriteHeader(answer.status)
++	_, err := w.Write(answer.Bytes())
++	return err
++}
+--- /dev/null
++++ b/internal/box/browseraccess_test.go
+@@ -0,0 +1,321 @@
++package box
++
++import (
++	"context"
++	"fmt"
++	"github.com/cosscom/shipyard/internal/wire"
++	"golang.org/x/net/dns/dnsmessage"
++	"io"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++)
++
++// The tool boundary must not turn a tab name or a forged header into owner access.
++func TestPersonalBrowserAccess(t *testing.T) {
++	previous := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	defer func() { EmbeddedFiles = previous }()
++	b, wt, _ := browserBox(t, func(http.ResponseWriter, *http.Request) {})
++	m := b.NewBrowsers(t.TempDir(), 2)
++	c := &chromium{m: m, path: wt.Path, tabs: map[string]*browser{}, done: make(chan struct{})}
++	br := &browser{chromium: c, tab: "user-private", url: "https://app.example.com/account", grants: map[string]browserGrant{}}
++	c.tabs[br.tab] = br
++	m.open[wt.Path] = c
++	request := func(action, tab, session string) *http.Request {
++		r := httptest.NewRequest("POST", "http://box/v1/worktrees/cal/"+wt.Name+"/browser/"+action+"?tab="+tab, nil)
++		r.SetPathValue("loc", "cal")
++		r.SetPathValue("wt", wt.Name)
++		r.Header.Set("X-Berth-Origin", "owner")
++		r.Header.Set("X-Berth-Caller", "owner")
++		return r.WithContext(context.WithValue(r.Context(), browserIdentityKey{}, browserIdentity{session: session}))
++	}
++	for _, tab := range []string{"user-private", "user-new"} {
++		if b.browserGuard(request("open", tab, "agent")) == nil {
++			t.Fatalf("agent reached %s", tab)
++		}
++	}
++	if b.browserGuard(request("snapshot", "main-agent", "")) != nil {
++		t.Fatal("ordinary agent tab refused")
++	}
++	for _, path := range []string{"/v1/browser/allow", "/v1/browser/owner", "/v1/browser/settings"} {
++		r := httptest.NewRequest("POST", "http://box"+path, nil)
++		r.Header.Set("X-Berth-Origin", "owner")
++		if b.browserGuard(r) == nil {
++			t.Fatalf("unknown caller reached %s", path)
++		}
++	}
++	if tabs := b.browserVisibleTabs(request("tabs", "", "agent"), wt.Path, []TabStatus{{Name: br.tab}, {Name: "qa"}}); len(tabs) != 1 || tabs[0].Name != "qa" {
++		t.Fatal("personal tab metadata leaked")
++	}
++
++	if _, err := b.Sessions.Create(context.Background(), "agent", "cal", wt.Path, "cat", nil); err != nil {
++		t.Fatal(err)
++	}
++	defer b.Sessions.Kill(context.Background(), "agent")
++	grantRequest := request("handoff", br.tab, "").WithContext(context.WithValue(context.Background(), browserIdentityKey{}, browserIdentity{owner: true}))
++	grantRequest.Body = io.NopCloser(strings.NewReader(`{"session":"agent","url":"https://other.com/"}`))
++	if b.browserHandoff(httptest.NewRecorder(), grantRequest) == nil {
++		t.Fatal("stale attachment shared a different site")
++	}
++	grantRequest.Body = io.NopCloser(strings.NewReader(`{"session":"agent","url":"https://example.com/"}`))
++	if err := b.browserHandoff(httptest.NewRecorder(), grantRequest); err != nil {
++		t.Fatal(err)
++	}
++
++	r := request("snapshot", br.tab, "agent")
++	if err := b.browserGuard(r); err != nil {
++		t.Fatal(err)
++	}
++	if b.browserGuard(request("snapshot", br.tab, "another")) == nil {
++		t.Fatal("grant crossed chats")
++	}
++	for _, action := range []string{"close", "resize", "eval", "screencast", "upload", "developer/cdp"} {
++		if b.browserGuard(request(action, br.tab, "agent")) == nil {
++			t.Fatalf("grant allowed %s", action)
++		}
++	}
++	if b.browserSharedNavigation(r, br, "https://accounts.example.com/login") != nil || b.browserSharedNavigation(r, br, "https://other.com/") == nil {
++		t.Fatal("wrong shared-site boundary")
++	}
++	rec := httptest.NewRecorder()
++	err := b.browserAnswer(rec, r, func(w http.ResponseWriter, _ *http.Request) error {
++		br.url = "https://other.com/secret"
++		fmt.Fprint(w, "secret")
++		return nil
++	})
++	if err == nil || rec.Body.Len() != 0 {
++		t.Fatal("navigation during a read leaked a different site")
++	}
++	br.url = "https://example.com/"
++	grant := br.grants["agent"]
++	grant.Expires = time.Now().Add(-time.Second)
++	br.grants["agent"] = grant
++	if b.browserGuard(r) == nil {
++		t.Fatal("expired grant remained live")
++	}
++	delete(br.grants, "agent")
++	if b.browserGuard(r) == nil {
++		t.Fatal("revoked grant remained live")
++	}
++}
++
++// Both listeners must check the actual destination, including names resolving privately.
++func TestPersonalBrowserProxyGuards(t *testing.T) {
++	browserFixtureDNS(t)
++	b, wt, port := browserBox(t, func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "workspace") })
++	personal, err := b.BrowserProxies.forMode(b, wt.Path, true)
++	if err != nil {
++		t.Fatal(err)
++	}
++	agent, err := b.BrowserProxies.For(b, wt.Path)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if personal.Addr() == agent.Addr() {
++		t.Fatal("listeners were shared")
++	}
++	scope, ok := b.browserScope(context.Background(), wt.Path)
++	if !ok {
++		t.Fatal("missing scope")
++	}
++	if _, ok := scope.route("example.com:443"); ok {
++		t.Fatal("agent policy opened the internet")
++	}
++	scope.personal = true
++	if route, ok := scope.route("example.com:443"); !ok || !route.public {
++		t.Fatal("personal public site refused")
++	}
++	for _, p := range []*worktreeProxy{personal, agent} {
++		client := viaProxy(t, p.Addr())
++		for _, host := range []string{"127.0.0.1:9", "10.0.0.1", "169.254.169.254", "[::1]:9"} {
++			resp, err := client.Get("http://" + host + "/")
++			if err != nil {
++				t.Fatal(err)
++			}
++			resp.Body.Close()
++			if resp.StatusCode == 200 {
++				t.Fatalf("private address allowed: %s", host)
++			}
++		}
++		resp, err := client.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
++		if err != nil {
++			t.Fatal(err)
++		}
++		resp.Body.Close()
++		if resp.StatusCode != 200 {
++			t.Fatal("own workspace refused")
++		}
++	}
++	for _, host := range []string{"localhost:9", "127.0.0.1:9", "10.0.0.1:9", "169.254.169.254:9", "rebound.test:9"} {
++		if c, err := guardedDial(context.Background(), b.browserPolicy(), host); err == nil {
++			c.Close()
++			t.Fatalf("dial guard allowed %s", host)
++		}
++	}
++}
++
++// Real Chromium must apply the restricted proxy to both its main and named agent contexts.
++func TestPersonalAndAgentContextsUseSeparateProxies(t *testing.T) {
++	previous := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	defer func() { EmbeddedFiles = previous }()
++	b, wt, _ := browserBox(t, func(http.ResponseWriter, *http.Request) {})
++	// Fixture DNS resolves two public-style names to an explicitly allowed local server.
++	browserFixtureDNS(t)
++	ln, err := net.Listen("tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	port := ln.Addr().(*net.TCPAddr).Port
++	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		if r.URL.Path == "/asset.js" {
++			w.Header().Set("Content-Type", "text/javascript")
++			fmt.Fprint(w, `document.querySelector('button').textContent='cross-host resource loaded'`)
++			return
++		}
++		fmt.Fprintf(w, `<body><button>waiting</button><script src="http://asset.test:%d/asset.js"></script>`, port)
++	})}
++	go srv.Serve(ln)
++	defer srv.Close()
++	os.WriteFile(filepath.Join(filepath.Dir(b.Flows.Path), NetworkFile), []byte(`{"allow_outbound":["127.0.0.1/32"]}`), 0600)
++	m := b.NewBrowsers(t.TempDir(), 2)
++	defer m.CloseAll("test")
++	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
++	defer cancel()
++	loc, _ := b.Locations.Get(ctx, "cal")
++	target := fmt.Sprintf("http://page.test:%d/", port)
++	for _, name := range []string{"", "qa", "user-test"} {
++		br, err := m.get(ctx, loc, wt, name)
++		if err != nil {
++			t.Fatal(err)
++		}
++		opened, openErr := br.Open(ctx, target)
++		t.Logf("%s open: %v %s", name, openErr, opened.Text)
++		result, err := br.Snapshot(ctx, false, false, "", 0)
++		if err != nil {
++			t.Fatal(err)
++		}
++		loaded := strings.Contains(result.Text, "cross-host resource loaded")
++		if loaded != userBrowserTab(name) {
++			raw, e := br.Eval(ctx, "document.body.innerText")
++			t.Logf("body: %v %s", e, raw.Text)
++			t.Fatalf("tab %q loaded=%v: %s", name, loaded, result.Text)
++		}
++		if name == "user-test" {
++			br.Eval(ctx, `window.open('/popup','_blank');true`)
++			deadline := time.Now().Add(3 * time.Second)
++			for time.Now().Before(deadline) {
++				if len(br.chromium.list()) > 3 {
++					break
++				}
++				time.Sleep(25 * time.Millisecond)
++			}
++			found := false
++			for _, popup := range br.chromium.list() {
++				if strings.HasPrefix(popup.tab, "user-popup-") {
++					found = true
++					if popup.bctx != br.bctx {
++						t.Fatal("popup changed policy")
++					}
++					if _, ok := popup.sharedWith("agent"); ok {
++						t.Fatal("popup inherited grant")
++					}
++				}
++			}
++			if !found {
++				t.Fatal("personal popup missing")
++			}
++		}
++	}
++}
++
++// Owner access is proved by the socket peer, not a caller-supplied HTTP header.
++func TestBrowserOwnerUsesSocketPeer(t *testing.T) {
++	previous := EmbeddedFiles
++	EmbeddedFiles = t.TempDir()
++	defer func() { EmbeddedFiles = previous }()
++	t.Setenv("BERTH_OWNER_PID", fmt.Sprint(os.Getpid()))
++	b := &Box{}
++	dir, err := os.MkdirTemp("/tmp", "ll-owner-")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer os.RemoveAll(dir)
++	sock := filepath.Join(dir, "owner.sock")
++	ln, err := net.Listen("unix", sock)
++	if err != nil {
++		t.Fatal(err)
++	}
++	srv := &wire.Server{}
++	b.mountBrowser(func(pattern string, h func(http.ResponseWriter, *http.Request) error) {
++		srv.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++			if err := h(w, r); err != nil {
++				writeErr(w, err)
++			}
++		}))
++	})
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	go srv.ServeLocal(ctx, ln)
++	client := NewClient(NewLocal(sock))
++	if err := client.Call(ctx, "GET", "/v1/browser/owner", nil, nil); err != nil {
++		t.Fatal(err)
++	}
++	out, err := exec.Command("curl", "-s", "--unix-socket", sock, "-H", "X-Berth-Origin: owner", "-H", "X-Berth-Caller: owner", "-o", "/dev/null", "-w", "%{http_code}", "http://box/v1/browser/owner").Output()
++	if err != nil || string(out) != "403" {
++		t.Fatalf("child process became owner: %s %v", out, err)
++	}
++	t.Setenv("BERTH_OWNER_PID", "")
++	exe, err := os.Executable()
++	if err != nil {
++		t.Fatal(err)
++	}
++	t.Setenv("BERTH_OWNER_EXE", exe)
++	b.browserAccess.mu.Lock()
++	b.browserAccess.callers = nil
++	b.browserAccess.mu.Unlock()
++	if err := client.Call(ctx, "GET", "/v1/browser/owner", nil, nil); err != nil {
++		t.Fatalf("app executable not recognised: %v", err)
++	}
++}
++
++func browserFixtureDNS(t *testing.T) {
++	t.Helper()
++	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	previous := net.DefaultResolver
++	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
++		return (&net.Dialer{}).DialContext(ctx, "udp", conn.LocalAddr().String())
++	}}
++	t.Cleanup(func() { net.DefaultResolver = previous; conn.Close() })
++	go func() {
++		buffer := make([]byte, 4096)
++		for {
++			n, addr, err := conn.ReadFrom(buffer)
++			if err != nil {
++				return
++			}
++			var query dnsmessage.Message
++			if query.Unpack(buffer[:n]) != nil {
++				continue
++			}
++			answer := dnsmessage.Message{Header: dnsmessage.Header{ID: query.ID, Response: true, RecursionAvailable: true}, Questions: query.Questions}
++			for _, q := range query.Questions {
++				if q.Type == dnsmessage.TypeA {
++					answer.Answers = append(answer.Answers, dnsmessage.Resource{Header: dnsmessage.ResourceHeader{Name: q.Name, Type: dnsmessage.TypeA, Class: dnsmessage.ClassINET}, Body: &dnsmessage.AResource{A: [4]byte{127, 0, 0, 1}}})
++				}
++			}
++			data, _ := answer.Pack()
++			conn.WriteTo(data, addr)
++		}
++	}()
++}
+--- a/internal/box/browsercontrols_test.go
++++ b/internal/box/browsercontrols_test.go
+@@ -126,7 +126,7 @@
+ 	call := func(fn func(http.ResponseWriter, *http.Request) error, body any) map[string]any {
+ 		t.Helper()
+ 		raw, _ := json.Marshal(body)
+-		r := httptest.NewRequest("POST", "http://box/?tab=user-one", bytes.NewReader(raw))
++		r := httptest.NewRequest("POST", "http://box/?tab=user-one", bytes.NewReader(raw)).WithContext(context.WithValue(ctx, browserIdentityKey{}, browserIdentity{owner: true}))
+ 		r.SetPathValue("loc", "cal")
+ 		r.SetPathValue("wt", "billing")
+ 		rec := httptest.NewRecorder()
+--- a/internal/box/browsernavigation_controls_test.go
++++ b/internal/box/browsernavigation_controls_test.go
+@@ -57,7 +57,7 @@
+ 		r := httptest.NewRequest("POST", "http://box/?tab="+activeTab, bytes.NewReader(raw))
+ 		requestContext, requestCancel := context.WithCancel(ctx)
+ 		defer requestCancel()
+-		r = r.WithContext(requestContext)
++		r = r.WithContext(context.WithValue(requestContext, browserIdentityKey{}, browserIdentity{owner: true}))
+ 		r.SetPathValue("loc", "cal")
+ 		r.SetPathValue("wt", "billing")
+ 		if err := fn(httptest.NewRecorder(), r); err != nil {

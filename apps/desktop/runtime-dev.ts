@@ -78,7 +78,7 @@ async function ensure(restart: boolean): Promise<Status> {
   const want = buildOf();
   if (!want) return { state: "failed", error: "No runtime built yet: run pnpm runtime:build.", home };
   const running = await info();
-  if (running && running.build === want.build && running.version === want.version && !restart) return { state: "ready", version: running.version, home };
+  if (running && running.build === want.build && running.version === want.version && !restart && (await call("GET", "/v1/browser/owner")).status === 200) return { state: "ready", version: running.version, home };
   if (running) {
     const pid = Number(fs.existsSync(path.join(home, "berthd.pid")) && fs.readFileSync(path.join(home, "berthd.pid"), "utf8"));
     if (pid) process.kill(pid, "SIGTERM");
@@ -88,7 +88,7 @@ async function ensure(restart: boolean): Promise<Status> {
   const log = fs.openSync(path.join(home, "berthd.log"), "a");
   const env = {
     HOME: os.homedir(), USER: process.env.USER, LOGNAME: process.env.LOGNAME, SHELL: process.env.SHELL, TMPDIR: process.env.TMPDIR, SSH_AUTH_SOCK: process.env.SSH_AUTH_SOCK,
-    LANG: "en_US.UTF-8", PATH: shellPath(), BERTH_HOME: home, BERTH_USER_DIR: path.join(home, "user"), BERTH_EMBEDDED: "1",
+    LANG: "en_US.UTF-8", PATH: shellPath(), BERTH_HOME: home, BERTH_USER_DIR: path.join(home, "user"), BERTH_EMBEDDED: "1", BERTH_OWNER_PID: String(process.pid),
     BERTH_TMUX_SOCKET: `leadinglight-dev-${hash}`, BERTH_PORT_BASE: String(48000 + (parseInt(hash, 16) % 9) * 100),
   };
   // Detached, as the app starts it: stopping the dev server leaves agents and runs going.
@@ -104,8 +104,12 @@ async function ensure(restart: boolean): Promise<Status> {
   return { state: "failed", error: fs.readFileSync(path.join(home, "berthd.log"), "utf8").trim().split("\n").pop(), home };
 }
 
-const handler: Connect.NextHandleFunction = (req, res) => {
+const forward: Connect.NextHandleFunction = (req, res) => {
   const url = new URL(req.url ?? "/", "http://box");
+  if (req.headers["sec-fetch-site"] === "cross-site" || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`)) {
+    res.writeHead(403).end("Open the app directly to use its runtime.");
+    return;
+  }
   if (url.pathname === "/codex") {
     void codexStatus().then(({ status, body }) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body)));
     return;
@@ -128,6 +132,14 @@ const handler: Connect.NextHandleFunction = (req, res) => {
   up.on("error", (e) => (res.headersSent ? res.destroy() : res.writeHead(503, { "content-type": "application/json" }).end(JSON.stringify({ code: "runtime_down", error: e.message }))));
   res.on("close", () => up.destroy());
   req.pipe(up);
+};
+
+// A runtime left by an earlier dev server trusts only that server's PID and answers 403, not
+// the 503 that makes the app start one: before the first request, ensure() restarts it once.
+let adopted: Promise<unknown> | null = null;
+const handler: Connect.NextHandleFunction = (req, res, next) => {
+  adopted ??= info().then((up) => up && (starting ??= ensure(false).finally(() => (starting = null)))).catch(() => {});
+  void adopted.then(() => forward(req, res, next));
 };
 
 export function projectRuntime(): Plugin {

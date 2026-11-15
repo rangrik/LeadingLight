@@ -397,3 +397,5 @@ html[data-ipad] [data-actions] > .ll-page-actions { width: max-content; min-widt
 @keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
 .ll-rise { animation: ll-rise 180ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .ll-rise { animation: none; } }
+/* While the browser is in front, toasts fit over the sidebar: a native page would cut them (App.tsx). */
+html[data-toasts-beside] [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); right: auto; max-width: calc(var(--toast-room) - 1.5rem); }

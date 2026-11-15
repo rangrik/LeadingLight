@@ -1,9 +1,13 @@
 // shadcn sidebar-08 (base-vega) app-sidebar, on COSS primitives.
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
-// usage as the footer (NavUser's place), and a Browser entry.
+// usage as the footer (NavUser's place), and a Browser entry. In the browser space its content is
+// the browser's (browser-sidebar.tsx) and the header switches back to Notes, as sidebar-07's
+// team switcher does; the notes stay mounted under it.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, Mail, Settings } from "lucide-react";
+import { CalendarDays, ChevronsUpDown, Globe, Mail, Settings } from "lucide-react";
+import type { ReactNode } from "react";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +24,8 @@ import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
+import { enter, leave, space } from "~/lib/browser-space";
+import { useKeysFor } from "~/lib/keymap";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
@@ -39,21 +45,47 @@ function Mark({ className }: { className?: string }) {
   );
 }
 
-export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
+// Notes or Browser, from the browser's header.
+function SpaceSwitch() {
+  const keys = useKeysFor();
+  return (
+    <MenuPopup align="start" className="min-w-(--anchor-width)">
+      <MenuRadioGroup onValueChange={(v) => (v === "notes" ? leave() : enter())} value={space.get().front ? "browser" : "notes"}>
+        <MenuRadioItem value="notes">Notes<MenuShortcut>{keys("browser")}</MenuShortcut></MenuRadioItem>
+        <MenuRadioItem value="browser">Browser</MenuRadioItem>
+      </MenuRadioGroup>
+    </MenuPopup>
+  );
+}
+
+export function AppSidebarHeader({ subtitle, switcher }: { subtitle: string; switcher?: boolean }) {
   const mobile = useMobile();
+  const brand: ReactNode = (
+    <>
+      <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+        <Mark className="size-8" />
+      </div>
+      <div className="grid flex-1 text-left text-sm leading-tight">
+        <span className="truncate font-medium">LeadingLight</span>
+        <span className="truncate text-xs">{subtitle}</span>
+      </div>
+      {switcher && <ChevronsUpDown className="ms-auto size-3.5 text-muted-foreground" />}
+    </>
+  );
   return (
     <SidebarHeader className="pt-[calc(var(--traffic-top)_+_0.5rem)]" data-tauri-drag-region={!mobile || undefined}>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton render={<a href="#" />} size="lg">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <Mark className="size-8" />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">LeadingLight</span>
-              <span className="truncate text-xs">{subtitle}</span>
-            </div>
-          </SidebarMenuButton>
+          {switcher ? (
+            <Menu>
+              <MenuTrigger render={<SidebarMenuButton aria-label="Switch between Notes and Browser" size="lg" />}>{brand}</MenuTrigger>
+              <SpaceSwitch />
+            </Menu>
+          ) : (
+            <SidebarMenuButton render={<a href="#" />} size="lg">
+              {brand}
+            </SidebarMenuButton>
+          )}
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
@@ -67,8 +99,12 @@ export function AppSidebar({
   onCreate,
   onToday,
   todayActive,
+  browser,
+  native,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
+  browser?: ReactNode;
+  native: boolean;
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
@@ -85,7 +121,9 @@ export function AppSidebar({
   const navigable = (items: typeof pages) => items.map((p) => ({ ...p, onSelect: select(p.onSelect), children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect) })) }));
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant={mobile ? "sidebar" : "inset"} {...props}>
-      <AppSidebarHeader subtitle="Notes" />
+      <AppSidebarHeader subtitle={browser ? "Browser" : "Notes"} switcher={!!browser} />
+      {browser}
+      <div className={browser ? "hidden" : "contents"}>
       <SidebarContent>
         <SidebarGroup className="pb-0">
           <SidebarMenu>
@@ -98,7 +136,7 @@ export function AppSidebar({
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
-              <SidebarMenuButton onClick={select(() => openBeside(browserView("")))}>
+              <SidebarMenuButton onClick={select(() => (native ? enter() : openBeside(browserView(""))))}>
                 <Globe className="size-4" />
                 <span>Browser</span>
               </SidebarMenuButton>
@@ -123,6 +161,7 @@ export function AppSidebar({
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>
       {!mobile && <UsageButton />}
+      </div>
     </Sidebar>
   );
 }

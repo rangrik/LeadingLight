@@ -1,0 +1,62 @@
+--- a/internal/box/browser.go
++++ b/internal/box/browser.go
+@@ -378,7 +378,10 @@
+ 		"--disable-extensions", "--disable-component-update", "--disable-default-apps", "--mute-audio",
+ 		"--disable-features=DnsOverHttps,Translate,MediaRouter,OptimizationHints,AutofillServerCommunication,CertificateTransparencyComponentUpdater,InterestFeedContentSuggestions,PrivacySandboxSettings4",
+ 		"--dns-over-https-mode=off", "--disable-client-side-phishing-detection", "--disable-domain-reliability", "--no-pings", "--disable-breakpad",
+-		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp", fmt.Sprintf("--window-size=%d,%d", v.Width, v.Height), "--hide-scrollbars",
++		"--force-webrtc-ip-handling-policy=disable_non_proxied_udp", fmt.Sprintf("--window-size=%d,%d", v.Width, v.Height),
++	}
++	if !Embedded {
++		args = append(args, "--hide-scrollbars")
+ 	}
+ 	if runtime.GOOS == "linux" {
+ 		args = append(args, "--disable-dev-shm-usage")
+@@ -403,6 +406,10 @@
+ func agentBrowserArgs() []string {
+ 	args := []string{"--renderer-process-limit=2"}
+ 	heap := 512
++	if Embedded {
++		args = nil
++		heap = 0
++	}
+ 	if v, err := strconv.Atoi(os.Getenv("BERTH_BROWSER_JS_HEAP_MB")); err == nil && v >= 0 {
+ 		heap = v
+ 	}
+--- /dev/null
++++ b/internal/box/browserdesktop_test.go
+@@ -0,0 +1,34 @@
++package box
++
++import (
++	"slices"
++	"testing"
++)
++
++// The launch boundary keeps box limits out of the desktop without weakening its proxy or sandbox.
++func TestDesktopBrowserLaunchDefaults(t *testing.T) {
++	previous := Embedded
++	t.Cleanup(func() { Embedded = previous })
++	t.Setenv("BERTH_BROWSER_JS_HEAP_MB", "")
++	for _, desktop := range []bool{false, true} {
++		Embedded = desktop
++		args := chromiumArgs("profile", "http://127.0.0.1:1234", false, Viewport{Width: 1280, Height: 800})
++		if slices.Contains(args, "--hide-scrollbars") == desktop {
++			t.Fatalf("desktop=%v: scrollbar flags %v", desktop, args)
++		}
++		if !slices.Contains(args, "--proxy-server=http://127.0.0.1:1234") || !slices.Contains(args, "--proxy-bypass-list=<-loopback>") || slices.Contains(args, "--no-sandbox") {
++			t.Fatalf("desktop=%v: confinement changed: %v", desktop, args)
++		}
++		limits := agentBrowserArgs()
++		if desktop && len(limits) != 0 {
++			t.Fatalf("desktop limits: %v", limits)
++		}
++		if !desktop && (!slices.Contains(limits, "--renderer-process-limit=2") || !slices.Contains(limits, "--js-flags=--max-old-space-size=512")) {
++			t.Fatalf("box limits: %v", limits)
++		}
++	}
++	t.Setenv("BERTH_BROWSER_JS_HEAP_MB", "1024")
++	if !slices.Contains(agentBrowserArgs(), "--js-flags=--max-old-space-size=1024") {
++		t.Fatal("explicit heap limit was ignored")
++	}
++}

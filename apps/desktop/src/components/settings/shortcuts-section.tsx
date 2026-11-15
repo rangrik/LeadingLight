@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { describe, SHORTCUT_GROUPS, SHORTCUTS } from "@/lib/shortcuts";
 import { SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
+import { Kbd } from "@leadinglight/ui/components/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { accelOf, defaultKeys, holdKeys, refuse, setKeys, useKeysFor } from "~/lib/keymap";
@@ -110,9 +111,14 @@ export function ShortcutsSection() {
       {grouped.length === 0 && <p className="text-muted-foreground text-body">No shortcut matches “{query}”.</p>}
       {grouped.map((g) => (
         <SettingsGroup key={g.title} title={g.title}>
-          {g.items.map((s) => (
-            <ShortcutRow className="min-h-10 py-2" id={s.id} key={s.id} label={describe(s)} />
-          ))}
+          {/* A numbered key (⌘1–9) is one key per number, so it can't be recorded as one. */}
+          {g.items.map((s) =>
+            s.count ? (
+              <SettingsRow className="min-h-10 py-2" key={s.id} label={describe(s)}><Kbd className="min-w-24">{keysFor(s.id)}</Kbd></SettingsRow>
+            ) : (
+              <ShortcutRow className="min-h-10 py-2" id={s.id} key={s.id} label={describe(s)} />
+            ),
+          )}
         </SettingsGroup>
       ))}
     </SettingsPage>

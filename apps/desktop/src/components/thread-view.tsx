@@ -1,9 +1,10 @@
-import { Bot, Brain, ChevronRight, FilePen, FilePlus, FileText, Globe, Link, ListPlus, Paperclip, PencilLine, Search, SquareTerminal, Wrench } from "lucide-react";
+import { ArrowDownUp, Bot, Brain, Camera, ChevronRight, Eye, FilePen, FilePlus, FileText, Globe, Link, ListPlus, MousePointerClick, Paperclip, PencilLine, Search, SquareTerminal, TextCursorInput, Wrench } from "lucide-react";
 import { memo, type MouseEvent, type Ref, useEffect, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { openLink } from "~/lib/links";
+import { space as browser } from "~/lib/browser-space";
 import { openPage } from "~/lib/panes";
 import { pageOf } from "~/lib/space";
 import { turnContent, type Approval, type Item } from "~/lib/threads";
@@ -36,7 +37,20 @@ const LL_STEPS: Record<string, [typeof Wrench, string]> = {
 export function describe(name: string, input: Record<string, unknown>, page: string) {
   const other = str(input.page);
   const on = `“${cut(other ? (pageOf(other)?.title ?? other) : page)}”`;
+  const tab = `“${cut(browser.get().tabs.find((t) => t.id === input.tab)?.title ?? "a tab")}”`;
   switch (name.replace(/^mcp__notes__/, "")) {
+    case "read_tab":
+      return { icon: Eye, done: `Read ${tab}`, ask: "" };
+    case "screenshot_tab":
+      return { icon: Camera, done: `Looked at ${tab}`, ask: "" };
+    case "scroll":
+      return { icon: ArrowDownUp, done: `Scrolled ${tab}`, ask: "" };
+    case "click":
+      return { icon: MousePointerClick, done: `Asked to press something in ${tab}`, ask: "" };
+    case "type":
+      return { icon: TextCursorInput, done: `Asked to type in ${tab}`, ask: "" };
+    case "go_to":
+      return { icon: Globe, done: `Went to ${/^https?:\/\/([^/]+)/.exec(str(input.url))?.[1] ?? "a page"}`, ask: "" };
     case "read_page":
       return { icon: FileText, done: `Read ${on}`, ask: `Read ${on}?` };
     case "search_pages":
@@ -47,6 +61,8 @@ export function describe(name: string, input: Record<string, unknown>, page: str
       return { icon: ListPlus, done: `Added to ${on}`, ask: `Add to ${on}?` };
     case "write_page":
       return { icon: FilePen, done: `Rewrote ${on}`, ask: `Rewrite ${on}?` };
+    case "rename_page":
+      return { icon: PencilLine, done: `Renamed ${on} to “${cut(str(input.title))}”`, ask: `Rename ${on} to “${cut(str(input.title))}”?` };
     case "create_page":
       return { icon: FilePlus, done: `Created “${cut(str(input.title))}”`, ask: `Create “${cut(str(input.title))}”?` };
     case "WebSearch":
@@ -90,10 +106,27 @@ const Markdown = ({ text, streaming, onFile }: { text: string; streaming?: boole
   return <div className="ll-answer" dangerouslySetInnerHTML={{ __html: html }} data-streaming={streaming ? "" : undefined} onClick={(e) => follow(e, onFile)} />;
 };
 
-type TurnProps = { items: Item[]; live: boolean; started?: number; waiting?: boolean; page: string; onGoAhead: () => void; onFile?: (href: string) => void };
+type TurnProps = { items: Item[]; live: boolean; started?: number; waiting?: boolean; page: string; onGoAhead: () => void; onFile?: (href: string) => void; cards?: boolean };
 // Only the turn being worked on redraws as words stream in; finished ones keep their Markdown.
-const same = (a: TurnProps, b: TurnProps) => a.live === b.live && a.started === b.started && a.waiting === b.waiting && a.page === b.page && a.onFile === b.onFile && a.items.length === b.items.length && a.items.every((x, i) => x === b.items[i]);
-export const Turn = memo(function Turn({ items, live, started, waiting, page, onGoAhead, onFile }: TurnProps) {
+const same = (a: TurnProps, b: TurnProps) => a.live === b.live && a.started === b.started && a.waiting === b.waiting && a.page === b.page && a.onFile === b.onFile && a.cards === b.cards && a.items.length === b.items.length && a.items.every((x, i) => x === b.items[i]);
+const NOTE_CHANGES = /^(mcp__notes__)?(insert_text|create_page|rename_page)$/;
+function NoteCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
+  const id = /\(id: ([^)]+)\)/.exec(item.output ?? "")?.[1];
+  if (!id || !pageOf(id)) return null;
+  const name = item.name.replace(/^mcp__notes__/, "");
+  const what = name === "create_page" ? "A new note" : name === "rename_page" ? "Renamed" : str(item.input.after) ? `Added under “${cut(str(item.input.after), 32)}”` : "Added at the end";
+  return (
+    <div className="mt-2 flex items-center gap-3 rounded-xl border px-3 py-2.5">
+      <FileText className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{pageOf(id)?.title || "Untitled"}</p>
+        <p className="truncate text-muted-foreground text-xs">{what}</p>
+      </div>
+      <Button onClick={() => openPage(id)} size="sm" variant="outline">Open</Button>
+    </div>
+  );
+}
+export const Turn = memo(function Turn({ items, live, started, waiting, page, onGoAhead, onFile, cards }: TurnProps) {
   const [open, setOpen] = useState(false);
   const now = useNow(live && !waiting);
   // Until the runtime lists the turn, it began when it was first shown.
@@ -151,6 +184,7 @@ export const Turn = memo(function Turn({ items, live, started, waiting, page, on
           <Markdown onFile={onFile} streaming={live && k === answer.length - 1} text={t.text} />
         </div>
       ))}
+      {cards && items.map((i, k) => i.kind === "tool" && i.status === "done" && NOTE_CHANGES.test(i.name) && <NoteCard item={i} key={`card-${k}`} />)}
       {end?.error && <p className="mt-2 text-destructive-foreground">{end.error}</p>}
       {end?.plan && (
         <Button className="mt-2" onClick={onGoAhead} size="sm">
@@ -165,7 +199,9 @@ function StepRow({ item, page }: { item: Step; page: string }) {
   const [open, setOpen] = useState(false);
   const tool = item.kind === "tool" ? describe(item.name, item.input, page) : null;
   const Icon = tool?.icon ?? Brain;
-  const label = item.kind === "tool" ? (tool?.done ?? "") : item.end ? `Thought for ${secs(item.end - item.start)}` : "Thinking";
+  // A press or typing says what, once done: its result begins with it ("Pressed “Annual”").
+  const did = item.kind === "tool" && /(^|__)(click|type)$/.test(item.name) && item.status === "done" ? /^[^.]+/.exec(item.output ?? "")?.[0] : undefined;
+  const label = item.kind === "tool" ? (did ?? tool?.done ?? "") : item.end ? `Thought for ${secs(item.end - item.start)}` : "Thinking";
   const running = item.kind === "tool" ? item.status === "running" : !item.end;
   // A project chat's step has only its target, shown as it is.
   const input = item.kind === "tool" && Object.keys(item.input).join() === "target" ? str(item.input.target) : item.kind === "tool" && Object.keys(item.input).length ? JSON.stringify(item.input, null, 2) : "";
@@ -200,11 +236,34 @@ function StepRow({ item, page }: { item: Step; page: string }) {
 }
 
 // A change waiting for the person, where the composer was: what it would do, and three answers.
+// A browser page action asks in its own words, and "Always" allows one site for the thread.
 export function ApprovalCard({ approval, page, onAnswer, ref }: { approval: Approval; page: string; onAnswer: (choice: "once" | "thread" | "decline") => void; ref?: Ref<HTMLDivElement> }) {
   const { tool, input } = approval;
   const name = tool.replace(/^mcp__notes__/, "");
+  if (/^(click|type|go_to)$/.test(name)) {
+    const host = str(input.host), who = str(input.who) || "Claude", label = cut(str(input.label), 60), why = str(input.why).trim();
+    const title = input.risky ? `Let ${who} sign in, pay or send on ${host}?` : `Let ${who} ${{ click: "click on", type: "type on", go_to: "go to" }[name]} ${host}?`;
+    const wants = name === "click" ? `press “${label}”` : name === "type" ? `type “${cut(str(input.text), 60)}” into “${label}”` : `open ${label}`;
+    return (
+      <div aria-label="Approval" className="mt-3 rounded-xl border p-4 outline-none" onKeyDown={(e) => {
+        const choice = ({ "1": "once", "2": approval.grant ? "thread" : undefined, "3": "decline" } as const)[e.key as "1"];
+        if (!choice || e.metaKey || e.ctrlKey || e.altKey) return;
+        e.preventDefault();
+        onAnswer(choice);
+      }} ref={ref} role="group" tabIndex={-1}>
+        <p className="font-medium">{title}</p>
+        <p className="mt-2 text-muted-foreground">It wants to {wants}{why ? ` ${why.replace(/\.$/, "")}` : ""}. {input.risky ? "This looks like signing in, paying or sending, so it asks every time." : "It will ask again before it signs in, pays or sends anything."}</p>
+        <div className="mt-3 flex flex-col gap-1.5">
+          <Button onClick={() => onAnswer("once")} variant="secondary">Allow once</Button>
+          {approval.grant && <Button onClick={() => onAnswer("thread")} variant="outline">Always allow on {host}</Button>}
+          <Button onClick={() => onAnswer("decline")} variant="ghost">Not now</Button>
+        </div>
+      </div>
+    );
+  }
   const removed = name === "edit_page" ? str(input.find) : "";
-  const added = str(input.replace) || str(input.markdown) || str(input.query) || str(input.url) || (removed || name === "write_page" ? "" : JSON.stringify(input, null, 2));
+  // A rename says it all in its question: no box of code under it.
+  const added = str(input.replace) || str(input.markdown) || str(input.query) || str(input.url) || (removed || name === "write_page" || name === "rename_page" ? "" : JSON.stringify(input, null, 2));
   // It takes 1, 2 and 3 while focus is in it.
   return (
     <div

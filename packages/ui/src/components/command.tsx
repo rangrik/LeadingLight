@@ -68,17 +68,20 @@ export function CommandDialogViewport({
   );
 }
 
+// LeadingLight: backdropClassName, so the browser's bar can dim the page lightly, without blur.
 export function CommandDialogPopup({
   className,
   children,
   portalProps,
+  backdropClassName,
   ...props
 }: CommandDialogPrimitive.Popup.Props & {
   portalProps?: CommandDialogPrimitive.Portal.Props;
+  backdropClassName?: string;
 }): React.ReactElement {
   return (
     <CommandDialogPortal {...portalProps}>
-      <CommandDialogBackdrop />
+      <CommandDialogBackdrop className={backdropClassName} />
       <CommandDialogViewport>
         <CommandDialogPrimitive.Popup
           className={cn(

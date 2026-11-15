@@ -161,7 +161,7 @@ credentials in `VITE_` variables.
 
 `gmail.modify` is a restricted scope. Complete Google's applicable verification and security
 assessment before public rollout, including that the Mac app sends new mail's text to the
-person's own model provider (decision 53). In testing, list the allowed Google test users;
+person's own model provider (decision 54). In testing, list the allowed Google test users;
 testing grants can expire. Gmail is not yet configured or verified in production.
 See [Google's scope guidance](https://developers.google.com/workspace/gmail/api/auth/scopes).
 

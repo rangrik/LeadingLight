@@ -148,7 +148,7 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
     };
     let version = |i: &Value| i["version"].as_str().map(String::from);
     if let Some(i) = info(&sock) {
-        if !restart && i["build"].as_str() == Some(want.as_str()) && i["version"].as_str() == Some(want_version.as_str()) {
+        if !restart && i["build"].as_str() == Some(want.as_str()) && i["version"].as_str() == Some(want_version.as_str()) && get(&sock, "/v1/browser/owner", Duration::from_secs(3)).is_some() {
             return set(rt, &home, "ready", version(&i), None);
         }
         if i["build"].as_str() != Some(want.as_str()) {
@@ -180,6 +180,7 @@ fn ensure(app: &AppHandle, rt: &Runtime, restart: bool) -> Status {
         .env("BERTH_TMUX_SOCKET", &tmux_name)
         .env("BERTH_PORT_BASE", ports.to_string())
         .env("BERTH_EMBEDDED", "1")
+        .env("BERTH_OWNER_EXE", std::env::current_exe().unwrap_or_default())
         .stdin(Stdio::null())
         // Its own process group: quitting the app doesn't end it.
         .process_group(0);
