@@ -1016,6 +1016,11 @@ other, so they can test their work without interfering. Ask on a page reaches a 
 through page tools the app answers: reading is free, and a click, typing or leaving the site
 asks first. The browser build has no native views and keeps the streamed pane.
 
+2026-11-15. An agent's steps in its own tab no longer ask: four approvals for one small test
+was all cost, since the runtime already fences that tab off. The runtime answers a command
+itself only when every part of it is such a step (`ownbrowser.go`, patch 0053); anything
+naming a tab, another project, eval or developer access still asks.
+
 ## 54. Gmail is a separate workspace connection, read by one fixed reader (2026-11-12, changed 2026-11-14)
 
 Mail follows Calendar's service path, with its own OAuth client, encrypted grants and one-use

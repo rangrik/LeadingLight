@@ -284,3 +284,12 @@ Feature: An agent's browser
     Then that viewport stays fixed until I choose Use pane size
     And using another view of the same tab does not change that fixed viewport
     And page input waits for a frame at the new size before accepting another click
+
+  Scenario: An agent tests in its own browser without asking
+    Given a project chat in "Ask for approval" mode
+    When its agent opens, reads, clicks and fills its own tab with `berthd browser`
+    Then those steps run without an approval card
+    And a sleep, an echo, or head, tail or grep in a pipe beside them asks nothing either
+    But a command that also runs anything else asks, as before
+    And a step naming a tab, another project's browser, eval or developer access asks
+    And the same holds for Claude and Codex

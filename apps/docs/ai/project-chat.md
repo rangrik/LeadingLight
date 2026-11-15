@@ -94,6 +94,10 @@ When the agent asks to write a file or run a command, the card shows the file's 
 
 With Codex, the card shows the command Codex wants to run, such as `echo … > done.txt`, and an edit shows the file's name and the lines it changes.
 
+Steps in the agent's own browser never ask: opening a page, reading it, clicking, typing and
+taking screenshots there run on their own, since that tab is sealed off from yours. A command
+that also does anything else still asks, and so does anything that reaches one of your tabs.
+
 ### Questions
 
 When the agent asks a question with choices, the card shows it in the agent's words, with numbered options. Press an option, or its number key.
