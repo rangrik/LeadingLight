@@ -16,14 +16,12 @@ import type { ObjectSummary } from "~/lib/objects";
 import { COLORS, readIcon } from "~/lib/page-meta";
 import type { Session } from "~/lib/project-runtime/chat";
 import { ALL, choose, inProject, railProjects, scope } from "~/lib/scope";
-import { space, typeOf } from "~/lib/space";
+import { pageOf, space, typeOf } from "~/lib/space";
 import { sessions, stateOf, type TaskState } from "~/lib/work-watch";
 
 // What waits on the person in a project (its Feed items), else whether its agents are at work.
-function status(project: string, items: FeedItem[], live: Map<string, Session>): { line: string; dot?: TaskState } {
+function status(project: string, mine: FeedItem[], live: Map<string, Session>): { line: string; dot?: TaskState } {
   const tasks = space.get().pages.filter((p) => isTask(p) && inProject(p, project));
-  const ids = new Set(tasks.map((t) => t.id));
-  const mine = items.filter((i) => i.project === project || (i.task !== undefined && ids.has(i.task)));
   if (mine.length) return { line: `${mine.length} need${mine.length === 1 ? "s" : ""} you`, dot: mine.some((i) => i.kind === "question" || i.kind === "approval") ? "input" : "review" };
   const working = tasks.some((t) => {
     const agent = agentOfTask(t);
@@ -68,6 +66,8 @@ export function ProjectRail() {
   const items = useFeed(true);
   const live = sessions.use();
   const projects = railProjects(pages);
+  // An item counts once: for its task's project, else for the one its agent's folder is linked to.
+  const ownerOf = (i: FeedItem) => projects.find((p) => i.task && pageOf(i.task) && inProject(pageOf(i.task)!, p.id))?.id ?? i.project;
   const gone = id !== ALL && pages.length > 0 && !projects.some((p) => p.id === id);
   // A project deleted or done leaves the rail; its pages are All's again.
   useEffect(() => void (gone && choose(ALL)), [gone]);
@@ -85,7 +85,7 @@ export function ProjectRail() {
           <Layers />
         </RailButton>
         {projects.map((p, i) => (
-          <RailButton active={id === p.id} key={p.id} n={i + 2} name={pageLabel(p.title)} onSelect={() => choose(p.id)} {...status(p.id, items, live)}>
+          <RailButton active={id === p.id} key={p.id} n={i + 2} name={pageLabel(p.title)} onSelect={() => choose(p.id)} {...status(p.id, items.filter((item) => ownerOf(item) === p.id), live)}>
             <Mark project={p} />
           </RailButton>
         ))}

@@ -31,7 +31,10 @@ Feature: Project rail
     Then a tooltip on its right reads "LeadingLight ⌘2" and under it "2 need you"
     And the button has an amber state dot, because the pricing agent asks a question
     When I hover "Home office"
-    Then the tooltip reads "Home office ⌘3" and "quiet", and it has no state dot
+    Then the tooltip reads "Home office ⌘3" and "1 needs you", with a state dot in the review
+      colour, because "Compare three desk lamps" is ready for review
+    And that item counts for Home office alone, though its agent works in LeadingLight's folder
+    And a project with nothing waiting and no agent at work reads "quiet" and has no state dot
 
   Scenario: A project with only an agent at work reads "working"
     Given the pricing question is answered and the audit is accepted
@@ -56,7 +59,8 @@ Feature: Project rail
   Scenario: A project with no linked folder has no Chat row
     When I click "Home office" in the rail
     Then the sidebar starts with "Overview" alone, then Today, and has no Resume group
-    And Recent lists "Desk measurements", and Types lists Pages (1) and Tasks (1)
+    And Recent lists "Compare three desk lamps" and "Desk measurements", and Types lists Pages (1)
+      and Tasks (2)
 
   Scenario: A type row opens its list filtered to the project
     Given "LeadingLight" is chosen in the rail

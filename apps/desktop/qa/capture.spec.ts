@@ -43,6 +43,7 @@ test("A captured idea keeps its project, shows in Today and opens beside", async
   await page.getByRole("button", { name: "Today", exact: true }).click();
   await expect(body(page)).toHaveAttribute("contenteditable", "true");
   await expect(body(page)).toHaveText("");
+  await page.getByRole("button", { name: /^This day · / }).click();
   await expect(page.getByRole("region", { name: "This day", exact: true })).toContainText("Walk the long way");
 
   // ⌘↩ saves and gives the keyboard back; ⇧⌘↩ opens the idea beside, Today staying in view.

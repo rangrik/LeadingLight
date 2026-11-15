@@ -37,12 +37,14 @@ export const RUNTIME = {
     { id: "conv-tabs", agent: "codex", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-tabs", live: true, title: "Fix the tab row overflow", created: ago(40 * 60e3) },
     { id: "conv-audit", agent: "claude", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-audit", live: true, title: "Audit the empty states", created: ago(5 * 3600e3) },
     { id: "conv-rename", agent: "claude", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-rename", live: false, title: "Rename Pages to Notes in the sidebar", created: ago(2 * DAY) },
+    { id: "conv-lamps", agent: "claude", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-lamps", live: true, title: "Compare three desk lamps", created: ago(DAY) },
   ],
   sessions: [
     { name: "sess-pricing", agent_state: "waiting", state_since: ago(6 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(3 * 3600e3) },
     { name: "sess-tabs", agent_state: "running", state_since: ago(2 * 60e3), exited: false, driver: "codex", agent: "codex", created: ago(40 * 60e3) },
     { name: "sess-audit", agent_state: "idle", state_since: ago(50 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(5 * 3600e3) },
     { name: "sess-rename", agent_state: "finished", state_since: ago(DAY), exited: true, driver: "claude", agent: "claude", created: ago(2 * DAY) },
+    { name: "sess-lamps", agent_state: "idle", state_since: ago(3 * 3600e3), exited: false, driver: "claude", agent: "claude", created: ago(DAY) },
   ],
   requests: {
     "sess-pricing": [
@@ -272,6 +274,14 @@ async function fill() {
     content: doc(p("Changed the starter type's name and plural; the docs already said note.")),
   });
   await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } }, updatedAt: at(1, 17) });
+  // A second project in motion, its one task ready (Today's strip)
+  const taskG = await make("taskG", { title: "Compare three desk lamps", typeId: "task", createdAt: at(2, 10), updatedAt: at(2, 10), properties: { "task-project": [office] } });
+  const agentG = await make("agentG", { title: "Claude: Compare three desk lamps", typeId: "agent", createdAt: at(1, 10), updatedAt: mins(180), properties: { "agent-task": [taskG], "agent-profile": "Claude", run: run("conv-lamps", "sess-lamps", "leadinglight", "claude") } });
+  await make("reportG1", {
+    title: "Three desk lamps compared", typeId: "report", createdAt: mins(180), updatedAt: mins(180),
+    properties: { parent: taskG, report: { by: agentG, session: "sess-lamps", to: taskG, at: mins(180), command: "c-g1", ready: true } },
+    content: doc(p("BenQ e-Reading, Dyson Solarcycle Morph, IKEA Forså. The BenQ lights the most desk for the least glare; the IKEA is the one to buy if the second screen comes first.")),
+  });
 
   // Captured ideas, unfiled (Tail's "4 ideas since Tuesday")
   await make("idea1", { title: "Add a weekly review page that pulls This day from each day of the week", typeId: "idea", createdAt: at(5, 14, 2), updatedAt: at(5, 14, 2), properties: { ...cap("idea", at(5, 14, 2)) } });

@@ -151,7 +151,8 @@ Feature: Writing tools
 
   Scenario: The tools follow the page's type
     Given the suggested types: on for Pages, Daily notes, Meetings, Projects, Ideas and any type I
-      make; off for People, Books, Tags and Collections
+      make; off for People, Books, Tags and Collections; a daily note never shows the counts
+      (today-strip.feature)
     When I open a person's page
     Then its card has no Writing menu and no counts, and nothing is underlined or dimmed
     When I tick People under "Use the tools on" in Settings › Writing

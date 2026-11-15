@@ -13,7 +13,7 @@ test("the Inbox counts all three, opens at a section and walks across them", asy
   await expect(count).toBeVisible();
   await page.keyboard.press("Meta+Alt+k");
   await expect(section("Captured").locator(":focus")).toHaveCount(1);
-  await expect(section("Needs you").getByRole("heading")).toHaveText(/2$/);
+  await expect(section("Needs you").getByRole("heading")).toHaveText(/3$/);
   // Suggestions shown are seen, so only the other two sections count now.
   await expect(count).toHaveText(String((await n("Needs you")) + (await n("Captured"))));
   // Tail's own rows land a moment after the load; a row added mid-walk would take the next ↓.
