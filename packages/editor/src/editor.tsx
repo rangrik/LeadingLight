@@ -477,8 +477,8 @@ export function BlockEditor({
     };
   }, [editor, counting, countGrammar]);
 
-  // Dev-only hook so QA scripts can read editor state: the page's body, not a field beside it.
-  if (import.meta.env.DEV && !readOnly && label === "Page body") (window as unknown as { __editor: unknown }).__editor = editor;
+  // Dev-only hook so QA scripts can read editor state: never the Takeaways field beside a page.
+  if (import.meta.env.DEV && !readOnly && label !== "Takeaways") (window as unknown as { __editor: unknown }).__editor = editor;
 
   // Words whose thought is gone (its Thoughts page or block was deleted) stop being noted, each
   // time the notes (re)load.
