@@ -37,6 +37,9 @@ import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { BrowserSidebar } from "~/components/browser-sidebar";
+import { BrowserSpace } from "~/components/browser-space";
+import { available as browserAvailable, leave as leaveBrowser, useFront } from "~/lib/browser-space";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
@@ -136,6 +139,9 @@ export default function App() {
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
   const projectsOn = projectPrefs.use().enabled && !mobile;
+  // The browser space takes the sidebar's content and the page area; the notes stay mounted under it.
+  const browserFront = useFront() && !mobile;
+  const canBrowse = browserAvailable.use();
 
   useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
@@ -144,7 +150,20 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
+  // A page opened from anywhere (⌘N, the capture box, the Feed) shows in the notes, so the browser steps aside.
+  const shownPage = useRef<string>(undefined);
+  useEffect(() => {
+    if (!loaded) return;
+    if (shownPage.current !== undefined && shownPage.current !== (current ?? "") && browserFront) leaveBrowser();
+    shownPage.current = current ?? "";
+  }, [current, loaded]);
+
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  // Toasts stay over the sidebar while the browser is in front: a native page would cut them (styles.css).
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-toasts-beside", browserFront && sidebarOpen);
+    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth}px`);
+  }, [browserFront, sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
@@ -153,12 +172,15 @@ export default function App() {
     loadSpace()
       .then(async (list) => {
         await foldDescriptions().catch(console.error);
+        const mac = await isDesktop;
         setLoaded(true);
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
           if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
+          // In the Mac app a streamed pane is only an agent's tab beside its chat; personal browsing is the browser space.
+          if (mac && id.startsWith(BROWSER_VIEW) && !page && !id.split("/")[2]) return false;
           return !page || list.some((p) => p.id === page);
         };
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
@@ -341,9 +363,11 @@ export default function App() {
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
-        {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+        {mac && !browserFront && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         <AppSidebar
+          browser={browserFront ? <BrowserSidebar /> : undefined}
+          native={canBrowse}
           onCreate={create}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
@@ -355,6 +379,7 @@ export default function App() {
           {loaded && <BrowserAddressBanner />}
           {/* The bar's panel is a card beside the pages, never over them. */}
           <div className="flex min-h-0 flex-1">
+            <div className={browserFront ? "hidden" : "contents"}>
             {root ? (
               <PaneArea windowToggle={mac} />
             ) : (
@@ -377,6 +402,8 @@ export default function App() {
                 </Empty>
               </div>
             )}
+            </div>
+            {browserFront && <BrowserSpace mac={mac} />}
             <BarPanel />
           </div>
           {/* The ask bar sits by the selected words. */}

@@ -8,6 +8,7 @@ import type { AgentEvent, AskRequest, Line } from "~/lib/agent";
 type Run = { emit: (line: Line) => void; waiting: Map<string, (answer: Line) => void>; asked: (msg: Line) => void; stopped: boolean };
 const runs = new Map<string, Run>();
 let n = 0;
+let lastTab: string | undefined;
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const words = (text: string) => text.split(/(?<=\s)/);
 
@@ -180,6 +181,16 @@ async function play(req: AskRequest, run: Run, d: Dialect) {
   const quote = /^> (.*)$/m.exec(req.prompt)?.[1];
   const question = req.prompt.split("\n\n").at(-1) ?? "";
   await d.stream("thinking", "Reading the question and the page.");
+  // The browser's Ask: read the tab in view, and to "press" ask to press its Annual button. The
+  // tabs come with a question only when they change, so the last ones seen are kept.
+  const tab = (lastTab = /Tabs you can work in.*\n- ([\w-]+): /.exec(req.prompt)?.[1] ?? lastTab);
+  if (tab && req.system.includes("web browser")) {
+    await d.tool("read_tab", { tab });
+    if (!run.stopped && /\b(press|click)\b/i.test(question)) await d.tool("click", { tab, item: 1, why: "to see the yearly prices" });
+    if (!run.stopped) await d.stream("text", "A stand-in answer about the tab. In the Mac app, the answer comes through your own sign-in.");
+    if (!run.stopped) d.end();
+    return;
+  }
   if (!run.stopped) await d.tool("read_page", {});
   if (run.stopped) return;
   if (req.access === "plan") {

@@ -2,8 +2,9 @@ import { cloudState } from './cloud';
 import { CALENDAR_TOOLS, runCalendarTool } from './calendar-tools';
 import { htmlDoc } from "@leadinglight/editor/editor";
 import { markdownHtml } from "@/lib/markdown-html";
-import { liveContent, liveEditor } from "~/lib/live";
+import { editPage, liveContent, liveEditor } from "~/lib/live";
 import { docText, objects } from "~/lib/objects";
+import { BROWSER_ASK, PAGE_NAMES, PAGE_TOOLS, type PageContext, runPageTool } from "~/lib/page-tools";
 import { docMarkdown, plainWords } from "~/lib/page-markdown";
 import { createPage, pageOf, space } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
@@ -42,8 +43,13 @@ export const TOOLS = [
   },
   {
     name: "insert_text",
-    description: "Add Markdown blocks to this page: after the block holding the words in after, or at the end.",
-    inputSchema: schema({ markdown: text("The blocks to add"), after: text("Words in the block to add them after") }, ["markdown"]),
+    description: "Add Markdown blocks to this page, or to another by its id or title: after the block holding the words in after, or at the end.",
+    inputSchema: schema({ markdown: text("The blocks to add"), after: text("Words in the block to add them after"), page: text("Another page's id or title") }, ["markdown"]),
+  },
+  {
+    name: "rename_page",
+    description: "Change a page's title: this page when no page is given, or another by its id or title.",
+    inputSchema: schema({ title: text("The new title"), page: text("Another page's id or title") }, ["title"]),
   },
   {
     name: "write_page",
@@ -57,10 +63,12 @@ export const TOOLS = [
   },
 ];
 
-// The same tools as Codex takes them.
-export const GPT_TOOLS = TOOLS.map(({ name, description, inputSchema }) => ({ type: "function", name, description, inputSchema }));
+// The same tools as Codex takes them; a browser thread's have the page tools but pictures.
+const gpt = (list: { name: string; description: string; inputSchema: object }[]) => list.map(({ name, description, inputSchema }) => ({ type: "function", name, description, inputSchema }));
+export const GPT_TOOLS = gpt(TOOLS);
+export const GPT_BROWSER_TOOLS = gpt([...TOOLS, ...PAGE_TOOLS.filter((t) => t.name !== "screenshot_tab")]);
 
-type Result = { content: { type: "text"; text: string }[]; isError?: boolean };
+type Result = { content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[]; isError?: boolean };
 const ok = (t: string): Result => ({ content: [{ type: "text", text: t }] });
 const fail = (t: string): Result => ({ ...ok(t), isError: true });
 
@@ -80,7 +88,8 @@ const findPage = (ref: string) => {
 };
 const bodyOf = async (id: string) => liveContent(id) ?? (await objects.get(id))?.content ?? null;
 
-export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>, context = action("Agent edited page", { kind: "agent", name: "Agent" }), canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null): Promise<Result> {
+export async function runTool(pageId: string, name: string, a: Record<string, string | undefined>, context = action("Agent edited page", { kind: "agent", name: "Agent" }), canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null, browser?: PageContext): Promise<Result> {
+  if (PAGE_NAMES.has(name)) return browser ? runPageTool(name, a, browser) : fail("There are no browser tabs in this thread.");
   if (name.startsWith('calendar_')) {
     if (!calendarOwner || cloudState().user?.id !== calendarOwner) return fail('The calendar workspace changed or is signed out. Start a new request after signing in.');
     if (canChange && !canChange()) return fail('This turn has stopped.');
@@ -97,7 +106,7 @@ export async function runTool(pageId: string, name: string, a: Record<string, st
 async function executeTool(pageId: string, name: string, a: Record<string, string | undefined>, context: ChangeContext, canChange?: () => boolean): Promise<Result> {
   if (name === "read_page") {
     const id = a.page ? findPage(a.page) : pageId;
-    if (!id) return fail(`No page is called "${a.page}". search_pages finds pages by their words.`);
+    if (!id || id === BROWSER_ASK) return fail(a.page ? `No page is called "${a.page}". search_pages finds pages by their words.` : "There's no note in front here: name one with page.");
     return ok(`# ${titleOf(id)}\n(id: ${id})\n\n${docMarkdown(await bodyOf(id), titleOf)}`);
   }
   if (name === "search_pages") {
@@ -112,6 +121,16 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
     const rows = [...found].slice(0, 20).map(([id, line]) => `- ${titleOf(id)} (id: ${id})${line ? `: ${line.slice(0, 200)}` : ""}`);
     return ok(rows.length ? rows.join("\n") : `No page has "${a.query}".`);
   }
+  if (name === "rename_page") {
+    const id = a.page ? findPage(a.page) : pageId;
+    const title = a.title?.trim();
+    if (!id || !pageOf(id)) return fail(`No page is called "${a.page ?? ""}". search_pages finds pages by their words.`);
+    if (!title) return fail("Give the new title.");
+    if (isReport(id)) return fail(`${quoted(id)} is an agent's report, which isn't changed once published.`);
+    const before = quoted(id);
+    await editPage(id, { title }, context);
+    return ok(`Renamed ${before} to “${title}” (id: ${id}).`);
+  }
   if (name === "create_page") {
     const title = a.title?.trim() || "Untitled";
     const init = await pageInit(PAGE_TYPE, { title, ...(a.markdown?.trim() && { content: htmlDoc(html(a.markdown)) }) });
@@ -120,7 +139,28 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
     return ok(`Created ${quoted(obj.id)} (id: ${obj.id}).`);
   }
 
+  // Another note, open or not: its editor when open, else its saved body (lib/live.ts).
+  if (name === "insert_text" && a.page && findPage(a.page) !== pageId) {
+    const id = findPage(a.page);
+    if (!id) return fail(`No page is called "${a.page}". search_pages finds pages by their words.`);
+    if (pageOf(id)?.typeId === "notebook" || isReport(id)) return fail(`${quoted(id)} can't take blocks of text.`);
+    const blocks = htmlDoc(html(a.markdown ?? "")).content ?? [];
+    const open = liveEditor(id);
+    const hit = a.after ? (open ? (open.find(a.after, 0) ?? open.find(plainWords(a.after), 0)) : null) : null;
+    let found = !a.after || !!hit;
+    if (open) open.insertAfter(hit?.to ?? Number.MAX_SAFE_INTEGER, html(a.markdown ?? ""));
+    else
+      await editPage(id, { content: (doc) => {
+        const list = doc.content ?? [];
+        const at = a.after ? list.findIndex((b) => docText({ type: "doc", content: [b] }).toLowerCase().includes(plainWords(a.after!).toLowerCase())) : -1;
+        found = !a.after || at >= 0;
+        return { ...doc, content: at >= 0 ? [...list.slice(0, at + 1), ...blocks, ...list.slice(at + 1)] : [...list, ...blocks] };
+      } }, context);
+    return ok(`Added to ${quoted(id)} (id: ${id})${a.after && found ? ` after "${a.after}"` : " at the end"}.`);
+  }
+
   // The rest change this page, through its editor. A report stays as its agent published it.
+  if (pageId === BROWSER_ASK) return fail("There's no note in front here: name one with page.");
   if (pageOf(pageId)?.typeId === "notebook") return fail("This notebook holds ink and positioned text. Create a document for block text instead.");
   if (isReport(pageId)) return fail(`${quoted(pageId)} is an agent's report, which isn't changed once published.`);
   const ed = liveEditor(pageId);
@@ -151,15 +191,16 @@ async function executeTool(pageId: string, name: string, a: Record<string, strin
 
 type Rpc = { jsonrpc: "2.0"; id?: number | string; method?: string; params?: { protocolVersion?: string; name?: string; arguments?: Record<string, string> } };
 
-// One MCP message from Claude Code; notifications get the empty answer the Agent SDK gives.
-export async function serve(pageId: string, msg: Rpc, context?: ChangeContext, canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null): Promise<object> {
+// One MCP message from Claude Code; notifications get the empty answer the Agent SDK gives. A
+// browser thread has the page tools too.
+export async function serve(pageId: string, msg: Rpc, context?: ChangeContext, canChange?: () => boolean, calendarOwner: string | null = cloudState().user?.id ?? null, browser?: PageContext): Promise<object> {
   const answer = (result: object) => ({ jsonrpc: "2.0", id: msg.id, result });
   if (msg.id === undefined) return { jsonrpc: "2.0", id: 0, result: {} };
   if (msg.method === "initialize") return answer({ protocolVersion: msg.params?.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "notes", version: "1" } });
-  if (msg.method === "tools/list") return answer({ tools: TOOLS });
+  if (msg.method === "tools/list") return answer({ tools: browser ? [...TOOLS, ...PAGE_TOOLS] : TOOLS });
   if (msg.method === "ping") return answer({});
   if (msg.method === "tools/call") {
-    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}, context, canChange, calendarOwner).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
+    const result = await runTool(pageId, msg.params?.name ?? "", msg.params?.arguments ?? {}, context, canChange, calendarOwner, browser).catch((e: unknown) => fail(e instanceof Error ? e.message : String(e)));
     return answer(result);
   }
   return { jsonrpc: "2.0", id: msg.id, error: { code: -32601, message: `No method ${msg.method}` } };

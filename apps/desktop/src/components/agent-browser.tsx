@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Bookmark, Check, ChevronDown, ChevronUp, Copy, Download, Ellipsis, ExternalLink, Globe, History, Maximize2, MessagesSquare, Minimize2, Monitor, MousePointer2, Plus, RotateCw, Search, ShieldCheck, Smartphone, Square, Terminal, TextSearch, X, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ArrowRight, Bookmark, Check, ChevronDown, ChevronUp, Copy, Download, Ellipsis, ExternalLink, Globe, History, LoaderCircle, Maximize2, MessagesSquare, Minimize2, Monitor, MousePointer2, Plus, RotateCw, Search, ShieldCheck, Smartphone, Square, Terminal, TextSearch, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Button, type ButtonProps } from "@leadinglight/ui/components/button";
@@ -25,7 +25,7 @@ import { saveBrowserFile } from "~/lib/browser-files";
 import { browserBase, browserError, tabRoute, useBrowserData, useBrowserState, useBrowserTabs, type BrowserTab } from "~/lib/project-runtime/browser";
 import { ask } from "~/lib/project-runtime/transport";
 import { isNative } from "~/lib/platform";
-import { attachBrowser, detachBrowser, type BrowserAnnotation } from "~/lib/browser-context";
+import { attachBrowser, forgetBrowserShares, detachBrowser, type BrowserAnnotation } from "~/lib/browser-context";
 import { useBrowserViewportOwner } from "~/lib/browser-viewport";
 import { openBeside } from "~/lib/panes";
 import { chatView } from "~/lib/space";
@@ -76,6 +76,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   const { tabs, error: tabsError, loaded, refresh: refreshTabs } = useBrowserTabs(location, worktree, active);
   const [selected, setSelected] = useState(() => personalTab(data.selected) ? data.selected : data.tabs[0]?.name || "");
   const [blank, setBlank] = useState<string[]>([]);
+  const [tabOrder, setTabOrder] = useState(() => data.tabs.map((tab) => tab.name));
   const { state, error: stateError, readStartedAt, refresh: refreshState } = useBrowserState(base, selected, active && tabs.some((t) => t.name === selected));
   const [address, setAddress] = useState("");
   const [error, setError] = useState("");
@@ -105,6 +106,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   const field = useRef<HTMLInputElement>(null);
   const addressRevision = useRef(0);
   const addressDraft = useRef(false);
+  const navigations = useRef(new Map<string, { settledAt: number }>());
   const closingTabs = useRef(new Set<string>());
   const interacted = useRef(false);
   const selectedRef = useRef(selected);
@@ -112,6 +114,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const current = tabs.find((t) => t.name === selected) ?? data.tabs.find((t) => t.name === selected);
+  const stateFresh = readStartedAt > (navigations.current.get(selected)?.settledAt ?? -1);
   const url = state?.url || current?.url || "";
   const running = !!tabs.find((t) => t.name === selected) && state?.running !== false;
   const annotationLease = useBrowserAnnotationLease(base, selected, active && running && (picking || !!inspection));
@@ -137,6 +140,16 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   }, automatic), [base, selected, viewportOwner.resize]);
   const title = state?.title || current?.title || (safeBrowserURL(url) ? new URL(url).hostname : "New tab");
   const known: BrowserTab[] = [...tabs, ...data.tabs.filter((t) => !tabs.some((x) => x.name === t.name)), ...blank.filter((name) => !tabs.some((t) => t.name === name) && !data.tabs.some((t) => t.name === name)).map((name) => ({ name, title: "New tab" }))];
+  known.sort((a, b) => (tabOrder.indexOf(a.name) < 0 ? Infinity : tabOrder.indexOf(a.name)) - (tabOrder.indexOf(b.name) < 0 ? Infinity : tabOrder.indexOf(b.name)));
+  const knownNames = known.map((tab) => tab.name).join("\n");
+  useEffect(() => {
+    const names = knownNames ? knownNames.split("\n") : [];
+    setTabOrder((order) => {
+      const next = [...order.filter((name) => names.includes(name)), ...names.filter((name) => !order.includes(name))];
+      return next.join("\n") === order.join("\n") ? order : next;
+    });
+  }, [knownNames]);
+  useEffect(() => { root.current?.querySelector('[role="tab"][aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [selected, knownNames]);
   const tabTitle = (tab: BrowserTab) => tab.name === selected && pendingURL && (!tab.url || tab.url === "about:blank") && (!tab.title || tab.title === "New tab" || tab.title === "about:blank") ? new URL(pendingURL).hostname : tab.title || (tab.url && safeBrowserURL(tab.url) ? new URL(tab.url).hostname : personalTab(tab.name) ? "New tab" : tab.name === session ? "This chat’s agent" : "Agent tab");
   const marked = data.bookmarks.some((e) => e.url === url);
   const currentError = error || downloadError || tabsError || stateError || state?.error || "";
@@ -144,12 +157,14 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
 
   const choose = (name: string, fromUser = true, keepDraft = false) => {
     if (fromUser) interacted.current = true;
+    if (fromUser && !keepDraft) root.current?.focus({ preventScroll: true });
     setSelected(name); setError(""); setDismissedError(""); setFind(null); setView(null); setPendingURL("");
     if (!keepDraft) { addressDraft.current = false; setAddress(known.find((t) => t.name === name)?.url || ""); }
     update((d) => ({ ...d, selected: name }));
   };
   const fresh = () => {
     const name = `user-${crypto.randomUUID().slice(0, 12)}`;
+    setTabOrder((order) => [...order, name]);
     setBlank((all) => [...all, name]); choose(name); setAddress("");
     window.setTimeout(() => field.current?.focus(), 0);
     return name;
@@ -158,7 +173,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     if (!loaded || interacted.current) return;
     choose((session && tabs.find((t) => t.name === session)?.name) || selected || data.tabs[0]?.name || tabs.find((t) => personalTab(t.name))?.name || "", false);
   }, [loaded]);
-  useEffect(() => { if (url && !addressDraft.current) setAddress(url); }, [url, selected]);
+  useEffect(() => { if (url && stateFresh && !state?.loading && !state?.error && !addressDraft.current) setAddress(url); }, [url, selected, stateFresh, state?.loading, state?.error]);
   useEffect(() => {
     if (active && (full || wasFull.current)) root.current?.focus({ preventScroll: true });
     wasFull.current = full;
@@ -182,6 +197,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     return () => window.clearTimeout(timer);
   }, [active, viewportOwner.owns, viewportOwner.canAutoResize, autoViewport, running, selected, paneSize.width, paneSize.height, state?.viewport?.width, state?.viewport?.height, view, resizeState, pendingViewport, resizePage]);
   useEffect(() => {
+    if (!stateFresh) return;
     if (state?.loading) visitedURLs.current.delete(selected);
     if (state?.running && !state.loading && !state.error && safeBrowserURL(state.url)) {
       const navigated = visitedURLs.current.get(selected) !== state.url;
@@ -189,11 +205,11 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
       update((d) => rememberVisit(d, selected, state.url, state.title, navigated));
       setPendingURL("");
     }
-  }, [selected, state?.url, state?.title, state?.loading, state?.error, readStartedAt]);
+  }, [selected, state?.url, state?.title, state?.loading, state?.error, readStartedAt, stateFresh]);
   useEffect(() => { setPrompt(state?.dialog?.defaultPrompt ?? ""); }, [selected, state?.dialog?.message, state?.dialog?.defaultPrompt]);
   useEffect(() => {
     setRefused([]);
-    if (!active || !selected || !running || !state?.refusedHosts?.length) return;
+    if (!active || !selected || personalTab(selected) || !running || !state?.refusedHosts?.length) return;
     let live = true;
     const read = async () => {
       const permissions = await ask<{ hosts: string[] }>("GET", "/v1/browser/permissions").catch(() => null);
@@ -216,10 +232,14 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     try { next = browserAddress(input); } catch (e) { setError(browserError(e)); return; }
     if (!target || closingTabs.current.has(target) || (!personalTab(target) && !tabs.some((t) => t.name === target))) target = fresh();
     addressDraft.current = false;
+    const navigation = { settledAt: Infinity };
+    navigations.current.set(target, navigation);
     setAddress(next); setPendingURL(next); setView(null);
     await run(async () => {
-      await ask("POST", tabRoute(base, tabs.some((t) => t.name === target) ? "navigate" : "open", target), { action: "open", url: next, ...(data.tabs.some((t) => t.name === target) ? {} : { size: "1280x800" }) });
-      visitedURLs.current.delete(target);
+      try {
+        await ask("POST", tabRoute(base, tabs.some((t) => t.name === target) ? "navigate" : "open", target), { action: "open", url: next, ...(data.tabs.some((t) => t.name === target) ? {} : { size: "1280x800" }) });
+        visitedURLs.current.delete(target);
+      } finally { navigation.settledAt = performance.now(); }
     }, target);
   };
   const action = (name: string) => run(async () => { await ask("POST", tabRoute(base, "navigate", selected), { action: name }); if (name !== "stop") visitedURLs.current.delete(selected); });
@@ -229,18 +249,20 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     void navigate(opening.url, fresh());
   }, [loaded, opening?.id, base]);
   const close = async (name = selected) => {
-    if (!name) return;
+    if (!name || closingTabs.current.has(name)) return;
     const revision = addressRevision.current;
     closingTabs.current.add(name);
     await run(async () => {
       if (tabs.some((t) => t.name === name)) await ask("POST", tabRoute(base, "close", name));
       const entry = known.find((t) => t.name === name);
       const rest = known.filter((t) => t.name !== name);
+      navigations.current.delete(name);
       setBlank((all) => all.filter((t) => t !== name));
       update((d) => ({ ...d, tabs: d.tabs.filter((t) => t.name !== name), closed: entry?.url && safeBrowserURL(entry.url) ? [{ url: entry.url, title: entry.title || entry.url, time: Date.now() }, ...d.closed].slice(0, 20) : d.closed }));
       if (selectedRef.current === name) choose(rest[Math.max(0, known.findIndex((t) => t.name === name) - 1)]?.name || "", true, addressRevision.current !== revision);
     }, name);
     closingTabs.current.delete(name);
+    if (active && document.activeElement === document.body) root.current?.focus({ preventScroll: true });
   };
   const reopen = () => {
     const entry = data.closed[0];
@@ -263,9 +285,9 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     });
   };
   const toggleBookmark = () => safeBrowserURL(url) && update((d) => ({ ...d, bookmarks: marked ? d.bookmarks.filter((e) => e.url !== url) : [{ url, title, time: Date.now() }, ...d.bookmarks].slice(0, 200) }));
-  const askWithAnnotations = (notes: BrowserAnnotation[] = annotations.comments) => {
+  const askWithAnnotations = async (notes: BrowserAnnotation[] = annotations.comments) => {
     if (notes.length > 20) throw new Error("Send the saved comments first, or remove one before adding this feedback.");
-    attachBrowser(pageId, { location, worktree, tab: selected, url, title, session, ...(notes.length ? { annotations: notes } : {}) });
+    await attachBrowser(pageId, { location, worktree, tab: selected, url, title, session, ...(notes.length ? { annotations: notes } : {}) });
     setInspection(null); setArea(null); setPicking(false); setFull(false); openBeside(chatView(pageId));
   };
   const captureComment = async (comment: string, styles: Record<string, string>) => {
@@ -277,7 +299,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
   };
   const askAboutPage = async (comment?: string, styles: Record<string, string> = {}) => {
     const note = comment !== undefined ? await captureComment(comment, styles) : undefined;
-    askWithAnnotations(note ? [...annotations.comments, note] : annotations.comments);
+    await askWithAnnotations(note ? [...annotations.comments, note] : annotations.comments);
   };
   const pickArea = (selection: BrowserAreaSelection) => {
     const sequence = ++pickSequence.current;
@@ -303,7 +325,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
       if (!alive.current) return;
       if (website) {
         setSelected(""); setBlank([]); setAddress(""); setPendingURL(""); setFind(null); setView(null); setError(""); setRefused([]);
-        detachBrowser(pageId);
+        await detachBrowser(pageId);
       }
       update((d) => ({ ...(history ? clearBrowserHistory(d, range) : d), ...(website ? { selected: "", tabs: [], closed: [] } : {}) }));
       setClearing(false); refreshTabs(); refreshState();
@@ -370,6 +392,7 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     if (e.key === "Escape") {
       // Portaled popups and expanded triggers dismiss before the containing browser pane.
       if (!e.currentTarget.contains(e.target as Node) || (e.target as Element).closest('[aria-haspopup][aria-expanded="true"]')) return;
+      if (e.target === field.current || (e.target as Element).closest('[aria-label="Browser page keyboard"]')) return;
       if (picking) { pickSequence.current++; setPicking(false); } else if (area) setArea(null); else if (inspection) setInspection(null); else if (find !== null) setFind(null); else if (view) setView(null); else if (full) toggleFull(); else return;
       e.preventDefault(); e.stopPropagation(); return;
     }
@@ -382,12 +405,12 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
     else return;
     e.preventDefault(); e.stopPropagation();
   }}>
-    <div className="flex min-h-9 shrink-0 items-center gap-1 border-b px-2">
+    <div className="flex min-h-10 shrink-0 items-center gap-1 border-b bg-muted/40 px-2">
       <Tabs className="min-w-0 flex-1 gap-0 overflow-x-auto" onValueChange={(v) => choose(String(v))} value={selected}>
-        <TabsList aria-label="Browser tabs" className="max-w-none justify-start" size="sm" variant="underline">
-          {known.map((t) => <div className="flex min-w-0 max-w-48 shrink-0 items-center" key={t.name}>
-            <TabsTab className="min-w-0 max-w-40 gap-1.5 px-2" value={t.name}><Globe className="size-4 shrink-0" /><span className="truncate">{tabTitle(t)}</span>{!personalTab(t.name) && <span className="text-xs text-muted-foreground">Agent</span>}</TabsTab>
-            <Tool disabled={busy} label={`Close ${tabTitle(t)}`} onClick={() => void close(t.name)}><X className="size-4" /></Tool>
+        <TabsList aria-label="Browser tabs" className="max-w-none justify-start gap-1 bg-transparent py-1 [&>[data-slot=tab-indicator]]:hidden" size="sm">
+          {known.map((t) => <div className={cn("flex w-44 min-w-28 max-w-48 shrink-0 items-center rounded-md border border-transparent pe-0.5", t.name === selected ? "border-border bg-background shadow-xs" : "hover:bg-muted")} key={t.name} onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); void close(t.name); } }} onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}>
+            <TabsTab className="min-w-0 flex-1 justify-start gap-1.5 px-2" value={t.name}>{t.name === selected && (busy || state?.loading) ? <LoaderCircle className="size-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <Globe className="size-4 shrink-0" />}<span className="min-w-0 flex-1 truncate text-left">{tabTitle(t)}</span>{!personalTab(t.name) && <span className="text-xs text-muted-foreground">Agent</span>}</TabsTab>
+            <Tool disabled={closingTabs.current.has(t.name)} label={`Close ${tabTitle(t)}`} onClick={() => void close(t.name)}><X className="size-4" /></Tool>
           </div>)}
         </TabsList>
       </Tabs>
@@ -398,37 +421,37 @@ function WorkspaceBrowser({ workspace, session, active, pageId }: { workspace: W
       <Tool disabled={!state?.canGoBack || busy} label="Back" onClick={() => void action("back")}><ArrowLeft className="size-4" /></Tool>
       <Tool disabled={!state?.canGoForward || busy} label="Forward" onClick={() => void action("forward")}><ArrowRight className="size-4" /></Tool>
       <Tool disabled={!running} label={state?.loading ? "Stop loading" : "Reload"} onClick={() => void action(state?.loading ? "stop" : "reload")}>{state?.loading ? <Square className="size-4" /> : <RotateCw className="size-4" />}</Tool>
-      <BrowserAddress history={data.history} inputRef={field} onChange={setAddress} onEdit={() => { addressRevision.current++; addressDraft.current = true; interacted.current = true; }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
+      <BrowserAddress history={data.history} inputRef={field} onCancel={() => { addressDraft.current = false; setAddress(safeBrowserURL(url) ? url : ""); }} onChange={setAddress} onEdit={() => { addressRevision.current++; addressDraft.current = true; interacted.current = true; }} onFocus={() => { interacted.current = true; }} onNavigate={(value) => void navigate(value)} value={address} />
       <span aria-hidden="true" className="flex-1 @min-[420px]/browser:hidden" />
       <Tool disabled={!safeBrowserURL(url)} label={marked ? "Remove bookmark" : "Bookmark this page"} onClick={toggleBookmark}><Bookmark className={cn("size-4", marked && "fill-current")} /></Tool>
       <Tool disabled={!running} label="Ask about page" onClick={() => void run(() => askAboutPage())}><MessagesSquare className="size-4" /></Tool>
-      <Menu onOpenChange={setMenuOpen} open={menuOpen}><Tooltip><TooltipTrigger render={<MenuTrigger render={<Button aria-label="Browser menu" size="icon-sm" variant="ghost" />} />}><Ellipsis className="size-4" /></TooltipTrigger><TooltipPopup>Browser menu</TooltipPopup></Tooltip><MenuPopup align="end">
+      <Menu onOpenChange={setMenuOpen} open={menuOpen}><Tooltip><TooltipTrigger render={<MenuTrigger render={<Button aria-label="Browser menu" size="icon-sm" variant="ghost" />} />}><Ellipsis className="size-4" /></TooltipTrigger><TooltipPopup>Browser menu</TooltipPopup></Tooltip><MenuPopup align="end" className="[&_[data-inset]]:ps-[1.875rem] sm:[&_[data-inset]]:ps-7">
         <MenuItem onClick={() => show("bookmarks")}><Bookmark />Bookmarks</MenuItem><MenuItem onClick={() => show("history")}><History />History</MenuItem><MenuItem onClick={() => show("downloads")}><Download />Downloads</MenuItem>
-        <MenuItem disabled={!data.closed.length} onClick={reopen}>Reopen closed tab</MenuItem><MenuSeparator />
+        <MenuItem inset disabled={!data.closed.length} onClick={reopen}>Reopen closed tab</MenuItem><MenuSeparator />
         <MenuItem disabled={!running} onClick={() => { setFind(""); setMatch(null); }}><Search />Find in page</MenuItem>
-        <MenuItem disabled={!running} onClick={() => void zoom((state?.zoom ?? 1) + 0.1)}><ZoomIn />Zoom in</MenuItem><MenuItem disabled={!running} onClick={() => void zoom((state?.zoom ?? 1) - 0.1)}><ZoomOut />Zoom out</MenuItem><MenuItem disabled={!running} onClick={() => void zoom(1)}>Actual size · {Math.round((state?.zoom ?? 1) * 100)}%</MenuItem>
-        <MenuCheckboxItem checked={fit} onCheckedChange={setFit}>Fit page to pane</MenuCheckboxItem>
-        <MenuCheckboxItem checked={autoViewport} disabled={!running} onCheckedChange={setAutoViewport}>Use pane size</MenuCheckboxItem>
+        <MenuItem disabled={!running || !!view || picking} onClick={() => window.setTimeout(() => root.current?.querySelector<HTMLTextAreaElement>('[aria-label="Browser page keyboard"]')?.focus({ preventScroll: true }), 0)}><MousePointer2 />Focus page</MenuItem>
+        <MenuItem disabled={!running} onClick={() => void zoom((state?.zoom ?? 1) + 0.1)}><ZoomIn />Zoom in</MenuItem><MenuItem disabled={!running} onClick={() => void zoom((state?.zoom ?? 1) - 0.1)}><ZoomOut />Zoom out</MenuItem><MenuItem inset disabled={!running} onClick={() => void zoom(1)}>Actual size · {Math.round((state?.zoom ?? 1) * 100)}%</MenuItem>
+        <MenuCheckboxItem className="ps-2.5 sm:ps-2" checked={fit} onCheckedChange={setFit}>Fit page to pane</MenuCheckboxItem>
+        <MenuCheckboxItem className="ps-2.5 sm:ps-2" aria-label="Use pane size" checked={autoViewport} disabled={!running} onCheckedChange={setAutoViewport}><span className="flex items-center justify-between gap-4"><span>Use pane size</span>{state?.viewport && <span className="text-xs text-muted-foreground">{state.viewport.width} × {state.viewport.height}</span>}</span></MenuCheckboxItem>
         <MenuItem disabled={!running} onClick={() => void resize(390, 844)}><Smartphone />Phone viewport</MenuItem><MenuItem disabled={!running} onClick={() => void resize(1280, 800)}><Monitor />Desktop viewport</MenuItem><MenuSeparator />
         <MenuItem disabled={!running || busy || !!inspection || !!area} onClick={() => { setView(null); setPicking(true); }}><MousePointer2 />Comment on an element</MenuItem>
-        <MenuItem disabled={!running} onClick={() => show("console")}><Terminal />Console</MenuItem><MenuItem disabled={!running} onClick={() => show("network")}>Network failures</MenuItem><MenuItem disabled={!running} onClick={() => show("text")}><TextSearch />Page text</MenuItem><MenuItem disabled={!running} onClick={() => void shot()}>Save screenshot</MenuItem>
-        <MenuItem onClick={() => show("permissions")}><ShieldCheck />Site permissions</MenuItem><MenuItem disabled={!running} onClick={() => void copyAgent()}>{copied ? <Check /> : <Copy />}Copy agent instructions</MenuItem>
+        <MenuItem disabled={!running} onClick={() => show("console")}><Terminal />Console</MenuItem><MenuItem inset disabled={!running} onClick={() => show("network")}>Network failures</MenuItem><MenuItem disabled={!running} onClick={() => show("text")}><TextSearch />Page text</MenuItem><MenuItem inset disabled={!running} onClick={() => void shot()}>Save screenshot</MenuItem>
+        <MenuItem onClick={() => show("permissions")}><ShieldCheck />Agent site permissions</MenuItem>{!personalTab(selected) && <MenuItem disabled={!running} onClick={() => void copyAgent()}>{copied ? <Check /> : <Copy />}Copy agent instructions</MenuItem>}{state?.shared && <MenuItem onClick={() => void run(async () => { await ask("DELETE", tabRoute(base, "handoff", selected), {}); forgetBrowserShares(location, worktree, selected); refreshState(); })}><ShieldCheck />Stop sharing this tab</MenuItem>}
         <MenuItem disabled={!safeBrowserURL(url)} onClick={() => void run(async () => { if (await isNative) await (await import("@tauri-apps/plugin-opener")).openUrl(url); else window.open(url, "_blank", "noopener,noreferrer"); })}><ExternalLink />Open in default browser</MenuItem>
-        <MenuItem disabled={!running} onClick={() => show("developer")}>Developer tools</MenuItem>
-        <MenuSeparator /><MenuItem onClick={() => useStore.getState().setView({ kind: "settings", section: "browser" })}>Browser settings</MenuItem><MenuItem onClick={() => { setClearError(""); setClearing(true); }}>Clear browsing data…</MenuItem>
+        <MenuItem inset disabled={!running} onClick={() => show("developer")}>Developer tools</MenuItem>
+        <MenuSeparator /><MenuItem inset onClick={() => useStore.getState().setView({ kind: "settings", section: "browser" })}>Browser settings</MenuItem><MenuItem inset onClick={() => { setClearError(""); setClearing(true); }}>Clear browsing data…</MenuItem>
       </MenuPopup></Menu>
     </div>
     {find !== null && <form className="flex shrink-0 items-center gap-1 border-b px-3 py-2" onSubmit={(e) => { e.preventDefault(); void search(); }}><Input aria-label="Find in page" autoFocus className="min-w-0 flex-1" onChange={(e) => { setFind(e.currentTarget.value); setMatch(null); }} size="sm" value={find} /><span className="text-xs text-muted-foreground" role="status">{match === false ? "No match" : match ? "Found" : ""}</span><Tool disabled={!find || busy} label="Previous match" onClick={() => void search(true)}><ChevronUp className="size-4" /></Tool><Tool disabled={!find || busy} label="Next match" onClick={() => void search()}><ChevronDown className="size-4" /></Tool><Tool label="Close find" onClick={() => setFind(null)}><X className="size-4" /></Tool></form>}
     {picking && <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-xs"><p className="min-w-0 flex-1">Click an element or drag an area to add feedback without activating the page.</p><Button onClick={() => { pickSequence.current++; setPicking(false); }} size="xs" variant="ghost">Cancel selection</Button></div>}
     {active && running && view !== "developer" && <BrowserDeveloperNotice base={base} onReview={() => show("developer")} tab={selected} />}
     {currentError && currentError !== dismissedError && !blockedSite && (!view || error || tabsError || downloadError) && <div className="flex shrink-0 items-start gap-2 border-b px-3 py-2 text-xs text-destructive-foreground" role="alert"><p className="min-w-0 flex-1 break-words">{currentError}</p><Tool label="Dismiss browser error" onClick={() => setDismissedError(currentError)}><X className="size-4" /></Tool></div>}
-    {!view && running && !!refused.length && <div className="max-h-32 shrink-0 overflow-y-auto">{refused.map((host) => <div className="flex items-center gap-2 border-b px-3 py-2 text-xs" key={host}><p className="min-w-0 flex-1 break-words">Allow <strong>{host}</strong> for browsing? This also allows agents to reach this site.</p><Button disabled={busy} onClick={() => void run(async () => { await ask("POST", "/v1/browser/allow", { origin: host }); setRefused((r) => r.filter((h) => h !== host)); if (pendingURL) await navigate(pendingURL); else await ask("POST", tabRoute(base, "navigate", selected), { action: "reload" }); })} size="xs" variant="outline">Allow</Button></div>)}</div>}
+    {!view && running && !!refused.length && <div className="max-h-32 shrink-0 overflow-y-auto">{refused.map((host) => <div className="flex items-center gap-2 border-b px-3 py-2 text-xs" key={host}><p className="min-w-0 flex-1 break-words">Allow <strong>{host}</strong> for agent browsing?</p><Button disabled={busy} onClick={() => void run(async () => { await ask("POST", "/v1/browser/allow", { origin: host }); setRefused((r) => r.filter((h) => h !== host)); if (pendingURL) await navigate(pendingURL); else await ask("POST", tabRoute(base, "navigate", selected), { action: "reload" }); })} size="xs" variant="outline">Allow</Button></div>)}</div>}
     {view === "bookmarks" || view === "history" ? <div className="flex min-h-0 flex-1 flex-col"><div className="flex items-center gap-2 border-b px-3 py-2"><strong className="text-sm">{view === "bookmarks" ? "Bookmarks" : "History"}</strong><Input aria-label={`Search ${view}`} className="min-w-0 flex-1" onChange={(e) => setFilter(e.currentTarget.value)} placeholder="Search" size="sm" value={filter} />{view === "history" && <Button onClick={() => update((d) => ({ ...d, history: [] }))} size="xs" variant="ghost">Clear history</Button>}<Tool label="Close browser list" onClick={() => setView(null)}><X className="size-4" /></Tool></div><div className="min-h-0 flex-1 overflow-auto p-2">{(view === "bookmarks" ? data.bookmarks : data.history).filter((entry) => `${entry.title} ${entry.url}`.toLowerCase().includes(filter.toLowerCase())).map((entry) => <SavedRow entry={entry} key={entry.url} onOpen={() => void navigate(entry.url)} onRemove={() => update((d) => view === "bookmarks" ? ({ ...d, bookmarks: d.bookmarks.filter((e) => e.url !== entry.url) }) : ({ ...d, history: d.history.filter((e) => e.url !== entry.url) }))} removeLabel={`Remove ${view === "bookmarks" ? "bookmark" : "history"} ${entry.title}`} />)}{!(view === "bookmarks" ? data.bookmarks : data.history).length && <p className="p-4 text-center text-muted-foreground">{view === "bookmarks" ? "Pages you bookmark appear here." : "Pages you visit appear here."}</p>}</div></div> : view === "developer" ? <BrowserDeveloper base={base} onClose={() => setView(null)} tab={selected} /> : view ? <BrowserTools base={base} onClose={() => setView(null)} onError={setError} onNavigate={(address) => void navigate(address)} tab={selected} view={view} /> : running ? <BrowserSurface active={active} base={base} expectedViewport={pendingViewport ?? state?.viewport} resizeBusy={resizeState.busy || resizeState.unresolved} fit={fit} highlight={inspection?.bounds} onError={setError} onArea={pickArea} onPick={pickElement} onViewport={setPaneSize} picking={picking} tab={selected} /> : <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 overflow-auto p-6 text-center"><Globe className="size-8 text-muted-foreground" /><h2 className="font-medium">{current?.url ? "This tab is closed" : "Your browser, beside your notes"}</h2><p className="max-w-sm text-sm text-muted-foreground">{current?.url ? "Reopen it to continue where you left off." : "Enter an address to browse. You and your agent can use the same page."}</p>{current?.url && <Button disabled={busy} onClick={() => void navigate(current.url!)} size="sm" variant="outline">Reopen tab</Button>}{!selected && <Button onClick={fresh} size="sm" variant="outline"><Plus className="size-4" />New tab</Button>}{data.tabs.some((t) => !tabs.some((x) => x.name === t.name)) && <Button disabled={busy} onClick={() => void run(async () => { for (const t of data.tabs) if (!tabs.some((x) => x.name === t.name)) await ask("POST", tabRoute(base, "open", t.name), { url: t.url }); })} size="sm" variant="ghost">Restore saved tabs</Button>}</div>}
     {inspection && !view && running && <BrowserFeedback base={base} inspection={inspection} lease={annotationLease.lease} onAsk={askAboutPage} onSave={async (comment, styles) => { annotations.save(await captureComment(comment, styles)); }} onChange={(next) => { if (selectedRef.current === selected && next.url === url) setInspection((current) => current?.handle === next.handle ? next : current); }} onClose={() => setInspection(null)} tab={selected} viewport={!resizeState.busy && !resizeState.unresolved && !pendingViewport ? state?.viewport : undefined} />}
     {area && !view && running && <BrowserAreaFeedback area={area} base={base} onAsk={(note) => askWithAnnotations([...annotations.comments, note])} onClose={() => setArea(null)} onSave={(note) => { annotations.save(note); }} tab={selected} />}
     {!view && running && !picking && !inspection && !area && <BrowserComments base={base} comments={annotations.comments} onAsk={() => askWithAnnotations()} onRemove={annotations.remove} tab={selected} />}
     {annotationLease.error && (picking || inspection) && <p className="border-t px-3 py-2 text-xs text-destructive-foreground" role="alert">{annotationLease.error}</p>}
-    <div className="flex min-h-6 shrink-0 items-center gap-2 border-t px-3 text-xs text-muted-foreground"><span className="min-w-0 flex-1 truncate">{busy || state?.loading ? "Loading…" : running ? personalTab(selected) ? "Personal tab · sign-ins stay in this workspace" : "Agent tab · shared live view" : "Ready"}</span>{state?.viewport && <span className="shrink-0">{state.viewport.width} × {state.viewport.height}</span>}</div>
     {active && state?.fileChooser && <div className="flex shrink-0 flex-wrap items-center gap-2 border-t p-3"><p className="text-xs text-muted-foreground">This page is asking for {state.fileChooser.multiple ? "files" : "a file"}. Only files you choose will be uploaded.</p><Input aria-label="Files to upload" key={state.fileChooser.id} disabled={busy} multiple={state.fileChooser.multiple} onChange={(e) => upload(e.currentTarget.files)} size="sm" type="file" /><Button onClick={() => void run(() => ask("POST", tabRoute(base, "upload", selected), { chooser: state.fileChooser?.id, files: [] }))} size="xs" variant="ghost">Cancel upload</Button></div>}
     <BrowserClearData busy={busy} error={clearError} onClear={clearProfile} onClose={() => setClearing(false)} open={active && clearing} />
     <Dialog onOpenChange={(open) => { if (!open && state?.dialog) void run(() => ask("POST", tabRoute(base, "dialog", selected), { accept: false })); }} open={active && !clearing && !!state?.dialog}><DialogPopup className="sm:max-w-md"><DialogHeader><DialogTitle>This page says</DialogTitle><DialogDescription className="break-words">{state?.dialog?.message}</DialogDescription></DialogHeader>{state?.dialog?.type === "prompt" && <DialogPanel><Input aria-label="Response to page" autoFocus onChange={(e) => setPrompt(e.currentTarget.value)} value={prompt} /></DialogPanel>}<DialogFooter>{state?.dialog?.type !== "alert" && <Button onClick={() => void run(() => ask("POST", tabRoute(base, "dialog", selected), { accept: false }))} variant="outline">Cancel</Button>}<Button onClick={() => void run(() => ask("POST", tabRoute(base, "dialog", selected), { accept: true, promptText: prompt }))}>OK</Button></DialogFooter></DialogPopup></Dialog>

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Copy, Plus, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Copy, CornerDownRight, Plus, Sparkles, X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { markdownHtml } from "@/lib/markdown-html";
 import { Button } from "@leadinglight/ui/components/button";
@@ -27,6 +27,12 @@ import { isReport } from "~/lib/work";
 import { type Item, newThread, patchThread, pickThread, setPending, turnContent, usePageThreads } from "~/lib/threads";
 import { answer, sendTurn, stopTurn } from "~/lib/turn";
 import { authored } from "@leadinglight/editor/authorship";
+import { htmlDoc } from "@leadinglight/editor/editor";
+import { SiteIcon } from "~/components/browser-sidebar";
+import { listed, space as browser } from "~/lib/browser-space";
+import { createPage } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
+import { pageInit } from "~/lib/templates";
 import { action } from "~/lib/history-types";
 import { flushAll } from "~/lib/saving";
 
@@ -116,6 +122,9 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
   }, [waiting]);
   const cx = codex.use();
   const gpt = !isClaude(prefs.model);
+  // The browser's Ask (features/browser-ask.feature): its threads work on tabs, not a note.
+  const tabsNow = browser.use();
+  const inBrowser = !!page?.browser;
   const check = () => {
     setStatus(null);
     void agentStatus().then(setStatus).catch((e) => setStatus({ installed: false, logged_in: false, error: String(e) }));
@@ -164,7 +173,42 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
     );
   const id = pageId;
   const title = page.title().trim();
+  const attached = inBrowser ? (thread.tabs ?? [tabsNow.selected].filter(Boolean)) : [];
+  const attach = (tabs: string[]) => patchThread(id, thread.id, (t) => ({ ...t, tabs }), true);
+  const others = tabsNow.tabs.filter((t) => !attached.includes(t.id) && (listed([t]).length || t.pin));
+  const chips = inBrowser && (
+    <>
+      {attached.flatMap((tid) => tabsNow.tabs.filter((t) => t.id === tid)).map((t) => (
+        <Button aria-label={`Take off ${t.title}`} key={t.id} onClick={() => attach(attached.filter((x) => x !== t.id))} size="xs" variant="outline">
+          <SiteIcon tab={t} />
+          <span className="max-w-40 truncate">{t.title}</span>
+          <X className="opacity-60" />
+        </Button>
+      ))}
+      {others.length > 0 && (
+        <Menu>
+          <MenuTrigger render={<Button size="xs" variant="outline" />}><Plus />Add a tab</MenuTrigger>
+          <MenuPopup align="start" className="max-w-72">
+            {others.map((t) => (
+              <MenuItem key={t.id} onClick={() => attach([...attached, t.id])}>
+                <SiteIcon tab={t} />
+                <span className="truncate">{t.title}</span>
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
+      )}
+    </>
+  );
+  const saveAsNote = () => void (async () => {
+    if (!final) return;
+    const init = await pageInit(PAGE_TYPE, { title: thread.title.slice(0, 80) || "From the browser", content: htmlDoc(markdownHtml(final.text).html) });
+    const made = await createPage(init, action("Saved an answer", { kind: "agent", name: gpt ? "GPT" : "Claude", model: prefs.model, run: thread.id }));
+    patchThread(id, thread.id, (t) => ({ ...t, note: `Saved as “${made.title}” in your notes.` }));
+  })().catch((error) => patchThread(id, thread.id, (t) => ({ ...t, note: error instanceof Error ? error.message : String(error) })));
   const items = thread.items;
+  // A browser page action waits in the thread, with the box still there (AskAllow in the design).
+  const pageApproval = !!thread.approval && /^(click|type|go_to)$/.test(thread.approval.tool);
   const lastTurn = turnsOf(items).at(-1) ?? [];
   // The last turn's answer, which Insert, Replace and Copy act on; a plan is not one.
   const final = !thread.busy && lastTurn.some((i) => i.kind === "end" && i.how === "done" && !i.plan) ? turnContent(lastTurn).answer.at(-1) : undefined;
@@ -322,7 +366,7 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
           <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
             <Sparkles className="size-6 text-muted-foreground" />
             <p className="text-balance text-lg">What should we do with {title ? `“${title}”` : "this page"}?</p>
-            <p className="text-balance text-muted-foreground text-xs">{gpt ? "GPT" : "Claude"} can read {page && isReport(page.id) ? "this report (an agent's, which doesn't change)" : "and change this page"}, find your other pages, and look things up.</p>
+            <p className="text-balance text-muted-foreground text-xs">{inBrowser ? `${gpt ? "GPT" : "Claude"} can read this page. It asks before it clicks, types or leaves the site.` : `${gpt ? "GPT" : "Claude"} can read ${page && isReport(page.id) ? "this report (an agent's, which doesn't change)" : "and change this page"}, find your other pages, and look things up.`}</p>
           </div>
         )}
         {turnsOf(items).map((t, k, all) => (
@@ -330,18 +374,26 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
             items={t}
             key={`${thread.id}:${k}`}
             live={!!thread.busy && k === all.length - 1}
+            cards={inBrowser}
             onGoAhead={() => goAheadNow.current()}
             page={title || "Untitled"}
             started={thread.started}
             waiting={!!thread.approval && k === all.length - 1}
           />
         ))}
+        {pageApproval && <ApprovalCard approval={thread.approval!} onAnswer={(c) => answer(id, thread.id, c)} page={title || "Untitled"} ref={card} />}
         {final && (
           <div className="mt-2 flex flex-wrap items-center gap-1">
+            {inBrowser ? (
+              <Button onClick={saveAsNote} size="sm" variant="ghost">
+                Save as a new note
+              </Button>
+            ) : (
             <Button onClick={insert} size="sm" variant="outline">
               Insert below
             </Button>
-            {thread.quote && (
+            )}
+            {!inBrowser && thread.quote && (
               <Button onClick={replace} size="sm" variant="outline">
                 Replace
               </Button>
@@ -354,9 +406,20 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
         {thread.note && <p className="mt-1 text-muted-foreground text-xs">{thread.note}</p>}
       </div>
 
-      {thread.approval && <ApprovalCard approval={thread.approval} onAnswer={(c) => answer(id, thread.id, c)} page={title || "Untitled"} ref={card} />}
+      {thread.approval && !pageApproval && <ApprovalCard approval={thread.approval} onAnswer={(c) => answer(id, thread.id, c)} page={title || "Untitled"} ref={card} />}
+      {/* Suggestions for a page, above the box, while the thread is empty. */}
+      {inBrowser && ready && items.length === 0 && (
+        <div className="flex shrink-0 flex-col gap-0.5 px-2 pb-2">
+          {["Summarize this page", "Save the key points as a note"].map((s) => (
+            <Button className="h-auto justify-start gap-2.5 whitespace-normal py-1.5 text-left font-normal text-muted-foreground sm:h-auto" key={s} onClick={() => send(s)} variant="ghost">
+              <CornerDownRight className="size-4" />
+              {s}
+            </Button>
+          ))}
+        </div>
+      )}
       {/* Kept mounted under an approval, so a draft being written survives it. */}
-      <div className={cn("shrink-0", thread.approval && "hidden")}>
+      <div className={cn("shrink-0", thread.approval && !pageApproval && "hidden")}>
         {threads.pending && (
           <div className="mx-2 mb-1.5 flex items-start gap-1 text-muted-foreground">
             <blockquote className="line-clamp-3 min-w-0 flex-1 border-l-2 border-muted-foreground/40 pl-2 text-sm">{threads.pending.text}</blockquote>
@@ -383,6 +446,7 @@ function LocalAskView({ head = (menu) => <div className="shrink-0 ps-[9px] pe-2 
           pages={pages.filter((p) => p.id !== id)}
           placeholder={threads.pending ? "Ask about the selection…" : "Ask about this page…"}
           ready={ready}
+          top={chips || undefined}
         />
       </div>
     </section>

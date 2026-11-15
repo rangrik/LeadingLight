@@ -60,7 +60,7 @@ test("Browser toolbar keeps a full address and every action in narrow panes", as
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Beside Browser");
   await page.getByRole("button", { name: "Browser", exact: true }).click();
   await address(page).fill("localhost:1420/wide"); await address(page).press("Enter");
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   const layout = async (twoRows: boolean) => {
     const toolbar = pane(page).getByTestId("browser-toolbar");
     const outer = (await toolbar.boundingBox())!, input = (await address(page).boundingBox())!;
@@ -141,7 +141,7 @@ test("Address supports free text, keyboard history, Escape, and reopening after 
   await address(page).press("ArrowDown"); await address(page).press("Enter");
   await expect.poll(() => runtime.calls.filter((c) => ["open", "navigate"].includes(c.action)).length).toBe(1);
   expect(runtime.calls.find((c) => c.action === "open")?.body.url).toBe("http://localhost:1420/Useful%20recent");
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await address(page).fill("Useful"); await expect(page.getByRole("option")).toHaveCount(2);
   await address(page).press("Escape"); await expect(page.getByRole("option")).toHaveCount(0);
   expect(runtime.calls.filter((c) => ["open", "navigate"].includes(c.action))).toHaveLength(1);
@@ -149,7 +149,7 @@ test("Address supports free text, keyboard history, Escape, and reopening after 
   await expect(pane(page).getByRole("button", { name: "Close typed", exact: true })).toBeVisible();
   await pane(page).getByRole("button", { name: "Close typed", exact: true }).click();
   await address(page).fill("localhost:1420/typed"); await address(page).press("Enter");
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await expect.poll(() => runtime.calls.filter((c) => c.action === "open").length).toBe(2);
 });
 
@@ -187,7 +187,7 @@ test("Browser settings search, remove and reopen history without enabling native
   await settings.getByRole("textbox", { name: "Search browser history" }).fill("");
   await page.screenshot({ path: info.outputPath("browser-settings.png"), animations: "disabled" });
   await settings.getByRole("button", { name: /^Useful recent http/ }).click();
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await expect(address(page)).toHaveValue("http://localhost:1420/Useful%20recent");
   expect((await saved(page)).history.some((x: { title: string }) => x.title === "Useful old")).toBe(false);
   expect(runtime.calls.filter((c) => c.action === "download-settings" && c.method === "PUT")).toHaveLength(0);
@@ -197,7 +197,7 @@ test("Browser settings search, remove and reopen history without enabling native
 test("Cleared current-page history stays removed across Settings and reload until actual navigation", async ({ page, runtime }) => {
   await open(page);
   await address(page).fill("localhost:1420/current"); await address(page).press("Enter");
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await expect.poll(async () => (await saved(page)).history.some((entry: { title: string }) => entry.title === "current")).toBe(true);
   await menu(page, "Browser settings");
   const settings = page.getByTestId("settings-browser");
@@ -207,9 +207,9 @@ test("Cleared current-page history stays removed across Settings and reload unti
   await dialog.getByRole("button", { name: "Clear browsing data", exact: true }).click();
   await expect(dialog).toHaveCount(0); expect((await saved(page)).history).toHaveLength(0);
   await page.keyboard.press("Escape");
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await page.reload();
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   expect((await saved(page)).history).toHaveLength(0);
   const reads = runtime.calls.filter((call) => call.action === "state").length;
   await expect.poll(() => runtime.calls.filter((call) => call.action === "state").length).toBeGreaterThan(reads);
@@ -219,6 +219,6 @@ test("Cleared current-page history stays removed across Settings and reload unti
   await menu(page, "Browser settings");
   await settings.getByRole("button", { name: "Remove history current", exact: true }).click();
   await page.keyboard.press("Escape"); await page.reload();
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   expect((await saved(page)).history).toHaveLength(0);
 });

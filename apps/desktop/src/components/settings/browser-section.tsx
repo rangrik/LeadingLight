@@ -11,6 +11,7 @@ import { clearBrowserHistory } from "~/lib/browser-data";
 import { useSavedBrowserComments } from "~/lib/browser-annotations";
 import { detachBrowser } from "~/lib/browser-context";
 import { requestBrowserOpen } from "~/lib/browser-opening";
+import { openInSpace } from "~/lib/browser-space";
 import { updateBrowserDownloadPreferences, useBrowserDownloadPreferences, useNativeBrowserDownloads } from "~/lib/browser-preferences";
 import { openPage } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
@@ -78,7 +79,7 @@ function BrowserHistorySettings({ base }: { base: string }) {
   const clear = async ({ history, website, range }: BrowserClearSelection) => {
     setBusy(true); setError("");
     try {
-      if (website) { await ask("DELETE", `${base}/profile`, { confirm: true }); detachBrowser(""); }
+      if (website) { await ask("DELETE", `${base}/profile`, { confirm: true }); await detachBrowser(""); }
       update((d) => ({ ...(history ? clearBrowserHistory(d, range) : d), ...(website ? { tabs: [], closed: [], selected: "" } : {}) }));
       setClearing(false);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
@@ -88,7 +89,7 @@ function BrowserHistorySettings({ base }: { base: string }) {
     <SettingsRow className="flex-col items-stretch gap-3" label="Visited pages" description="Project browsers have their own history in the browser menu.">
       <div className="min-w-0 flex-1 space-y-2">
       <div className="flex flex-wrap gap-2"><Input aria-label="Search browser history" className="min-w-0 flex-1" onChange={(e) => setFilter(e.target.value)} placeholder="Search history" size="sm" value={filter} /><Button onClick={() => { setError(""); setClearing(true); }} size="sm" variant="outline">Clear browsing data…</Button></div>
-      <div className="max-h-96 overflow-auto">{entries.map((entry) => <div className="flex min-w-0 items-center gap-2" key={entry.url}><Button className="h-auto min-w-0 flex-1 justify-start py-2 text-left sm:h-auto" onClick={() => { requestBrowserOpen(base, entry.url); closeSettings(); openPage(browserView("")); }} variant="ghost"><span className="min-w-0"><span className="block truncate">{entry.title}</span><span className="block truncate text-xs font-normal text-muted-foreground">{entry.url}</span></span></Button><Button aria-label={`Remove history ${entry.title}`} onClick={() => update((d) => ({ ...d, history: d.history.filter((x) => x.url !== entry.url) }))} size="xs" variant="ghost">Remove</Button></div>)}{!entries.length && <p className="py-3 text-sm text-muted-foreground">{filter ? "No matching pages." : "No browsing history."}</p>}</div>
+      <div className="max-h-96 overflow-auto">{entries.map((entry) => <div className="flex min-w-0 items-center gap-2" key={entry.url}><Button className="h-auto min-w-0 flex-1 justify-start py-2 text-left sm:h-auto" onClick={() => { closeSettings(); if (!openInSpace(entry.url)) { requestBrowserOpen(base, entry.url); openPage(browserView("")); } }} variant="ghost"><span className="min-w-0"><span className="block truncate">{entry.title}</span><span className="block truncate text-xs font-normal text-muted-foreground">{entry.url}</span></span></Button><Button aria-label={`Remove history ${entry.title}`} onClick={() => update((d) => ({ ...d, history: d.history.filter((x) => x.url !== entry.url) }))} size="xs" variant="ghost">Remove</Button></div>)}{!entries.length && <p className="py-3 text-sm text-muted-foreground">{filter ? "No matching pages." : "No browsing history."}</p>}</div>
       <BrowserClearData busy={busy} error={error} onClear={clear} onClose={() => setClearing(false)} open={clearing} />
       </div>
     </SettingsRow>

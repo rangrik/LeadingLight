@@ -14,6 +14,7 @@ import { isDesktop } from "~/lib/platform";
 import { ask } from "~/lib/project-runtime/transport";
 import { browserBase } from "~/lib/project-runtime/browser";
 import { requestBrowserOpen } from "~/lib/browser-opening";
+import { openInSpace } from "~/lib/browser-space";
 import type { LLObject } from "~/lib/objects";
 
 const readerAddress = (value: string) => {
@@ -90,6 +91,7 @@ export function BookNavigation({ page }: { page: LLObject }) {
     try {
       const address = readerAddress(root.url);
       if (!(await isDesktop)) { openLink(address); return; }
+      if (openInSpace(address)) return;
       const workspace = await ask<{ location: string; worktree: string }>("POST", "/v1/browser/workspace");
       requestBrowserOpen(browserBase(workspace.location, workspace.worktree), address);
       openBeside(browserView(""));

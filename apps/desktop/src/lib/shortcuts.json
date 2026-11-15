@@ -1,14 +1,17 @@
 {
-  "_": "LeadingLight's keyboard shortcuts, in Shipyard's shape (vendor/shipyard/app/src/lib/shortcuts.ts reads it through an alias; src-tauri/src/menu.rs builds the Mac menu bar from it). group is the menu an item is in; accel, when set, puts it there with that accelerator, so macOS cannot take the key first. Never give ⌘C, ⌘V, ⌘A or ⌘F an accelerator: text fields need them. The editor's own keys (⌘B, ⌘I, ⌘/ for the block menu, …) stay out: its toolbar shows them. Settings › Shortcuts can change any key here (lib/keymap.ts).",
+  "_": "LeadingLight's keyboard shortcuts, in Shipyard's shape (vendor/shipyard/app/src/lib/shortcuts.ts reads it through an alias; src-tauri/src/menu.rs builds the Mac menu bar from it). group is the menu an item is in; accel, when set, puts it there with that accelerator, so macOS cannot take the key first. Never give ⌘C, ⌘V, ⌘A or ⌘F an accelerator: text fields need them. browser marks a key the browser space has only while it is in front, so the editor keeps ⌘D. The editor's own keys (⌘B, ⌘I, ⌘/ for the block menu, …) stay out: its toolbar shows them. Settings › Shortcuts can change any key here (lib/keymap.ts).",
   "shortcuts": [
     { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N" },
     { "id": "new-tab", "group": "File", "label": "New tab", "keys": "⌘T", "accel": "CmdOrCtrl+T" },
+    { "id": "open-location", "group": "File", "label": "Open location…", "keys": "⌘L", "accel": "CmdOrCtrl+L", "browser": true, "what": "Go somewhere in this browser tab" },
     { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },
     { "id": "close-tab", "group": "File", "label": "Close tab", "keys": "⌘W", "accel": "CmdOrCtrl+W", "sep": true },
     { "id": "reopen-tab", "group": "File", "label": "Reopen closed tab", "keys": "⇧⌘T", "accel": "CmdOrCtrl+Shift+T" },
     { "id": "quick-record", "group": "File", "label": "Quick record", "keys": "⇧⌘R", "accel": "CmdOrCtrl+Shift+R", "what": "Start or stop a voice note in this page" },
     { "id": "save", "group": "File", "label": "Save", "keys": "⌘S", "accel": "CmdOrCtrl+S", "what": "Save now", "sep": true },
+    { "id": "save-link", "group": "File", "label": "Save page", "keys": "⌘D", "accel": "CmdOrCtrl+D", "browser": true, "what": "Save the browser's page, or stop saving it" },
     { "id": "sidebar", "group": "View", "label": "Show or hide the sidebar", "keys": "⌘\\", "accel": "CmdOrCtrl+\\" },
+    { "id": "reload", "group": "View", "label": "Reload page", "keys": "⌘R", "accel": "CmdOrCtrl+R", "browser": true, "what": "Reload the browser's page" },
     { "id": "zoom-in", "group": "View", "label": "Zoom in", "keys": "⌘+", "accel": "CmdOrCtrl+=", "sep": true },
     { "id": "zoom-out", "group": "View", "label": "Zoom out", "keys": "⌘−", "accel": "CmdOrCtrl+-" },
     { "id": "zoom-reset", "group": "View", "label": "Actual size", "keys": "⌘0", "accel": "CmdOrCtrl+0" },
@@ -21,11 +24,14 @@
     { "id": "suggestions", "group": "Go", "label": "Suggestions", "keys": "⌥⌘S", "accel": "CmdOrCtrl+Alt+S", "what": "Show or hide tail's suggestions" },
     { "id": "feed", "group": "Go", "label": "Feed", "keys": "⌥⌘F", "accel": "CmdOrCtrl+Alt+F", "what": "Show or hide what agents need from you" },
     { "id": "captures", "group": "Go", "label": "Captures", "keys": "⌥⌘K", "accel": "CmdOrCtrl+Alt+K", "what": "Show or hide what you captured" },
+    { "id": "browser", "group": "Go", "label": "Browser", "keys": "⌥⌘B", "accel": "CmdOrCtrl+Alt+B", "what": "Go to the browser, or back to your notes" },
     { "id": "nod", "group": "Go", "label": "Nod", "keys": "⌃↩", "accel": "Ctrl+Enter", "what": "Do what tail's line offers on the page in front" },
     { "id": "back", "group": "Go", "label": "Back", "keys": "⌘[", "accel": "CmdOrCtrl+[", "sep": true, "what": "The tab's previous page" },
     { "id": "forward", "group": "Go", "label": "Forward", "keys": "⌘]", "accel": "CmdOrCtrl+]", "what": "The tab's next page" },
     { "id": "next-tab", "group": "Go", "label": "Next tab", "keys": "⌃⇥", "accel": "Ctrl+Tab" },
     { "id": "previous-tab", "group": "Go", "label": "Previous tab", "keys": "⌃⇧⇥", "accel": "Ctrl+Shift+Tab" },
+    { "id": "tab", "group": "Go", "label": "Tab {n}", "keys": "⌘1–9", "accel": "CmdOrCtrl+{n}", "count": 9, "browser": true, "what": "Go to a browser tab by its place" },
+    { "id": "browser-anywhere", "group": "Go", "label": "Browser from anywhere", "keys": "⌃⌥B", "accel": "Ctrl+Alt+B", "what": "Bring the browser up, or put it away, from any app" },
     { "id": "settings", "group": "Go", "label": "Settings…", "keys": "⌘,", "accel": "CmdOrCtrl+,", "sep": true },
     { "id": "shortcuts", "group": "Help", "label": "Keyboard shortcuts", "keys": "⌘⌥/", "accel": "CmdOrCtrl+Alt+/" }
   ]

@@ -54,20 +54,34 @@ const TAKEN: Record<string, string> = {
 };
 
 // Why id can't have these keys, or nothing when it can. ⌃ and a letter move the cursor in text.
+// Its own default is always allowed: the browser's ⌘D is the editor's only outside the browser.
 export function refuse(id: string, accel: string): string | undefined {
   const other = SHORTCUTS.find((s) => s.id !== id && s.accel === accel);
   const keys = other?.keys ?? keysOf(accel);
-  const what = other ? other.label.replace(/…$/, "") : (TAKEN[keys] ?? (/^Ctrl\+[A-Z]$/.test(accel) ? "editing text" : undefined));
+  const own = accel === DEFAULTS.get(id)?.accel;
+  const what = other ? other.label.replace(/…$/, "") : own ? undefined : (TAKEN[keys] ?? (/^Ctrl\+[A-Z]$/.test(accel) ? "editing text" : undefined));
   return what && `${keys} is already used for ${what}.`;
 }
 
-// The Mac app's menu bar and its global ⌃⌥I take keys before the page (lib.rs); hold lets every key through.
+// The Mac app's menu bar and its global keys take keys before the page (lib.rs); hold lets every
+// key through. The browser space's own keys are in the menu only while it is in front, and a
+// numbered one (⌘1–9) is a menu item per number.
+let space = false;
 async function toNative(hold = false) {
   if (!(await isDesktop)) return;
   const { invoke } = await import("@tauri-apps/api/core");
-  await invoke("shortcuts_set", { keys: Object.fromEntries(SHORTCUTS.map((s) => [s.id, hold ? null : (s.accel ?? null)])) });
+  const keys = SHORTCUTS.flatMap((s) => {
+    const accel = hold || ((s as { browser?: boolean }).browser && !space) ? null : (s.accel ?? null);
+    return s.count ? Array.from({ length: s.count }, (_, i) => [`${s.id}-${i + 1}`, accel?.replace("{n}", String(i + 1)) ?? null]) : [[s.id, accel]];
+  });
+  await invoke("shortcuts_set", { keys: Object.fromEntries(keys) });
 }
 export const holdKeys = (hold: boolean) => void toNative(hold).catch(console.error);
+export function spaceKeys(front: boolean) {
+  if (front === space) return;
+  space = front;
+  holdKeys(false);
+}
 
 // At launch the menu bar has the table's keys; changed ones are sent once the page is up.
 export function sendKeys() {
@@ -91,7 +105,7 @@ export async function setKeys(id: string, accel?: string): Promise<string | unde
   try {
     await toNative();
   } catch {
-    // Only the global ⌃⌥I can be refused: another app holds the keys.
+    // Only a global key (⌃⌥I, ⌃⌥B) can be refused: another app holds the keys.
     save(before);
     holdKeys(false);
     return `macOS would not give ${keysOf(want)} to LeadingLight. Another app may have it.`;

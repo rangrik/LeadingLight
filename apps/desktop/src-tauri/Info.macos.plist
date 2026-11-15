@@ -5,4 +5,10 @@
   <string>LeadingLight records voice notes and keeps their audio in your pages.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>LeadingLight transcribes voice notes on this Mac.</string>
+  <!-- The browser opens plain http sites, as Safari does; only web pages get this. -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoadsInWebContent</key>
+    <true/>
+  </dict>
 </dict></plist>

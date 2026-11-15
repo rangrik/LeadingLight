@@ -61,6 +61,9 @@
     "0046-route-fixture-stability.patch",
     "0047-localbox-service-fixture-path.patch",
     "0048-archived-conversation-transcript.patch",
-    "0049-mobile-agents.patch"
+    "0049-mobile-agents.patch",
+    "0050-desktop-browser-defaults.patch",
+    "0051-personal-browser-permissions.patch",
+    "0052-agents-browser-is-visible.patch"
   ]
 }

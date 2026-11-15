@@ -1,5 +1,5 @@
 import { type Access, type AiPrefs, isClaude } from "~/lib/ai-prefs";
-import { annotationImageName, appendBrowserContext, stripBrowserContext, type BrowserImageReference } from "~/lib/browser-context";
+import { annotationImageName, appendBrowserContext, stripBrowserContext, type BrowserImageReference, type BrowserContext, shareBrowser } from "~/lib/browser-context";
 import { folders, refresh as refreshFolders } from "~/lib/project-runtime/folders";
 import { onRuntimeEvent } from "~/lib/project-runtime/live";
 import { type Answer, type Delivery, type Draft, mergeRequests, reconcile, restoreDraft, type RuntimeRequest, sendAnswer } from "~/lib/project-runtime/requests";
@@ -300,27 +300,28 @@ const refused = (err: unknown, conv: Conversation | null) =>
 // message carries a key of its own, so a send repeated after a lost answer is one message. Sent
 // "idle" while the agent works, the runtime holds it until the turn ends (slice 12).
 const sends = new Map<string, Promise<unknown>>();
-export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = [], context = "", browserImages: BrowserImageReference[] = [], when: "now" | "idle" = "now"): Promise<Conversation> {
+export async function send(key: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[] = [], context = "", browserImages: BrowserImageReference[] = [], when: "now" | "idle" = "now", browser?: BrowserContext): Promise<Conversation> {
   const id = crypto.randomUUID();
   const c0 = chatOf(key).get();
   patch(key, { submissions: beginMessageSubmission(c0.submissions, { clientMessageId: id }), texts: { ...c0.texts, [id]: text }, restore: null, error: null });
   // One at a time per chat: a message typed while the first is still starting the chat waits for
   // it, then goes to that chat rather than starting another.
   const prev = sends.get(key);
-  const run = prev ? prev.catch(() => {}).then(() => sendTo(adopted.get(key) ?? key, id, location, text, prefs, files, context, browserImages, when)) : sendTo(key, id, location, text, prefs, files, context, browserImages, when);
+  const run = prev ? prev.catch(() => {}).then(() => sendTo(adopted.get(key) ?? key, id, location, text, prefs, files, context, browserImages, when, browser)) : sendTo(key, id, location, text, prefs, files, context, browserImages, when, browser);
   sends.set(key, run);
   run.catch(() => {}).finally(() => sends.get(key) === run && sends.delete(key));
   return run;
 }
-async function sendTo(key: string, id: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[], context: string, browserImages: BrowserImageReference[], when: "now" | "idle"): Promise<Conversation> {
+async function sendTo(key: string, id: string, location: string, text: string, prefs: Pick<AiPrefs, "model" | "effort" | "access" | "plan"> & { branch?: boolean }, files: File[], context: string, browserImages: BrowserImageReference[], when: "now" | "idle", browser?: BrowserContext): Promise<Conversation> {
   try {
     // A folder gone since the page opened: no agent starts, in its place or anywhere else.
     await refreshFolders();
     if ([...folders.get().values()].some((f) => f.folder.location === location && f.missing)) throw new Error("The folder isn't there any more.");
     let conv = chatOf(key).get().conv;
-    const hasFiles = files.length + browserImages.length > 0;
+    const hasFiles = files.length + browserImages.length > 0 || !!browser;
     const full = async (session: string) => {
       const paths = [...await upload(session, files), ...await uploadBrowserImages(session, browserImages)];
+      if (browser) await shareBrowser(browser, session);
       return appendBrowserContext(paths.length ? `${text}${ATTACHED}${paths.join("\n")}` : text, context);
     };
     if (!conv) {
