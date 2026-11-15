@@ -33,6 +33,8 @@ Feature: Reading layout
     Then its column goes, and stays gone after a reload, though it is a Book
     When I press ⌥⌘R again
     Then the column is back
+    And turning it on or off is not an edit of the page: Resume's first row, Today's "Yesterday
+      you were in" line and "This day" stay as they were
 
   Scenario: Notes list the page's sidenotes
     Given "Notes on Thinking in Systems" in the reading layout, with three sidenotes in the margin

@@ -145,7 +145,7 @@ export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext
   if (before) checkNotebookType(before.typeId, patch.typeId);
   const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
-    patchSummary(id, { updatedAt: Date.now() });
+    patchSummary(id, { updatedAt: patch.updatedAt ?? Date.now() });
     markSaved();
   }, (error) => { if (reportError) reportSaveError(error); throw error; });
 }

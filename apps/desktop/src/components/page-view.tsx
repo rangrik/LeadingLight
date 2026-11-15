@@ -62,7 +62,7 @@ import { PaperPage } from "~/components/paper-page";
 import { readPaper, registerPaper, type PaperAction } from "~/lib/paper";
 
 // The body is read only when a save runs, not on every keystroke.
-type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string; context?: ChangeContext };
+type Pending = { title?: string; content?: () => EditorDoc; properties?: Record<string, unknown>; typeId?: string; updatedAt?: number; context?: ChangeContext };
 
 const SAVE_DELAY_MS = 500;
 
@@ -188,6 +188,8 @@ export function PageView({ page }: { page: LLObject }) {
 
   const queue = (patch: Pending) => {
     if (restoring.current) return;
+    // An edit queued after a view setting takes today's date again.
+    if (patch.updatedAt === undefined) delete pending.current.updatedAt;
     Object.assign(pending.current, patch, { context: currentEdit() });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void flush(false).catch(() => {}), SAVE_DELAY_MS);
@@ -195,10 +197,12 @@ export function PageView({ page }: { page: LLObject }) {
 
   // Every other stored property, including ones this version doesn't know, is kept as it was.
   const replaceProps = (next: Record<string, unknown>) => {
+    // The reading layout is a view setting: saved alone, it keeps the page's date (not an edit).
+    const view = !Object.keys(pending.current).length && Object.keys({ ...latest.current, ...next }).every((k) => k === "reading" || latest.current[k] === next[k]);
     latest.current = next;
     setProps(next);
     patchSummary(page.id, { properties: next });
-    queue({ properties: next });
+    queue(view ? { properties: next, updatedAt: pageOf(page.id)?.updatedAt } : { properties: next });
   };
   const setProp = (key: string, value: unknown) => {
     const next = { ...latest.current };
