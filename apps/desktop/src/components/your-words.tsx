@@ -18,8 +18,9 @@ import { useThoughts } from "~/lib/thoughts";
 // The Your words column beside a source (features/reading-layout.feature): its sidenotes, the
 // reader's takeaways, names in the text worth a page, and the essay it could become.
 
-// Narrower panes fold the column into tabs above the body.
-const FOLD = 1100;
+// Narrower panes fold the column into tabs above the body. A 1440 px window leaves the pane
+// 1092 beside the project rail and the sidebar, which must still fit the column.
+const FOLD = 1080;
 
 // The pane's size while the page is a source: the column folds under FOLD, and stays within the
 // pane's height as the page scrolls.

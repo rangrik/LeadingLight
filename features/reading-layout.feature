@@ -106,6 +106,7 @@ Feature: Reading layout
     Then the body is back as it was
     When the pane grows to 1200 px
     Then the tabs go and the column is back
+    And a 1440 px window with the project rail and the sidebar open is wide enough for the column
 
   Scenario: Thoughts pages, essays and reports are never sources
     When I open the Thoughts page under "Notes on Thinking in Systems"
