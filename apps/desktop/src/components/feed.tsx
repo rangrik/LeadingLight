@@ -1,25 +1,24 @@
 import { CircleCheck, Info, MessageCircleQuestion, MessageSquareReply, ShieldQuestion } from "lucide-react";
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Input } from "@leadinglight/ui/components/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { accept } from "~/lib/assign";
-import { feedFocus, feedItems, type FeedItem, feedPrefs, followAgents, showTarget, wantFocus } from "~/lib/feed";
+import { feedFocus, feedItems, type FeedItem, feedPrefs, followAgents, showTarget } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { accessOf, answer, chatOf, send } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
-import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { deliveryOf } from "~/lib/project-runtime/requests";
 import { pageOf, space } from "~/lib/space";
 import type { Target } from "~/lib/work";
 import { sessions, watchWork } from "~/lib/work-watch";
 
-// The Feed (features/feed.feature): a panel of the bar (components/bar.tsx), or a pane of its own
-// in a narrow window. Selecting an item opens what it is about beside it; a question or an
-// approval is answered in the item, as in its chat, through the same receipts.
+// The Feed (features/feed.feature): the Inbox's Needs you (components/inbox.tsx). Selecting an
+// item opens what it is about beside it; a question or an approval is answered in the item, as in
+// its chat, through the same receipts.
 
 const ICON = { question: MessageCircleQuestion, approval: ShieldQuestion, review: CircleCheck, answer: MessageSquareReply, notice: Info };
 const title = (id?: string) => (id ? pageLabel(pageOf(id)?.title ?? "") : "");
@@ -102,8 +101,9 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
   const meta = [item.task ? title(item.task) : title(item.agent), title(item.project), formatAgo(item.at)].filter(Boolean).join(" · ");
   return (
     <li className={cn("rounded-lg transition-colors duration-150", open ? "bg-accent/60" : "hover:bg-accent/40")} data-feed-item={item.id}>
-      {/* The item with the keyboard is tinted, as one under the pointer is; no ring. */}
-      <button aria-expanded={open} className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left focus-visible:bg-accent/60" onClick={onSelect} type="button">
+      {/* The item with the keyboard is tinted, as one under the pointer is; no ring. On focus, not
+          focus-visible: a ⌥⌘ key that opens the Inbox does not count as typing to the browser. */}
+      <button aria-expanded={open} data-inbox-row className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left focus:bg-accent/60" onClick={onSelect} type="button">
         <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1">
           <span className={cn("block text-sm leading-snug", !open && "line-clamp-2")}>{item.reason}</span>
@@ -144,81 +144,52 @@ function FeedRow({ item, open, onSelect, paneId }: { item: FeedItem; open: boole
   );
 }
 
-// The list, its project filter, and keys: ↑ and ↓ move, Enter opens. Only while projects are on.
-export function FeedList({ paneId }: { paneId?: string }) {
-  const items = useFeed();
+// The project menu, in Needs you's header: only with two projects or more, or one picked.
+export function ProjectMenu() {
   const prefs = feedPrefs.use();
-  const { enabled } = projectPrefs.use();
-  const all = folders.use();
+  const projects = [...folders.use().values()].map((f) => f.folder.pageId);
+  const value = projects.includes(prefs.project) ? prefs.project : "all";
+  if (projects.length < 2 && prefs.project === "all") return null;
+  return (
+    <Select items={{ all: "All projects", ...Object.fromEntries(projects.map((p) => [p, title(p)])) }} onValueChange={(v) => feedPrefs.set({ project: v as string })} value={value}>
+      <SelectTrigger aria-label="Project" className="ms-auto w-auto min-w-0" size="sm">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
+        <SelectItem value="all">All projects</SelectItem>
+        {projects.map((p) => (
+          <SelectItem key={p} value={p}>
+            {title(p)}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
+  );
+}
+
+// The items, in the Inbox's Needs you. Enter or a click opens one, and what it is about beside.
+export function FeedRows({ items, paneId }: { items: FeedItem[]; paneId?: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const list = useRef<HTMLUListElement>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const projects = [...all.values()].map((f) => f.folder.pageId);
   const want = feedFocus.use();
   // Opened on an item: it is shown open, with the keyboard, and its project filter set aside.
   useEffect(() => {
     if (!want) return;
-    if (!items.some((i) => i.id === want)) return void (prefs.project !== "all" && feedPrefs.set({ project: "all" }));
+    if (!items.some((i) => i.id === want)) return void (feedPrefs.get().project !== "all" && feedPrefs.set({ project: "all" }));
     feedFocus.set(null);
     setSelected(want);
     requestAnimationFrame(() => list.current?.querySelector<HTMLButtonElement>(`[data-feed-item="${CSS.escape(want)}"] > button`)?.focus());
   }, [want, items]);
-  useEffect(() => {
-    if (!wantFocus.now) return;
-    wantFocus.now = false;
-    // The first item, or with none the Feed's project menu.
-    (list.current?.querySelector<HTMLButtonElement>(":scope > li > button") ?? root.current?.querySelector<HTMLElement>("[aria-label=Project]"))?.focus();
-  }, [items.length]);
   const select = (item: FeedItem) => {
     setSelected(item.id === selected ? null : item.id);
     requestAnimationFrame(() => list.current?.querySelector(`[data-feed-item="${CSS.escape(item.id)}"]`)?.scrollIntoView({ block: "nearest" }));
     if (item.id !== selected && item.targets[0] && !paneId) showTarget(item.targets[0]);
   };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-    if ((e.target as HTMLElement).closest("input, textarea, [role=group]")) return;
-    const rows = [...(list.current?.querySelectorAll<HTMLButtonElement>(":scope > li > button") ?? [])];
-    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
-    rows[Math.max(0, Math.min(rows.length - 1, at + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
-    e.preventDefault();
-  };
-  const none = <p className="m-auto px-6 text-center text-muted-foreground text-sm">Nothing needs you. Questions, approvals and work ready for review show here.</p>;
-  if (!enabled) return none;
   return (
-    <div className="flex min-h-0 flex-1 flex-col" ref={root}>
-      <div className="px-2 pb-2">
-        <Select items={{ all: "All projects", ...Object.fromEntries(projects.map((p) => [p, title(p)])) }} onValueChange={(v) => feedPrefs.set({ project: v as string })} value={projects.includes(prefs.project) ? prefs.project : "all"}>
-          <SelectTrigger aria-label="Project" size="sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectPopup>
-            <SelectItem value="all">All projects</SelectItem>
-            {projects.map((p) => (
-              <SelectItem key={p} value={p}>
-                {title(p)}
-              </SelectItem>
-            ))}
-          </SelectPopup>
-        </Select>
-      </div>
-      {items.length === 0 ? (
-        none
-      ) : (
-        <ul aria-label="Feed items" className="min-h-0 flex-1 overflow-y-auto px-1.5 pb-2" onKeyDown={onKey} ref={list}>
-          {items.map((item) => (
-            <FeedRow item={item} key={item.id} onSelect={() => select(item)} open={item.id === selected} paneId={paneId} />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// In a pane of its own: what an item is about opens in this pane, its crumb leading back.
-export function FeedView({ paneId }: { paneId: string }) {
-  return (
-    <div className="flex h-full flex-col pt-2" data-testid="feed">
-      <FeedList paneId={paneId} />
-    </div>
+    <ul aria-label="Feed items" className="px-1.5" ref={list}>
+      {items.map((item) => (
+        <FeedRow item={item} key={item.id} onSelect={() => select(item)} open={item.id === selected} paneId={paneId} />
+      ))}
+    </ul>
   );
 }

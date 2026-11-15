@@ -1,12 +1,12 @@
 import { expect, type Page, test } from "@playwright/test";
 
-const inbox = (page: Page) => page.getByRole("complementary", { name: "Captures", exact: true });
+const inbox = (page: Page) => page.getByRole("complementary", { name: "Inbox", exact: true });
 const row = (page: Page, title: string) => inbox(page).getByRole("row").filter({ has: page.getByRole("button", { name: title, exact: true }) });
 // The bar keeps its panel open across a reload, so it is opened only when it isn't.
 async function openInbox(page: Page) {
-  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true });
+  const toggle = page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Inbox", exact: true });
   if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
-  await expect(inbox(page).getByRole("tab", { name: "To review" })).toBeVisible();
+  await expect(inbox(page)).toBeVisible();
 }
 async function seed(page: Page) {
   await page.goto("/");
@@ -47,11 +47,12 @@ test("Inbox includes captured material and keeps review state across undo and re
   await page.reload();
   await openInbox(page);
   await expect(row(page, "Garden lights")).toHaveCount(0);
-  await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();
+  await inbox(page).getByRole("button", { name: "Show reviewed", exact: true }).click();
   await expect(row(page, "Garden lights")).toBeVisible();
   await row(page, "Garden lights").getByRole("button", { name: "Return to inbox" }).click();
-  await inbox(page).getByRole("tab", { name: "To review" }).click();
-  await expect(row(page, "Garden lights")).toBeVisible();
+  // Back to review, and with nothing reviewed left the link goes.
+  await expect(row(page, "Garden lights").getByRole("button", { name: "Mark reviewed" })).toBeVisible();
+  await expect(inbox(page).getByRole("button", { name: /^(Show|Hide) reviewed$/ })).toHaveCount(0);
 });
 
 // Seam: metadata edits keep the original page's other properties and body across a reload.
@@ -78,11 +79,11 @@ test("Inbox assigns project and tags, including projects on saved webpages", asy
   const saved = await page.evaluate(async (id) => (await import(String("/src/lib/objects.ts"))).objects.get(id), id);
   expect(saved.properties.custom).toBe("kept");
   expect(saved.content.content[0].content[0].text).toBe("Keep these words.");
-  // Narrow, Captures is a pane beside the page.
+  // Narrow, the Inbox is a pane beside the page.
   await page.setViewportSize({ width: 520, height: 800 });
-  await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Captures", exact: true }).click();
-  const pane = page.getByRole("region", { name: "Captures", exact: true });
-  await expect(pane.getByRole("heading", { name: "Captures" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Bar" }).getByRole("button", { name: "Inbox", exact: true }).click();
+  const pane = page.getByRole("region", { name: "Inbox", exact: true });
+  await expect(pane.getByRole("heading", { name: /^Captured/ })).toBeVisible();
   await page.screenshot({ path: "qa/report/capture-inbox-narrow.png" });
   expect(await pane.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
 });
@@ -107,9 +108,7 @@ test("A failed review stays visible and can be retried", async ({ page }) => {
 test("Reviewing beside an open page keeps its words and empty states stay calm", async ({ page }) => {
   await page.goto("/");
   await openInbox(page);
-  await expect(inbox(page).getByText("Nothing waiting here")).toBeVisible();
-  await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();
-  await expect(inbox(page).getByText("No reviewed captures yet")).toBeVisible();
+  await expect(inbox(page).getByText("Nothing needs you.")).toBeVisible();
   await seed(page);
   await openInbox(page);
   await row(page, "Garden lights").getByRole("button", { name: "Garden lights", exact: true }).click({ modifiers: ["Shift"] });
@@ -133,6 +132,6 @@ test("Reviewing beside an open page keeps its words and empty states stay calm",
   await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Garden lights", exact: true }).click();
   await expect(page.getByRole("region", { name: "Garden lights", exact: true }).getByRole("textbox", { name: "Page body" })).toContainText("More words.");
   await openInbox(page);
-  await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();
+  await inbox(page).getByRole("button", { name: "Show reviewed", exact: true }).click();
   await expect(row(page, "Garden lights")).toBeVisible();
 });

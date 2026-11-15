@@ -6,11 +6,11 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { DailyCard } from "~/components/daily-card";
 import { visit } from "~/components/property-value";
 import { Row } from "~/components/work-panel";
-import { barViewOf, showBar } from "~/lib/bar";
+import { sectionOf, showBar } from "~/lib/bar";
 import { follow, type Line, nod, type Part, tail, TODAY, undo } from "~/lib/tail";
 
 // Tail's lines (docs/TAIL.md): rows like the work panel's, on Today, under a page's title and in
-// the bar's Suggestions. Each fades in and out over 150 ms; the fade in is an animation, since
+// the bar's Inbox. Each fades in and out over 150 ms; the fade in is an animation, since
 // WebKit holds a transition still while the window is behind others (editor.css, ll-fade-in).
 const FADE = "animate-[ll-fade-in_150ms_ease-out] transition-opacity duration-150 ease-out data-leaving:opacity-0";
 
@@ -42,13 +42,13 @@ const Words = ({ parts, where, fit, open }: { parts: Part[]; where?: string; fit
     if (typeof p === "string") return p;
     // Wrapped in the panel, a long name breaks as a box: its lines start at the left, as words do.
     const name = cn("text-start text-foreground", fit && "inline-block truncate align-top");
-    const view = barViewOf(p.page);
+    const at = sectionOf(p.page);
     return p.page === where ? (
       <span className={name} data-name key={i}>
         {p.text}
       </span>
     ) : (
-      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => (view ? showBar(view) : open ? open(p.page) : visit(p.page, e))} type="button">
+      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => (at ? showBar("inbox", at) : open ? open(p.page) : visit(p.page, e))} type="button">
         {p.text}
       </button>
     );
@@ -113,10 +113,10 @@ const Nod = ({ line }: { line: Line }) => (
 
 // One line; in the bar's narrow panel (open: where a name goes) as many as its words need.
 type RowProps = { line: Line; leaving: boolean; words?: Part[]; here?: string; open?: (page: string) => void } & React.HTMLAttributes<HTMLDivElement>;
-export function TailRow({ line, leaving, words = line.done?.words ?? line.words, here = line.where, open, ...rest }: RowProps) {
+export function TailRow({ line, leaving, words = line.done?.words ?? line.words, here = line.where, open, className, ...rest }: RowProps) {
   const ref = useFit(words, !open);
   return (
-    <Row className={cn(FADE, open && "flex-nowrap items-start")} data-leaving={leaving || undefined} {...rest}>
+    <Row className={cn(FADE, open && "flex-nowrap items-start", className)} data-leaving={leaving || undefined} {...rest}>
       <MessageSquareDashed className={cn("size-4 shrink-0 text-muted-foreground", open && "mt-1")} />
       <span className={cn("min-w-0 flex-1 text-muted-foreground", open ? "leading-6" : "truncate")} ref={ref}>
         <Words fit={!open} open={open} parts={words} where={here} />

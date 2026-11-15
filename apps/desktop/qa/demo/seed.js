@@ -151,7 +151,7 @@ async function fill() {
     content: doc(p("A feedback loop is a closed chain of causes: a stock's level sets a flow that changes the stock."), ul([b("Balancing"), " loops seek a goal: a thermostat, a thirst, a budget."], [b("Reinforcing"), " loops compound: interest, population, a habit."]), p("Delays in a loop make it oscillate. That is most of what goes wrong in projects: the signal arrives after the decision.")),
   });
   // Fill the two mentions above now that ids exist.
-  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")) });
+  await savePage(stocks, { content: doc(p("A ", b("stock"), " is what you can see, feel, count or measure at a moment: water in a bathtub, money in an account, trust in a team."), p("A ", b("flow"), " changes a stock over time. Inflows fill, outflows drain. A stock changes only as fast as its flows allow, which is why systems have ", i("momentum"), "."), quote("A stock takes time to change, because flows take time to flow.", " — ", m(meadows)), p("See ", m(loops), " for how stocks drive their own flows.")), updatedAt: at(5, 20, 40) });
 
   // The long reading note, left mid-sentence yesterday
   const notes = await make("notes", {
@@ -176,7 +176,7 @@ async function fill() {
     ),
   });
 
-  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")) });
+  await savePage(tis, { content: doc(p("Reading it slowly, a chapter a week. Notes live in ", m(notes), "."), p("The one idea so far: you can't understand a system from its parts; look at the ", b("structure"), " that produces its behaviour.")), updatedAt: at(1, 21) });
 
   // Other pages
   const weekly = await make("weekly", {
@@ -267,7 +267,7 @@ async function fill() {
     properties: { parent: taskD, report: { by: agentD, session: "sess-rename", to: taskD, at: at(1, 16), command: "c-d1", ready: true } },
     content: doc(p("Changed the starter type's name and plural; the docs already said note.")),
   });
-  await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } } });
+  await savePage(taskD, { properties: { "task-project": [ll], done: true, accepted: { at: at(1, 17), report: reportD } }, updatedAt: at(1, 17) });
 
   // Captured ideas, unfiled (Tail's "4 ideas since Tuesday")
   await make("idea1", { title: "Add a weekly review page that pulls This day from each day of the week", typeId: "idea", createdAt: at(5, 14, 2), updatedAt: at(5, 14, 2), properties: { ...cap("idea", at(5, 14, 2)) } });
@@ -290,4 +290,23 @@ async function fill() {
   localStorage.setItem("ll.ai", JSON.stringify({ model: "opus", effort: "medium", access: "ask", plan: false, tail: { mode: "normal" } }));
   window.__seed = ids;
   return ids;
+}
+
+// Tail's suggestions are never stored, so the demo puts three in at each load: two on the reading
+// note, one on the pricing notes. A nod changes nothing.
+export function suggest(pages) {
+  return import("/src/lib/tail.ts").then(({ tail }) => {
+    const id = (title) => pages.find((p) => p.title === title)?.id;
+    const [notes, loops, stocks, pricing] = ["Notes on Thinking in Systems", "Feedback loops", "Stocks and flows", "Pricing notes"].map(id);
+    if (!notes || !pricing) return;
+    const act = async () => ({ words: ["Done. The demo leaves the page as it was."] });
+    const line = (key, where, block, text, nod, words, row) => ({ id: `demo-${key}`, where, block, text, nod, words, row, act, at: Date.now() - 20 * 60e3 });
+    const name = (text, page) => ({ text, page });
+    tail.set([
+      ...tail.get().filter((l) => !l.id.startsWith("demo-")),
+      line("delays", notes, 14, "The point about delays in a feedback loop is that", "Draft it", ["You stopped mid-sentence. Finish it from ", name("Feedback loops", loops), "?"], ["“The point about delays…” in ", name("Notes on Thinking in Systems", notes), ": finish it from ", name("Feedback loops", loops), "?"]),
+      line("resilience", notes, 9, "Resilience, self-organization, hierarchy. Resilience is a stock too: it drains quietly and you only notice when it is gone.", "Make page", ["Make “resilience is a stock” a page beside ", name("Stocks and flows", stocks), "?"], ["“Resilience is a stock too…” in ", name("Notes on Thinking in Systems", notes), ": a page of its own?"]),
+      line("pricing", pricing, 1, "Monthly is simpler to explain; yearly is what most people buy. Lead with one, show the other in smaller type.", "Link task", ["The pricing agent is asking this very question. Link this to its task?"], ["“Monthly is simpler to explain…” in ", name("Pricing notes", pricing), " is what the pricing agent asks. Link it?"]),
+    ]);
+  });
 }
