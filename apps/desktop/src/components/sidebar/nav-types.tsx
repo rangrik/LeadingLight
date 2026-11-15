@@ -1,6 +1,7 @@
-import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@leadinglight/ui/components/sidebar";
+import { SidebarGroup, SidebarGroupLabel, SidebarMenu, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem } from "@leadinglight/ui/components/sidebar";
 
-// One row per type, opening its list of pages. Built like NavProjects, without a menu.
+// One row per type, opening its list of pages. Built like NavProjects, without a menu. Narrowed
+// to a project, each says how many of its pages it holds.
 export function NavTypes({
   types,
 }: {
@@ -8,6 +9,7 @@ export function NavTypes({
     id: string;
     name: string;
     icon: React.ReactNode;
+    count?: number;
     isActive: boolean;
     onSelect: (e: React.MouseEvent) => void;
     onDrag: (e: React.PointerEvent<HTMLElement>) => void;
@@ -28,6 +30,7 @@ export function NavTypes({
               {item.icon}
               <span>{item.name}</span>
             </SidebarMenuButton>
+            {item.count !== undefined && <SidebarMenuBadge className="font-normal text-muted-foreground">{item.count}</SidebarMenuBadge>}
           </SidebarMenuItem>
         ))}
       </SidebarMenu>

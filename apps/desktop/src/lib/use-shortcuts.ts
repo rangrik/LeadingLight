@@ -12,7 +12,8 @@ import { pageOf } from "~/lib/space";
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { openPaper, readPaper } from "~/lib/paper";
 import { closeTab, focusedPage, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
-import { isDesktop } from "~/lib/platform";
+import { isDesktop, useMobile } from "~/lib/platform";
+import { pick } from "~/lib/scope";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
@@ -34,6 +35,7 @@ const TABS: Record<string, (() => void) | undefined> = {
 // browser the page reads the keys itself. ⌃⌥I is the Mac app's global shortcut (capture.rs),
 // which takes the key before the menu sees it; the menu item and a browser's key come through here.
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(key: "inbox" | "feed" | "captures" | "suggestions"): void }) {
+  const mobile = useMobile();
   useEffect(() => {
     const run = (id: string) => {
       if (useStore.getState().view.kind !== "settings") {
@@ -43,6 +45,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       // Tabs and history act on the panes, so not while Settings covers them.
       const tabKey = TABS[id];
       if (tabKey) return useStore.getState().view.kind === "settings" ? undefined : tabKey();
+      // ⌘1–9 pick on the rail (features/project-rail.feature); the Mac menu says rail-3 for ⌘3.
+      if (id.startsWith("rail-")) return useStore.getState().view.kind === "settings" || mobile ? undefined : pick(Number(id.slice(5)));
       switch (id) {
         case "new-page":
           // A new page is made to be written in: Settings goes first.
@@ -99,7 +103,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       if (!accel) return;
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
       const find = (a: string) => SHORTCUTS.find((s) => s.accel === a)?.id;
-      const id = find(accel) ?? (e.ctrlKey && !e.metaKey ? find(accel.replace("Ctrl", "CmdOrCtrl")) : undefined);
+      const rail = /^CmdOrCtrl\+([1-9])$/.exec(accel)?.[1];
+      const id = find(accel) ?? (e.ctrlKey && !e.metaKey ? find(accel.replace("Ctrl", "CmdOrCtrl")) : undefined) ?? (rail && `rail-${rail}`);
       if (!id) return;
       e.preventDefault();
       run(id);
@@ -119,5 +124,5 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       window.removeEventListener("keydown", onKey);
       unlisten?.();
     };
-  }, [actions]);
+  }, [actions, mobile]);
 }

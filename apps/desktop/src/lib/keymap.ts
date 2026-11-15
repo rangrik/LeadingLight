@@ -55,9 +55,10 @@ const TAKEN: Record<string, string> = {
 
 // Why id can't have these keys, or nothing when it can. ⌃ and a letter move the cursor in text.
 export function refuse(id: string, accel: string): string | undefined {
-  const other = SHORTCUTS.find((s) => s.id !== id && s.accel === accel);
+  // A numbered row (⌘1–9 on the rail) holds each of its keys.
+  const other = SHORTCUTS.find((s) => s.id !== id && (s.accel === accel || (s.count && s.accel?.replace("{n}", "") === accel.replace(/[1-9]$/, ""))));
   const keys = other?.keys ?? keysOf(accel);
-  const what = other ? other.label.replace(/…$/, "") : (TAKEN[keys] ?? (/^Ctrl\+[A-Z]$/.test(accel) ? "editing text" : undefined));
+  const what = other ? other.label.replace(/…$/, "").replace(" {n}", "") : (TAKEN[keys] ?? (/^Ctrl\+[A-Z]$/.test(accel) ? "editing text" : undefined));
   return what && `${keys} is already used for ${what}.`;
 }
 
