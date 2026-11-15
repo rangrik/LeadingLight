@@ -970,7 +970,7 @@ so GitHub alone cannot push code into installed apps; losing that key means one 
 hand. No server of ours is involved, and the Vercel key stays out of the build. An iPhone or
 iPad app cannot replace itself, so those update through TestFlight.
 
-## 51. iPhone and iPad builds go to TestFlight from the same release (2026-11-14)
+## 52. iPhone and iPad builds go to TestFlight from the same release (2026-11-14)
 
 They were built on one Mac and pushed over a cable to two registered devices. Now the release
 workflow signs the iOS build with our distribution certificate and an App Store profile,
