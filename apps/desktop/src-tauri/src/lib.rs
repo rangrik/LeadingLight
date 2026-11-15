@@ -22,6 +22,8 @@ mod clis;
 #[cfg(target_os = "macos")]
 mod menu;
 #[cfg(target_os = "macos")]
+mod native_browser;
+#[cfg(target_os = "macos")]
 mod runtime;
 #[cfg(target_os = "macos")]
 mod relay;
@@ -89,8 +91,31 @@ fn menu_bar(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+// The global keys: ⌃⌥I's capture box and ⌃⌥B's browser. Both are set at once, since a change
+// drops every global key the app holds. Another app may hold one; the other still works.
+#[cfg(target_os = "macos")]
+fn global_keys(app: &AppHandle, idea: Option<&str>, browser: Option<&str>) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let keys = app.global_shortcut();
+    keys.unregister_all().map_err(|e| e.to_string())?;
+    let actions: [(Option<&str>, fn(&AppHandle)); 2] = [(idea, capture::toggle), (browser, native_browser::bring)];
+    let mut result = Ok(());
+    for (accel, action) in actions {
+        let Some(accel) = accel else { continue };
+        let set = keys.on_shortcut(accel, move |app, _, event| {
+            if event.state == ShortcutState::Pressed {
+                action(app);
+            }
+        });
+        if let Err(e) = set {
+            result = Err(e.to_string());
+        }
+    }
+    result
+}
+
 // Settings › Shortcuts (lib/keymap.ts): each menu item gets its keys, or none while Settings
-// records new ones. New idea's are also the capture box's global keys.
+// records new ones. New idea's and Browser from anywhere's are also global keys.
 #[cfg(target_os = "macos")]
 #[tauri::command]
 fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Result<(), String> {
@@ -104,7 +129,8 @@ fn shortcuts_set(app: AppHandle, keys: HashMap<String, Option<String>>) -> Resul
             }
         }
     }
-    capture::set_key(&app, keys.get("new-idea").and_then(|a| a.as_deref()))
+    let key = |id: &str| keys.get(id).and_then(|a| a.as_deref());
+    global_keys(&app, key("new-idea"), key("browser-anywhere"))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -195,12 +221,28 @@ pub fn run() {
             voice::image_text,
             browser_menu::browser_menu_focus,
             browser_menu::browser_clipboard,
+            native_browser::native_browser_open,
+            native_browser::native_browser_navigate,
+            native_browser::native_browser_show,
+            native_browser::native_browser_hide,
+            native_browser::native_browser_focus,
+            native_browser::native_browser_close,
+            native_browser::native_browser_freeze,
+            native_browser::native_browser_shot,
+            native_browser::native_browser_eval,
+            native_browser::native_browser_edge,
+            native_browser::native_browser_copied_link,
+            native_browser::native_browser_away,
             shortcuts_set
         ])
         .setup(|app| {
             menu_bar(app)?;
             browser_menu::setup(app.handle())?;
             capture::setup(app.handle())?;
+            // Another app (or a second LeadingLight) may hold the keys; the app still starts without them.
+            if let Err(e) = global_keys(app.handle(), Some("Ctrl+Alt+I"), Some("Ctrl+Alt+B")) {
+                eprintln!("no global key: {e}");
+            }
             runtime::setup(app.handle());
             relay::setup(app.handle());
             Ok(())

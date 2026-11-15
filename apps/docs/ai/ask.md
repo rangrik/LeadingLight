@@ -5,7 +5,7 @@ description: Ask Claude or GPT about a page or a few words, let it change the pa
 
 # Ask Claude about a page
 
-Every page has Claude beside it. Ask about the whole page or about words you select. Claude can read and change the page, find and read your other pages, make new ones, and look things up on the web. It runs through the Claude Code on your Mac, or through Codex for GPT models; see [AI and agents](/ai/) for setup.
+Every page has Claude beside it. Ask about the whole page or about words you select. Claude can read and change the page, rename it, find and read your other pages, make new ones, and look things up on the web. It runs through the Claude Code on your Mac, or through Codex for GPT models; see [AI and agents](/ai/) for setup.
 
 ## Open Ask
 

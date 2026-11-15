@@ -1,0 +1,11 @@
+diff --git a/internal/box/embeddednote.go b/internal/box/embeddednote.go
+index 293cbe5..8309ad2 100644
+--- a/internal/box/embeddednote.go
++++ b/internal/box/embeddednote.go
+@@ -12,5 +12,6 @@ const embeddedNote = "You work inside a project runtime. To hand part of the wor
+ 	"prompts it, runs the check and gives it the failures, at most that many times, as a run that outlives your turn; you hear how it ended. " +
+ 	"For a second opinion, hand the review to another worker. Use these when they help; you choose. " +
+ 	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone. " +
++	"The person can watch that tab live in LeadingLight, under Agents in its browser or from this chat's Browser button. " +
+ 	"The person reads your work in LeadingLight: its leadinglight tools read the project's pages and publish your reports " +
+ 	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."

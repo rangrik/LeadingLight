@@ -8,7 +8,8 @@ import { remoteReady, selectedPair } from "~/lib/remote";
 // which surface has them. Words selected get the ask bar beside them (Shipyard's pattern);
 // a question typed there opens the bar's Ask with it already sent. No words: Ask itself.
 export type Quote = { text: string; from: number; to: number };
-export type AskPage = { id: string; title: () => string; text: () => string };
+// browser: the browser's Ask, whose threads work on tabs, not a note (features/browser-ask.feature).
+export type AskPage = { id: string; title: () => string; text: () => string; browser?: true };
 export type PageRef = { id: string; title: string };
 type State = {
   quote: Quote | null;
@@ -31,14 +32,27 @@ const set = (patch: Partial<State>) => {
   listeners.forEach((l) => l());
 };
 
+// While the browser is in front, Ask is about it; the note behind comes back when it goes.
+let behind: { page: AskPage | null; editor: BlockEditorHandle | null } | null = null;
+export function askAboutBrowser(page: AskPage | null) {
+  if (page && !behind) behind = { page: state.page, editor };
+  if (!page && !behind) return;
+  const back = page ? null : behind;
+  if (!page) behind = null;
+  editor = back?.editor ?? null;
+  set({ page: page ?? back?.page ?? null, quote: null, bar: null, askNow: null });
+}
+
 // Ask stays open as the page in front changes, and follows it.
 export function registerPage(page: AskPage, handle: BlockEditorHandle | null) {
+  if (behind) return void (behind = { page, editor: handle });
   if (state.page?.id === page.id && editor === handle) return; // already in front
   editor = handle;
   set({ page, quote: null, bar: null, askNow: null });
 }
 
 export function unregisterPage(id: string) {
+  if (behind?.page?.id === id) return void (behind = { page: null, editor: null });
   if (state.page?.id !== id) return;
   editor = null;
   set({ page: null, quote: null, bar: null, askNow: null });

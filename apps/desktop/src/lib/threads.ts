@@ -21,8 +21,9 @@ export function turnContent(items: Item[]) {
   return { answer, work: body.filter((i) => !answers.has(i)) };
 }
 
-// A change waiting for the person, while its turn waits on it.
-export type Approval = { requestId: string | number; tool: string; input: Record<string, unknown>; toolUseId: string };
+// A change waiting for the person, while its turn waits on it. grant: what "Always allow" adds
+// to the thread's allowed list, when not the tool (a browser site, "site:fernhill.app").
+export type Approval = { requestId: string | number; tool: string; input: Record<string, unknown>; toolUseId: string; grant?: string };
 
 export type Thread = {
   id: string;
@@ -36,6 +37,8 @@ export type Thread = {
   codexId?: string;
   codexSeen?: Seen;
   allowed: string[];
+  // The browser's tabs this thread may work in; unset, the tab in view.
+  tabs?: string[];
   executionTarget?: string;
   remoteRun?: { id: string; target: string; started: number };
   stopping?: boolean;

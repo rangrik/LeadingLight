@@ -106,12 +106,16 @@ export const FEED_VIEW = "feed:";
 export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
 export const CALENDAR_VIEW = "calendar:";
-const VIEWS = [CALENDAR_VIEW,FEED_VIEW, INBOX_VIEW, ASK_VIEW];
+// Mail home, and the look (one mail, then the rest, then the end) as its own page, so the pane's Back works.
+export const MAIL_VIEW = "mail:";
+export const MAIL_LOOK = "mail:look";
+const VIEWS = [CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW];
 // An empty view is a tab with no page yet.
-export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(WORK_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
+export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(WORK_VIEW) && !view.startsWith(BROWSER_VIEW) && !view.startsWith(MAIL_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
+  if (view.startsWith(MAIL_VIEW)) return { title: "Mail" };
   if (view === CALENDAR_VIEW) return { title: "Calendar" };
   if (view === INBOX_VIEW) return { title: "Captures" };
   if (view === FEED_VIEW) return { title: "Inbox" };

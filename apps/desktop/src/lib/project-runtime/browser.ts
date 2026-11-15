@@ -5,7 +5,7 @@ import { ask } from "~/lib/project-runtime/transport";
 
 export type BrowserTab = { name: string; url?: string; title?: string; busy?: boolean };
 export type BrowserState = {
-  running: boolean; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; zoom: number;
+  running: boolean; shared?: boolean; url: string; title: string; loading: boolean; canGoBack: boolean; canGoForward: boolean; zoom: number;
   error?: string; viewport?: { width: number; height: number; scale: number };
   refusedHosts?: string[];
   dialog?: { type: string; message: string; defaultPrompt?: string };

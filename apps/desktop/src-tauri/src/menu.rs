@@ -31,6 +31,9 @@ struct Shortcut {
     count: Option<u32>,
     #[serde(default)]
     sep: bool,
+    // Only the browser space's: it gets its keys while the space is in front (lib/keymap.ts).
+    #[serde(default)]
+    browser: bool,
 }
 
 // The one item that is the window's, not the webview's: Close window. Its
@@ -59,6 +62,7 @@ fn fill<R: Runtime>(
             sub.append(&PredefinedMenuItem::separator(app)?)?;
         }
         first = false;
+        let key = |n: &str| (!s.browser).then(|| accel.replace("{n}", n));
         match s.count {
             Some(n) => {
                 for i in 1..=n {
@@ -68,7 +72,7 @@ fn fill<R: Runtime>(
                         format!("{}-{n}", s.id),
                         s.label.replace("{n}", &n),
                         true,
-                        Some(accel.replace("{n}", &n)),
+                        key(&n),
                     )?;
                     sub.append(&item)?;
                 }
@@ -78,7 +82,7 @@ fn fill<R: Runtime>(
                 s.id.as_str(),
                 &s.label,
                 true,
-                Some(accel),
+                key(""),
             )?)?,
         }
     }

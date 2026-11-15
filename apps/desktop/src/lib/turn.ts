@@ -3,11 +3,13 @@ import { type AskRequest, ask, cancel, type Line, reply } from "~/lib/agent";
 import type { Agent } from "~/lib/agents";
 import { type Access, aiPrefs, isClaude } from "~/lib/ai-prefs";
 import type { AskPage, Quote } from "~/lib/ask";
-import { buildPrompt, type NoteText, type Seen, SYSTEM } from "~/lib/ask-prompt";
+import { BROWSER, buildPrompt, type NoteText, type Seen, SYSTEM } from "~/lib/ask-prompt";
+import { space as browserSpace } from "~/lib/browser-space";
+import { endPageWork, PAGE_NAMES, type PageAsk, type PageContext } from "~/lib/page-tools";
 import { effortFor } from "~/lib/codex";
 import { stopStarting } from "~/lib/stop-starting";
 import { codexFailure, codexFailureMessage } from "~/lib/codex-failure";
-import { GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
+import { GPT_BROWSER_TOOLS, GPT_TOOLS, runTool, serve } from "~/lib/note-tools";
 import { type Item, patchThread, type Thread, threadOf } from "~/lib/threads";
 import { action } from "~/lib/history-types";
 import { isDesktop, isMobile } from "~/lib/platform";
@@ -17,7 +19,7 @@ import { remoteRunCurrent, remoteTarget } from "~/lib/remote";
 // their lines become the thread's items, and their requests are answered, page tools by
 // lib/note-tools.ts and approvals by the person (answer()).
 
-const CHANGES = /^(mcp__notes__)?(edit_page|insert_text|write_page|create_page|calendar_create|calendar_update|calendar_delete)$/;
+const CHANGES = /^(mcp__notes__)?(edit_page|insert_text|write_page|create_page|rename_page|calendar_create|calendar_update|calendar_delete|click|type|go_to)$/;
 const PLANNED = "The person now sees your plan, with a button to go ahead. Stop here and wait for them.";
 const PLANNING = "Plan mode: change nothing yet. Write the plan, then call ExitPlanMode.";
 const GPT_PLAN = "Plan mode: change nothing yet. Read what you need, write a short plan, and stop; the person will say when to go ahead.";
@@ -44,6 +46,11 @@ type Turn = {
   starting?: Promise<void>;
   remote: boolean;
   pending?: (allow: boolean) => Promise<void>;
+  // A browser thread's turn (lib/page-tools.ts): its system prompt has the browser's part, and a
+  // page action waiting on the person resolves here.
+  browser: boolean;
+  system: string;
+  asking?: (choice: "once" | "thread" | "decline") => void;
   gpt?: { prompt: string; fresh: string; freshSeen: Seen; model: string; effort: string; resume?: string; thread?: string; turn?: string; failure?: ReturnType<typeof codexFailure> };
 };
 const turns = new Map<string, Turn>();
@@ -69,7 +76,10 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   // A mentioned agent's model wins, and with it its provider.
   const model = o.agent?.model ?? prefs.model;
   const provider: Provider = isClaude(model) ? "claude" : "codex";
-  const turn: Turn = { model, calendarOwner: cloudState().user?.id ?? null, pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false, remote: target !== "local" };
+  const browser = !!page.browser;
+  const turn: Turn = { model, calendarOwner: cloudState().user?.id ?? null, pageId: page.id, threadId, provider, access: prefs.access, plan: prefs.plan, planned: false, declined: false, remote: target !== "local", browser, system: browser ? `${SYSTEM}\n${BROWSER}` : SYSTEM };
+  // A new browser thread works on the tab in view.
+  const tabs = browser ? (th.tabs ?? [browserSpace.get().selected].filter(Boolean)) : undefined;
   turns.set(id, turn);
   // The answer is about the words quoted with it; a follow-up without a quote is about the
   // thread, so Replace goes away until words are quoted again.
@@ -83,6 +93,7 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
     quote,
     note: undefined,
     title: t.title || question,
+    ...(tabs && { tabs }),
     items: [...t.items, { kind: "user", text: question, ...(quote && { quote: quote.text }) }],
   }), true);
   const note = { id: page.id, title: page.title(), text: page.text() };
@@ -90,7 +101,8 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
   if (!turns.has(id) || turn.stopped) return;
   if (!desktop && target !== remoteTarget()) return finish(id, "failed", "The agent connection changed while the question was being prepared. Nothing was sent. Ask again on the selected Mac.");
   const s = changedTarget ? { id: undefined, seen: {} } : session(th, provider);
-  const input = { note, pages, agent: o.agent?.prompt ?? null, quote: quote?.text ?? null, question };
+  const tabText = tabs?.flatMap((id) => browserSpace.get().tabs.filter((x) => x.id === id).map((x) => ({ id, title: x.title, url: x.url })));
+  const input = { note, pages, agent: o.agent?.prompt ?? null, quote: quote?.text ?? null, question, tabs: tabText };
   const { prompt, seen } = buildPrompt({ seen: s.seen, ...input });
   turn.seen = seen;
   const effort = effortFor(model, prefs.effort);
@@ -99,7 +111,7 @@ export async function sendTurn(o: { page: AskPage; threadId: string; question: s
     const planned = (p: string) => (prefs.plan ? `${GPT_PLAN}\n\n${p}` : p);
     turn.gpt = { prompt: planned(prompt), fresh: planned(fresh.prompt), freshSeen: fresh.seen, model, effort, resume: s.id };
   }
-  const req: AskRequest = { id, prompt, system: SYSTEM, model, effort, access: prefs.plan ? "plan" : prefs.access, resume: s.id, provider };
+  const req: AskRequest = { id, prompt, system: turn.system, model, effort, access: prefs.plan ? "plan" : prefs.access, resume: s.id, provider };
   turn.dispatched = true;
   turn.starting = ask(req, (e) => {
     if (!turns.has(id) || turn.stopped) return;
@@ -213,7 +225,7 @@ async function control(id: string, t: Turn, line: Line) {
   const r = line.request ?? {};
   const respond = (response: object) => canWork(id, t) ? reply(id, { type: "control_response", response: { subtype: "success", request_id: line.request_id, response } }) : Promise.resolve();
   if (r.subtype === "mcp_message" && t.plan && r.message?.method === "tools/call" && CHANGES.test(r.message.params?.name ?? "")) return respond({ mcp_response: { jsonrpc: "2.0", id: r.message.id, result: { isError: true, content: [{ type: "text", text: PLANNING }] } } });
-  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message, { ...action("Claude edited page", { kind: "agent", name: "Claude", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner) });
+  if (r.subtype === "mcp_message") return respond({ mcp_response: await serve(t.pageId, r.message, { ...action("Claude edited page", { kind: "agent", name: "Claude", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner, pageContext(id, t)) });
   if (r.subtype !== "can_use_tool") return reply(id, { type: "control_response", response: { subtype: "error", request_id: line.request_id, error: "Not supported here" } });
   if (r.tool_name === "ExitPlanMode") {
     t.planned = true;
@@ -229,6 +241,20 @@ function wait(t: Turn, approval: NonNullable<Thread["approval"]>) {
   patchThread(t.pageId, t.threadId, (th) => ({ ...th, approval }));
 }
 
+// What the page tools get for a browser thread's turn; the tabs are read at each call.
+const pageContext = (id: string, t: Turn): PageContext | undefined =>
+  t.browser
+    ? {
+        turn: id, thread: t.threadId, tabs: threadOf(t.pageId, t.threadId)?.tabs ?? [],
+        allowed: () => threadOf(t.pageId, t.threadId)?.allowed ?? [],
+        ask: (a: PageAsk) => new Promise((resolve) => {
+          t.asking = resolve;
+          wait(t, { requestId: `page-${crypto.randomUUID()}`, toolUseId: "", ...a });
+        }),
+        who: t.provider === "codex" ? "GPT" : "Claude", pictures: t.provider === "claude", canWork: () => canWork(id, t),
+      }
+    : undefined;
+
 // GPT: the app's own requests are answered in order (initialize, the thread, the turn); Codex's
 // requests are page tools, which the app runs, gating changes itself, or else declined.
 function onCodex(id: string, line: Line) {
@@ -239,7 +265,7 @@ function onCodex(id: string, line: Line) {
   const thread = () =>
     g.resume
       ? send("thread/resume", 1, { threadId: g.resume, approvalPolicy: "never", sandbox: "read-only" })
-      : send("thread/start", 1, { model: g.model, approvalPolicy: "never", sandbox: "read-only", developerInstructions: SYSTEM, dynamicTools: GPT_TOOLS });
+      : send("thread/start", 1, { model: g.model, approvalPolicy: "never", sandbox: "read-only", developerInstructions: t.system, dynamicTools: t.browser ? GPT_BROWSER_TOOLS : GPT_TOOLS });
   const m: string | undefined = line.method;
   const p = line.params ?? {};
   if (!m) {
@@ -317,12 +343,13 @@ function codexItem(list: Item[], item: Line, done: boolean): Item[] {
 // A page tool GPT asked for: run at once, or once the person allows it.
 async function toolCall(id: string, t: Turn, rid: string | number, name: string, input: Record<string, string>, callId: string) {
   const respond = async (allow: boolean, text = DECLINED) => {
-    const r = allow ? await runTool(t.pageId, name, input, { ...action("GPT edited page", { kind: "agent", name: "GPT", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
-    if (canWork(id, t)) await reply(id, { id: rid, result: { contentItems: r.content.map((c) => ({ type: "inputText", text: c.text })), success: !r.isError } });
+    const r = allow ? await runTool(t.pageId, name, input, { ...action("GPT edited page", { kind: "agent", name: "GPT", model: t.model, run: t.threadId }), action: `turn:${id}` }, () => canWork(id, t), t.calendarOwner, pageContext(id, t)).catch((e: unknown) => ({ content: [{ type: "text" as const, text: String(e) }], isError: true })) : { content: [{ type: "text" as const, text }], isError: true };
+    if (canWork(id, t)) await reply(id, { id: rid, result: { contentItems: r.content.flatMap((c) => (c.type === "text" ? [{ type: "inputText", text: c.text }] : [])), success: !r.isError } });
   };
   if (t.plan && CHANGES.test(name)) return respond(false, GPT_PLAN);
-  // Codex has no classifier for the app's tools, so Approve for me asks too.
-  if (!CHANGES.test(name) || t.access === "full" || threadOf(t.pageId, t.threadId)?.allowed.includes(name)) return respond(true);
+  // Codex has no classifier for the app's tools, so Approve for me asks too. The page tools ask
+  // for themselves (lib/page-tools.ts).
+  if (!CHANGES.test(name) || PAGE_NAMES.has(name) || t.access === "full" || threadOf(t.pageId, t.threadId)?.allowed.includes(name)) return respond(true);
   t.pending = respond;
   wait(t, { requestId: rid, tool: name, input, toolUseId: callId });
 }
@@ -334,10 +361,15 @@ export async function answer(pageId: string, threadId: string, choice: "once" | 
   const t = th?.busy ? turns.get(th.busy) : undefined;
   if (!th?.busy || !a || !t || t.answering || t.stopped) return;
   const busy = th.busy;
+  // A page action waiting in the app: "Not now" is told to the agent, and the turn goes on.
+  const page = t.asking;
   t.answering = true;
   patchThread(pageId, threadId, (x) => ({ ...x, note: 'Sending your decision…' }));
   try {
-    if (t.provider === "codex") {
+    if (page) {
+      t.asking = undefined;
+      page(choice);
+    } else if (t.provider === "codex") {
       await t.pending?.(choice !== "decline");
       if (choice === "decline" && t.gpt?.thread && t.gpt.turn) await reply(busy, { method: "turn/interrupt", id: 3, params: { threadId: t.gpt.thread, turnId: t.gpt.turn } });
       t.pending = undefined;
@@ -351,7 +383,7 @@ export async function answer(pageId: string, threadId: string, choice: "once" | 
     return;
   } finally { t.answering = false; }
   if (!canWork(busy, t)) return;
-  t.declined ||= choice === "decline";
+  t.declined ||= !page && choice === "decline";
   // The clock moves on by the wait, so the turn's time is the agent's alone.
   const waited = Date.now() - (t.asked ?? Date.now());
   t.asked = undefined;
@@ -359,7 +391,7 @@ export async function answer(pageId: string, threadId: string, choice: "once" | 
     ...x,
     started: (x.started ?? Date.now()) + waited,
     approval: undefined, note: undefined,
-    allowed: choice === "thread" ? [...x.allowed, a.tool] : x.allowed,
+    allowed: choice === "thread" ? [...x.allowed, a.grant ?? a.tool] : x.allowed,
     items: choice === "decline" ? x.items.map((i) => (i.kind === "tool" && i.id === a.toolUseId ? { ...i, status: "declined" } : i)) : x.items,
   }));
 }
@@ -368,7 +400,7 @@ export async function stopTurn(pageId: string, threadId: string) {
   const thread = threadOf(pageId, threadId), busy = thread?.busy;
   if (!busy || thread.stopping) return;
   const turn = turns.get(busy);
-  if (turn) { turn.stopped = true; turn.pending = undefined; }
+  if (turn) { turn.stopped = true; turn.pending = undefined; turn.asking?.("decline"); turn.asking = undefined; }
   patchThread(pageId, threadId, (t) => ({ ...t, stopping: true, approval: undefined, note: 'Stopping…' }));
   if (turn && !turn.dispatched) return finish(busy, "stopped");
   try {
@@ -385,6 +417,8 @@ function finish(id: string, how: "done" | "stopped" | "failed", error?: string, 
   const t = turns.get(id);
   if (!t) return;
   turns.delete(id);
+  t.asking?.("decline");
+  endPageWork(id);
   const now = Date.now();
   const kept = (th: Thread) => {
     const seen = how === "done" && t.seen;

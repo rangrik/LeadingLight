@@ -172,7 +172,7 @@ was made and edited. Decisions 21, 22, 24, 42, 43.
 [Project 6 — One door](PROJECT-6.md): nine of the UX review's eighteen options in one branch (one
 Inbox, a project rail, Resume rows, Today's strip, the reading layout, Recall, the answering card,
 Review mode, search with content), and the designs for what follows: a quiet pass, a Work view with
-worktrees, Studio, and other machines. Decision 53. On `claude/ux-unified`, not yet in main.
+worktrees, Studio, and other machines. Decisions 56 and 57. On `claude/ux-unified`, not yet in main.
 
 ## Workspace history and connected devices (2026-10-29)
 

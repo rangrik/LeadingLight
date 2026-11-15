@@ -3,10 +3,14 @@
 // skips it), our Resume rows, NavProjects as Pinned (while a page is) and Recent above our Types,
 // and the plans' usage as the footer (NavUser's place), a Browser entry, and Search under Today with
 // its key. Narrowed to a project on the rail, its name under the logo and its Overview, Chat and
-// Work on top (features/project-rail.feature, work-view.feature).
+// Work on top (features/project-rail.feature, work-view.feature). In the browser space its content
+// is the browser's (browser-sidebar.tsx) and the header switches back to Notes, as sidebar-07's
+// team switcher does; the notes stay mounted under it.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, GitBranch, Globe, MessageSquareText, Search, Settings } from "lucide-react";
+import { CalendarDays, ChevronsUpDown, GitBranch, Globe, Mail, MessageSquareText, Search, Settings } from "lucide-react";
+import type { ReactNode } from "react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
+import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
 import {
   Sidebar,
   SidebarContent,
@@ -24,10 +28,11 @@ import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { toggleSearch } from "~/components/search-panel";
-import { useKeysFor } from "~/lib/keymap";
 import { UsageButton } from "~/components/usage-button";
+import { enter, leave, space } from "~/lib/browser-space";
+import { useKeysFor } from "~/lib/keymap";
 import { openFrom, openBeside } from "~/lib/panes";
-import { CALENDAR_VIEW, browserView } from "~/lib/space";
+import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavResume } from "./nav-resume";
 import { NavTypes } from "./nav-types";
@@ -46,21 +51,47 @@ function Mark({ className }: { className?: string }) {
   );
 }
 
-export function AppSidebarHeader({ subtitle }: { subtitle: string }) {
+// Notes or Browser, from the browser's header.
+function SpaceSwitch() {
+  const keys = useKeysFor();
+  return (
+    <MenuPopup align="start" className="min-w-(--anchor-width)">
+      <MenuRadioGroup onValueChange={(v) => (v === "notes" ? leave() : enter())} value={space.get().front ? "browser" : "notes"}>
+        <MenuRadioItem value="notes">Notes<MenuShortcut>{keys("browser")}</MenuShortcut></MenuRadioItem>
+        <MenuRadioItem value="browser">Browser</MenuRadioItem>
+      </MenuRadioGroup>
+    </MenuPopup>
+  );
+}
+
+export function AppSidebarHeader({ subtitle, switcher }: { subtitle: string; switcher?: boolean }) {
   const mobile = useMobile();
+  const brand: ReactNode = (
+    <>
+      <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+        <Mark className="size-8" />
+      </div>
+      <div className="grid flex-1 text-left text-sm leading-tight">
+        <span className="truncate font-medium">LeadingLight</span>
+        <span className="truncate text-xs">{subtitle}</span>
+      </div>
+      {switcher && <ChevronsUpDown className="ms-auto size-3.5 text-muted-foreground" />}
+    </>
+  );
   return (
     <SidebarHeader className="pt-[calc(var(--traffic-top)_+_0.5rem)]" data-tauri-drag-region={!mobile || undefined}>
       <SidebarMenu>
         <SidebarMenuItem>
-          <SidebarMenuButton render={<a href="#" />} size="lg">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <Mark className="size-8" />
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">LeadingLight</span>
-              <span className="truncate text-xs">{subtitle}</span>
-            </div>
-          </SidebarMenuButton>
+          {switcher ? (
+            <Menu>
+              <MenuTrigger render={<SidebarMenuButton aria-label="Switch between Notes and Browser" size="lg" />}>{brand}</MenuTrigger>
+              <SpaceSwitch />
+            </Menu>
+          ) : (
+            <SidebarMenuButton render={<a href="#" />} size="lg">
+              {brand}
+            </SidebarMenuButton>
+          )}
         </SidebarMenuItem>
       </SidebarMenu>
     </SidebarHeader>
@@ -77,9 +108,13 @@ export function AppSidebar({
   onCreate,
   onToday,
   todayActive,
+  browser,
+  native,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   project?: { id: string; name: string; icon: React.ReactNode; overview: Row; chat?: Row; work?: Row; has: (p: ObjectSummary) => boolean };
+  browser?: ReactNode;
+  native: boolean;
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
@@ -97,7 +132,9 @@ export function AppSidebar({
   const navigable = (items: typeof pages) => items.map((p) => ({ ...p, onSelect: select(p.onSelect), children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect) })) }));
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant={mobile ? "sidebar" : "inset"} {...props}>
-      <AppSidebarHeader subtitle={project?.name ?? "Notes"} />
+      <AppSidebarHeader subtitle={browser ? "Browser" : (project?.name ?? "Notes")} switcher={!!browser} />
+      {browser}
+      <div className={browser ? "hidden" : "contents"}>
       {/* Keyed by the rail's pick, so another project's sidebar starts at its top. */}
       <SidebarContent key={project?.id ?? "all"}>
         {project && (
@@ -144,8 +181,9 @@ export function AppSidebar({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
-              <SidebarMenuButton onClick={select(() => openBeside(browserView("")))}>
+              <SidebarMenuButton onClick={select(() => (native ? enter() : openBeside(browserView(""))))}>
                 <Globe className="size-4" />
                 <span>Browser</span>
               </SidebarMenuButton>
@@ -171,6 +209,7 @@ export function AppSidebar({
         <SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={select(() => openSettings())}><Settings /><span>Settings</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>
       </SidebarFooter>
       {!mobile && <UsageButton />}
+      </div>
     </Sidebar>
   );
 }

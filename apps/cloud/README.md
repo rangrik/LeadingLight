@@ -147,3 +147,41 @@ The signed iOS app needs `aps-environment`; its actual signature chooses the APN
 Ad Hoc installations on registered personal devices support production push without App Store review.
 Development builds require a separately enabled sandbox key/environment; do not register their tokens
 against a production-only key. Missing configuration leaves in-app requests available and reports an error.
+
+## Gmail
+
+Gmail uses its own web OAuth client (`GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`) and a stable
+32-byte base64 `GMAIL_TOKEN_KEY`. Use a separate Google Cloud project/consent setup while the
+Calendar application's verification is pending; do not add Gmail scopes to that pending review.
+Enable Gmail API and register `https://leadinglight.app/api/gmail/callback` (or the exact local
+`APP_ORIGIN` equivalent). Request `openid`, `email` and
+`https://www.googleapis.com/auth/gmail.modify`; the callback refuses a grant without it. Run the
+additive migration for `gmail_accounts` and `gmail_oauth` before deploying. Never place
+credentials in `VITE_` variables.
+
+`gmail.modify` is a restricted scope. Complete Google's applicable verification and security
+assessment before public rollout, including that the Mac app sends new mail's text to the
+person's own model provider (decision 54). In testing, list the allowed Google test users;
+testing grants can expire. Gmail is not yet configured or verified in production.
+See [Google's scope guidance](https://developers.google.com/workspace/gmail/api/auth/scopes).
+
+The same workspace session or scoped native credential authorizes every Gmail route. Google
+callbacks require the matching browser workspace, one-use ten-minute state and PKCE. Grants use
+AES-GCM with a Gmail-specific owner/account binding and key. Disconnect deletes only this
+workspace's Gmail grant. It does not revoke Calendar or Google's entire app grant. Tokens never
+reach clients.
+
+Routes, all `POST` with `account`: `messages` (25 summaries a page, each with its label ids and
+whether it has `List-Unsubscribe`; `after` in epoch seconds lists `in:inbox` since then),
+`message`, `thread` (a conversation as text, oldest first, at most 30 messages and about 3 MB),
+`counts` (the inbox total), `modify` (adds or removes only `INBOX` and `UNREAD` on a
+conversation) and `send` (`{ id, text }`: a plain-text reply of at most 20,000 characters to
+the mail `id`; the service takes the recipient from its `Reply-To` or `From`, sets `Re:`,
+`In-Reply-To`, `References` and the thread, and sends from that account). Nothing trashes,
+deletes or marks spam. Mail is kept only in request and app memory; none is added to the
+database or note journal. This is not end-to-end encrypted transport. Do not log tokens, email
+content or search terms. Attachments open in Gmail.
+
+Validate with `TEST_DATABASE_URL=... node --test src/gmail.test.mjs` and desktop
+`QA_PORT=... pnpm exec playwright test -c qa/playwright.config.ts --project=qa gmail.spec.ts`.
+The tests use synthetic Google responses; live Google consent and native acceptance are separate.

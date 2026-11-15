@@ -9,14 +9,101 @@ LeadingLight has a browser of its own, beside your notes. You and your agents us
 you can browse by hand, watch an agent click through a site live, hand it the exact tab you are
 looking at, and comment on parts of a page for it to fix.
 
+Your own tabs browse public websites without approving each site or its images and scripts.
+Agent tabs keep a separate site allowlist. Private network addresses and unrelated local ports
+remain blocked. **Agent site permissions** in the Browser menu changes the agent allowlist.
+
 The browser runs on your Mac, with its own profile, separate from Safari or Chrome. Websites never
 load inside your notes, and nothing of the browser's is written into your project folders.
 
-## Open the browser
+## The browser in the Mac app
 
-- Press **Browser** in the sidebar. The browser opens beside your notes. No project is needed.
+In the Mac app the browser is a place of its own. Press **Browser** in the sidebar, or
+<kbd>⌥⌘B</kbd>. The sidebar then shows **Browser** under LeadingLight, a search field,
+**Pinned**, your **Tabs** and **Agents**, with **Saved**, **History** and **Settings** at the
+bottom. The tab you left is in view; with no tabs, the command bar opens for an address. To go back to your notes, press <kbd>⌥⌘B</kbd> again, or click LeadingLight at the top
+and choose **Notes**. Your notes are as you left them, and your tabs stay open for next time.
+
+Your pages are real Safari pages (WebKit), sharp at your screen's resolution, with their own
+sign-ins, apart from Safari's and from the notes. Websites can't reach the app or your notes.
+
+- **Open a page.** Press <kbd>⌘T</kbd> (or **+** beside Tabs, or the search field). A bar opens
+  in the middle of the window: type an address, or words to search for, and press <kbd>↩</kbd>.
+  With nothing typed it offers a link you copied, your open tabs, pages you saved lately and
+  your history. Choosing an open tab shows it rather than opening a copy.
+- **Go somewhere in this tab.** Click the address in the middle of the toolbar, or press
+  <kbd>⌘L</kbd>. The full address is selected; what you type opens in this tab.
+- **The address** shows the site in full colour and the rest of the address quieter. A thin line
+  along its bottom shows a page loading; **Reload** becomes **Stop** meanwhile. "Not secure" marks
+  a site without https. A page that can't be reached says why, with **Try again**.
+- **Tabs.** Click a row to show its page, just as you left it (a video keeps playing). Hover a row
+  for its **×**. Right-click a row to **Pin** it, copy its link or close it. A link that opens a new
+  window opens in a new tab after its own; <kbd>⌘</kbd>-click a link to open it in a tab behind.
+- **Pinned** sites sit as tiles above your tabs, and stay after you close their tab or restart.
+  Click a tile to show its tab, or open it again. Right-click a tile to **Unpin** it.
+- **Save** (the bookmark in the toolbar, or <kbd>⌘D</kbd>) adds the page to **Saved**; the
+  address says "Saved" for a moment and the icon fills. Press it again to stop saving it.
+  **Saved** and **History** in the sidebar list your pages in the page area.
+- **Agents** lists the browsers your agents work in, with a dot while one works. Click one to watch
+  its page; the address says "Agent's own browser". Agents' browsers never share cookies, tabs or
+  sign-ins with yours or with each other's.
+- When the app quits, your tabs, their order, the tab you were on and your pinned sites come back
+  next time, and you stay signed in.
+
+### Ask on a page
+
+Press **Ask** (the sparkles in the toolbar) or <kbd>⌘J</kbd>. The same Ask as in your notes opens
+at the right and the page narrows to make room. The tab is attached above the message box, with
+**Add a tab** to attach another open tab, and **×** on a tab to take it away. With no thread yet it
+reads "What should we do with" and the page's name, with "Claude can read this page. It asks before
+it clicks, types or leaves the site." and two suggestions to start from.
+
+- **Reading never asks.** Claude reads an attached tab's text, its links, buttons and fields, and
+  the words you selected, and can look at a picture of it.
+- **Acting asks first.** Before Claude clicks, types or opens another address, a card asks: "Let
+  Claude click on fernhill.app?", with what it would press or type and why. The thing it wants to
+  press is outlined in the page with "Claude wants to press this". **Allow once** lets it go
+  ahead; **Always allow on** the site lets it act there without asking for the rest of this
+  thread; **Not now** tells Claude no, and the page stays as it was.
+- While Claude works in a tab, the tab's row shows a sparkle, the address says "Claude is working
+  in this tab" (or "Claude is waiting for your OK") with **Stop**, and the page has a blue edge.
+- Claude never types into a password field and never opens a `javascript:`, `data:` or `file:`
+  address. Whatever you allowed before, it asks again before signing in, paying or sending.
+  A page's words reach Claude as data, never as instructions.
+- Its answers can land in your notes: "put the plans as a table in my Pricing research note"
+  adds them to that note, even when it isn't open, and a card shows the note with **Open**.
+  **Save as a new note** keeps an answer as a note of its own.
+
+With a GPT model the same works, except pictures of a tab, which only Claude takes.
+
+From any app, <kbd>⌃⌥B</kbd> brings LeadingLight up in the browser, ready to type an address.
+Press it again to put LeadingLight away and go back to the app you were in.
+
+| Key | What it does in the browser |
+| --- | --- |
+| <kbd>⌘T</kbd> | Open anything in a new tab |
+| <kbd>⌘L</kbd> | Go somewhere in this tab |
+| <kbd>⌘W</kbd> <kbd>⇧⌘T</kbd> | Close the tab, bring it back |
+| <kbd>⌘1</kbd>–<kbd>⌘9</kbd>, <kbd>⌃⇥</kbd> | Go to a tab by its place, or the next one |
+| <kbd>⌘R</kbd>, <kbd>⌘[</kbd> <kbd>⌘]</kbd> | Reload, Back and Forward |
+| <kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd> | Zoom the page |
+| <kbd>⌘D</kbd> | Save the page, or stop saving it |
+| <kbd>⌘&#92;</kbd> | Hide or show the sidebar |
+| <kbd>⌥⌘B</kbd> | Back to your notes |
+| <kbd>⌃⌥B</kbd> | The browser from any app, or away again |
+
+Copy, Paste, Cut, Select All and Undo act on whatever has the keyboard: the page, or your note.
+Settings › Shortcuts changes these keys like the others.
+
+The rest of this page is the streamed browser: agents' own tabs beside a project chat, and the
+browser in a web browser.
+
+## Open the streamed browser
+
 - In a [project chat](/ai/project-chat), press **Browser** in the chat's header. The browser
   opens beside the chat, for that project's folder.
+- Outside the Mac app, press **Browser** in the sidebar. The browser opens beside your notes. No
+  project is needed.
 
 A new browser shows an address field and **New tab**. No website opens until you enter an address.
 In a narrow window, the active pane fills the page area; its sidebar button keeps navigation within reach.
@@ -29,6 +116,7 @@ Type in **Address** ("Search or enter address") and press <kbd>↩</kbd>.
 - Words that aren't an address open a DuckDuckGo search for them.
 - As you type, pages from your history that match show below the field. Choose one with the
   arrow keys and <kbd>↩</kbd>, or press <kbd>esc</kbd> to dismiss them.
+- Press <kbd>esc</kbd> again to cancel an unfinished address and restore the current page's address.
 
 **Back**, **Forward**, **Reload** and **Stop loading** sit beside the address. Following a link
 updates the address and title. A slow page can always be stopped, and a page that fails to load
@@ -52,6 +140,8 @@ another browser behind your back.
 
 Click, type, paste, select, scroll and drag in the page as you would in any browser. Right-click
 for **Copy selection**, **Cut selection**, **Paste text** and **Select all**.
+Resizing pauses clicks until the page fits; typing continues in the focused field. **Focus page** in the
+**Browser menu** also returns keyboard control to the page.
 
 - **Dialogs.** When a page shows an alert, a confirm or a prompt, the browser shows "This page
   says" with the message and **OK** or **Cancel** (and a field for a prompt).
@@ -64,6 +154,7 @@ for **Copy selection**, **Cut selection**, **Paste text** and **Select all**.
 The tab strip shows your own tabs and any agent's tabs, which are labelled **Agent**.
 
 - **New browser tab** (the **+** button) opens a tab of your own.
+- Tabs keep their order while pages load. Close one with its **×** button or a middle-click.
 - <kbd>⌘</kbd>-click or middle-click a link to open it in another tab.
 - Closing your last tab shows a new-tab view.
 - **Reopen closed tab** in the **Browser menu** brings back the last tab you closed.
@@ -109,7 +200,7 @@ From the **Browser menu**:
   and you can scroll across.
 - **Phone viewport** and **Desktop viewport**: show the page at that size. You and the agent both
   see that layout. The size stays fixed until you choose **Use pane size**, which makes the page
-  follow the pane's width again. The current size shows at the bottom of the browser.
+  follow the pane's width again. The current size shows beside **Use pane size** in the menu.
 
 ## Clear browsing data
 
@@ -143,7 +234,9 @@ Reading these doesn't take anything away from the agent: it still sees the same 
 ## Full view and keys
 
 Press **Enter full view** (the arrows at the end of the tab strip) to give the browser the whole
-window. **Return to split view**, or <kbd>esc</kbd>, brings it back, with the same tab and chat open.
+window. **Return to split view** brings it back, with the same tab and chat open.
+When the page has focus, <kbd>esc</kbd> goes to the website, for example to dismiss its popup.
+In the browser toolbar, <kbd>esc</kbd> closes an open browser tool or returns to split view.
 
 While the browser has the focus, these keys act on the browser, not on your note tabs:
 
@@ -184,12 +277,17 @@ You can click and type in the agent's tab too: you and the agent share the same 
 1. Open the page you want help with in one of your own tabs.
 2. Press **Ask about page** (the speech bubbles beside the address).
 
-The chat opens with that tab attached above the message box. Your next message names that exact tab,
-and the agent can read and use it with its browser tools. You can remove the attachment before
-sending. The tab goes only to that chat: switching to another chat doesn't share it.
+The chat opens with that tab attached above the message box. Sending your message shares the tab
+with that chat for 30 minutes, on the current site. Each message with the page attached renews
+access. The agent can read and act on that page, including its signed-in state.
 
-**Copy agent instructions** in the **Browser menu** copies text that names this workspace and tab,
-to paste to an agent yourself.
+Remove the attachment to stop sharing with that chat, or choose **Stop sharing this tab** in the
+**Browser menu** to stop every chat's access. Closing the tab, clearing website data, or moving to
+another site also ends access. Attach the page again to share its new site. Other tabs, including
+new popups, stay private. Uploads, downloads, profile changes and developer tools on your personal
+tabs remain yours to control.
+
+**Copy agent instructions** is available for agent tabs. Personal tabs must be shared through a chat.
 
 ## Comment on part of a page
 
@@ -225,7 +323,7 @@ projects, with **Remove saved comments…**. Comments already sent to a chat sta
 
 ## Developer access for agents
 
-An agent can ask for deeper access to a page (its structure, styles, network and performance)
+In its own tab, an agent can ask for deeper access to a page (its structure, styles, network and performance)
 through Chrome's developer tools protocol. This is off until you turn it on, and then each page
 still needs your approval.
 
@@ -241,7 +339,9 @@ profile, its cookies or your files this way. Open **Developer tools** in the **B
 review a request, revoke access, or see the same results yourself.
 
 ::: info Limits
-- The browser plays no sound, and doesn't offer camera or microphone access.
+- The streamed browser plays no sound. Neither browser offers camera or microphone access.
+- In the Mac app's browser, a page's alerts do nothing, a sign-in window that closes itself stays
+  open as a tab, and links that download a file don't download it yet.
 - No extensions, and no importing a profile from another browser.
 - Comments: up to 20 per page and 200 in all. When the store is full, the browser asks you to remove
   old ones.

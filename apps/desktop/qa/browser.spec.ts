@@ -5,7 +5,7 @@ import type { RuntimeRequest } from "../src/lib/project-runtime/requests";
 // Seam: browser controls to runtime HTTP and global shortcuts; catches wrong-tab actions and note-tab collisions.
 type Tab = { name: string; url: string; title: string; history: string[]; at: number; viewport?: { width: number; height: number; scale: number }; refusedHosts?: string[]; error?: string };
 type Call = { action: string; tab: string; body: Record<string, unknown> };
-type Runtime = { tabs: Map<string, Tab>; calls: Call[]; holdState: (tab: string) => { arrived: Promise<void>; release: () => void }; holdFrames: (tab: string) => () => void };
+type Runtime = { tabs: Map<string, Tab>; calls: Call[]; handoffs: string[]; holdState: (tab: string) => { arrived: Promise<void>; release: () => void }; holdFrames: (tab: string) => () => void };
 const pane = (page: Page) => page.getByTestId("agent-browser");
 const address = (page: Page) => pane(page).getByLabel("Address", { exact: true });
 const tabList = (page: Page) => pane(page).getByRole("tablist", { name: "Browser tabs" });
@@ -21,6 +21,7 @@ const test = base.extend<{ runtime: Runtime }>({
     await preview.close();
     const tabs = new Map<string, Tab>();
     const calls: Call[] = [];
+    const handoffs: string[] = [];
     let annotationNumber = 0;
     const heldFrames = new Map<string, { width: number; height: number }>();
     let held: { tab: string; arrive: () => void; wait: Promise<void> } | undefined;
@@ -54,6 +55,7 @@ const test = base.extend<{ runtime: Runtime }>({
       if (action === "area") return reply({ url: body?.expectedURL, bounds: { x: body?.x, y: body?.y, width: body?.width, height: body?.height }, viewport: body?.viewport, capturedAt: "2026-10-28T20:00:00Z", screenshot: { name: `annotation-${(++annotationNumber).toString(16).padStart(32, "0")}.png`, mime: "image/png" } });
       if (action === "data" && url.pathname.includes("/shots/")) return reply({ name: url.pathname.split("/").at(-2), mime: "image/png", data: annotationPNG });
       if (action === "permissions") return reply({ hosts: [] });
+      if (action === "handoff") { handoffs.push(request.method()); return reply({ site: "http://localhost:1420", expires: new Date(Date.now() + 30 * 60_000).toISOString() }); }
       if (action === "locations" || action === "sessions") return reply([]);
       if (action === "status") return reply({ state: "ready", running: true, home: "/tmp/browser-qa", status: { refused_hosts: [] } });
       if (action === "tabs") return reply({ tabs: [...tabs.values()] });
@@ -84,7 +86,7 @@ const test = base.extend<{ runtime: Runtime }>({
       return reply({});
     });
     try {
-      await use({ tabs, calls, holdFrames: (tab) => {
+      await use({ tabs, calls, handoffs, holdFrames: (tab) => {
         heldFrames.set(tab, { ...(tabs.get(tab)?.viewport ?? { width: 640, height: 400 }) });
         return () => { heldFrames.delete(tab); };
       }, holdState: (tab) => {
@@ -111,13 +113,122 @@ async function navigate(page: Page, value: string) {
   await address(page).fill(value);
   await address(page).press("Enter");
   await expect(pane(page).getByRole("button", { name: "Reload", exact: true })).toBeEnabled();
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await fittedPage(page);
+}
+
+async function fittedPage(page: Page) {
+  await expect.poll(() => pane(page).getByTestId("browser-surface").evaluate((surface) => {
+    const image = surface.querySelector("img");
+    const area = surface.firstElementChild!;
+    return image?.dataset.pointerReady === "true" && Math.abs(image.width - area.clientWidth) < 2 && Math.abs(image.height - area.clientHeight) < 2;
+  })).toBe(true);
 }
 
 async function menu(page: Page, name: string) {
   await pane(page).getByRole("button", { name: "Browser menu" }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
+  if (name === "Comment on an element") await fittedPage(page);
 }
+
+// Seam: browser state arrives after user input; stale replies must not replace navigation or focus.
+test("Everyday browsing cancels address edits without leaving full view", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  await pane(page).getByRole("button", { name: "Enter full view" }).click();
+  await address(page).fill("unfinished search");
+  await address(page).press("Escape");
+  await expect(address(page)).toHaveValue("http://localhost:1420/alpha");
+  await expect(pane(page).getByRole("button", { name: "Return to split view" })).toBeVisible();
+  expect([...runtime.tabs.values()][0].url).toBe("http://localhost:1420/alpha");
+});
+
+test("Everyday browsing preserves the submitted address until navigation settles", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  let release!: () => void;
+  const wait = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/__runtime/**/navigate?*", async (route) => { await wait; return route.fallback(); });
+  const tab = [...runtime.tabs.values()][0];
+  const held = runtime.holdState(tab.name);
+  await held.arrived;
+  await address(page).fill("localhost:1420/redirect");
+  await address(page).press("Enter");
+  tab.url = "http://localhost:1420/alpha#old";
+  held.release();
+  try {
+    await expect.poll(() => runtime.calls.filter((call) => call.action === "state").length).toBeGreaterThan(2);
+    await expect(address(page)).toHaveValue("http://localhost:1420/redirect");
+  } finally { release(); }
+  await expect(address(page)).toHaveValue("http://localhost:1420/destination");
+});
+
+test("Everyday browsing sends Escape to the focused page in full view", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  await pane(page).getByRole("button", { name: "Enter full view" }).click();
+  await expect.poll(() => [...runtime.tabs.values()][0].viewport?.width).toBeGreaterThan(1200);
+  await expect(pane(page).getByTestId("browser-frame")).toHaveAttribute("data-pointer-ready", "true");
+  await pane(page).getByTestId("browser-frame").click();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect.poll(() => runtime.calls.some((call) => call.action === "input" && call.body.type === "keyDown" && call.body.key === "Escape")).toBe(true);
+  await expect(pane(page).getByRole("button", { name: "Return to split view" })).toBeVisible();
+});
+
+test("Everyday browsing keeps the submitted address after acknowledgement while the old document loads", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  await page.route("**/__runtime/**/navigate?*", (route) => route.fulfill({ json: { ok: true } }));
+  let committed = false;
+  let reads = 0;
+  await page.route("**/__runtime/**/state?*", (route) => {
+    reads++;
+    return route.fulfill({ json: { running: true, url: `http://localhost:1420/${committed ? "beta" : "alpha"}`, title: "Page", loading: !committed, viewport: [...runtime.tabs.values()][0].viewport } });
+  });
+  await address(page).fill("localhost:1420/beta"); await address(page).press("Enter");
+  await expect.poll(() => reads).toBeGreaterThan(2);
+  await expect(address(page)).toHaveValue("http://localhost:1420/beta");
+  committed = true;
+  await expect(pane(page).getByRole("button", { name: "Reload", exact: true })).toBeVisible();
+  await expect(address(page)).toHaveValue("http://localhost:1420/beta");
+});
+
+test("Everyday browsing keeps blank and loaded tabs in creation order", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  await pane(page).getByRole("button", { name: "New browser tab" }).click();
+  await pane(page).getByRole("button", { name: "New browser tab" }).click();
+  await navigate(page, "localhost:1420/beta");
+  const reversed = [...runtime.tabs.entries()].reverse();
+  runtime.tabs.clear(); reversed.forEach(([key, value]) => runtime.tabs.set(key, value));
+  await expect(tabList(page).getByRole("tab")).toHaveText(["Alpha", "New tab", "Beta"]);
+  await tabList(page).getByRole("tab", { name: "Beta", exact: true }).click({ button: "middle" });
+  await expect(tabList(page).getByRole("tab")).toHaveText(["Alpha", "New tab"]);
+});
+
+test("Everyday browsing restores page focus after resizing without taking it from Address", async ({ page, runtime }) => {
+  await openBrowser(page); await navigate(page, "localhost:1420/alpha");
+  const keyboard = pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true });
+  await pane(page).getByTestId("browser-frame").click();
+  await expect(keyboard).toBeFocused();
+  await page.setViewportSize({ width: 1150, height: 820 });
+  await expect.poll(() => [...runtime.tabs.values()][0].viewport?.height).toBeGreaterThan(600);
+  await expect(keyboard).toBeEnabled();
+  await expect(keyboard).toBeFocused();
+  const release = runtime.holdFrames([...runtime.tabs.keys()][0]);
+  let releaseInput!: () => void;
+  const queuedInput = new Promise<void>((resolve) => { releaseInput = resolve; });
+  await page.route("**/__runtime/**/input?*", async (route) => { await queuedInput; return route.fallback(); });
+  await page.keyboard.type("queued ");
+  await page.setViewportSize({ width: 1100, height: 850 });
+  await expect(pane(page).getByTestId("browser-frame")).toHaveAttribute("data-pointer-ready", "false");
+  releaseInput();
+  await expect(keyboard).toBeEnabled();
+  await page.keyboard.type("typing while resizing");
+  await expect.poll(() => runtime.calls.filter((call) => call.action === "input" && call.body.type === "keyDown").map((call) => call.body.text ?? "").join("")).toBe("queued typing while resizing");
+  await expect(pane(page).getByTestId("browser-frame")).toHaveCSS("opacity", "1");
+  await expect(pane(page).getByText("Updating page size…")).toHaveCount(0);
+  await address(page).fill("a draft during resizing");
+  release();
+  await expect(keyboard).toBeEnabled();
+  await expect(address(page)).toBeFocused();
+  await expect(address(page)).toHaveValue("a draft during resizing");
+});
 
 test("Browser starts without a linked folder and rejects executable or credential URLs", async ({ page, runtime }) => {
   await openBrowser(page);
@@ -213,7 +324,7 @@ test("A redirect updates Address when the user returns focus to the page", async
   await navigate(page, "localhost:1420/redirect");
   await expect(tabList(page).getByRole("tab", { name: "Destination", exact: true })).toBeVisible();
   await expect(address(page)).toBeFocused();
-  await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await menu(page, "Focus page");
   await expect(address(page)).toHaveValue("http://localhost:1420/destination");
   expect([...runtime.tabs.values()][0].url).toBe("http://localhost:1420/destination");
 });
@@ -236,8 +347,8 @@ test("Browser page Enter activates buttons and inserts textarea newlines", async
     await navigate(page, "localhost:1420/keyboard");
     await menu(page, "Desktop viewport");
     await expect.poll(() => [...runtime.tabs.values()][0]?.viewport?.width).toBe(1280);
-    await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
-    await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+    await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
+    await menu(page, "Focus page");
     const keyboard = pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true });
     await expect(keyboard).toBeFocused();
     await content.getByRole("textbox", { name: "Start", exact: true }).focus();
@@ -308,8 +419,8 @@ test("Browser shortcuts leave note tabs and note contents intact", async ({ page
   await address(page).click();
   await address(page).press("Meta+Shift+t");
   await expect(tabList(page).getByRole("tab")).toHaveCount(2);
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
-  await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
+  await menu(page, "Focus page");
   await page.keyboard.press("Meta+l");
   await expect(address(page)).toBeFocused();
   await address(page).press("Meta+f");
@@ -339,7 +450,7 @@ test("Full view and a narrow window preserve a usable browser", async ({ page, r
   await expect(address(page)).toBeVisible();
   await expect(pane(page).getByRole("button", { name: "Browser menu" })).toBeVisible();
   await expect.poll(() => [...runtime.tabs.values()][0].viewport?.width ?? Infinity).toBeLessThanOrEqual(360);
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   expect(await pane(page).evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   const box = (await pane(page).boundingBox())!;
   expect(box.y + box.height).toBeLessThanOrEqual(720);
@@ -371,7 +482,7 @@ test("A delayed state response cannot replace the newly selected tab", async ({ 
   });
   held.release();
   await (await released).finished();
-  await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await menu(page, "Focus page");
   await expect(address(page)).toHaveValue("http://localhost:1420/beta");
   await expect(tabList(page).getByRole("tab", { name: "Beta", exact: true })).toHaveAttribute("aria-selected", "true");
 });
@@ -478,11 +589,16 @@ test("Ask about page sends the selected tab on initial and follow-up messages un
   const chip = chat.getByTestId("browser-chat-context");
   await expect(chip).toContainText("Alpha");
   await expect(chip).toContainText("http://localhost:1420/alpha");
+  expect(runtime.calls.filter((c) => c.action === "handoff")).toHaveLength(0);
+  const deliveries: string[] = [];
+  page.on("request", (request) => { if (request.method() === "POST" && /\/(handoff|send)(\?|$)/.test(request.url())) deliveries.push(new URL(request.url()).pathname.split("/").at(-1)!); });
   for (const [i, question] of ["Summarize this page.", "What is its title?"].entries()) {
     await chat.getByRole("textbox", { name: "Question", exact: true }).fill(question);
     await chat.getByRole("button", { name: "Send", exact: true }).click();
     await expect(chat.getByText(`Fixture reply ${i + 1}`, { exact: true })).toBeVisible();
     expect(messages[i]).toContain(`${question}\n\n<leadinglight_browser_context>\n`);
+    expect(deliveries.slice(-2)).toEqual(["handoff", "send"]);
+    await expect(chip).toContainText("Shared with this chat: http://localhost:1420");
     expect(messages[i]).toContain(`workspace 'personal/main'`);
     expect(messages[i]).toContain(`--tab '${tab}'`);
     expect(messages[i]).toContain('Selected address (metadata): "http://localhost:1420/alpha"');
@@ -491,6 +607,7 @@ test("Ask about page sends the selected tab on initial and follow-up messages un
   }
   await chip.getByRole("button", { name: "Remove browser page" }).click();
   await expect(chip).toHaveCount(0);
+  expect(runtime.handoffs.filter((method) => method === "DELETE")).toHaveLength(1);
   await chat.getByRole("textbox", { name: "Question", exact: true }).fill("Continue without that page.");
   await chat.getByRole("button", { name: "Send", exact: true }).click();
   await expect(chat.getByText("Fixture reply 3", { exact: true })).toBeVisible();
@@ -529,7 +646,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   const narrowWidth = await widthOf(1);
   await pane(page).nth(1).getByLabel("Address", { exact: true }).click();
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width).toBe(narrowWidth);
-  for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  for (const browser of await pane(page).all()) await expect(browser.getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   await chat.getByRole("textbox", { name: "Question", exact: true }).click();
   const afterTransfer = runtime.calls.length;
   await page.waitForTimeout(1800);
@@ -554,7 +671,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Phone viewport", exact: true }).click();
   await expect.poll(() => runtime.tabs.get(tab)?.viewport).toEqual({ width: 390, height: 844, scale: 1 });
-  for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  for (const browser of await pane(page).all()) await expect(browser.getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   const unholdFrames = runtime.holdFrames(tab);
   let releaseStates!: () => void;
   const heldStates = new Promise<void>((resolve) => { releaseStates = resolve; });
@@ -580,7 +697,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
     await page.getByRole("menuitemcheckbox", { name: "Use pane size", exact: true }).click();
     await page.keyboard.press("Escape");
     await arrived;
-    for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeDisabled();
+    for (const browser of await pane(page).all()) await expect(browser.getByTestId("browser-frame")).toHaveAttribute("data-pointer-ready", "false");
     await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
     await page.getByRole("menuitem", { name: "Phone viewport", exact: true }).click();
     await page.waitForTimeout(350);
@@ -589,14 +706,14 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
     release();
     await expect.poll(() => requests.map((call) => call.body.size)).toEqual([firstSize, "390x844"]);
     await expect.poll(() => runtime.tabs.get(tab)?.viewport).toEqual({ width: 390, height: 844, scale: 1 });
-    for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+    for (const browser of await pane(page).all()) await expect(browser.getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
     await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
     await page.getByRole("menuitem", { name: "Desktop viewport", exact: true }).click();
     await expect.poll(() => runtime.tabs.get(tab)?.viewport).toEqual({ width: 1280, height: 800, scale: 1 });
     await page.waitForTimeout(300);
-    for (const browser of await pane(page).all()) expect(await browser.getByRole("button", { name: "Focus page", exact: true }).isEnabled()).toBe(false);
+    for (const browser of await pane(page).all()) await expect(browser.getByTestId("browser-frame")).toHaveAttribute("data-pointer-ready", "false");
     releaseFrames();
-    for (const browser of await pane(page).all()) await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+    for (const browser of await pane(page).all()) await expect(browser.getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   } finally { release(); releaseFrames(); await page.unroute(resizeRoute); await page.unroute(stateRoute); }
   await page.route(resizeRoute, async (route) => {
     const name = new URL(route.request().url()).searchParams.get("tab")!;
@@ -609,8 +726,10 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
     await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
     await page.getByRole("menuitem", { name: "Phone viewport", exact: true }).click();
     for (const browser of await pane(page).all()) {
-      await expect(browser.getByText("1024 × 768", { exact: true })).toBeVisible();
-      await expect(browser.getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+      await expect(browser.getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
+      await browser.getByRole("button", { name: "Browser menu", exact: true }).click();
+      await expect(page.getByText("1024 × 768", { exact: true })).toBeVisible();
+      await page.keyboard.press("Escape");
     }
   } finally { await page.unroute(resizeRoute); }
   await pane(page).nth(1).getByRole("button", { name: "Browser menu", exact: true }).click();
@@ -622,7 +741,7 @@ test("Two visible browser panes do not keep resizing their shared tab", async ({
   await owner.getByRole("button", { name: "Close page", exact: true }).click();
   await expect(pane(page)).toHaveCount(1);
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width).toBe(await widthOf(0));
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   expect(runtime.tabs.size).toBe(1);
 });
 
@@ -666,7 +785,7 @@ test("Clearing browsing data requires confirmation, preserves data on failure an
 });
 
 // Seam: page failures and global grants; catches notices leaking across tabs and retries of an old address.
-test("Site permission notices follow the current page and Allow reloads that page", async ({ page, runtime }) => {
+test("Agent permission notices follow its page while personal tabs need no public grants", async ({ page, runtime }) => {
   const allowed = new Set<string>();
   const grants: unknown[] = [];
   await page.route("**/__runtime/v1/browser/**", async (route) => {
@@ -679,7 +798,12 @@ test("Site permission notices follow the current page and Allow reloads that pag
   });
   await openBrowser(page);
   await navigate(page, "localhost:1420/alpha");
-  const tab = [...runtime.tabs.values()][0];
+  const personal = [...runtime.tabs.values()][0];
+  personal.refusedHosts = ["blocked.example"];
+  await expect(pane(page).getByRole("button", { name: "Allow", exact: true })).toHaveCount(0);
+  const tab = { ...personal, name: "agent-check", title: "Agent check" };
+  runtime.tabs.set(tab.name, tab);
+  await tabList(page).getByRole("tab", { name: /Agent check/ }).click();
   tab.url = "https://blocked.example/current"; tab.title = "Current";
   tab.history.push(tab.url); tab.at++;
   tab.refusedHosts = ["blocked.example", "blocked.example", "localhost"];
@@ -705,7 +829,7 @@ test("Site permission notices follow the current page and Allow reloads that pag
   await pane(page).getByRole("button", { name: "New browser tab" }).click();
   await navigate(page, "localhost:1420/beta");
   await expect(allow).toHaveCount(0);
-  await tabList(page).getByRole("tab", { name: "Current", exact: true }).click();
+  await tabList(page).getByRole("tab", { name: /Current/ }).click();
   await expect(allow).toHaveCount(1);
   await pane(page).getByRole("button", { name: "Close Current", exact: true }).click();
   await expect(allow).toHaveCount(0);
@@ -737,7 +861,7 @@ test("Element feedback preserves style previews, resets them and sends quoted co
   await pane(page).getByRole("button", { name: "Enter full view" }).click();
   await page.setViewportSize({ width: 360, height: 720 });
   await expect.poll(() => runtime.tabs.get(tab)?.viewport?.width ?? Infinity).toBeLessThanOrEqual(360);
-  await expect(pane(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   const initialHeight = runtime.tabs.get(tab)!.viewport!.height;
   await menu(page, "Comment on an element");
   await expect(pane(page).getByRole("button", { name: "Cancel selection" })).toBeVisible();
@@ -752,7 +876,9 @@ test("Element feedback preserves style previews, resets them and sends quoted co
   for (const [property, value] of [["Padding", "8px"], ["Text color", "navy"]]) {
     await panel.getByRole("combobox", { name: "Style", exact: true }).click();
     await page.getByRole("option", { name: property, exact: true }).click();
+    await expect(panel.getByRole("combobox", { name: "Style", exact: true })).toHaveText(property);
     await panel.getByRole("textbox", { name: "Value", exact: true }).fill(value);
+    await expect(panel.getByRole("textbox", { name: "Value", exact: true })).toHaveValue(value);
     await panel.getByRole("button", { name: "Preview", exact: true }).click();
     await expect(panel.getByRole("button", { name: "Preview", exact: true })).toBeEnabled();
   }
@@ -867,6 +993,43 @@ test("Expired elements can be closed and late previews cannot restore an old pag
   await expect.poll(() => edits.filter((call) => call.action === "reset").length).toBe(resets + 1);
   await expect(panel).toHaveCount(0);
   expect(edits.at(-1)).toMatchObject({ action: "reset", tab, body: { handle: "heading" } });
-  await pane(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await menu(page, "Focus page");
   await expect(address(page)).toHaveValue("http://localhost:1420/beta");
+});
+
+// Seam: a chat must not receive personal-tab instructions when its runtime grant fails.
+test("A refused personal tab grant preserves the message without sending it", async ({ page, runtime: _runtime }) => {
+  const messages = await mockChat(page);
+  await page.route("**/browser/handoff?**", (route) => route.fulfill({ status: 403, json: { error: "The page moved. Attach it again." } }));
+  await openBrowser(page);
+  await navigate(page, "localhost:1420/alpha");
+  await pane(page).getByRole("button", { name: "Ask about page" }).click();
+  const chat = page.getByTestId("project-chat");
+  await chat.getByRole("textbox", { name: "Question", exact: true }).fill("Read my page.");
+  await chat.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(chat.getByText("The page moved. Attach it again.", { exact: true })).toBeVisible();
+  await expect(chat.getByRole("textbox", { name: "Question", exact: true })).toHaveText("Read my page.");
+  expect(messages).toEqual([]);
+});
+
+// Seam: removing the focused tab must not hand the next shortcut to the notes shell.
+test("Browser shortcuts keep their target after switching and closing tabs", async ({ page, runtime: _runtime }) => {
+  await openBrowser(page);
+  await navigate(page, "localhost:1420/alpha");
+  await pane(page).getByRole("button", { name: "New browser tab" }).click();
+  await navigate(page, "localhost:1420/beta");
+  await menu(page, "Focus page");
+  await page.keyboard.press("Control+Shift+Tab");
+  await expect(tabList(page).getByRole("tab", { name: "Alpha", exact: true })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+Tab");
+  await expect(tabList(page).getByRole("tab", { name: "Beta", exact: true })).toHaveAttribute("aria-selected", "true");
+  await pane(page).getByRole("button", { name: "Close Beta", exact: true }).click();
+  await expect(tabList(page).getByRole("tab")).toHaveCount(1);
+  await page.keyboard.press("Meta+t");
+  await expect(tabList(page).getByRole("tab")).toHaveCount(2);
+  await expect(address(page)).toBeFocused();
+  await page.keyboard.press("Meta+w");
+  await expect(tabList(page).getByRole("tab")).toHaveCount(1);
+  await page.keyboard.press("Meta+t");
+  await expect(tabList(page).getByRole("tab")).toHaveCount(2);
 });

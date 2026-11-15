@@ -1,4 +1,4 @@
-import { CALENDAR_VIEW } from '~/lib/space';
+import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -38,9 +38,13 @@ import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
 import { NewWork } from "~/components/new-work";
 import { SearchPanel } from "~/components/search-panel";
+import { MailRoot } from "~/components/mail";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { ProjectRail } from "~/components/sidebar/project-rail";
+import { BrowserSidebar } from "~/components/browser-sidebar";
+import { BrowserSpace } from "~/components/browser-space";
+import { available as browserAvailable, leave as leaveBrowser, useFront } from "~/lib/browser-space";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
@@ -72,6 +76,7 @@ import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView, WORK_VIEW } f
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const ROOM_KEY = "ll.sidebar.room";
+const RAIL = 44; // the project rail's width, left of the sidebar
 const WIDTH_KEY = "ll.sidebar.width";
 // Tasks given to an agent, their own or a subtask's, are listed like any page, with their state.
 // Found from the agents' pages in two passes; a search per task was 40 ms on 3000 pages.
@@ -104,6 +109,7 @@ export default function App() {
   useEffect(watchStillness, []);
   const mobile = useMobile();
   useEffect(() => mobile ? watchViewport() : undefined, [mobile]);
+  const [gmailReturn] = useState(() => new URL(location.href).searchParams.has('gmail'));
   const [calendarReturn] = useState(() => new URL(location.href).searchParams.has('calendar'));
   const view = useStore((s) => s.view);
   const settings = view.kind === "settings";
@@ -144,6 +150,9 @@ export default function App() {
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
   const projectsOn = projectPrefs.use().enabled && !mobile;
+  // The browser space takes the sidebar's content and the page area; the notes stay mounted under it.
+  const browserFront = useFront() && !mobile;
+  const canBrowse = browserAvailable.use();
 
   useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
@@ -153,8 +162,21 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
+  // A page opened from anywhere (⌘N, the capture box, the Feed) shows in the notes, so the browser steps aside.
+  const shownPage = useRef<string>(undefined);
+  useEffect(() => {
+    if (!loaded) return;
+    if (shownPage.current !== undefined && shownPage.current !== (current ?? "") && browserFront) leaveBrowser();
+    shownPage.current = current ?? "";
+  }, [current, loaded]);
+
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
   useEffect(() => localStorage.setItem(ROOM_KEY, String(forRoom)), [forRoom]);
+  // Toasts stay over the sidebar while the browser is in front: a native page would cut them (styles.css).
+  useEffect(() => {
+    document.documentElement.toggleAttribute("data-toasts-beside", browserFront && sidebarOpen);
+    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth + (mobile ? 0 : RAIL)}px`);
+  }, [browserFront, sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
@@ -177,14 +199,18 @@ export default function App() {
           void demo.suggest(list);
         }
         await foldDescriptions().catch(console.error);
+        const mac = await isDesktop;
         setLoaded(true);
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
           if (mobile && ([ASK_VIEW, FEED_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW) || id.startsWith(WORK_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
+          // In the Mac app a streamed pane is only an agent's tab beside its chat; personal browsing is the browser space.
+          if (mac && id.startsWith(BROWSER_VIEW) && !page && !id.split("/")[2]) return false;
           return !page || list.some((p) => p.id === page);
         };
+        if (gmailReturn) { openPage(MAIL_VIEW); return; }
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
         // The last scope comes back with its panes, unless its project has left the rail since.
@@ -382,15 +408,17 @@ export default function App() {
         onOpenChange={(open) => !settings && setSidebar(open)}
         open={sidebarOpen}
         data-rail-kept={forRoom || undefined}
-        style={{ ...chrome(mac, sidebarWidth), "--rail-width": mobile ? "0px" : "44px" } as React.CSSProperties}
+        style={{ ...chrome(mac, sidebarWidth), "--rail-width": mobile ? "0px" : `${RAIL}px` } as React.CSSProperties}
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
-        {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+        {mac && !browserFront && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         {!mobile && <ProjectRail stay={forRoom} />}
         <AppSidebar
           className="left-(--rail-width)"
+          browser={browserFront ? <BrowserSidebar /> : undefined}
+          native={canBrowse}
           onCreate={create}
           project={scoped}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
@@ -403,6 +431,7 @@ export default function App() {
           {loaded && <BrowserAddressBanner />}
           {/* The bar's panel is a card beside the pages, never over them. */}
           <div className="flex min-h-0 flex-1">
+            <div className={browserFront ? "hidden" : "contents"}>
             {root ? (
               <PaneArea windowToggle={mac} />
             ) : (
@@ -425,6 +454,8 @@ export default function App() {
                 </Empty>
               </div>
             )}
+            </div>
+            {browserFront && <BrowserSpace mac={mac} />}
             <BarPanel />
           </div>
           {/* The ask bar sits by the selected words. */}
@@ -472,6 +503,7 @@ export default function App() {
           <ShortcutsSheet />
           {!phone && <SearchPanel />}
           {!mobile && <NewWork />}
+          {!phone && <MailRoot />}
           {!mobile && <CliUpdates />}
           <AppUpdates />
           <ZoomHud />

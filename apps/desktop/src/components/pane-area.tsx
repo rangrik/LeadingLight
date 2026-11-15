@@ -2,7 +2,8 @@ import { CalendarView } from '~/components/calendar-view';
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
 // with its own header (crumbs and a close button) and tab row (tab-row.tsx), no Compare tabs.
-import { X } from "lucide-react";
+import { Mail, X } from "lucide-react";
+import { MailActions, MailCount, MailView } from "~/components/mail";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "@leadinglight/ui/components/button";
@@ -31,7 +32,7 @@ import { AskView } from "~/components/agent-panel";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
 import { WorkView } from "~/components/work-view";
-import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, readTypeView, space, TYPE_VIEW, WORK_VIEW } from "~/lib/space";
+import { MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, readTypeView, space, TYPE_VIEW, WORK_VIEW } from "~/lib/space";
 import { readPaper } from "~/lib/paper";
 import { phone, useMobile } from "~/lib/platform";
 
@@ -153,6 +154,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           const b = box(leaf.id, rect);
           // Touch has no hover: on iOS every pane shows its buttons, so none sit there invisible.
           const backCard = !mobile && split && leaf.id !== focus && BACK_CARD;
+          const mail = leaf.page.startsWith(MAIL_VIEW);
           return (
             <section
               aria-label={shown.title}
@@ -177,9 +179,9 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
               {!folded && (
               <PanelHeader
-                after={!phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
+                after={mail ? <MailCount view={leaf.page} /> : !phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
-                icon={shown.icon && <PageIconView icon={shown.icon} />}
+                icon={mail ? <Mail className="size-4 shrink-0" /> : shown.icon && <PageIconView icon={shown.icon} />}
                 lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
@@ -197,6 +199,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && (reportOf(pageOf(leaf.page)) ? <PageHistory className={cn(backCard)} page={leaf.page} /> : <div className="ll-page-actions" data-page-actions />)}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", backCard)} page={leaf.page} />}
+                {mail && <MailActions className={cn(backCard)} view={leaf.page} />}
                 {split && (
                   <Button
                     aria-label="Close page"
@@ -218,6 +221,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               >
                 {!leaf.page ? (
                   <NoPage className="h-full" />
+                ) : mail ? (
+                  <MailView pane={leaf.id} view={leaf.page} />
                 ) : leaf.page === CALENDAR_VIEW ? (
                   <CalendarView />
                 ) : leaf.page === INBOX_VIEW ? (

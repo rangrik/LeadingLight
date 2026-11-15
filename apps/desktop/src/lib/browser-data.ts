@@ -59,7 +59,7 @@ export function rememberVisit(data: BrowserData, name: string, url: string, titl
   return {
     ...data,
     history: same ? data.history : [entry, ...data.history.filter((e) => e.url !== url)].slice(0, 500),
-    tabs: personalTab(name) ? [...data.tabs.filter((t) => t.name !== name), { ...entry, name }].slice(-24) : data.tabs,
+    tabs: personalTab(name) ? (current ? data.tabs.map((tab) => tab.name === name ? { ...entry, name } : tab) : [...data.tabs, { ...entry, name }]).slice(-24) : data.tabs,
   };
 }
 

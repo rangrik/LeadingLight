@@ -63,6 +63,7 @@ export default defineConfig({
           { text: "Lists, tables and boards", link: "/organize/views" },
           { text: "Tags and daily notes", link: "/organize/tags-daily" },
           { text: "Calendar", link: "/organize/calendar" },
+          { text: "Mail", link: "/organize/mail" },
           { text: "Tasks and new objects", link: "/organize/tasks" },
           { text: "History and authorship", link: "/organize/history" },
         ],

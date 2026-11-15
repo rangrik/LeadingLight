@@ -9,11 +9,12 @@ import { openNewWork } from "~/components/new-work";
 import { searching, toggleSearch } from "~/components/search-panel";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
+import { available, space, spaceKey } from "~/lib/browser-space";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
-import { pageOf } from "~/lib/space";
+import { MAIL_VIEW, browserView, pageOf } from "~/lib/space";
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { openPaper, readPaper } from "~/lib/paper";
-import { closeTab, focusedPage, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
+import { closeTab, focusedPage, cycleTab, newTab, openBeside, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop, useMobile } from "~/lib/platform";
 import { pick } from "~/lib/scope";
 import { toggleReading } from "~/lib/reading";
@@ -45,6 +46,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     const run = (id: string) => {
       if (searching.get() && !OVER_SEARCH.has(id)) return;
       if (useStore.getState().view.kind !== "settings") {
+        // The browser space in front takes the keys that act on a tab (lib/browser-space.ts).
+        if (spaceKey(id)) return;
         const browser = new CustomEvent("ll:browser-shortcut", { detail: id, cancelable: true });
         if (!window.dispatchEvent(browser)) return;
       }
@@ -90,12 +93,18 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "captures":
         case "suggestions":
           return actions.toggleView(id);
+        case "mail":
+          if (useStore.getState().view.kind === "settings") closeSettings();
+          return openPage(MAIL_VIEW);
         case "nod":
           // Only at a page in front: never under Settings, a dialog or a menu, or another window.
           if (useStore.getState().view.kind === "settings" || !document.hasFocus() || shown(COVERS)) return;
           return nodFront();
         case "shortcuts":
           return toggleShortcuts();
+        // Where the space can't be shown (the browser build), Browser is the streamed pane.
+        case "browser":
+          return available.get() ? undefined : openBeside(browserView(""));
         case "focus":
         case "syntax":
         case "style":
@@ -113,10 +122,18 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       const editorEnter = e.key === "Enter" && (e.target as Element | null)?.closest?.(".ProseMirror");
       const accel = (e.defaultPrevented && !editorEnter) || e.repeat ? undefined : accelOf(e);
       if (!accel) return;
-      // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd.
-      const find = (a: string) => SHORTCUTS.find((s) => s.accel === a)?.id;
-      const rail = /^CmdOrCtrl\+([1-9])$/.exec(accel)?.[1];
-      const id = find(accel) ?? (e.ctrlKey && !e.metaKey ? find(accel.replace("Ctrl", "CmdOrCtrl")) : undefined) ?? (rail && `rail-${rail}`);
+      // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd. The browser
+      // space's own keys count only while it is in front, and then before others: ⌘1 is the numbered
+      // "tab-1" there and the rail's "rail-1" elsewhere.
+      const front = available.get() && space.get().front;
+      const isBrowser = (s: (typeof SHORTCUTS)[number]) => !!(s as { browser?: boolean }).browser;
+      const rows = front ? [...SHORTCUTS.filter(isBrowser), ...SHORTCUTS.filter((s) => !isBrowser(s))] : SHORTCUTS.filter((s) => !isBrowser(s));
+      const find = (a: string) => {
+        const n = /^(.*\+)([1-9])$/.exec(a);
+        const counted = n && rows.find((s) => s.count && s.accel === `${n[1]}{n}`);
+        return counted ? `${counted.id}-${n[2]}` : rows.find((s) => s.accel === a)?.id;
+      };
+      const id = find(accel) ?? (e.ctrlKey && !e.metaKey ? find(accel.replace("Ctrl", "CmdOrCtrl")) : undefined);
       if (!id) return;
       e.preventDefault();
       run(id);

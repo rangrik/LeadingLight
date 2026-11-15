@@ -114,7 +114,8 @@ pub struct Ask {
 pub type Sink = Arc<dyn Fn(Event) + Send + Sync>;
 
 // Reading needs no asking; the rest follows the access the person chose. Anything unknown asks.
-const READS: &str = "mcp__notes__read_page,mcp__notes__search_pages";
+// The page tools ask in the app itself, whatever the access, so Claude Code lets them through.
+const READS: &str = "mcp__notes__read_page,mcp__notes__search_pages,mcp__notes__read_tab,mcp__notes__screenshot_tab,mcp__notes__scroll,mcp__notes__click,mcp__notes__type,mcp__notes__go_to";
 fn access(mode: &str) -> &'static [&'static str] {
     match mode {
         "auto" => &["--permission-mode", "auto", "--tools", "WebSearch,WebFetch"],

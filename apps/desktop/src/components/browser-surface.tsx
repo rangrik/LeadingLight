@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { MousePointer2, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@leadinglight/ui/components/button";
 import { ContextMenu, ContextMenuItem, ContextMenuPopup, ContextMenuTrigger } from "@leadinglight/ui/components/context-menu";
 import { Textarea } from "@leadinglight/ui/components/textarea";
@@ -64,7 +64,6 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   const [foreground, setForeground] = useState(!document.hidden);
   const [attempt, setAttempt] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [focused, setFocused] = useState(false);
   const [caret, setCaret] = useState({ x: 0, y: 0 });
   const [failure, setFailure] = useState("");
   const [outlined, setOutlined] = useState<BrowserBounds>();
@@ -78,11 +77,12 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   const live = active && visible && foreground;
   const resizing = resizeBusy || (!!expectedViewport && !!frame && (frame.w !== expectedViewport.width || frame.h !== expectedViewport.height));
   const ready = live && connection === "live" && !resizing;
+  const keyboardReady = live && connection === "live" && !picking;
   const inputAllowed = useRef(false);
-  inputAllowed.current = ready && !picking;
+  inputAllowed.current = keyboardReady;
   const scrollAllowed = useRef(false);
   scrollAllowed.current = ready;
-  const channel = useRef<{ send: (input: Input) => void; copy: (cut?: boolean) => void; paste: () => void; release: (discard?: boolean) => void } | null>(null);
+  const channel = useRef<{ send: (input: Input) => void; copy: (cut?: boolean) => void; paste: () => void; release: (discard?: boolean, pointerOnly?: boolean) => void } | null>(null);
   const pressed = useRef(new Map<string, Input>());
   const pointer = useRef<{ x: number; y: number; button: string; clickCount: number } | null>(null);
   const lastPress = useRef({ time: 0, x: 0, y: 0, button: "", count: 0 });
@@ -118,7 +118,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   }, [highlight]);
 
   useEffect(() => {
-    if (picking) { channel.current?.release(true); keyboard.current?.blur(); releaseMenu(); setFocused(false); }
+    if (picking) { channel.current?.release(true); keyboard.current?.blur(); releaseMenu(); }
   }, [picking]);
 
   useEffect(() => {
@@ -210,7 +210,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
     let generation = 0;
     let pending: Promise<unknown> = Promise.resolve();
     const queue: (Input | (() => Promise<void>))[] = [];
-    const allowed = (event: Input) => ["keyUp", "mouseReleased"].includes(event.type) || (event.type === "mouseWheel" ? scrollAllowed.current : inputAllowed.current);
+    const allowed = (event: Input) => ["keyUp", "mouseReleased"].includes(event.type) || (event.type.startsWith("mouse") ? scrollAllowed.current && (event.type === "mouseWheel" || inputAllowed.current) : inputAllowed.current);
     const input = (event: Input) => ask("POST", `${base}/input${suffix}`, event);
     const fail = (error: unknown) => {
       if (!alive) return;
@@ -265,13 +265,14 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
       });
       void drain();
     };
-    const release = (discard = false) => {
+    const release = (discard = false, pointerOnly = false) => {
       if (discard) {
         generation++;
         queue.splice(0, queue.length, ...queue.filter((event) => typeof event !== "function" && ["keyUp", "mouseReleased"].includes(event.type)));
       }
       if (pointer.current) send({ type: "mouseReleased", ...pointer.current, buttons: 0, clickCount: 1 });
       pointer.current = null;
+      if (pointerOnly) return;
       for (const event of pressed.current.values()) send({ ...event, type: "keyUp", modifiers: 0, text: undefined, commands: undefined });
       pressed.current.clear();
     };
@@ -371,7 +372,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
   }, [ready]);
 
   const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (!ready || composing.current || event.nativeEvent.isComposing || ["Dead", "Process"].includes(event.key)) return;
+    if (!keyboardReady || composing.current || event.nativeEvent.isComposing || ["Dead", "Process"].includes(event.key)) return;
     const command = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
     // Browser chrome shortcuts belong to the containing pane, even while the page has focus.
@@ -398,7 +399,13 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
     pressed.current.delete(event.code);
   };
   const width = frame ? Math.max(1, fit ? Math.min(frame.w, size.width, size.height * frame.w / frame.h) : frame.w) : 0;
-  useEffect(() => { if (!ready) { channel.current?.release(true); keyboard.current?.blur(); releaseMenu(); setFocused(false); } }, [ready]);
+  useEffect(() => {
+    if (!keyboardReady) { channel.current?.release(true); releaseMenu(); }
+    else {
+      if (!ready) channel.current?.release(false, true);
+      if (document.activeElement === keyboard.current) claimMenu();
+    }
+  }, [ready, keyboardReady]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" data-testid="browser-surface" data-tab={tab}>
@@ -408,8 +415,9 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
             <ContextMenuTrigger className="relative block" style={{ width, height: width * frame.h / frame.w, marginInline: fit ? "auto" : undefined }}>
               <img
                 alt="Live browser page"
-                className={cn("block max-w-none select-none", picking && "cursor-crosshair", !ready && "opacity-40")}
+                className={cn("block max-w-none select-none", picking && "cursor-crosshair", (!live || connection !== "live") && "opacity-40")}
                 data-testid="browser-frame"
+                data-pointer-ready={ready}
                 draggable={false}
                 height={width * frame.h / frame.w}
                 onContextMenu={(event) => { if (!ready || picking || pickingPointer.current) event.preventDefault(); }}
@@ -478,7 +486,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
             </ContextMenuPopup>
           </ContextMenu>
         )}
-        {!ready && (
+        {!ready && (!resizing || !live || connection !== "live") && (
           <div aria-live="polite" className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-muted-foreground text-sm">
             <p>{!live ? "Browser paused while this pane is hidden." : connection === "closed" ? "This tab is closed." : connection === "connecting" ? "Connecting to the browser…" : resizing ? "Updating page size…" : "Reconnecting to the browser…"}</p>
             {failure && <p className="max-w-sm break-words text-xs">{failure}</p>}
@@ -491,8 +499,8 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
           autoComplete="off"
           autoCorrect="off"
           className="pointer-events-none absolute top-0 left-0 size-px opacity-0 [&_textarea]:size-px [&_textarea]:min-h-0 [&_textarea]:p-0"
-          disabled={!ready || picking}
-          onBlur={() => { setFocused(false); releaseMenu(); channel.current?.release(); }}
+          disabled={!keyboardReady}
+          onBlur={() => { releaseMenu(); channel.current?.release(); }}
           onCompositionStart={() => { composing.current = true; compositionDone.current = null; }}
           onCompositionEnd={(event) => {
             composing.current = false;
@@ -502,7 +510,7 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
           }}
           onCopy={(event) => { event.preventDefault(); channel.current?.copy(); }}
           onCut={(event) => { event.preventDefault(); channel.current?.copy(true); }}
-          onFocus={() => { setFocused(true); claimMenu(); }}
+          onFocus={() => { if (keyboardReady) claimMenu(); }}
           onInput={(event) => {
             if (composing.current) return;
             const text = event.currentTarget.value;
@@ -522,11 +530,6 @@ function Surface({ base, tab, fit, active = true, expectedViewport, resizeBusy =
           style={{ transform: `translate(${caret.x}px, ${caret.y}px)` }}
           unstyled
         />
-      </div>
-      <div className="flex min-h-7 shrink-0 items-center gap-2 border-t px-2 text-muted-foreground text-xs">
-        <MousePointer2 aria-hidden="true" className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">{failure && ready ? failure : picking ? "Click an element or drag an area to comment" : focused ? "Typing in the page · ⌘L for the address" : "Click the page to browse"}</span>
-        <Button className="shrink-0" disabled={!ready || picking} onClick={() => keyboard.current?.focus({ preventScroll: true })} size="xs" variant="ghost">Focus page</Button>
       </div>
     </div>
   );

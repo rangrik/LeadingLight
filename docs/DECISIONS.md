@@ -524,10 +524,27 @@ frames and sends input through the existing local runtime transport. Remote webs
 enters the notes webview. Agent snapshots, references, screenshots and actions keep working.
 
 Personal tabs use an app-owned persistent profile per workspace; named and unnamed agent tabs
-stay isolated. A legacy command without a tab must not inherit personal cookies. Explicit tab
-names let an agent work on a personal tab when asked. Website content is
-untrusted, and the runtime's network restrictions still apply to manual and agent navigation.
+stay isolated. A legacy command without a tab must not inherit personal cookies. Personal tabs
+load public sites through a separate proxy; agent contexts keep the site allowlist. Both paths
+check resolved addresses and restrict local ports to the workspace. A tab name grants no access.
+
+The local socket proves the caller: the native app's executable, or the exact dev-server PID.
+Unknown and detached processes stay restricted. The dev HTTP bridge is for local development;
+it rejects cross-site browser requests but is not an OS boundary against local shell processes.
+The native app has no such HTTP bridge. Agents with unrestricted shell access already share the
+Mac user's files; this boundary governs browser tools, not that user's operating-system account.
+
+Sending an attached personal page grants that tab and current site to the chat's actual session
+for 30 minutes. Each attached message renews it. A site is a registrable domain; local sites also
+include scheme and port. Removal, Stop sharing, closing, clearing data, expiry or leaving the site
+ends access. Popups get no grant. The runtime checks before actions and before returning contents.
+Grants permit page reads and actions; profile changes, uploads, downloads, resizing, console history
+and developer commands remain with the person. Workspace hooks and events omit personal URLs.
 Browser metadata lives on this Mac; profiles and downloads never go in the linked project.
+
+2026-11-12. Embedded Chromium uses its normal scrollbars, renderer count and JavaScript heap
+defaults. The separate box browser retains its smaller resource limits; explicit heap settings
+still apply. Chromium's sandbox stays enabled.
 
 The reference is ChatGPT's documented built-in Browser, not an assumption that its private
 implementation is available. Research, exclusions and any remaining gaps live in
@@ -563,16 +580,17 @@ Reset restores the original style attribute when safe, while preserving unrelate
 Personal pages follow the pane's size by default; shrinking a desktop screenshot made text too
 small beside a chat. Explicit phone/desktop sizes stay fixed, and agent tabs keep the size the
 agent chose until the person opts into the pane's size.
-Input waits for a frame at the requested size, so a click cannot use old image coordinates after
+Pointer input waits for a frame at the requested size, so a click cannot use old image coordinates after
 the runtime has resized the page.
 Two views can share one tab. Only the last browser pane used controls that tab's automatic size;
 other views fit its frames. Ownership passes on close, avoiding competing resize requests.
 The auto/fixed choice also belongs to the tab, so using another pane cannot cancel phone mode.
 It stays in app memory, bounded to 256 recent explicit choices; it is not a saved device profile.
-Resize requests run in order per tab. Every view pauses input while they run and waits for a
+Resize requests run in order per tab. Every view pauses pointer input while they run and waits for a
 frame at the final size, including views whose state poll has not caught up yet.
 Afterward, a fresh state read resumes following the agent's viewport; an older poll cannot
-release the input guard, and an agent changing size again cannot leave the view stuck.
+release the pointer guard, and an agent changing size again cannot leave the view stuck.
+Typing into the focused page field continues through a resize; its queued keys use no image coordinates.
 
 Uploads carry the file chooser's identity, not only its tab name. A navigation or a second chooser
 invalidates a delayed file choice so it cannot attach to a different form.
@@ -987,7 +1005,47 @@ a new device must be registered and the profile remade before it can install. Si
 hand rather than through the API key because, on a fresh build machine, Xcode's own signing
 makes a new certificate every run.
 
-## 53. One door: the review's options are judged by places to look (2026-11-14)
+## 53. My tabs are native pages; agents keep their own Chromium (2026-11-14)
+
+This changes decision 31 for the person's own tabs in the Mac app. The streamed Chromium was
+soft on a Retina screen (a JPEG at half the pixels), about 16 frames a second, muted, and
+announced itself as HeadlessChrome, so Google and ChatGPT asked it to prove it was human.
+
+My tabs are now WKWebViews laid over the browser space (`native_browser.rs`). Tested in the dev
+app: full Retina pixels, sound, Safari's user agent with no robot checks, and a website data
+store of their own. Pages see none of the app: the view is made with wry directly, not through
+Tauri's multi-webview mode, which would also have changed how ⌘ keys reach the notes webview.
+
+Agents keep their own streamed Chromium tabs, one per chat, apart from my tabs and from each
+other, so they can test their work without interfering. Ask on a page reaches a native tab only
+through page tools the app answers: reading is free, and a click, typing or leaving the site
+asks first. The browser build has no native views and keeps the streamed pane.
+
+## 54. Gmail is a separate workspace connection, read by one fixed reader (2026-11-12, changed 2026-11-14)
+
+Mail follows Calendar's service path, with its own OAuth client, encrypted grants and one-use
+PKCE state. One workspace can connect several accounts. Separate configuration keeps Gmail's
+restricted scope out of Calendar's pending consent review. The permission is `gmail.modify`:
+the service may only move a conversation in or out of Inbox and Unread, and send a reply whose
+recipient, subject and thread it takes from the mail being answered. It never trashes or deletes.
+
+Mail is never saved in the note journal and never shown to the app's agents. One fixed reader
+on the person's Mac, running their own model with no tools, may read new mail to write its
+lines. The lines stay on that device and are removed when the mail is dealt with, or after 14
+days. A task made from a mail keeps the sender, the subject, a link and the reader's two lines,
+never the mail's own text. Mail shows as text; originals and attachments open in Gmail. Native
+credentials allow only named routes. Google's review is required before any public rollout.
+
+## 55. Mail is a look, not an inbox (2026-11-14)
+
+Mail is for someone who avoids email, because an inbox shows its weight before its content. So
+Mail shows the weight before any mail: how many need you, about how long, and whether anyone is
+upset. Then one mail at a time, one decision each, five at most. It ends, and says how long it
+took. Nothing nags: no counts, no badges, no streaks. There are no work-hours rules, because
+work hours differ from person to person; each mail says which account it came to. See
+`docs/MAIL.md`.
+
+## 56. One door: the review's options are judged by places to look (2026-11-14)
 
 The UX review (2026-11-08) built eighteen options for six issues as separate branches. With many
 agents at work, every signal on screen is a pull to switch, so each option was judged by one test:
@@ -1008,7 +1066,7 @@ when pointed at, because a blue or green dot is a pull with nothing to do. A sid
 sidebar only when its margin has no room and leaves the rail: the rail is how a project is chosen,
 and a note should not take that away.
 
-## 54. The Work view shows git's worktrees; New work is Assign with the task made first (2026-11-14)
+## 57. The Work view shows git's worktrees; New work is Assign with the task made first (2026-11-14)
 
 A project's Work view lists its tasks in flight and then every worktree of its folder
 (`features/work-view.feature`, [PROJECT-6.md](PROJECT-6.md) 1). The list is the runtime's

@@ -1,5 +1,5 @@
 import { ArrowUp, AtSign, Bot, Check, ChevronDown, FileText, Gauge, Hand, ListChecks, Paperclip, Plus, ShieldAlert, ShieldCheck, Slash, Square, X } from "lucide-react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import {
   Composer as Frame,
@@ -84,6 +84,7 @@ export function Composer({
   settings,
   files,
   queue,
+  top,
 }: {
   ready: boolean;
   busy: boolean;
@@ -105,6 +106,8 @@ export function Composer({
   // Set, Send stays on while busy: Enter queues the message for when the agent (who) finishes,
   // ⌘↩ sends it now. Without it Send waits for the turn (the note chat).
   queue?: { who: string };
+  // Chips above the field (the browser's attached tabs).
+  top?: ReactNode;
 }) {
   const prefs = useAiPrefs();
   const s = settings ?? { ...prefs, onChange: setAiPrefs };
@@ -157,6 +160,7 @@ export function Composer({
       triggers={triggers}
       value={value}
     >
+      {top && <div className="flex flex-wrap gap-1 px-[calc(var(--composer-padding)+1px)] pt-2" {...own}>{top}</div>}
       {files && files.names.length > 0 && (
         <div className="flex flex-wrap gap-1 px-[calc(var(--composer-padding)+1px)] pt-2" {...own}>
           {files.names.map((name, i) => (

@@ -118,8 +118,12 @@ test("Escape closes the Style menu before the feedback draft and resets previews
   await expect(feedback).toHaveCount(0);
   await expect.poll(() => runtime.calls.filter((call) => call.action === "reset").length).toBe(1);
   await browser(page).getByRole("button", { name: "Enter full view" }).click();
-  await browser(page).getByRole("button", { name: "Focus page", exact: true }).click();
+  await browser(page).getByRole("button", { name: "Browser menu" }).click();
+  await page.getByRole("menuitem", { name: "Focus page", exact: true }).click();
   await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(browser(page).getByRole("button", { name: "Return to split view" })).toBeVisible();
+  await browser(page).getByRole("button", { name: "Return to split view" }).focus();
   await page.keyboard.press("Escape");
   await expect(browser(page).getByRole("button", { name: "Enter full view" })).toBeVisible();
 });
@@ -147,13 +151,13 @@ test("A full comment store rejects another save without replacing existing evide
 
 async function navigate(page: Page, path = "alpha") {
   await address(page).fill(`http://localhost:1420/${path}`); await address(page).press("Enter");
-  await expect(browser(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
 }
 async function open(page: Page) {
   await page.goto("/"); await page.getByRole("button", { name: "Browser", exact: true }).click(); await navigate(page);
   await browser(page).getByRole("button", { name: "Browser menu" }).click();
   await page.getByRole("menuitem", { name: "Desktop viewport", exact: true }).click();
-  await expect(browser(page).getByRole("button", { name: "Focus page", exact: true })).toBeEnabled();
+  await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
 }
 async function annotate(page: Page) {
   await browser(page).getByRole("button", { name: "Browser menu" }).click();
