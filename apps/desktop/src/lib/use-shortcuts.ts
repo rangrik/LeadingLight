@@ -5,7 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
-import { openNewWork } from "~/components/new-work";
+import { newWork, openNewWork } from "~/components/new-work";
 import { searching, toggleSearch } from "~/components/search-panel";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
@@ -26,6 +26,8 @@ import { toggleTool } from "~/lib/writing";
 export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
 // The keys that still act while the search panel covers the page; the rest would move things behind it.
 const OVER_SEARCH = new Set(["search", "new-page", "new-idea", "save", "settings", "shortcuts", "zoom-in", "zoom-out", "zoom-reset"]);
+// The New work box is for one project: nothing may change the project or open over it.
+const OVER_NEW_WORK = new Set(["save", "zoom-in", "zoom-out", "zoom-reset"]);
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
@@ -45,6 +47,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
   useEffect(() => {
     const run = (id: string) => {
       if (searching.get() && !OVER_SEARCH.has(id)) return;
+      if (newWork.get() && !OVER_NEW_WORK.has(id)) return;
       if (useStore.getState().view.kind !== "settings") {
         // The browser space in front takes the keys that act on a tab (lib/browser-space.ts).
         if (spaceKey(id)) return;
