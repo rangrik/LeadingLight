@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/rangrik/LeadingLight/compare/v0.4.0...v0.4.1) (2026-11-15)
+
+
+### Fixes
+
+* keep install:app from replacing a signed release ([1b66aaf](https://github.com/rangrik/LeadingLight/commit/1b66aafce13b9f7cae81963a925fd5fd41440e3b))
+
 ## [0.4.0](https://github.com/rangrik/LeadingLight/compare/v0.3.0...v0.4.0) (2026-11-15)
 
 
