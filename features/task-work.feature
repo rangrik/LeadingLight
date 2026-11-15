@@ -16,6 +16,8 @@ Feature: Following an assigned task
   - primary: the one filled button on the card; the rest are plain buttons or in the ⋯ menu
   - ⋯ menu: the small button at the end of the card's first row, holding Chat, Stop, and Continue
     when it applies but isn't the primary
+  - Review: a plain button at the end of the card's review line; it opens review mode on the
+    agent's latest report (review-mode.feature)
   - states: Working, Needs your input, Ready for review, Idle (its turn ended, nothing to review),
     Stopped (its agent process ended), Done (I accepted it)
   - state dot: a 6 px dot before the title on the task's tab and its sidebar row: info colour
@@ -125,6 +127,7 @@ Feature: Following an assigned task
       | Working with nothing ticked                                    | none                   |
     And with notes ticked while another is primary, "Send n notes" stays on the card, not filled
     And with Accept the primary on an Idle task, Continue is in the ⋯ menu
+    And Review on the review line is never filled, whatever the primary is
 
   Scenario: Chat and Stop live in the ⋯ menu
     Given the agent works in the worktree "summary"

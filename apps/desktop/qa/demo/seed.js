@@ -268,7 +268,7 @@ async function fill() {
       asks: [{ question: "Should the pricing page lead with the monthly or the yearly price?", about: [{ page: pricing, quote: "Monthly is simpler to explain" }], at: Date.now() - 6 * 60e3 }],
     },
   });
-  // Two drafts by the same agent, so the card can say what changed between them.
+  // Two drafts by the same agent, so the card and review mode's Changes can say what changed.
   await make("reportA0", {
     title: "Pricing copy, first draft", typeId: "report", createdAt: mins(150), updatedAt: mins(150),
     properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(150), command: "c-a0" } },
@@ -277,7 +277,7 @@ async function fill() {
   await make("reportA1", {
     title: "Pricing copy, second draft", typeId: "report", createdAt: mins(80), updatedAt: mins(80),
     properties: { parent: taskA, report: { by: agentA, session: "sess-pricing", to: taskA, at: mins(80), command: "c-a1", sources: [{ page: pricing, quote: "Monthly is simpler to explain" }] } },
-    content: doc(h(2, "Hero"), p(b("Notes that think with you."), " Every note is an object; links go both ways; agents work beside your words, never in them."), h(2, "Tiers"), ul([b("Personal"), " · one Mac, one space · $8 a month or $80 a year"], [b("Team"), " · shared spaces, roles · $15 a seat a month"]), h(2, "FAQ"), ul(["Is my data on your servers? No. It stays on your Mac."], ["Can I switch tiers later? Yes, at any time."], ["Is there a free trial? Thirty days, no card."]), p("Open: I lead with the monthly price because the notes say it is simpler to explain. If most people buy yearly, I should flip it; see my question.")),
+    content: doc(h(2, "Hero"), p(b("Notes that think with you."), " Every note is an object; links go both ways; agents work beside your words, never in them."), h(2, "Tiers"), ul([b("Personal"), " · one Mac, one space · $8 a month or $80 a year"], [b("Team"), " · shared spaces, roles · $15 a seat a month"]), h(2, "FAQ"), ul(["Is my data on your servers? No. It stays on your Mac."], ["Can I switch tiers later? Yes, at any time."], ["Can I try it first? Yes: try it free for 14 days, no card needed."]), p("Open: I lead with the monthly price because the notes say it is simpler to explain. If most people buy yearly, I should flip it; see my question.")),
   });
   const agentB = await make("agentB", {
     title: "Codex: Fix the tab row overflow", typeId: "agent", createdAt: mins(45), updatedAt: mins(3),

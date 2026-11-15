@@ -22,7 +22,8 @@ import { IconPicker, PageIconView } from "~/components/page-icon";
 import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
 import { ReportByline, Reports, ReportSources } from "~/components/reports";
-import { WorkPanel } from "~/components/work-panel";
+import { toReport, WorkPanel } from "~/components/work-panel";
+import { clearPending, pendingReview, ReviewBar, ReviewHead } from "~/components/review";
 import { ProjectWork } from "~/components/work-table";
 import { PagePicker } from "~/components/property-value";
 import { TagPanel } from "~/components/tag-panel";
@@ -110,6 +111,45 @@ export function PageView({ page }: { page: LLObject }) {
   const [turnInto, setTurnInto] = useState<PageSelection | null>(null);
   const [voiceReview, setVoiceReview] = useState<VoiceReview | null>(null);
   const [tailRow, setTailRow] = useState(false);
+  // Review mode (features/review-mode.feature): the report under review, in this pane only.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [review, setReview] = useState<string | null>(() => pendingReview(page.id));
+  const [unfold, setUnfold] = useState(false);
+  const [changes, setChanges] = useState(false);
+  const back = useRef<string | null>(null);
+  const startReview = (id: string) => {
+    setUnfold(false);
+    setChanges(false);
+    setReview(id);
+  };
+  const endReview = () => {
+    back.current = review;
+    setReview(null);
+  };
+  useEffect(() => clearPending(page.id), [page.id]);
+  // In, the pane starts at the report's top; out, at the report on the task.
+  useEffect(() => {
+    const root = rootRef.current;
+    if (review) root?.closest("[data-page-scroller]")?.scrollTo({ top: 0 });
+    else if (back.current && root) toReport(root, back.current, false);
+    back.current = null;
+  }, [review]);
+  // Esc is Done, unless a note, a field, a popup or another pane has it.
+  useEffect(() => {
+    if (!review) return;
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      const root = rootRef.current;
+      if (e.key !== "Escape" || e.defaultPrevented || !root || t.closest(".ll-note, input, textarea, [role=dialog], [role=menu], [role=listbox]")) return;
+      if (!root.contains(t) && !(t === document.body && focusedPage() === page.id)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      endReview();
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [review]);
   // The writing tools follow the page's type (Settings › Writing › Use on).
   const tools = toolsOn(writing, typeId);
   // A daily note is a log, not writing to measure.
@@ -310,7 +350,8 @@ export function PageView({ page }: { page: LLObject }) {
   const onBlankMouseDown = (e: React.MouseEvent) => {
     const editor = editorRef.current;
     const title = titleRef.current;
-    if (paper || !editor || !title || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
+    // Reviewing, the title and often the body are hidden, so blank space is nobody's.
+    if (paper || !editor || !title || review || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || editor.hasFocus()) return;
     if (document.activeElement?.closest("[role=dialog], [role=menu], [role=listbox]")) return;
     const target = e.target as HTMLElement;
     if (target.closest(".ProseMirror, .ll-handle, .ll-note, .ll-toc, textarea, input, button, a, [role]")) return;
@@ -420,7 +461,7 @@ export function PageView({ page }: { page: LLObject }) {
           )}
         </div>
         {report ? <div className="mt-2"><ReportByline about report={current} /></div> : <FolderRow pageId={page.id} />}
-        <WorkPanel pageId={page.id} />
+        <WorkPanel onReview={startReview} pageId={page.id} />
         {templateOf && (
           <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">
             <LayoutTemplate className="size-4" />
@@ -458,15 +499,24 @@ export function PageView({ page }: { page: LLObject }) {
   return (
     // Focus mode fades the rest of the page too while the body is written in (styles.css).
     <div
-      className={cn("ll-page-root min-h-full", paper && "ll-notebook-root", paper && showDetails && "ll-notebook-with-details", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim")}
+      className={cn("ll-page-root min-h-full", paper && "ll-notebook-root", paper && showDetails && "ll-notebook-with-details", tools && writing.focus && writing.focusOn !== "typewriter" && inBody && "ll-page-dim", review && "flex flex-col")}
       onFocusCapture={() => registerPage(askPage, editorRef.current)}
       onMouseDown={onBlankMouseDown}
+      ref={rootRef}
     >
       {!paper && !report && <ReadingToolbar pageId={page.id} paper={unavailablePaper} unavailable={unavailablePaper} />}
-      {showDetails && cover && <CoverBand cover={cover} onChange={setCover} />}
+      {showDetails && cover && !review && <CoverBand cover={cover} onChange={setCover} />}
       {/* The left padding is the block handle's gutter; the right one gives way in narrow panes.
           Sidenotes and "On this page" make room for themselves (ll-page, styles.css). */}
-      <div className={cn("ll-page pb-8", paper && "ll-notebook-page")} data-page-notes={margins.notes || streamNotes || undefined} data-page-toc={margins.toc || undefined} style={{ "--content-width": `${paper ? 900 : contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) } as CSSProperties}>
+      {/* Reviewing, the report reads at 72ch with the notes' margin kept for it (styles.css). */}
+      <div
+        className={cn("ll-page pb-8", paper && "ll-notebook-page")}
+        data-page-notes={!!review || margins.notes || streamNotes || undefined}
+        data-page-toc={margins.toc || undefined}
+        data-review={review ? (unfold ? "open" : "folded") : undefined}
+        style={(review ? { "--content-width": "72ch" } : { "--content-width": `${paper ? 900 : contentWidth(layout.width)}px`, ...(layout.fullWidth && { maxWidth: "none" }) }) as CSSProperties}
+      >
+        {review && <ReviewHead changes={changes} content={editorRef.current?.getJSON() ?? page.content} onChanges={setChanges} onOpen={setUnfold} open={unfold} report={review} task={page.id} />}
         {showDetails && <div className={paper ? "ll-notebook-details" : "contents"}>{pageDetails}</div>}
         {unavailablePaper && <Alert className="my-4"><AlertTitle>Notebook unavailable</AlertTitle><AlertDescription>This version cannot read the notebook’s paper. Open it with the app version that saved it, or restore a version from history. Your saved content is unchanged.</AlertDescription></Alert>}
         <div className={cn("ll-page-body pt-3", (paper || unavailablePaper) && !documentNotes && "hidden")} ref={bodyRef}>
@@ -511,7 +561,7 @@ export function PageView({ page }: { page: LLObject }) {
           else saveEmergency(page, { properties: latest.current }, currentEdit());
         }} />}
         {report && <ReportSources report={current} />}
-        <Reports onNotes={setStreamNotes} pageId={page.id} />
+        <Reports onNotes={setStreamNotes} onReview={startReview} pageId={page.id} review={review ? { report: review, changes } : undefined} />
         <Linked id={page.id} />
         <Backlinks id={page.id} title={title} />
       </div>
@@ -521,6 +571,7 @@ export function PageView({ page }: { page: LLObject }) {
           <SheetPanel>{cover && <CoverBand cover={cover} onChange={setCover} />}{pageDetails}<Linked id={page.id} /><Backlinks id={page.id} title={title} /></SheetPanel>
         </SheetPopup>
       </Sheet>}
+      {review && <ReviewBar onDone={endReview} report={review} task={page.id} />}
       {voiceReview && <VoiceReviewDialog review={voiceReview} sourceId={page.id} onClose={() => setVoiceReview(null)} />}
       {turnInto && <TurnIntoPage selection={turnInto} onClose={() => setTurnInto(null)} />}
     </div>

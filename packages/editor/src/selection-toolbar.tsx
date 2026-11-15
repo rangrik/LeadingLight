@@ -61,7 +61,8 @@ function LinkEditor({
 }
 
 // `note` offers "Add sidenote"; `quote` offers "Add to essay" once the page has one. onAsk, when
-// given, adds Ask at the end: the app opens its agent panel on the selection.
+// given, adds Ask at the end: the app opens its agent panel on the selection. `verdicts` are words
+// that each add a note starting with that word (review mode).
 export function SelectionToolbar({
   editor,
   note,
@@ -70,6 +71,8 @@ export function SelectionToolbar({
   onTurnInto,
   annotate,
   askKeys,
+  verdicts,
+  onVerdict,
 }: {
   editor: Editor;
   note?: boolean;
@@ -79,6 +82,8 @@ export function SelectionToolbar({
   // Words that can't change: only a sidenote, and Ask, are offered.
   annotate?: boolean;
   askKeys?: string;
+  verdicts?: string[];
+  onVerdict?: (word: string) => void;
 }) {
   const [linkWidth, setLinkWidth] = useState<number | null>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -204,6 +209,12 @@ export function SelectionToolbar({
                   <MessageSquarePlus />
                 </ToolButton>
               )}
+              {note && !!verdicts?.length && <ToolbarSeparator className="mx-0.5 h-4" orientation="vertical" />}
+              {note && verdicts?.map((word) => (
+                <ToolButton key={word} label={`${word}, as a note to send`} onClick={() => onVerdict?.(word)}>
+                  {word}
+                </ToolButton>
+              ))}
               {quote && !annotate && (
                 <ToolButton label={quote.label} onClick={quote.run}>
                   <TextQuote />

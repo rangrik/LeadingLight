@@ -8,6 +8,7 @@ import { Answer, useFeed } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
 import { visit } from "~/components/property-value";
 import { showChanges } from "~/components/reports";
+import { reviewable } from "~/components/review";
 import { StartReady, WorkTable } from "~/components/work-table";
 import { useAnchored } from "~/lib/anchor";
 import { accept, acceptedOf, agentOfTask, carryOn, isTask, readySubtasks, start, stopAgent, syncWorkers } from "~/lib/assign";
@@ -193,11 +194,11 @@ export function EvidenceWidget({ task }: { task: ObjectSummary }) {
   );
 }
 
-// The report as it shows under the task's words: unfolded, and scrolled to.
-function toReport(from: HTMLElement, id: string) {
-  const el = from.closest(".ll-page")?.querySelector<HTMLElement>(`[data-report="${CSS.escape(id)}"]`);
+// The report as it shows under the task's words: unfolded, and scrolled to (at once from review mode).
+export function toReport(from: HTMLElement, id: string, smooth = true) {
+  const el = (from.closest(".ll-page") ?? from).querySelector<HTMLElement>(`[data-report="${CSS.escape(id)}"]`);
   el?.querySelector<HTMLButtonElement>("button[aria-expanded=false]")?.click();
-  requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  requestAnimationFrame(() => el?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "instant" }));
 }
 
 type Block = { type?: string; text?: string; attrs?: Record<string, unknown>; content?: Block[] };
@@ -222,7 +223,7 @@ function useChanged(older?: ObjectSummary, newer?: ObjectSummary) {
 
 // The latest report to read, and what changed since the one before; once accepted, when, and
 // anything published since. Accept itself is the card's primary, in its first row.
-export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: ObjectSummary }) {
+export function ReviewWidget({ task, agent, onReview }: { task: ObjectSummary; agent: ObjectSummary; onReview?: (report: string) => void }) {
   const { pages } = space.use();
   const live = sessions.use();
   const state = stateOf(task, agent, live);
@@ -264,6 +265,12 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
             </>
           )}
         </span>
+        {/* Review mode for that report (review.tsx); never filled, so the card keeps one primary. */}
+        {onReview && reviewable(last.id) && (
+          <Button className="text-muted-foreground" onClick={() => onReview(last.id)} size="xs" variant="ghost">
+            Review
+          </Button>
+        )}
       </Row>
     );
   }
@@ -286,7 +293,7 @@ export function ReviewWidget({ task, agent }: { task: ObjectSummary; agent: Obje
 }
 
 // Under the title of an assigned task, or of a task with subtasks.
-export function WorkPanel({ pageId }: { pageId: string }) {
+export function WorkPanel({ pageId, onReview }: { pageId: string; onReview?: (report: string) => void }) {
   const { pages } = space.use();
   const box = useRef<HTMLDivElement>(null);
   useAnchored(box);
@@ -311,7 +318,7 @@ export function WorkPanel({ pageId }: { pageId: string }) {
           {agent && run ? (
             <>
               <ActivityWidget agent={agent} task={page} />
-              <ReviewWidget agent={agent} task={page} />
+              <ReviewWidget agent={agent} onReview={onReview} task={page} />
               <ChecklistWidget agent={agent} />
               <EvidenceWidget task={page} />
             </>
