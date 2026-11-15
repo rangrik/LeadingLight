@@ -4,6 +4,10 @@ A local-first notes app in the spirit of Capacities: every note is an object of
 a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 19
 + Vite + Tailwind 4. macOS first.
 
+It is a private app. The code and the Mac downloads are public, so anyone may find and use
+them, but nothing promotes it: iPhone and iPad builds go only to TestFlight's internal group,
+never to App Store review, external testers or a public TestFlight link.
+
 ## Layout
 
 - `apps/desktop` — the app. `src/` is React, `src-tauri/` is Rust (window, SQLite migrations, the

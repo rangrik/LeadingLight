@@ -90,7 +90,7 @@ Upload the signed IPA with Apple's Transporter, or distribute the signed archive
 Xcode Organizer using App Store Connect. After Apple processes it, complete any export
 compliance questions, create an internal TestFlight group and add your own App Store Connect
 account. Add the build to that group, then install TestFlight on the iPad with the invited
-Apple Account. External testers need a separate group and Apple's beta review.
+Apple Account. LeadingLight is private: no external testers, no App Store review.
 [Apple's upload guide](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
 and [internal testing guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers)
 describe these steps.
