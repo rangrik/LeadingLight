@@ -4,7 +4,7 @@ Feature: Resume rows in the sidebar
   Recent come next, then Types, which folds.
 
   Names used below:
-  - Resume: navigation "Resume", under Today, Calendar and Browser
+  - Resume: navigation "Resume", under Today, Search, Calendar and Browser
   - a row's first line: the page's icon and title; its second line: 12 px, muted, the page's
     project when it has one, then what changed since you left, joined by " · "
   - a page's project: a page it links to through a relation property of type Project; a
@@ -108,5 +108,5 @@ Feature: Resume rows in the sidebar
     Then its rows show again
 
   Scenario: Nothing else moves
-    Then Today, Calendar and Browser are still the first three rows
+    Then Today, Search (search.feature), Calendar and Browser are still the first rows
     And Recent's sort and New page, row menus, rename, the footer and the bar work as before

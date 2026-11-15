@@ -18,6 +18,7 @@
     { "id": "grammar", "group": "View", "label": "Grammar check", "keys": "⇧⌘G", "accel": "CmdOrCtrl+Shift+G" },
     { "id": "count", "group": "View", "label": "Counts", "keys": "⇧⌘W", "accel": "CmdOrCtrl+Shift+W" },
     { "id": "reading", "group": "View", "label": "Reading layout", "keys": "⌥⌘R", "accel": "CmdOrCtrl+Alt+R", "what": "Show or hide Your words beside the page in front", "sep": true },
+    { "id": "search", "group": "Go", "label": "Search…", "keys": "⌘K", "accel": "CmdOrCtrl+K", "what": "Find a page by any of its words" },
     { "id": "ask", "group": "Go", "label": "Ask about this…", "keys": "⌘J", "accel": "CmdOrCtrl+J", "what": "Ask Claude about the selected words, or the page" },
     { "id": "inbox", "group": "Go", "label": "Inbox", "keys": "⌥⌘I", "accel": "CmdOrCtrl+Alt+I", "what": "Show or hide what agents need, Tail's suggestions and your captures" },
     { "id": "feed", "group": "Go", "label": "Needs you", "keys": "⌥⌘F", "accel": "CmdOrCtrl+Alt+F", "what": "Open the Inbox at what agents need from you" },

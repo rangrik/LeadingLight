@@ -337,9 +337,9 @@ async function fill() {
   ids.today = todayId;
   await savePage(todayId, { content: doc(p("Quiet morning. Reviewed ", m(pricing), " and still can't decide monthly or yearly; the agent is asking the same thing."), todo([false, "Decide monthly vs yearly before the design review"], [false, "Read chapter 3"]), p("Noticed: I open the app, look at Today, and then go hunting in Recent for where I was.")) });
   const yday = await ensureDaily(shiftDay(today(), -1));
-  await savePage(yday, { content: doc(p("Read chapter 2 of ", m(tis), ". Delays in ", m(loops), " are the key idea; see ", m(notes), "."), p("Design review with Sam in the afternoon.")) });
+  await savePage(yday, { updatedAt: at(1, 22), content: doc(p("Read chapter 2 of ", m(tis), ". Delays in ", m(loops), " are the key idea; see ", m(notes), "."), p("Design review with Sam in the afternoon.")) });
   const thu = await ensureDaily(shiftDay(today(), -3));
-  await savePage(thu, { content: doc(p("Saved the leverage points essay. Worth a page of its own.")) });
+  await savePage(thu, { updatedAt: at(3, 20), content: doc(p("Saved the leverage points essay. Worth a page of its own.")) });
 
   // The project's linked folder, and projects on
   await objects.putFolder({ pageId: ll, path: RUNTIME.path, folderId: "f-ll", location: RUNTIME.location, createdAt: at(30), updatedAt: at(30) });

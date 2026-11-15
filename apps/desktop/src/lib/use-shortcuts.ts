@@ -5,6 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
+import { toggleSearch } from "~/components/search-panel";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
@@ -76,6 +77,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return openSettings();
         case "ask":
           return openAsk();
+        case "search":
+          return toggleSearch();
         case "inbox":
         case "feed":
         case "captures":
