@@ -90,7 +90,7 @@ export function InboxView({ paneId }: { paneId?: string }) {
           ) : (
             <>
               <Group front={front} lit rows={here} title="On this page" />
-              <Group front={front} rows={elsewhere} title="Elsewhere" />
+              <Group front={front} rows={elsewhere} title={here.length ? "Elsewhere" : undefined} />
             </>
           )}
         </InboxSection>
