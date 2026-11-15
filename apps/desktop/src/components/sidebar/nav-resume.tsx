@@ -5,6 +5,7 @@ import { armDrag } from "~/components/pane-drag";
 import type { FeedItem } from "~/lib/feed";
 import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
+import { parentOf, roleOf } from "~/lib/linked";
 import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom, panes } from "~/lib/panes";
 import { iconFor, listed, pageOf, propOf, space, typeOf } from "~/lib/space";
@@ -23,18 +24,21 @@ function pick(pages: ObjectSummary[], feed: FeedItem[]) {
   const ask = feed.filter((i) => WAITS[i.kind] && pageOf(i.task ?? "")).sort((a, b) => b.at - a.at)[0];
   // A task given to an agent is the agent's to edit; it comes back here when it needs you.
   const given = new Set(pages.flatMap((p) => (p.typeId === AGENT ? [taskOfAgent(p)] : [])));
-  const own = pages.filter((p) => listed(p) && !typeOf(p.typeId).made && !given.has(p.id) && p.id !== ask?.task).sort((a, b) => b.updatedAt - a.updatedAt);
+  // Sidenotes are kept in the page's Thoughts page: writing one is an edit of the page, not a place you were.
+  const noted = new Map(pages.flatMap((p) => (roleOf(p) === "thoughts" ? [[parentOf(p) ?? "", p.updatedAt] as const] : [])));
+  const at = (p: ObjectSummary) => Math.max(p.updatedAt, noted.get(p.id) ?? 0);
+  const own = pages.filter((p) => listed(p) && roleOf(p) !== "thoughts" && !typeOf(p.typeId).made && !given.has(p.id) && p.id !== ask?.task).sort((a, b) => at(b) - at(a));
   const here = own[0];
   const near = here ? projectsOf(here) : [];
   const other = here && own.find((p) => (near.length || projectsOf(p).length) && !projectsOf(p).some((id) => near.includes(id)));
-  return [here && { page: here }, ask && { page: pageOf(ask.task!)!, ask }, other && { page: other }].filter((r) => !!r);
+  return [here && { page: here }, ask && { page: pageOf(ask.task!)!, ask }, other && { page: other }].filter((r) => !!r).map((r) => ({ ...r, at: at(r.page) }));
 }
 
 // The project, then what changed since you left: what the agent waits on, a newer report, or when.
-function since(p: ObjectSummary, ask?: FeedItem) {
+function since(p: ObjectSummary, at: number, ask?: FeedItem) {
   const project = projectsOf(p).find((id) => id !== p.id && pageOf(id));
   const report = reportsOn(p.id).at(-1);
-  const change = ask ? WAITS[ask.kind] : report && report.createdAt > p.updatedAt ? "Report arrived" : formatAgo(p.updatedAt);
+  const change = ask ? WAITS[ask.kind] : report && report.createdAt > at ? "Report arrived" : formatAgo(at);
   return [project && pageLabel(pageOf(project)!.title), change].filter(Boolean).join(" · ");
 }
 
@@ -50,7 +54,7 @@ export function NavResume({ select, within }: { select: (fn: (e: React.MouseEven
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
         <SidebarGroupLabel>Resume</SidebarGroupLabel>
         <SidebarMenu>
-          {rows.map(({ page, ask }) => (
+          {rows.map(({ page, ask, at }) => (
             <SidebarMenuItem key={page.id}>
               <SidebarMenuButton
                 aria-current={page.id === current ? "page" : undefined}
@@ -62,7 +66,7 @@ export function NavResume({ select, within }: { select: (fn: (e: React.MouseEven
                 <RowIcon icon={iconFor(page)} />
                 <span className="grid flex-1">
                   <span className="truncate">{pageLabel(page.title)}</span>
-                  <span className="truncate font-normal text-muted-foreground text-xs">{since(page, ask)}</span>
+                  <span className="truncate font-normal text-muted-foreground text-xs">{since(page, at, ask)}</span>
                 </span>
               </SidebarMenuButton>
             </SidebarMenuItem>

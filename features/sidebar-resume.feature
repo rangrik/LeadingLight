@@ -10,7 +10,8 @@ Feature: Resume rows in the sidebar
   - a page's project: a page it links to through a relation property of type Project; a
     Project page is its own project and doesn't name itself
   - your pages: every page except daily notes, tags, templates, the app's own pages (agents,
-    reports, feedback) and tasks given to an agent (those come back through the second row)
+    reports, feedback), tasks given to an agent (those come back through the second row) and
+    a page's Thoughts page, which keeps its sidenotes: a sidenote is an edit of the page it is on
 
   The rows, in order, never the same page twice:
   1. Where you were: the page among your pages with the latest edit.
@@ -46,6 +47,8 @@ Feature: Resume rows in the sidebar
     When I edit "Pricing notes" again
     Then row 1 is "Pricing notes"
     And a daily note, a tag or a report edited later never takes row 1
+    When I write a sidenote on "Feedback loops"
+    Then row 1 is "Feedback loops", reading "just now", and no row is named "Thoughts"
 
   Scenario: A report arrived after you left
     Given I last edited "Pricing notes" an hour ago
