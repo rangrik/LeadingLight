@@ -1,11 +1,15 @@
 import { useEffect } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { toastManager } from "@leadinglight/ui/components/toast";
-import { appUpdate, checkForUpdate, installUpdate, RELEASES, updatePrefs } from "~/lib/app-update";
+import { appUpdate, checkForUpdate, installUpdate, RELEASES, TESTFLIGHT, updatePrefs, updateWay } from "~/lib/app-update";
 import { openLink } from "~/lib/links";
 
 // Says when a newer LeadingLight is ready, 30 s after the app opens (once the tools' toast has had
-// its 15 s) and every four hours, and installs it from the toast or from Settings › About.
+// its 15 s) and every four hours, and installs it from the toast or from Settings › About. On
+// iPhone and iPad the same button opens TestFlight, which does the installing.
+
+let testFlight = false;
+void updateWay.then((way) => (testFlight = way === "testflight"));
 
 let showing: string | null = null;
 // The failure toast stays until answered, so a retry or a newer offer takes it away.
@@ -16,6 +20,7 @@ export async function updateAndRestart() {
   const { state, version } = appUpdate.get();
   if (state !== "ready" && state !== "failed") return;
   close(showing);
+  if (testFlight) return openLink(TESTFLIGHT);
   close(failed);
   const id = toastManager.add({ type: "loading", title: `Updating to LeadingLight ${version}…`, timeout: 0 });
   if (await installUpdate()) return toastManager.close(id);
@@ -55,11 +60,11 @@ async function check() {
   const id = toastManager.add({
     type: "info",
     timeout: 15_000,
-    title: `LeadingLight ${version} is ready`,
+    title: `LeadingLight ${version} is ${testFlight ? "in TestFlight" : "ready"}`,
     description: (
       <span className="flex gap-1.5">
         <Button onClick={() => void updateAndRestart()} size="xs">
-          Update and restart
+          {testFlight ? "Open TestFlight" : "Update and restart"}
         </Button>
         <Button
           onClick={() => {

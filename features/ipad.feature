@@ -102,6 +102,7 @@ Feature: LeadingLight on iPad
     When Apple account access or distribution signing is unavailable
     Then the release archive remains available locally
     And the build is not described as uploaded or installable from TestFlight
+    And a release on GitHub does all of this by itself (releases.feature)
 
   Scenario: Test directly on a connected iPad
     Given my iPad is paired with this Mac and Developer Mode is enabled

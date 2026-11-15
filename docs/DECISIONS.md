@@ -949,3 +949,14 @@ Nothing is downloaded before the click. It trusts only an archive signed by our 
 so GitHub alone cannot push code into installed apps; losing that key means one reinstall by
 hand. No server of ours is involved, and the Vercel key stays out of the build. An iPhone or
 iPad app cannot replace itself, so those update through TestFlight.
+
+## 51. iPhone and iPad builds go to TestFlight from the same release (2026-11-14)
+
+They were built on one Mac and pushed over a cable to two registered devices. Now the release
+workflow signs the iOS build with our distribution certificate and an App Store profile,
+has Apple validate it, and uploads it after the Mac build has passed, so one version reaches
+all three or none. It signs by hand rather than through the API key because, on a fresh
+build machine, Xcode's own signing makes a new certificate every run. The app's notice
+opens TestFlight and waits 45 minutes after a release, since Apple takes a while to process
+an upload. The cost: a TestFlight build stops opening after 90 days, where the Ad Hoc build
+ran a year.

@@ -3,15 +3,15 @@ import { useEffect, useState } from "react";
 import { SettingsGroup, SettingsPage, SettingsRow, Value } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
 import { updateAndRestart } from "~/components/app-update";
-import { appUpdate, checkForUpdate, updatable } from "~/lib/app-update";
+import { appUpdate, checkForUpdate, updateWay } from "~/lib/app-update";
 import { openLink } from "~/lib/links";
 
 // Our About: which build this is, and what it is built on. Shipyard's own About
 // (vendor/shipyard/app/src/views/settings/about-section.tsx) is about boxes and berthd.
 const built = new Date(__LL_BUILT__).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-// Only where the app can replace itself: the Mac app, not the web or a phone.
-function VersionRow() {
+// Only where the app has a way to a new version: the Mac app itself, TestFlight on iPhone and iPad.
+function VersionRow({ testFlight }: { testFlight: boolean }) {
   const update = appUpdate.use();
   const offered = update.state === "ready" || update.state === "failed";
   const installing = update.state === "installing";
@@ -20,7 +20,7 @@ function VersionRow() {
     idle: "Checked every four hours.",
     checking: "Checking…",
     current: "Up to date",
-    ready: `${update.version} is ready`,
+    ready: `${update.version} is ${testFlight ? "in TestFlight" : "ready"}`,
     installing: `Updating to ${update.version}…`,
     failed: `Couldn't update to ${update.version}`,
     unreachable: "Couldn't check for updates",
@@ -29,19 +29,19 @@ function VersionRow() {
     <SettingsRow label="Version" description={says}>
       <Value>{__LL_VERSION__}</Value>
       <Button disabled={busy} onClick={() => void (offered ? updateAndRestart() : checkForUpdate(true))} size="sm" variant={offered || installing ? "default" : "outline"}>
-        {offered || installing ? "Update and restart" : "Check for updates"}
+        {offered || installing ? (testFlight ? "Open TestFlight" : "Update and restart") : "Check for updates"}
       </Button>
     </SettingsRow>
   );
 }
 
 export function AboutSection() {
-  const [canUpdate, setCanUpdate] = useState(false);
-  useEffect(() => void updatable.then(setCanUpdate), []);
+  const [way, setWay] = useState<Awaited<typeof updateWay>>(null);
+  useEffect(() => void updateWay.then(setWay), []);
   return (
     <SettingsPage title="About" description={`LeadingLight ${__LL_VERSION__}`}>
       <SettingsGroup title="This build">
-        {canUpdate && <VersionRow />}
+        {way && <VersionRow testFlight={way === "testflight"} />}
         <SettingsRow label="Build" description="The commit it was built from. “+dirty” means uncommitted changes went in.">
           <Value>{__LL_COMMIT__}</Value>
         </SettingsRow>

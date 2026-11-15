@@ -424,7 +424,7 @@ export default function App() {
           ))}
           <ShortcutsSheet />
           {!mobile && <CliUpdates />}
-          {!mobile && <AppUpdates />}
+          <AppUpdates />
           <ZoomHud />
         </TooltipProvider>
       </ShipyardToasts>
