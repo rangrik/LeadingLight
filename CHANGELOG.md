@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/rangrik/LeadingLight/compare/v0.3.0...v0.4.0) (2026-11-15)
+
+
+### Features
+
+* update iPhone and iPad from the release, without TestFlight ([d31abce](https://github.com/rangrik/LeadingLight/commit/d31abce7659fcf356cecbcc45841f05aa06f5b3f))
+
+
+### Documentation
+
+* say LeadingLight is a private app ([1ab9f9c](https://github.com/rangrik/LeadingLight/commit/1ab9f9ce71265cbb34400e4304c6542049f7b670))
+
 ## [0.3.0](https://github.com/rangrik/LeadingLight/compare/v0.2.0...v0.3.0) (2026-11-15)
 
 
