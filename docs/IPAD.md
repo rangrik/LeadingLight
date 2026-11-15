@@ -63,9 +63,9 @@ QA_PORT=1437 pnpm --filter @leadinglight/desktop exec playwright test \
 
 ## TestFlight
 
-A release on GitHub now does this by itself: it archives, signs, validates and uploads, with
-the build number taken from the clock. See [RELEASING.md](RELEASING.md). The steps below are
-the same thing by hand.
+LeadingLight no longer uses TestFlight: it is private, and each GitHub release carries an Ad
+Hoc build that the app installs by its Update button. See [RELEASING.md](RELEASING.md). The
+steps below are kept for reference only.
 
 `IOS_BUILD_NUMBER=1 pnpm ios:archive` creates an unsigned **release** archive at the same path
 as `ios:build`. Choose the next unused build number in App Store Connect before uploading;

@@ -968,15 +968,16 @@ a toast and in Settings › About, and on one click downloads, verifies, install
 Nothing is downloaded before the click. It trusts only an archive signed by our update key,
 so GitHub alone cannot push code into installed apps; losing that key means one reinstall by
 hand. No server of ours is involved, and the Vercel key stays out of the build. An iPhone or
-iPad app cannot replace itself, so those update through TestFlight.
+iPad app cannot replace itself; decision 52 says how those update.
 
-## 52. iPhone and iPad builds go to TestFlight from the same release (2026-11-14)
+## 52. iPhone and iPad install each release by a link, without TestFlight (2026-11-15)
 
 They were built on one Mac and pushed over a cable to two registered devices. Now the release
-workflow signs the iOS build with our distribution certificate and an App Store profile,
-has Apple validate it, and uploads it after the Mac build has passed, so one version reaches
-all three or none. It signs by hand rather than through the API key because, on a fresh
-build machine, Xcode's own signing makes a new certificate every run. The app's notice
-opens TestFlight and waits 45 minutes after a release, since Apple takes a while to process
-an upload. The cost: a TestFlight build stops opening after 90 days, where the Ad Hoc build
-ran a year.
+signs an Ad Hoc build with our distribution certificate and attaches it, with the manifest iOS
+reads, to the GitHub release; the app's Update button opens that manifest's
+`itms-services` link and iOS installs it in place. TestFlight came first and was dropped the
+same day: LeadingLight is private, the owner did not want the TestFlight app, and a TestFlight
+build stops opening after 90 days, where an Ad Hoc one lasts as long as its profile. The cost:
+a new device must be registered and the profile remade before it can install. Signing is by
+hand rather than through the API key because, on a fresh build machine, Xcode's own signing
+makes a new certificate every run.

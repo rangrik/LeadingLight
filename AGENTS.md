@@ -5,8 +5,8 @@ a type, written in a Notion-style block editor. Desktop app on Tauri 2 + React 1
 + Vite + Tailwind 4. macOS first.
 
 It is a private app. The code and the Mac downloads are public, so anyone may find and use
-them, but nothing promotes it: iPhone and iPad builds go only to TestFlight's internal group,
-never to App Store review, external testers or a public TestFlight link.
+them, but nothing promotes it: iPhone and iPad builds are Ad Hoc, installable only on the
+devices registered to the team, and nothing goes to the App Store or TestFlight.
 
 ## Layout
 
@@ -94,20 +94,21 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
    never replaces it.
 7. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
 8. Once the user says it works, or told you to finish without asking, deliver it yourself:
-   commit; merge main into the branch and run the change's scenarios again (see Traps); merge
-   the branch into main in the main checkout (`$BERTH_ROOT_PATH`) and push it. The push updates
-   the release PR, "chore(main): release x.y.z". Merge that too once Checks pass on it (run
-   them on its branch if none ran). The release then signs and notarizes the Mac app, sends
-   the iPhone and iPad build to TestFlight, and publishes; watch it (`gh run watch`), and if it
-   fails, retry as `docs/RELEASING.md` says. The installed apps update themselves: the Mac app
-   offers Update and restart (Settings › About checks at once), and iPhone and iPad get it from
-   TestFlight about 45 minutes after. Never put a local build (`pnpm install:app`) over the
-   installed app: macOS sees a different app and asks again for the Keychain and microphone.
-   Remove your dev app and its data (`pnpm install:dev-app --remove` in the worktree). Then
-   tell the user what to try once the update arrives. Last, clean up: stop the worktree's servers; free and delete the merged branch (`git checkout
-   --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and close the worktree
-   with `"$BERTH_HOME/bin/berthd" worktree rm "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends
-   your session, so send your report before it.
+   commit; merge main into the branch and run the change's scenarios again (see Traps); merge the
+   branch into main in the main checkout (`$BERTH_ROOT_PATH`) and push it. The push updates the
+   release PR, "chore(main): release x.y.z". Merge that too once Checks pass on it (run them on
+   its branch if none ran). The release then signs and notarizes the Mac app, signs the iPhone
+   and iPad build, and publishes; watch it (`gh run watch`), and if it fails, retry as
+   `docs/RELEASING.md` says. The installed apps update themselves: the Mac app offers Update and
+   restart (Settings › About checks at once), and on iPhone and iPad Update asks iOS to install
+   the release. Never put a local build (`pnpm install:app`) over the installed app: macOS sees a
+   different app and asks again for the Keychain and microphone. Remove your dev app and its data
+   (`pnpm install:dev-app --remove` in the worktree). Then tell the user what to try once the
+   update arrives. Last, clean up: stop the worktree's servers; free and delete the merged branch
+   (`git checkout --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and
+   close the worktree with `"$BERTH_HOME/bin/berthd" worktree rm
+   "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends your session, so send your report before
+   it.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.

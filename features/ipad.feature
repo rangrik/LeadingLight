@@ -94,14 +94,13 @@ Feature: LeadingLight on iPad
     And it contains no Mac agent runtime, terminal multiplexer or transcription executable
     And the macOS build keeps its existing desktop features
 
-  Scenario: Prepare a TestFlight build
-    When I build the iOS release for TestFlight
+  Scenario: Prepare a release build
+    When I build the iOS release
     Then the archive uses the release configuration and a distinct iOS build number
     And the app includes its icons and required privacy declarations
-    And distribution uses App Store Connect signing
+    And distribution uses Ad Hoc signing for the registered devices
     When Apple account access or distribution signing is unavailable
     Then the release archive remains available locally
-    And the build is not described as uploaded or installable from TestFlight
     And a release on GitHub does all of this by itself (releases.feature)
 
   Scenario: Test directly on a connected iPad

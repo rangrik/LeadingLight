@@ -183,70 +183,34 @@ jobs:
       # Compiled before signing, as on the Mac: Cargo's build scripts never run beside the secrets.
       - name: Build the app
         run: |
-          # The UTC minute: always newer than the last upload, whichever workflow run made it.
+          # The UTC minute: always newer than the installed build, whichever workflow run made it.
           build=$(date -u +%y%m%d%H%M)
           echo "IOS_BUILD_NUMBER=$build" >> "$GITHUB_ENV"
           IOS_BUILD_NUMBER=$build pnpm ios:archive
-      - name: Sign and export for TestFlight
+      - name: Sign and export the Ad Hoc build
         env:
           IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
         run: |
-          : "${IOS_CERTIFICATE:?Add the TestFlight secrets listed in docs/RELEASING.md}" "${IOS_MOBILE_PROVISION:?Add the TestFlight secrets listed in docs/RELEASING.md}"
+          : "${IOS_CERTIFICATE:?Add the iOS secrets listed in docs/RELEASING.md}" "${IOS_MOBILE_PROVISION:?Add the iOS secrets listed in docs/RELEASING.md}"
           # The team is read from the profile, so no team ID lives in the repository.
           printf '%s' "$IOS_MOBILE_PROVISION" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
           team=$(security cms -D -i "$RUNNER_TEMP/app.mobileprovision" | plutil -extract TeamIdentifier.0 raw -)
           rm "$RUNNER_TEMP/app.mobileprovision"
           APPLE_DEVELOPMENT_TEAM="$team" pnpm ios:export
-      - name: Check the build, and let Apple check it
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          ipa=apps/desktop/src-tauri/gen/apple/build/arm64/LeadingLight.ipa
-          unzip -q "$ipa" -d "$RUNNER_TEMP/ipa"
-          app="$RUNNER_TEMP/ipa/Payload/LeadingLight.app"
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Info.plist")" = "${TAG#v}"
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Info.plist")" = com.leadinglight.app
-          codesign --verify --strict "$app"
-          # Apple's own validation of the signed build, without uploading it.
-          mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s\n' "$APPLE_API_KEY_P8" > ~/.appstoreconnect/private_keys/"AuthKey_$APPLE_API_KEY.p8"
-          xcrun altool --validate-app --type ios --file "$ipa" --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
-          rm ~/.appstoreconnect/private_keys/"AuthKey_$APPLE_API_KEY.p8"
+      - name: Verify and package the iPhone and iPad build
+        run: scripts/release/package-ios.sh "$TAG"
       - name: Preserve the iOS build
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: LeadingLight-${{ needs.draft.outputs.tag }}-ios
-          path: apps/desktop/src-tauri/gen/apple/build/arm64/LeadingLight.ipa
+          path: release-ios/*
           if-no-files-found: error
           retention-days: 7
 
-  # After both builds pass, so TestFlight never gets a version whose Mac build failed.
-  testflight:
-    needs: [draft, macos, ios]
-    if: ${{ !inputs.rehearsal }}
-    runs-on: macos-26
-    timeout-minutes: 30
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: LeadingLight-${{ needs.draft.outputs.tag }}-ios
-      - name: Upload to TestFlight
-        env:
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
-        run: |
-          mkdir -p ~/.appstoreconnect/private_keys
-          printf '%s\n' "$APPLE_API_KEY_P8" > ~/.appstoreconnect/private_keys/"AuthKey_$APPLE_API_KEY.p8"
-          xcrun altool --upload-app --type ios --file LeadingLight.ipa --apiKey "$APPLE_API_KEY" --apiIssuer "$APPLE_API_ISSUER"
-          rm ~/.appstoreconnect/private_keys/"AuthKey_$APPLE_API_KEY.p8"
-
   publish:
-    needs: [draft, macos, testflight]
+    needs: [draft, macos, ios]
     if: ${{ !inputs.rehearsal }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -258,6 +222,10 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: LeadingLight-${{ needs.draft.outputs.tag }}-macos-arm64
+          path: release-assets
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: LeadingLight-${{ needs.draft.outputs.tag }}-ios
           path: release-assets
       - name: Upload and publish the complete release
         env:
@@ -275,8 +243,8 @@ jobs:
           import { createHash } from 'node:crypto';
           const assets = JSON.parse(readFileSync('assets.json'));
           const files = readdirSync('release-assets');
-          assert.equal(files.length, 5);
-          assert.equal(assets.length, 5);
+          assert.equal(files.length, 7);
+          assert.equal(assets.length, 7);
           for (const name of files) {
             const path = `release-assets/${name}`;
             const asset = assets.find(a => a.name === name);
@@ -292,6 +260,7 @@ jobs:
           Apple Silicon (M-series), macOS 13 or later. Voice transcription requires macOS 26.
           Use the DMG to install, or the ZIP for the app bundle. SHA256SUMS.txt verifies either download.
           An installed app offers this update by itself; the `.app.tar.gz` and `latest.json` are for that.
+          The `_ios.ipa` and `LeadingLight_ios.plist` are the iPhone and iPad build, which installs only on the owner's devices.
 
           Signed with an Apple Developer ID and notarized by Apple.
           NOTES

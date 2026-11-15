@@ -10,8 +10,8 @@ import { openLink } from "~/lib/links";
 // (vendor/shipyard/app/src/views/settings/about-section.tsx) is about boxes and berthd.
 const built = new Date(__LL_BUILT__).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
-// Only where the app has a way to a new version: the Mac app itself, TestFlight on iPhone and iPad.
-function VersionRow({ testFlight }: { testFlight: boolean }) {
+// Only where the app has a way to a new version: the Mac app itself, the install link on iPhone and iPad.
+function VersionRow({ byLink }: { byLink: boolean }) {
   const update = appUpdate.use();
   const offered = update.state === "ready" || update.state === "failed";
   const installing = update.state === "installing";
@@ -20,7 +20,7 @@ function VersionRow({ testFlight }: { testFlight: boolean }) {
     idle: "Checked every four hours.",
     checking: "Checking…",
     current: "Up to date",
-    ready: `${update.version} is ${testFlight ? "in TestFlight" : "ready"}`,
+    ready: `${update.version} is ready`,
     installing: `Updating to ${update.version}…`,
     failed: `Couldn't update to ${update.version}`,
     unreachable: "Couldn't check for updates",
@@ -29,7 +29,7 @@ function VersionRow({ testFlight }: { testFlight: boolean }) {
     <SettingsRow label="Version" description={says}>
       <Value>{__LL_VERSION__}</Value>
       <Button disabled={busy} onClick={() => void (offered ? updateAndRestart() : checkForUpdate(true))} size="sm" variant={offered || installing ? "default" : "outline"}>
-        {offered || installing ? (testFlight ? "Open TestFlight" : "Update and restart") : "Check for updates"}
+        {offered || installing ? (byLink ? "Update" : "Update and restart") : "Check for updates"}
       </Button>
     </SettingsRow>
   );
@@ -41,7 +41,7 @@ export function AboutSection() {
   return (
     <SettingsPage title="About" description={`LeadingLight ${__LL_VERSION__}`}>
       <SettingsGroup title="This build">
-        {way && <VersionRow testFlight={way === "testflight"} />}
+        {way && <VersionRow byLink={way === "link"} />}
         <SettingsRow label="Build" description="The commit it was built from. “+dirty” means uncommitted changes went in.">
           <Value>{__LL_COMMIT__}</Value>
         </SettingsRow>

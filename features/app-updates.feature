@@ -3,8 +3,9 @@ Feature: The Mac app updates itself
   one click. It installs an update only if it carries LeadingLight's update signature. Nothing is
   downloaded before the click. In a browser build a stand-in plays the updater: ?update=0.9.0
   offers that version, ?update=fail offers it and makes the install fail, and ?update=offline
-  makes the check fail. An iPhone or iPad app cannot replace itself, so there the same notice
-  opens TestFlight (the last scenario); ?ipad or ?iphone with ?update shows it in a browser.
+  makes the check fail. An iPhone or iPad app cannot replace itself, so there the button opens
+  the release's install link and iOS asks before installing (the last scenario); ?ipad or ?iphone
+  with ?update shows it in a browser.
 
   Names used below:
   - the update toast: a toast titled "LeadingLight 0.9.0 is ready", where the tools' toast shows
@@ -50,14 +51,14 @@ Feature: The Mac app updates itself
     And trying again takes the old message away, so there is never more than one
     And the installed app is unchanged and keeps running
 
-  Scenario: iPhone and iPad point to TestFlight
-    Given a release newer than this app has been GitHub's latest for 45 minutes, time enough
-      for TestFlight to have it
-    Then a toast reads "LeadingLight 0.9.0 is in TestFlight" with the buttons "Open TestFlight" and "Later"
-    And the version row reads "0.9.0 is in TestFlight" beside an "Open TestFlight" button
-    When I tap "Open TestFlight"
-    Then TestFlight opens, where Update installs it
-    And the app itself downloads and installs nothing
+  Scenario: iPhone and iPad install the release by its link
+    Given a release newer than this app is GitHub's latest
+    Then a toast reads "LeadingLight 0.9.0 is ready" with the buttons "Update" and "Later"
+    And the version row reads "0.9.0 is ready" beside an "Update" button
+    When I tap "Update"
+    Then iOS asks whether to install LeadingLight, and Install replaces the app in place
+    And my pages are as I left them
+    And nothing goes through TestFlight or the App Store
 
   Scenario: Not the released app
     Given a dev app from pnpm install:dev-app, the web app, or a browser build without ?update

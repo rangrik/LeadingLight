@@ -43,18 +43,18 @@ case "${1:-}" in
     shift
     # Up to ten digits: a release uses the UTC minute, such as 2611142345.
     if [[ ! "${IOS_BUILD_NUMBER:-}" =~ ^[1-9][0-9]{0,9}$ ]]; then
-      echo "Set IOS_BUILD_NUMBER to an unused whole number, higher than the last upload." >&2
+      echo "Set IOS_BUILD_NUMBER to a whole number, higher than the installed build's." >&2
       exit 1
     fi
     release_config="{\"bundle\":{\"iOS\":{\"bundleVersion\":\"$IOS_BUILD_NUMBER\"}}}"
     cp src-tauri/ExportOptions.ios.plist src-tauri/gen/apple/ExportOptions.plist
     if [[ "$release_action" == release-archive ]]; then
-      set -- build --ci --target aarch64 --no-sign --archive-only --export-method app-store-connect --config "$release_config" "$@"
+      set -- build --ci --target aarch64 --no-sign --archive-only --export-method release-testing --config "$release_config" "$@"
     else
       : "${APPLE_DEVELOPMENT_TEAM:?Set APPLE_DEVELOPMENT_TEAM to your enrolled Apple Developer team ID.}"
       # A distribution profile allows only production push; Xcode's own signing switches it by itself.
       [[ -z "${IOS_MOBILE_PROVISION:-}" ]] || /usr/libexec/PlistBuddy -c 'Set :aps-environment production' src-tauri/gen/apple/leadinglight-desktop_iOS/leadinglight-desktop_iOS.entitlements
-      set -- build --ci --target aarch64 --export-method app-store-connect --config "$release_config" "$@"
+      set -- build --ci --target aarch64 --export-method release-testing --config "$release_config" "$@"
     fi
     ;;
 esac

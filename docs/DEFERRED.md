@@ -5,7 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
-| 2026-11-14 | `ITSAppUsesNonExemptEncryption` is not in the iOS Info.plist, so App Store Connect asks about encryption for each build | The answer describes the app's own sync encryption and is the owner's to give; none is guessed. | The first upload's questions are answered: record the same answer in `Info.ios.plist`. |
+| 2026-11-15 | The App Store Connect record "Leading Light: Notes" and its TestFlight group are unused | Made for TestFlight, which was dropped the same day; deleting them needs the owner's word. The API key there still notarizes the Mac app. | The owner asks to tidy App Store Connect. |
+| 2026-11-15 | Whether iOS follows GitHub's redirect for a release's install link | Not checked on a device yet; the first update after an install will show it. | That update fails with "Cannot connect": host the manifest and build where there is no redirect. |
 | 2026-11-14 | The iOS signing step runs the frontend build beside the distribution certificate | Tauri builds and signs iOS in one command. Cargo's build scripts run in the earlier unsigned step; the npm build runs again. | Tauri can sign an existing archive, or the release moves to `xcodebuild` directly. |
 | 2026-11-14 | The app's update toast covers the sidebar's Settings row while it shows, as the tools' toast does | Where toasts sit is app-wide (see 2026-10-28 below). The same update is offered in Settings › About. | The notification placement fix. |
 | 2026-11-14 | The three landing pages and `features/landing-pages.feature` still say builds are unsigned and not notarized | True until the first signed release is out, and the pages deploy apart from a release. | The first signed release is published: change the copy and the feature, then deploy. |

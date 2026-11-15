@@ -21,7 +21,7 @@ the Mac build is signed with the Apple secrets listed under Downloads and signin
    The workflow creates a tag and draft, validates
    that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, a ZIP, the
    update archive with `latest.json`, and `SHA256SUMS.txt`, sends the iPhone and iPad build
-   to TestFlight, and then publishes. Until every step succeeds, the draft stays private.
+   and the iPhone and iPad build, and then publishes. Until every step succeeds, the draft stays private.
 
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.
@@ -107,28 +107,27 @@ apps refuse every later update, and each needs one reinstall by hand. A dev app
 
 ## iPhone and iPad
 
-The same release builds the iOS app, signs it for App Store Connect, has Apple validate
-it, and uploads it to TestFlight once the Mac build has also passed. Only then is the
-GitHub release published. The build number is the UTC minute (`2611142345`), so every
-upload is newer than the last. A rehearsal does everything except the upload.
+The same release builds the iOS app and signs it Ad Hoc, for the devices registered to the
+team. The release carries the build (`LeadingLight_<version>_ios.ipa`) and its manifest
+(`LeadingLight_ios.plist`). The build number is the UTC minute (`2611142345`), so every build
+is newer than the last. Nothing goes to TestFlight or App Store Connect: LeadingLight is
+private (see `AGENTS.md`).
 
-An app there cannot replace itself. After a release has been out 45 minutes, time for
-TestFlight to process it, the app says the version is in TestFlight and its button opens
-TestFlight, where Update installs it. With TestFlight's automatic updates on, it arrives
-by itself. Internal testers need no Apple review. A TestFlight build stops opening 90
-days after its upload, so release at least that often.
+An iOS app cannot replace itself. When a newer release is out, the app says so, and its Update
+button opens `itms-services://?action=download-manifest&url=…` for that release. iOS asks
+whether to install LeadingLight, and Install replaces it in place, keeping its notes. The first
+install on a device is by cable, `xcrun devicectl device install app`, as in `docs/IPAD.md`.
 
 | Secret | What it is |
 | --- | --- |
 | `IOS_CERTIFICATE` | The Apple Distribution certificate with its key, exported as `.p12`: `base64 -i file.p12 \| gh secret set IOS_CERTIFICATE` |
 | `IOS_CERTIFICATE_PASSWORD` | The password chosen at that export |
-| `IOS_MOBILE_PROVISION` | An App Store Connect provisioning profile for `com.leadinglight.app` made with that certificate: `base64 -i file.mobileprovision \| gh secret set IOS_MOBILE_PROVISION` |
+| `IOS_MOBILE_PROVISION` | The Ad Hoc profile "LeadingLight Ad Hoc CI" for `com.leadinglight.app`, made with that certificate and the registered devices: `base64 -i file.mobileprovision \| gh secret set IOS_MOBILE_PROVISION` |
 
-The upload uses the App Store Connect key above. The certificate and profile end
-together each November; make new ones, set the three secrets again and run a rehearsal.
-The App Store Connect app record is "Leading Light: Notes" (Apple ID 6834977186; the plain
-name was taken). Once there: answer the export compliance questions for the first build,
-and make an internal testing group with automatic distribution. `docs/IPAD.md` has the local steps.
+The certificate and profile end together on 14 November 2027; make new ones, set the three
+secrets again and run a rehearsal. To add a device, register its UDID on the Apple Developer
+site, edit the profile to include it, download it and set `IOS_MOBILE_PROVISION` again; the
+next release installs on it.
 
 ## Maintenance
 

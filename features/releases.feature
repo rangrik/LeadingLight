@@ -19,20 +19,20 @@ Feature: Versioned GitHub releases
     And the app and the disk image are signed with a Developer ID, notarized by Apple and carry the ticket
     And the release is a normal release, marked as GitHub's latest
 
-  Scenario: Send the iPhone and iPad build to TestFlight
+  Scenario: Attach the iPhone and iPad build
     Given the release pull request has been merged
     When the checks, the Apple Silicon build and the iOS build pass
-    Then the iOS build is signed for App Store Connect and carries the release's version
-    And its build number is the UTC minute it was built, so each upload is newer than the last
-    And Apple's validation accepts it before anything is uploaded
-    And it is uploaded to TestFlight, and only then is the GitHub release published
+    Then the iOS build is signed Ad Hoc for the registered devices and carries the release's version
+    And its build number is the UTC minute it was built, so each build is newer than the last
+    And the release carries the build and the manifest its install link reads
+    And nothing goes to TestFlight or App Store Connect
 
   Scenario: A signing secret is missing
     Given the Developer ID certificate or the App Store Connect key is not in the repository's secrets
     When the Apple Silicon build reaches signing
     Then it stops and points to docs/RELEASING.md
     And nothing unsigned is published
-    And a missing TestFlight certificate or profile stops the iOS build the same way
+    And a missing iOS certificate or profile stops the iOS build the same way
 
   Scenario: Stop an incomplete release
     Given a check, runtime build, signing, notarization, bundle check or upload fails
@@ -45,7 +45,6 @@ Feature: Versioned GitHub releases
     Given I run Publish release on main or on a branch with rehearsal enabled
     When checks, signing and packaging pass
     Then the workflow stores the same signed downloads as build artifacts
-    And Apple validates the iOS build, but nothing is uploaded to TestFlight
     And it creates no tag or GitHub release
 
   Scenario: A branch cannot publish
