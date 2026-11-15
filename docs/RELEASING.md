@@ -77,8 +77,9 @@ them. Add each with `gh secret set NAME`; never put one in a commit, a PR or a c
 | `APPLE_API_KEY` | That key's Key ID |
 | `APPLE_API_ISSUER` | The Issuer ID shown above the keys |
 
-A missing secret stops the build before anything is signed. The certificate lasts five
-years; after replacing it or the key, set the secrets again and run a rehearsal. The app
+A missing secret stops the build before anything is signed. The certificate ends on
+15 December 2027; Apple issued it for 13 months. Apps signed before then keep working, but
+a release after it needs a new one: set the secrets again and run a rehearsal. The app
 is compiled first and signed in a later step, so the secrets never sit beside a
 dependency's build script. See
 [Tauri's signing instructions](https://v2.tauri.app/distribute/sign/macos/).
