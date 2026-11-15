@@ -1,7 +1,7 @@
 Feature: Writing tools
   iA Writer's best-loved editor aids, on our block editor: Focus mode, Syntax highlight, Style
-  check (https://ia.net/writer/support/editor), plus a grammar check and counts of everything
-  beside the page's name. All run on this Mac; grammar comes from Harper. They only change how
+  check (https://ia.net/writer/support/editor), plus a grammar check and a word count beside the
+  page's name, which opens counts of everything. All run on this Mac; grammar comes from Harper. They only change how
   the page looks to you: nothing in the page is changed or saved because of them. Each is a
   setting for the whole app, kept on this Mac, and holds after a reload. Grammar check and
   Counts are on to begin with; the rest are off. Grammar help starts at When I ask
@@ -17,7 +17,8 @@ Feature: Writing tools
     mode, Syntax highlight and Style check, indented in one block with them, the choice of what
     each does, greyed while its switch is off (checkboxes where any of several can be on, on one
     line); and "Use the tools on": a checkbox for each type of page, in even columns
-  - the counts: button "Counts" right after the breadcrumbs, past a thin divider
+  - the counts: button "Counts" right after the breadcrumbs, past a thin divider: one line of
+    words in the theme's muted text, such as "301 words", with no colour and no dots
   - dimmed: drawn at low opacity, 150–200 ms ease-out to change
 
   Background:
@@ -116,26 +117,23 @@ Feature: Writing tools
     When I fix "recieved" to "received" and pause typing
     Then its underline goes
     When I press Shift+Meta+G
-    Then no underlines show and the browser's spelling check is back; the counts still count mistakes
+    Then no underlines show and the browser's spelling check is back; the counts' popover still counts mistakes
 
   Scenario: Counts beside the page's name
-    Then the counts read, on one line in the theme's muted text:
-      "14 words · <1 min read · N misspellings · N grammar issues · ● nouns · ● verbs ·
-       ● adjectives · ● adverbs · ● conjunctions · 1 filler", each part of speech with its number
-      and its Syntax highlight colour, and the parts' names only where the panel is wide
-    And parts of speech, fillers and grammar are counted whether or not their marks are shown
-    And kinds with none are left out of the line
-    And the counts sit on the crumbs' text baseline and take only the room the title leaves: the
-      title is never cut while a count shows, a narrow card shows only the counts that fit whole,
-      in that order, and one too narrow for the first shows none and no divider
+    Then the counts read "14 words", and nothing else: no reading time, no mistakes, no parts of
+      speech, no coloured dots
+    And the counts sit on the crumbs' text baseline, in a wide card and a narrow one alike, and
+      take only the room the title leaves: the title is never cut while the counts show, and a
+      card too narrow for them whole shows none and no divider
     And narrow cards hide the parent breadcrumb before crowding the title or history control
-    And pointing at a dot names it in the app's tooltip
     When I select "the quick fox"
-    Then they count the selection: "3 of 14 words" and the selection's own parts and issues
+    Then they read "3 of 14 words"
     When I type, the counts follow within a moment
     When I click the counts
     Then a popover lists everything: words, characters, sentences, paragraphs, reading time, each
-      part of speech, each style kind and each grammar kind, with the selection's beside the page's
+      part of speech beside a dot in its Syntax highlight colour, each style kind and each grammar
+      kind, with the selection's beside the page's
+    And parts of speech, fillers and grammar are counted there whether or not their marks are shown
     When I press Shift+Meta+W
     Then the counts are gone, and come back with it again
 

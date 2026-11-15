@@ -19,10 +19,14 @@ import { ALL, choose, inProject, railProjects, scope } from "~/lib/scope";
 import { pageOf, space, typeOf } from "~/lib/space";
 import { sessions, stateOf, type TaskState } from "~/lib/work-watch";
 
-// What waits on the person in a project (its Feed items), else whether its agents are at work.
+// What waits on the person in a project (its Feed items), in Today's words, else whether its
+// agents are at work. The dot is amber, for an agent that asks; ready is a word.
 function status(project: string, mine: FeedItem[], live: Map<string, Session>): { line: string; dot?: TaskState } {
   const tasks = space.get().pages.filter((p) => isTask(p) && inProject(p, project));
-  if (mine.length) return { line: `${mine.length} need${mine.length === 1 ? "s" : ""} you`, dot: mine.some((i) => i.kind === "question" || i.kind === "approval") ? "input" : "review" };
+  const asks = mine.filter((i) => i.kind === "question" || i.kind === "approval").length;
+  const ready = mine.filter((i) => i.kind === "review").length;
+  const line = [asks && `${asks} need${asks === 1 ? "s" : ""} you`, ready && `${ready} ready`].filter(Boolean).join(" · ");
+  if (line) return { line, dot: asks ? "input" : undefined };
   const working = tasks.some((t) => {
     const agent = agentOfTask(t);
     return agent && ["working", "starting"].includes(stateOf(t, agent, live));
@@ -57,12 +61,13 @@ function RailButton({ name, n, active, line, dot, onSelect, children }: { name: 
   );
 }
 
-export function ProjectRail() {
+export function ProjectRail({ stay }: { stay: boolean }) {
   const { pages } = space.use();
   const { id } = scope.use();
-  // Gone with the sidebar, and while it is a sheet in a narrow window.
+  // Gone with the sidebar, unless that only folded for a sidenote's room (stay), and while it is
+  // a sheet in a narrow window.
   const { open, isMobile } = useSidebar();
-  const shown = open && !isMobile;
+  const shown = (open || stay) && !isMobile;
   const items = useFeed(true);
   const live = sessions.use();
   const projects = railProjects(pages);

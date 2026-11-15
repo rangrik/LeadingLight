@@ -104,6 +104,6 @@ Feature: Today says where things stand
   Scenario: No counts on a daily note
     Given Counts is on in the Writing menu
     When I open Today
-    Then the pane's header shows no word count, reading time or part-of-speech dots
+    Then the pane's header shows no word count
     When I open "Notes on Thinking in Systems"
     Then its header shows them as before (writing.feature)

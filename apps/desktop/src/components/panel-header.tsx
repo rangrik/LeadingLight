@@ -41,8 +41,9 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
       <div
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 overflow-hidden ps-4 pe-1 transition-[padding] duration-200 ease-linear",
-          // Past the lights, or past the lights and the window's sidebar button (12 px after it).
-          lead && !sidebarOpen && !under && (toggle ? "ps-[calc(var(--traffic-left)_+_1rem)]" : "ps-[calc(var(--traffic-left)_+_50px)]"),
+          // Past the lights, or past the lights and the window's sidebar button (12 px after it);
+          // less what a rail that stayed already puts before the card.
+          lead && !sidebarOpen && !under && (toggle ? "ps-[max(1rem,calc(var(--traffic-left)_+_1rem_-_var(--rail-kept,0px)))]" : "ps-[calc(var(--traffic-left)_+_50px_-_var(--rail-kept,0px))]"),
         )}
         onPointerDown={onGrab}
       >
@@ -69,7 +70,8 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
                   {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[48rem]/header:block" />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
-                    <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>
+                    {/* Its text, not the icon's bottom edge, is the baseline the counts sit on. */}
+                    <BreadcrumbPage className={cn("max-w-[40ch] self-baseline truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </>
               )}

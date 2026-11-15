@@ -13,13 +13,12 @@ import { CARD } from "~/components/pane-area";
 import { PanelHeader } from "~/components/panel-header";
 import { closeAsk, openAsk } from "~/lib/ask";
 import { bar, type BarView, NAMES, PANEL, type Section, showBar, showing, toggleBar, useNarrow, useShowing } from "~/lib/bar";
-import { discoverVoiceCaptures, toReview } from "~/lib/capture-inbox";
+import { discoverVoiceCaptures } from "~/lib/capture-inbox";
 import { wantFocus } from "~/lib/feed";
 import { useKeysFor } from "~/lib/keymap";
 import { useMobile } from "~/lib/platform";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { space } from "~/lib/space";
-import { inPanel, tail } from "~/lib/tail";
 
 // The bar (features/bar.feature): a strip of icons at the window's right edge, and the panel
 // beside it that each opens. In a narrow window a view opens as a pane instead (lib/bar.ts).
@@ -39,21 +38,18 @@ export function toggleView(view: BarView | "feed" | "suggestions" | "captures", 
   else toggleBar("inbox");
 }
 
-// One number: what agents need while projects are on, unseen suggestions, captures to review.
+// One number: what agents wait on (Needs you). Suggestions and captures wait without one.
 // Counting the agents' items also keeps the Inbox following every agent while it is closed.
 function InboxCount() {
-  const { pages } = space.use();
-  const ready = pages.length > 0;
-  // Recordings saved before the inbox existed count too; found once per session.
+  const ready = space.use().pages.length > 0;
+  // Recordings saved before the inbox existed are captures too; found once per session.
   useEffect(() => void (ready && discoverVoiceCaptures().catch(() => {})), [ready]);
-  const rest = toReview(pages).length + tail.use().filter((l) => inPanel(l) && !l.seen && !l.done).length;
   const mobile = useMobile();
-  const feed = projectPrefs.use().enabled && !mobile;
-  return feed ? <FeedCount plus={rest} /> : <Count n={rest} />;
+  return projectPrefs.use().enabled && !mobile ? <FeedCount /> : null;
 }
-const FeedCount = ({ plus }: { plus: number }) => <Count n={useFeed().length + plus} />;
 
-function Count({ n }: { n: number }) {
+function FeedCount() {
+  const n = useFeed().length;
   if (!n) return null;
   return (
     <Badge className="pointer-events-none absolute -top-0.5 -right-0.5" id="bar-count-inbox" size="sm">

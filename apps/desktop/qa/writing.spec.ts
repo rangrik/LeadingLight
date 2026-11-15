@@ -35,16 +35,20 @@ test("Focus mode keeps the line being written in the middle", async ({ page }) =
   expect(Math.abs(off)).toBeLessThan(4);
 });
 
-// Seam: Harper's wasm and worker load through the bundler and report back to the editor and header,
-// and the reason reaches COSS's tooltip. Catches grammar that never arrives, or the slow native tip.
+// Seam: Harper's wasm and worker load through the bundler and report back to the editor and the
+// counts, and the reason reaches COSS's tooltip. Catches grammar that never arrives, the slow
+// native tip, or a header that says more than its one line of words.
 test("Grammar check underlines, explains and counts a misspelling", async ({ page }) => {
   await open(page, { grammarMode: "inline" });
   await page.keyboard.type("I recieved it.");
   const word = page.getByRole("textbox", { name: "Page body" }).locator(".ll-spelling");
   await expect(word).toHaveText("recieved", { timeout: 15000 });
-  await expect(page.getByRole("button", { name: "Counts" })).toContainText("1 misspelling");
   await word.hover();
   await expect(page.locator("[data-slot=tooltip-popup]")).toContainText("recieved", { timeout: 1000 });
+  const counts = page.getByRole("button", { name: "Counts", exact: true });
+  await expect(counts).toHaveText("3 words");
+  await counts.click();
+  await expect(page.getByRole("row", { name: "Misspellings 1" })).toBeVisible();
 });
 
 // Seam: the counts share a card header with the page's title. Catches the title cut to "L…"
@@ -75,7 +79,7 @@ test("Narrow cards keep the title whole and show only whole counts", async ({ pa
     for (const count of await header.locator("[data-count]").all())
       if (await count.isVisible()) expect((await count.boundingBox())!.x + (await count.boundingBox())!.width).toBeLessThanOrEqual(edge);
     await header.hover();
-    await expect(header.getByRole("button", { name: "History and authorship" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Page actions", exact: true })).toBeVisible();
   }
   await page.screenshot({ path: "qa/report/merged-narrow-cards.png", animations: "disabled" });
 });
@@ -88,12 +92,19 @@ test("The writing tools follow the page's type", async ({ page }) => {
   await page.getByRole("button", { name: "New person" }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Ada");
   const card = page.getByRole("region", { name: "Ada", exact: true });
+  // The tools are in the page's ⋯ menu, beside History.
+  const menu = card.getByRole("button", { name: "Page actions", exact: true });
+  const tools = page.getByRole("menuitem", { name: "Writing tools" });
   await expect(card.getByRole("button", { name: "Counts" })).toHaveCount(0);
-  await expect(card.getByRole("button", { name: "Writing" })).toHaveCount(0);
+  await menu.click();
+  await expect(page.getByRole("menuitem", { name: "History and authorship" })).toBeVisible();
+  await expect(tools).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Meta+Comma");
   await page.getByTestId("settings-nav-writing").click();
   await page.getByRole("checkbox", { name: "People" }).click();
   await page.keyboard.press("Escape");
-  await expect(card.getByRole("button", { name: "Writing" })).toHaveCount(1);
   await expect(card.getByRole("button", { name: "Counts" })).toHaveCount(1);
+  await menu.click();
+  await expect(tools).toBeVisible();
 });

@@ -19,7 +19,7 @@ export function useNotesFor(page: ObjectSummary, editor: RefObject<BlockEditorHa
   const notes = useThoughts(page, (thoughts) => {
     if (thoughts) void editPage(page.id, { properties: (p) => ({ ...p, thoughts: thoughts.id }) });
     // A line saved from Recall keeps the layout still: nothing moves (docs/TAIL.md).
-    if (!recalling.get().includes(page.id)) makeRoom();
+    if (!recalling.get().includes(page.id)) makeRoom(true);
   });
   // Only when this page's task or its sent notes change does the page draw again.
   const pickKey = useSyncExternalStore(space.subscribe, () => {

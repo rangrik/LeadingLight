@@ -7,6 +7,8 @@ Feature: Sidenotes, thoughts and essays
   - "Add sidenote" in the selection toolbar; ⌘⇧M does the same, and with no selection it notes
     the whole paragraph holding the cursor
   - margin: the column right of the text where notes sit, each level with its sentence
+  - room: a page with notes needs a card 832 px wide, an essay or a page without notes 520 px;
+    pages side by side need the sum. At 1440 px with the sidebar open the page area is 1092 px
   - note number: the small numbered chip after a noted sentence
   - "Remove sidenote": a button on a note, shown while the pointer is over it
   - "Start an essay on this page" / "Open essay" in "Page options"; the essay opens as a pane (panes.feature)
@@ -21,10 +23,34 @@ Feature: Sidenotes, thoughts and essays
     When I select a sentence in the second paragraph and click "Add sidenote"
     Then the sentence gets a dotted underline and a note number "1" after it
     And a note opens in the margin level with the sentence, with the cursor in it
-    And the sidebar collapses, and the text moves left to make room for the margin
+    And the text moves left to make room for the margin
+    And the sidebar and the project rail stay as they were: the card has room for the margin
     And "Thoughts" appears nested under "Article" in the sidebar
     When I type "Is this true for small teams?" and reload
     Then the note still shows "Is this true for small teams?" beside the sentence
+
+  Scenario: The sidebar folds only when the margin has no room
+    Given the sidebar and the Inbox are open, so "Article"'s card is 764 px wide
+    When I add a sidenote
+    Then the sidebar folds, the card is 832 px wide or more, and the note is in the margin
+    And the project rail stays at the far left, and ⌘2 still picks a project (project-rail.feature)
+    When I add a second sidenote
+    Then nothing moves
+    When I reload
+    Then the sidebar is still folded and the rail is still there
+    When I press ⌘\
+    Then the sidebar comes back beside the rail
+
+  Scenario: A sidebar closed by hand stays closed
+    Given I closed the sidebar with ⌘\, so the rail is away too
+    When I add a sidenote
+    Then neither comes back
+
+  Scenario: A verdict in review mode folds nothing while there is room
+    Given a report is open in review mode (review-mode.feature) with the sidebar open, in a card
+      832 px wide or more
+    When I select words and press Keep, then Change on other words, then Ask
+    Then three notes are in the margin, and the sidebar and the rail are where they were
 
   Scenario: A sidenote on a whole paragraph
     When I put the cursor in the third paragraph, select nothing, and press ⌘⇧M
@@ -80,7 +106,11 @@ Feature: Sidenotes, thoughts and essays
     When I choose "Start an essay on this page" in "Page options"
     Then an essay page opens on the right with the cursor in its title
     And "Article" stays on the left with its notes in the margin
-    And the essay appears nested under "Article" in the sidebar, and the sidebar collapses
+    And the essay appears nested under "Article" in the sidebar
+    And the sidebar closes, and the rail with it as with ⌘\: the two pages need 1352 px, and
+      with the rail kept there would be 1340
+    And in a window 1500 px wide the sidebar folds and the rail stays, since that leaves 1400 px
+    And in a window wide enough for both pages beside the sidebar, nothing closes
     When I click "Close page" in the essay's pane
     Then "Article" fills the panel again, and "Page options" offers "Open essay"
     When I click the essay in the sidebar

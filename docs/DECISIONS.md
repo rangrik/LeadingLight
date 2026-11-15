@@ -1001,3 +1001,9 @@ labelled inboxes) lost to ones that showed less, even where they were quicker to
 
 Two picks overlap on purpose: the Inbox's "Needs you" and the card's Answer are the same question
 in two places, so answering in either clears both.
+
+The quiet pass applies the test to what was left. The one number counts only Needs you: a
+suggestion or a capture can wait, so it gets no number. A state that is not amber is a word, read
+when pointed at, because a blue or green dot is a pull with nothing to do. A sidenote folds the
+sidebar only when its margin has no room and leaves the rail: the rail is how a project is chosen,
+and a note should not take that away.

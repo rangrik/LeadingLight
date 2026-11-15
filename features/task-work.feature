@@ -3,8 +3,8 @@ Feature: Following an assigned task
   is doing now, its checklist of concrete steps, the subtasks with their own state, the workers it
   started, the evidence it has published so far, and the one press that is wanted next. How it is
   going comes from the runtime; what the agent is doing and its checklist come from the agent, and
-  change in place. The task's state also shows on its tab and its sidebar row, so nothing has to be
-  opened to know. Nothing here moves the words being read. The agent ticks off only subtasks it
+  change in place. A task whose agent waits for me also says so on its tab and its sidebar row, so
+  nothing has to be opened to know. Nothing here moves the words being read. The agent ticks off only subtasks it
   made; only the person marks the task done.
 
   Names used below:
@@ -20,9 +20,11 @@ Feature: Following an assigned task
     agent's latest report (review-mode.feature)
   - states: Working, Needs your input, Ready for review, Idle (its turn ended, nothing to review),
     Stopped (its agent process ended), Done (I accepted it)
-  - state dot: a 6 px dot before the title on the task's tab and its sidebar row: info colour
-    while Working, warning for Needs your input, success for Ready for review, none otherwise,
-    with a tooltip naming the state
+  - state dot: a 6 px amber dot (the warning colour) before the title on the task's tab and its
+    sidebar row, only while it Needs your input, with a tooltip saying so. Amber means an agent
+    waits for me and nothing else, so no other state has a dot
+  - state in words: pointing at the tab or the sidebar row of a task that Needs your input, is
+    Working or is Ready for review says so in the app's tooltip; the other states say nothing
 
   Background:
     Given linked folders and project chats are on (Settings › AI › Projects)
@@ -37,14 +39,14 @@ Feature: Following an assigned task
 
   Scenario: The state on the tab and in the sidebar
     Given "Write the summary" is open in a tab and listed in the sidebar
-    Then both carry the state dot, info colour, "Working" on hover
+    Then neither has a dot, and pointing at either says "Working"
     When the agent asks a question
-    Then both dots turn warning, and the Feed's count goes up by one
+    Then both carry the amber state dot and say "Needs your input", and the Inbox's count goes up by one
     When it publishes with ready
-    Then both dots turn success
+    Then the dots go, and pointing at either says "Ready for review"
     When I accept it
-    Then the dots go
-    And a task with no agent, and every other page, has no dot
+    Then pointing at either says nothing
+    And a task with no agent, and every other page, has no dot and nothing to say
 
   Scenario: Subtasks
     When the agent makes subtasks "Outline" and "Draft" with its task tool and ticks "Outline" done

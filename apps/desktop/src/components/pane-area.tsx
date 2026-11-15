@@ -17,7 +17,7 @@ import { PanelHeader } from "~/components/panel-header";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { reportOf } from "~/lib/work";
-import { PLAIN_NEED, paneNeed } from "~/lib/essay";
+import { PLAIN_NEED, paneNeed, widthNeeded } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
@@ -65,8 +65,6 @@ const place = (r: Rect, s: Size) => {
 // titles, so notes are never squeezed; a click on a strip opens it. Folded pages stay mounted.
 // Plain pages side by side never fold.
 const STRIP = 44;
-export const widthNeeded = (n: PaneNode): number =>
-  n.kind === "leaf" ? paneNeed(n.page) : n.dir === "row" ? widthNeeded(n.a) + widthNeeded(n.b) : Math.max(widthNeeded(n.a), widthNeeded(n.b));
 const hasNotes = (n: PaneNode): boolean => (n.kind === "leaf" ? paneNeed(n.page) > PLAIN_NEED : hasNotes(n.a) || hasNotes(n.b));
 const splitById = (n: PaneNode, id: string): PaneNode | undefined =>
   n.kind === "leaf" ? undefined : n.id === id ? n : (splitById(n.a, id) ?? splitById(n.b, id));

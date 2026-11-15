@@ -40,17 +40,20 @@ const useLines = (where: string) => {
 const Words = ({ parts, where, fit, open }: { parts: Part[]; where?: string; fit?: boolean; open?: (page: string) => void }) =>
   parts.map((p, i) => {
     if (typeof p === "string") return p;
-    // Wrapped in the panel, a long name breaks as a box: its lines start at the left, as words do.
     const name = cn("text-start text-foreground", fit && "inline-block truncate align-top");
     const at = sectionOf(p.page);
+    // Wrapped in the panel a name breaks where words do. A real button is a box, which took a
+    // line to itself there, so it is a span that acts as one.
+    const Name = fit ? "button" : "span";
+    const press = fit ? { type: "button" as const } : { role: "button", tabIndex: 0, onKeyDown: (e: React.KeyboardEvent<HTMLElement>) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), e.currentTarget.click()) };
     return p.page === where ? (
       <span className={name} data-name key={i}>
         {p.text}
       </span>
     ) : (
-      <button className={cn(name, "underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => (at ? showBar("inbox", at) : open ? open(p.page) : visit(p.page, e))} type="button">
+      <Name className={cn(name, "cursor-default underline-offset-2 hover:underline")} data-name key={i} onClick={(e) => (at ? showBar("inbox", at) : open ? open(p.page) : visit(p.page, e))} {...press}>
         {p.text}
-      </button>
+      </Name>
     );
   });
 

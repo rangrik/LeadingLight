@@ -96,18 +96,15 @@ Turn Grammar check off and the underlines go, and the system's spelling check co
 
 ## Counts
 
-Counts sit beside the page's name, after the breadcrumbs, in muted text. They read like this:
+The count sits beside the page's name, after the breadcrumbs, as one quiet line in muted text:
 
-> 14 words · <1 min read · ● nouns · ● verbs · ● adjectives · ● adverbs · ● conjunctions · 1 filler
+> 14 words
 
-- Each part of speech shows its number and a dot in its Syntax highlight colour. Point at a dot to see what it is. The names show only where there is room.
-- Parts of speech and style kinds are counted whether or not their marks are shown. Kinds with none are left out.
-- With **While I write**, the counts also show misspellings and grammar issues.
-- The counts never crowd the page's name. A narrow page shows only the counts that fit whole, in order.
+It never crowds the page's name: a page too narrow for it shows none.
 
-Select some words and the counts are for the selection, such as "3 of 14 words". They follow your typing within a moment.
+Select some words and the count is for the selection, such as "3 of 14 words". It follows your typing within a moment.
 
-Click the counts for every number: words, characters, sentences, paragraphs, reading time, each part of speech, each style kind and each grammar kind, with the selection's beside the page's.
+Click the count for every number: words, characters, sentences, paragraphs, reading time, each part of speech beside a dot in its Syntax highlight colour, each style kind and each grammar kind, with the selection's beside the page's. Parts of speech, style kinds and grammar are counted there whether or not their marks are shown.
 
 With pages side by side, each one counts its own page, and only the one you are writing in dims.
 

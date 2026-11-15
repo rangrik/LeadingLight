@@ -26,6 +26,12 @@ Nine of the eighteen options, merged and made to work together. Contracts are th
 | 5 Attention | 5A one Inbox | `bar.feature` |
 | 6 Search | 6B search with content | `search.feature` |
 
+The quiet pass, built on top the same day, finishes the first rule. The Inbox's number counts only
+Needs you, the default until the owner answers (`bar.feature`). A page's header says "301 words"
+and the rest on a click (`writing.feature`). Amber is the only state dot; working and ready are
+words, on hover and in the rail's tooltip (`task-work.feature`, `project-rail.feature`). A sidenote
+folds the sidebar only when its margin has no room, and never the rail (`sidenotes.feature`).
+
 Left out, each with its branch kept: 1A (every project's dots at once), 2B (a second home), 2C (a
 record with no next step), 3B (a map to wander, a fifth panel), 4C (two headers; its "Review next"
 is wanted), 5B and 5C (still three places to poll), 6A (titles only; its commands and "New page" row
@@ -33,19 +39,17 @@ are wanted in 6B's panel), 6C (needs the sidebar open).
 
 ## Designed, not built
 
-1. **Quiet pass.** The Inbox number counts only what blocks an agent; the header shows "46 words"
-   and the rest on a click; working and ready become words where a dot stood.
-2. **Work view.** In a project: tasks in flight, then every worktree (branch, who is in it, files
+1. **Work view.** In a project: tasks in flight, then every worktree (branch, who is in it, files
    changed, dev server) with Changes, Open preview, Accept and open PR, Remove. One "New work" box
    replaces the three ways to start (Chat, Assign, own branch), after Shipyard's composer: prompt,
    where (this checkout, a new worktree, from a branch or PR), agent with model and effort, or no
    agent for a bare worktree.
-3. **Review next.** Review mode walks the Inbox, so a round is one sitting.
-4. **Studio.** An asset is a page of type Asset (Site, Slides, Document, Image) with a folder of
+2. **Review next.** Review mode walks the Inbox, so a round is one sitting.
+3. **Studio.** An asset is a page of type Asset (Site, Slides, Document, Image) with a folder of
    its own that is not a repository. "Make" on any page starts one with that page as the brief. The
    page shows the folder live, keeps each turn's files as versions, and is reviewed like a report.
    Export first; a public link needs the owner's yes (it would be the first unencrypted surface).
-5. **Other machines.** A Mac pairs as a client in Settings › Account and devices, through the relay
+4. **Other machines.** A Mac pairs as a client in Settings › Account and devices, through the relay
    the phone uses (DECISIONS 41, 50). A second grant level, Work, adds starting tasks, worktrees and
    changes; a third carries the agent's browser frames. A terminal waits for a direct link. A
    machine with no window waits until the runtime can answer page tools without the app.

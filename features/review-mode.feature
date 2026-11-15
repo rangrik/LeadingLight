@@ -57,6 +57,8 @@ Feature: Reviewing a report in review mode
     Then a note opens in the margin level with the words, its first line "<verdict>"
     And its tick is on, and the review bar says "1 note ticked" with "Send 1 note"
     And the caret is on the note's next line, so typing adds words under the verdict
+    And the sidebar and the project rail stay where they were while the pane has room for the
+      margin (sidenotes.feature)
     When I click back in the report without typing
     Then the note reads "<verdict>" alone, with no empty line under it
 

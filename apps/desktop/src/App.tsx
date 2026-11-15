@@ -70,6 +70,7 @@ import { ABOUT } from "~/lib/tail-memory";
 import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
+const ROOM_KEY = "ll.sidebar.room";
 const WIDTH_KEY = "ll.sidebar.width";
 // Tasks given to an agent, their own or a subtask's, are listed like any page, with their state.
 // Found from the agents' pages in two passes; a search per task was 40 ms on 3000 pages.
@@ -134,6 +135,8 @@ export default function App() {
   const { root } = panes.use();
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
+  // Folded for a sidenote's or an essay's room, not closed by hand: the rail stays (features/sidenotes.feature).
+  const [forRoom, setForRoom] = useState(() => localStorage.getItem(ROOM_KEY) === "true");
   const [native, setNative] = useState(false);
   const mac = native || new URLSearchParams(location.search).has("mac");
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
@@ -150,6 +153,7 @@ export default function App() {
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  useEffect(() => localStorage.setItem(ROOM_KEY, String(forRoom)), [forRoom]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
@@ -249,7 +253,9 @@ export default function App() {
   }, [capture, closeCapture]);
 
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
-  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
+  // Opened or closed by hand, it is no longer folded for room.
+  const setSidebar = useCallback((open: boolean) => (setSidebarOpen(open), setForRoom(false)), []);
+  const toggleSidebar = useCallback(() => (setSidebarOpen((open) => !open), setForRoom(false)), []);
   useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleView }), [create, toggleCapture, toggleSidebar]));
 
   // Save pending edits whenever the app might be about to go away.
@@ -277,12 +283,13 @@ export default function App() {
     };
   }, []);
 
-  // Adding a sidenote or opening an essay asks for room (lib/essay.ts).
+  // A sidenote or an essay without room asks for it (lib/essay.ts). The rail stays if the sidebar's
+  // width, less the card's 8 px margin, covers what is short; a sidebar closed by hand stays as it is.
   useEffect(() => {
-    const fold = () => setSidebarOpen(false);
+    const fold = (e: Event) => sidebarOpen && (setSidebarOpen(false), setForRoom((e as CustomEvent<number>).detail <= sidebarWidth - 8));
     window.addEventListener("ll:make-room", fold);
     return () => window.removeEventListener("ll:make-room", fold);
-  }, []);
+  }, [sidebarOpen, sidebarWidth]);
 
   // A row opens its page; Shift opens it beside the one in front, as Shift on a link does; ⌘ in a new tab.
   const opener = (id: string) => (e: React.MouseEvent) => openFrom(id, e);
@@ -371,15 +378,16 @@ export default function App() {
         className="ll-shell isolate h-svh min-h-0 overflow-hidden data-resizing:**:transition-none"
         data-resizing={resizing || undefined}
         inert={settings || undefined}
-        onOpenChange={(open) => !settings && setSidebarOpen(open)}
+        onOpenChange={(open) => !settings && setSidebar(open)}
         open={sidebarOpen}
+        data-rail-kept={forRoom || undefined}
         style={{ ...chrome(mac, sidebarWidth), "--rail-width": mobile ? "0px" : "44px" } as React.CSSProperties}
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
-        {!mobile && <ProjectRail />}
+        {!mobile && <ProjectRail stay={forRoom} />}
         <AppSidebar
           className="left-(--rail-width)"
           onCreate={create}
@@ -445,7 +453,7 @@ export default function App() {
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
-                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
+                <SettingsView onOpenChange={setSidebar} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
               </Suspense>
             </div>
           )}

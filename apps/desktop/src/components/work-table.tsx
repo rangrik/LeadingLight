@@ -1,5 +1,5 @@
 import { Check, ChevronRight, Play } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "@leadinglight/ui/components/table";
@@ -110,16 +110,17 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
           </button>
           {action && <span className="shrink-0 @min-[720px]/work:hidden">{action}</span>}
         </div>
-        {/* Narrow: what the columns say, under the title; each part whole or cut, its dot with it. */}
-        <div className="ms-6 whitespace-normal text-muted-foreground @min-[720px]/work:hidden">
-          {meta.map((m, i) => (
-            <Fragment key={i}>
-              <span className="inline-flex max-w-full gap-1 align-top">
+        {/* Narrow: what the columns say, under the title; each part whole or cut. Its dot leads it,
+            in the 12 px the lines are pulled left and cut by, so no line starts or ends in one. */}
+        <div className="ms-6 overflow-hidden text-muted-foreground @min-[720px]/work:hidden">
+          <div className="-ms-3 whitespace-normal">
+            {meta.map((m, i) => (
+              <span className="inline-flex max-w-full gap-1 ps-1 align-top" key={i}>
+                <span className="w-1 shrink-0 text-center">·</span>
                 {typeof m === "string" ? <span className="truncate">{m}</span> : m}
-                {i < meta.length - 1 && <span>·</span>}
-              </span>{" "}
-            </Fragment>
-          ))}
+              </span>
+            ))}
+          </div>
         </div>
       </TableCell>
       <TableCell className={cn(cell, wide, "text-muted-foreground")}>{who && <span className={line}>{who}</span>}</TableCell>

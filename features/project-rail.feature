@@ -8,7 +8,8 @@ Feature: Project rail
   - rail: navigation "Projects", 44 px wide, left of the sidebar, the sidebar's colour, a hairline
     on its right like the bar's on its left
   - rail button: a 32 px rounded square in the rail, named by its project (or "All")
-  - state dot: the 6 px dot at a rail button's top right corner
+  - state dot: the 6 px amber dot at a rail button's top right corner, there only while one of
+    the project's agents asks a question or for approval; every other state is words in the tooltip
   - a project's pages: pages whose Project property (any relation to projects) points at it, and
     pages its own body links to
   - the demo: the browser build opened at "/?mac&demo" in an empty space
@@ -28,11 +29,11 @@ Feature: Project rail
 
   Scenario: Hovering a project says how it is going
     When I hover "LeadingLight" in the rail
-    Then a tooltip on its right reads "LeadingLight ⌘2" and under it "2 need you"
+    Then a tooltip on its right reads "LeadingLight ⌘2" and under it "1 needs you · 1 ready"
     And the button has an amber state dot, because the pricing agent asks a question
     When I hover "Home office"
-    Then the tooltip reads "Home office ⌘3" and "1 needs you", with a state dot in the review
-      colour, because "Compare three desk lamps" is ready for review
+    Then the tooltip reads "Home office ⌘3" and "1 ready", because "Compare three desk lamps" is
+      ready for review, and the button has no state dot: nothing there waits on an answer
     And that item counts for Home office alone, though its agent works in LeadingLight's folder
     And a project with nothing waiting and no agent at work reads "quiet" and has no state dot
 
@@ -40,6 +41,7 @@ Feature: Project rail
     Given the pricing question is answered and the audit is accepted
     When I hover "LeadingLight" in the rail
     Then the tooltip's second line reads "working" and the state dot is gone
+    And no dot on the rail, in any state, is blue or green
 
   Scenario: Choosing a project scopes the sidebar
     When I click "LeadingLight" in the rail
@@ -112,6 +114,16 @@ Feature: Project rail
     When I press ⌘\ again
     Then both come back, the rail at the far left
     And in a browser window narrower than 768 px, where the sidebar is a sheet, there is no rail
+
+  Scenario: The rail stays when a sidenote folds the sidebar
+    Given a sidenote or an essay has folded the sidebar for room (sidenotes.feature)
+    Then the rail is still at the far left, and its buttons and keys work
+    And the first card's title starts clear of the traffic lights and the sidebar button, where it
+      does with the rail away
+    When I press ⌘\
+    Then the sidebar comes back beside the rail
+    When I press ⌘\ again
+    Then the sidebar and the rail slide away together, as when I close it by hand
 
   Scenario: An empty space has only All
     Given an empty space opened without the demo

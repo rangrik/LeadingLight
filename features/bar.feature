@@ -13,7 +13,7 @@ Feature: The bar
   - Needs you: what the Feed listed (feed.feature), answered in the row the same way; its project menu sits in the section's header when there are two projects or more; ⌥⌘F opens the Inbox here
   - Suggested: Tail's suggestions (suggestions.feature), "On this page" rows first, then "Elsewhere"; ⌥⌘S opens the Inbox here
   - Captured: the captures to review, newest first, each with its project picker, Add tag and review tick; ⌥⌘K opens the Inbox here
-  - count: one number on the Inbox icon: items that need me, plus suggestions not yet seen, plus captures to review; none on Ask or Quick capture
+  - count: one number on the Inbox icon: the items in Needs you, which an agent waits on; suggestions and captures wait in their sections and add nothing to it; none on Ask or Quick capture
   - pin: a toggle in the Inbox's header, its tooltip "Keep order", that keeps the sections in their order
   - Ask: the agent panel's thread and composer (ask.feature); ⌘J opens it, as it did
 
@@ -31,18 +31,20 @@ Feature: The bar
     When I press ⌥⌘I twice
     Then the same happens
 
-  Scenario: One count
+  Scenario: One count, of what an agent waits on
     Given an agent asks a question, two captures are unreviewed, and tail has one suggestion I have not seen
-    Then Inbox shows 4, and Ask and Quick capture show nothing
+    Then Inbox shows 1, and Ask and Quick capture show nothing
     When I open the Inbox
-    Then Inbox shows 3, since the suggestion is now seen, and Suggested still says 1
+    Then Inbox still shows 1, Needs you says 1, Suggested says 1 and Captured says 2
+    When tail adds a suggestion, or I capture an idea
+    Then its section's number goes up and Inbox still shows 1
     When I answer the question and tick one capture
-    Then Inbox shows 1, Needs you is gone, and Captured says 1
+    Then the Inbox icon shows no count, Needs you is gone, and Captured says 1
 
   Scenario: Sections with nothing in them do not show
     Given no agent needs me and tail has no suggestions, and one capture waits
     When I open the Inbox
-    Then only Captured shows, saying 1
+    Then only Captured shows, saying 1, and the Inbox icon shows no count
     When a page I edit gets a suggestion
     Then Suggested appears above Captured, saying 1
 

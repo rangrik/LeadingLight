@@ -60,3 +60,5 @@ Feature: The Work table on a project
     When the Work table itself is narrower than 720 px
     Then each row keeps its title and action on the first line, and puts agent, state, steps and
       latest report under it; nothing sticks out of the pane
+    And an agent's question, too long for that line, has the next line to itself, and the line
+      above it ends in its last word, "1 of 2", not in a "·"
