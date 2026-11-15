@@ -166,3 +166,18 @@ CREATE TABLE IF NOT EXISTS mobile_push_deliveries (
   FOREIGN KEY(channel,event) REFERENCES mobile_push_events(channel,id) ON DELETE CASCADE,
   FOREIGN KEY(channel,device) REFERENCES mobile_push_devices(channel,id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS gmail_accounts (
+  owner text NOT NULL,
+  account text NOT NULL,
+  email text NOT NULL,
+  tokens text NOT NULL,
+  PRIMARY KEY(owner, account)
+);
+CREATE TABLE IF NOT EXISTS gmail_oauth (
+  state text PRIMARY KEY,
+  owner text NOT NULL,
+  verifier text NOT NULL,
+  expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes'
+);
+CREATE INDEX IF NOT EXISTS gmail_oauth_expiry ON gmail_oauth(expires_at);

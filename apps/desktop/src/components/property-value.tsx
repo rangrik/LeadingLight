@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Hash,
   Link as LinkIcon,
+  Mail,
   type LucideIcon,
   Paperclip,
   Plus,
@@ -82,6 +83,18 @@ export function PageChip({ id, onRemove }: { id: string; onRemove?: () => void }
   );
 }
 
+// A task made from a mail (lib/mail.ts makeTask): opens the mail, in Mail while it waits there, else in Gmail.
+function FromMail({ page, value }: { page: ObjectSummary; value: string }) {
+  const ref = page.properties.mail as Record<string, unknown> | undefined;
+  const ok = !!ref && ["account", "email", "id", "threadId"].every((k) => typeof ref[k] === "string");
+  return (
+    <Badge className="h-6 max-w-full gap-1.5 px-1.5 sm:h-6 sm:text-sm" render={<button disabled={!ok} onClick={() => void import("~/components/mail/act").then((m) => m.openMail(ref as never))} type="button" />} size="lg" variant="outline">
+      <Mail className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="truncate">{value}</span>
+    </Badge>
+  );
+}
+
 const ChoiceChip = ({ choice }: { choice: Choice }) => (
   <Badge className={cn("h-6 px-1.5 text-foreground sm:h-6 sm:text-sm", COLORS[choice.color].band)} size="lg">
     {choice.name}
@@ -117,6 +130,7 @@ type EditProps = { prop: PropDef; value: unknown; page: ObjectSummary; onChange:
 
 // The editable value in a page's property row. An emptied value is passed on as undefined.
 export function PropValue({ prop, value, page, onChange }: EditProps) {
+  if (prop.id === "from-mail" && typeof value === "string") return <FromMail page={page} value={value} />;
   switch (prop.kind) {
     case "text":
       return <TextValue label={prop.name} onChange={(v) => onChange(v || undefined)} value={typeof value === "string" ? value : ""} />;

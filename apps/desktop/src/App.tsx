@@ -1,4 +1,4 @@
-import { CALENDAR_VIEW } from '~/lib/space';
+import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -35,6 +35,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { MailRoot } from "~/components/mail";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { byRecent, recentOrder } from "~/components/sidebar/nav-projects";
@@ -98,6 +99,7 @@ export default function App() {
   useEffect(watchStillness, []);
   const mobile = useMobile();
   useEffect(() => mobile ? watchViewport() : undefined, [mobile]);
+  const [gmailReturn] = useState(() => new URL(location.href).searchParams.has('gmail'));
   const [calendarReturn] = useState(() => new URL(location.href).searchParams.has('calendar'));
   const view = useStore((s) => s.view);
   const settings = view.kind === "settings";
@@ -161,6 +163,7 @@ export default function App() {
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           return !page || list.some((p) => p.id === page);
         };
+        if (gmailReturn) { openPage(MAIL_VIEW); return; }
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
@@ -422,6 +425,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
+          {!phone && <MailRoot />}
           {!mobile && <CliUpdates />}
           <ZoomHud />
         </TooltipProvider>

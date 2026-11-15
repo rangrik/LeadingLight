@@ -21,8 +21,8 @@ function envelope(value) {
 
 export function nativeRoute(request) {
   const path = new URL(request.url).pathname;
-  return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts'].includes(path)
-    || request.method === 'POST' && ['/api/sync', '/api/native/revoke', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
+  return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts', '/api/gmail/accounts'].includes(path)
+    || request.method === 'POST' && ['/api/sync', '/api/native/revoke', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].map((action) => `/api/gmail/${action}`), ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
 }
 
 export async function authenticateNative(request, sql) {

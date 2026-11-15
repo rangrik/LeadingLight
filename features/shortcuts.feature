@@ -65,6 +65,11 @@ Feature: Changing keyboard shortcuts
       | Meta+Shift+M | ⇧⌘M  | Add sidenote |
       | Control+K    | ⌃K   | editing text |
 
+  Scenario: ⌥⌘M opens Mail
+    Then the Go group has "Mail" ⌥⌘M, beside Feed ⌥⌘F and Captures ⌥⌘K
+    When I go back to the app and press Meta+Alt+M
+    Then Mail home opens in the pane in front
+
   Scenario: Pressing a shortcut's own key keeps it
     When I click the "New page" key button and press Meta+N
     Then it reads "⌘N", with no reset button, and no new page was made

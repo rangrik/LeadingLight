@@ -8,10 +8,10 @@ import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
-import { pageOf } from "~/lib/space";
+import { MAIL_VIEW, pageOf } from "~/lib/space";
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { openPaper, readPaper } from "~/lib/paper";
-import { closeTab, focusedPage, cycleTab, newTab, reopenTab, travel } from "~/lib/panes";
+import { closeTab, focusedPage, cycleTab, newTab, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
@@ -75,6 +75,9 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         case "captures":
         case "suggestions":
           return actions.toggleView(id);
+        case "mail":
+          if (useStore.getState().view.kind === "settings") closeSettings();
+          return openPage(MAIL_VIEW);
         case "nod":
           // Only at a page in front: never under Settings, a dialog or a menu, or another window.
           if (useStore.getState().view.kind === "settings" || !document.hasFocus() || shown(COVERS)) return;

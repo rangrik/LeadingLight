@@ -903,3 +903,27 @@ Broad agent rewrites cannot discard annotated content.
 The DOM owns inline ink and its geometry. A narrow iOS gesture bridge captures only
 Pencil input; fingers keep scrolling the existing document. Standalone notebooks
 continue using PencilKit. No new native editor or page conversion is involved.
+
+## 48. Gmail is a separate workspace connection, read by one fixed reader (2026-11-12, changed 2026-11-14)
+
+Mail follows Calendar's service path, with its own OAuth client, encrypted grants and one-use
+PKCE state. One workspace can connect several accounts. Separate configuration keeps Gmail's
+restricted scope out of Calendar's pending consent review. The permission is `gmail.modify`:
+the service may only move a conversation in or out of Inbox and Unread, and send a reply whose
+recipient, subject and thread it takes from the mail being answered. It never trashes or deletes.
+
+Mail is never saved in the note journal and never shown to the app's agents. One fixed reader
+on the person's Mac, running their own model with no tools, may read new mail to write its
+lines. The lines stay on that device and are removed when the mail is dealt with, or after 14
+days. A task made from a mail keeps the sender, the subject, a link and the reader's two lines,
+never the mail's own text. Mail shows as text; originals and attachments open in Gmail. Native
+credentials allow only named routes. Google's review is required before any public rollout.
+
+## 49. Mail is a look, not an inbox (2026-11-14)
+
+Mail is for someone who avoids email, because an inbox shows its weight before its content. So
+Mail shows the weight before any mail: how many need you, about how long, and whether anyone is
+upset. Then one mail at a time, one decision each, five at most. It ends, and says how long it
+took. Nothing nags: no counts, no badges, no streaks. There are no work-hours rules, because
+work hours differ from person to person; each mail says which account it came to. See
+`docs/MAIL.md`.

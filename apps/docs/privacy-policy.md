@@ -1,11 +1,11 @@
 ---
 title: Privacy policy
-description: How LeadingLight accesses, uses, stores and shares account, note and Google Calendar data.
+description: How LeadingLight accesses, uses, stores and shares account, note and Google Calendar and Gmail data.
 ---
 
 # LeadingLight privacy policy
 
-Effective November 4, 2026. LeadingLight is developed and operated by Pranav Kanade.
+Effective November 14, 2026. LeadingLight is developed and operated by Pranav Kanade.
 Contact [k.pranav.apk@gmail.com](mailto:k.pranav.apk@gmail.com) for support, privacy questions,
 or requests to delete cloud data. This policy covers the LeadingLight apps and their cloud service.
 
@@ -61,13 +61,43 @@ before using calendar data with an agent. You can manage calendars directly with
 LeadingLight does not use Google user data to develop, improve or train generalized AI or
 machine-learning models. We use it only to provide the user-facing features described here.
 
+## Gmail
+
+When enabled by the operator, Mail can connect several Gmail accounts, each with its own
+consent. We request **read, compose and modify mail** (`gmail.modify`), plus `openid` and
+`email`. We use it to:
+
+- read the headers, labels and text of mail in your inbox since the day you chose to start;
+- put a mail away when you decide on it: archive it and mark it read, or undo that;
+- send a reply you have seen and chosen to send, inside the conversation, from the account the
+  mail came to. The recipient is taken from the mail you answer.
+
+We never trash, delete or mark mail as spam. Google connection tokens are encrypted at rest and
+bound to your workspace and account. Mail passes through our service in memory and is not
+end-to-end encrypted. We do not store mail on the service or add it to note sync. Scripts and
+remote images are blocked; attachments and original formatting open in Gmail.
+
+**The reader.** In the Mac app, LeadingLight reads new mail for you to write a few lines about
+each: what happened, where it stands and your part, with short reply drafts. To do this, the
+mail's text is sent from your Mac, through your own Claude Code or Codex sign-in, to the model
+provider you already use in the app (**Anthropic or OpenAI**). Mail is sent as data, with no
+tools and no access to your notes. The lines stay on that Mac, are deleted when you deal with
+the mail, and after 14 days. If you make a task from a mail, the task keeps the sender, the
+subject, a link to the mail and two of the reader's lines, never the mail's own text. Model
+providers process this under their own terms and your account's data controls.
+
+Disconnecting an account in Mail deletes its saved Gmail connection. This leaves mail in Google
+and Calendar connections unchanged. Gmail credentials follow the connection and backup
+retention practices below. Google processes the mail requests; our hosting providers handle
+transport.
+
 ## Sharing and service providers
 
 We do not sell Google user data or use it for advertising. We do not share it with data brokers
 or use it to decide creditworthiness. Vercel hosts the web app and API; Neon provides the
 service database. They process data needed to operate the service. Google processes calendar
-requests. Anthropic or OpenAI receives relevant calendar content only through the optional
-agent workflow described above. Hosting providers may process IP addresses and request
+and Gmail requests. Anthropic or OpenAI receives relevant calendar content only through the optional
+agent workflow described above, and new mail's text only through the reader described above. Hosting providers may process IP addresses and request
 metadata for delivery, security and operations.
 
 LeadingLight has no advertising or analytics trackers of its own. Covers, embeds, saved web
@@ -83,14 +113,14 @@ by that policy. We may disclose data when required by law or to address fraud an
 
 ## Retention, disconnecting and deletion
 
-Calendar credentials remain in our live database until you disconnect the account or request
+Calendar and Gmail credentials remain in our live database until you disconnect the account or request
 their deletion. Choose **Calendar → Calendars → Disconnect** to delete our stored connection
 and credentials. This leaves your events in Google Calendar unchanged. You can also revoke
 LeadingLight in [your Google Account connections](https://myaccount.google.com/connections).
 Revoking access at Google stops future access; disconnect in LeadingLight to remove its stored
 connection as well. Expired OAuth setup records are removed when new connections start.
 
-Signing out clears calendar data from the open app. It does not delete notes, their history,
+Signing out clears calendar and Gmail data from the open app. It does not delete notes, their history,
 saved agent conversations or encrypted sync data. You can delete local notes in the app;
 to remove all local data, follow the platform's app-data removal process. Email the contact
 above to request deletion of cloud connection records, encrypted notes or account-associated
@@ -100,7 +130,7 @@ until those copies expire. We do not claim immediate erasure from backups.
 
 ## Security and changes
 
-We use HTTPS in transit, encrypted calendar credentials at rest, workspace ownership checks,
+We use HTTPS in transit, encrypted Google credentials at rest, workspace ownership checks,
 and explicit approval for paired Macs. No service can guarantee perfect security. Keep your
 devices and provider accounts secure, and keep your sync recovery key private.
 

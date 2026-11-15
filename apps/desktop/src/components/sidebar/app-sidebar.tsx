@@ -3,7 +3,7 @@
 // skips it), NavProjects as Pinned (while a page is) and Recent under our Types, and the plans'
 // usage as the footer (NavUser's place), and a Browser entry.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, Settings } from "lucide-react";
+import { CalendarDays, Globe, Mail, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,7 +21,7 @@ import { CloudButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { openFrom, openBeside } from "~/lib/panes";
-import { CALENDAR_VIEW, browserView } from "~/lib/space";
+import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -96,6 +96,7 @@ export function AppSidebar({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
               <SidebarMenuButton onClick={select(() => openBeside(browserView("")))}>
                 <Globe className="size-4" />
