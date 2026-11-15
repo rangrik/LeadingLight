@@ -1,0 +1,74 @@
+{
+ "port": 1435,
+ "name": "2B",
+ "steps": [
+  {
+   "click": {
+    "role": "button",
+    "name": "Desk",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "Option 2B · Desk. One home screen says where everything stands, then you leave it.",
+   "hold": 3000
+  },
+  {
+   "still": "desk"
+  },
+  {
+   "hover": {
+    "text": "Continue",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "caption": "Continue: the last pages you edited, with their project and when.",
+   "hold": 2400
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "Answer",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "caption": "One card per project in motion: its agent’s state, what it is doing, and the one action.",
+   "hold": 2800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Answer",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "Answer opens the Feed on that question.",
+   "hold": 2000
+  },
+  {
+   "still": "answer"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "caption": "Today’s note is one card here, editable in place; captures to file wait in another.",
+   "hold": 2600
+  },
+  {
+   "still": "end"
+  }
+ ]
+}
