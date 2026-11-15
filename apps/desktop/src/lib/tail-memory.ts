@@ -35,6 +35,7 @@ const LABEL: Record<string, string> = {
   stopped: "Lines about where you stopped",
   task: "Offers to make a task",
   mention: "Links",
+  recall: "Offers to recall notes",
 };
 export const quietLine = (kind: string, type: string, project?: string) => `${LABEL[kind] ?? kind} on ${type === "Page" ? "" : `${type} `}pages${project ? ` in ${project}` : ""} are quiet.`;
 export const notAgain = (name: string) => `Not asking again about ${name} for now.`;

@@ -35,16 +35,16 @@ Feature: Reading layout
     Then the column is back
 
   Scenario: Notes list the page's sidenotes
-    Given "Notes on Thinking in Systems" in the reading layout, with two sidenotes in the margin
-    Then Notes lists both, numbered as in the margin, each showing its note's first line
+    Given "Notes on Thinking in Systems" in the reading layout, with three sidenotes in the margin
+    Then Notes lists the three, numbered as in the margin, each showing its note's first line
     And the sidenotes stay in the margin, between the text and the column, with no overlap
     When I click the second row
     Then the page scrolls to the second note's words and they are lit for a moment
     When I select a sentence in the body and click "Add note" in Notes
-    Then the sentence gets note number 3, its note opens in the margin with the cursor in it
-    And Notes lists a third row
+    Then the sentence gets the next number, its note opens in the margin with the cursor in it
+    And Notes lists a fourth row, in the place its words have in the text
     When I type "Delays again" in that note
-    Then the third row reads "Delays again"
+    Then that row reads "Delays again"
 
   Scenario: Add note needs a place in the page
     Given "Thinking in Systems" with the cursor in its title

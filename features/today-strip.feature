@@ -69,12 +69,12 @@ Feature: Today says where things stand
     Then there is no strip and no empty row in its place
 
   Scenario: Where I was yesterday
-    Given the last pages I was in yesterday are "Notes on Thinking in Systems" and "Design review
-      with Sam", as yesterday's This day lists them, and I haven't edited either since
+    Given the last pages I was in yesterday are "Thinking in Systems" and "Rename Pages to Notes in
+      the sidebar", as yesterday's This day lists them, and I haven't edited either since
     When I open Today
-    Then under the strip one muted line reads "Yesterday you were in Notes on Thinking in Systems
-      and Design review with Sam", the two titles in the foreground
-    When I click "Notes on Thinking in Systems"
+    Then under the strip one muted line reads "Yesterday you were in Thinking in Systems and Rename
+      Pages to Notes in the sidebar", the two titles in the foreground
+    When I click "Thinking in Systems"
     Then it opens in this pane; Shift-click opens it beside
     When I edit it and come back to Today
     Then the line is gone: I have picked up where I was

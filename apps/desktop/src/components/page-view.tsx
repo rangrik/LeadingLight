@@ -53,6 +53,7 @@ import { TurnIntoPage } from "~/components/turn-into-page";
 import { VoiceReviewDialog } from "~/components/voice-review";
 import { TailPage, TailToday } from "~/components/tail";
 import { TodayStrip } from "~/components/today-strip";
+import { RecallCard } from "~/components/recall";
 import { today } from "~/lib/daily";
 import { currentEdit } from "@leadinglight/editor/authorship";
 import type { ChangeContext } from "~/lib/history-types";
@@ -542,6 +543,7 @@ export function PageView({ page }: { page: LLObject }) {
         {review && <ReviewHead changes={changes} content={editorRef.current?.getJSON() ?? page.content} onChanges={setChanges} onOpen={setUnfold} open={unfold} report={review} task={page.id} />}
         {showDetails && <div className={paper ? "ll-notebook-details" : "contents"}>{pageDetails}</div>}
         {unavailablePaper && <Alert className="my-4"><AlertTitle>Notebook unavailable</AlertTitle><AlertDescription>This version cannot read the notebook’s paper. Open it with the app version that saved it, or restore a version from history. Your saved content is unchanged.</AlertDescription></Alert>}
+        {!report && role !== "thoughts" && role !== "essay" && <RecallCard notes={notes} page={page.id} />}
         {folded && (
           <Tabs className="mt-4" onValueChange={setReadingTab} value={readingTab}>
             {/* The tab's words line up with the text, as Backlinks' tabs do. */}

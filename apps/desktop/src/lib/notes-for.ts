@@ -5,6 +5,7 @@ import { draftOf, drafts, noteStates, pick, recipientFor } from "~/lib/feedback"
 import { pageLabel } from "~/lib/labels";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
+import { recalling } from "~/lib/recall";
 import { pageOf, space } from "~/lib/space";
 import { useThoughts } from "~/lib/thoughts";
 import { reportOf } from "~/lib/work";
@@ -17,7 +18,8 @@ const showing = new Map<string, Set<RefObject<BlockEditorHandle | null>>>();
 export function useNotesFor(page: ObjectSummary, editor: RefObject<BlockEditorHandle | null>) {
   const notes = useThoughts(page, (thoughts) => {
     if (thoughts) void editPage(page.id, { properties: (p) => ({ ...p, thoughts: thoughts.id }) });
-    makeRoom();
+    // A line saved from Recall keeps the layout still: nothing moves (docs/TAIL.md).
+    if (!recalling.get().includes(page.id)) makeRoom();
   });
   // Only when this page's task or its sent notes change does the page draw again.
   const pickKey = useSyncExternalStore(space.subscribe, () => {
