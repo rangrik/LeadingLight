@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/rangrik/LeadingLight/compare/v0.5.0...v0.6.0) (2026-11-15)
+
+
+### Features
+
+* an agent's own-browser steps no longer ask for approval ([05b0cbb](https://github.com/rangrik/LeadingLight/commit/05b0cbb83e6f4de60ac67bbac9b9ad1a435a15cb))
+
+
+### Documentation
+
+* iOS installs a release through GitHub's redirect ([b7eb804](https://github.com/rangrik/LeadingLight/commit/b7eb804651af9cf17158c4b98d577ca56b9019f0))
+
 ## [0.5.0](https://github.com/rangrik/LeadingLight/compare/v0.4.1...v0.5.0) (2026-11-15)
 
 
