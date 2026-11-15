@@ -79,7 +79,7 @@ export function AppSidebar({
   todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  project?: { name: string; icon: React.ReactNode; overview: Row; chat?: Row; has: (p: ObjectSummary) => boolean };
+  project?: { id: string; name: string; icon: React.ReactNode; overview: Row; chat?: Row; has: (p: ObjectSummary) => boolean };
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
@@ -98,7 +98,8 @@ export function AppSidebar({
   return (
     <Sidebar inert={!isMobile && state === "collapsed"} variant={mobile ? "sidebar" : "inset"} {...props}>
       <AppSidebarHeader subtitle={project?.name ?? "Notes"} />
-      <SidebarContent>
+      {/* Keyed by the rail's pick, so another project's sidebar starts at its top. */}
+      <SidebarContent key={project?.id ?? "all"}>
         {project && (
           <SidebarGroup className="pb-0">
             <SidebarMenu>

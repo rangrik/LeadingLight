@@ -46,6 +46,7 @@ Feature: Project rail
     Then it is marked current and "All" is not
     And the sidebar header reads "LeadingLight" over "LeadingLight" (the project's name under the mark)
     And the sidebar starts with "Overview" and "Chat", then Today, Search, Calendar and Browser
+    And it shows from its top, however far the sidebar I came from was scrolled
     And Resume shows only the rows that are LeadingLight's pages (sidebar-resume.feature)
     And Recent lists only LeadingLight's pages: the four tasks at work, "Design review with Sam",
       "Sam Rivera" and "Pricing notes"; no book, no daily note, no other project
