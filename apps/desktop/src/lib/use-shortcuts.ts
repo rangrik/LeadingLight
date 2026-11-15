@@ -5,6 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
+import { openNewWork } from "~/components/new-work";
 import { searching, toggleSearch } from "~/components/search-panel";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
@@ -59,6 +60,8 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return actions.newPage();
         case "new-idea":
           return actions.newIdea();
+        case "new-work":
+          return useStore.getState().view.kind === "settings" || mobile || shown(COVERS) ? undefined : openNewWork();
         case "quick-record": {
           if (useStore.getState().view.kind === "settings" || shown(COVERS)) return;
           const id = focusedPage();

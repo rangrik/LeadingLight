@@ -39,7 +39,8 @@ are wanted in 6B's panel), 6C (needs the sidebar open).
    changed, dev server) with Changes, Open preview, Accept and open PR, Remove. One "New work" box
    replaces the three ways to start (Chat, Assign, own branch), after Shipyard's composer: prompt,
    where (this checkout, a new worktree, from a branch or PR), agent with model and effort, or no
-   agent for a bare worktree.
+   agent for a bare worktree. First slice built (`work-view.feature`, DECISIONS 54): the view,
+   the box and Remove; the rest is in DEFERRED.
 3. **Review next.** Review mode walks the Inbox, so a round is one sitting.
 4. **Studio.** An asset is a page of type Asset (Site, Slides, Document, Image) with a folder of
    its own that is not a repository. "Make" on any page starts one with that page as the brief. The

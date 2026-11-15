@@ -57,6 +57,6 @@ Feature: The Work table on a project
     And the subtasks are not rows of their own in the project's Work; they are on "Pricing page"'s card
 
   Scenario: Narrow panes
-    When the Work table itself is narrower than 720 px
+    When the Work table itself is narrower than 900 px
     Then each row keeps its title and action on the first line, and puts agent, state, steps and
       latest report under it; nothing sticks out of the pane

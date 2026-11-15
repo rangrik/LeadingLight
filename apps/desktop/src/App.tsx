@@ -36,6 +36,7 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { NewWork } from "~/components/new-work";
 import { SearchPanel } from "~/components/search-panel";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
@@ -60,14 +61,14 @@ import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { AGENT, taskOfAgent } from "~/lib/work";
 import { ALL, inProject, railProjects, scope, useLinks } from "~/lib/scope";
-import { chatView, createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { chatView, createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView, workView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
-import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView } from "~/lib/space";
+import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView, WORK_VIEW } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
 const WIDTH_KEY = "ll.sidebar.width";
@@ -176,7 +177,7 @@ export default function App() {
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
-          if (mobile && ([ASK_VIEW, FEED_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
+          if (mobile && ([ASK_VIEW, FEED_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW) || id.startsWith(WORK_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           return !page || list.some((p) => p.id === page);
         };
@@ -358,7 +359,7 @@ export default function App() {
     }];
   });
   const row = (view: string) => ({ isActive: current === view, onSelect: opener(view) });
-  const scoped = project && { id: project.id, name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined, has: mine };
+  const scoped = project && { id: project.id, name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined, work: folderOf.has(project.id) && !mobile ? row(workView(project.id)) : undefined, has: mine };
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
   // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
@@ -462,6 +463,7 @@ export default function App() {
           ))}
           <ShortcutsSheet />
           {!phone && <SearchPanel />}
+          {!mobile && <NewWork />}
           {!mobile && <CliUpdates />}
           <AppUpdates />
           <ZoomHud />

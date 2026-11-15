@@ -176,6 +176,48 @@ of its tasks that has an agent or started subtasks, rows that need you first. Su
 parent's card. A task with neither is not listed, and with nothing at work or done the section
 isn't there.
 
+## The Work view
+
+Choose a project on the rail at the window's left. If it has a linked folder, its sidebar has
+**Work** under **Chat**. It opens one page for the developer side of the project:
+
+- **In flight**: the same rows as Work on the project page.
+- **Worktrees**: every worktree of the folder, as Git lists them, whoever made them. The folder's
+  own checkout comes first. Each row shows the worktree's name and branch, who is in it and how
+  they are ("Claude · Working", "3 agents · Needs your input", "No agent"), and what changed:
+  files changed or new and not committed, then commits its branch has that its base lacks.
+
+A folder that isn't a Git checkout has no worktrees, and the page says so. If the runtime doesn't
+answer, the page says why, with **Try again**; the tasks in flight still show.
+
+### New work
+
+**New work** on that page, or <kbd>⇧⌘N</kbd> from any page of the project, opens one box:
+
+- **What to do**: the first line names the work; the rest is its brief.
+- **Where**: **New worktree**, named from the first line ("Add a dark mode toggle to the settings
+  page" gets `add-dark-mode-toggle-settings` on the branch `ll/add-dark-mode-toggle-settings`; a
+  name already taken gets a number), or **This checkout**, the folder as it is.
+- **Agent** and **Effort**: a Claude model, a GPT model when Codex is signed in, or **No agent**.
+
+With an agent, **Start** makes a task in the project from what you wrote and assigns it, exactly
+as **Assign** does. It works with the access set in **Settings › AI**. With **No agent**, **Make
+worktree** only makes the worktree, for you to work in.
+
+Outside a project with a linked folder, the key says so and opens nothing.
+
+### Remove a worktree
+
+**Remove** on a worktree's row asks first. Its folder is deleted; its branch and commits stay.
+
+- While an agent is working in it or waiting on you, it can't be removed: stop the agent first.
+- If it has files that aren't committed, nothing is removed and the dialog says so. **Remove
+  anyway** deletes them.
+- The folder's own checkout has no **Remove**. Neither do two worktrees that share a name, which
+  can happen with ones other tools made.
+
+**Open task** on a row opens the task the worktree was made for.
+
 ## Reports
 
 What an agent wants you to read arrives as a report: a new page shown after the task's own words,

@@ -1001,3 +1001,21 @@ labelled inboxes) lost to ones that showed less, even where they were quicker to
 
 Two picks overlap on purpose: the Inbox's "Needs you" and the card's Answer are the same question
 in two places, so answering in either clears both.
+
+## 54. The Work view shows git's worktrees; New work is Assign with the task made first (2026-11-14)
+
+A project's Work view lists its tasks in flight and then every worktree of its folder
+(`features/work-view.feature`, [PROJECT-6.md](PROJECT-6.md) 2). The list is the runtime's
+(`GET /v1/worktrees`), which is git's own, so worktrees other tools made are there too; the app
+keeps no list. Who is in one is read from the runtime's live sessions by their folder, not from
+Agent pages, so a chat on its own branch and another tool's agent show as well. State is words.
+
+New work makes a task of the project from what was written (the first line its title) and then
+calls Assign, so 21 holds: one Agent page, one session named after it, and a worktree named from
+the title (42). A task no agent was made for is deleted again. With no agent it only makes the
+worktree. Its key is ⇧⌘N, as ⌘N is New page.
+
+Remove asks, keeps the branch, and is refused while an agent in the worktree is in a turn or waits
+on the person: the runtime ends the sessions of a worktree it removes. Files not committed are the
+runtime's refusal to give; only then does the dialog offer to force it. The checkout is never
+removed, nor a worktree whose name another shares, since the runtime removes by name.

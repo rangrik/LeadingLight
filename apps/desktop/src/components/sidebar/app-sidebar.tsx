@@ -2,10 +2,10 @@
 // Changes: our name and logo, room for the macOS traffic lights, inert while collapsed (so Tab
 // skips it), our Resume rows, NavProjects as Pinned (while a page is) and Recent above our Types,
 // and the plans' usage as the footer (NavUser's place), a Browser entry, and Search under Today with
-// its key. Narrowed to a project on the rail, its name under the logo and its Overview and Chat on
-// top (features/project-rail.feature).
+// its key. Narrowed to a project on the rail, its name under the logo and its Overview, Chat and
+// Work on top (features/project-rail.feature, work-view.feature).
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, Globe, MessageSquareText, Search, Settings } from "lucide-react";
+import { CalendarDays, GitBranch, Globe, MessageSquareText, Search, Settings } from "lucide-react";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   Sidebar,
@@ -79,7 +79,7 @@ export function AppSidebar({
   todayActive,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  project?: { id: string; name: string; icon: React.ReactNode; overview: Row; chat?: Row; has: (p: ObjectSummary) => boolean };
+  project?: { id: string; name: string; icon: React.ReactNode; overview: Row; chat?: Row; work?: Row; has: (p: ObjectSummary) => boolean };
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
@@ -114,6 +114,14 @@ export function AppSidebar({
                   <SidebarMenuButton aria-current={project.chat.isActive ? "page" : undefined} isActive={project.chat.isActive} onClick={select(project.chat.onSelect)}>
                     <MessageSquareText />
                     <span>Chat</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {project.work && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton aria-current={project.work.isActive ? "page" : undefined} isActive={project.work.isActive} onClick={select(project.work.onSelect)}>
+                    <GitBranch />
+                    <span>Work</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
