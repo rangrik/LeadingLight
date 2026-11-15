@@ -26,6 +26,8 @@ Feature: Search with content
     When I click the Search row
     Then the panel opens
     And pressing ⌘K again closes it
+    And while the panel is open, the keys that act on the page behind it do nothing: the Inbox's
+      keys, ⌘J, ⌥⌘R, ⌘1–9, the tab keys and the writing tools
 
   Scenario: Nothing typed shows the recent pages
     When I open the panel

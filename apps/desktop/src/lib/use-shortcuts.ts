@@ -5,7 +5,7 @@ import { zoom } from "@/lib/zoom";
 import { useStore } from "@/lib/store";
 import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
-import { toggleSearch } from "~/components/search-panel";
+import { searching, toggleSearch } from "~/components/search-panel";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
@@ -22,6 +22,8 @@ import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
 export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+// The keys that still act while the search panel covers the page; the rest would move things behind it.
+const OVER_SEARCH = new Set(["search", "new-page", "new-idea", "save", "settings", "shortcuts", "zoom-in", "zoom-out", "zoom-reset"]);
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
@@ -40,6 +42,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
   const mobile = useMobile();
   useEffect(() => {
     const run = (id: string) => {
+      if (searching.get() && !OVER_SEARCH.has(id)) return;
       if (useStore.getState().view.kind !== "settings") {
         const browser = new CustomEvent("ll:browser-shortcut", { detail: id, cancelable: true });
         if (!window.dispatchEvent(browser)) return;
