@@ -30,7 +30,8 @@ import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, readTypeView, space, TYPE_VIEW } from "~/lib/space";
+import { WorkView } from "~/components/work-view";
+import { CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, readTypeView, space, TYPE_VIEW, WORK_VIEW } from "~/lib/space";
 import { readPaper } from "~/lib/paper";
 import { phone, useMobile } from "~/lib/platform";
 
@@ -231,6 +232,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                   <TypeView {...readTypeView(leaf.page)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
                   leaf.page === CHAT_VIEW ? <BrowserChat /> : <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
+                ) : leaf.page.startsWith(WORK_VIEW) ? (
+                  <WorkView pageId={leaf.page.slice(WORK_VIEW.length)} />
                 ) : leaf.page.startsWith(BROWSER_VIEW) ? (
                   <BrowserPane active={front && !folded} pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} session={leaf.page.split("/")[2] || undefined} worktree={leaf.page.split("/")[1] || undefined} />
                 ) : (

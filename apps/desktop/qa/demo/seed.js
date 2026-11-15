@@ -32,9 +32,11 @@ const noted = (id, x) => ({ ...(typeof x === "string" ? text(x) : x), marks: [..
 const thought = (id, source, quote, words) => ({ type: "thought", attrs: { id, source, quote }, content: [p(words)] });
 
 // ---- the runtime fixture ----
+const HERE = "/Users/you/work/LeadingLight";
+const TREES = "/Users/you/Library/Application Support/LeadingLight/worktrees/LeadingLight";
 export const RUNTIME = {
   location: "leadinglight",
-  path: "/Users/you/work/LeadingLight",
+  path: HERE,
   conversations: [
     { id: "conv-pricing", agent: "claude", location: "leadinglight/pricing-copy", dir: "/Users/you/work/LeadingLight", session: "sess-pricing", live: true, title: "Write the pricing page copy", created: ago(3 * 3600e3) },
     { id: "conv-tabs", agent: "codex", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-tabs", live: true, title: "Fix the tab row overflow", created: ago(40 * 60e3) },
@@ -43,11 +45,19 @@ export const RUNTIME = {
     { id: "conv-lamps", agent: "claude", location: "leadinglight", dir: "/Users/you/work/LeadingLight", session: "sess-lamps", live: true, title: "Compare three desk lamps", created: ago(DAY) },
   ],
   sessions: [
-    { name: "sess-pricing", agent_state: "waiting", state_since: ago(6 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(3 * 3600e3) },
-    { name: "sess-tabs", agent_state: "running", state_since: ago(2 * 60e3), exited: false, driver: "codex", agent: "codex", created: ago(40 * 60e3) },
-    { name: "sess-audit", agent_state: "idle", state_since: ago(50 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(5 * 3600e3) },
-    { name: "sess-rename", agent_state: "finished", state_since: ago(DAY), exited: true, driver: "claude", agent: "claude", created: ago(2 * DAY) },
-    { name: "sess-lamps", agent_state: "idle", state_since: ago(3 * 3600e3), exited: false, driver: "claude", agent: "claude", created: ago(DAY) },
+    { name: "sess-pricing", dir: `${TREES}-pricing-copy`, agent_state: "waiting", state_since: ago(6 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(3 * 3600e3) },
+    { name: "sess-tabs", dir: HERE, agent_state: "running", state_since: ago(2 * 60e3), exited: false, driver: "codex", agent: "codex", created: ago(40 * 60e3) },
+    { name: "sess-audit", dir: HERE, agent_state: "idle", state_since: ago(50 * 60e3), exited: false, driver: "claude", agent: "claude", created: ago(5 * 3600e3) },
+    { name: "sess-rename", dir: HERE, agent_state: "finished", state_since: ago(DAY), exited: true, driver: "claude", agent: "claude", created: ago(2 * DAY) },
+    { name: "sess-lamps", dir: HERE, agent_state: "idle", state_since: ago(3 * 3600e3), exited: false, driver: "claude", agent: "claude", created: ago(DAY) },
+  ],
+  // The folder's worktrees (features/work-view.feature): the checkout, a task's, one made by hand
+  // with files not committed, and one left clean with commits.
+  worktrees: [
+    { name: "LeadingLight", path: HERE, branch: "main", main: true, changed: 1, untracked: 0, ahead: 0 },
+    { name: "pricing-copy", path: `${TREES}-pricing-copy`, branch: "ll/pricing-copy", changed: 3, untracked: 1, ahead: 0 },
+    { name: "sync-spike", path: `${TREES}-sync-spike`, branch: "ll/sync-spike", changed: 2, untracked: 0, ahead: 0 },
+    { name: "old-search", path: `${TREES}-old-search`, branch: "ll/old-search", changed: 0, untracked: 0, ahead: 3 },
   ],
   requests: {
     "sess-pricing": [
@@ -67,14 +77,40 @@ export function installFixture() {
   // A stream the fixture speaks on, so views read again after the demo answers, stops or carries on.
   const streams = new Set();
   let seq = 0;
-  const now = (name, agent_state) => {
-    Object.assign(RUNTIME.sessions.find((s) => s.name === name) ?? {}, { agent_state, state_since: new Date().toISOString() });
-    const line = new TextEncoder().encode(`${JSON.stringify({ seq: ++seq, type: "session.changed", time: new Date().toISOString(), data: { session: name } })}\n`);
+  const say = (type, data) => {
+    const line = new TextEncoder().encode(`${JSON.stringify({ seq: ++seq, type, time: new Date().toISOString(), data })}\n`);
     for (const c of streams) try { c.enqueue(line); } catch { streams.delete(c); }
   };
-  // The demo's agents take an answer, a stop and a carry on; every other write is refused.
-  const write = (r, body) => {
+  const now = (name, agent_state) => {
+    Object.assign(RUNTIME.sessions.find((s) => s.name === name) ?? {}, { agent_state, state_since: new Date().toISOString() });
+    say("session.changed", { session: name });
+  };
+  const dirOf = (location) => RUNTIME.worktrees.find((w) => w.name === location.split("/")[1])?.path ?? HERE;
+  // The demo's agents take an answer, a stop and a carry on, and its folder takes New work and
+  // Remove (features/work-view.feature); every other write is refused.
+  const write = (method, r, body, force) => {
     let x;
+    if (/^\/v1\/locations\/[^/]+\/worktrees$/.test(r)) {
+      if (RUNTIME.worktrees.some((w) => w.name === body.name)) return json({ error: `git worktree add: fatal: '${body.name}' already exists` }, 400);
+      RUNTIME.worktrees.push({ name: body.name, path: `${TREES}-${body.name}`, branch: body.branch, changed: 0, untracked: 0, ahead: 0 });
+      setTimeout(() => say("worktree.created", { name: body.name }));
+      return json({ name: body.name });
+    }
+    if (method === "DELETE" && (x = /^\/v1\/locations\/[^/]+\/worktrees\/([^/]+)$/.exec(r))) {
+      const wt = RUNTIME.worktrees.find((w) => w.name === decodeURIComponent(x[1]) && !w.main);
+      if (!wt) return json({ error: "unknown worktree" }, 404);
+      if (!force && wt.changed + wt.untracked) return json({ error: `git worktree remove: '${wt.path}' contains modified or untracked files, use --force to delete it` }, 400);
+      RUNTIME.worktrees.splice(RUNTIME.worktrees.indexOf(wt), 1);
+      setTimeout(() => say("worktree.removed", { name: wt.name }));
+      return json({ removed: wt.name });
+    }
+    if (r === "/v1/sessions") {
+      const at = { dir: dirOf(body.location), agent: body.agent, created: new Date().toISOString() };
+      RUNTIME.sessions.push({ ...at, name: body.name, agent_state: "running", state_since: at.created, exited: false, driver: body.agent });
+      RUNTIME.conversations.push({ ...at, id: `conv-${body.name}`, location: body.location, session: body.name, live: true, title: body.title });
+      setTimeout(() => say("session.created", { session: body.name }));
+      return json({ name: body.name });
+    }
     if ((x = /^\/v1\/sessions\/([^/]+)\/requests\/([^/]+)\/respond$/.exec(r))) {
       const req = (RUNTIME.requests[x[1]] ?? []).find((q) => q.id === decodeURIComponent(x[2]));
       if (!req || req.state !== "pending") return json({ error: "Already answered.", request: req }, 409);
@@ -95,8 +131,9 @@ export function installFixture() {
     const r = path.replace("/__runtime", "");
     const method = (init?.method ?? "GET").toUpperCase();
     if (r === "/status") return Promise.resolve(json({ state: "ready", version: "fixture", home: "/tmp/fixture" }));
-    if (method !== "GET") return Promise.resolve(write(r, init?.body ? JSON.parse(init.body) : {}));
-    if (r === "/v1/locations") return Promise.resolve(json([{ name: RUNTIME.location, path: RUNTIME.path, folder_id: "f-ll" }]));
+    if (method !== "GET") return Promise.resolve(write(method, r, init?.body ? JSON.parse(init.body) : {}, u.searchParams.has("force")));
+    if (r === "/v1/locations") return Promise.resolve(json([{ name: RUNTIME.location, path: RUNTIME.path, folder_id: "f-ll", repo: true, worktrees: RUNTIME.worktrees }]));
+    if (r === "/v1/worktrees") return Promise.resolve(json(RUNTIME.worktrees));
     if (r === "/v1/conversations") return Promise.resolve(json(RUNTIME.conversations));
     if (r === "/v1/sessions") return Promise.resolve(json(RUNTIME.sessions));
     if (r === "/v1/notify") return Promise.resolve(json([]));

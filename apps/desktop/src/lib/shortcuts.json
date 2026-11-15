@@ -4,6 +4,7 @@
     { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N" },
     { "id": "new-tab", "group": "File", "label": "New tab", "keys": "⌘T", "accel": "CmdOrCtrl+T" },
     { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },
+    { "id": "new-work", "group": "File", "label": "New work…", "keys": "⇧⌘N", "accel": "CmdOrCtrl+Shift+N" },
     { "id": "close-tab", "group": "File", "label": "Close tab", "keys": "⌘W", "accel": "CmdOrCtrl+W", "sep": true },
     { "id": "reopen-tab", "group": "File", "label": "Reopen closed tab", "keys": "⇧⌘T", "accel": "CmdOrCtrl+Shift+T" },
     { "id": "quick-record", "group": "File", "label": "Quick record", "keys": "⇧⌘R", "accel": "CmdOrCtrl+Shift+R", "what": "Start or stop a voice note in this page" },

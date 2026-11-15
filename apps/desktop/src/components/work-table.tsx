@@ -25,14 +25,15 @@ import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
 // The Work table (features/work-table.feature): one row per task with its agent, state, steps,
 // latest report and the one press it wants. On a task's card its rows are the subtasks; on a
-// project page, the project's tasks at work. Below 720 px the agent and report go under the title.
+// project page, the project's tasks at work. Below 900 px the agent and report go under the
+// title: five columns beside it left a title about 110 px at 720.
 
 const name = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 const done = (p: ObjectSummary) => p.properties.done === true;
 const fail = (e: Error) => toastManager.add({ type: "error", title: "That didn't go", description: e.message });
 // Every cell starts with a 24 px line, so text and buttons share one baseline whatever wraps.
-const cell = "h-8 py-1 align-top leading-5";
-const line = "flex h-6 min-w-0 items-center";
+export const cell = "h-8 py-1 align-top leading-5";
+export const line = "flex h-6 min-w-0 items-center";
 
 // Opens the task with the report under its words in view, unfolded.
 function openReport(task: string, report: string, e: React.MouseEvent) {
@@ -95,10 +96,10 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
       </Button>
     ) : null;
   const meta = [who, label, steps, report, later].filter(Boolean);
-  const wide = "hidden @min-[720px]/work:table-cell";
+  const wide = "hidden @min-[900px]/work:table-cell";
   return (
     <TableRow data-task={task.id}>
-      <TableCell className={cn(cell, "w-full max-w-0 px-0 @min-[720px]/work:pe-2.5")}>
+      <TableCell className={cn(cell, "w-full max-w-0 px-0 @min-[900px]/work:pe-2.5")}>
         <div className={cn(line, "gap-2")}>
           {state === "done" ? <Checkbox aria-label="Done" checked readOnly /> : <RowIcon icon={iconFor(task)} />}
           <button
@@ -108,11 +109,11 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
           >
             {pageLabel(task.title)}
           </button>
-          {action && <span className="shrink-0 @min-[720px]/work:hidden">{action}</span>}
+          {action && <span className="shrink-0 @min-[900px]/work:hidden">{action}</span>}
         </div>
         {/* Narrow: what the columns say, under the title; each part whole or cut. Its dot leads it,
             in the 12 px the lines are pulled left and cut by, so no line starts or ends in one. */}
-        <div className="ms-6 overflow-hidden text-muted-foreground @min-[720px]/work:hidden">
+        <div className="ms-6 overflow-hidden text-muted-foreground @min-[900px]/work:hidden">
           <div className="-ms-3 whitespace-normal">
             {meta.map((m, i) => (
               <span className="inline-flex max-w-full gap-1 ps-1 align-top" key={i}>

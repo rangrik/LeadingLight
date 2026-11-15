@@ -93,6 +93,9 @@ export const readTypeView = (view: string) => {
 // A page's project chat (features/project-chat.feature), crumbed under its page.
 export const CHAT_VIEW = "chat:";
 export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
+// A project's tasks in flight and its folder's worktrees (features/work-view.feature).
+export const WORK_VIEW = "work:";
+export const workView = (pageId: string) => `${WORK_VIEW}${pageId}`;
 // Its agent's browser, live (features/agent-browser.feature): page id, the chat's own worktree if
 // any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
@@ -105,7 +108,7 @@ export const ASK_VIEW = "ask:";
 export const CALENDAR_VIEW = "calendar:";
 const VIEWS = [CALENDAR_VIEW,FEED_VIEW, INBOX_VIEW, ASK_VIEW];
 // An empty view is a tab with no page yet.
-export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
+export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(WORK_VIEW) && !view.startsWith(BROWSER_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
@@ -117,6 +120,10 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
     const id = view.slice(CHAT_VIEW.length);
     if (!id) return { title: "Browser chat" };
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
+  }
+  if (view.startsWith(WORK_VIEW)) {
+    const id = view.slice(WORK_VIEW.length);
+    return { title: "Work", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(BROWSER_VIEW)) {
     const id = view.slice(BROWSER_VIEW.length).split("/")[0];
