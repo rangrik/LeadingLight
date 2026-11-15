@@ -22,7 +22,7 @@ Feature: Connect the installed app to the same encrypted workspace
     Given the browser is signed into my workspace and has never synced at this address
     And the account already has synced notes
     When I open the approval link
-    Then the page says the key is in the app on a device that already syncs, under Account and sync, Sync, Show recovery key
+    Then the page says to type the code on a device that already syncs, or to paste its key from Account and devices, Recovery key, Show…
     When I press Connect this device with the key left blank
     Then I read "This account already has synced notes. Enter its recovery key to connect."
     And the request stays pending and the browser saves no key
@@ -35,11 +35,11 @@ Feature: Connect the installed app to the same encrypted workspace
 
   Scenario: Approve a new Mac from an app that already syncs
     Given LeadingLight on my first Mac is signed in and syncing
-    And my new Mac shows code "3F9A1C07" after I press "Connect your workspace"
-    When I open "Account and sync" on the first Mac and type "3f9a 1c07" under "Connect another device"
+    And my new Mac shows code "3F9A1C07" after I press "Connect this Mac", and no browser opens
+    When I open Account and devices on the first Mac, press "Add a device" and type "3f9a 1c07"
     And I press "Continue"
-    Then it says "LeadingLight on Mac will connect to" my account "and receive the key for your encrypted notes"
-    When I press "Connect this device"
+    Then it asks "Let LeadingLight on Mac open your notes?" with my account and the code
+    When I press "Approve"
     Then it says "LeadingLight on Mac is connected. It will finish syncing by itself."
     And the new Mac receives the same account and the recovery key, encrypted for it alone
     And no recovery key was typed on either Mac or in a browser
@@ -53,8 +53,8 @@ Feature: Connect the installed app to the same encrypted workspace
 
   Scenario: A device that does not sync cannot approve another
     Given LeadingLight is signed in but sync is off or paused on this device
-    When I open "Account and sync"
-    Then there is no "Connect another device"
+    When I open Account and devices
+    Then "Add a device" is disabled and I read "Turn on sync here to add another device."
 
   Scenario: Sign out all devices from the browser
     Given my Mac and iPad are connected and a third device is approved but has not finished connecting

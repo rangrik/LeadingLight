@@ -135,8 +135,8 @@ test("connect a Mac and start, approve, continue and stop its shared project age
   await page.goto("/?ipad");
   await sidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByTestId("settings-nav-devices")).toBeVisible();
-  await page.getByTestId("settings-nav-devices").click();
+  await expect(page.getByTestId("settings-nav-account")).toBeVisible();
+  await page.getByTestId("settings-nav-account").click();
   await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:test-code");
   await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
@@ -250,7 +250,7 @@ test("iPhone pairs in Devices and opens Mac agents from Notes", async ({ page })
   await page.goto("/?iphone");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
-  await page.getByTestId("settings-nav-devices").click();
+  await page.getByTestId("settings-nav-account").click();
   await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:test-code");
   await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
@@ -451,7 +451,7 @@ test("Mac settings share only checked projects and can disable the grant", async
     }
   });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByTestId("settings-nav-devices").click();
+  await page.getByTestId("settings-nav-account").click();
   await page.getByRole("checkbox", { name: "One", exact: true }).click();
   await page.getByRole("switch", { name: "Mobile access", exact: true }).click();
   await expect(page.getByRole("button", { name: "Copy code", exact: true })).toBeEnabled();
@@ -472,7 +472,7 @@ test("switching Macs cannot send an old pending prompt to the new connection", a
   await hold.started;
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByTestId("settings-nav-devices").click();
+  await page.getByTestId("settings-nav-account").click();
   await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:second");
   await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Travel Mac", { exact: true })).toBeVisible();

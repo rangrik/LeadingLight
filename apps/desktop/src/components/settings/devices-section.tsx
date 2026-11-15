@@ -1,6 +1,6 @@
 import { Copy, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
-import { SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
+import { SettingsGroup, SettingsRow } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Field, FieldLabel } from "@leadinglight/ui/components/field";
@@ -10,7 +10,7 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { ConfirmDialog } from "@/views/settings/confirm";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { connectMobileAgents, disconnectMobileAgents, mobileAgents, refreshMobileAgents } from "~/lib/mobile-agents";
-import { useMobile } from "~/lib/platform";
+import { platform, useMobile } from "~/lib/platform";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
 import { cloudApi, useCloud } from "~/lib/cloud";
@@ -21,11 +21,11 @@ type Host = { enabled: boolean; projects: string[]; code?: string; channel?: str
 type Relay = { channel: string; hostToken: string; clientToken: string };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 
-export function DevicesSection() {
-  const mobile = useMobile();
-  return <SettingsPage title="Devices" description="Run project agents on your Mac from iPhone or iPad with one encrypted connection.">
-    {mobile ? <ConnectMac /> : <ShareMac />}
-  </SettingsPage>;
+// Project agents on a Mac, reached from iPhone or iPad. Shown at the foot of Account and devices.
+export function MobileAgentAccess() {
+  const mobile = useMobile(), os = platform.use();
+  // Sharing a Mac needs the Mac's runtime, which a browser has only in development.
+  return mobile ? <ConnectMac /> : os === "macos" || import.meta.env.DEV ? <ShareMac /> : null;
 }
 
 function ShareMac() {
@@ -65,8 +65,8 @@ function ShareMac() {
     catch { setError("The code could not be copied. Allow clipboard access and try again."); }
   };
   return <>
-    <SettingsGroup title="This Mac" description="Keep this Mac awake and online. LeadingLight carries encrypted messages between your devices. Your Claude Code and Codex accounts stay here.">
-      {!cloud.user && <SettingsRow label="Connect your account" description="Sign in on this Mac to enable the connection. Your phone pairs with a code; note sync is optional."><Button size="sm" variant="outline" onClick={() => window.dispatchEvent(new Event("leadinglight:cloud-account"))}>Account and sync</Button></SettingsRow>}
+    <SettingsGroup title="Agents from iPhone and iPad" description="Keep this Mac awake and online. LeadingLight carries encrypted messages between your devices. Your Claude Code and Codex accounts stay here.">
+      {!cloud.user && <SettingsRow label="Sign in first" description="Sign in on this Mac, above, to enable the connection. Your phone pairs with a code; note sync is optional." />}
       <SettingsRow label="Mobile access" description={host?.error || (host?.enabled ? `Available on ${host.name}. Paired devices can start and answer agents in the projects below.` : "Off until you enable it and choose projects to share.")}>
         <Switch checked={host?.enabled ?? false} disabled={busy || !host || (!host.enabled && (!cloud.user || !host.projects.length))} onCheckedChange={(enabled) => void change({ enabled })} />
       </SettingsRow>
@@ -101,7 +101,7 @@ function ConnectMac() {
     try { await work(); setCode(""); } catch (e) { setError(message(e)); } finally { setBusy(false); }
   };
   return <>
-    <SettingsGroup title="Connect a Mac" description="In LeadingLight on your Mac, open Settings → Devices, choose shared projects, enable mobile access and copy its code. Both devices only need LeadingLight and an internet connection.">
+    <SettingsGroup title="Agents on your Mac" description="In LeadingLight on your Mac, open Settings → Account and devices, choose shared projects, enable mobile access and copy its code. Both devices only need LeadingLight and an internet connection.">
       <form className="space-y-3 py-4" onSubmit={(e) => { e.preventDefault(); void run(() => connectMobileAgents(code)); }}>
         <Field><FieldLabel>Mac connection code</FieldLabel><Input type="password" autoComplete="off" spellCheck={false} autoCapitalize="none" value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste connection code" /></Field>
         <Button type="submit" disabled={busy || !code.trim()}>{busy ? "Connecting…" : "Connect Mac"}</Button>

@@ -1,15 +1,16 @@
 # Native workspace sync
 
-Mac and iPad use the existing cloud journal. Account connection shows a code and opens the
-system browser. Either the signed-in workspace approves the named device after checking the
-code, or a device that already syncs approves it after the code is typed there.
+Mac and iPad use the existing cloud journal. Account connection shows a code. A device that
+already syncs approves it after the code is typed there (Add a device), or the person chooses
+the system browser, where the signed-in workspace approves the named device after checking
+the code. The device list, renaming and removal are decision 50.
 The approval encrypts the recovery key with ECDH-P256 and AES-GCM. The private polling
 verifier and native bearer credential remain in Rust. Keychain persistence happens only
 after key verification; failure restores the earlier local key and login.
 
 Requests expire after ten minutes and can be claimed once. Native sessions end 30 days
-after their last use and sign-out revokes them. Config, identity, encrypted sync, calendar and device
-approval routes accept native credentials. Expected-account headers reject a session change
+after their last use and sign-out revokes them. Config, identity, encrypted sync, calendar, device
+approval, the device list and a device's own name accept native credentials. Expected-account headers reject a session change
 during a sync. The browser's existing origin checks remain in place.
 
 A typed code is the first eight characters of the request id. Each account may look up ten

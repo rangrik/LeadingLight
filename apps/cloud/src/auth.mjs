@@ -17,6 +17,8 @@ export function authentication(env) {
       jwt({ token, account }) {
         // Provider subjects, never matching emails, define account ownership.
         if (account) token.sub = createHash('sha256').update(`${account.provider}:${account.providerAccountId}`).digest('hex');
+        // Kept so each device can say which sign-in an account is.
+        if (account) token.provider = account.provider;
         return token;
       },
       session({ session, token }) { session.user.id = token.sub; return session; },
@@ -29,7 +31,7 @@ export function authentication(env) {
     async user(request) {
       if (!ready) return null;
       const token = await getToken({ req: request, secret: env.AUTH_SECRET, secureCookie: env.APP_ORIGIN.startsWith('https:') });
-      return typeof token?.sub === 'string' ? { id: token.sub, name: token.name ?? 'Your account' } : null;
+      return typeof token?.sub === 'string' ? { id: token.sub, name: token.name ?? 'Your account', email: token.email ?? undefined, provider: token.provider ?? undefined } : null;
     },
   };
 }
