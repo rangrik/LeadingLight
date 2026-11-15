@@ -22,7 +22,8 @@ if [ "${1:-}" = "--remove" ]; then
   echo "removed $APP and its data"
   exit 0
 fi
-printf '{"productName":"%s","identifier":"%s"}' "$APP" "$ID" >"$CONF"
+# No update address: a release installed over a dev app would open the real notes.
+printf '{"productName":"%s","identifier":"%s","plugins":{"updater":{"endpoints":[]}}}' "$APP" "$ID" >"$CONF"
 scripts/project-runtime/build.sh
 scripts/project-runtime/build-tmux.sh
 pnpm --filter @leadinglight/desktop tauri build --debug --bundles app --config "$CONF"

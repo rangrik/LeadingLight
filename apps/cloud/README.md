@@ -39,7 +39,9 @@ Native Mac and iPad apps join this same account through approval in a browser or
 already syncs. The server stores
 only hashed device credentials and encrypted recovery-key envelopes. Native sessions are scoped
 to note sync and cannot grant browser agent access. Additive schema setup runs in the production
-build before the web client is deployed. See [native sync](../../docs/NATIVE-SYNC.md) for limits
+build before the web client is deployed. `/api/devices` lists an account's device sign-ins; a device renames itself and only a browser
+removes one. `accounts` keeps each account's sign-in provider and email for display. Both are
+additive in `schema.sql`. See [native sync](../../docs/NATIVE-SYNC.md) for limits
 and the required device acceptance.
 
 Redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --prod --yes --scope pranavs-projects-9ffa1d28`.

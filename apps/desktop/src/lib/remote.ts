@@ -184,7 +184,7 @@ export async function removePair(id: string) {
 }
 export async function remoteStatus(): Promise<AgentStatus> {
   const pair = selectedPair();
-  return pair?.status?.claude ?? { installed: false, logged_in: false, error: pair?.error ?? 'Connect to an online Mac in Account and sync → Agents.' };
+  return pair?.status?.claude ?? { installed: false, logged_in: false, error: pair?.error ?? 'Connect to an online Mac in Settings → Account and devices.' };
 }
 export async function remoteCodex(): Promise<unknown> {
   const value = selectedPair()?.status?.codex;
@@ -228,7 +228,7 @@ function stopUncertain(run: Run, message: string) {
   else interrupted(run, message);
 }
 export async function remoteAsk(request: AskRequest, onEvent: (event: AgentEvent) => void) {
-  if (!remoteReady() || !connection) throw new Error('Connect to an online Mac in Account and sync → Agents. Your question has been kept.');
+  if (!remoteReady() || !connection) throw new Error('Connect to an online Mac in Settings → Account and devices. Your question has been kept.');
   if (request.tail) throw new Error('Automatic background requests are not part of this Mac connection.');
   if (runs.size) throw new Error('The Mac is already working on a page-agent task for this browser. Finish or stop it first.');
   checkAccount(connection.account);

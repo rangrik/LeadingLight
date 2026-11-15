@@ -122,6 +122,32 @@ test('a syncing device approves by code and the browser signs every device out',
   assert.equal((await native('native/poll', { id: waiting.id, verifier: waiting.verifier })).status, 403);
 }));
 
+// The device list is one account's own; only the browser removes a device, and only a device names itself.
+test('devices are listed per account, named by themselves and removed by the browser', options, () => fixture(async ({ sql, owner, other, browser, native, start, approve, claim }) => {
+  const a = await start(), b = await start(), c = await start();
+  await approve(a); await approve(b); await approve(c, other);
+  const mac = await claim(a), pad = await claim(b), theirs = await claim(c);
+  assert.equal((await native('devices/name', { name: ' Studio ' }, pad.token)).status, 200);
+  assert.equal((await native('devices/name', { name: 'x'.repeat(41) }, pad.token)).status, 400);
+  const list = (await (await native('devices', undefined, mac.token)).json()).devices;
+  assert.deepEqual(list.map((d) => [d.name, d.kind, d.current]).sort(), [['Studio', 'ipad', false], ['Test iPad', 'ipad', true]]);
+  const studio = list.find((d) => d.name === 'Studio').id;
+  assert.equal((await native('devices/remove', { id: studio }, mac.token)).status, 403);
+  assert.equal((await browser('devices/name', { name: 'Mine' })).status, 403);
+  assert.equal((await browser('devices/remove', { id: studio }, other)).status, 404);
+  assert.equal((await browser('devices/remove', { id: studio })).status, 200);
+  assert.equal((await native('me', undefined, pad.token)).status, 401);
+  assert.equal((await (await browser('devices')).json()).devices.length, 1);
+  assert.equal((await (await native('devices', undefined, theirs.token)).json()).devices.length, 1);
+  // A browser sign-in that knows its provider tells the account's apps which sign-in they use.
+  const signedIn = { ...auth, user: async () => ({ id: owner, name: 'Test account', provider: 'google', email: 'a@example.test' }) };
+  await application({ env: { APP_ORIGIN: origin, CLOUD_ACCESS: 'public' }, sql, auth: signedIn })(new Request(`${origin}/api/me`));
+  const me = await (await native('me', undefined, mac.token)).json();
+  assert.deepEqual([me.provider, me.email], ['google', 'a@example.test']);
+  assert.equal((await (await native('me', undefined, theirs.token)).json()).provider, undefined);
+  await sql`DELETE FROM accounts WHERE owner=${owner}`;
+}));
+
 // An expired request, expired session or revoked device must not regain access.
 test('expiry, revocation and encrypted sync stay isolated between accounts', options, () => fixture(async ({ sql, owner, other, browser, native, start, approve, claim }) => {
   const expired = await start();

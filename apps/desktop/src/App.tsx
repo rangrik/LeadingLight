@@ -27,6 +27,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { AskBar } from "~/components/ask-bar";
 import { BarPanel, BarStrip, toggleView } from "~/components/bar";
 import { CaptureBox, type CaptureHost, POPUP } from "~/components/capture-box";
+import { AppUpdates } from "~/components/app-update";
 import { CliUpdates } from "~/components/cli-updates";
 import { DeletePageDialog } from "~/components/delete-page-dialog";
 import { makeLinkHost } from "~/components/link-views";
@@ -462,6 +463,7 @@ export default function App() {
           <ShortcutsSheet />
           {!phone && <SearchPanel />}
           {!mobile && <CliUpdates />}
+          <AppUpdates />
           <ZoomHud />
         </TooltipProvider>
       </ShipyardToasts>

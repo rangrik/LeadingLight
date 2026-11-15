@@ -26,11 +26,11 @@ Pairing doesn't turn on note sync. It only connects agents.
 
 ## Connect your Mac
 
-1. **In the web app**, open **Account and sync › Agents**. Give the browser a name in **Browser
+1. **In the web app**, open **Settings › Account and devices** and find **Agents from a browser**. Give the browser a name in **Browser
    name** if you like, and press **Connect a Mac**.
 2. A **Pairing code** appears, with **Copy code**. It expires in five minutes. Share it only with
    your Mac.
-3. **In the Mac app**, open **Account and sync › Agents**. Check **Mac name**, paste the code into
+3. **In the Mac app**, open **Settings › Account and devices** and find **Agents from a browser**. Check **Mac name**, paste the code into
    **Pairing code from your browser**, and press **Review connection**.
 4. The Mac shows **Allow this browser?** with the browser's name and your workspace account. It
    explains that the browser can run page agents with your CLI accounts on this Mac, and that web

@@ -48,5 +48,7 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/publish.yml
+    # The macOS job signs with the repository's Apple secrets.
+    secrets: inherit
     with:
       tag: ${{ needs.prepare.outputs.tag }}

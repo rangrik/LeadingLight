@@ -140,7 +140,6 @@ async function pairedMac(page: Page, codex = false, ready = true) {
 async function connect(page: Page, mac: Awaited<ReturnType<typeof pairedMac>>, url = '/') {
   await page.goto(url);
   await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Connect a Mac', exact: true }).click();
   const code = await page.getByLabel('Pairing code', { exact: true }).inputValue();
   expect(JSON.stringify(mac.wire)).not.toContain(code);
@@ -151,7 +150,7 @@ async function connect(page: Page, mac: Awaited<ReturnType<typeof pairedMac>>, u
   await expect(page.getByText(mac.readiness(), { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Use this Mac', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Connected', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to app' }).click();
   await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Paired note');
   await page.getByRole('textbox', { name: 'Page body' }).fill('My original words.');
@@ -242,12 +241,11 @@ test('paired Mac streams, edits once, and another Mac receives fresh context', a
   await expect(page.locator('[data-origin="agent"]')).toContainText(['One approved addition.']);
   await page.screenshot({ path: 'qa/report/paired-mac-approval.png', animations: 'disabled' });
   await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Connect a Mac', exact: true }).click();
   await mac.approve(await page.getByLabel('Pairing code', { exact: true }).inputValue());
   await page.getByRole('button', { name: 'Refresh connections' }).click();
   await page.getByRole('button', { name: 'Use this Mac', exact: true }).click();
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Back to app' }).click();
   mac.hold();
   await page.getByRole('textbox', { name: 'Question' }).fill('Continue on another Mac.');
   await page.getByRole('button', { name: 'Send', exact: true }).click();
@@ -340,7 +338,6 @@ test('removing a Mac while a question is prepared sends nothing', async ({ page 
   });
   await expect.poll(() => page.evaluate(async () => Boolean((await import('/src/lib/' + 'threads.ts')).threadOf('preparing', 'preparing-thread').busy))).toBe(true);
   await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Remove connection', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Remove connection', exact: true })).toHaveCount(0);
   await page.evaluate(() => (window as any).finishPageRead());

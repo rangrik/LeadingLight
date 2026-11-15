@@ -7,7 +7,9 @@ if (!process.env.TEST_DATABASE_URL?.includes('127.0.0.1:55439/')) throw new Erro
 const sql = database(process.env.TEST_DATABASE_URL);
 await sql.unsafe(await readFile(new URL('../src/schema.sql', import.meta.url), 'utf8'));
 const env = { CLOUD_ACCESS: 'public', APP_ORIGIN: `http://127.0.0.1:${process.env.QA_PORT || 1431}` };
-const auth = { ready: true, providers: [], user: async (req) => { const id = /(?:^|;\s*)qa-user=([^;]+)/.exec(req.headers.get('cookie') || '')?.[1]; return id ? { id, name: 'QA account' } : null; } };
+const cookie = (req, name) => new RegExp(`(?:^|;\\s*)${name}=([^;]+)`).exec(req.headers.get('cookie') || '')?.[1];
+// qa-provider=none stands for a sign-in from before providers were kept.
+const auth = { ready: true, providers: [{ id: 'google', name: 'Google' }, { id: 'github', name: 'GitHub' }], user: async (req) => { const id = cookie(req, 'qa-user'), provider = cookie(req, 'qa-provider') ?? 'google'; return id ? { id, name: 'QA account', ...(provider === 'none' ? {} : { provider, email: `${id.slice(-8)}@example.test` }) } : null; } };
 const app = application({ env, sql, auth });
 createServer(async (req, res) => {
   const response = await app(new Request(new URL(req.url, env.APP_ORIGIN), { method: req.method, headers: req.headers, ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: Readable.toWeb(req), duplex: 'half' } : {}) }));

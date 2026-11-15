@@ -484,8 +484,11 @@ Release Please keeps one version across Cargo, Tauri and the desktop package, wi
 notes from conventional commits. Merging its PR creates a draft; GitHub Actions
 checks and builds that exact commit, verifies helpers and licenses, and uploads
 downloads before publishing. Failed builds stay drafts and can be retried by tag.
-The first distribution is an unsigned Apple Silicon preview, matching the runtime
-we can build today. No personal token or signing secret is needed for that path.
+The first distribution, 0.2.0, was an unsigned Apple Silicon preview. Since 2026-11-14 the
+build is signed with a Developer ID and notarized, and releases are normal releases, because
+"unsigned" was the only reason to call them prereleases. The signing secrets live in GitHub
+Actions and reach only the step that signs; the app is compiled before it. A branch may
+rehearse a build, and only `main` publishes.
 
 ## 30. One bar for what wants a glance; tabs inside panes; one box for capture
 
@@ -941,6 +944,48 @@ What this costs. The key was already stored unencrypted on the device beside the
 showing it gives a person at an unlocked device nothing new; signing out never removed it. A
 lost device that stays in use now stays signed in until the browser's "Sign out all devices"
 (decision 48) ends it. Signing out one device from another is deferred.
+
+## 50. One place for the account, and a list of its devices (2026-11-14)
+
+The owner could not tell which account his devices used, or what was signed in. Sign-in showed
+a name only, so a Google and a GitHub account looked the same. Account, sync, device approval
+and the two agent pairings sat in a dialog with tabs and in Settings › Devices.
+
+Settings › Account and devices now holds all of it, and the sidebar row says where sync stands.
+The service keeps each account's provider and email (a new `accounts` row, written when a
+browser signs in), because only a browser sign-in knows them and the installed apps need to
+show them. This is the first personal detail the service keeps beside the name; the privacy
+page says so. Each device sign-in keeps when it was last used, at most one write in five
+minutes, which also renews it (decision 49).
+
+The list is the installed apps only: a browser sign-in is a cookie with no row to list. A
+device renames itself. Only a browser removes a device, for the reason decision 48 gives for
+"Sign out all devices"; a removed device keeps its notes and key (decision 49). A device knows
+its sign-in ended only from the service's own refusal, never from a failed request, so being
+offline is not shown as signed out. A new app no longer opens the browser by itself: it shows
+its code, and the browser is the choice for a first device.
+
+## 51. The Mac app updates itself from GitHub's latest release (2026-11-14)
+
+Getting a merged change onto the Mac meant a local build. Now the app reads `latest.json`
+from GitHub's latest release when it opens and every four hours, says a version is ready in
+a toast and in Settings › About, and on one click downloads, verifies, installs and reopens.
+Nothing is downloaded before the click. It trusts only an archive signed by our update key,
+so GitHub alone cannot push code into installed apps; losing that key means one reinstall by
+hand. No server of ours is involved, and the Vercel key stays out of the build. An iPhone or
+iPad app cannot replace itself; decision 52 says how those update.
+
+## 52. iPhone and iPad install each release by a link, without TestFlight (2026-11-15)
+
+They were built on one Mac and pushed over a cable to two registered devices. Now the release
+signs an Ad Hoc build with our distribution certificate and attaches it, with the manifest iOS
+reads, to the GitHub release; the app's Update button opens that manifest's
+`itms-services` link and iOS installs it in place. TestFlight came first and was dropped the
+same day: LeadingLight is private, the owner did not want the TestFlight app, and a TestFlight
+build stops opening after 90 days, where an Ad Hoc one lasts as long as its profile. The cost:
+a new device must be registered and the profile remade before it can install. Signing is by
+hand rather than through the API key because, on a fresh build machine, Xcode's own signing
+makes a new certificate every run.
 
 ## 53. One door: the review's options are judged by places to look (2026-11-14)
 
