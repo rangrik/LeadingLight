@@ -1,3 +1,4 @@
+import { gmailRequest, gmailCallback, gmailReady } from './gmail.mjs';
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
 import { mobileRelayRequest } from './mobile-relay.mjs';
@@ -19,8 +20,8 @@ export function application({ env, sql, auth }) {
       if (['/api/native/start', '/api/native/poll'].includes(path)) return auth.ready ? await nativePublicRequest({ request, sql, readBody: limitedBody, origin }) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       const native = request.headers.has('authorization') ? await authenticateNative(request, sql) : null;
       if (!native && !['GET', 'HEAD'].includes(request.method) && request.headers.get('origin') !== url.origin) return json({ error: 'Unexpected origin.' }, 403);
-      if (!native && url.origin !== origin && (/^\/api\/auth\/(signin|callback)(\/|$)/.test(path) || path === '/api/calendar/connect')) return json({ error: `Open ${origin} after copying your browser notes to sign in or connect another calendar.` }, 409);
-      if (path === '/api/config') return json({ allowed: enabled(env, (native?.user ?? await auth.user(request))?.id), ready: auth.ready, calendar: calendarReady(env), providers: auth.providers, agents: [] });
+      if (!native && url.origin !== origin && (/^\/api\/auth\/(signin|callback)(\/|$)/.test(path) || ['/api/calendar/connect', '/api/gmail/connect'].includes(path))) return json({ error: `Open ${origin} after copying your browser notes to sign in or connect another Google account.` }, 409);
+      if (path === '/api/config') return json({ allowed: enabled(env, (native?.user ?? await auth.user(request))?.id), ready: auth.ready, calendar: calendarReady(env), gmail: gmailReady(env), providers: auth.providers, agents: [] });
       if (path.startsWith('/api/auth/')) return auth.ready ? auth.handle(request) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
       if (path === '/api/worker' || path === '/api/queue-worker') return agentsUnavailable();
       const user = native?.user ?? await auth.user(request);
@@ -28,6 +29,10 @@ export function application({ env, sql, auth }) {
       const expectedOwner = request.headers.get('x-leadinglight-owner');
       if (expectedOwner && expectedOwner !== user.id) return json({ error: 'The signed-in account changed. Reconnect to the original workspace and try again.' }, 409);
       if (['/api/mobile-relay/channels','/api/mobile-relay/remove'].includes(path)) return await mobileRelayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
+      if (path.startsWith('/api/gmail/')) {
+        if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
+        return await (path === '/api/gmail/callback' ? gmailCallback : gmailRequest)({ request, env, sql, user, readBody: limitedBody });
+      }
       if (path.startsWith('/api/calendar/')) {
         if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
         return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });

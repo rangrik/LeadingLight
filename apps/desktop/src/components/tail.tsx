@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { DailyCard } from "~/components/daily-card";
+import { MailRow } from "~/components/mail";
 import { visit } from "~/components/property-value";
 import { Row } from "~/components/work-panel";
 import { barViewOf, showBar } from "~/lib/bar";
@@ -136,9 +137,10 @@ const Rows = ({ rows, className }: { rows: { line: Line; leaving: boolean }[]; c
     </div>
   );
 
-// Under Today's day bar: the daily card, then up to three rows from the records, never stored in the note.
+// Under Today's day bar: Mail's row, the daily card, then up to three rows from the records, never stored in the note.
 export const TailToday = () => (
   <>
+    <MailRow />
     <DailyCard />
     <Rows className="mt-2" rows={useLines(TODAY)} />
   </>

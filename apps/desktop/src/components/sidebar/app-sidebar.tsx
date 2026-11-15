@@ -5,7 +5,7 @@
 // the browser's (browser-sidebar.tsx) and the header switches back to Notes, as sidebar-07's
 // team switcher does; the notes stay mounted under it.
 // The header is its own export, so Settings' sidebar wears the same one.
-import { CalendarDays, ChevronsUpDown, Globe, Settings } from "lucide-react";
+import { CalendarDays, ChevronsUpDown, Globe, Mail, Settings } from "lucide-react";
 import type { ReactNode } from "react";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
 import {
@@ -27,7 +27,7 @@ import { UsageButton } from "~/components/usage-button";
 import { enter, leave, space } from "~/lib/browser-space";
 import { useKeysFor } from "~/lib/keymap";
 import { openFrom, openBeside } from "~/lib/panes";
-import { CALENDAR_VIEW, browserView } from "~/lib/space";
+import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
 import { NavTypes } from "./nav-types";
 
@@ -134,6 +134,7 @@ export function AppSidebar({
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(CALENDAR_VIEW, e))}><CalendarDays /><span>Calendar</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton onClick={select((e) => openFrom(MAIL_VIEW, e))}><Mail /><span>Mail</span></SidebarMenuButton></SidebarMenuItem>
             {!mobile && <SidebarMenuItem>
               <SidebarMenuButton onClick={select(() => (native ? enter() : openBeside(browserView(""))))}>
                 <Globe className="size-4" />
