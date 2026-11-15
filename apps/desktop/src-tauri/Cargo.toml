@@ -1,6 +1,6 @@
 [package]
 name = "leadinglight-desktop"
-version = "0.2.0"
+version = "0.4.0"
 description = "LeadingLight desktop app"
 edition = "2024"
 
@@ -38,6 +38,9 @@ security-framework = "3"
 tauri-nspanel = "2.1"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-autostart = "2"
+# The Mac app installs its own updates; iPhone and iPad get theirs from TestFlight.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 # The browser space's pages (native_browser.rs) are WKWebViews made with wry, the crate Tauri uses.
 wry = { version = "0.57", default-features = false }
 objc2 = "0.6"

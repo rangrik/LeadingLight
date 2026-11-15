@@ -15,13 +15,13 @@ Yes. LeadingLight is open source under the [MIT license](https://github.com/rang
 
 Apple Silicon Macs (M-series) with macOS 13 or later. Transcribing voice notes needs macOS 26. There are no Intel builds yet, because the helpers the app bundles are built for Apple Silicon only.
 
-### Why does macOS warn me when I open it?
+### Why does macOS ask before opening it?
 
-The previews aren't signed with an Apple Developer ID or notarized by Apple yet. Allow the app once in **System Settings › Privacy & Security**. See [Install](/guide/install#allow-the-app-to-open).
+macOS asks once about any app downloaded from the internet. LeadingLight is signed with an Apple Developer ID and notarized by Apple, so click **Open**. See [Install](/guide/install#open-it).
 
 ### Does it update itself?
 
-Not yet. Quit the app and replace it with the newest release. Your notes stay where they are.
+Yes, on the Mac. It says when a newer release is ready and installs it with one click. See [Install](/guide/install#update-to-a-new-version). Your notes stay where they are.
 
 ### Is there a Windows, Linux or iPhone app?
 

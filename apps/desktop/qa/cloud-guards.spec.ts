@@ -16,19 +16,26 @@ test('sign-out keeps the account on failure and clears it on success', async ({ 
   await page.goto('/');
   await page.getByRole('button', { name: 'Account and sync' }).click();
   await expect(page.getByText('Logout test account', { exact: true })).toBeVisible();
+  // Sign out asks first; the question's own button is the one that signs out.
+  const signOut = async () => {
+    await page.getByTestId('settings-account').getByRole('button', { name: 'Sign out', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Sign out', exact: true }).click();
+  };
   for (const mode of ['http', 'redirect'] as const) {
     failure = mode;
-    await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('You are still signed in');
+    await signOut();
+    await expect(page.getByRole('alert').filter({ hasText: 'You are still signed in' })).toBeVisible();
     await expect(page.getByText('Logout test account', { exact: true })).toBeVisible();
   }
   failure = null;
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await signOut();
   await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible();
   await expect(page.getByText('Logout test account', { exact: true })).not.toBeVisible();
   await page.reload();
   await page.getByRole('button', { name: 'Account and sync' }).click();
   await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible();
+  // A sign-out the person chose leaves no warning behind.
+  await expect(page.getByText('is signed out of sync')).toHaveCount(0);
 });
 
 // Seam: old task state and stale server configuration cannot start hosted model work.
@@ -46,15 +53,14 @@ test('browser agents explain local execution and never upload an old outbox', as
   await page.goto('/');
   await page.getByRole('button', { name: 'Account and sync' }).click();
   await expect(page.getByText('Local agent account', { exact: true })).toBeVisible();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
-  await expect(page.getByRole('tabpanel', { name: 'Agents', exact: true })).toContainText('already signed in on your Mac');
+  const section = page.getByTestId('settings-account');
+  await expect(section).toContainText('already signed in on your Mac');
   await expect(page.getByRole('button', { name: 'Send task' })).toHaveCount(0);
-  await expect(page.getByRole('dialog')).not.toContainText('API keys');
+  await expect(section).not.toContainText('API keys');
   const before = configurations;
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect.poll(() => configurations).toBeGreaterThan(before);
-  await page.getByRole('tab', { name: 'Sync', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Set up encrypted sync' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Turn on sync', exact: true })).toBeEnabled();
   expect(uploads).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('leadinglight.cloud-outbox'))).toContain('Private old context');
 });

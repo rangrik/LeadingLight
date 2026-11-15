@@ -63,6 +63,10 @@ QA_PORT=1437 pnpm --filter @leadinglight/desktop exec playwright test \
 
 ## TestFlight
 
+LeadingLight no longer uses TestFlight: it is private, and each GitHub release carries an Ad
+Hoc build that the app installs by its Update button. See [RELEASING.md](RELEASING.md). The
+steps below are kept for reference only.
+
 `IOS_BUILD_NUMBER=1 pnpm ios:archive` creates an unsigned **release** archive at the same path
 as `ios:build`. Choose the next unused build number in App Store Connect before uploading;
 the example `1` is provisional. The marketing version stays `0.2.0` and the release bot owns it.
@@ -86,7 +90,7 @@ Upload the signed IPA with Apple's Transporter, or distribute the signed archive
 Xcode Organizer using App Store Connect. After Apple processes it, complete any export
 compliance questions, create an internal TestFlight group and add your own App Store Connect
 account. Add the build to that group, then install TestFlight on the iPad with the invited
-Apple Account. External testers need a separate group and Apple's beta review.
+Apple Account. LeadingLight is private: no external testers, no App Store review.
 [Apple's upload guide](https://developer.apple.com/help/app-store-connect/manage-builds/upload-builds)
 and [internal testing guide](https://developer.apple.com/help/app-store-connect/test-a-beta-version/add-internal-testers)
 describe these steps.

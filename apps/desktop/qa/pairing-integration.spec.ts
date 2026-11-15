@@ -11,7 +11,6 @@ test('real relay connects browser approval and Stop to an encrypted test Mac', a
   await context.addCookies([{ name: 'qa-user', value: `pair-e2e-${crypto.randomUUID()}`, url: 'http://127.0.0.1:1431' }]);
   await page.goto('/');
   await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('tab', { name: 'Agents', exact: true }).click();
   await page.getByRole('button', { name: 'Connect a Mac', exact: true }).click();
   const code = await page.getByLabel('Pairing code', { exact: true }).inputValue();
   const [, pairId, encoded] = code.split(':'), token = randomBytes(32).toString('base64url');
@@ -57,7 +56,7 @@ test('real relay connects browser approval and Stop to an encrypted test Mac', a
     await page.getByRole('button', { name: 'Refresh connections' }).click();
     await page.getByRole('button', { name: 'Use this Mac', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Connected', exact: true })).toBeDisabled();
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to app' }).click();
     await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
     await page.getByRole('textbox', { name: 'Title' }).fill('Relay round trip');
     await page.getByRole('textbox', { name: 'Page body' }).fill('Private original words.');

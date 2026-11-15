@@ -15,7 +15,7 @@ export async function runtimeStatus(opts: { start?: boolean; restart?: boolean }
   if (await isMobile) {
     await refreshMobileAgents();
     const status = mobileAgents.get();
-    return { state: status.online ? "ready" : "failed", error: status.error || (!status.connected ? "Connect your Mac in Settings > Devices first." : null), home: "" };
+    return { state: status.online ? "ready" : "failed", error: status.error || (!status.connected ? "Connect your Mac in Settings > Account and devices first." : null), home: "" };
   }
   if (await isDesktop) return invoke("runtime_status", { start: !!opts.start, restart: !!opts.restart });
   const query = opts.restart ? "?restart=1" : opts.start ? "?start=1" : "";

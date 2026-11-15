@@ -1,7 +1,7 @@
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
 import { mobileRelayRequest } from './mobile-relay.mjs';
-import { NativeError, authenticateNative, nativePublicRequest, nativeBrowserRequest, revokeNative } from './native.mjs';
+import { NativeError, authenticateNative, nativePublicRequest, nativeAccountRequest, devicesRequest, revokeNative } from './native.mjs';
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const enabled = (env, id) => env.CLOUD_ACCESS === 'public' || (env.CLOUD_ALLOWED_USERS || '').split(',').map((v) => v.trim()).includes(id);
 const bounded = (value, max) => typeof value === 'string' && value.length <= max;
@@ -32,9 +32,10 @@ export function application({ env, sql, auth }) {
         if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
         return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });
       }
-      if (path === '/api/me') return json(native ? { ...user, expiresAt: native.expiresAt } : user);
+      if (path === '/api/me') return json({ ...user, ...await signIn(sql, user, !native), ...(native ? { expiresAt: native.expiresAt } : {}) });
+      if (path === '/api/devices' || path.startsWith('/api/devices/')) return await devicesRequest({ request, sql, user, session: native?.sessionId, readBody: limitedBody });
       if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
-      if (path.startsWith('/api/native/')) return await nativeBrowserRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
+      if (path.startsWith('/api/native/')) return await nativeAccountRequest({ request, sql, user, session: native?.sessionId, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path.startsWith('/api/relay/')) return await relayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path === '/api/jobs' && request.method === 'GET') return json({ jobs: [] });
       if (path === '/api/jobs' || path.startsWith('/api/jobs/')) return agentsUnavailable();
@@ -79,6 +80,13 @@ export function application({ env, sql, auth }) {
       return json({ error: 'Cloud is temporarily unavailable. Your local notes are safe.' }, 503);
     }
   };
+}
+
+// Only a browser sign-in knows its provider and email. It is saved so the installed apps can show them.
+async function signIn(sql, user, browser) {
+  if (!browser || !user.provider) return (await sql`SELECT provider,email FROM accounts WHERE owner=${user.id}`)[0] ?? {};
+  await sql`INSERT INTO accounts(owner,provider,email) VALUES(${user.id},${user.provider},${user.email ?? ''}) ON CONFLICT(owner) DO UPDATE SET provider=EXCLUDED.provider,email=EXCLUDED.email WHERE (accounts.provider,accounts.email) IS DISTINCT FROM (EXCLUDED.provider,EXCLUDED.email)`;
+  return {};
 }
 
 async function limitedBody(request, limit) {

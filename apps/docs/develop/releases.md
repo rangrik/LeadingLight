@@ -15,13 +15,15 @@ For step-by-step installation, see [Install](/guide/install).
 
 ## What a release contains
 
-Each release has exactly three files:
+Each release has five files:
 
 | File | What it is for |
 | --- | --- |
 | `LeadingLight_<version>_macos-arm64.dmg` | The disk image. Use this to install. |
 | `LeadingLight_<version>_macos-arm64.app.zip` | The same app bundle, as a ZIP. |
-| `SHA256SUMS.txt` | The SHA-256 checksum of each of the other two files. |
+| `LeadingLight_<version>_macos-arm64.app.tar.gz` | The update an installed app downloads. |
+| `latest.json` | Tells an installed app which version is newest, with the update's signature. |
+| `SHA256SUMS.txt` | The SHA-256 checksum of the DMG, the ZIP and the update. |
 
 The app inside carries everything it needs to run, including the project runtime, tmux, the transcription helper and their license notices. Its version matches the release's tag.
 
@@ -47,8 +49,8 @@ Each file should be reported as `OK`.
 
 - **Apple Silicon only.** Releases are built for M-series Macs. There are no Intel builds.
 - **macOS 13 or later.** Voice transcription on the device needs macOS 26.
-- **Unsigned previews.** The app is ad-hoc signed, without an Apple Developer ID or Apple's notarization. macOS may block it the first time, or ask you to allow it in **System Settings › Privacy & Security**. Every release is marked as a prerelease on GitHub, never as the latest stable one.
-- **No automatic updates.** To update, quit LeadingLight, then replace the app with the new one. Your notes stay where they are, in the app's data folder.
+- **Signed and notarized.** The app and the disk image are signed with an Apple Developer ID and notarized by Apple. Version 0.2.0 was an unsigned preview.
+- **Updates.** An installed app offers each new release and installs it with one click. It accepts only an update signed with LeadingLight's update key. Your notes stay where they are, in the app's data folder.
 
 ## How releases are made
 
@@ -56,10 +58,10 @@ Releases come from the history of `main`, with no hand-edited version numbers.
 
 1. **Conventional commit titles.** Each change on `main` has a title such as `feat: add calendar view`, `fix: preserve cover position` or `perf: speed up search`. A feature bumps the minor version and a fix bumps the patch version. `feat!:` marks a breaking change; below 1.0 that bumps the minor version too. Titles that don't follow this form don't appear in the release notes.
 2. **A release pull request.** Release Please keeps one open pull request for the next version. It updates the changelog and every version number together (the desktop app, the Tauri config and the Rust package), and its description becomes the release notes, so a maintainer can review and edit them there.
-3. **Build.** When that pull request is merged and its checks pass, the workflow tags the commit and makes a private draft release. It checks that exact commit again, builds the app on a fresh Apple Silicon Mac, and verifies the downloads.
-4. **Publish.** It uploads the DMG, the ZIP and `SHA256SUMS.txt`, checks that each uploaded file matches, and only then publishes the release.
+3. **Build.** When that pull request is merged and its checks pass, the workflow tags the commit and makes a private draft release. It checks that exact commit again, builds the app on a fresh Apple Silicon Mac, signs it, has Apple notarize it, and verifies the downloads.
+4. **Publish.** It uploads the five files, checks that each uploaded file matches, and only then publishes the release.
 
-If any step fails, the release stays a private draft, and nothing incomplete is published. A maintainer can retry the draft by its tag; a published release can never have its files replaced. A maintainer can also rehearse a build: it makes the same downloads and keeps them as workflow artifacts for seven days, without tagging or publishing anything.
+If any step fails, the release stays a private draft, and nothing incomplete is published. A maintainer can retry the draft by its tag; a published release can never have its files replaced. A maintainer can also rehearse a build: it makes the same downloads and keeps them as workflow artifacts for seven days, without tagging or publishing anything. A branch can rehearse too.
 
 Pull requests from forks run their checks with read-only access and no release secrets, and only `main` can prepare or publish a release.
 

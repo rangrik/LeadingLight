@@ -4,6 +4,7 @@
 #
 #   scripts/install-app.sh            build, then install
 #   scripts/install-app.sh --no-build install the bundle already built
+#   OVER_RELEASE=1 scripts/install-app.sh   even over a signed release
 set -eu
 cd "$(dirname "$0")/.."
 APP=LeadingLight
@@ -13,6 +14,12 @@ BUNDLE="target/release/bundle/macos/$APP.app"
 # By path: the process is named leadinglight-desktop, not after the app.
 if pgrep -f "/Applications/$APP.app/" >/dev/null; then
   echo "$APP is running: quit it, then run this again. Nothing was changed."
+  exit 1
+fi
+# A release updates itself; a local build over it is a different app to macOS (Keychain, microphone).
+if [ -z "${OVER_RELEASE:-}" ] && codesign -dvv "/Applications/$APP.app" 2>&1 | grep -q "^Authority=Developer ID Application"; then
+  echo "$APP in /Applications is a signed release that updates itself. Nothing was changed."
+  echo "Ship changes through a release (AGENTS.md, step 8), or force it: OVER_RELEASE=1 $0 $*"
   exit 1
 fi
 if [ "${1:-}" != "--no-build" ]; then
