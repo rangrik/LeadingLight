@@ -16,7 +16,7 @@ The words get a dotted underline and a small number after them. A note opens in 
 
 To note a whole paragraph, put the cursor in it without selecting anything and press <kbd>⇧⌘M</kbd>. In an empty paragraph, nothing happens.
 
-The text moves left to make room for the margin. The sidebar folds only when the page is too narrow for both; press <kbd>⌘\</kbd> to bring it back.
+The text moves left to make room for the margin. The sidebar folds only when the page is too narrow for both; press <kbd>⌘\\</kbd> to bring it back.
 
 ## Read your notes in the margin
 
