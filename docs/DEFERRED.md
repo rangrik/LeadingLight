@@ -5,6 +5,8 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-14 | Close-out (step 8 in `CLAUDE.md`) still installs a local build with `pnpm install:app` | Right until the Mac runs a signed release with the updater. After that a local build over it is a different app to macOS and asks again for the Keychain and microphone. | The first signed release is installed: change step 8 to "merge the release PR, click Update". |
+| 2026-11-14 | The app's update toast covers the sidebar's Settings row while it shows, as the tools' toast does | Where toasts sit is app-wide (see 2026-10-28 below). The same update is offered in Settings › About. | The notification placement fix. |
 | 2026-11-14 | The three landing pages and `features/landing-pages.feature` still say builds are unsigned and not notarized | True until the first signed release is out, and the pages deploy apart from a release. | The first signed release is published: change the copy and the feature, then deploy. |
 | 2026-11-14 | `cloud.spec.ts` "web workspace fits 390px/820px" fails: it clicks a History and authorship header button that `2251046` moved into the page's ⋯ menu | A stale test, not a product fault, and not in CI's browser smoke. Found while merging the device approval work. | The next change to `cloud.spec.ts` or the page header. |
 | 2026-11-14 | Ask for Touch ID or the Mac password before the installed app shows the recovery key or approves a device | Not needed for the sign-out fix: the notes are open in the app, and the key was already on disk and shown while signed in. It needs native code the browser can't test. | The next round of sync security work. |
@@ -171,11 +173,10 @@ When one is picked up, move it out of this file and into the plan or the change 
 | 2026-10-26 | Tail's memory: what it does not count yet | A quiet sentence names its type and project as they were, so renaming either brings the kind back. The last beat is kept in memory only; a beat runs when the app opens. | Real use shows tail too loud, too quiet, or wrong about a habit. |
 | 2026-10-27 | ⌘Z after a tail nod undoes the editor's half only | The editor's undo puts the words back but the task page the nod made stays, and the chip's Undo is gone. Tail's Undo is the one that reverts both. | Someone reaches for ⌘Z after a nod; the editor's history would need to carry tail's undo. |
 
-## 2026-10-27 — Intel builds and in-app updates
+## 2026-10-27 — Intel builds
 
-Releases are signed and notarized since 2026-11-14. Intel needs separately built runtime
-helpers and a full Intel smoke test. In-app updates need their own signing key and an
-update flow; they come next.
+Releases are signed and notarized, and the Mac app updates itself, since 2026-11-14. Intel
+needs separately built runtime helpers and a full Intel smoke test.
 
 ## 2026-10-28 — Update toast over a narrow review sheet
 

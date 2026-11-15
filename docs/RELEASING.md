@@ -19,8 +19,8 @@ the Mac build is signed with the Apple secrets listed under Downloads and signin
 3. Approve and run **Checks** on the bot's PR when GitHub requests approval, or run
    **Checks** manually on its branch. Merge the release PR once those checks pass.
    The workflow creates a tag and draft, validates
-   that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, ZIP and
-   `SHA256SUMS.txt` before publishing. Until every step succeeds, the draft stays private.
+   that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, a ZIP, the
+   update archive with `latest.json`, and `SHA256SUMS.txt` before publishing. Until every step succeeds, the draft stays private.
 
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.
@@ -38,7 +38,7 @@ Open Actions → **Publish release** → **Run workflow**, choose `main`, disabl
 **rehearsal** and enter the existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
 only draft assets, and publishes on success. A published version cannot be overwritten.
 While a draft is unfinished, **Prepare release** stops instead of starting another.
-The draft must contain only the three generated assets; remove any unrelated
+The draft must contain only the five generated assets; remove any unrelated
 manually added file before retrying.
 
 If the tagged source is broken, delete only its draft release in GitHub Releases
@@ -62,8 +62,8 @@ Download from the release's **Assets** section. Quit LeadingLight before replaci
 the app; its data remains in the user's application data directory.
 
 Only Apple Silicon is supported by the pinned runtime build. The app requires
-macOS 13 or later; on-device transcription needs macOS 26. Intel builds and in-app
-automatic updates are not part of this workflow.
+macOS 13 or later; on-device transcription needs macOS 26. Intel builds are not part of
+this workflow.
 
 The macOS job needs these repository secrets. Only the Apple account holder can make
 them. Add each with `gh secret set NAME`; never put one in a commit, a PR or a chat.
@@ -85,6 +85,23 @@ dependency's build script. See
 A local `pnpm install:app` build stays ad-hoc signed. macOS treats it as a different app
 from the signed one, so installing it over a release asks again for the microphone and
 the Keychain.
+
+## Updates
+
+The Mac app reads `https://github.com/rangrik/LeadingLight/releases/latest/download/latest.json`
+when it opens and every four hours, and offers a newer version with one button. GitHub
+serves that address only for a normal release marked latest. The app installs only an
+archive signed by the update key, whose public half is `plugins.updater.pubkey` in
+`tauri.conf.json`; packaging refuses a release whose archive does not verify with it.
+
+| Secret | What it is |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | The update key, made once with `pnpm --filter @leadinglight/desktop tauri signer generate -w ~/.tauri/leadinglight-updater.key`: `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/leadinglight-updater.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password chosen then |
+
+Keep the key and its password somewhere safe outside GitHub. If they are lost, installed
+apps refuse every later update, and each needs one reinstall by hand. A dev app
+(`pnpm install:dev-app`) has no update address. iPhone and iPad update through TestFlight.
 
 ## Maintenance
 

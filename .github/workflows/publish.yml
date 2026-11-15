@@ -126,10 +126,13 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_API_KEY_PATH: ${{ runner.temp }}/AuthKey.p8
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          : "${APPLE_CERTIFICATE:?Add the signing secrets listed in docs/RELEASING.md}" "${APPLE_API_KEY_P8:?Add the signing secrets listed in docs/RELEASING.md}"
+          : "${APPLE_CERTIFICATE:?Add the signing secrets listed in docs/RELEASING.md}" "${APPLE_API_KEY_P8:?Add the signing secrets listed in docs/RELEASING.md}" "${TAURI_SIGNING_PRIVATE_KEY:?Add the signing secrets listed in docs/RELEASING.md}"
           printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
-          pnpm --filter @leadinglight/desktop tauri bundle --bundles app,dmg
+          # Only a release makes the update archive: a local build has no update key.
+          pnpm --filter @leadinglight/desktop tauri bundle --bundles app,dmg --config '{"bundle":{"createUpdaterArtifacts":true}}'
           # Tauri notarizes the app; the disk image people download needs its own ticket.
           dmg=(target/release/bundle/dmg/*.dmg)
           xcrun notarytool submit "${dmg[0]}" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait
@@ -178,8 +181,8 @@ jobs:
           import { createHash } from 'node:crypto';
           const assets = JSON.parse(readFileSync('assets.json'));
           const files = readdirSync('release-assets');
-          assert.equal(files.length, 3);
-          assert.equal(assets.length, 3);
+          assert.equal(files.length, 5);
+          assert.equal(assets.length, 5);
           for (const name of files) {
             const path = `release-assets/${name}`;
             const asset = assets.find(a => a.name === name);
@@ -194,6 +197,7 @@ jobs:
           ### Download
           Apple Silicon (M-series), macOS 13 or later. Voice transcription requires macOS 26.
           Use the DMG to install, or the ZIP for the app bundle. SHA256SUMS.txt verifies either download.
+          An installed app offers this update by itself; the `.app.tar.gz` and `latest.json` are for that.
 
           Signed with an Apple Developer ID and notarized by Apple.
           NOTES

@@ -28,4 +28,7 @@ hdiutil verify "${dmgs[0]}"
 xcrun stapler validate "${dmgs[0]}"
 cp "${dmgs[0]}" "release-assets/$name.dmg"
 ditto -c -k --sequesterRsrc --keepParent "$app" "release-assets/$name.app.zip"
-(cd release-assets && shasum -a 256 "$name.dmg" "$name.app.zip" > SHA256SUMS.txt)
+# What an installed app downloads, and the manifest that tells it a newer version exists.
+cp "$app.tar.gz" "release-assets/$name.app.tar.gz"
+node scripts/release/update-manifest.mjs "$tag" "release-assets/$name.app.tar.gz" "$app.tar.gz.sig" > release-assets/latest.json
+(cd release-assets && shasum -a 256 "$name.dmg" "$name.app.zip" "$name.app.tar.gz" > SHA256SUMS.txt)

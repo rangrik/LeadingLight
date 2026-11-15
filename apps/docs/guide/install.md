@@ -34,11 +34,9 @@ macOS may ask for permissions later, only when you use a feature that needs one:
 
 ## Update to a new version
 
-The app doesn't update itself yet.
+LeadingLight looks for a newer release when it opens and every four hours. When one is ready it says so: click **Update and restart**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. To look yourself, open **Settings › About** and click **Check for updates**.
 
-1. Quit LeadingLight (<kbd>⌘Q</kbd>).
-2. Download the new release and drag it into **Applications**, replacing the old app.
-3. Open it.
+Version 0.2.0 can't update itself. Replace it once by hand: quit LeadingLight, download the newest release and drag it into **Applications** over the old app.
 
 Your notes are kept in the app's data folder, not inside the app, so replacing the app leaves them as they were. What changed in each version is in the [changelog](https://github.com/rangrik/LeadingLight/blob/main/CHANGELOG.md).
 

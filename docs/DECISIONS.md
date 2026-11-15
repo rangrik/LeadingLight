@@ -939,3 +939,13 @@ What this costs. The key was already stored unencrypted on the device beside the
 showing it gives a person at an unlocked device nothing new; signing out never removed it. A
 lost device that stays in use now stays signed in until the browser's "Sign out all devices"
 (decision 48) ends it. Signing out one device from another is deferred.
+
+## 50. The Mac app updates itself from GitHub's latest release (2026-11-14)
+
+Getting a merged change onto the Mac meant a local build. Now the app reads `latest.json`
+from GitHub's latest release when it opens and every four hours, says a version is ready in
+a toast and in Settings › About, and on one click downloads, verifies, installs and reopens.
+Nothing is downloaded before the click. It trusts only an archive signed by our update key,
+so GitHub alone cannot push code into installed apps; losing that key means one reinstall by
+hand. No server of ours is involved, and the Vercel key stays out of the build. An iPhone or
+iPad app cannot replace itself, so those update through TestFlight.

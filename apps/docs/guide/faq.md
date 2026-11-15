@@ -21,7 +21,7 @@ macOS asks once about any app downloaded from the internet. LeadingLight is sign
 
 ### Does it update itself?
 
-Not yet. Quit the app and replace it with the newest release. Your notes stay where they are.
+Yes, on the Mac. It says when a newer release is ready and installs it with one click. See [Install](/guide/install#update-to-a-new-version). Your notes stay where they are.
 
 ### Is there a Windows, Linux or iPhone app?
 

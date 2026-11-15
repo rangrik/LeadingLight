@@ -51,6 +51,12 @@
       }
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/rangrik/LeadingLight/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

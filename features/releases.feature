@@ -12,7 +12,8 @@ Feature: Versioned GitHub releases
     Given the release pull request has been merged
     When the checks and Apple Silicon build pass
     Then GitHub publishes a versioned release with the reviewed release notes
-    And the release contains a DMG, an app ZIP and SHA-256 checksums
+    And the release contains a DMG, an app ZIP, the update archive with its manifest, and SHA-256 checksums
+    And the update archive verifies with the update key the app carries
     And the app includes berthd, tmux, the transcription helper and license notices
     And its bundle version matches the release tag
     And the app and the disk image are signed with a Developer ID, notarized by Apple and carry the ticket
