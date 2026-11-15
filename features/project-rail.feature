@@ -43,9 +43,11 @@ Feature: Project rail
     Then it is marked current and "All" is not
     And the sidebar header reads "LeadingLight" over "LeadingLight" (the project's name under the mark)
     And the sidebar starts with "Overview" and "Chat", then Today, Calendar and Browser
-    And Types lists only Pages, People, Meetings and Tasks, each with a muted count (1, 1, 1, 7)
+    And Resume shows only the rows that are LeadingLight's pages (sidebar-resume.feature)
     And Recent lists only LeadingLight's pages: the four tasks at work, "Design review with Sam",
       "Sam Rivera" and "Pricing notes"; no book, no daily note, no other project
+    And Types, below Recent, lists only Pages, People, Meetings and Tasks, each with a muted count
+      (1, 1, 1, 7)
     When I click "Overview"
     Then the LeadingLight project page opens
     When I click "Chat"
@@ -53,8 +55,8 @@ Feature: Project rail
 
   Scenario: A project with no linked folder has no Chat row
     When I click "Home office" in the rail
-    Then the sidebar starts with "Overview" alone, then Today
-    And Types lists Pages (1) and Tasks (1), and Recent lists "Desk measurements"
+    Then the sidebar starts with "Overview" alone, then Today, and has no Resume group
+    And Recent lists "Desk measurements", and Types lists Pages (1) and Tasks (1)
 
   Scenario: A type row opens its list filtered to the project
     Given "LeadingLight" is chosen in the rail
@@ -91,8 +93,8 @@ Feature: Project rail
     Given "LeadingLight" was chosen
     When I click "All" in the rail
     Then the sidebar header reads "LeadingLight" over "Notes"
-    And there is no "Overview" row, Types lists every type without counts, and Recent mixes every
-      project's pages as before
+    And there is no "Overview" row, Resume shows its rows, Recent mixes every project's pages as
+      before, and Types, below it, lists every type without counts
 
   Scenario: A chosen project that is deleted or done falls back to All
     Given "Home office" is chosen

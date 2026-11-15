@@ -356,7 +356,7 @@ export default function App() {
     }];
   });
   const row = (view: string) => ({ isActive: current === view, onSelect: opener(view) });
-  const scoped = project && { name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined };
+  const scoped = project && { name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined, has: mine };
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
   // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see

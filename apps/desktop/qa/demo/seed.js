@@ -232,7 +232,7 @@ async function fill() {
   await make("taskE", { title: "Read chapter 3 of Thinking in Systems", typeId: "task", createdAt: mins(130), updatedAt: mins(130), properties: { due: { start: iso(0) } } });
   await make("taskF", { title: "Call Sam about the invoice before Friday", typeId: "task", createdAt: at(4, 9), updatedAt: at(4, 9), properties: { "task-project": [ll] } });
   // The project's notes link its pricing page, so the rail's LeadingLight lists it (project-rail.feature).
-  await savePage(ll, { content: doc(p("A local-first notes app that helps me think. Every note is an object of a type; agents work beside the notes, never in them."), h(2, "This month"), ul(["Ship the pricing page and the first public build: ", m(pricing), "."], ["Make Today the place to start the day."], ["Review agent reports without leaving the task."]), h(2, "Open questions"), ul(["Does the sidebar lead with types or with projects?"], [m(sam), " thinks the bar needs labels."])) });
+  await savePage(ll, { content: doc(p("A local-first notes app that helps me think. Every note is an object of a type; agents work beside the notes, never in them."), h(2, "This month"), ul(["Ship the pricing page and the first public build: ", m(pricing), "."], ["Make Today the place to start the day."], ["Review agent reports without leaving the task."]), h(2, "Open questions"), ul(["Does the sidebar lead with types or with projects?"], [m(sam), " thinks the bar needs labels."])), updatedAt: mins(95) });
 
   // Agents and reports (the runtime fixture names these sessions)
   const run = (conversation, session, location, agent) => ({ conversation, session, location, agent });
