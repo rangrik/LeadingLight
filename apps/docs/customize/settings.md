@@ -118,13 +118,15 @@ The same commit shows beside **About** in the Settings sidebar, so you can tell 
 
 When you report a problem, include what **About** says.
 
-## Account and sync
+## Account and devices
 
-Your account is not a section of Settings. Click **Account and sync** in the sidebar, just above **Settings**, to open **Your workspace, everywhere**. It has three tabs:
+The first section of Settings. **Account and sync** in the sidebar, just above **Settings**, opens it too, and says where sync stands. You can keep writing without an account.
 
-- **Account**: sign in to connect another device, or sign out. You can keep writing without an account.
-- **Sync**: set up encrypted sync, connect a device with a recovery key, **Sync now**, show your recovery key, or pause sync on this device.
-- **Agents**: connect a browser to the agents on your Mac. Not shown on iPad.
+- **Account**: who you are signed in as, by email and provider, and **Sign out**.
+- **Sync**: turn sync on, **Sync now**, or switch it off on this device.
+- **Devices**: the apps signed in to your account. **Add a device** approves a new one by its code; a device renames itself here, and a browser at leadinglight.app removes one.
+- **Recovery key**: **Show…** the key and tick it as saved.
+- **Agents**: connect a browser, iPhone or iPad to the agents on your Mac.
 
 See [Accounts and encrypted sync](/sync/) and [Agents from a browser](/sync/pairing).
 

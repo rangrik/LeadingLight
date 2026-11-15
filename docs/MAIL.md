@@ -453,7 +453,7 @@ Read again on November 14, after the first version of this spec. The service
 (`apps/cloud/src/gmail.mjs`) now has what the first version asked for: Google's `gmail.modify`
 permission; a list route that returns each mail's Gmail labels and whether it can be
 unsubscribed from, and can list mail since a time; `thread`; `modify` (Inbox and Unread only);
-`send` (a reply only); `counts`. Decision 48 was changed the same day to allow the one fixed
+`send` (a reply only); `counts`. Decision 53 was changed the same day to allow the one fixed
 reader, and a task that keeps the sender, subject, link and two lines.
 
 **Must have, for tags, addresses and dates (5.0). In this order.**
@@ -469,7 +469,7 @@ reader, and a task that keeps the sender, subject, link and two lines.
 
 No new Google permission, and no reconnecting.
 
-**One thing to settle.** Decision 48 now says the reader's lines stay on the Mac. The phone
+**One thing to settle.** Decision 53 now says the reader's lines stay on the Mac. The phone
 screens in 5.7 show the tags and the three lines. Either the lines travel in the workspace's
 encrypted sync, as section 4 asks, or the phone shows every mail as "Not read for you" (5.3)
 with only its Account tag and address. The first is the design. The second is what he gets
@@ -520,7 +520,7 @@ the one thing he asked not to do.
   has its own date cannot slip: see "How the date is used for him" in section 3.
 - **Swipes on the phone.** Buttons are easier to find and harder to hit by accident.
 - **Streaks and scores.** A missed day would turn them into blame.
-- **Showing a mail's original formatting.** Text only, as decision 48 says. Open in Gmail is there.
+- **Showing a mail's original formatting.** Text only, as decision 53 says. Open in Gmail is there.
 - **A settings screen.** Accounts (connect, reconnect, disconnect) and the start date should sit
   in a dialog like Calendar's "Your calendars". Not drawn here.
 - **Mail in the bar's panel.** A 320 px panel is too narrow to read a mail in, and a second home

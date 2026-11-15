@@ -12,7 +12,8 @@ const request = (app, path, user, body, method = body ? 'POST' : 'GET', source =
 // Seam: domain migration keeps old sessions without trusting arbitrary hosts or cross-origin writes.
 test('legacy hosts keep sessions but new sign-ins require the canonical host', async () => {
   const old = 'https://old.test';
-  const app = application({ env: { APP_ORIGIN: origin, LEGACY_APP_ORIGINS: old }, sql: null, auth });
+  // /api/me looks up the account's sign-in label; none is saved here.
+  const app = application({ env: { APP_ORIGIN: origin, LEGACY_APP_ORIGINS: old }, sql: async () => [], auth });
   const call = (host, path, source = host, method = 'GET') => app(new Request(host + path, { method, headers: { origin: source, 'test-user': 'owner' } }));
   assert.equal((await call(old, '/api/me')).status, 200);
   assert.equal((await call('https://untrusted.test', '/api/me')).status, 400);

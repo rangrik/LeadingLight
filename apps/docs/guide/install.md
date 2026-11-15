@@ -1,6 +1,6 @@
 ---
 title: Install
-description: Download the LeadingLight preview for an Apple Silicon Mac, allow it to open, and update it later.
+description: Download the LeadingLight preview for an Apple Silicon Mac, open it, and update it later.
 ---
 
 # Install
@@ -22,25 +22,9 @@ LeadingLight is downloaded from its GitHub releases. Each release is a preview b
 
 If you want to be sure the file is intact, compare its checksum with the release's `SHA256SUMS.txt`. See [Check a download](/develop/releases#check-a-download).
 
-## Allow the app to open
+## Open it
 
-The previews are not signed with an Apple Developer ID or notarized by Apple, so the first time you open LeadingLight macOS says it can't check it.
-
-1. Open LeadingLight once and dismiss the message.
-2. Open **System Settings › Privacy & Security**.
-3. Scroll to **Security**. Beside the note about LeadingLight, click **Open Anyway**, then confirm with your password or Touch ID.
-
-LeadingLight opens, and macOS remembers your choice.
-
-::: details macOS says the app "is damaged and can't be opened"
-This can happen with unsigned downloads. It means macOS has marked the download as from the internet and refuses it without offering **Open Anyway**. Only if you trust the build you downloaded from the official releases page, you can remove that mark from this one app in Terminal:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/LeadingLight.app
-```
-
-Then open LeadingLight again.
-:::
+LeadingLight is signed with an Apple Developer ID and notarized by Apple. The first time you open it, macOS asks whether to open an app downloaded from the internet. Click **Open**.
 
 ## The first time you open it
 
@@ -50,11 +34,9 @@ macOS may ask for permissions later, only when you use a feature that needs one:
 
 ## Update to a new version
 
-The app doesn't update itself yet.
+LeadingLight looks for a newer release when it opens and every four hours. When one is ready it says so: click **Update and restart**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. To look yourself, open **Settings › About** and click **Check for updates**.
 
-1. Quit LeadingLight (<kbd>⌘Q</kbd>).
-2. Download the new release and drag it into **Applications**, replacing the old app.
-3. Open it. You may need to allow it once more in **Privacy & Security**.
+Version 0.2.0 can't update itself. Replace it once by hand: quit LeadingLight, download the newest release and drag it into **Applications** over the old app.
 
 Your notes are kept in the app's data folder, not inside the app, so replacing the app leaves them as they were. What changed in each version is in the [changelog](https://github.com/rangrik/LeadingLight/blob/main/CHANGELOG.md).
 

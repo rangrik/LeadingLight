@@ -48,12 +48,13 @@ Diagrams fit the phone's width, follow its appearance and render offline in the 
 ## Settings and sync
 
 Open **Settings** from Today or Notes. Light and dark follow the device's system setting by default.
-**Notes › Account and sync** connects the app to the same encrypted workspace as your other devices.
+**Notes › Account and sync** opens **Account and devices**, where **Connect this iPhone** shows a code to
+type on a device that already syncs.
 See [Accounts and encrypted sync](/sync/). Sync is optional; local saving never waits for it.
 
 ## Agents on your Mac
 
-Connect your Mac in **Settings → Devices**, then open **Notes → Agents on Mac** to start or continue
+Connect your Mac in **Settings → Account and devices**, then open **Notes → Agents on Mac** to start or continue
 project work. Both devices only need LeadingLight and internet access; your Mac runs the agent and keeps working when the phone
 is closed. The phone needs no workspace sign-in. See [Mac agent setup](/sync/mobile-agents).
 

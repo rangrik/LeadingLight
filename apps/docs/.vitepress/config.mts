@@ -141,7 +141,7 @@ export default defineConfig({
     editLink: { pattern: `${repo}/edit/main/apps/docs/:path`, text: "Edit this page on GitHub" },
     outline: { level: [2, 3] },
     footer: {
-      message: `LeadingLight is MIT licensed. <a href="${base}privacy-policy${base === "/" ? "" : ".html"}">Privacy policy</a>. Preview builds are unsigned and for Apple Silicon Macs.`,
+      message: `LeadingLight is MIT licensed. <a href="${base}privacy-policy${base === "/" ? "" : ".html"}">Privacy policy</a>. Preview builds are for Apple Silicon Macs.`,
       copyright: "© 2026 Pranav Kanade",
     },
   },

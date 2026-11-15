@@ -1,16 +1,47 @@
 import { ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
 import { SettingsGroup, SettingsPage, SettingsRow, Value } from "@/views/settings/rows";
 import { Button } from "@leadinglight/ui/components/button";
+import { updateAndRestart } from "~/components/app-update";
+import { appUpdate, checkForUpdate, updateWay } from "~/lib/app-update";
 import { openLink } from "~/lib/links";
 
 // Our About: which build this is, and what it is built on. Shipyard's own About
 // (vendor/shipyard/app/src/views/settings/about-section.tsx) is about boxes and berthd.
 const built = new Date(__LL_BUILT__).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
+// Only where the app has a way to a new version: the Mac app itself, the install link on iPhone and iPad.
+function VersionRow({ byLink }: { byLink: boolean }) {
+  const update = appUpdate.use();
+  const offered = update.state === "ready" || update.state === "failed";
+  const installing = update.state === "installing";
+  const busy = update.state === "checking" || installing;
+  const says = {
+    idle: "Checked every four hours.",
+    checking: "Checking…",
+    current: "Up to date",
+    ready: `${update.version} is ready`,
+    installing: `Updating to ${update.version}…`,
+    failed: `Couldn't update to ${update.version}`,
+    unreachable: "Couldn't check for updates",
+  }[update.state];
+  return (
+    <SettingsRow label="Version" description={says}>
+      <Value>{__LL_VERSION__}</Value>
+      <Button disabled={busy} onClick={() => void (offered ? updateAndRestart() : checkForUpdate(true))} size="sm" variant={offered || installing ? "default" : "outline"}>
+        {offered || installing ? (byLink ? "Update" : "Update and restart") : "Check for updates"}
+      </Button>
+    </SettingsRow>
+  );
+}
+
 export function AboutSection() {
+  const [way, setWay] = useState<Awaited<typeof updateWay>>(null);
+  useEffect(() => void updateWay.then(setWay), []);
   return (
     <SettingsPage title="About" description={`LeadingLight ${__LL_VERSION__}`}>
       <SettingsGroup title="This build">
+        {way && <VersionRow byLink={way === "link"} />}
         <SettingsRow label="Build" description="The commit it was built from. “+dirty” means uncommitted changes went in.">
           <Value>{__LL_COMMIT__}</Value>
         </SettingsRow>

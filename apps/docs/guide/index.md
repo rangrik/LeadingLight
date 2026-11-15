@@ -12,7 +12,7 @@ It is built in the spirit of [Capacities](https://capacities.io), with writing t
 <img class="shot" src="/screenshots/page-header.webp" alt="A Book page for Dune with a cover, an icon, a description and properties for author, rating, status and tags" />
 
 ::: warning Early preview
-LeadingLight is in early development, and you should expect rough edges. The downloads are previews for Apple Silicon Macs running macOS 13 or later. They are not yet signed or notarized by Apple, so macOS asks you to allow the app the first time. See [Install](/guide/install).
+LeadingLight is in early development, and you should expect rough edges. The downloads are previews for Apple Silicon Macs running macOS 13 or later. They are signed and notarized by Apple. See [Install](/guide/install).
 :::
 
 ## What you can do with it

@@ -6,9 +6,9 @@ Feature: The documentation site
     When I open the site's home page
     Then I read that LeadingLight is a local-first notes app for macOS
     And "Download the preview" opens the official GitHub releases
-    And the page says downloads are early previews for Apple Silicon, unsigned and not notarized
+    And the page says downloads are early previews for Apple Silicon, signed and notarized by Apple
     When I open "Install"
-    Then it lists the requirements, the steps to allow the app in Privacy & Security, how to update,
+    Then it lists the requirements, what macOS asks the first time it opens, how to update,
       and where notes are kept
 
   Scenario: Every feature has a page

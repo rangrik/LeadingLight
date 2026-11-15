@@ -79,7 +79,7 @@ function MobileProjects({ target }: { target: MobileAgentTarget | null }) {
     void refresh();
     return () => { done = true; clearTimeout(timer); };
   }, [target?.project]);
-  if (!state.connection) return <p className="p-6 text-sm text-muted-foreground">Connect your Mac in Settings → Devices. No mobile sign-in is needed.</p>;
+  if (!state.connection) return <p className="p-6 text-sm text-muted-foreground">Connect your Mac in Settings → Account and devices. No mobile sign-in is needed.</p>;
   return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
     {!state.online && !selected && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
     {target && listTarget !== target.project && !error && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Opening the notified project…</p>}
@@ -90,7 +90,7 @@ function MobileProjects({ target }: { target: MobileAgentTarget | null }) {
       <MobileProjectChat key={selected.name} project={selected} host={state.connection.id} online={state.online} target={target?.project === selected.name ? target : null} />
     </> : <div className="space-y-2 overflow-y-auto p-6 pt-0">
       {projects.map((p) => <Button key={p.name} variant="outline" className="w-full justify-start" disabled={p.missing} onClick={() => { clearTarget(); setSelected(p); }}>{label(p)}{p.missing ? " · Folder unavailable" : ""}</Button>)}
-      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? "No shared projects. Choose folders in Settings → Devices on your Mac." : "Loading shared projects…"}</p>}
+      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
     </div>}
   </div>;
 }

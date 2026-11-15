@@ -69,7 +69,7 @@ features:
 <img class="shot" src="/screenshots/editor.webp" alt="A LeadingLight page called Trip to Kyoto, with headings, to-dos, a quote, a list and a link to a book" />
 
 ::: warning Early preview
-LeadingLight is in early development. Downloads are previews for Apple Silicon Macs, and they are not yet signed or notarized by Apple. Read [Install](/guide/install) before you download.
+LeadingLight is in early development. Downloads are previews for Apple Silicon Macs, signed and notarized by Apple. Read [Install](/guide/install) before you download.
 :::
 
 </div>

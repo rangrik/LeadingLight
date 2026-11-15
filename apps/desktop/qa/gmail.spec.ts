@@ -140,7 +140,9 @@ test("signing out removes mail, and a late answer cannot bring it back", async (
   await asked;
   s.signOut();
   await page.evaluate(() => window.dispatchEvent(new Event("leadinglight:cloud-account")));
-  await page.getByRole("button", { name: "Sign out" }).click();
+  // Sign out asks first; the question's own button is the one that signs out.
+  await page.getByTestId("settings-account").getByRole("button", { name: "Sign out", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(row(page)).toHaveCount(0);
   release();
   await page.clock.runFor(2000);

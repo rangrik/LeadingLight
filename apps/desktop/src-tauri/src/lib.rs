@@ -147,6 +147,8 @@ pub fn run() {
         .plugin(tauri_nspanel::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(agent::Agents::default())
         .manage(browser_menu::BrowserMenu::default())
         .manage(runtime::Runtime::default())
