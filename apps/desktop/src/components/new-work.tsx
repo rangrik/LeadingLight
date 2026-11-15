@@ -14,7 +14,7 @@ import { EFFORTS, isClaude, labelOf, MODELS, useAiPrefs } from "~/lib/ai-prefs";
 import { NotStarted, startWork, worktreeFor } from "~/lib/assign";
 import { codex, effortFor, effortsFor, loadCodex } from "~/lib/codex";
 import { pageLabel } from "~/lib/labels";
-import { folders } from "~/lib/project-runtime/folders";
+import { folders, refresh } from "~/lib/project-runtime/folders";
 import { scope } from "~/lib/scope";
 import { pageOf } from "~/lib/space";
 import { createStore } from "~/lib/state";
@@ -42,6 +42,8 @@ function Box({ project, onClose }: { project: string; onClose: () => void }) {
   const cx = codex.use();
   const folder = folders.use().get(project);
   const location = folder?.folder.location ?? "";
+  // Unknown until the runtime has said: a first read that failed must not look like a plain folder.
+  const known = folder?.repo !== undefined;
   const repo = !!folder?.repo;
   const rows = worktrees.use()[location]?.rows;
   const [text, setText] = useState("");
@@ -52,8 +54,9 @@ function Box({ project, onClose }: { project: string; onClose: () => void }) {
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     void loadCodex();
+    if (!known) void refresh().catch(() => setError("The project runtime isn't answering. Close this and try again in a moment."));
     if (repo) void loadWorktrees(location);
-  }, [location, repo]);
+  }, [location, repo, known]);
   const title = text.trim().split("\n")[0].trim();
   const agent = model !== NONE;
   const own = repo && where === "worktree";
@@ -63,7 +66,7 @@ function Box({ project, onClose }: { project: string; onClose: () => void }) {
   const noCodex = agent && !isClaude(model) && cx.state !== "ready";
   const nothing = !agent && !own;
   const efforts = agent ? effortsFor(model) : [];
-  const can = !!title && !nothing && !noCodex && !busy;
+  const can = known && !!title && !nothing && !noCodex && !busy;
   const models = Object.fromEntries([...MODELS.map((m) => [m.value, m.label]), ...gpt.map((m) => [m.id, m.name]), [NONE, "No agent"]]);
   const submit = async () => {
     setBusy(true);
@@ -109,6 +112,7 @@ function Box({ project, onClose }: { project: string; onClose: () => void }) {
               value={text}
             />
             {error && <FieldError match>{error}</FieldError>}
+            {!known && !error && <FieldDescription>Checking the folder…</FieldDescription>}
           </Field>
           {repo && (
             <Field>

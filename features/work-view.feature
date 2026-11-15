@@ -92,6 +92,11 @@ Feature: The Work view of a project
       a "Try again" button
     When the runtime is back and I press "Try again"
     Then the worktrees are listed
+    And when I open New work it first reads whether the folder is a git checkout: until it knows, it
+      says "Checking the folder…" and Start waits; it never starts an agent in the checkout itself
+      because the first read failed
+    And if the runtime still doesn't answer, the box says "The project runtime isn't answering. Close
+      this and try again in a moment."
 
   Scenario: A folder that is not a git checkout
     Given "Research" is linked to "~/LL QA/Notes", a plain folder
@@ -112,6 +117,8 @@ Feature: The Work view of a project
     Then the box opens the same
     And File › New work… in the Mac menu bar opens it too
     And Settings › Shortcuts and the Keyboard shortcuts sheet list "New work" under File with ⇧⌘N
+    And while the box is open, the keys for what is behind it do nothing: ⌘1–9 keep the project,
+      and ⌘K, ⌘N, ⌘J, ⌘, and the Inbox's keys open nothing over or under it
 
   Scenario: An agent in a new worktree
     Given the box is open
