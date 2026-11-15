@@ -17,6 +17,8 @@ const b64 = (data: Uint8Array) => { let text = ''; for (let i = 0; i < data.leng
 const bytes = (value: string) => Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
 // Signed out, this is the key of the library this device is bound to, so it can still be shown.
 export const syncKey = () => { const owner = cloudState().user?.id ?? localStorage.getItem('leadinglight.sync-owner'); return owner ? localStorage.getItem(keyName(owner)) ?? '' : ''; };
+// Set once the person says the key is kept somewhere safe, or once it arrives from where it already is.
+export const keySavedName = (owner: string) => `leadinglight.key-saved:${owner}`;
 export const syncEnabled = () => ownsSyncLibrary(cloudState().user?.id, localStorage.getItem('leadinglight.sync-owner')) && Boolean(syncKey()) && localStorage.getItem(`leadinglight.sync-paused:${cloudState().user?.id}`) !== 'true';
 const assertOwner = (owner: string) => {
   if (cloudState().verifying || cloudState().user?.id !== owner || !ownsSyncLibrary(owner, localStorage.getItem('leadinglight.sync-owner'))) throw new Error('The account changed. Sync stopped to protect this local library.');
@@ -28,7 +30,9 @@ export async function enableSync(recovery?: string) {
   if (bound && bound !== user.id) throw new Error('This device’s notes are linked to another account. Sign in to that account to sync this library.');
   const previous = localStorage.getItem(keyName(user.id));
   const key = recovery?.trim() || previous || b64(crypto.getRandomValues(new Uint8Array(32)));
-  if (bytes(key).length !== 32) throw new Error('Enter the complete recovery key from your other device.');
+  // A mistyped key may not even be base64, which `atob` reports in words nobody can act on.
+  let whole = false; try { whole = bytes(key).length === 32; } catch { /* not a key */ }
+  if (!whole) throw new Error('That is not a whole recovery key. A key has 44 characters.');
   if (key !== previous) {
     const { events } = await cloudApi<{ events: { id: string; envelope: Envelope }[] }>('sync?after=0', undefined, 'GET', user.id);
     if (events.length) {

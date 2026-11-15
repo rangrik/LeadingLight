@@ -3,7 +3,7 @@ Feature: A local-first web app with optional accounts and sync
 
   Scenario: Account providers reflect the deployed configuration
     When I open "Account and sync"
-    Then I can continue using this device without an account
+    Then Settings opens on Account and devices and I can go back without an account
     And only configured Google, GitHub and ChatGPT providers can start sign-in
     And missing cloud configuration is explained without pretending to be signed in
 
@@ -63,36 +63,35 @@ Feature: A local-first web app with optional accounts and sync
     When I pause sync
     Then the device keeps its notes and recovery key
     And resuming uses the same key
-    And a wrong key can be replaced from the Sync panel
+    And when sync reports that the key does not match, Account and devices takes the right one
 
   Scenario: A signed-out device still shows its recovery key
     Given this device synced notes with a recovery key
     And its sign-in has ended, or I signed out
-    When I open Account and sync, Sync
-    Then I read "Sign in on the Account tab to sync this device again. If your browser asks for a recovery key, use the one kept here."
-    And Show recovery key shows the same key as before
+    When I open Account and devices
+    Then Recovery key, Show… shows the same key as before, with Copy
     When I start signing in again and a browser without the key asks for it
     And I paste that key and press Connect this device
     Then I read "Device approved"
-    And after signing in the Sync tab reads "Up to date" with the same notes
+    And after signing in Account and devices reads "Up to date" with the same notes
 
   Scenario: Starting offline does not tell a signed-in device to sign in
     Given this device synced notes and its sign-in is still good
-    When the app starts with no network and I open Account and sync, Sync
+    When the app starts with no network and I open Account and devices
     Then I read "You’re offline. Your local notes still work; cloud will reconnect when the network returns."
-    And I do not read "Sign in on the Account tab to sync this device again."
-    And Show recovery key still shows the key
+    And I see the account this device uses, and no sign-in buttons
+    And Recovery key, Show… still shows the key
 
   Scenario: A device that never synced has no key to show
     Given this device has no recovery key and no sign-in
-    When I open Account and sync, Sync
-    Then there is no Show recovery key button
-    And I read "Sign in to connect devices. Your local notes remain available."
+    When I open Account and devices
+    Then there is no Recovery key part
+    And I am offered sign-in, with my local notes still available
 
   Scenario: Another account does not see this device's key
     Given this device synced notes as one account and that sign-in ended
-    When I sign in as a different account and open Account and sync, Sync
-    Then there is no Show recovery key button
+    When I sign in as a different account and open Account and devices
+    Then there is no Recovery key part
 
   Scenario: Cloud access is private by default
     Given the service has not enabled my account

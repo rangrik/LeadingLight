@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS native_sessions (
   revoked_at timestamptz
 );
 CREATE INDEX IF NOT EXISTS native_sessions_owner ON native_sessions(owner);
+ALTER TABLE native_sessions ADD COLUMN IF NOT EXISTS last_seen timestamptz;
+ALTER TABLE native_sessions ADD COLUMN IF NOT EXISTS kind text;
+CREATE TABLE IF NOT EXISTS accounts (
+  owner text PRIMARY KEY,
+  provider text NOT NULL,
+  email text NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS native_code_lookups (
   owner text NOT NULL,
   at timestamptz NOT NULL DEFAULT now()

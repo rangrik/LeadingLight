@@ -4,7 +4,7 @@ Feature: Run page agents through a paired Mac
 
   Scenario: A Mac explicitly approves a browser
     Given I am signed into the web app with cloud access enabled
-    When I choose "Connect a Mac" in Account and sync > Agents
+    When I choose "Connect a Mac" in Settings > Account and devices, under Agents from a browser
     Then I can copy a pairing code that expires in five minutes
     When I paste it into LeadingLight on my Mac and choose "Review connection"
     Then the Mac shows my workspace account, browser name and page-agent access

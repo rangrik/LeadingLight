@@ -57,7 +57,7 @@ export async function disconnectMobileAgents(): Promise<void> {
 export async function mobileCall<T = unknown>(method: string, path: string, body?: unknown, expectedConnection?: string): Promise<MobileReply<T>> {
   if (!mobileAgents.get().initialized) await refreshMobileAgents();
   const connection = mobileAgents.get().connection;
-  if (!connection) throw new Error("Connect your Mac in Settings > Devices first.");
+  if (!connection) throw new Error("Connect your Mac in Settings > Account and devices first.");
   if (expectedConnection !== undefined && expectedConnection !== connection.id) throw new Error("The Mac connection changed. Reopen the conversation before continuing.");
   const current = generation;
   try {

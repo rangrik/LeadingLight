@@ -92,7 +92,7 @@ Images, audio, video and PDFs you add are saved in the app's own storage on the 
 
 The iPad app has your pages and editor, but not the parts that run on a Mac:
 
-- **Agent execution.** Connect to a Mac in **Settings → Devices** to start and control shared
+- **Agent execution.** Connect to a Mac in **Settings → Account and devices** to start and control shared
   project chats through an encrypted connection inside LeadingLight. Agents keep running on the Mac. See
   [Agents from iPhone and iPad](/sync/mobile-agents). Ask about selected note text, Tail, task
   assignment and the Feed remain Mac features.
@@ -103,18 +103,19 @@ The iPad app has your pages and editor, but not the parts that run on a Mac:
 
 To see your Mac's notes on the iPad, connect both to the same workspace account:
 
-1. On the iPad, open **Account and sync › Account** and press **Connect your workspace**. It shows
-   a code and opens your browser.
-2. On your Mac, if LeadingLight already syncs there, open **Account and sync › Account**, type the
-   code under **Connect another device**, press **Continue**, then **Connect this device**.
-   Otherwise use the browser page that opened at **leadinglight.app**: sign in with the same
-   provider you use on your Mac, check that the code matches, and press **Connect this device**.
+1. On the iPad, press **Account and sync** in the sidebar, then **Connect this iPad**. It shows a
+   code.
+2. On your Mac, if LeadingLight already syncs there, open **Settings › Account and devices**, press
+   **Add a device**, type the code, press **Continue**, then **Approve**.
+   Otherwise press **Continue in the browser** on the iPad: at **leadinglight.app**, sign in with
+   the same provider you use on your Mac, check that the code matches, and press **Connect this
+   device**.
 3. Go back to LeadingLight. Wait for **Sync** to say **Up to date** before you go offline.
 
 Your notes, history, images and files then download to the iPad and stay there for offline use.
 Offline edits sync when the app is open and online again. The Mac doesn't need to stay awake once
 it has uploaded its changes. The full steps, and what to do with your recovery key, are in
-[Accounts and encrypted sync](/sync/#in-the-mac-or-ipad-app).
+[Accounts and encrypted sync](/sync/#in-the-mac-ipad-or-iphone-app).
 
 The iPad keeps its sign-in in the Keychain. **Sign out** ends that connection and keeps the notes
 on the iPad.

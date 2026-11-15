@@ -936,3 +936,23 @@ What this costs. The key was already stored unencrypted on the device beside the
 showing it gives a person at an unlocked device nothing new; signing out never removed it. A
 lost device that stays in use now stays signed in until the browser's "Sign out all devices"
 (decision 48) ends it. Signing out one device from another is deferred.
+
+## 50. One place for the account, and a list of its devices (2026-11-14)
+
+The owner could not tell which account his devices used, or what was signed in. Sign-in showed
+a name only, so a Google and a GitHub account looked the same. Account, sync, device approval
+and the two agent pairings sat in a dialog with tabs and in Settings › Devices.
+
+Settings › Account and devices now holds all of it, and the sidebar row says where sync stands.
+The service keeps each account's provider and email (a new `accounts` row, written when a
+browser signs in), because only a browser sign-in knows them and the installed apps need to
+show them. This is the first personal detail the service keeps beside the name; the privacy
+page says so. Each device sign-in keeps when it was last used, at most one write in five
+minutes, which also renews it (decision 49).
+
+The list is the installed apps only: a browser sign-in is a cookie with no row to list. A
+device renames itself. Only a browser removes a device, for the reason decision 48 gives for
+"Sign out all devices"; a removed device keeps its notes and key (decision 49). A device knows
+its sign-in ended only from the service's own refusal, never from a failed request, so being
+offline is not shown as signed out. A new app no longer opens the browser by itself: it shows
+its code, and the browser is the choice for a first device.
