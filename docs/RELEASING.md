@@ -96,10 +96,10 @@ archive signed by the update key, whose public half is `plugins.updater.pubkey` 
 
 | Secret | What it is |
 | --- | --- |
-| `TAURI_SIGNING_PRIVATE_KEY` | The update key, made once with `pnpm --filter @leadinglight/desktop tauri signer generate -w ~/.tauri/leadinglight-updater.key`: `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/leadinglight-updater.key` |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The password chosen then |
+| `TAURI_SIGNING_PRIVATE_KEY` | The update key, made once with `pnpm --filter @leadinglight/desktop tauri signer generate --ci -w ~/.tauri/leadinglight-updater.key`: `gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/leadinglight-updater.key` |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | The key's password, if it has one. Ours has none, so this secret is not set |
 
-Keep the key and its password somewhere safe outside GitHub. If they are lost, installed
+Keep a copy of the key file somewhere safe outside GitHub. If it is lost, installed
 apps refuse every later update, and each needs one reinstall by hand. A dev app
 (`pnpm install:dev-app`) has no update address. iPhone and iPad update through TestFlight.
 
