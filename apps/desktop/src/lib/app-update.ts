@@ -13,8 +13,8 @@ export const appUpdate = createStore<AppUpdate>({ state: "idle" });
 // later: the version whose toast was answered, so it doesn't come back for that version.
 export const updatePrefs = localPrefs("ll.update", { later: "" });
 export const RELEASES = "https://github.com/rangrik/LeadingLight/releases/latest";
-// Opens the TestFlight app. Add /v1/app/<Apple ID> once the App Store Connect record exists.
-export const TESTFLIGHT = "itms-beta://";
+// LeadingLight's page in TestFlight; the number is the App Store Connect app's Apple ID.
+export const TESTFLIGHT = "itms-beta://beta.itunes.apple.com/v1/app/6834977186";
 // TestFlight takes a while to process an upload, so a release this fresh is not offered yet.
 const SETTLE = 45 * 60_000;
 

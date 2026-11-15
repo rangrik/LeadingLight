@@ -55,7 +55,7 @@ The browser build is the quickest way to work on the interface, and it is what t
 
 | Command | What it does |
 | --- | --- |
-| `pnpm install:app` | Builds the Mac app and puts it in `/Applications`. It refuses while LeadingLight is running, so quit it first. |
+| `pnpm install:app` | Builds the Mac app and puts it in `/Applications`. It refuses while LeadingLight is running, so quit it first. A released app updates itself; a local build over it asks again for the Keychain and microphone. |
 | `pnpm install:dev-app` | Installs a separate "LeadingLight Dev" copy for this checkout, with its own data, so your own notes are never touched. `pnpm install:dev-app --remove` takes it and its data away again. |
 
 A global key such as <kbd>⌃⌥I</kbd> belongs to whichever copy of the app started first, so quit the other copy when you test one.

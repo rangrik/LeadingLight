@@ -35,7 +35,7 @@ pnpm qa                                    # Playwright, headless Chromium, agai
 QA_PORT=$BERTH_PORT pnpm qa                # in a Berth worktree, when :1420 is another checkout's
 pnpm check:themes                          # every built-in theme keeps its contrast
 pnpm sync:shipyard [ref]                   # pull Shipyard's changes into vendor/shipyard
-pnpm install:app                           # build the Mac app and put it in /Applications
+pnpm install:app                           # a local build in /Applications; not how changes ship (step 8)
 pnpm install:dev-app                       # this worktree's own "LeadingLight Dev <hash>", own data
 ```
 
@@ -89,13 +89,18 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
    with what they should see, and wait for their report. The browser stays the first way; this
    never replaces it.
 7. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
-8. Once the user says it works, or told you to finish without asking, close it out yourself:
+8. Once the user says it works, or told you to finish without asking, deliver it yourself:
    commit; merge main into the branch and run the change's scenarios again (see Traps); merge
-   the branch into main in the main checkout (`$BERTH_ROOT_PATH`); there, build the Mac app and
-   install it (`pnpm install:app`, which refuses while the app is running: ask the user to quit
-   it, never kill it); remove your dev app and its data (`pnpm install:dev-app --remove` in the
-   worktree). Then tell the user what to try in the installed app and what to look at. Last,
-   clean up: stop the worktree's servers; free and delete the merged branch (`git checkout
+   the branch into main in the main checkout (`$BERTH_ROOT_PATH`) and push it. The push updates
+   the release PR, "chore(main): release x.y.z". Merge that too once Checks pass on it (run
+   them on its branch if none ran). The release then signs and notarizes the Mac app, sends
+   the iPhone and iPad build to TestFlight, and publishes; watch it (`gh run watch`), and if it
+   fails, retry as `docs/RELEASING.md` says. The installed apps update themselves: the Mac app
+   offers Update and restart (Settings › About checks at once), and iPhone and iPad get it from
+   TestFlight about 45 minutes after. Never put a local build (`pnpm install:app`) over the
+   installed app: macOS sees a different app and asks again for the Keychain and microphone.
+   Remove your dev app and its data (`pnpm install:dev-app --remove` in the worktree). Then
+   tell the user what to try once the update arrives. Last, clean up: stop the worktree's servers; free and delete the merged branch (`git checkout
    --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and close the worktree
    with `"$BERTH_HOME/bin/berthd" worktree rm "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends
    your session, so send your report before it.

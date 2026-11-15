@@ -126,9 +126,9 @@ days after its upload, so release at least that often.
 
 The upload uses the App Store Connect key above. The certificate and profile end
 together each November; make new ones, set the three secrets again and run a rehearsal.
-Once, in App Store Connect: create the app record for `com.leadinglight.app`, answer the
-export compliance questions for the first build, and make an internal testing group with
-automatic distribution. `docs/IPAD.md` has the local steps.
+The App Store Connect app record is "Leading Light: Notes" (Apple ID 6834977186; the plain
+name was taken). Once there: answer the export compliance questions for the first build,
+and make an internal testing group with automatic distribution. `docs/IPAD.md` has the local steps.
 
 ## Maintenance
 
