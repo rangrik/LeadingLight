@@ -941,3 +941,18 @@ What this costs. The key was already stored unencrypted on the device beside the
 showing it gives a person at an unlocked device nothing new; signing out never removed it. A
 lost device that stays in use now stays signed in until the browser's "Sign out all devices"
 (decision 48) ends it. Signing out one device from another is deferred.
+
+## 53. One door: the review's options are judged by places to look (2026-11-14)
+
+The UX review (2026-11-08) built eighteen options for six issues as separate branches. With many
+agents at work, every signal on screen is a pull to switch, so each option was judged by one test:
+does it add a place to look, or remove one. Nine were taken and made to work together on one branch
+([PROJECT-6.md](PROJECT-6.md)); nine were left out with their branches kept.
+
+What follows from the test. One number in the window (the Inbox's). One colour with a meaning
+(amber: an agent waits for you). One project at a time (the rail). Nothing moves by itself.
+Options that showed more state at once (every project's dots, a second home, a links map, three
+labelled inboxes) lost to ones that showed less, even where they were quicker to scan.
+
+Two picks overlap on purpose: the Inbox's "Needs you" and the card's Answer are the same question
+in two places, so answering in either clears both.
