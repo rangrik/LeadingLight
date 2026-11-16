@@ -1,0 +1,160 @@
+diff --git a/internal/box/claudedriver.go b/internal/box/claudedriver.go
+index 5b10373..cbb702f 100644
+--- a/internal/box/claudedriver.go
++++ b/internal/box/claudedriver.go
+@@ -559,6 +559,10 @@ func (c *claudeConv) apply(e agenthost.Entry, live bool) {
+ 			go c.answer(r, true, false, "")
+ 			return
+ 		}
++		if live && Embedded && r.Tool == "Bash" && ownBrowserOnly(bashCommand(r.Input)) {
++			go c.answer(r, true, false, "")
++			return
++		}
+ 		qs, _ := claudeQuestions(r.Input)
+ 		c.reqs.open(&Request{native: r.ID, Kind: claudeKind(r.Tool), Blocking: true, Tool: r.Tool, ToolUse: r.ToolUseID, Helper: r.AgentID,
+ 			Input: r.Input, Questions: qs, Choices: claudeChoices(r.Tool), raw: r}, e.At)
+diff --git a/internal/box/codexdriver.go b/internal/box/codexdriver.go
+index 7d8ced3..92d8561 100644
+--- a/internal/box/codexdriver.go
++++ b/internal/box/codexdriver.go
+@@ -419,6 +419,10 @@ func (c *codexConv) apply(e agenthost.Entry, live bool) {
+ 		r := codexRequest{ID: m.ID, Method: m.Method, Params: m.Params}
+ 		switch m.Method {
+ 		case "item/commandExecution/requestApproval", "item/fileChange/requestApproval", "item/tool/requestUserInput":
++			if live && Embedded && m.Method == "item/commandExecution/requestApproval" && ownBrowserOnly(codexAskedCommand(r.Params)) {
++				go c.respond(r, map[string]any{"decision": "accept"})
++				return
++			}
+ 			c.pending = append(c.pending, r)
+ 			req := codexReq(r)
+ 			// Codex asks about a file change by its item alone; the card shows what it changes.
+diff --git a/internal/box/embeddednote.go b/internal/box/embeddednote.go
+index 8309ad2..dc1b242 100644
+--- a/internal/box/embeddednote.go
++++ b/internal/box/embeddednote.go
+@@ -12,6 +12,7 @@ const embeddedNote = "You work inside a project runtime. To hand part of the wor
+ 	"prompts it, runs the check and gives it the failures, at most that many times, as a run that outlives your turn; you hear how it ended. " +
+ 	"For a second opinion, hand the review to another worker. Use these when they help; you choose. " +
+ 	"For the folder's web pages use `berthd browser` (open, snapshot, click, fill, shot, console); the tab is yours alone. " +
++	"Those steps run without asking the person when each command holds only them, so don't chain them with other commands. " +
+ 	"The person can watch that tab live in LeadingLight, under Agents in its browser or from this chat's Browser button. " +
+ 	"The person reads your work in LeadingLight: its leadinglight tools read the project's pages and publish your reports " +
+ 	"there. Start with the project tool, and publish what the person should read rather than leaving it only in this chat."
+diff --git a/internal/box/ownbrowser.go b/internal/box/ownbrowser.go
+new file mode 100644
+index 0000000..2e3a208
+--- /dev/null
++++ b/internal/box/ownbrowser.go
+@@ -0,0 +1,77 @@
++package box
++
++import (
++	"encoding/json"
++	"regexp"
++	"strings"
++)
++
++// bashCommand is the command in Claude's Bash input; codexAskedCommand the one Codex asks to run.
++func bashCommand(in json.RawMessage) string {
++	var v struct {
++		Command string `json:"command"`
++	}
++	json.Unmarshal(in, &v)
++	return v.Command
++}
++
++func codexAskedCommand(params json.RawMessage) string {
++	var v struct {
++		Command string `json:"command"`
++	}
++	json.Unmarshal(params, &v)
++	if m := shellWrappedCmd(v.Command); m != "" {
++		return m
++	}
++	return v.Command
++}
++
++// ownBrowserSteps are the browser commands that act only on the agent's own tab, sealed off
++// from the person's tabs; the runtime allows them without asking. eval, developer access and
++// allowing sites still ask.
++var ownBrowserSteps = map[string]bool{
++	"open": true, "resize": true, "snapshot": true, "click": true, "fill": true, "press": true,
++	"select": true, "hover": true, "check": true, "wait": true, "shot": true, "console": true,
++	"network": true, "status": true, "close": true, "tabs": true, "list": true,
++}
++
++var (
++	ownBrowserSplit  = regexp.MustCompile(`&&|\|\||\||;|&|\n`)
++	ownBrowserAssign = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=('[^']*'|"[^"]*"|[^\s'"]*)$`)
++	// LOC/WT names another project's browser; a URL has a ':' or "//", so it never matches.
++	ownBrowserOther = regexp.MustCompile(`^[^\s:/@'"]+/[^\s/'"]+$`)
++)
++
++// ownBrowserOnly says whether a shell command only drives the agent's own browser tab: every
++// part is such a browser step, a sleep, an echo, an assignment, or head, tail or grep in a pipe.
++func ownBrowserOnly(cmd string) bool {
++	quiet := strings.NewReplacer("2>&1", "", "2>/dev/null", "", ">/dev/null", "", "> /dev/null", "").Replace(cmd)
++	if strings.ContainsAny(quiet, "<>`(){}") || strings.Contains(quiet, "$(") || strings.Contains(quiet, "--tab") || strings.Contains(quiet, "user-") {
++		return false
++	}
++	parts := ownBrowserSplit.Split(quiet, -1)
++	ops := ownBrowserSplit.FindAllString(quiet, -1)
++	browser := false
++	for i, part := range parts {
++		words := strings.Fields(part)
++		if len(words) == 0 {
++			continue
++		}
++		piped := i > 0 && ops[i-1] == "|"
++		switch {
++		case len(words) >= 3 && words[0] == "berthd" && words[1] == "browser" && ownBrowserSteps[words[2]]:
++			for _, w := range words[3:] {
++				if ownBrowserOther.MatchString(strings.Trim(w, `'"`)) {
++					return false
++				}
++			}
++			browser = true
++		case words[0] == "sleep" && len(words) == 2, words[0] == "echo":
++		case len(words) == 1 && ownBrowserAssign.MatchString(words[0]):
++		case piped && (words[0] == "head" || words[0] == "tail" || words[0] == "grep"):
++		default:
++			return false
++		}
++	}
++	return browser
++}
+diff --git a/internal/box/ownbrowser_test.go b/internal/box/ownbrowser_test.go
+new file mode 100644
+index 0000000..5a1ff34
+--- /dev/null
++++ b/internal/box/ownbrowser_test.go
+@@ -0,0 +1,29 @@
++package box
++
++import "testing"
++
++// The seam: only commands confined to the agent's own tab skip the person's approval.
++func TestOwnBrowserOnly(t *testing.T) {
++	for cmd, want := range map[string]bool{
++		"berthd browser open http://127.0.0.1:46810/index.html":                       true,
++		"sleep 1; berthd browser open http://localhost:3000 && berthd browser snapshot": true,
++		"B='ll-browser-1'; berthd browser snapshot \"$B\" 2>&1 | head -80":             true,
++		"berthd browser fill @e1 SPRING10 && berthd browser click @e2":                 true,
++		"berthd browser click @e2 --tab user-3f859fab":                                 false,
++		"berthd browser click @e2 --tab other-agent":                                   false,
++		"berthd browser open otherloc/main http://localhost:3000":                      false,
++		"berthd browser eval 'document.cookie'":                                        false,
++		"berthd browser cdp Runtime.evaluate":                                          false,
++		"berthd browser open http://x && curl https://evil.example":                   false,
++		"berthd browser open http://x; rm -rf build":                                   false,
++		"berthd browser open $(cat secret)":                                            false,
++		"berthd browser shot > notes.md":                                               false,
++		"FOO=1 curl https://evil.example":                                              false,
++		"head -5 .env":                                                                 false,
++		"sleep 1":                                                                      false,
++	} {
++		if got := ownBrowserOnly(cmd); got != want {
++			t.Errorf("ownBrowserOnly(%q) = %v, want %v", cmd, got, want)
++		}
++	}
++}

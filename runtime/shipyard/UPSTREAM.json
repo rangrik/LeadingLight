@@ -64,6 +64,7 @@
     "0049-mobile-agents.patch",
     "0050-desktop-browser-defaults.patch",
     "0051-personal-browser-permissions.patch",
-    "0052-agents-browser-is-visible.patch"
+    "0052-agents-browser-is-visible.patch",
+    "0053-own-browser-steps-need-no-approval.patch"
   ]
 }
