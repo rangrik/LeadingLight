@@ -1,3 +1,4 @@
+import { connectionContext, connectionRedirect } from './account-return.mjs';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { NativeError } from './native.mjs';
 
@@ -106,7 +107,7 @@ export async function calendarRequest({ request, env, sql, user, readBody, fetch
   if (path === '/api/calendar/connect') {
     const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
     await sql`DELETE FROM calendar_oauth WHERE expires_at<now()`;
-    await sql`INSERT INTO calendar_oauth(state,owner,verifier) VALUES(${hash(state)},${user.id},${seal(env, user.id, verifier)})`;
+    await sql`INSERT INTO calendar_oauth(state,owner,verifier) VALUES(${hash(state)},${user.id},${seal(env, user.id, connectionContext(verifier, body))})`;
     const params = new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, redirect_uri: callbackUrl(env), response_type: 'code', scope: scopes.join(' '), access_type: 'offline', prompt: 'consent select_account', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
     return json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
   }
@@ -160,9 +161,10 @@ export async function calendarCallback({ request, env, sql, user, fetcher = fetc
   need(string(state, 100), 400, 'Invalid Google connection. Start again from Calendar.');
   const [pending] = await sql`DELETE FROM calendar_oauth WHERE state=${hash(state)} AND owner=${user.id} AND expires_at>now() RETURNING verifier`;
   need(pending, 400, 'This Google connection expired or belongs to another workspace. Start again from Calendar.');
-  if (params.has('error')) return Response.redirect(`${env.APP_ORIGIN}/?calendar=cancelled`, 303);
+  const stored = unseal(env, user.id, pending.verifier), context = typeof stored === 'string' ? { verifier: stored } : stored;
+  if (params.has('error')) return connectionRedirect(env, 'calendar', 'cancelled', context);
   need(string(params.get('code'), 4096), 400, 'Google did not return an authorization code.');
-  const tokens = await tokenRequest(env, { code: params.get('code'), grant_type: 'authorization_code', redirect_uri: callbackUrl(env), code_verifier: unseal(env, user.id, pending.verifier) }, fetcher);
+  const tokens = await tokenRequest(env, { code: params.get('code'), grant_type: 'authorization_code', redirect_uri: callbackUrl(env), code_verifier: context.verifier }, fetcher);
   const granted = (tokens.scope || '').split(' ');
   need(scopes.slice(2).every((s) => granted.includes(s)), 403, 'Allow both calendar permissions when connecting Google.');
   const profile = await google('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${tokens.access_token}` } }, fetcher);
@@ -172,5 +174,5 @@ export async function calendarCallback({ request, env, sql, user, fetcher = fetc
   need(tokens.refresh_token, 400, 'Google did not grant background access. Reconnect with consent.');
   tokens.expires = Date.now() + tokens.expires_in * 1000;
   await sql`INSERT INTO calendar_accounts(owner,account,email,tokens) VALUES(${user.id},${profile.sub},${profile.email},${seal(env, `${user.id}:${profile.sub}`, tokens)}) ON CONFLICT(owner,account) DO UPDATE SET email=excluded.email,tokens=excluded.tokens`;
-  return Response.redirect(`${env.APP_ORIGIN}/?calendar=connected`, 303);
+  return connectionRedirect(env, 'calendar', 'connected', context);
 }

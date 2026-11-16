@@ -23,7 +23,7 @@ if [ "${1:-}" = "--remove" ]; then
   exit 0
 fi
 # No update address: a release installed over a dev app would open the real notes.
-printf '{"productName":"%s","identifier":"%s","plugins":{"updater":{"endpoints":[]}}}' "$APP" "$ID" >"$CONF"
+printf '{"productName":"%s","identifier":"%s","plugins":{"updater":{"endpoints":[]},"deep-link":{"desktop":{"schemes":["leadinglight-dev-%s"]}}}}' "$APP" "$ID" "$HASH" >"$CONF"
 scripts/project-runtime/build.sh
 scripts/project-runtime/build-tmux.sh
 pnpm --filter @leadinglight/desktop tauri build --debug --bundles app --config "$CONF"

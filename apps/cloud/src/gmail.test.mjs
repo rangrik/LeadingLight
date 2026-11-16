@@ -34,6 +34,8 @@ test('routes enforce workspace, origin, rollout and the native allowlist', async
   assert.equal((await app(request({ origin: env.APP_ORIGIN }))).status, 401);
   assert.equal((await app(request({ origin: 'https://evil.test', 'test-user': 'alice' }))).status, 403);
   assert.equal((await app(request({ origin: env.APP_ORIGIN, 'test-user': 'alice', 'x-leadinglight-owner': 'bob' }))).status, 409);
+  assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/accounts`)), true);
+  assert.equal((await app(new Request(`${env.APP_ORIGIN}/api/gmail/accounts`, { headers: { authorization: 'Bearer invalid' } }))).status, 401);
   for (const action of ['connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send']) assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: 'POST' })), true);
   for (const action of ['callback', 'delete', 'trash']) assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: 'POST' })), false);
 });
@@ -62,8 +64,8 @@ test('OAuth, multi-account reads, search, paging, refresh and disconnect isolati
   const headers = [['Subject', 'Hello'], ['From', 'Alex <alex@example.test>'], ['Reply-To', '"Alex, Team" <replies@example.test>'], ['Message-ID', '<m1@example.test>'], ['References', '<m0@example.test>'], ['List-Unsubscribe', '<mailto:u@example.test>']];
   const mail = (text, internalDate = '1700000000000') => ({ id: 'one', threadId: 'thread', internalDate, labelIds: ['UNREAD', 'INBOX', 'CATEGORY_UPDATES'], payload: { headers: headers.map(([name, value]) => ({ name, value })), ...part('text/plain', text) } });
   const run = (action, body, user = owner) => gmailRequest({ request: new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: body ? 'POST' : 'GET', ...(body && { body: JSON.stringify(body) }) }), env, sql, user: { id: user }, readBody: (r) => r.json(), fetcher });
-  const connect = async () => {
-    const auth = new URL((await (await run('connect', {})).json()).url);
+  const connect = async (body = {}) => {
+    const auth = new URL((await (await run('connect', body)).json()).url);
     assert.equal(auth.searchParams.get('scope'), scope); assert.equal(auth.searchParams.get('code_challenge_method'), 'S256');
     return new Request(`${env.APP_ORIGIN}/api/gmail/callback?code=code&state=${auth.searchParams.get('state')}`);
   };
@@ -83,6 +85,19 @@ test('OAuth, multi-account reads, search, paging, refresh and disconnect isolati
     await assert.rejects(run('message', { account, id: 'one' }, other), /Connect this Gmail/);
     const cancel = new URL((await connect()).url); cancel.searchParams.set('error', 'access_denied');
     assert.match((await callback(new Request(cancel))).headers.get('location'), /cancelled/);
+    // Seam: the callback must return only to the initiating app, with no Google credentials in the link.
+    for (const app of ['leadinglight', 'leadinglight-dev-cb7069']) {
+      const id = randomUUID(), native = await connect({ app, id }), tampered = new URL(native.url);
+      tampered.searchParams.set('app', 'https://evil.test'); tampered.searchParams.set('id', randomUUID());
+      const back = new URL((await callback(new Request(tampered))).headers.get('location'));
+      assert.equal(back.pathname, '/connect/complete');
+      assert.deepEqual(Object.fromEntries(back.searchParams), { integration: 'gmail', result: 'connected', app, id });
+      const cancelled = new URL((await connect({ app, id })).url); cancelled.searchParams.set('error', 'access_denied');
+      assert.equal(new URL((await callback(new Request(cancelled))).headers.get('location')).searchParams.get('result'), 'cancelled');
+      await assert.rejects(callback(native), /expired/);
+    }
+    await assert.rejects(connect({ app: 'https://evil.test', id: randomUUID() }), /return address/);
+    await assert.rejects(connect({ app: 'leadinglight', id: '-'.repeat(36) }), /return address/);
     granted = 'openid email https://www.googleapis.com/auth/gmail.readonly'; await assert.rejects(callback(await connect()), /put away/); granted = scope;
     const page = await (await run('messages', { account: 'personal' })).json();
     assert.equal(page.messages.length, 1); assert.equal(page.messages[0].unread, true); assert.equal(page.nextPageToken, 'next');

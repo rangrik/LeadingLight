@@ -1,5 +1,25 @@
 # Calendar validation — 2026-11-03
 
+## Native Google return, November 16, 2026
+
+With the owner's approval, connected LeadingLight Dev cb7069 to the existing workspace,
+then completed Gmail consent and Calendar reconnection in Safari. Both consent flows
+offered to open that dev app. Allow brought it back to the correct page: Mail immediately
+showed the connected account and inbox count; Calendar closed its accounts dialog,
+showed "Google connected." and refreshed its calendars without navigating or restarting.
+No mail was sent or moved, and no events were changed. The released app was not replaced.
+
+The final 12 return-flow checks passed in Chromium and WebKit; 24 cloud checks passed
+against isolated PostgreSQL. Sonnet 5.5 independently checked the browser flows and
+rechecked the cancellation-notice fixes. Cold-start URL delivery uses a simulated Tauri
+bridge in browser tests; this native pass covered the already-running app.
+
+With the owner's approval, Gmail consent was then published to production and the
+connection renewed. Google's unverified-app notice and user cap remain. Google's
+Calendar review and the older native agent-session checks below remain separate.
+
+## Original Calendar implementation
+
 Implementation is on `codex/google-calendar`, isolated from other worktrees. In Safari, the
 existing production OAuth client was verified, the calendar callback was registered, and
 `CALENDAR_TOKEN_KEY` was saved as a production-only Vercel secret. No client secret was

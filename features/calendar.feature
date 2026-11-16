@@ -12,6 +12,19 @@ Feature: Personal and work calendars in one calm plan
     And connecting the same account again replaces its connection without duplicates
     And cancelling Google consent leaves existing connections intact
 
+  Scenario: Return from Safari with the connected calendar ready
+    Given I started connecting Calendar in the installed app
+    When I finish Google consent in Safari
+    Then the same installed app opens at Calendar
+    And its accounts, calendars and events refresh immediately without changing pages
+    And returning manually to the app also refreshes the visible calendar
+    And a page I open while the workspace starts is not replaced by the restored page
+    And Safari offers "Open LeadingLight" if the automatic return is blocked
+    And a connection started in the web app stays in the web app
+    But cancelling consent returns to Calendar without changing existing connections
+    And leaving and reopening Calendar does not replay the return or its notice
+    And Calendar and Mail returns received during startup are both handled after sign-in loads
+
   Scenario: See and shape today
     Given I have selected personal and work calendars
     When I open Calendar

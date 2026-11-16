@@ -84,7 +84,7 @@ try again."
 to hand over.
 
 **From your browser.** Use this for your first device. Press **Continue in the browser** under the
-code.
+code. On the Mac, this opens Safari.
 
 1. In the browser, sign in if you need to. A **Connect your device** window names the device and
    shows the code. Check that it matches the code in the app.

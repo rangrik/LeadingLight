@@ -162,8 +162,25 @@ credentials in `VITE_` variables.
 `gmail.modify` is a restricted scope. Complete Google's applicable verification and security
 assessment before public rollout, including that the Mac app sends new mail's text to the
 person's own model provider (decision 54). In testing, list the allowed Google test users;
-testing grants can expire. Gmail is not yet configured or verified in production.
+testing grants expire after seven days. Gmail's separate project is `leadinglight-mail`
+(`872602080153`), configured on 2026-11-16 with the production callback above and all three
+`GMAIL_` variables stored as sensitive production variables. With the owner's approval,
+Google consent was published to production for personal use, removing the test-mode expiry.
+Mail has not been verified for public use; Google's unverified-app notice and user cap remain.
+The same day's production deployment reports `gmail: true`; native accounts and connect routes
+reach authentication, while the callback still rejects native credentials. Live Gmail consent,
+Calendar reconnection, Safari return to the dev app and immediate refresh all passed.
 See [Google's scope guidance](https://developers.google.com/workspace/gmail/api/auth/scopes).
+
+After each cloud deployment, check `/api/config` reports `gmail: true`. An invalid bearer token
+on `/api/gmail/accounts` must return 401, not the native-route 403: the Mac release can otherwise
+contain Mail while the independently deployed cloud service still refuses it.
+
+Calendar and Gmail connect requests from the installed app include an allowlisted app scheme
+and request ID, saved with the encrypted PKCE verifier. Successful and cancelled callbacks go
+through `/connect/complete`, which opens that app and offers an explicit return button. No token
+or authorization code enters the link. Web requests keep the original browser return; existing
+pending requests remain valid across deployment. The app refreshes only its matching request.
 
 The same workspace session or scoped native credential authorizes every Gmail route. Google
 callbacks require the matching browser workspace, one-use ten-minute state and PKCE. Grants use

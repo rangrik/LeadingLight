@@ -10,9 +10,12 @@ import { mail, refresh, setKind, useMail } from "~/lib/mail";
 import { LABEL, type Kind } from "~/lib/mail-rules";
 import { useMailReader } from "~/lib/mail-reader";
 import { createStore } from "~/lib/state";
+import { accountReturns, clearAccountReturn } from "~/lib/account-return";
+import { focusedPage, panes } from "~/lib/panes";
+import { MAIL_VIEW } from "~/lib/space";
 
 // waiting: Google is open in the browser; the page checks by itself until an account appears.
-export const connection = createStore({ busy: false, waiting: false, notice: "", error: "", dialog: false });
+export const connection = createStore({ busy: false, waiting: false, accountCount: 0, notice: "", error: "", dialog: false });
 const set = (patch: Partial<ReturnType<typeof connection.get>>) => connection.set({ ...connection.get(), ...patch });
 export const openAccounts = () => set({ dialog: true });
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -23,11 +26,11 @@ export async function connectNow() {
   set({ busy: true, error: "", notice: "" });
   try {
     await connectGmail();
-    const had = mail.get().accounts.length, until = Date.now() + 10 * 60_000;
-    set({ waiting: true });
+    const until = Date.now() + 10 * 60_000;
+    set({ waiting: true, accountCount: mail.get().accounts.length });
     clearInterval(watch);
     watch = setInterval(() => {
-      if (mail.get().accounts.length > had || Date.now() > until || !connection.get().waiting) return void (clearInterval(watch), set({ waiting: false }));
+      if (Date.now() > until || !connection.get().waiting) return void (clearInterval(watch), set({ waiting: false }));
       if (document.visibilityState === "visible") void refresh({ full: true });
     }, 4000);
   } catch (e) {
@@ -39,7 +42,28 @@ export async function connectNow() {
 
 export function MailRoot() {
   useMailReader();
-  const { dialog } = connection.use();
+  const { dialog, waiting, accountCount } = connection.use();
+  const connected = useMail().accounts.length;
+  const returned = accountReturns.use().gmail;
+  useEffect(() => {
+    let page = focusedPage();
+    return panes.subscribe(() => { const next = focusedPage(); if (next !== page && next !== MAIL_VIEW) set({ notice: "" }); page = next; });
+  }, []);
+  useEffect(() => {
+    if (!returned || returned.owner !== mail.get().owner) return;
+    clearAccountReturn("gmail", returned.id);
+    clearInterval(watch);
+    set({ waiting: false, dialog: false, error: "", notice: returned.result === "cancelled" ? "Connection cancelled. Nothing changed." : "" });
+    if (returned.result === "connected") void refresh({ full: true });
+  }, [returned]);
+  useEffect(() => {
+    const front = () => void refresh({ full: connection.get().waiting });
+    window.addEventListener("leadinglight:app-focus", front);
+    return () => window.removeEventListener("leadinglight:app-focus", front);
+  }, []);
+  useEffect(() => {
+    if (waiting && connected > accountCount) { clearInterval(watch); set({ waiting: false }); }
+  }, [waiting, connected, accountCount]);
   useEffect(() => {
     const url = new URL(location.href), result = url.searchParams.get("gmail");
     if (!result) return;
@@ -101,7 +125,7 @@ function Accounts({ open, onOpenChange }: { open: boolean; onOpenChange: (open: 
             </section>
           ))}
           <Button disabled={c.busy || !!m.error} onClick={() => void connectNow()}>
-            Add account
+            {c.waiting ? "Open Google again" : "Add account"}
           </Button>
           {c.waiting && <p className="text-muted-foreground text-sm">Finish in the browser window that opened. This page updates by itself.</p>}
           <p className="text-muted-foreground text-xs">Disconnect removes saved access. Your mail stays in Google.</p>

@@ -54,7 +54,7 @@
 .ll-capture[data-web] .is-empty::before { content: none; }
 
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
-:where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], a, [type="checkbox"]):focus-visible {
+:where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], [data-slot="segmented-control-item"], a, [type="checkbox"]):focus-visible {
   outline: none;
   --tw-ring-shadow: 0 0 #0000;
   --tw-ring-offset-shadow: 0 0 #0000;

@@ -140,6 +140,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .manage(native_cloud::NativeCloud::default())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -276,6 +277,15 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 let (app, event) = (_app, _event);
+                if let RunEvent::Opened { ref urls } = event {
+                    if urls.iter().any(|url| url.host_str() == Some("connected") && matches!(url.path(), "/gmail" | "/calendar")) {
+                        if let Some(main) = app.get_webview_window(capture::MAIN) {
+                            let _ = main.show();
+                            let _ = main.unminimize();
+                            let _ = main.set_focus();
+                        }
+                    }
+                }
                 // The Dock icon brings the hidden main window back.
                 if let RunEvent::Reopen { has_visible_windows: false, .. } = event {
                     if let Some(main) = app.get_webview_window(capture::MAIN) {

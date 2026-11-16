@@ -55,7 +55,7 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
             <Button onClick={() => window.dispatchEvent(new Event("leadinglight:cloud-account"))}>Sign in to connect Gmail</Button>
           ) : (
             <Button disabled={c.busy || m.loading || !!m.error} onClick={() => void connectNow()}>
-              Connect Gmail
+              {c.waiting ? "Open Google again" : "Connect Gmail"}
             </Button>
           )}
         </div>
@@ -68,10 +68,10 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
       <>
         <Title>Start fresh</Title>
         <Lede>{s.line}</Lede>
-        <div className="mt-3 flex flex-wrap items-end gap-x-3 gap-y-1">
-          <div className="flex flex-col gap-1.5 text-muted-foreground tabular-nums">
-            {m.accounts.map((a) => (
-              <p className="flex min-w-0 items-center gap-2" key={a.account}>
+        <div className="mt-3 flex flex-col gap-1.5 text-muted-foreground tabular-nums">
+          {m.accounts.map((a, i) => (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1" key={a.account}>
+              <p className="flex min-w-0 items-center gap-2">
                 <span className="flex w-18 shrink-0">
                   <AccountTag account={a.account} />
                 </span>
@@ -79,11 +79,13 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
                   {a.email} · {(a.inbox ?? 0).toLocaleString("en-US")} waiting
                 </span>
               </p>
-            ))}
-          </div>
-          <Button className="text-muted-foreground" disabled={c.busy} onClick={() => void connectNow()} size="xs" variant="ghost">
-            Add another account
-          </Button>
+              {i === m.accounts.length - 1 && (
+                <Button className="text-muted-foreground" disabled={c.busy} onClick={() => void connectNow()} size="xs" variant="ghost">
+                  {c.waiting ? "Open Google again" : "Add another account"}
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
         <div className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span>Start from the last</span>

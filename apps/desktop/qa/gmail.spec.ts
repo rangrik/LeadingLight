@@ -59,6 +59,39 @@ const today = async (page: Page) => {
 const row = (page: Page) => page.getByTestId("mail-row");
 const toast = (page: Page, text: string) => page.locator("[data-slot=toast-title]", { hasText: text });
 
+// Seam: a fixed service must recover from the native-route error and finish connecting without a reload.
+test("retry the service, connect Gmail, and pick up the new account", async ({ page, context }) => {
+  let failed = true, connected = false;
+  await page.route("**/api/**", async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === "/api/config") return route.fulfill({ json: { ready: true, allowed: true, providers: [] } });
+    if (path === "/api/me") return route.fulfill({ json: { id: "mail-owner", name: "Mail test" } });
+    if (path === "/api/gmail/accounts") return route.fulfill(failed
+      ? { status: 403, json: { error: "This native session cannot use this route." } }
+      : { json: { accounts: connected ? [{ account: "personal", email: "mail@example.test" }] : [] } });
+    if (path === "/api/gmail/connect") return route.fulfill({ json: { url: "https://accounts.google.com/o/oauth2/v2/auth?state=qa" } });
+    return route.fulfill({ json: { inbox: 3 } });
+  });
+  await context.route("https://accounts.google.com/**", (route) => route.fulfill({ body: "Google consent fixture" }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mail", exact: true }).first().click();
+  await expect(page.getByRole("alert")).toContainText("This native session cannot use this route.");
+  await expect(page.getByRole("button", { name: "Connect Gmail" })).toBeDisabled();
+  failed = false;
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  const opened = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Connect Gmail" }).click();
+  const popup = await opened;
+  await expect(popup).toHaveURL(/accounts\.google\.com/);
+  await expect(page.getByText("Finish in the browser window that opened. This page updates by itself.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open Google again" })).toBeEnabled();
+  connected = true;
+  await popup.close();
+  await expect(page.getByRole("heading", { name: "Start fresh" })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Add another account" })).toBeVisible({ timeout: 1000 });
+  await expect(page.getByText("mail@example.test · 3 waiting")).toBeVisible();
+});
+
 // Seam: the whole look against the service. Catches a choice that does not reach Gmail, a reply
 // sent before its 8 seconds or after Undo, a task that copies the mail's own text, a reply form
 // naming another address than the one the service sends to, and a costly new-sender lookup.

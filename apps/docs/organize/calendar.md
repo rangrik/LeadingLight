@@ -6,8 +6,10 @@ Your notes remain local and work without a calendar connection.
 ## Connect your calendars
 
 Sign into LeadingLight through **Account and sync**, then choose **Connect Google Calendar**.
-Google opens in your browser. Choose an account and allow calendar access. Return to the app
-and press **Refresh** if the connection has not appeared yet. On the Mac, use the same
+Google opens in Safari on the Mac. Choose an account and allow calendar access. Safari returns
+to Calendar in the app and refreshes your accounts and events. If Safari waits, choose **Open
+LeadingLight**. Returning to the app yourself also refreshes the calendar. Web connections stay
+in the browser. On the Mac, use the same
 LeadingLight workspace in the browser that approved your device.
 
 Open **Calendars → Add or reconnect Google account** to connect another personal or work

@@ -9,16 +9,21 @@ Mail is not an inbox. It tells you what your new mail will cost you, takes you t
 mail at a time, and ends.
 
 ::: warning Preview
-Google has not yet reviewed Mail's access to Gmail, so for now only the owner can connect an
-account. The reader that writes each mail's lines runs only in the Mac app.
+Mail is being tried for the owner's personal use. Google has not yet reviewed its access to
+Gmail, so Google shows an unverified-app notice when connecting. The reader that writes each
+mail's lines runs only in the Mac app.
 :::
 
 ## Connect accounts
 
 Sign into LeadingLight through **Account and sync**, then open **Mail** in the sidebar (or press
 <kbd>⌥⌘M</kbd>) and choose **Connect Gmail**. Signed out, the button reads **Sign in to connect
-Gmail** and opens **Settings › Account and devices**. Google opens in your browser. Allow access, and Mail updates
-by itself. If you refuse the permission to put mail away, nothing is connected and Mail says why.
+Gmail** and opens **Settings › Account and devices**. On the Mac, Google opens in Safari. Sign into
+the same LeadingLight workspace in Safari before connecting. Allow access, and Safari returns to
+Mail in the app with the account ready. If Safari waits, choose **Open LeadingLight**. Returning
+to the app yourself also refreshes Mail. In the web app, the connection stays in the browser.
+If you close Google before finishing, choose **Open Google again** to retry.
+If you refuse the permission to put mail away, nothing is connected and Mail says why.
 
 Add a second account with the accounts button in Mail's header (**Mail accounts**), where you can
 also mark each account Personal or Work, reconnect it, or disconnect it. Disconnecting removes

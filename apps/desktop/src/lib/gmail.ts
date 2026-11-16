@@ -1,5 +1,7 @@
+import { accountReturnRequest } from './account-return';
 import { cloudApi, cloudState } from './cloud';
 import { isNative } from './platform';
+import { openAccountBrowser } from './account-browser';
 
 // The service's Gmail routes (apps/cloud/src/gmail.mjs).
 export type MailAccount = { account: string; email: string };
@@ -18,9 +20,9 @@ export async function connectGmail() {
   const native = await isNative;
   const popup = native ? null : window.open('about:blank', '_blank');
   try {
-    const { url } = await gmailApi<{ url: string }>('connect', {});
+    const { url } = await gmailApi<{ url: string }>('connect', await accountReturnRequest('gmail'));
     if (new URL(url).origin !== 'https://accounts.google.com') throw new Error('Invalid Google connection URL.');
-    if (native) await (await import('@tauri-apps/plugin-opener')).openUrl(url);
+    if (native) await openAccountBrowser(url);
     else if (popup) { popup.opener = null; popup.location.href = url; }
     else throw new Error('Allow popups to connect Gmail, then try again.');
   } catch (error) { popup?.close(); throw error; }
@@ -28,7 +30,7 @@ export async function connectGmail() {
 
 // Gmail opens in the person's browser, never in the app's window.
 export async function openExternal(url: string) {
-  if (await isNative) await (await import('@tauri-apps/plugin-opener')).openUrl(url);
+  if (await isNative) await openAccountBrowser(url);
   else window.open(url, '_blank', 'noopener,noreferrer');
 }
 

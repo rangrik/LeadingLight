@@ -1036,6 +1036,11 @@ days. A task made from a mail keeps the sender, the subject, a link and the read
 never the mail's own text. Mail shows as text; originals and attachments open in Gmail. Native
 credentials allow only named routes. Google's review is required before any public rollout.
 
+2026-11-16. Native Google connections carry an app scheme and request ID inside the encrypted
+OAuth state. The browser returns through a confirmation page to that app; no Google code or token
+goes into the link. The app accepts only its pending request for the same workspace, opens Mail or
+Calendar and refreshes it. Dev apps have their own scheme. Web connections stay in the browser.
+
 ## 55. Mail is a look, not an inbox (2026-11-14)
 
 Mail is for someone who avoids email, because an inbox shows its weight before its content. So

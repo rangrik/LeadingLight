@@ -26,12 +26,45 @@ Feature: Mail is a look, not an inbox
     And connecting an account again replaces its connection without a second copy
     But if I refuse the permission to put mail away, nothing is connected and Mail says why
 
+  Scenario: Connect from the Mac through Safari
+    Given I am signed in to LeadingLight on the Mac
+    And Safari is signed in to the same LeadingLight workspace
+    And another browser is the Mac's default
+    When I press "Connect Gmail"
+    Then Google's account chooser opens in Safari
+    And after I allow access, Mail updates without signing the Mac in again
+    And "Open in Gmail" opens the original mail in Safari
+    And connecting Google Calendar or opening device approval also uses Safari
+
+  Scenario: Return from Google to the app that started connecting
+    Given I started connecting Gmail in the installed app
+    When I finish consent in Safari
+    Then Safari opens that installed app at Mail
+    And the connected account appears without changing pages or reopening the app
+    And reconnecting the same account clears the waiting message too
+    And an older account refresh cannot replace the newly connected account
+    And Safari offers "Open LeadingLight" if the automatic return is blocked
+    And a development app returns to its own window, not the released app
+    But cancelling consent returns to Mail without changing existing connections
+    And the cancellation notice clears when I leave Mail
+    And an expired or unrelated return link cannot change the workspace or claim success
+    And a connection started in the web app stays in the web app
+    And cancelling in the web app opens Mail with the cancellation notice, even during startup
+
+  Scenario: The deployed service accepts Mail from installed apps
+    Given the Gmail service has been configured and deployed
+    When the signed-in Mac requests its Gmail accounts
+    Then it receives its workspace's accounts without "This native session cannot use this route."
+    But a revoked device is still refused
+    And native requests cannot use Google's callback or delete mail
+
   Scenario: Before any account is connected
     Given no Gmail account is connected
     When I open Mail
     Then the title is "Mail" over "LeadingLight reads your new mail and tells you what needs you. Nothing is sent or put away unless you say so." and "Connect Gmail"
     When I press "Connect Gmail"
     Then it says "Finish in the browser window that opened. This page updates by itself." and shows Start fresh once the account is there
+    And while waiting the button reads "Open Google again", so I can retry if I closed Google
     But signed out of LeadingLight, the button reads "Sign in to connect Gmail" and opens the account dialog
     And if I cancel at Google, Mail says "Connection cancelled. Nothing changed."
     And if the service is not set up or cannot be reached, it says why with "Try again", and "Connect Gmail" is disabled
@@ -47,6 +80,7 @@ Feature: Mail is a look, not an inbox
     When I open Mail
     Then the title is "Start fresh" and it says "14,236 mails are in your two inboxes."
     And "7 days" is chosen from "3 days", "7 days" and "14 days"
+    And "Add another account" is centred on the last account's row
     When I press Enter
     Then the title is "Reading the last 7 days"
     And mail older than 7 days is never listed, read or changed

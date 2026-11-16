@@ -60,8 +60,8 @@ test('OAuth, multiple accounts, refresh, paging, permissions and idempotent writ
     return response({ ...created, id: eventId || 'event', etag: '"v1"' });
   };
   const run = (action, body, user = owner) => calendarRequest({ request: new Request(`${env.APP_ORIGIN}/api/calendar/${action}`, { method: body ? 'POST' : 'GET', ...(body && { body: JSON.stringify(body) }) }), env, sql, user: { id: user }, readBody: (r) => r.json(), fetcher });
-  const connect = async () => {
-    const { url } = await (await run('connect', {})).json();
+  const connect = async (body = {}) => {
+    const { url } = await (await run('connect', body)).json();
     const authorization = new URL(url);
     assert.equal(authorization.searchParams.get('code_challenge_method'), 'S256');
     return new Request(`${env.APP_ORIGIN}/api/calendar/callback?state=${authorization.searchParams.get('state')}&code=code`);
@@ -79,6 +79,19 @@ test('OAuth, multiple accounts, refresh, paging, permissions and idempotent writ
     assert.equal((await (await run('accounts', undefined, other)).json()).accounts.length, 0);
     const cancel = new URL((await connect()).url); cancel.searchParams.set('error', 'access_denied');
     assert.match((await callback(new Request(cancel))).headers.get('location'), /cancelled/);
+    // Seam: the callback must return only to the initiating app, with no Google credentials in the link.
+    for (const app of ['leadinglight', 'leadinglight-dev-cb7069']) {
+      const id = randomUUID(), native = await connect({ app, id }), tampered = new URL(native.url);
+      tampered.searchParams.set('app', 'https://evil.test'); tampered.searchParams.set('id', randomUUID());
+      const back = new URL((await callback(new Request(tampered))).headers.get('location'));
+      assert.equal(back.pathname, '/connect/complete');
+      assert.deepEqual(Object.fromEntries(back.searchParams), { integration: 'calendar', result: 'connected', app, id });
+      const cancelled = new URL((await connect({ app, id })).url); cancelled.searchParams.set('error', 'access_denied');
+      assert.equal(new URL((await callback(new Request(cancelled))).headers.get('location')).searchParams.get('result'), 'cancelled');
+      await assert.rejects(callback(native), /expired/);
+    }
+    await assert.rejects(connect({ app: 'https://evil.test', id: randomUUID() }), /return address/);
+    await assert.rejects(connect({ app: 'leadinglight', id: '-'.repeat(36) }), /return address/);
     const rows = await sql`SELECT tokens FROM calendar_accounts WHERE owner=${owner}`;
     assert.equal(rows.some((r) => r.tokens.includes('refresh')), false);
     const target = { account: 'personal', calendar: 'primary' };

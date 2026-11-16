@@ -116,7 +116,7 @@ async function change(edit: (s: MailState) => void) {
 }
 
 // A workspace's mail never shows in another: switching drops it, and late answers are ignored.
-let generation = 0;
+let generation = 0, refreshing = 0;
 // A full listing of the window when the app opens, after Start fresh and every 30 minutes; in
 // between, only mail since the last listing, merged by key.
 const FULL = 30 * 60_000, MARGIN = 15 * 60_000;
@@ -151,7 +151,7 @@ export async function refresh(o: { full?: boolean } = {}) {
   const who = ownerNow();
   if (who !== owner) reset(who);
   if (!who) return;
-  const run = generation, src = await source;
+  const run = generation, request = ++refreshing, src = await source;
   status.loading = true;
   publish();
   try {
@@ -173,7 +173,7 @@ export async function refresh(o: { full?: boolean } = {}) {
         throw e;
       }
     }));
-    if (run !== generation) return;
+    if (run !== generation || request !== refreshing) return;
     // Lines and keeps for mail gone from a live inbox go too: it was dealt with, here or in Gmail.
     const live = new Set(next.filter((a) => !a.out).map((a) => a.account)), present = new Set(found.map((m) => m.key));
     const gone = (k: string) => whole && live.has(JSON.parse(k)[0]) && !present.has(k);
@@ -187,9 +187,9 @@ export async function refresh(o: { full?: boolean } = {}) {
     if (s.start) listed = { any: at, full: full ? at : listed.full };
     status.error = "";
   } catch (e) {
-    if (run === generation) status.error = why(e);
+    if (run === generation && request === refreshing) status.error = why(e);
   } finally {
-    if (run === generation) {
+    if (run === generation && request === refreshing) {
       status.loading = false;
       publish();
     }

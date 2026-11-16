@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTab } from '@leadinglight/ui/components/tabs';
 import { Calendar as DatePicker } from '@leadinglight/ui/components/calendar';
 import { Popover, PopoverTrigger, PopoverPopup } from '@leadinglight/ui/components/popover';
 import { useCloud } from '~/lib/cloud';
+import { accountReturns, clearAccountReturn } from '~/lib/account-return';
 import { calendarApi, calendarEvents, calendarKey, calendarList, changeCalendar, connectCalendar, dayAfter, dayString, eventEnd, eventStart, freeTime, writable, type Calendar, type CalendarAccount, type CalendarEvent } from '~/lib/calendar';
 
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -35,6 +36,7 @@ function CalendarWorkspace({ owner }: { owner?: string }) {
   const [error, setError] = useState(''), [notice, setNotice] = useState(''), [synced, setSynced] = useState(0);
   const [edit, setEdit] = useState<{ event?: CalendarEvent; at?: number } | null>(null);
   const [now, setNow] = useState(Date.now()), generation = useRef(0), alive = useRef(true);
+  const returned = accountReturns.use().calendar;
   const shown = calendars.filter((c) => !hidden.includes(calendarKey(c)));
   const count = view === 'day' ? 1 : 7;
   const refresh = useCallback(async () => {
@@ -51,6 +53,18 @@ function CalendarWorkspace({ owner }: { owner?: string }) {
     finally { if (alive.current && run === generation.current) setBusy(false); }
   }, [owner, day, count, JSON.stringify(hidden)]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; generation.current++; }; }, []);
+  useEffect(() => {
+    const front = () => void refresh();
+    window.addEventListener('leadinglight:app-focus', front);
+    return () => window.removeEventListener('leadinglight:app-focus', front);
+  }, [refresh]);
+  useEffect(() => {
+    if (!returned || returned.owner !== owner) return;
+    clearAccountReturn('calendar', returned.id);
+    setSettings(false);
+    setNotice(returned.result === 'connected' ? 'Google connected.' : 'Connection cancelled. Your existing calendars are unchanged.');
+    if (returned.result === 'connected') void refresh();
+  }, [returned, refresh]);
   useEffect(() => {
     setEvents([]); setSynced(0); void refresh();
     const tick = () => { if (document.visibilityState === 'visible') void refresh(); };
@@ -81,7 +95,7 @@ function CalendarWorkspace({ owner }: { owner?: string }) {
       {!owner ? <div className="space-y-3 rounded-lg border p-6"><CalendarDays className="size-6 text-muted-foreground" /><h2 className="font-medium">Personal and work, in one place</h2><p className="max-w-lg text-sm text-muted-foreground">Connect your workspace, then add as many Google accounts as you need. See your day, make space for focus, and ask your note agent to help schedule.</p><Button onClick={() => window.dispatchEvent(new Event('leadinglight:cloud-account'))}>Sign in to connect calendars</Button></div> : <>
         {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
         {error && !settings && <div role="alert" className="rounded-lg border p-3 text-sm"><p>{error}</p><p className="mt-1 text-muted-foreground">{synced ? 'The events below may be out of date. Refresh before planning.' : 'Calendar data is unavailable. Your notes still work.'}</p><Button variant="ghost" disabled={busy} onClick={() => void refresh()}>Try again</Button></div>}
-        {!accounts.length && !busy && !error ? <div className="space-y-3 rounded-lg border p-6"><h2 className="font-medium">Start with one calendar</h2><p className="max-w-lg text-sm text-muted-foreground">Bring in your existing plans. Add work or another account whenever you like. You choose which calendars appear.</p><Button onClick={() => void action(async () => { await connectCalendar(); setNotice('Finish connecting in Google, then return here.'); })}>Connect Google Calendar</Button><p className="text-xs text-muted-foreground">Connections are encrypted on our service. Google events are fetched while you use the app. You can disconnect at any time.</p></div> : <>
+        {!accounts.length && !busy && !error ? <div className="space-y-3 rounded-lg border p-6"><h2 className="font-medium">Start with one calendar</h2><p className="max-w-lg text-sm text-muted-foreground">Bring in your existing plans. Add work or another account whenever you like. You choose which calendars appear.</p><Button onClick={() => void action(async () => { await connectCalendar(); setNotice('Finish connecting in Google. Your calendar updates when you return.'); })}>Connect Google Calendar</Button><p className="text-xs text-muted-foreground">Connections are encrypted on our service. Google events are fetched while you use the app. You can disconnect at any time.</p></div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2"><Button variant="outline" aria-label="Previous day or week" onClick={() => setDay(dayAfter(day, -count))}><ChevronLeft className="size-4" /></Button><Button variant="outline" onClick={() => setDay(dayString(new Date()))}>Today</Button><Button variant="outline" aria-label="Next day or week" onClick={() => setDay(dayAfter(day, count))}><ChevronRight className="size-4" /></Button>
               <Popover><PopoverTrigger render={<Button variant="ghost" className="max-w-full whitespace-normal text-left" />}>{dateLabel(day)}</PopoverTrigger><PopoverPopup><DatePicker mode="single" defaultMonth={new Date(`${day}T12:00:00`)} selected={new Date(`${day}T12:00:00`)} onSelect={(d) => d && selectDay(dayString(d))} /></PopoverPopup></Popover>
@@ -102,7 +116,7 @@ function CalendarWorkspace({ owner }: { owner?: string }) {
         </>}
       </>}
     </div>
-    <Dialog open={settings} onOpenChange={setSettings}><DialogPopup className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Your calendars</DialogTitle><DialogDescription>Show what matters. Hiding a calendar does not change it in Google.</DialogDescription></DialogHeader><div className="space-y-5 px-6 pb-6">{error && <p role="alert" className="text-sm text-destructive">{error}</p>}{accounts.map((a) => <section key={a.account} className="space-y-3"><p className="break-all text-sm font-medium">{a.email}</p>{calendars.filter((c) => c.account === a.account).map((c) => <Field key={c.id}><FieldLabel className="text-sm font-normal"><Checkbox checked={!hidden.includes(calendarKey(c))} onCheckedChange={(v) => toggle(calendarKey(c), v)} />{c.summary}{!writable(c) && ' (read-only)'}</FieldLabel></Field>)}<Button variant="ghost" size="sm" disabled={busy} onClick={() => void action(async () => { await calendarApi('disconnect', { account: a.account }); setEvents((old) => old.filter((e) => e.calendar.account !== a.account)); await refresh(); })}>Disconnect {a.email}</Button></section>)}<Button disabled={busy || !owner} onClick={() => void action(async () => { await connectCalendar(); setNotice('Finish connecting in Google, then return here.'); })}>{accounts.length ? 'Add or reconnect Google account' : 'Connect Google Calendar'}</Button><p className="text-xs text-muted-foreground">Disconnect removes our saved access. It does not delete Google events. You can also remove LeadingLight in your Google account’s connected apps.</p></div></DialogPopup></Dialog>
+    <Dialog open={settings} onOpenChange={setSettings}><DialogPopup className="max-h-[85dvh] overflow-y-auto"><DialogHeader><DialogTitle>Your calendars</DialogTitle><DialogDescription>Show what matters. Hiding a calendar does not change it in Google.</DialogDescription></DialogHeader><div className="space-y-5 px-6 pb-6">{error && <p role="alert" className="text-sm text-destructive">{error}</p>}{accounts.map((a) => <section key={a.account} className="space-y-3"><p className="break-all text-sm font-medium">{a.email}</p>{calendars.filter((c) => c.account === a.account).map((c) => <Field key={c.id}><FieldLabel className="text-sm font-normal"><Checkbox checked={!hidden.includes(calendarKey(c))} onCheckedChange={(v) => toggle(calendarKey(c), v)} />{c.summary}{!writable(c) && ' (read-only)'}</FieldLabel></Field>)}<Button variant="ghost" size="sm" disabled={busy} onClick={() => void action(async () => { await calendarApi('disconnect', { account: a.account }); setEvents((old) => old.filter((e) => e.calendar.account !== a.account)); await refresh(); })}>Disconnect {a.email}</Button></section>)}<Button disabled={busy || !owner} onClick={() => void action(async () => { await connectCalendar(); setNotice('Finish connecting in Google. Your calendar updates when you return.'); })}>{accounts.length ? 'Add or reconnect Google account' : 'Connect Google Calendar'}</Button><p className="text-xs text-muted-foreground">Disconnect removes our saved access. It does not delete Google events. You can also remove LeadingLight in your Google account’s connected apps.</p></div></DialogPopup></Dialog>
     {edit && <EventEditor calendars={calendars} preferred={shown.find((c) => writable(c) && c.primary) || shown.find(writable)} initial={edit.event} focus={edit.at !== undefined} at={edit.at ?? new Date(`${day}T09:00:00`).getTime()} onClose={() => setEdit(null)} onSaved={(removed) => { setEdit(null); setNotice(removed ? 'Deleted from Google Calendar.' : 'Saved to Google Calendar.'); void refresh(); }} />}
   </div>;
 }

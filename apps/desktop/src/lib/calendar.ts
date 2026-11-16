@@ -1,5 +1,7 @@
+import { accountReturnRequest } from './account-return';
 import { cloudApi, cloudState } from './cloud';
 import { isNative } from './platform';
+import { openAccountBrowser } from './account-browser';
 
 export type CalendarAccount = { account: string; email: string };
 export type Calendar = { id: string; summary: string; accessRole: string; timeZone: string; primary?: boolean; account: string; email: string };
@@ -23,9 +25,9 @@ export async function connectCalendar() {
   const native = await isNative;
   const popup = native ? null : window.open('about:blank', '_blank');
   try {
-    const { url } = await calendarApi<{ url: string }>('connect', {});
+    const { url } = await calendarApi<{ url: string }>('connect', await accountReturnRequest('calendar'));
     if (new URL(url).origin !== 'https://accounts.google.com') throw new Error('Invalid Google connection URL.');
-    if (native) await (await import('@tauri-apps/plugin-opener')).openUrl(url);
+    if (native) await openAccountBrowser(url);
     else if (popup) { popup.opener = null; popup.location.href = url; }
     else throw new Error('Allow popups to connect Google, then try again.');
   } catch (e) { popup?.close(); throw e; }

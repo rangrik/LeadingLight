@@ -1,3 +1,4 @@
+import { connectionContext, connectionRedirect } from './account-return.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { seal, unseal } from './calendar.mjs';
 import { NativeError } from './native.mjs';
@@ -115,7 +116,7 @@ export async function gmailRequest({ request, env, sql, user, readBody, fetcher 
   if (action === 'connect') {
     const state = randomBytes(32).toString('base64url'), verifier = randomBytes(32).toString('base64url');
     await sql`DELETE FROM gmail_oauth WHERE expires_at<now()`;
-    await sql`INSERT INTO gmail_oauth(state,owner,verifier) VALUES(${hash(state)},${user.id},${seal(key(env), binding(user.id), verifier)})`;
+    await sql`INSERT INTO gmail_oauth(state,owner,verifier) VALUES(${hash(state)},${user.id},${seal(key(env), binding(user.id), connectionContext(verifier, body))})`;
     const params = new URLSearchParams({ client_id: env.GMAIL_CLIENT_ID, redirect_uri: callbackUrl(env), response_type: 'code', scope: `openid email ${scope}`, access_type: 'offline', prompt: 'consent select_account', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
     return json({ url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` });
   }
@@ -176,9 +177,10 @@ export async function gmailCallback({ request, env, sql, user, fetcher = fetch }
   need(string(state, 100), 400, 'Invalid Gmail connection. Start again from Mail.');
   const [pending] = await sql`DELETE FROM gmail_oauth WHERE state=${hash(state)} AND owner=${user.id} AND expires_at>now() RETURNING verifier`;
   need(pending, 400, 'This Gmail connection expired or belongs to another workspace. Start again from Mail.');
-  if (params.has('error')) return Response.redirect(`${env.APP_ORIGIN}/?gmail=cancelled`, 303);
+  const stored = unseal(key(env), binding(user.id), pending.verifier), context = typeof stored === 'string' ? { verifier: stored } : stored;
+  if (params.has('error')) return connectionRedirect(env, 'gmail', 'cancelled', context);
   need(string(params.get('code'), 4096), 400, 'Google did not return an authorization code.');
-  const tokens = await tokenRequest(env, { code: params.get('code'), grant_type: 'authorization_code', redirect_uri: callbackUrl(env), code_verifier: unseal(key(env), binding(user.id), pending.verifier) }, fetcher);
+  const tokens = await tokenRequest(env, { code: params.get('code'), grant_type: 'authorization_code', redirect_uri: callbackUrl(env), code_verifier: context.verifier }, fetcher);
   need((tokens.scope || '').split(' ').includes(scope), 403, 'Allow LeadingLight to read, reply to and put away Gmail when connecting.');
   need(string(tokens.access_token) && Number.isFinite(tokens.expires_in), 502, 'Google returned an invalid connection.');
   const profile = await google('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${tokens.access_token}` } }, fetcher);
@@ -188,5 +190,5 @@ export async function gmailCallback({ request, env, sql, user, fetcher = fetch }
   need(string(tokens.refresh_token, 4096), 400, 'Google did not grant background access. Reconnect with consent.');
   tokens.expires = Date.now() + tokens.expires_in * 1000;
   await sql`INSERT INTO gmail_accounts(owner,account,email,tokens) VALUES(${user.id},${profile.sub},${profile.email},${seal(key(env), binding(user.id, profile.sub), tokens)}) ON CONFLICT(owner,account) DO UPDATE SET email=excluded.email,tokens=excluded.tokens`;
-  return Response.redirect(`${env.APP_ORIGIN}/?gmail=connected`, 303);
+  return connectionRedirect(env, 'gmail', 'connected', context);
 }

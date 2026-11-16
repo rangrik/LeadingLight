@@ -57,6 +57,20 @@
       "endpoints": [
         "https://github.com/rangrik/LeadingLight/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "leadinglight"
+        ]
+      },
+      "mobile": [
+        {
+          "scheme": [
+            "leadinglight"
+          ]
+        }
+      ]
     }
   },
   "bundle": {

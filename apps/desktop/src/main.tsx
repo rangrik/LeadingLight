@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from './App';
+import { AccountReturn } from './components/account-return';
 import { BrowserAddressEntry } from './components/browser-migration';
 import "./styles.css";
 import { platformReady } from "./lib/platform";
@@ -9,7 +10,7 @@ document.documentElement.dataset.authorship = localStorage.getItem("leadinglight
 
 void platformReady.then(() => ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <BrowserAddressEntry><App /></BrowserAddressEntry>
+    {location.pathname === '/connect/complete' ? <AccountReturn /> : <BrowserAddressEntry><App /></BrowserAddressEntry>}
   </React.StrictMode>,
 ));
 

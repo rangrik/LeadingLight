@@ -1,6 +1,7 @@
 import { cloudApi, refreshCloud, setCloud } from './cloud';
 import { phone, platformReady } from './platform';
 import { createStore } from './state';
+import { openAccountBrowser } from './account-browser';
 
 type KeyEnvelope = { publicKey: JsonWebKey; iv: string; data: string };
 export type NativeApproval = { id: string; deviceName: string; publicKey: JsonWebKey; expiresAt: string };
@@ -33,7 +34,7 @@ export const cancelNativeConnection = () => { cancelled = true; };
 // The browser is one way in, for a first device; it opens only when asked for.
 export async function openNativeApproval() {
   const { url } = nativeConnection.get();
-  if (url) await (await import('@tauri-apps/plugin-opener')).openUrl(url);
+  if (url) await openAccountBrowser(url);
 }
 
 export async function connectNativeAccount() {

@@ -1,3 +1,4 @@
+import { watchAccountReturns } from '~/lib/account-return';
 import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
@@ -172,6 +173,7 @@ export default function App() {
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
+    const opening = panes.get().root;
     loadSpace()
       .then(async (list) => {
         await foldDescriptions().catch(console.error);
@@ -186,6 +188,8 @@ export default function App() {
           if (mac && id.startsWith(BROWSER_VIEW) && !page && !id.split("/")[2]) return false;
           return !page || list.some((p) => p.id === page);
         };
+        // Restoring the workspace must not undo a page the person already opened.
+        if (panes.get().root !== opening) return;
         if (gmailReturn) { openPage(MAIL_VIEW); return; }
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
@@ -193,6 +197,8 @@ export default function App() {
       })
       .catch(console.error);
   }, []);
+
+  useEffect(() => loaded ? watchAccountReturns((integration) => { useStore.getState().setView({ kind: 'workspace' }); leaveBrowser(); openPage(integration === 'gmail' ? MAIL_VIEW : CALENDAR_VIEW); }) : undefined, [loaded]);
 
   const create = useCallback(() => {
     newPage(PAGE_TYPE)
