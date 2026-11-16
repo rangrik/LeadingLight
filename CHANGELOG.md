@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.1](https://github.com/rangrik/LeadingLight/compare/v0.6.0...v0.6.1) (2026-11-16)
+
+
+### Fixes
+
+* restore Mail access and return Google connections to the app ([ad62e8d](https://github.com/rangrik/LeadingLight/commit/ad62e8d58cd2ac4e4dd0300ed938d5f85903a931))
+
+
+### Documentation
+
+* bring the docs site and landing pages up to date ([e6b844c](https://github.com/rangrik/LeadingLight/commit/e6b844c4b95cd64eab0fc20df1d7d7991731bb75))
+* use a version not yet out in the update example ([e5d6463](https://github.com/rangrik/LeadingLight/commit/e5d64638bca338d0783c7b11c45e8aed179e6324))
+
 ## [0.6.0](https://github.com/rangrik/LeadingLight/compare/v0.5.0...v0.6.0) (2026-11-15)
 
 
