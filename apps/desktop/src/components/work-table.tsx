@@ -1,5 +1,5 @@
 import { Check, ChevronRight, Play } from "lucide-react";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Checkbox } from "@leadinglight/ui/components/checkbox";
 import { Table, TableBody, TableCaption, TableCell, TableRow } from "@leadinglight/ui/components/table";
@@ -18,20 +18,22 @@ import { formatAgo } from "~/lib/format";
 import { pageLabel } from "~/lib/labels";
 import { whenLive } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { iconFor, pageOf, propOf, space } from "~/lib/space";
+import { inProject } from "~/lib/scope";
+import { iconFor, pageOf, space } from "~/lib/space";
 import { reportOf, reportsOn, subtasksOf, workOf } from "~/lib/work";
 import { sessions, STATE_LABEL, stateOf, watchWork } from "~/lib/work-watch";
 
 // The Work table (features/work-table.feature): one row per task with its agent, state, steps,
 // latest report and the one press it wants. On a task's card its rows are the subtasks; on a
-// project page, the project's tasks at work. Below 720 px the agent and report go under the title.
+// project page, the project's tasks at work. Below 900 px the agent and report go under the
+// title: five columns beside it left a title about 110 px at 720.
 
 const name = (id: string) => pageLabel(pageOf(id)?.title ?? "");
 const done = (p: ObjectSummary) => p.properties.done === true;
 const fail = (e: Error) => toastManager.add({ type: "error", title: "That didn't go", description: e.message });
 // Every cell starts with a 24 px line, so text and buttons share one baseline whatever wraps.
-const cell = "h-8 py-1 align-top leading-5";
-const line = "flex h-6 min-w-0 items-center";
+export const cell = "h-8 py-1 align-top leading-5";
+export const line = "flex h-6 min-w-0 items-center";
 
 // Opens the task with the report under its words in view, unfolded.
 function openReport(task: string, report: string, e: React.MouseEvent) {
@@ -75,7 +77,7 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
   // One look for every action, so their right edges line up.
   const action =
     state === "input" ? (
-      <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("feed"))} size="xs" variant="outline">
+      <Button onClick={() => (ask && feedFocus.set(ask.id), showBar("inbox", "needs"))} size="xs" variant="outline">
         Answer
       </Button>
     ) : state === "review" && subs.every(done) ? (
@@ -94,10 +96,10 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
       </Button>
     ) : null;
   const meta = [who, label, steps, report, later].filter(Boolean);
-  const wide = "hidden @min-[720px]/work:table-cell";
+  const wide = "hidden @min-[900px]/work:table-cell";
   return (
     <TableRow data-task={task.id}>
-      <TableCell className={cn(cell, "w-full max-w-0 px-0 @min-[720px]/work:pe-2.5")}>
+      <TableCell className={cn(cell, "w-full max-w-0 px-0 @min-[900px]/work:pe-2.5")}>
         <div className={cn(line, "gap-2")}>
           {state === "done" ? <Checkbox aria-label="Done" checked readOnly /> : <RowIcon icon={iconFor(task)} />}
           <button
@@ -107,18 +109,19 @@ function WorkRow({ row, parent, ready, ask }: { row: Row; parent?: string; ready
           >
             {pageLabel(task.title)}
           </button>
-          {action && <span className="shrink-0 @min-[720px]/work:hidden">{action}</span>}
+          {action && <span className="shrink-0 @min-[900px]/work:hidden">{action}</span>}
         </div>
-        {/* Narrow: what the columns say, under the title; each part whole or cut, its dot with it. */}
-        <div className="ms-6 whitespace-normal text-muted-foreground @min-[720px]/work:hidden">
-          {meta.map((m, i) => (
-            <Fragment key={i}>
-              <span className="inline-flex max-w-full gap-1 align-top">
+        {/* Narrow: what the columns say, under the title; each part whole or cut. Its dot leads it,
+            in the 12 px the lines are pulled left and cut by, so no line starts or ends in one. */}
+        <div className="ms-6 overflow-hidden text-muted-foreground @min-[900px]/work:hidden">
+          <div className="-ms-3 whitespace-normal">
+            {meta.map((m, i) => (
+              <span className="inline-flex max-w-full gap-1 ps-1 align-top" key={i}>
+                <span className="w-1 shrink-0 text-center">·</span>
                 {typeof m === "string" ? <span className="truncate">{m}</span> : m}
-                {i < meta.length - 1 && <span>·</span>}
-              </span>{" "}
-            </Fragment>
-          ))}
+              </span>
+            ))}
+          </div>
         </div>
       </TableCell>
       <TableCell className={cn(cell, wide, "text-muted-foreground")}>{who && <span className={line}>{who}</span>}</TableCell>
@@ -207,13 +210,16 @@ export function StartReady({ parent }: { parent: string }) {
   );
 }
 
-// A project's tasks at work, under its properties: those with an agent or started subtasks.
+// A project's tasks at work: those with an agent or started subtasks, subtasks aside.
+export const tasksAtWork = (projectId: string, pages: ObjectSummary[]) =>
+  pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && inProject(p, projectId) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+
+// A project's tasks at work, under its properties.
 export function ProjectWork({ pageId }: { pageId: string }) {
   const { pages } = space.use();
   const box = useRef<HTMLDivElement>(null);
   useAnchored(box);
-  const ofProject = (p: ObjectSummary) => Object.entries(p.properties).some(([k, v]) => propOf(k)?.kind === "relation" && propOf(k)?.options.type === "project" && Array.isArray(v) && v.includes(pageId));
-  const tasks = pages.filter((p) => isTask(p) && !(p.properties["subtask-of"] as string[] | undefined)?.length && ofProject(p) && (agentOfTask(p) || subtasksOf(p.id, pages).some((s) => agentOfTask(s))));
+  const tasks = tasksAtWork(pageId, pages);
   const going = tasks.filter((t) => !done(t)).length;
   return (
     <div ref={box}>

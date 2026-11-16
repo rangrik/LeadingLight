@@ -1,0 +1,63 @@
+{
+ "port": 1438,
+ "name": "3B",
+ "steps": [
+  {
+   "click": {
+    "text": "Notes on Thinking in Systems",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "key": "Alt+Meta+KeyL",
+   "after": 1800
+  },
+  {
+   "caption": "Option 3B · Connections. A bar panel maps the page in front to its neighbours.",
+   "hold": 2800
+  },
+  {
+   "still": "panel"
+  },
+  {
+   "caption": "Below the map: links from this page, linked here, shares with, people, and names not linked yet.",
+   "hold": 2800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Link",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "Not linked yet: one press turns the name in the text into a link, and the row moves up.",
+   "hold": 2800
+  },
+  {
+   "still": "linked"
+  },
+  {
+   "click": {
+    "text": "Reading list 2026"
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Click any row or node: that page opens beside, and the panel follows it.",
+   "hold": 2600
+  },
+  {
+   "still": "beside"
+  },
+  {
+   "caption": "The page itself never changes; connections live in the panel.",
+   "hold": 1800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

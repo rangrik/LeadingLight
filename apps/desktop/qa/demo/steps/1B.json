@@ -1,0 +1,76 @@
+{
+ "port": 1432,
+ "name": "1B",
+ "steps": [
+  {
+   "caption": "Option 1B · Project rail. Pick a project; the whole sidebar follows it.",
+   "hold": 2800
+  },
+  {
+   "still": "all"
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "LeadingLight",
+    "exact": true
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Hover a project: its name, its key, and what needs you.",
+   "hold": 2200
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "LeadingLight",
+    "exact": true
+   },
+   "after": 1500
+  },
+  {
+   "caption": "Scoped: Overview and Chat, this project's Recent, its types with counts.",
+   "hold": 3000
+  },
+  {
+   "still": "scoped"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Tasks"
+   },
+   "after": 1500
+  },
+  {
+   "caption": "Type views filter to the project, with a chip you can remove.",
+   "hold": 2600
+  },
+  {
+   "still": "tasks"
+  },
+  {
+   "key": "Meta+Digit3",
+   "after": 1500
+  },
+  {
+   "caption": "⌘3 switches to Home office: only its pages, and its own panes.",
+   "hold": 2600
+  },
+  {
+   "still": "home-office"
+  },
+  {
+   "key": "Meta+Digit1",
+   "after": 1500
+  },
+  {
+   "caption": "⌘1 is All: the sidebar as it is today.",
+   "hold": 2000
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

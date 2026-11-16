@@ -1,0 +1,84 @@
+{
+ "port": 1437,
+ "name": "3A",
+ "steps": [
+  {
+   "click": {
+    "role": "button",
+    "name": "Books",
+    "exact": true
+   },
+   "after": 1500
+  },
+  {
+   "click": {
+    "text": "Thinking in Systems",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Option 3A · Reading layout. A source gets a “Your words” column beside the text.",
+   "hold": 3000
+  },
+  {
+   "still": "book"
+  },
+  {
+   "hover": {
+    "text": "Meadows",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "caption": "Concepts: names in the text that could be pages. One press links them.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "text": "Meadows",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "caption": "Linked. Takeaways is a place for your own words; it saves with the page.",
+   "hold": 2600
+  },
+  {
+   "still": "linked"
+  },
+  {
+   "click": {
+    "text": "Notes on Thinking in Systems",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "key": "Alt+Meta+KeyR",
+   "after": 1800
+  },
+  {
+   "caption": "Any page can turn it on with ⌥⌘R. Notes lists your sidenotes; click one to jump to it.",
+   "hold": 3000
+  },
+  {
+   "still": "notes"
+  },
+  {
+   "click": {
+    "text": "Forrester"
+   },
+   "after": 1800
+  },
+  {
+   "caption": "Make page: a concept page is made and linked in place. Nothing opens.",
+   "hold": 2600
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

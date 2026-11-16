@@ -504,6 +504,11 @@ the count rises quietly and the text never moves. Today keeps its rows and gets 
 what earlier days left, with Dismiss all as the pressure valve that keeps a persistent list from
 becoming a pile.
 
+2026-11-08: three of those icons were inboxes, named only in tooltips, so they are now one Inbox
+with three sections (Needs you, Suggested, Captured) and one count; the strip keeps Inbox, Ask and
+Quick capture. The panel no longer switches views by itself: a page with suggestions only lifts
+its rows to the top of the Inbox, and the pin ("Keep order") stops that.
+
 Tabs are a layer inside a pane, not a new window model: the split stays the split, a tab keeps its
 own back and forward, and the row shows only with two or more tabs so one page looks as it did.
 Panes, tabs and the active tab are restored on launch. Quick capture is one box because what comes
@@ -1044,3 +1049,42 @@ upset. Then one mail at a time, one decision each, five at most. It ends, and sa
 took. Nothing nags: no counts, no badges, no streaks. There are no work-hours rules, because
 work hours differ from person to person; each mail says which account it came to. See
 `docs/MAIL.md`.
+
+## 56. One door: the review's options are judged by places to look (2026-11-14)
+
+The UX review (2026-11-08) built eighteen options for six issues as separate branches. With many
+agents at work, every signal on screen is a pull to switch, so each option was judged by one test:
+does it add a place to look, or remove one. Nine were taken and made to work together on one branch
+([PROJECT-6.md](PROJECT-6.md)); nine were left out with their branches kept.
+
+What follows from the test. One number in the window (the Inbox's). One colour with a meaning
+(amber: an agent waits for you). One project at a time (the rail). Nothing moves by itself.
+Options that showed more state at once (every project's dots, a second home, a links map, three
+labelled inboxes) lost to ones that showed less, even where they were quicker to scan.
+
+Two picks overlap on purpose: the Inbox's "Needs you" and the card's Answer are the same question
+in two places, so answering in either clears both.
+
+The quiet pass applies the test to what was left. The one number counts only Needs you: a
+suggestion or a capture can wait, so it gets no number. A state that is not amber is a word, read
+when pointed at, because a blue or green dot is a pull with nothing to do. A sidenote folds the
+sidebar only when its margin has no room and leaves the rail: the rail is how a project is chosen,
+and a note should not take that away.
+
+## 57. The Work view shows git's worktrees; New work is Assign with the task made first (2026-11-14)
+
+A project's Work view lists its tasks in flight and then every worktree of its folder
+(`features/work-view.feature`, [PROJECT-6.md](PROJECT-6.md) 1). The list is the runtime's
+(`GET /v1/worktrees`), which is git's own, so worktrees other tools made are there too; the app
+keeps no list. Who is in one is read from the runtime's live sessions by their folder, not from
+Agent pages, so a chat on its own branch and another tool's agent show as well. State is words.
+
+New work makes a task of the project from what was written (the first line its title) and then
+calls Assign, so 21 holds: one Agent page, one session named after it, and a worktree named from
+the title (42). A task no agent was made for is deleted again. With no agent it only makes the
+worktree. Its key is ⇧⌘N, as ⌘N is New page.
+
+Remove asks, keeps the branch, and is refused while an agent in the worktree is in a turn or waits
+on the person: the runtime ends the sessions of a worktree it removes. Files not committed are the
+runtime's refusal to give; only then does the dialog offer to force it. The checkout is never
+removed, nor a worktree whose name another shares, since the runtime removes by name.

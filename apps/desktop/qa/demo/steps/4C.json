@@ -1,0 +1,80 @@
+{
+ "port": 1442,
+ "name": "4C",
+ "steps": [
+  {
+   "caption": "Option 4C · Side-by-side review. The brief on the left, the report on the right.",
+   "hold": 2800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "click": {
+    "text": "Claude asks"
+   },
+   "after": 2400
+  },
+  {
+   "caption": "Pick a Feed item: the task opens left, its report right, with a review strip under the crumbs.",
+   "hold": 3000
+  },
+  {
+   "still": "panes"
+  },
+  {
+   "click": {
+    "text": "2 of 4 steps"
+   },
+   "after": 1400
+  },
+  {
+   "caption": "The strip holds the agent’s steps, the pending question, Send n notes and Accept.",
+   "hold": 2600
+  },
+  {
+   "still": "steps"
+  },
+  {
+   "click": {
+    "text": "Yearly",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Answer in the strip: the question leaves the strip and the Feed; the card says Working.",
+   "hold": 2600
+  },
+  {
+   "still": "answered"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Review next",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "Review next walks the rest of the Feed in the same two panes.",
+   "hold": 2600
+  },
+  {
+   "still": "next"
+  },
+  {
+   "caption": "No new mode: just the panes and tabs the app already has.",
+   "hold": 1800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

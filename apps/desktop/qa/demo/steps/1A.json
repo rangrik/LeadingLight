@@ -1,0 +1,78 @@
+{
+ "port": 1431,
+ "name": "1A",
+ "steps": [
+  {
+   "caption": "Option 1A · Work first. The sidebar starts with your projects, not your types.",
+   "hold": 2800
+  },
+  {
+   "still": "start"
+  },
+  {
+   "hover": {
+    "role": "button",
+    "name": "Expand LeadingLight"
+   }
+  },
+  {
+   "caption": "LeadingLight · 2: two things need you. The amber dot means “needs your input”.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Expand LeadingLight"
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Unfolded: its tasks at work, most urgent first, then its last pages.",
+   "hold": 3000
+  },
+  {
+   "still": "expanded"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Expand Home office"
+   },
+   "after": 1200
+  },
+  {
+   "caption": "A quiet project says so.",
+   "hold": 1800
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Library",
+    "exact": true
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Types, Calendar and Browser live in Library, one click away.",
+   "hold": 2600
+  },
+  {
+   "still": "library"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Library",
+    "exact": true
+   },
+   "after": 1200
+  },
+  {
+   "caption": "Fold it, and it stays folded. Recent sits right under your projects.",
+   "hold": 2400
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

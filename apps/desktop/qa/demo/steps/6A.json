@@ -1,0 +1,81 @@
+{
+ "port": 1446,
+ "name": "6A",
+ "steps": [
+  {
+   "caption": "Option 6A · Quick open. ⌘K finds any page by its name.",
+   "hold": 2600
+  },
+  {
+   "still": "start"
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 1400
+  },
+  {
+   "caption": "Recent pages first, with type and project, then commands with their keys.",
+   "hold": 2600
+  },
+  {
+   "still": "open"
+  },
+  {
+   "type": "pri",
+   "after": 900
+  },
+  {
+   "caption": "Three letters: Pricing notes, Priya Nair, the pricing task, then “New page ‘pri’”.",
+   "hold": 2600
+  },
+  {
+   "still": "typed"
+  },
+  {
+   "key": "Escape",
+   "after": 700
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 900
+  },
+  {
+   "type": "tis",
+   "after": 900
+  },
+  {
+   "caption": "Aliases count: “tis” finds Thinking in Systems.",
+   "hold": 2200
+  },
+  {
+   "key": "Escape",
+   "after": 700
+  },
+  {
+   "key": "Meta+KeyK",
+   "after": 900
+  },
+  {
+   "type": "feedback",
+   "after": 900
+  },
+  {
+   "key": "Shift+Enter",
+   "after": 1800
+  },
+  {
+   "caption": "Shift-Enter opens the page beside; ⌘-Enter opens a new tab; Enter opens in place.",
+   "hold": 2800
+  },
+  {
+   "still": "beside"
+  },
+  {
+   "caption": "Titles only, and fast. Nothing else in the app moves.",
+   "hold": 1800
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

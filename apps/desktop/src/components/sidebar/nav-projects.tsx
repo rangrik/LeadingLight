@@ -29,7 +29,7 @@ import { newNotebook } from "~/lib/notebooks";
 import { openPage } from "~/lib/panes";
 import { reportSaveError } from "~/lib/saving";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "@leadinglight/ui/components/tooltip";
-import { StateDot } from "~/components/state-dot";
+import { StateDot, StateTip } from "~/components/state-dot";
 
 // How Recent is ordered, newest first either way; kept on this Mac.
 export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent", { by: "created" });
@@ -186,10 +186,12 @@ function PageRow({ item }: { item: Row }) {
   return (
     <SidebarMenuItem>
       <StateDot className="-left-2" pageId={item.id} />
-      <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
-        {item.icon}
-        <span>{item.name}</span>
-      </SidebarMenuButton>
+      <StateTip pageId={item.id} side="right">
+        <SidebarMenuButton ref={ref} aria-current={item.isActive ? "page" : undefined} isActive={item.isActive} onClick={item.onSelect} onPointerDown={item.onDrag}>
+          {item.icon}
+          <span>{item.name}</span>
+        </SidebarMenuButton>
+      </StateTip>
       <RowMenu item={item} onRename={() => setRenaming(true)} showOnHover />
       <RenameField
         anchor={ref}

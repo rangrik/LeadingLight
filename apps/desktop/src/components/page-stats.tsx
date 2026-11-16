@@ -4,7 +4,6 @@ import { type ReactNode, useLayoutEffect, useRef, useState, useSyncExternalStore
 import { Popover, PopoverPopup, PopoverTrigger } from "@leadinglight/ui/components/popover";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow, Table as UITable } from "@leadinglight/ui/components/table";
 import { Separator } from "@leadinglight/ui/components/separator";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { useBackToPage, useWritingPrefs } from "~/lib/writing";
 
@@ -41,27 +40,19 @@ const kindName = (kind: string) => kind.replace(/([a-z])([A-Z])/g, "$1 $2").repl
 
 const Dot = ({ part }: { part: Part }) => <span className="size-2 shrink-0 rounded-full" style={{ background: `var(--syntax-${part})` }} />;
 
-// The page's counts beside its name (features/writing.feature): what is selected, or the whole
-// page. It takes only the room the crumbs leave, shows the counts that fit whole, mistakes before
-// the parts of speech, and none at all when even the first won't; a click shows them all.
+// The page's word count beside its name (features/writing.feature): one quiet line, so nothing
+// there pulls. It shows only where it fits whole in the room the crumbs leave; a click shows every count.
 export function PageStats({ id }: { id: string }) {
   const stats = usePageStats(id);
-  const prefs = useWritingPrefs();
-  const on = prefs.count;
-  const showGrammar = prefs.grammarMode === "inline";
+  const on = useWritingPrefs().count;
   const back = useBackToPage();
   const box = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState(Infinity);
+  const [fits, setFits] = useState(true);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    // Hidden counts keep their place, so measuring never moves what it measures.
-    const measure = () => {
-      const edge = el.getBoundingClientRect().right + 0.5;
-      const items = [...el.querySelectorAll("[data-count]")];
-      const over = items.findIndex((i) => i.getBoundingClientRect().right > edge);
-      setFit(over < 0 ? items.length : over);
-    };
+    // Hidden, the line keeps its place, so measuring never moves what it measures.
+    const measure = () => setFits((el.querySelector("[data-count]")?.getBoundingClientRect().right ?? 0) <= el.getBoundingClientRect().right + 0.5);
     measure();
     const watch = new ResizeObserver(measure);
     watch.observe(el);
@@ -69,52 +60,24 @@ export function PageStats({ id }: { id: string }) {
   });
   if (!on || !stats) return null;
   const sel = stats.selected?.characters ? stats.selected : null;
-  const c = sel ?? stats.page;
-
-  const items: { key: string; node: ReactNode }[] = [
-    { key: "words", node: sel ? `${n(sel.words)} of ${of(stats.page.words, ["word", "words"])}` : of(c.words, ["word", "words"]) },
-    { key: "time", node: `${minutes(c)} min read` },
-    ...(showGrammar && mistakes(c, true) ? [{ key: "spelling", node: of(mistakes(c, true), ["misspelling", "misspellings"]) }] : []),
-    ...(showGrammar && mistakes(c, false) ? [{ key: "grammar", node: of(mistakes(c, false), ["grammar issue", "grammar issues"]) }] : []),
-    ...(c.parts
-      ? PARTS.filter((p) => c.parts![p]).map((p) => ({
-          key: p,
-          node: (
-            <Tooltip>
-              <TooltipTrigger render={<span aria-label={of(c.parts![p], PART[p])} className="flex items-center gap-1" />}>
-                <Dot part={p} />
-                {n(c.parts![p])}
-                {/* Names only where a wide panel has room for them. */}
-                <span className="hidden @6xl/header:inline">{PART[p][c.parts![p] === 1 ? 0 : 1]}</span>
-              </TooltipTrigger>
-              <TooltipPopup>{of(c.parts![p], PART[p])}</TooltipPopup>
-            </Tooltip>
-          ),
-        }))
-      : []),
-    ...(Object.keys(STYLE) as (keyof typeof STYLE)[]).filter((k) => c.style[k]).map((k) => ({ key: k, node: of(c.style[k], STYLE[k]) })),
-  ];
+  const words = of(stats.page.words, ["word", "words"]);
 
   return (
     <Popover>
       {/* Taller than the crumbs' line, so it takes no height there and leaves them on the header's
           middle; its separator goes up the pixel that costs, level with the sidebar button's. */}
       <div className="-my-1 flex min-w-0 flex-1 basis-0 items-baseline overflow-hidden" ref={box}>
-        <Separator className={cn("mx-3 h-4 shrink-0 -translate-y-px self-center", !fit && "invisible")} orientation="vertical" />
+        <Separator className={cn("mx-3 h-4 shrink-0 -translate-y-px self-center", !fits && "invisible")} orientation="vertical" />
         <PopoverTrigger
           aria-label="Counts"
           className={cn(
-            "flex h-6 shrink-0 items-center gap-x-1.5 text-muted-foreground text-xs tabular-nums transition-colors duration-150 ease-out hover:text-foreground data-popup-open:text-foreground",
-            !fit && "invisible",
+            "flex h-6 shrink-0 items-center whitespace-nowrap text-muted-foreground text-xs tabular-nums transition-colors duration-150 ease-out hover:text-foreground data-popup-open:text-foreground",
+            !fits && "invisible",
           )}
+          data-count
           onPointerDown={back.onPointerDown}
         >
-          {items.map((item, i) => (
-            <span className={cn("flex h-6 items-center gap-1.5 whitespace-nowrap", i >= fit && "invisible")} data-count key={item.key}>
-              {i > 0 && <span aria-hidden>·</span>}
-              {item.node}
-            </span>
-          ))}
+          {sel ? `${n(sel.words)} of ${words}` : words}
         </PopoverTrigger>
       </div>
       <PopoverPopup align="start" className="max-h-(--available-height) w-72" finalFocus={back.finalFocus}>

@@ -84,39 +84,50 @@ export const iconFor = (p: ObjectSummary): PageIcon | undefined => readIcon(p.pr
 
 // What a pane shows: a page by its id, or a type's list of pages.
 export const TYPE_VIEW = "type:";
-export const typeView = (id: string) => `${TYPE_VIEW}${id}`;
+export const typeView = (id: string, project?: string) => `${TYPE_VIEW}${id}${project ? `@${project}` : ""}`;
+// A type's list, and the project it is narrowed to (features/project-rail.feature).
+export const readTypeView = (view: string) => {
+  const [type, project] = view.slice(TYPE_VIEW.length).split("@");
+  return { type, project };
+};
 // A page's project chat (features/project-chat.feature), crumbed under its page.
 export const CHAT_VIEW = "chat:";
 export const chatView = (pageId: string) => `${CHAT_VIEW}${pageId}`;
+// A project's tasks in flight and its folder's worktrees (features/work-view.feature).
+export const WORK_VIEW = "work:";
+export const workView = (pageId: string) => `${WORK_VIEW}${pageId}`;
 // Its agent's browser, live (features/agent-browser.feature): page id, the chat's own worktree if
 // any, and its session, whose tab it opens on.
 export const BROWSER_VIEW = "browser:";
 export const browserView = (pageId: string, worktree = "", session = "") => `${BROWSER_VIEW}${pageId}/${worktree}/${session}`;
-// The bar's views in a pane, when the window is too narrow for its panel (lib/bar.ts).
+// The bar's views in a pane, when the window is too narrow for its panel (lib/bar.ts): the
+// Inbox (it was the Feed's, hence its id) and Ask. INBOX_VIEW is the full Captures page.
 export const FEED_VIEW = "feed:";
 export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
-export const SUGGESTIONS_VIEW = "suggestions:";
 export const CALENDAR_VIEW = "calendar:";
 // Mail home, and the look (one mail, then the rest, then the end) as its own page, so the pane's Back works.
 export const MAIL_VIEW = "mail:";
 export const MAIL_LOOK = "mail:look";
-const VIEWS = [CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+const VIEWS = [CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW];
 // An empty view is a tab with no page yet.
-export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !view.startsWith(MAIL_VIEW) && !VIEWS.includes(view);
+export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(WORK_VIEW) && !view.startsWith(BROWSER_VIEW) && !view.startsWith(MAIL_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (!view) return { title: "New tab" }; // a tab with no page yet
   if (view.startsWith(MAIL_VIEW)) return { title: "Mail" };
   if (view === CALENDAR_VIEW) return { title: "Calendar" };
   if (view === INBOX_VIEW) return { title: "Captures" };
-  if (view === FEED_VIEW) return { title: "Feed" };
+  if (view === FEED_VIEW) return { title: "Inbox" };
   if (view === ASK_VIEW) return { title: "Ask" };
-  if (view === SUGGESTIONS_VIEW) return { title: "Suggestions" };
   if (view.startsWith(CHAT_VIEW)) {
     const id = view.slice(CHAT_VIEW.length);
     if (!id) return { title: "Browser chat" };
     return { title: "Chat", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
+  }
+  if (view.startsWith(WORK_VIEW)) {
+    const id = view.slice(WORK_VIEW.length);
+    return { title: "Work", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(BROWSER_VIEW)) {
     const id = view.slice(BROWSER_VIEW.length).split("/")[0];
@@ -124,8 +135,10 @@ export function describe(view: string): { title: string; icon?: PageIcon; parent
     return { title: "Browser", parent: { title: pageLabel(pageOf(id)?.title ?? ""), view: id } };
   }
   if (view.startsWith(TYPE_VIEW)) {
-    const type = typeOf(view.slice(TYPE_VIEW.length));
-    return { title: type.plural, icon: type.icon };
+    const { type: id, project } = readTypeView(view);
+    const type = typeOf(id);
+    const owner = project ? pageOf(project) : undefined;
+    return { title: type.plural, icon: type.icon, ...(owner && { parent: { title: pageLabel(owner.title), view: owner.id } }) };
   }
   const page = pageOf(view);
   // An essay not yet titled is called an essay, not "Untitled" (DECISIONS.md, 11).
@@ -143,7 +156,7 @@ export function savePage(id: string, patch: ObjectPatch, context?: ChangeContext
   if (before) checkNotebookType(before.typeId, patch.typeId);
   const write = drafts.has(id) ? storeDraft(id, patch, context) : (storing.get(id) ?? Promise.resolve()).then(() => objects.update(id, patch, context));
   return write.then(() => {
-    patchSummary(id, { updatedAt: Date.now() });
+    patchSummary(id, { updatedAt: patch.updatedAt ?? Date.now() });
     markSaved();
   }, (error) => { if (reportError) reportSaveError(error); throw error; });
 }

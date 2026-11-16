@@ -1,0 +1,75 @@
+{
+ "port": 1434,
+ "name": "2A",
+ "steps": [
+  {
+   "click": {
+    "role": "button",
+    "name": "Today",
+    "exact": true
+   },
+   "after": 1800
+  },
+  {
+   "caption": "Option 2A · Where things stand. Today starts with the state of your projects.",
+   "hold": 2800
+  },
+  {
+   "still": "today"
+  },
+  {
+   "hover": {
+    "text": "1 needs you"
+   },
+   "after": 1000
+  },
+  {
+   "caption": "One row per project in motion: counts as words, and exactly one button.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Answer",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "caption": "Answer opens the Feed on that question, ready to reply.",
+   "hold": 2400
+  },
+  {
+   "still": "answer"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "This day"
+   },
+   "after": 1400
+  },
+  {
+   "caption": "This day folds under the strip and remembers whether you left it open.",
+   "hold": 2400
+  },
+  {
+   "still": "thisday"
+  },
+  {
+   "caption": "And a daily note shows no word counts in its header any more.",
+   "hold": 2000
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

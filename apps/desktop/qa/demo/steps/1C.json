@@ -1,0 +1,68 @@
+{
+ "port": 1433,
+ "name": "1C",
+ "steps": [
+  {
+   "caption": "Option 1C · Resume rows. Three rows say where you were and what changed.",
+   "hold": 2800
+  },
+  {
+   "still": "start"
+  },
+  {
+   "hover": {
+    "text": "Asks a question"
+   },
+   "after": 1200
+  },
+  {
+   "caption": "Row 2 is the task that needs you: “LeadingLight · Asks a question”.",
+   "hold": 2400
+  },
+  {
+   "click": {
+    "text": "Write the pricing page copy",
+    "exact": true
+   },
+   "after": 1600
+  },
+  {
+   "caption": "Click a row and the task opens where you are.",
+   "hold": 2200
+  },
+  {
+   "still": "opened"
+  },
+  {
+   "click": {
+    "text": "Read chapter 3 of Thinking in Systems"
+   },
+   "modifiers": [
+    "Shift"
+   ],
+   "after": 1800
+  },
+  {
+   "caption": "Shift-click opens the page beside, as anywhere else in the app.",
+   "hold": 2400
+  },
+  {
+   "still": "beside"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Types",
+    "exact": true
+   },
+   "after": 1400
+  },
+  {
+   "caption": "Recent sits above Types, which fold and stay folded. Nothing else moved.",
+   "hold": 2600
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

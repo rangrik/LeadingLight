@@ -6,7 +6,7 @@ import { childOf, createChild, parentOf, parseHref } from "./linked";
 import { openLink } from "./links";
 import { editPage, isLive, whenLive } from "./live";
 import { objects } from "./objects";
-import { focusPane, leaves, openPage, panes, placePage } from "./panes";
+import { focusPane, leaves, openPage, type PaneNode, panes, placePage } from "./panes";
 import { pageOf } from "./space";
 import { createStore } from "./state";
 
@@ -20,10 +20,20 @@ const leafOf = (page: string) => {
 
 // The width a pane needs for its page: one with sidenotes needs room for its margin.
 export const PLAIN_NEED = 520;
-export const paneNeed = (page: string) => (pageOf(page)?.properties.thoughts ? 832 : PLAIN_NEED);
+const NOTES_NEED = 832;
+export const paneNeed = (page: string) => (pageOf(page)?.properties.thoughts ? NOTES_NEED : PLAIN_NEED);
+// What panes side by side need; `noted` is a pane whose page is getting its first sidenote.
+export const widthNeeded = (n: PaneNode, noted?: string): number =>
+  n.kind === "leaf" ? (n.id === noted ? NOTES_NEED : paneNeed(n.page)) : n.dir === "row" ? widthNeeded(n.a, noted) + widthNeeded(n.b, noted) : Math.max(widthNeeded(n.a, noted), widthNeeded(n.b, noted));
 
-// Asks the shell to fold the sidebar: sidenotes and essays want the room.
-export const makeRoom = () => window.dispatchEvent(new Event("ll:make-room"));
+// Asks the shell to fold the sidebar when the panes lack room (features/sidenotes.feature), saying
+// how much: an essay may need the rail's room too; a sidenote, made in the pane in front, never.
+export function makeRoom(note = false) {
+  const { root, focus } = panes.get();
+  const area = document.querySelector("[data-pane-area]");
+  const short = root && area ? widthNeeded(root, note ? focus : undefined) - area.clientWidth : 0;
+  if (short > 0) window.dispatchEvent(new CustomEvent("ll:make-room", { detail: note ? 0 : short }));
+}
 
 // Opens the page's essay (made the first time) beside the page. `stay` keeps the keyboard in the
 // page, as when quoting from it.

@@ -2,17 +2,19 @@ Feature: Suggestions
   Tail's offers live in the bar's Suggestions panel, not in the text. Tail reads a block when I finish
   it: Enter at its end, a full stop followed by ten seconds of quiet, or twenty seconds of quiet in any
   case; both numbers are in Settings › AI › Tail, and a browser's design mode starts them at three and
-  five. A block is judged once per wording and never sent again while its words stand. A new offer raises the count on the Suggestions icon and moves
-  nothing in the text. Today's rows and the daily card are on Today itself.
+  five. A block is judged once per wording and never sent again while its words stand. A new offer adds a row to the Inbox's Suggested, whose header says how many it holds, and moves
+  nothing in the text; the Inbox icon's number is for what agents wait on only (bar.feature). Today's rows and the daily card are on Today itself.
 
   Names used below:
   - a suggestion row: tail's row (tail.feature), with the words it is about in the foreground; hovering or
-    selecting it lights those words in the page; the nod is on the row, and Undo after it
+    selecting it lights those words in the page; the nod is on the row, and Undo after it. In the
+    panel its words wrap as one sentence: a page's name breaks where words do, and never takes a
+    line to itself; Tab reaches the name, and Enter or Space opens its page as a click does
   - "On this page" / "Elsewhere": the panel's two groups; Elsewhere holds offers about other pages and
     the day's rows, each opening its page beside when clicked. On Today, the day's rows are under the
     day bar and not in the panel, so On this page holds only offers about the note's own blocks
-  - seen: a suggestion the panel has shown while open; counts are of unseen ones, and the day's rows
-    count too until Today or the panel has shown them
+  - Suggested's number: how many rows the Inbox's Suggested holds; it is on the section's header
+    only, never on the Inbox icon
   - the daily card: on Today, once a day, when earlier days left suggestions or unreviewed captures:
     "Yesterday left 4 things." when all are from yesterday, else "Left over: 5 things.", with Go
     through, Dismiss all and Hand off
@@ -23,9 +25,9 @@ Feature: Suggestions
   Scenario: A finished block is read once
     Given Today has been opened once, and "Garden plan" is open with the panel collapsed
     When I type "Need to call Sam about the invoice before Friday." and press Enter
-    Then within a moment the Suggestions icon shows 1 and nothing in the text changes
+    Then nothing in the text changes and the Inbox icon shows no number for it
     When I open Suggestions
-    Then "On this page" lists "Make this a task?" with Make task, the count goes, and hovering the row lights the line
+    Then "On this page" lists "Make this a task?" with Make task, and hovering the row lights the line
     When I press Make task
     Then the line becomes the task, the row reads "Made a task, due Friday." with Undo, and leaves after eight seconds
     When I type the same line again on a new paragraph and press Enter
@@ -33,7 +35,7 @@ Feature: Suggestions
 
   Scenario: Quiet after a full stop, and the fallback
     When I type "Ask Sam about the beans." and stop
-    Then after ten seconds the block is read, and the count goes up if it is worth a line
+    Then after ten seconds the block is read, and Suggested gains a row if it is worth a line
     When I type "Ask Sam about the stakes" with no full stop and stop
     Then after twenty seconds it is read
     When I set Settings › AI › Tail › Read a block after to 5 and 8 seconds
@@ -56,7 +58,7 @@ Feature: Suggestions
     Then the row fades out over 150 ms, and only then does the panel say "Nothing yet."
     Given no page is open at all
     When I open Suggestions
-    Then "Elsewhere" lists the day's three rows, and the count on the icon goes
+    Then "Elsewhere" lists the day's three rows
     When the window is 1000 px wide and Suggestions is a pane
     Then its group labels and rows start under the pane's title
 

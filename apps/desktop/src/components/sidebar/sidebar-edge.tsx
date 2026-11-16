@@ -43,7 +43,7 @@ export function SidebarEdge({ width, onResize, onResizing }: Props) {
         el.addEventListener("pointercancel", up);
       }}
       role="separator"
-      style={{ left: width - 8 }}
+      style={{ left: `calc(var(--rail-width, 0px) + ${width - 8}px)` }}
     >
       <span className="h-8 w-1 rounded-full bg-muted-foreground/40 opacity-0 transition-opacity duration-150 group-hover/edge:opacity-100" />
     </div>

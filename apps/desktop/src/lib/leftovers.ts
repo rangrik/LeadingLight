@@ -36,7 +36,7 @@ export function saying(items: Leftover[]) {
 export function goThrough([first]: Leftover[]) {
   if (!first) return;
   openBeside(first.page);
-  showBar(first.line ? "suggestions" : "captures");
+  showBar("inbox", first.line ? "suggested" : "captured");
 }
 
 // Captures reviewed and suggestions gone, none counted as ignored.

@@ -36,9 +36,12 @@ import { CARD, PaneArea } from "~/components/pane-area";
 import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
+import { NewWork } from "~/components/new-work";
+import { SearchPanel } from "~/components/search-panel";
 import { MailRoot } from "~/components/mail";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
+import { ProjectRail } from "~/components/sidebar/project-rail";
 import { BrowserSidebar } from "~/components/browser-sidebar";
 import { BrowserSpace } from "~/components/browser-space";
 import { available as browserAvailable, leave as leaveBrowser, useFront } from "~/lib/browser-space";
@@ -61,16 +64,19 @@ import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { AGENT, taskOfAgent } from "~/lib/work";
-import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
+import { ALL, inProject, railProjects, scope, useLinks } from "~/lib/scope";
+import { chatView, createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView, workView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newPage } from "~/lib/templates";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
-import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, SUGGESTIONS_VIEW, isPageView } from "~/lib/space";
+import { ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, FEED_VIEW, isPageView, WORK_VIEW } from "~/lib/space";
 
 const SIDEBAR_KEY = "ll.sidebar.open";
+const ROOM_KEY = "ll.sidebar.room";
+const RAIL = 44; // the project rail's width, left of the sidebar
 const WIDTH_KEY = "ll.sidebar.width";
 // Tasks given to an agent, their own or a subtask's, are listed like any page, with their state.
 // Found from the agents' pages in two passes; a search per task was 40 ms on 3000 pages.
@@ -136,6 +142,8 @@ export default function App() {
   const { root } = panes.use();
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
+  // Folded for a sidenote's or an essay's room, not closed by hand: the rail stays (features/sidenotes.feature).
+  const [forRoom, setForRoom] = useState(() => localStorage.getItem(ROOM_KEY) === "true");
   const [native, setNative] = useState(false);
   const mac = native || new URLSearchParams(location.search).has("mac");
   const [sidebarWidth, setSidebarWidth] = useState(() => clampWidth(Number(localStorage.getItem(WIDTH_KEY)) || 256));
@@ -148,7 +156,8 @@ export default function App() {
 
   useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
-  const linkedFolders = folders.use().size > 0;
+  const folderOf = folders.use();
+  const linkedFolders = folderOf.size > 0;
   useEffect(() => void (projectsOn && loadFolders().catch(console.error)), [projectsOn]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
@@ -162,25 +171,40 @@ export default function App() {
   }, [current, loaded]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
+  useEffect(() => localStorage.setItem(ROOM_KEY, String(forRoom)), [forRoom]);
   // Toasts stay over the sidebar while the browser is in front: a native page would cut them (styles.css).
   useEffect(() => {
     document.documentElement.toggleAttribute("data-toasts-beside", browserFront && sidebarOpen);
-    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth}px`);
+    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth + (mobile ? 0 : RAIL)}px`);
   }, [browserFront, sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
 
   useEffect(() => {
-    loadSpace()
-      .then(async (list) => {
+    // Dev only: ?demo fills an empty space with a demo space and answers the project runtime
+    // with fixed agents, so every surface can be tried without a Mac runtime (qa/demo/seed.js).
+    // The fixture goes in before the pages load, or the Feed's first ask reaches no runtime.
+    const fixture = import.meta.env.DEV && new URLSearchParams(location.search).has("demo")
+      ? import(/* @vite-ignore */ String("/qa/demo/seed.js")).then((demo) => (demo.installFixture(), demo))
+      : Promise.resolve(null);
+    fixture.then(async (demo) => [demo, await loadSpace()] as const)
+      .then(async ([demo, list]) => {
+        if (demo) {
+          if (!list.length) {
+            await demo.seed();
+            location.reload();
+            return;
+          }
+          void demo.suggest(list);
+        }
         await foldDescriptions().catch(console.error);
         const mac = await isDesktop;
         setLoaded(true);
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
-          if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
+          if (mobile && ([ASK_VIEW, FEED_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW) || id.startsWith(WORK_VIEW))) return false;
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           // In the Mac app a streamed pane is only an agent's tab beside its chat; personal browsing is the browser space.
           if (mac && id.startsWith(BROWSER_VIEW) && !page && !id.split("/")[2]) return false;
@@ -189,6 +213,10 @@ export default function App() {
         if (gmailReturn) { openPage(MAIL_VIEW); return; }
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
+        // The last scope comes back with its panes, unless its project has left the rail since.
+        if (mobile || !railProjects(list).some((p) => p.id === scope.get().id)) scope.set({ id: ALL });
+        const at = scope.get().id;
+        if (at !== ALL) return void (restorePanes(exists, at) || showOnly(at));
         if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort(byRecent)[0]?.id ?? null);
       })
       .catch(console.error);
@@ -252,7 +280,9 @@ export default function App() {
   }, [capture, closeCapture]);
 
   // One sidebar state for the pages and Settings, so folding it in one holds in the other.
-  const toggleSidebar = useCallback(() => setSidebarOpen((open) => !open), []);
+  // Opened or closed by hand, it is no longer folded for room.
+  const setSidebar = useCallback((open: boolean) => (setSidebarOpen(open), setForRoom(false)), []);
+  const toggleSidebar = useCallback(() => (setSidebarOpen((open) => !open), setForRoom(false)), []);
   useShortcuts(useMemo(() => ({ newPage: create, newIdea: toggleCapture, toggleSidebar, toggleView }), [create, toggleCapture, toggleSidebar]));
 
   // Save pending edits whenever the app might be about to go away.
@@ -280,12 +310,13 @@ export default function App() {
     };
   }, []);
 
-  // Adding a sidenote or opening an essay asks for room (lib/essay.ts).
+  // A sidenote or an essay without room asks for it (lib/essay.ts). The rail stays if the sidebar's
+  // width, less the card's 8 px margin, covers what is short; a sidebar closed by hand stays as it is.
   useEffect(() => {
-    const fold = () => setSidebarOpen(false);
+    const fold = (e: Event) => sidebarOpen && (setSidebarOpen(false), setForRoom((e as CustomEvent<number>).detail <= sidebarWidth - 8));
     window.addEventListener("ll:make-room", fold);
     return () => window.removeEventListener("ll:make-room", fold);
-  }, []);
+  }, [sidebarOpen, sidebarWidth]);
 
   // A row opens its page; Shift opens it beside the one in front, as Shift on a link does; ⌘ in a new tab.
   const opener = (id: string) => (e: React.MouseEvent) => openFrom(id, e);
@@ -302,9 +333,14 @@ export default function App() {
   const isChild = (p: ObjectSummary) => pages.some((q) => q.id === parentOf(p));
   recentOrder.use(); // the list follows a change of order
   const work = atWork(pages);
+  // A project chosen on the rail narrows the sidebar to its pages (features/project-rail.feature).
+  const { id: scopeId } = scope.use();
+  const project = scopeId === ALL ? undefined : pages.find((p) => p.id === scopeId);
+  const linked = useLinks(scopeId);
+  const mine = (p: ObjectSummary) => !project || inProject(p, project.id, linked);
   const navPages = pages
     // Tasks live in their type's view, too many for this list, unless at work; agents' pages too.
-    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p))
+    .filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !isChild(p) && mine(p))
     .sort(byRecent)
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.
@@ -341,14 +377,22 @@ export default function App() {
     });
   // The app's own types (agents, reports, feedback) are listed once there is one of them; tail's
   // page about you is reached from Settings and search, so tail never adds a row here.
-  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).map((t) => ({
-    id: t.id,
-    name: t.plural,
-    icon: <RowIcon icon={t.icon} />,
-    isActive: current === typeView(t.id),
-    onSelect: opener(typeView(t.id)),
-    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
-  }));
+  // Narrowed to a project, a type shows only while it has some of its pages, and how many.
+  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).flatMap((t) => {
+    const view = typeView(t.id, project?.id);
+    const count = project && pages.filter((p) => p.typeId === t.id && !p.properties.templateOf && mine(p)).length;
+    return count === 0 ? [] : [{
+      id: t.id,
+      name: t.plural,
+      icon: <RowIcon icon={t.icon} />,
+      count,
+      isActive: current === view,
+      onSelect: opener(view),
+      onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: view, label: t.plural }),
+    }];
+  });
+  const row = (view: string) => ({ isActive: current === view, onSelect: opener(view) });
+  const scoped = project && { id: project.id, name: pageLabel(project.title), icon: <RowIcon icon={iconFor(project)} />, overview: row(project.id), chat: folderOf.has(project.id) ? row(chatView(project.id)) : undefined, work: folderOf.has(project.id) && !mobile ? row(workView(project.id)) : undefined, has: mine };
 
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
   // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
@@ -361,22 +405,27 @@ export default function App() {
         className="ll-shell isolate h-svh min-h-0 overflow-hidden data-resizing:**:transition-none"
         data-resizing={resizing || undefined}
         inert={settings || undefined}
-        onOpenChange={(open) => !settings && setSidebarOpen(open)}
+        onOpenChange={(open) => !settings && setSidebar(open)}
         open={sidebarOpen}
-        style={chrome(mac, sidebarWidth)}
+        data-rail-kept={forRoom || undefined}
+        style={{ ...chrome(mac, sidebarWidth), "--rail-width": mobile ? "0px" : `${RAIL}px` } as React.CSSProperties}
       >
         {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* In the app the sidebar button stays beside the traffic lights, as in the Claude app. */}
         {mac && !browserFront && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
+        {!mobile && <ProjectRail stay={forRoom} />}
         <AppSidebar
+          className="left-(--rail-width)"
           browser={browserFront ? <BrowserSidebar /> : undefined}
           native={canBrowse}
           onCreate={create}
+          project={scoped}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
           pages={navPages.filter((p) => !p.pinned)}
           pinned={navPages.filter((p) => p.pinned)}
           todayActive={current !== undefined && current === dayShown(today())}
+          current={current}
           types={navTypes}
         />
         <SidebarInset className="ll-inset relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
@@ -437,7 +486,7 @@ export default function App() {
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>
-                <SettingsView onOpenChange={setSidebarOpen} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
+                <SettingsView onOpenChange={setSidebar} open={sidebarOpen} style={chrome(mac, sidebarWidth)} windowToggle={mac} />
               </Suspense>
             </div>
           )}
@@ -453,6 +502,8 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
+          {!phone && <SearchPanel />}
+          {!mobile && <NewWork />}
           {!phone && <MailRoot />}
           {!mobile && <CliUpdates />}
           <AppUpdates />

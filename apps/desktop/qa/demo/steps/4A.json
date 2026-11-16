@@ -1,0 +1,71 @@
+{
+ "port": 1440,
+ "name": "4A",
+ "steps": [
+  {
+   "click": {
+    "text": "Write the pricing page copy",
+    "exact": true
+   },
+   "after": 2200
+  },
+  {
+   "caption": "Option 4A · The task card answers. The agent’s question comes to the task.",
+   "hold": 2800
+  },
+  {
+   "still": "card"
+  },
+  {
+   "hover": {
+    "text": "paragraphs changed"
+   },
+   "after": 900
+  },
+  {
+   "caption": "The review line counts what changed since the first draft.",
+   "hold": 2200
+  },
+  {
+   "click": {
+    "text": "paragraphs changed"
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Click it: the page scrolls to the second draft and marks each changed block for two seconds.",
+   "hold": 2800
+  },
+  {
+   "still": "changed"
+  },
+  {
+   "click": {
+    "text": "Yearly",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Answer on the card: the question leaves the card and the Feed, and the card says Working.",
+   "hold": 2800
+  },
+  {
+   "still": "answered"
+  },
+  {
+   "click": {
+    "text": "Audit the empty states",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Ready for review: Accept is the one filled button. Chat and Stop live in the ⋯ menu.",
+   "hold": 2800
+  },
+  {
+   "still": "accept"
+  }
+ ]
+}

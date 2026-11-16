@@ -1,0 +1,79 @@
+{
+ "port": 1436,
+ "name": "2C",
+ "steps": [
+  {
+   "click": {
+    "role": "button",
+    "name": "Today",
+    "exact": true
+   },
+   "after": 2000
+  },
+  {
+   "caption": "Option 2C · Today as a timeline. The day writes half of itself.",
+   "hold": 2800
+  },
+  {
+   "still": "today"
+  },
+  {
+   "hover": {
+    "text": "Claude published"
+   },
+   "after": 900
+  },
+  {
+   "caption": "Edits, reports, captures and questions, in time order, each one a link.",
+   "hold": 2600
+  },
+  {
+   "click": {
+    "text": "Claude asked"
+   },
+   "after": 1600
+  },
+  {
+   "caption": "A question opens the Feed with it expanded, ready to answer.",
+   "hold": 2400
+  },
+  {
+   "still": "question"
+  },
+  {
+   "click": {
+    "role": "button",
+    "name": "Feed",
+    "exact": true
+   },
+   "after": 1000
+  },
+  {
+   "click": {
+    "text": "Just my words"
+   },
+   "after": 1300
+  },
+  {
+   "caption": "Just my words hides the timeline. The choice is remembered.",
+   "hold": 2400
+  },
+  {
+   "still": "words"
+  },
+  {
+   "click": {
+    "text": "Day",
+    "exact": true
+   },
+   "after": 1200
+  },
+  {
+   "caption": "Day brings it back. Earlier days get the same timeline from the records.",
+   "hold": 2400
+  },
+  {
+   "still": "end"
+  }
+ ]
+}

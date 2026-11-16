@@ -18,20 +18,21 @@ import { PanelHeader } from "~/components/panel-header";
 import { visit } from "~/components/property-value";
 import { TypeView } from "~/components/type-view";
 import { reportOf } from "~/lib/work";
-import { PLAIN_NEED, paneNeed } from "~/lib/essay";
+import { PLAIN_NEED, paneNeed, widthNeeded } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
 import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
-import { FeedView } from "~/components/feed";
+import { InboxView } from "~/components/inbox";
 import { FeedbackButton } from "~/components/feedback";
+import { ReviewButton } from "~/components/review";
 import { BrowserPane } from "~/components/agent-browser";
 import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
-import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { WorkView } from "~/components/work-view";
+import { MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, readTypeView, space, TYPE_VIEW, WORK_VIEW } from "~/lib/space";
 import { readPaper } from "~/lib/paper";
 import { phone, useMobile } from "~/lib/platform";
 
@@ -66,8 +67,6 @@ const place = (r: Rect, s: Size) => {
 // titles, so notes are never squeezed; a click on a strip opens it. Folded pages stay mounted.
 // Plain pages side by side never fold.
 const STRIP = 44;
-export const widthNeeded = (n: PaneNode): number =>
-  n.kind === "leaf" ? paneNeed(n.page) : n.dir === "row" ? widthNeeded(n.a) + widthNeeded(n.b) : Math.max(widthNeeded(n.a), widthNeeded(n.b));
 const hasNotes = (n: PaneNode): boolean => (n.kind === "leaf" ? paneNeed(n.page) > PLAIN_NEED : hasNotes(n.a) || hasNotes(n.b));
 const splitById = (n: PaneNode, id: string): PaneNode | undefined =>
   n.kind === "leaf" ? undefined : n.id === id ? n : (splitById(n.a, id) ?? splitById(n.b, id));
@@ -196,6 +195,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
+                {!mobile && isPageView(leaf.page) && <ReviewButton className={cn(backCard)} page={leaf.page} pane={leaf.id} />}
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && (reportOf(pageOf(leaf.page)) ? <PageHistory className={cn(backCard)} page={leaf.page} /> : <div className="ll-page-actions" data-page-actions />)}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", backCard)} page={leaf.page} />}
@@ -228,15 +228,17 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 ) : leaf.page === INBOX_VIEW ? (
                   <CaptureInbox />
                 ) : leaf.page === FEED_VIEW ? (
-                  <FeedView paneId={leaf.id} />
+                  <div className="flex h-full flex-col pt-2">
+                    <InboxView paneId={leaf.id} />
+                  </div>
                 ) : leaf.page === ASK_VIEW ? (
                   <AskView />
-                ) : leaf.page === SUGGESTIONS_VIEW ? (
-                  <Suggestions pane />
                 ) : leaf.page.startsWith(TYPE_VIEW) ? (
-                  <TypeView typeId={leaf.page.slice(TYPE_VIEW.length)} />
+                  <TypeView {...readTypeView(leaf.page)} />
                 ) : leaf.page.startsWith(CHAT_VIEW) ? (
                   leaf.page === CHAT_VIEW ? <BrowserChat /> : <ProjectChat pageId={leaf.page.slice(CHAT_VIEW.length)} />
+                ) : leaf.page.startsWith(WORK_VIEW) ? (
+                  <WorkView pageId={leaf.page.slice(WORK_VIEW.length)} />
                 ) : leaf.page.startsWith(BROWSER_VIEW) ? (
                   <BrowserPane active={front && !folded} pageId={leaf.page.slice(BROWSER_VIEW.length).split("/")[0]} session={leaf.page.split("/")[2] || undefined} worktree={leaf.page.split("/")[1] || undefined} />
                 ) : (

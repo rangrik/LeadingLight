@@ -8,7 +8,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { cn } from "@leadinglight/ui/lib/utils";
 import { RowIcon } from "~/components/page-icon";
 import { armDrag } from "~/components/pane-drag";
-import { StateDot } from "~/components/state-dot";
+import { StateDot, StateTip } from "~/components/state-dot";
 import { phone, useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
 import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
@@ -53,7 +53,7 @@ export function TabRow({ leaf, inset }: { leaf: Leaf; inset: boolean }) {
   const mobile = useMobile();
   return (
     <Tabs
-      className={cn("h-(--header-height) shrink-0 flex-row items-center gap-1 border-b px-2 transition-[padding] duration-200 ease-linear", inset && "ps-[calc(var(--traffic-left)_+_50px)]")}
+      className={cn("h-(--header-height) shrink-0 flex-row items-center gap-1 border-b px-2 transition-[padding] duration-200 ease-linear", inset && "ps-[calc(var(--traffic-left)_+_50px_-_var(--rail-kept,0px))]")}
       data-tab-row
       data-tauri-drag-region={!mobile || undefined}
       onValueChange={(id) => showTab(leaf.id, String(id))}
@@ -86,7 +86,9 @@ function TabItem({ pane, tab }: { pane: string; tab: Tab }) {
     >
       <StateDot className="-left-[3px]" pageId={page} />
       <RowIcon icon={shown.icon} />
-      <span className="min-w-0 flex-1 truncate">{shown.title}</span>
+      <StateTip pageId={page}>
+        <span className="min-w-0 flex-1 truncate">{shown.title}</span>
+      </StateTip>
       <Button
         aria-label="Close tab"
         className="opacity-0 transition-opacity duration-150 ease-out focus-visible:opacity-100 group-hover/tab:opacity-100"

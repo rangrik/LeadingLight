@@ -10,7 +10,7 @@ import { docMarkdown } from "~/lib/page-markdown";
 import { accessOf, type Conversation, listChats, modeFor, send, sync } from "~/lib/project-runtime/chat";
 import { folders } from "~/lib/project-runtime/folders";
 import { ask, call } from "~/lib/project-runtime/transport";
-import { createPage, pageOf, propOf, retype, space, typeOf } from "~/lib/space";
+import { createPage, pageOf, propOf, removePage, retype, space, typeOf } from "~/lib/space";
 import { ensureTag } from "~/lib/capture";
 import { action } from "~/lib/history-types";
 import { AGENT, agentFor, relationsOf, type Run, runOf, subtasksOf } from "~/lib/work";
@@ -140,7 +140,7 @@ async function becomeTask(page: ObjectSummary, typeId: string | undefined, proje
 }
 
 // A worktree of the project's own for the task (DECISIONS.md, 42); a name the runtime has goes to the next number.
-async function worktreeFor(location: string, task: string): Promise<string> {
+export async function worktreeFor(location: string, task: string): Promise<string> {
   const all = await ask<{ name: string; worktrees?: { name: string }[] }[]>("GET", "/v1/locations");
   const taken = new Set((all.find((l) => l.name === location)?.worktrees ?? []).map((w) => w.name));
   for (let tries = 1; ; tries++) {
@@ -187,6 +187,28 @@ export async function assign(pageId: string, o: Choices): Promise<string> {
   } finally {
     busy.delete(pageId);
   }
+}
+
+// New work with an agent (features/work-view.feature): what was written becomes a task of the
+// project, assigned as any task is. One no agent was made for is taken back.
+export class NotStarted extends Error {}
+export async function startWork(project: string, text: string, o: Choices): Promise<string> {
+  const type = taskTypes().find((t) => t.id === "task") ?? taskTypes()[0];
+  if (!type) throw new Error(NO_TASK_TYPE);
+  const prop = type.props.find((id) => propOf(id)?.kind === "relation" && propOf(id)?.options.type === pageOf(project)?.typeId);
+  if (!prop) throw new Error(`${type.name} has no Project property, so the task can't be put in this project.`);
+  const [first, ...rest] = text.trim().split("\n").map((l) => l.trim());
+  // A long first line is cut at a word for the title, and kept whole in the task's words.
+  const long = first.length > 80;
+  const lines = (long ? [first, ...rest] : rest).filter(Boolean);
+  const content = lines.length ? { type: "doc", content: lines.map((l) => ({ type: "paragraph", content: [{ type: "text", text: l }] })) } : undefined;
+  const task = await createPage({ typeId: type.id, title: long ? `${first.slice(0, 80).replace(/\s+\S*$/, "")}…` : first, properties: { [prop]: [project] }, ...(content && { content }) });
+  await assign(task.id, o).catch(async (e: Error) => {
+    if (agentOfTask(pageOf(task.id))) throw new NotStarted(e.message);
+    await removePage(task.id);
+    throw e;
+  });
+  return task.id;
 }
 
 // An agent's own step: a subtask an agent made while working, not while asked to plan first.

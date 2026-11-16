@@ -16,7 +16,7 @@ The words get a dotted underline and a small number after them. A note opens in 
 
 To note a whole paragraph, put the cursor in it without selecting anything and press <kbd>⇧⌘M</kbd>. In an empty paragraph, nothing happens.
 
-To make room for the margin, the sidebar collapses and the text moves left.
+The text moves left to make room for the margin. The sidebar folds only when the page is too narrow for both; press <kbd>⌘\\</kbd> to bring it back.
 
 ## Read your notes in the margin
 
@@ -42,7 +42,7 @@ Open **Thoughts** to see every note, each under the words it belongs to. Click t
 1. Open **Page options** on the page.
 2. Choose **Start an essay on this page**.
 
-An essay page opens on the right with the cursor in its title. The source page stays on the left, with its notes in the margin. The essay is nested under the page in the sidebar, and the sidebar collapses.
+An essay page opens on the right with the cursor in its title. The source page stays on the left, with its notes in the margin. The essay is nested under the page in the sidebar, and the sidebar closes when the two pages need its room.
 
 To close the essay, click **Close page** in its pane. To open it again, choose **Open essay** in **Page options**, or click the essay in the sidebar; the page opens with its essay beside it.
 

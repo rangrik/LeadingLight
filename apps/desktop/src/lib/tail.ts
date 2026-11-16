@@ -26,6 +26,7 @@ import { commitAction, undoAction } from "./history";
 import { flushAll } from "./saving";
 import { newObject } from "./store";
 import { pageInit } from "./templates";
+import { away, countNoted, dueToRecall, markOpen, metAt, openRecall, whenNoted } from "./recall";
 
 // Tail (docs/TAIL.md, features/tail.feature): reads along and offers one line to nod at. Word
 // rules find what might be worth a line; a tail turn picks, or stays silent. Nothing it shows is
@@ -85,8 +86,16 @@ const normal = () => mode() === "normal";
 export const readsOnByDefault = (typeId: string) => suggested(typeId) || typeId === "task";
 export const readsOn = (typeId: string) => tailPrefs().readsOn[typeId] ?? readsOnByDefault(typeId);
 const readable = (p?: ObjectSummary) => !!p && mayRead(p, readsOn);
-// The edits a nod makes are not the person typing.
+// The edits a nod makes are not the person typing, nor a line Recall anchors (components/recall.tsx).
 let acting = false;
+export function quietly(fn: () => void) {
+  acting = true;
+  try {
+    fn();
+  } finally {
+    acting = false;
+  }
+}
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const later = (id: string, wait: number, fn: () => void) => {
@@ -222,6 +231,22 @@ async function leftMidSentence(pages: ObjectSummary[]): Promise<Found | undefine
       line: () => ({ id, where: TODAY, words: ["You left ", name(p), ` mid-sentence ${when === "yesterday" ? when : `on ${when}`}.`], nod: "Open", act: async () => openBeside(p.id) }),
     };
   }
+}
+
+// Pages whose noted things have not been in front of the person for days (lib/recall.ts). Open
+// goes beside, where the page's own row offers Recall.
+async function toRecall(pages: ObjectSummary[]): Promise<Found | undefined> {
+  const due = await dueToRecall(pages);
+  if (!due.length) return;
+  const [{ page: p, noted }] = due;
+  const id = `recall-today:${p.id}`;
+  return {
+    id,
+    kind: "recall",
+    pages: due.map((d) => d.page.id),
+    facts: { pages: due.length, noted, when: whenNoted(p) },
+    line: () => ({ id, where: TODAY, words: due.length === 1 ? [`${noted} things to recall in `, name(p), "."] : [`${due.length} notes to recall, starting with `, name(p), "."], nod: "Open", act: async () => openBeside(p.id) }),
+  };
 }
 
 // Not yet filed, as the capture inbox has it: no project and not reviewed (DECISIONS 28).
@@ -467,7 +492,9 @@ const todayShown = () => {
 // What the records find for Today, less the rows that stay out (seenOn). The rest are forgotten,
 // their sentence with them, once their pages change or the records no longer find them.
 async function todayFinds(pages: ObjectSummary[]) {
-  const found = (await Promise.all([leftMidSentence(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)])).filter((x) => x !== undefined);
+  const [left, recall, ...rest] = await Promise.all([leftMidSentence(pages), toRecall(pages), ideasToFile(pages), taskWithoutDay(pages), untitled(pages)]);
+  // A page to recall says so; its row on the page yields "you stopped at" too.
+  const found = [recall?.pages.includes(left?.pages[0] ?? "") ? undefined : left, recall, ...rest].filter((x) => x !== undefined);
   await writing;
   const about = await aboutLines();
   const { shown } = ledger.get();
@@ -671,9 +698,34 @@ async function revive() {
 type Visit = { at: number; block?: number };
 const seen = new Map<string, Visit>();
 const asking = new Set<string>();
-async function comeBack(page: string, doc: EditorDoc) {
+// Noted things not in front of the person for days, as of before this open: Recall (lib/recall.ts).
+async function recallOn(p: ObjectSummary, doc: EditorDoc, met?: number): Promise<Found | undefined> {
+  const noted = met !== undefined && away(p, met) ? await countNoted(p, doc) : 0;
+  if (noted < 2) return;
+  const id = `recall:${p.id}`;
+  const when = whenNoted(p);
+  return {
+    id,
+    kind: "recall",
+    pages: [p.id],
+    facts: { noted, when },
+    line: () => ({ id, where: p.id, words: [`You noted ${noted} things here ${when}.`], nod: "Recall", act: async () => (openRecall(p.id), drop((l) => l.id === id)) }),
+  };
+}
+async function comeBack(page: string, doc: EditorDoc, met?: number) {
   const was = seen.get(page);
-  if (mode() === "off" || asking.has(page) || !readable(pageOf(page)) || Date.now() - (was?.at ?? pageOf(page)?.updatedAt ?? Date.now()) < ms("away")) return;
+  const p = pageOf(page);
+  if (mode() === "off" || asking.has(page) || !p || !readable(p)) return;
+  asking.add(page);
+  // Recall comes first; "you stopped at" yields to it.
+  const recall = await recallOn(p, doc, met).catch(() => undefined);
+  const found = recall ?? (Date.now() - (was?.at ?? p.updatedAt) >= ms("away") ? stoppedOn(page, doc, was) : undefined);
+  if (!found) return void asking.delete(page);
+  const lines = linesOf((await choose("page", `page:${page}`, [found], [p]).finally(() => asking.delete(page))).picks);
+  // An edit, or the page left, while the model thought: the moment has passed.
+  if (seen.get(page) === was && isLive(page)) lines.forEach(put);
+}
+function stoppedOn(page: string, doc: EditorDoc, was?: Visit): Found | undefined {
   const blocks = doc.content ?? [];
   const lineOf = (b?: EditorDoc) => (b ? docText({ type: "doc", content: [b] }).split("\n").at(-1)!.trim() : "");
   // The block, not its words, which an earlier paragraph may share.
@@ -682,11 +734,7 @@ async function comeBack(page: string, doc: EditorDoc) {
   if (!unfinished(text)) return;
   const quote = text.split(/\s+/).slice(-4).join(" ");
   const id = `stopped:${page}`;
-  const found: Found = { id, kind: "stopped", pages: [page], facts: { line: text.slice(-200), quote }, line: () => ({ id, where: page, words: ['You stopped at "', { text: quote, page }, '".'], nod: "Show", act: async () => liveEditor(page)?.reveal(`b${at + 1}`) }) };
-  asking.add(page);
-  const lines = linesOf((await choose("page", `page:${page}`, [found], [pageOf(page)!]).finally(() => asking.delete(page))).picks);
-  // An edit, or the page left, while the model thought: the moment has passed.
-  if (seen.get(page) === was && isLive(page)) lines.forEach(put);
+  return { id, kind: "stopped", pages: [page], facts: { line: text.slice(-200), quote }, line: () => ({ id, where: page, words: ['You stopped at "', { text: quote, page }, '".'], nod: "Show", act: async () => liveEditor(page)?.reveal(`b${at + 1}`) }) };
 }
 
 // While a page is open. An edit takes "you stopped at" away, and a suggestion once its block's
@@ -700,7 +748,12 @@ export function follow(page: string) {
   const back = closing.has(page);
   clearTimeout(closing.get(page));
   closing.delete(page);
-  if (!back) whenLive(page, (live) => void comeBack(page, live.content()));
+  if (!back) {
+    // When it was last in front of the person, before this open counts.
+    const met = pageOf(page) && metAt(pageOf(page)!);
+    markOpen(page);
+    whenLive(page, (live) => void comeBack(page, live.content(), met));
+  }
   const off = watchLive(page, () => {
     if (mode() === "off" || acting) return;
     const ed = liveEditor(page);
@@ -727,6 +780,7 @@ export function follow(page: string) {
         closing.delete(page);
         edits.delete(page);
         seen.set(page, { ...seen.get(page), at: Date.now() });
+        markOpen(page);
         settle(page);
       }),
     );

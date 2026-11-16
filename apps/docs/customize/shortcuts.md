@@ -20,6 +20,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 | <kbd>⌘N</kbd> | **New page** | Makes a new page and opens it, with the title ready to type. |
 | <kbd>⌘T</kbd> | **New tab** | Opens a new tab. |
 | <kbd>⌃⌥I</kbd> | **New idea** | Opens the capture box for a quick idea. In the Mac app it works over any app. |
+| <kbd>⇧⌘N</kbd> | **New work…** | Starts work in the project chosen on the rail: a task with an agent, or a bare worktree. See [The Work view](/ai/tasks-for-agents#the-work-view). |
 | <kbd>⌘W</kbd> | **Close tab** | Closes the tab in front. Closing a pane's last tab closes the pane. |
 | <kbd>⇧⌘T</kbd> | **Reopen closed tab** | Brings back the tab you closed last. |
 | <kbd>⌘S</kbd> | **Save** | Saves now. Pages also save by themselves as you type. |
