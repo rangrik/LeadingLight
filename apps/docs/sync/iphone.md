@@ -15,8 +15,12 @@ today. Only three recent captures appear here. There are no unread badges or str
 
 **Today** and **Notes** sit in a glass bar that floats at the bottom of the screen, with a round
 **Quick capture** button beside it. The bar hides while the keyboard is open. Pages open one at a
-time. The back arrow above a page returns to the page before it, or to Today or Notes when there
-is none.
+time. The round back button above a page returns to the page before it, or to Today or Notes when
+there is none. **⋯** (**Page actions**) at the other end holds the page's actions, including
+**History and authorship**.
+
+With **Increase Contrast** on, the bars and round buttons turn solid; with **Reduce Motion** on,
+nothing on them moves.
 
 ## Capture first, organize later
 
@@ -60,8 +64,11 @@ is closed. The phone needs no workspace sign-in. See [Mac agent setup](/sync/mob
 
 ## Get the app
 
-This is a source preview, with no App Store or TestFlight release yet. Build the universal iOS target
-using [Build from source](/develop/#build-for-iphone-and-ipad). A device build needs development
+LeadingLight is a private app, with no App Store or TestFlight version. An iPhone registered to the
+project installs the build attached to each
+[GitHub release](https://github.com/rangrik/LeadingLight/releases), then updates itself as on
+[iPad](/sync/ipad#update-the-app). On any other iPhone, build the universal iOS target using
+[Build from source](/develop/#build-for-iphone-and-ipad). A device build needs development
 signing and Developer Mode before it can be installed. Native hardware acceptance is tracked in
 [the iPhone QA report](https://github.com/rangrik/LeadingLight/blob/main/docs/QA_IPHONE.md).
 
@@ -71,5 +78,5 @@ app uses SQLite. Connect both to your workspace if you want the same notes in bo
 Private release builds are named **LeadingLight**, with the cream LeadingLight mark on a dark
 background. On iOS 26 and later the mark takes on the system's glass look, including the dark,
 clear and tinted Home Screen styles. **LeadingLight iPhone Dev** is a separate app with its own local notes. Connect the
-release app to the same workspace before removing a development app. A directly installed build
-works until its signing profile expires; it is not an App Store or TestFlight installation.
+release app to the same workspace before removing a development app. A build you install yourself
+works until its signing profile expires.

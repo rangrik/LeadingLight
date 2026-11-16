@@ -7,7 +7,8 @@ Feature: Three LeadingLight landing page concepts
     And the page demonstrates notes, object types, or linked ideas
     And a download link opens the official GitHub releases
     And the page describes the download as an early preview for Apple Silicon
-    And the page states that preview builds are unsigned and not notarized
+    And the page states that builds are signed and notarized by Apple
+    And no page says a build is unsigned or that macOS will block it
 
     Examples:
       | concept |

@@ -65,8 +65,11 @@ Daily notes stay out of Recent. Find them all under **Daily notes** in the sideb
 At the end of a daily note, **This day** lists the pages you made or edited that day, newest first, with a count, such as **This day · 2**. Each row says **made** or **edited** and the time. Click one to open it.
 
 - A page made that day shows once, as made, even if you edited it later.
-- A page shows on every day you edited it. In the browser, only on the last day you edited it.
-- Tags, other daily notes and Thoughts pages aren't listed; they have their own places.
+- A page shows on every day you edited it.
+- A page keeps its days whatever it becomes. An idea that became a task still shows on the day you
+  had it, now with the Task icon.
+- Tags, other daily notes, Thoughts pages and pages the app makes (agents, reports, feedback)
+  aren't listed; they have their own places.
 - A page the note already links in its body isn't listed again.
 - The list updates while the note is open, without a reload.
 

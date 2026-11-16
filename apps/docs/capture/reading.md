@@ -103,9 +103,9 @@ Hold a recording in Text mode to retry transcription. Photo saves the original
 image before reading its text; hold it for **Extract text** to retry. If you press
 Back during recognition, the source stays saved for later retry.
 
-## Photograph a passage
+## Photograph a passage <Badge type="info" text="iPhone and iPad" />
 
-Tap **Photo** on iPad or iPhone. After the first camera permission prompt, this opens
+Tap **Photo** on iPad or iPhone; the Mac app and the browser have no Photo button. After the first camera permission prompt, this opens
 the rear camera directly. Accept the picture to save it in the page. Text recognition
 then adds recognised words underneath. The original picture stays even if OCR finds
 nothing. Crooked pages, small print and handwriting can need corrections.
@@ -116,9 +116,10 @@ words without removing the picture. The browser build cannot run Apple's recogni
 
 ## Read PDF and EPUB books
 
-Choose **Page actions → Import a book** (or **Notebook options → Import a book**), then **Import PDF or EPUB**.
-Imports accept files up to 32 MiB so the original can sync to every device. Enter a
-PDF password first if the file needs one.
+Choose **Page actions → Import a book** (or **Notebook options → Import a book**). The **Reading
+library** opens; choose **Import PDF or EPUB**. Imports accept files up to 32 MiB so the original
+can sync to every device. Enter a PDF password first if the file needs one. An encrypted EPUB or a
+Kindle-only file can't be imported; you are sent to its own reader instead of getting an empty book.
 
 A Book page holds the original and links to reading sections. PDFs keep page numbers
 and split every ten pages; EPUBs follow chapter order. These are ordinary editor

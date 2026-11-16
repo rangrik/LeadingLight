@@ -3,7 +3,7 @@ title: Agents on your Mac from iPhone and iPad
 description: Pair inside LeadingLight and control project agents running on your own Mac.
 ---
 
-# Agents on your Mac from iPhone and iPad
+# Agents on your Mac from iPhone and iPad <Badge type="warning" text="Preview" />
 
 The installed iPhone and iPad apps can start, read, answer and stop project agents on your Mac.
 The Mac runs Claude Code or Codex with your existing sign-in and keeps the project files and
@@ -84,12 +84,14 @@ or stop it.
 ## Permissions and questions
 
 Permission requests and questions stay pending on the Mac until you respond. Approve, decline,
-or answer from either device. Claude accepts feedback with Decline or Keep planning. Codex
+or answer from either device. When a question allows several answers, pick options and type your
+own words too; the agent gets both together. Claude accepts feedback with Decline or Keep planning. Codex
 records the decline first, then offers a separate **Send feedback** message in that conversation.
 If delivery is uncertain, your exact response is kept for an explicit retry.
 
 In Account and devices, enable **Agent notifications** to receive a generic alert while the app is
-closed. Tap it to fetch the request through the encrypted connection. Commands, file names,
+closed: "An agent on your Mac needs your response". Tap it to fetch the request through the
+encrypted connection. A dev build explains that background alerts need the signed LeadingLight app. Commands, file names,
 questions and answers never appear in the alert. A request already handled elsewhere stays handled.
 Reopening the app keeps its notification registration, so a pending request does not alert you again.
 iOS controls alert delivery; requests remain available in the app when alerts are denied or delayed.

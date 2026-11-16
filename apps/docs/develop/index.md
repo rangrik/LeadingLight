@@ -71,7 +71,7 @@ One universal iOS app supports iPhone and iPad. It shares the desktop app's edit
 | `pnpm ios:build:iphone` | Builds a separate unsigned **LeadingLight iPhone Dev** archive, with its own app data after signing and installation. |
 | `pnpm ios:build:sim` | Builds for the simulator, which needs a simulator runtime that matches Xcode's SDK. |
 
-The target needs iOS or iPadOS 16.4 or later. No signing team, certificate or profile is stored in the repository; choose your own in Xcode. Signing, installing on a device and TestFlight are covered in [docs/IPAD.md](https://github.com/rangrik/LeadingLight/blob/main/docs/IPAD.md).
+The target needs iOS or iPadOS 16.4 or later. No signing team, certificate or profile is stored in the repository; choose your own in Xcode. Signing and installing on a device are covered in [docs/IPAD.md](https://github.com/rangrik/LeadingLight/blob/main/docs/IPAD.md). Each release also signs an Ad Hoc build for the project's registered devices; see [Releases](/develop/releases#iphone-and-ipad).
 
 For the phone interface, open the browser build with `?iphone` in development, or use an iPhone.
 Run its Chromium and WebKit scenarios with:

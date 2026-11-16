@@ -28,13 +28,19 @@ LeadingLight is signed with an Apple Developer ID and notarized by Apple. The fi
 
 ## The first time you open it
 
-LeadingLight starts with an empty space and a sidebar of starter types: Pages, Tags, Daily notes, People, Books, Meetings, Projects, Tasks, Ideas and Collections. Click **New page** to write your first page, or follow [Your first ten minutes](/guide/first-steps).
+LeadingLight starts with an empty space and a sidebar of starter types: Pages, Notebooks, Tags, Daily notes, People, Books, Meetings, Projects, Tasks, Ideas and Collections. Click **New page** to write your first page, or follow [Your first ten minutes](/guide/first-steps).
 
 macOS may ask for permissions later, only when you use a feature that needs one: the microphone for a voice note, or speech recognition for its transcript.
 
 ## Update to a new version
 
-LeadingLight looks for a newer release when it opens and every four hours. When one is ready it says so: click **Update and restart**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. To look yourself, open **Settings › About** and click **Check for updates**.
+LeadingLight looks for a newer release when it opens and every four hours. When one is ready, a toast says so, such as "LeadingLight 0.6.0 is ready". Click **Update and restart**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. Nothing is downloaded before you click.
+
+- **Later** hides the toast for that version, even after you quit and reopen. **Settings › About** still offers **Update and restart**, and a newer version brings the toast back.
+- To look yourself, open **Settings › About** and click **Check for updates**. It says **Up to date**, or **Couldn't check for updates** when you are offline.
+- If the update can't be installed, a toast says "Couldn't update LeadingLight", with the reason and **Download**, which opens the release page. The app you have keeps running, unchanged.
+
+A dev app (`pnpm install:dev-app`) and the web app never offer an update.
 
 Version 0.2.0 can't update itself. Replace it once by hand: quit LeadingLight, download the newest release and drag it into **Applications** over the old app.
 
@@ -51,4 +57,7 @@ Quit LeadingLight and move it from Applications to the Trash. To remove your not
 ## Other ways to run it
 
 - **Build it yourself** on a Mac with Node, pnpm and Rust: see [Build from source](/develop/).
-- **iPad:** see [LeadingLight on iPad](/sync/ipad).
+- **iPhone and iPad:** each release also carries an iPhone and iPad build. It installs only on
+  devices registered to the project, never through the App Store or TestFlight, and then updates
+  itself. See [LeadingLight on iPad](/sync/ipad#how-to-get-it) and
+  [LeadingLight on iPhone](/sync/iphone#get-the-app).

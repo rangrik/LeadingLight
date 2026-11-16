@@ -30,6 +30,10 @@ features:
     details: Connect Google accounts, choose calendars, and plan a day or a week. Create, edit and delete events directly, or ask an agent to help you find time.
     link: /organize/calendar
     linkText: Calendar and permissions
+  - title: Mail that tells you what needs you
+    details: Mail reads your new Gmail, says how many mails need you and for how long, then takes you through them one at a time. Reply, mark done, or make a task. In preview.
+    link: /organize/mail
+    linkText: Mail
   - title: A block editor that stays out of the way
     details: Markdown shortcuts, a slash menu, tables, columns, toggles, code, images, video and embeds. Drag any block to move it.
     link: /write/editor
@@ -43,7 +47,7 @@ features:
     link: /organize/links
     linkText: Links and backlinks
   - title: Capture from anywhere
-    details: Press ⌃⌥I in any app to jot an idea. Save a web page to read offline, or record a voice note and turn it into tasks.
+    details: Press ⌃⌥I in any app to jot an idea. Save a web page to read offline, record a voice note and turn it into tasks, or write by hand on a page.
     link: /capture/idea-capture
     linkText: Capture
   - title: Writing tools after iA Writer
@@ -54,12 +58,20 @@ features:
     details: Ask about a page, chat with a project's folder, or assign a task to an agent — through the Claude Code or Codex you already use. No API keys, no extra bill.
     link: /ai/
     linkText: AI and agents
+  - title: A browser beside your notes
+    details: Browse real Safari pages in the Mac app, watch an agent's tab live, and ask about the page you are on. Its sign-ins and history stay on your Mac.
+    link: /ai/browser
+    linkText: The built-in browser
+  - title: On iPhone and iPad
+    details: Capture a thought, carry on writing, and answer your Mac's agents from your phone or tablet. In preview.
+    link: /sync/iphone
+    linkText: LeadingLight on iPhone
   - title: Local first
-    details: Your notes live in a file on your Mac and work offline. Encrypted sync to an iPad or the web app is optional, and in preview.
+    details: Your notes live in a file on your Mac and work offline. Encrypted sync to an iPhone, an iPad or the web app is optional, and in preview.
     link: /guide/privacy
     linkText: Your data
   - title: Calm, and yours
-    details: Light and dark follow the system. Pick from 23 themes, change any shortcut, and set the width you like to read at.
+    details: Light and dark follow the system. Pick from 24 themes, change any shortcut, and set the width you like to read at.
     link: /customize/appearance
     linkText: Make it yours
 ---

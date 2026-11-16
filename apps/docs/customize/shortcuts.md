@@ -7,7 +7,7 @@ description: Every key in LeadingLight, from the menu bar to the editor and the 
 
 Most of what you do in LeadingLight has a key. This page lists them all: the app's shortcuts, which you can change, and the editor's own keys, which stay as they are.
 
-To see the app's shortcuts inside LeadingLight, press <kbd>⌘⌥/</kbd> (**Help › Keyboard shortcuts**). The same list, with a button to change each key, is in **Settings › Shortcuts**.
+To see the app's shortcuts inside LeadingLight, press <kbd>⌘⌥/</kbd> (**Help › Keyboard shortcuts**). The same shortcuts, with a button to change each key, are in **Settings › Shortcuts**.
 
 ## App shortcuts
 
@@ -23,6 +23,9 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 | <kbd>⌘W</kbd> | **Close tab** | Closes the tab in front. Closing a pane's last tab closes the pane. |
 | <kbd>⇧⌘T</kbd> | **Reopen closed tab** | Brings back the tab you closed last. |
 | <kbd>⌘S</kbd> | **Save** | Saves now. Pages also save by themselves as you type. |
+| <kbd>⇧⌘R</kbd> | **Quick record** | Starts or stops a voice note in this page. See [Capture while reading](/capture/reading#speak). |
+| <kbd>⌘L</kbd> | **Open location…** | In the browser, goes somewhere in this tab. |
+| <kbd>⌘D</kbd> | **Save page** | In the browser, saves the page, or stops saving it. |
 
 ### View
 
@@ -32,6 +35,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 | <kbd>⌘+</kbd> | **Zoom in** | Makes the interface text one step larger. |
 | <kbd>⌘−</kbd> | **Zoom out** | Makes the interface text one step smaller. |
 | <kbd>⌘0</kbd> | **Actual size** | Puts the text back to its default size. |
+| <kbd>⌘R</kbd> | **Reload page** | In the browser, reloads the page. |
 | <kbd>⇧⌘F</kbd> | **Focus mode** | Keeps the line you are writing in the middle of the page. |
 | <kbd>⇧⌘D</kbd> | **Syntax highlight** | Colours nouns, verbs, adjectives, adverbs and conjunctions. |
 | <kbd>⌥⇧⌘D</kbd> | **Style check** | Strikes through fillers, redundancies and clichés. Nothing is deleted. |
@@ -46,6 +50,10 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 | <kbd>⌥⌘S</kbd> | **Suggestions** | Shows or hides tail's suggestions. |
 | <kbd>⌥⌘F</kbd> | **Feed** | Shows or hides what agents need from you. |
 | <kbd>⌥⌘K</kbd> | **Captures** | Shows or hides what you captured. |
+| <kbd>⌥⌘M</kbd> | **Mail** | Opens Mail. See [Mail](/organize/mail). |
+| <kbd>⌥⌘B</kbd> | **Browser** | Goes to the built-in browser, or back to your notes. <Badge type="info" text="Mac app" /> |
+| <kbd>⌃⌥B</kbd> | **Browser from anywhere** | Brings the browser up from any app, or puts it away. <Badge type="info" text="Mac app" /> |
+| <kbd>⌘1–9</kbd> | **Tab 1–9** | In the browser, goes to a tab by its place. |
 | <kbd>⌃↩</kbd> | **Nod** | Does what tail's line offers on the page in front. |
 | <kbd>⌘[</kbd> | **Back** | Goes to the tab's previous page. |
 | <kbd>⌘]</kbd> | **Forward** | Goes to the tab's next page. |
@@ -196,7 +204,7 @@ A new key shows everywhere the old one did:
 
 - the **Keyboard shortcuts** list (<kbd>⌘⌥/</kbd>)
 - the tooltip of the Ask button in a page's header, and of **Ask about this** in the selection toolbar
-- the **Writing** menu and **Settings › Writing**, beside each writing tool
+- the **Writing tools** menu and **Settings › Writing**, beside each writing tool
 - the sidebar's **New idea** row, when you point at it
 - **Settings › Capture**, as **New idea shortcut**
 - the **Text size** row in **Settings › Appearance**, which names the zoom keys

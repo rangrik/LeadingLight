@@ -5,9 +5,10 @@ description: Browse the web beside your notes, watch an agent's tab live, point 
 
 # The built-in browser <Badge type="info" text="Mac app" />
 
-LeadingLight has a browser of its own, beside your notes. You and your agents use the same pages:
-you can browse by hand, watch an agent click through a site live, hand it the exact tab you are
-looking at, and comment on parts of a page for it to fix.
+LeadingLight has a browser of its own, beside your notes. Browse by hand, watch an agent click
+through a site live, hand it the exact tab you are looking at, and comment on parts of a page for
+it to fix. Your tabs are yours: agents work in browsers of their own, and see your page only when
+you attach it in Ask.
 
 Your own tabs browse public websites without approving each site or its images and scripts.
 Agent tabs keep a separate site allowlist. Private network addresses and unrelated local ports
@@ -56,7 +57,8 @@ Press **Ask** (the sparkles in the toolbar) or <kbd>⌘J</kbd>. The same Ask as 
 at the right and the page narrows to make room. The tab is attached above the message box, with
 **Add a tab** to attach another open tab, and **×** on a tab to take it away. With no thread yet it
 reads "What should we do with" and the page's name, with "Claude can read this page. It asks before
-it clicks, types or leaves the site." and two suggestions to start from.
+it clicks, types or leaves the site." and two suggestions to start from: **Summarize this page**
+and **Save the key points as a note**. Press <kbd>⌘J</kbd> again to close Ask.
 
 - **Reading never asks.** Claude reads an attached tab's text, its links, buttons and fields, and
   the words you selected, and can look at a picture of it.
@@ -127,12 +129,13 @@ in them, are refused.
 
 ### Allow a public site
 
-Pages on your Mac, such as a site an agent serves from its folder, open straight away. The first
-time a tab tries to open a public website, the browser asks first: "Allow example.com for
-browsing? This also allows agents to reach this site." Press **Allow** and the page loads.
+Pages on your Mac, such as a site an agent serves from its folder, open straight away. Agents'
+tabs keep their own list of allowed sites: the first time one tries to open a public website, the
+browser asks "Allow example.com for agent browsing?" Press **Allow** and the page loads. Your own
+tabs open public websites without asking, and add nothing to the agents' list.
 
 To see or take back what you allowed, open the **Browser menu** (the **…** button) and choose
-**Site permissions**, then **Revoke** beside a site. Revoking blocks new requests to it; a page
+**Agent site permissions**, then **Revoke** beside a site. Revoking blocks new requests to it; a page
 already shown, or kept in the browser's cache, may still appear. A refused site never opens in
 another browser behind your back.
 

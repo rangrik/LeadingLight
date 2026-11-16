@@ -13,7 +13,7 @@ LeadingLight is local first. Your notes are kept on your device, and nearly ever
 | --- | --- |
 | Mac app | A SQLite file, `leadinglight.db`, in `~/Library/Application Support/com.leadinglight.app/`. Images and files you add are kept in an `assets` folder beside it. |
 | Web app | Your browser's storage for that site (IndexedDB). Clearing the site's data in the browser deletes them. |
-| iPad | A SQLite file inside the app, as on the Mac. |
+| iPad and iPhone | A SQLite file inside the app, as on the Mac. |
 
 Page history and authorship are kept in the same store, next to the pages. Nothing needs an account.
 
@@ -23,7 +23,8 @@ These features never send your words anywhere:
 
 - **The editor, links, backlinks, types, lists and search menus.**
 - **Writing tools.** Focus mode, syntax highlight, the style check and counts run in the app. The grammar check uses Harper, a checker that runs on your device. **Listen** in the writing coach uses a voice installed on your Mac, never an online voice.
-- **Voice transcription** uses Apple's speech recognition on your Mac (macOS 26 or later). Your audio isn't sent away to be transcribed.
+- **Voice transcription** uses Apple's speech recognition on your Mac, iPad or iPhone (OS 26 or later). Your audio isn't sent away to be transcribed.
+- **Text in a photo** is read by Apple Vision on your iPad or iPhone.
 - **History and authorship.**
 
 LeadingLight has no analytics or tracking of its own.
@@ -40,8 +41,10 @@ LeadingLight has no analytics or tracking of its own.
 | Check for Claude Code and Codex updates | The app looks up the newest version where your copy updates from (npm or Homebrew). You can turn off **Check for updates** in **Settings › AI**. |
 | Use the built-in browser | It loads the sites you or an agent open, as any browser would. Its history, site data and downloads stay on your Mac. |
 | Connect Google Calendar | Google grants calendar access separately from workspace sign-in. Our service stores encrypted refresh tokens and fetches event data on demand. Calendar data is not end-to-end encrypted. Note agents can send calendar details to your model provider when you ask them to plan. Disconnect removes our saved grant. |
+| Connect Gmail for Mail | Our service reads and acts on your mail with Google's permission. Mail passes through it in memory, is not stored there and is not end-to-end encrypted. To write the few lines about each mail, the Mac app sends its text through your Claude Code or Codex to Anthropic or OpenAI. Those lines stay on the Mac and are deleted when you deal with the mail, or after 14 days. See the [privacy policy](/privacy-policy#gmail). |
 | Turn on encrypted sync | Your notes are encrypted on your device before they're uploaded. The service stores only encrypted data and can't read it. Your sign-in (Google or GitHub) identifies your account. The service keeps that sign-in's email address and provider, so each of your devices can show which account it uses, and the name and last-online time of each installed app, for the device list. |
-| Use agents from a browser | Your browser and your Mac exchange messages through an encrypted relay. The relay can't read prompts, answers or tool results, and your Claude Code or Codex sign-in never leaves the Mac. |
+| Use agents from a browser, iPhone or iPad | The device and your Mac exchange messages through an encrypted relay. The relay can't read prompts, answers or tool results, and your Claude Code or Codex sign-in never leaves the Mac. |
+| Turn on agent notifications on iPhone or iPad | Apple delivers an alert that says only "An agent on your Mac needs your response". The request itself is fetched through the encrypted relay. |
 
 LeadingLight never asks for or stores a model API key. Agents use the Claude Code or Codex account you already signed in to on your Mac, and that plan's limits apply. The app doesn't read their sign-in secrets either: it asks the tools themselves, for example to show how much of your plan you've used.
 

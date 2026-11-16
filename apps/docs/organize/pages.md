@@ -25,7 +25,7 @@ The card header above the page shows where you are: the type's plural name, then
 
 ## Find pages in Recent
 
-**Recent** lists your pages, newest first. Daily notes, tags and tasks live in their own lists under **Types**, and templates in their type's settings, so none of them is in Recent. A page you open shows as the current row.
+**Recent** lists your pages, newest first. Daily notes, tags and tasks live in their own lists under **Types**, and templates in their type's settings, so none of them is in Recent. The exception is a task given to an agent: it is listed like any page, with a dot for its state. A page you open shows as the current row.
 
 To change the order, click **Sort Recent** beside **New page** and pick one:
 

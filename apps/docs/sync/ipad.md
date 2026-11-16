@@ -15,13 +15,24 @@ The same iOS target also supports [iPhone](/sync/iphone), with a capture-first p
 
 ## How to get it
 
-There is no App Store or TestFlight version yet. Today there are two ways to use LeadingLight on
-an iPad:
+LeadingLight is a private app, so it is not on the App Store or TestFlight. There are three ways
+to use it on an iPad:
 
+- **The release build**, on an iPad registered to the project. Each
+  [GitHub release](https://github.com/rangrik/LeadingLight/releases) carries a build signed for
+  those devices. The first install is from a Mac, by cable; after that the app updates itself.
 - **Build it yourself** and install it on your own iPad from a Mac with Xcode. See [Build it
   yourself](#build-it-yourself) below.
 - **Use the web app in Safari.** It works by touch at iPad size and keeps working offline once
   opened. See [Accounts and encrypted sync](/sync/#use-the-web-app-on-a-phone-or-tablet).
+
+## Update the app
+
+When a newer release is out, a toast names it, such as "LeadingLight 0.6.0 is ready", with
+**Update** and **Later**. **Settings › About** offers the same **Update** beside **Version**.
+Tap **Update**: iOS asks whether to install LeadingLight, and **Install** replaces the app in
+place. Your pages stay as you left them. The same works on iPhone. The web app never offers an
+update.
 
 ## Write without a connection
 
@@ -137,7 +148,8 @@ You can build the iPad app from source on a Mac with Xcode, CocoaPods, pnpm and 
   Developer Mode there. It shows as **LeadingLight Dev**, keeps its own notes apart from any other
   copy, and opens without a development server. Its signing lasts seven days; then build and
   install it again.
-- A TestFlight build needs a paid Apple Developer membership and an App Store Connect record.
+- The release build is signed only for the project's registered devices, so it won't install on
+  any other iPad. Build your own instead.
 
 ## Related
 

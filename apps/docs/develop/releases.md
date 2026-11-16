@@ -15,7 +15,7 @@ For step-by-step installation, see [Install](/guide/install).
 
 ## What a release contains
 
-Each release has five files:
+Each release has seven files:
 
 | File | What it is for |
 | --- | --- |
@@ -24,6 +24,8 @@ Each release has five files:
 | `LeadingLight_<version>_macos-arm64.app.tar.gz` | The update an installed app downloads. |
 | `latest.json` | Tells an installed app which version is newest, with the update's signature. |
 | `SHA256SUMS.txt` | The SHA-256 checksum of the DMG, the ZIP and the update. |
+| `LeadingLight_<version>_ios.ipa` | The iPhone and iPad app, signed only for the project's registered devices. |
+| `LeadingLight_ios.plist` | The manifest that the iPhone and iPad app's **Update** button hands to iOS. |
 
 The app inside carries everything it needs to run, including the project runtime, tmux, the transcription helper and their license notices. Its version matches the release's tag.
 
@@ -33,7 +35,7 @@ A checksum tells you the file you downloaded is exactly the one that was built. 
 
 ```sh
 cd ~/Downloads
-shasum -a 256 LeadingLight_0.2.0_macos-arm64.dmg
+shasum -a 256 LeadingLight_0.5.0_macos-arm64.dmg
 cat SHA256SUMS.txt
 ```
 
@@ -58,12 +60,16 @@ Releases come from the history of `main`, with no hand-edited version numbers.
 
 1. **Conventional commit titles.** Each change on `main` has a title such as `feat: add calendar view`, `fix: preserve cover position` or `perf: speed up search`. A feature bumps the minor version and a fix bumps the patch version. `feat!:` marks a breaking change; below 1.0 that bumps the minor version too. Titles that don't follow this form don't appear in the release notes.
 2. **A release pull request.** Release Please keeps one open pull request for the next version. It updates the changelog and every version number together (the desktop app, the Tauri config and the Rust package), and its description becomes the release notes, so a maintainer can review and edit them there.
-3. **Build.** When that pull request is merged and its checks pass, the workflow tags the commit and makes a private draft release. It checks that exact commit again, builds the app on a fresh Apple Silicon Mac, signs it, has Apple notarize it, and verifies the downloads.
-4. **Publish.** It uploads the five files, checks that each uploaded file matches, and only then publishes the release.
+3. **Build.** When that pull request is merged and its checks pass, the workflow tags the commit and makes a private draft release. It checks that exact commit again, builds the app on a fresh Apple Silicon Mac, signs it, has Apple notarize it, and verifies the downloads. It also builds the iPhone and iPad app and signs it Ad Hoc for the registered devices.
+4. **Publish.** It uploads the seven files, checks that each uploaded file matches, and only then publishes the release.
 
-If any step fails, the release stays a private draft, and nothing incomplete is published. A maintainer can retry the draft by its tag; a published release can never have its files replaced. A maintainer can also rehearse a build: it makes the same downloads and keeps them as workflow artifacts for seven days, without tagging or publishing anything. A branch can rehearse too.
+If any step fails, the release stays a private draft, and nothing incomplete is published. A missing signing secret stops the build and points to `docs/RELEASING.md`, so nothing unsigned is ever published. A maintainer can retry the draft by its tag; a published release can never have its files replaced. A maintainer can also rehearse a build: it makes the same downloads and keeps them as workflow artifacts for seven days, without tagging or publishing anything. A branch can rehearse too.
 
 Pull requests from forks run their checks with read-only access and no release secrets, and only `main` can prepare or publish a release.
+
+## iPhone and iPad
+
+LeadingLight is private, so nothing goes to TestFlight or the App Store. The iOS build in each release installs only on devices registered to the project. The first install on a device is from a Mac, by cable. After that the app's **Update** button opens the release's install link, and iOS asks before it replaces the app. See [Update the app](/sync/ipad#update-the-app).
 
 The maintainer's full steps are in [docs/RELEASING.md](https://github.com/rangrik/LeadingLight/blob/main/docs/RELEASING.md).
 

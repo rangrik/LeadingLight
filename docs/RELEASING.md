@@ -20,8 +20,8 @@ the Mac build is signed with the Apple secrets listed under Downloads and signin
    **Checks** manually on its branch. Merge the release PR once those checks pass.
    The workflow creates a tag and draft, validates
    that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, a ZIP, the
-   update archive with `latest.json`, and `SHA256SUMS.txt`, sends the iPhone and iPad build
-   and the iPhone and iPad build, and then publishes. Until every step succeeds, the draft stays private.
+   update archive with `latest.json`, `SHA256SUMS.txt`, and the iPhone and iPad build with its
+   manifest, and then publishes. Until every step succeeds, the draft stays private.
 
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.
@@ -39,7 +39,7 @@ Open Actions → **Publish release** → **Run workflow**, choose `main`, disabl
 **rehearsal** and enter the existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
 only draft assets, and publishes on success. A published version cannot be overwritten.
 While a draft is unfinished, **Prepare release** stops instead of starting another.
-The draft must contain only the five generated assets; remove any unrelated
+The draft must contain only the seven generated assets; remove any unrelated
 manually added file before retrying.
 
 If the tagged source is broken, delete only its draft release in GitHub Releases

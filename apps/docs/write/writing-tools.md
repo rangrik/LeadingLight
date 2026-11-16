@@ -23,7 +23,7 @@ All of them run on your Mac. No text leaves it.
 
 You can also use:
 
-- **The Writing menu**: the **Writing** button at the right of each page's header. It shows a check beside each tool that is on, with its key. It also has **Review writing** (see [Writing coach](/write/writing-coach)) and **Writing settings…**, which opens **Settings › Writing**.
+- **The Writing tools menu**: **⋯** (**Page actions**) at the right of each page's header, then **Writing tools**. It shows a check beside each tool that is on, with its key. It also has **Review writing** (see [Writing coach](/write/writing-coach)) and **Writing settings…**, which opens **Settings › Writing**.
 - **The View menu** in the menu bar. <Badge type="info" text="Mac app" />
 - **Settings › Writing**, with a switch for each tool and its choices.
 
@@ -85,7 +85,7 @@ Choose what is struck under **Strike through** in **Settings › Writing**: **Fi
 
 Grammar check finds spelling and grammar mistakes in English, using Harper, a checker that runs on your Mac. **Grammar help** in **Settings › Writing** decides how it shows them:
 
-- **When I ask** (the default): nothing is underlined while you write. Choose **Review writing** in the Writing menu to go through suggestions one at a time. See [Writing coach](/write/writing-coach).
+- **When I ask** (the default): nothing is underlined while you write. Choose **Review writing** in the **Writing tools** menu to go through suggestions one at a time. See [Writing coach](/write/writing-coach).
 - **While I write**: mistakes are underlined as you go.
 
 With **While I write**, spelling mistakes get a red dotted underline and grammar mistakes a green one, within a few seconds. Point at one to see the reason, such as "Incorrect indefinite article.", and click it to open its suggestion. Fix the word and pause, and its underline goes.
@@ -118,7 +118,7 @@ The tools work on the types of pages chosen under **Use the tools on** in **Sett
 - **On** for pages you write in: Pages, Daily notes, Meetings, Projects, Ideas and any type you make.
 - **Off** for records: People, Books, Tags and Collections.
 
-A page of a type that is off has no Writing menu and no counts, and nothing on it is dimmed, coloured or underlined.
+A page of a type that is off has no **Writing tools** menu and no counts, and nothing on it is dimmed, coloured or underlined.
 
 Tick or untick a type to change it. Once you differ from the suggestion, **Use suggestions** appears; click it to go back. Unticking a type never changes its pages' text or properties.
 

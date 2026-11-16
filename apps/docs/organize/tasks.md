@@ -18,7 +18,9 @@ Task is a starter type, listed as **Tasks** under Types in the sidebar, after Pr
 | **Project** | One project page. The project lists its tasks. |
 | **Tags** | Its tags. |
 
-Task cards show Due and Project. Tasks live in **Tasks**, not in Recent.
+Task cards show Due and Project. Tasks live in **Tasks**, not in Recent, until you give one to an
+agent. Then it is listed like any page, with a dot for its state. See
+[Assign tasks to agents](/ai/tasks-for-agents).
 
 A to-do item in the editor is a quick checklist line on one page. A task is a page you can find, list and link from anywhere. Use whichever fits.
 

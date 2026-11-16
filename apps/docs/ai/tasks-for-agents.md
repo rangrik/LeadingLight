@@ -102,14 +102,14 @@ runtime that runs it; you don't need to open the chat.
 | --- | --- |
 | State | **Working**, **Needs your input**, **Ready for review**, **Idle** (its turn ended, nothing to review), **Stopped** (its agent process ended), or **Done** (you accepted it) |
 | Now | What the agent says it is doing, such as "Reading notes.txt", and when it said so |
-| Steps | "1 of 2 steps done", from the checklist the agent keeps. Click it to see the steps |
+| Steps | "1 of 2 steps", from the checklist the agent keeps. Click it to see the steps |
 | Workers | Other agents it started, such as "Codex worker, working", then how each ended |
 | Evidence | Small views of the images and files in its reports; each opens where it sits in its report |
 
 The task's tab and its row in the sidebar carry its state as a small dot before the title: blue
 while **Working**, amber for **Needs your input**, green for **Ready for review**, and none
-otherwise. Hover over the dot to see the state's name. The sidebar lists tasks of your own task
-types, such as a "Chore"; Tasks of the starter type are in Tasks.
+otherwise. Hover over the dot to see the state's name. A task given to an agent is listed in the
+sidebar like any page, with its dot; until then it lives in Tasks.
 
 A count shows only for steps the agent listed. There is never a guessed percentage. These lines
 change in place as the work goes, and they never move the words you are reading: if you have

@@ -31,7 +31,8 @@ place for your account:
 | **Sync** | Whether this device syncs, its status, and **Sync now** |
 | **Devices** | The apps signed in to your account, and **Add a device** |
 | **Recovery key** | **Show…** the key, and tick it as saved |
-| **Agents** | Connections that let a browser, iPhone or iPad run agents on your Mac. See [Agents from a browser](/sync/pairing) and [Agents from iPhone and iPad](/sync/mobile-agents) |
+| **Agents from a browser** | Pair a web browser with the agents on your Mac. See [Agents from a browser](/sync/pairing) |
+| **Agents from iPhone and iPad** | Let your iPhone or iPad start and answer the agents on your Mac. See [Agents from iPhone and iPad](/sync/mobile-agents) |
 
 The sidebar row also says where sync stands: **Synced**, **Syncing**, **Offline**, **Sync off**,
 **Paused**, **Sign in** when a sign-in has ended, or **Check** when something needs a look. It
@@ -72,7 +73,12 @@ There are two ways in.
 2. Type the code and press **Continue**.
 3. It asks "Let LeadingLight on Mac open your notes?" with your account and the code. Check the
    code is the one on the new device, then press **Approve**.
-4. The new device says "Connected". It appears in **Devices**, marked **New**.
+4. It says "LeadingLight on Mac is connected. It will finish syncing by itself." The new device
+   appears in **Devices**, marked **New**.
+
+A code nobody is waiting with gets "No device is waiting with that code. Check the code on your new
+device." After ten wrong codes in ten minutes it says "Too many codes tried. Wait ten minutes, then
+try again."
 
 **Add a device** is off on a device where sync is off or paused, because that device has no key
 to hand over.
@@ -90,7 +96,8 @@ code.
 
 Either way the recovery key reaches the new device encrypted, so the service never sees it. The
 device keeps its sign-in in the system Keychain. A code is good for ten minutes and can be
-approved once; after that, press Connect again. Only ten codes can be tried in ten minutes.
+approved once; after that, press Connect again. An approval link that has expired says so and asks
+for nothing; start again on the new device.
 
 Signing in to your workspace is separate from Claude Code and Codex. Agents keep using the CLI
 account already signed in on your Mac. See [Overview and setup](/ai/).
@@ -102,7 +109,7 @@ others with when each was last online. A device that joined in the last day is m
 Browsers are not listed.
 
 - **Rename.** Press **Rename** on this device's own row. Your other devices list it by the new
-  name.
+  name. A name can't be empty or longer than 40 characters.
 - **Remove.** At **leadinglight.app**, press **Remove** on a device and confirm. It is signed out
   at once and gets nothing new. Notes already on it stay on it. The installed apps do not remove
   other devices; they say "To remove a device, sign in at leadinglight.app."

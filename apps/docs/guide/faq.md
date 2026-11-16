@@ -21,11 +21,14 @@ macOS asks once about any app downloaded from the internet. LeadingLight is sign
 
 ### Does it update itself?
 
-Yes, on the Mac. It says when a newer release is ready and installs it with one click. See [Install](/guide/install#update-to-a-new-version). Your notes stay where they are.
+Yes, on the Mac. It says when a newer release is ready and installs it with one click. See [Install](/guide/install#update-to-a-new-version). Your notes stay where they are. The iPhone and iPad apps update from the same release: see [Update the app](/sync/ipad#update-the-app).
 
-### Is there a Windows, Linux or iPhone app?
+### Is there a Windows, Linux, iPhone or iPad app?
 
-No. LeadingLight is made for the Mac first. The web app runs in any modern browser, including Safari on an iPhone, and a native iPad app is in preview. See [LeadingLight on iPad](/sync/ipad).
+There are no Windows or Linux apps. LeadingLight is made for the Mac first. Native
+[iPhone](/sync/iphone) and [iPad](/sync/ipad) apps are in preview, but they are private: they
+install only on the devices registered to the project, and are not on the App Store or
+TestFlight. Anyone can use the web app in a modern browser, including Safari on an iPhone.
 
 ### Can I use it without an account?
 
@@ -75,14 +78,17 @@ Sync is in preview. If two devices change the same page while apart, one of the 
 
 These are known gaps. Each has a reason and a plan to come back to it.
 
-- **Search across all notes** (⌘K), and a **trash** with restore.
+- **Search across all notes** (⌘K) on the Mac and the web, and a **trash** with restore. On
+  iPhone, **Notes** already searches titles and saved text.
 - **Math blocks**, **block references** and **saved queries**.
 - **A graph view** of links.
 - **Stickers**, images as pages, and opening the same page twice side by side.
 - **Editing values inside lists**, and editing an embed in place.
-- **Intel builds**, **signed and notarized downloads**, and **automatic updates**.
+- **Intel builds.**
 - **Sync for everyone.** Accounts and sync are in private preview, and Google sign-in is in testing.
-- **iPad on the App Store or TestFlight.**
+- **Mail for everyone.** Google has not yet reviewed Mail's access to Gmail, so only the owner can
+  connect an account.
+- **iPhone and iPad for everyone.** The apps are private and are not on the App Store.
 
 ## Get help
 

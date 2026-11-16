@@ -13,7 +13,7 @@ This page is a map of the LeadingLight code: where things live, what they are bu
 | --- | --- |
 | `apps/desktop` | The app. `src/` is the React interface; `src-tauri/` is the Rust side. |
 | `apps/desktop/src-tauri` | The window, the SQLite migrations (`migrations/`), the Mac menu bar, `agent.rs`, which drives the installed Claude Code for Ask, and `capture.rs`, the <kbd>⌃⌥I</kbd> idea capture panel. `capture.html` and `src/capture.tsx` are that panel's page. |
-| `apps/cloud` | The optional service for accounts, encrypted sync and pairing a browser with a Mac. |
+| `apps/cloud` | The optional service for accounts, encrypted sync, Google Calendar and Gmail access, and the encrypted relay between a Mac and a browser, iPhone or iPad. |
 | `apps/image-service` | A small service that searches Unsplash for covers. It never receives notes. |
 | `apps/landing-pages` | Three landing page concepts. |
 | `apps/docs` | This documentation site. |
@@ -35,7 +35,7 @@ pnpm workspaces hold the JavaScript packages; a Cargo workspace at the root hold
 - **COSS UI**, shadcn-style components on **Base UI**, as the one component kit, used as shipped.
 - **lucide** as the one icon set, and the system font (SF Pro on macOS).
 
-The same React app runs in three places: the Mac app, the iPad app and a plain browser. Code that needs to know whether it is in the Mac app asks one place, `isNative` in `apps/desktop/src/lib/platform.ts`.
+The same React app runs in four places: the Mac app, the iPhone and iPad app (one universal iOS app) and a plain browser. Code that needs to know whether it is in the Mac app asks one place, `isNative` in `apps/desktop/src/lib/platform.ts`.
 
 ## Data model
 
@@ -60,6 +60,8 @@ LeadingLight holds no model API keys. Agents run through the command-line tools 
 - **Ask on a page.** Each turn, the Rust side starts the installed Claude Code (`claude -p`) as a subprocess, speaking stream-json both ways, and resumes it for follow-ups. GPT models go through Codex the same way, one `codex app-server` per turn. The page tools (read, search, edit, insert, rewrite, create) are answered by the web view, so every change goes through the page's open editor. Access maps to the tool's own permission modes.
 - **Project chats.** Agents that keep working while the window is closed run in the app's own copy of the project runtime, `berthd`, built from Shipyard at a pinned commit with a short patch series in `runtime/shipyard`. It has its own state folder, socket and tmux server, so it never touches the person's own. The app is its client: the runtime owns the agent processes, their questions and approvals, turns and history; LeadingLight owns the link between a project page and its folder, and the reports the person keeps.
 - **From a browser.** A signed-in browser can pair with a Mac and use its page agents through an encrypted relay. The Mac runs the same processes; the relay sees only encrypted messages.
+- **From iPhone and iPad.** The iOS app pairs with a Mac by a connection code and starts, answers and stops that Mac's project agents through the same kind of relay. A push alert through Apple carries only a generic line; the request itself is fetched over the relay.
+- **The browser.** Your own tabs in the Mac app are native WebKit views. Agents' tabs are separate Chromium browsers run by the project runtime and streamed into the app; they share nothing with your tabs unless you attach one in Ask.
 
 The browser build has a stand-in that plays the same protocol as Claude Code, so the Ask panel can be tried and tested without it.
 
@@ -67,7 +69,11 @@ The browser build has a stand-in that plays the same protocol as Claude Code, so
 
 Sync is optional and off until you set it up. Each device keeps its full local store, and changes travel as an encrypted journal: compressed, chunked entries, encrypted with AES-GCM on the device. The hosted service stores only that ciphertext. The recovery key that unlocks it stays on your devices and never reaches the service.
 
-Devices can reconnect at different times. If two offline devices change the same page, both versions are kept; it is not live, character-by-character merging. Attachments travel inside the encrypted journal. Linked project folders stay on the Mac. Native apps join an account by approval in a signed-in browser, which encrypts the recovery key for that device.
+Devices can reconnect at different times. If two offline devices change the same page, both versions are kept; it is not live, character-by-character merging. Attachments travel inside the encrypted journal. Linked project folders stay on the Mac. Native apps join an account by approval, from a signed-in browser or from a device that already syncs, which encrypts the recovery key for that device.
+
+## Updates
+
+The Mac app checks GitHub's latest release with Tauri's updater and installs an update only if it carries LeadingLight's update signature. An iOS app can't replace itself, so its **Update** button opens the release's `itms-services` install link and iOS installs the Ad Hoc build in place. See [Releases](/develop/releases).
 
 ## Shipyard inside
 

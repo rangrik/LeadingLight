@@ -15,8 +15,8 @@ The build fails on a link to a page that doesn't exist, so run it after moving p
 
 - The specs in `features/` are the contract: document what they say the app does, and nothing more.
 - Plain English, second person, the app's own labels in **bold**, keys as `<kbd>⇧⌘F</kbd>`.
-- Mark features that exist in one place only with `<Badge type="info" text="Mac app" />`, and
-  previews with `<Badge type="warning" text="Preview" />`.
+- Mark features that exist in one place only with that place, as `<Badge type="info" text="Mac app" />`
+  or `<Badge type="info" text="iPhone and iPad" />`, and previews with `<Badge type="warning" text="Preview" />`.
 - Screenshots are WebP in `public/screenshots/`, 1600×1000, taken from the browser build
   (`pnpm --filter @leadinglight/desktop dev`) at 1280×800 and twice the pixel density.
   Show them with `<img class="shot" src="/screenshots/<name>.webp" alt="…" />`.

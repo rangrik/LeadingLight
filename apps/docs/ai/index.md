@@ -13,7 +13,8 @@ LeadingLight's agents are Claude and GPT, working beside your notes. They run on
 - **Tail.** A quiet helper that reads along and now and then offers one line you can accept with a single press: file your ideas, give a task its day, link a name. See [Tail and suggestions](/ai/tail).
 - **Projects and project chats.** Link a page to a folder on your Mac, or to a GitHub repository, and chat with an agent that works in that folder: it reads and changes files, runs commands, and reads the project's pages. See [Projects linked to folders](/ai/projects) and [Project chat](/ai/project-chat).
 - **Tasks for agents.** Give a task to an agent with one Assign. It works in the project's folder and writes a report beside the task. See [Assign tasks to agents](/ai/tasks-for-agents) and [Feed and feedback](/ai/feed-feedback).
-- **The browser.** A browser inside the app that you and a project's agents share. See [The browser](/ai/browser).
+- **The browser.** A browser inside the Mac app. Your tabs are your own and agents work in browsers of their own; an agent sees your page only when you attach it in Ask. See [The browser](/ai/browser).
+- **Mail.** In the Mac app, a reader writes a few lines about each new mail, with short reply drafts. See [Mail](/organize/mail).
 
 ## What you need
 
@@ -45,9 +46,11 @@ The app says what to do, in **Settings › AI** and in the Ask panel:
 - **Codex not installed.** In the model picker, the GPT group says **Install Codex to use GPT models**, with a link, and lists no models.
 - **Codex not signed in.** The GPT group says **Run codex login in Terminal to use GPT models**. If you chose a GPT model earlier, the panel sends nothing until Codex is ready, and says why.
 
-### In a browser or on iPad
+### In a browser, or on iPhone and iPad
 
-In LeadingLight in a web browser, Ask shows **Agents work on your Mac** with **Connect a Mac**. Pairing the browser with your Mac lets it use that Mac's Claude Code or Codex; see [Pair a browser with your Mac](/sync/pairing). Agents are not available in the iPad app.
+In LeadingLight in a web browser, Ask shows **Agents work on your Mac** with **Connect a Mac**. Pairing the browser with your Mac lets it use that Mac's Claude Code or Codex; see [Pair a browser with your Mac](/sync/pairing).
+
+The iPhone and iPad apps don't run agents themselves either. Connect them to your Mac and they can start, answer and stop that Mac's project agents, which keep working when the phone is closed. See [Agents from iPhone and iPad](/sync/mobile-agents).
 
 ## Settings › AI
 
@@ -122,6 +125,7 @@ Your notes stay on your Mac. Only what an agent needs leaves it, and only when a
 - **Ask** sends your question, the page you ask from, and the pages the model reads or you mention: to Anthropic for Claude, to OpenAI for GPT.
 - **Project chats** also send the files the agent reads in the folder you linked, as it works.
 - **Tail**, without being asked, sends the titles of your pages, and the summaries and changed words of the pages it reads on. You choose which types of page those are; see [What Tail reads](/ai/tail#what-tail-reads).
+- **Mail's reader** sends the text of each new mail, as data with no tools and no access to your notes. See [Your data and privacy](/guide/privacy).
 - Your sidenotes stay private: Tail and a project's agents never read them, unless you send them to an agent as feedback.
 
 The same words are in **Settings › AI › Privacy**. For more, see [Privacy](/guide/privacy).

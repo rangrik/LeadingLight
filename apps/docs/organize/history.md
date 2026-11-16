@@ -9,7 +9,8 @@ LeadingLight keeps a history of every page as you work, on your device. You neve
 
 ## Open a page's history
 
-Click the clock button in the page's card header (**History and authorship**). Its menu has:
+Click **⋯** (**Page actions**) in the page's card header and choose **History and authorship**.
+(A report page has no ⋯; its header has a clock button for the same menu.) The menu has:
 
 | Item | What it does |
 | --- | --- |

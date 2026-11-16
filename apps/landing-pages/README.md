@@ -32,7 +32,7 @@ Exclude `.env*`, `.vercel`, and `.gitignore` in the output's `.vercelignore`.
 Only the built static site is uploaded.
 
 The interactive examples contain illustrative notes. Downloads lead to the
-official GitHub releases and disclose the unsigned Apple Silicon preview status.
+official GitHub releases and say the Apple Silicon preview is signed and notarized.
 There are no signup forms or backend services in these landing pages.
 
 Render recipes are in each concept's `artwork/` or `design/` folder. Optimized

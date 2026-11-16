@@ -24,7 +24,7 @@ Grammar check works on the types of pages chosen under **Use the tools on**. See
 
 ## Review your writing
 
-1. Open the **Writing** menu at the right of the page's header.
+1. Open **⋯** (**Page actions**) at the right of the page's header, then **Writing tools**.
 2. Choose **Review writing**.
 
 The **Review writing** window opens on its **Review** tab. It says what it is checking: **Whole page**, or **Selected text** if you selected words first. It shows one suggestion:

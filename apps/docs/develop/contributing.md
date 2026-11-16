@@ -26,6 +26,7 @@ LeadingLight is in early development, so expect rough edges. Known limits are li
 5. **Fix what you found**, and check the failed scenarios again.
 6. **Try the Mac app** if part of the change can't be judged in a browser, such as the menu bar, global keys, the capture panel, or anything WebKit does differently from Chromium. `pnpm install:dev-app` installs a separate copy with its own data.
 7. **Write down what you put off.** Anything left for later goes in `docs/DEFERRED.md`, with the date, why not now, and what would bring it back.
+8. **Ship it through a release.** Merge the change into `main`. That updates the release pull request; merging it publishes a signed release, and the installed apps offer the update themselves. Never put a local build over the installed app. See [Releases](/develop/releases).
 
 The Playwright checks in `apps/desktop/qa` (`pnpm qa`) cover the quick smoke test, the gallery screenshots and regressions. They never drive the native window.
 

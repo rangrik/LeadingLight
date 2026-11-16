@@ -27,19 +27,26 @@ LeadingLight is in early development, and you should expect rough edges. The dow
 
 **Capture.** Press <kbd>⌃⌥I</kbd> in any app to note an idea without leaving what you're doing. Save a web page to read offline, or record a voice note, have it transcribed on your Mac, and turn parts of it into tasks. → [Idea capture](/capture/idea-capture)
 
+**Read and write by hand.** Write over a page or in a notebook, photograph a passage, and read imported books beside your notes. → [Reading and handwriting](/capture/reading)
+
+**Plan your day.** See your Google calendars beside your notes, and let Mail take you through the Gmail that needs you, one mail at a time. → [Calendar](/organize/calendar) and [Mail](/organize/mail) <Badge type="warning" text="Preview" />
+
 **Write better, quietly.** Focus mode, parts-of-speech highlighting, a style check for fillers and clichés, an on-device grammar check, and live counts. → [Writing tools](/write/writing-tools)
 
 **Work with Claude or Codex.** Ask about the page you're on, chat with a folder on your Mac, or assign a task to an agent that reports back beside your page. It all runs through the Claude Code or Codex you have installed and signed in to. LeadingLight never asks for an API key and doesn't bill you. → [AI and agents](/ai/)
 
-**Keep it yours.** Pick one of 23 themes, follow the system's light and dark, change any shortcut, and keep a full history of every page with the option to restore it. → [Appearance and themes](/customize/appearance)
+**Browse beside your notes.** The Mac app has a browser of its own. Watch an agent work in a tab, or ask about the page you are reading. → [The built-in browser](/ai/browser)
+
+**Keep it yours.** Pick one of 24 themes, follow the system's light and dark, change any shortcut, and keep a full history of every page with the option to restore it. → [Appearance and themes](/customize/appearance)
 
 ## Where it runs
 
 | | What you get |
 | --- | --- |
-| **Mac app** | Everything. Notes are stored in a SQLite file on your Mac. The menu bar, the global <kbd>⌃⌥I</kbd> capture key, on-device transcription and all agent features need the Mac app. |
+| **Mac app** | Everything. Notes are stored in a SQLite file on your Mac. The menu bar, the global <kbd>⌃⌥I</kbd> capture key, on-device transcription, the built-in browser and all agent features need the Mac app. |
 | **Web app** | The same editor and notes, kept in your browser's storage. It works offline once loaded, on a computer, a phone or an iPad. Agents run only through a Mac you pair with it. <Badge type="warning" text="Preview" /> |
-| **iPad** | A native app that shares the editor and keeps notes offline. It is not on the App Store yet. <Badge type="warning" text="Preview" /> |
+| **iPad** | A native app that shares the editor and keeps notes offline. It installs only on devices registered to the project. <Badge type="warning" text="Preview" /> |
+| **iPhone** | A native app built for capture: write a thought, carry on with your last note, and run agents on your Mac. Registered devices only, as on iPad. <Badge type="warning" text="Preview" /> |
 
 Accounts and encrypted sync between these are optional and in private preview. Without them, each device keeps its own notes. See [Accounts and encrypted sync](/sync/).
 

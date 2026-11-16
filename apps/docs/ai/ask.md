@@ -9,7 +9,7 @@ Every page has Claude beside it. Ask about the whole page or about words you sel
 
 ## Open Ask
 
-- Click the **Ask Claude** button (a sparkles icon) in the page's header, beside the Writing menu. Its tooltip reads **Ask Claude ⌘J**. Click it again to close the panel.
+- Click the **Ask Claude** button (a sparkles icon) in the page's header, beside **⋯** (**Page actions**). Its tooltip reads **Ask Claude ⌘J**. Click it again to close the panel.
 - Or press <kbd>⌘J</kbd> with nothing selected. Press <kbd>⌘J</kbd> again while you're in the question field to close the panel and go back to the page.
 
 Ask opens in the bar's panel at the right of the window, and the page narrows to make room, so no words sit under it. See [The bar](/workspace/bar). With no thread yet, it reads "What should we do with" and the page's name.

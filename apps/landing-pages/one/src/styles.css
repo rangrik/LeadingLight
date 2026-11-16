@@ -131,7 +131,7 @@ h2 { font-size: clamp(43px, 4.45vw, 72px); font-weight: 400; line-height: 1.05; 
 .everyday-details { padding-top: 5px; }
 .everyday-details article { display: flex; gap: 23px; padding: 0 0 35px; margin-bottom: 30px; border-bottom: 1px solid var(--border); }
 .everyday-details article:last-child { border: 0; padding-bottom: 0; margin: 0; }
-.detail-number { font-size: 10px; line-height: 25px; opacity: .7; }
+.detail-number { flex: none; width: 2ch; font-variant-numeric: tabular-nums; font-size: 10px; line-height: 25px; opacity: .7; }
 .everyday-details h3 { font-size: 21px; letter-spacing: -.035em; font-weight: 450; margin: 0 0 13px; }
 .everyday-details p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.7; max-width: 370px; }
 .keyboard-shortcut { display: flex; gap: 5px; align-items: center; margin-top: 23px; }
