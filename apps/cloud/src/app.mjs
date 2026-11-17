@@ -1,3 +1,4 @@
+import { publicationRequest, publishedRequest, publicationHeaders } from './publications.mjs';
 import { gmailRequest, gmailCallback, gmailReady } from './gmail.mjs';
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
 import { relayRequest } from './relay.mjs';
@@ -15,6 +16,7 @@ export function application({ env, sql, auth }) {
     try {
       const url = new URL(request.url), path = url.pathname;
       if (origin && !origins.has(url.origin)) return json({ error: 'Unexpected host.' }, 400);
+      if (path.startsWith('/api/published/')) return await publishedRequest({ request, sql });
       if (path.startsWith('/api/mobile-relay/native/')) return await mobileRelayRequest({ request, sql, readBody: limitedBody, env });
       if (path.startsWith('/api/relay/device/')) return await relayRequest({ request, sql, readBody: limitedBody });
       if (['/api/native/start', '/api/native/poll'].includes(path)) return auth.ready ? await nativePublicRequest({ request, sql, readBody: limitedBody, origin }) : json({ error: 'Cloud sign-in has not been configured.' }, 503);
@@ -28,6 +30,10 @@ export function application({ env, sql, auth }) {
       if (!user) return json({ error: 'Sign in to use cloud features.' }, 401);
       const expectedOwner = request.headers.get('x-leadinglight-owner');
       if (expectedOwner && expectedOwner !== user.id) return json({ error: 'The signed-in account changed. Reconnect to the original workspace and try again.' }, 409);
+      if (path.startsWith('/api/publications/')) {
+        if (path === '/api/publications/publish' && !enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
+        return await publicationRequest({ request, sql, user, origin, readBody: limitedBody });
+      }
       if (['/api/mobile-relay/channels','/api/mobile-relay/remove'].includes(path)) return await mobileRelayRequest({ request, sql, user, allowed: enabled(env, user.id), readBody: limitedBody });
       if (path.startsWith('/api/gmail/')) {
         if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
@@ -79,6 +85,7 @@ export function application({ env, sql, auth }) {
       }
       return json({ error: 'Not found.' }, 404);
     } catch (error) {
+      if (new URL(request.url).pathname.startsWith('/api/published/')) return Response.json({ error: 'The shared page could not be reached. Try again.' }, { status: 503, headers: publicationHeaders });
       if (error instanceof NativeError) return json({ error: error.message }, error.status);
       if (error instanceof RangeError || error instanceof SyntaxError) return json({ error: 'Request is too large or invalid.' }, 400);
       console.error('Cloud request failed', error instanceof Error ? error.name : 'Error');

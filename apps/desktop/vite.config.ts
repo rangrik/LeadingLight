@@ -4,7 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { offlineBuild } from "./offline-build";
 import { projectRuntime } from "./runtime-dev";
 
@@ -35,14 +35,30 @@ function noShikiWasm(): Plugin {
   };
 }
 
+// The local preview follows the same shared-page route as Vercel.
+function publishedPage(): Plugin {
+  const mount = (server: Pick<ViteDevServer, "middlewares">) => {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.startsWith('/p/')) {
+        req.url = '/published.html';
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Referrer-Policy', 'no-referrer');
+      }
+      next();
+    });
+  };
+  return { name: "published-page", configureServer: mount, configurePreviewServer: mount };
+}
+
 // https://v2.tauri.app/start/frontend/vite/
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss(), noShikiWasm(), projectRuntime(), offlineBuild()],
+  plugins: [publishedPage(), react(), tailwindcss(), noShikiWasm(), projectRuntime(), offlineBuild()],
   // Keep Lucide's icon modules in one dev chunk instead of thousands of requests.
   optimizeDeps: { rolldownOptions: { output: { codeSplitting: { groups: [{ name: "lucide", test: /\/lucide-react\//, includeDependenciesRecursively: false }] } } } },
   worker: { format: "es" as const, plugins: () => [noShikiWasm()] },
   // Two pages: the app, and the capture box's panel (src-tauri/src/capture.rs).
-  build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html") } } },
+  build: { rollupOptions: { input: { main: path.join(here, "index.html"), capture: path.join(here, "capture.html"), published: path.join(here, "published.html") } } },
   // The vendored Shipyard code (vendor/shipyard/README.md) runs on its mock
   // fixtures, as Shipyard's live demo does, until there is an agent backend.
   define: {

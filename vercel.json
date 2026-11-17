@@ -5,6 +5,7 @@
   "regions": ["iad1"],
   "functions": { "api/gateway.mjs": { "maxDuration": 180 } },
   "rewrites": [
+    { "source": "/p/:path*", "destination": "/published.html" },
     { "source": "/api/:path*", "destination": "/api/gateway?route=:path*" },
     { "source": "/((?!help/|google91415a0dc0d5c471.html|assets/|sw.js|manifest.webmanifest|icon.svg|apple-touch-icon.png|builtin-plugins/).*)", "destination": "/index.html" }
   ],
@@ -14,6 +15,8 @@
   ],
   "headers": [
     { "source": "/sw.js", "headers": [{ "key": "Cache-Control", "value": "no-cache" }] },
-    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "same-origin" }, { "key": "X-Frame-Options", "value": "DENY" }] }
+    { "source": "/(.*)", "headers": [{ "key": "X-Content-Type-Options", "value": "nosniff" }, { "key": "Referrer-Policy", "value": "same-origin" }, { "key": "X-Frame-Options", "value": "DENY" }] },
+    { "source": "/p/:path*", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }, { "key": "Cache-Control", "value": "no-store" }, { "key": "Referrer-Policy", "value": "no-referrer" }, { "key": "Content-Security-Policy", "value": "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https: data: blob:; media-src https: data: blob:; connect-src 'self'; frame-src https://www.youtube-nocookie.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" }] },
+    { "source": "/published.html", "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }, { "key": "Cache-Control", "value": "no-store" }, { "key": "Referrer-Policy", "value": "no-referrer" }] }
   ]
 }

@@ -214,7 +214,7 @@ function ImageView(props: NodeViewProps) {
     <NodeViewWrapper className="ll-media" data-media="image" data-width={node.attrs.width}>
       {failed ? (
         <Placeholder icon={<ImageOff />} label="This image can't be shown">
-          <ChooseFile accept="image/*" onFile={put} />
+          {!fixed(props.editor) && <ChooseFile accept="image/*" onFile={put} />}
         </Placeholder>
       ) : node.attrs.src ? (
         // The frame is the image's own size, so the toolbar and the outline sit on the image.
@@ -233,8 +233,8 @@ function ImageView(props: NodeViewProps) {
           )}
         </div>
       ) : (
-        <Placeholder icon={<ImageIcon />} label="Add an image, or paste or drop one">
-          <ChooseFile accept="image/*" onFile={put} />
+        <Placeholder icon={<ImageIcon />} label={fixed(props.editor) ? "No image attached" : "Add an image, or paste or drop one"}>
+          {!fixed(props.editor) && <ChooseFile accept="image/*" onFile={put} />}
         </Placeholder>
       )}
       {!fixed(props.editor) && node.attrs.src && (selected || busy || message) && <div className="flex flex-wrap items-center gap-2 py-2 text-sm" data-controls contentEditable={false}>
@@ -271,11 +271,11 @@ function PlayerView({ kind, props }: { kind: "video" | "audio"; props: NodeViewP
     <NodeViewWrapper className="ll-media relative" data-media={kind}>
       {failed ? (
         <Placeholder icon={kind === "video" ? <VideoOff /> : <VolumeOff />} label={`This ${kind} can't be played`}>
-          <ChooseFile accept={accept} onFile={put} />
+          {!fixed(props.editor) && <ChooseFile accept={accept} onFile={put} />}
         </Placeholder>
       ) : !node.attrs.src ? (
-        <Placeholder icon={kind === "video" ? <Film /> : <AudioLines />} label={kind === "video" ? "Add a video" : "Add an audio file"}>
-          <ChooseFile accept={accept} onFile={put} />
+        <Placeholder icon={kind === "video" ? <Film /> : <AudioLines />} label={fixed(props.editor) ? `No ${kind} attached` : kind === "video" ? "Add a video" : "Add an audio file"}>
+          {!fixed(props.editor) && <ChooseFile accept={accept} onFile={put} />}
         </Placeholder>
       ) : kind === "video" ? (
         <Player
@@ -351,8 +351,8 @@ function FileView(props: NodeViewProps) {
           )}
         </>
       ) : (
-        <Placeholder icon={<FileIcon />} label="Attach a file">
-          <ChooseFile accept="*/*" onFile={put} />
+        <Placeholder icon={<FileIcon />} label={fixed(props.editor) ? "No file attached" : "Attach a file"}>
+          {!fixed(props.editor) && <ChooseFile accept="*/*" onFile={put} />}
         </Placeholder>
       )}
     </NodeViewWrapper>
@@ -405,11 +405,13 @@ function EmbedView(props: NodeViewProps) {
             allow="autoplay; encrypted-media; picture-in-picture"
             allowFullScreen
             loading="lazy"
+            sandbox={!props.editor.isEditable ? 'allow-scripts allow-same-origin allow-presentation' : undefined}
+            referrerPolicy="no-referrer"
             src={embedSrc(node.attrs.src) ?? undefined}
             title="Embedded content"
           />
         </div>
-      ) : (
+      ) : fixed(props.editor) ? null : (
         <Placeholder icon={<LinkIcon />} label="Embed a link">
           <form className="flex items-center gap-2" onSubmit={submit}>
             <Input

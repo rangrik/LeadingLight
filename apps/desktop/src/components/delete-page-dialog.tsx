@@ -29,7 +29,7 @@ export function DeletePageDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>Delete “{page ? pageLabel(page.title) : ""}”?</AlertDialogTitle>
           <AlertDialogDescription>
-            The page and everything in it will be removed.
+            The page and everything in it will be removed. Published copies stay online until you unpublish them in Account and devices.
             {page?.properties.role === "thoughts" && " Its notes leave their page too."}
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -68,6 +68,7 @@ function NoteEditor({
   onAutoFocus,
   quote,
   finish,
+  readOnly,
 }: {
   id: string;
   label: string;
@@ -79,6 +80,7 @@ function NoteEditor({
   // The words the note is written against, now.
   quote: () => string;
   finish: () => void;
+  readOnly: boolean;
 }) {
   const store = useRef(notes);
   store.current = notes;
@@ -88,11 +90,12 @@ function NoteEditor({
   );
   const editor = useEditor({
     extensions,
+    editable: !readOnly,
     content: { type: "doc", content: notes.read(id) ?? [{ type: "paragraph" }] },
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
-      attributes: { class: "ll-editor", role: "textbox", "aria-label": label },
+      attributes: { class: "ll-editor", role: "textbox", "aria-label": label, "aria-readonly": String(readOnly) },
       handleKeyDown: (_view, event) => {
         if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.isComposing) return false;
         event.preventDefault();
@@ -104,6 +107,7 @@ function NoteEditor({
     onUpdate: ({ editor }) => {
       // A note brought back without its thought (by undo, redo or paste) gets one again, so
       // nothing typed into it is lost.
+      if (readOnly) return;
       if (!store.current.read(id)) store.current.add(id, quote());
       store.current.write(id, editor.getJSON().content ?? []);
     },
@@ -139,12 +143,14 @@ export function Sidenotes({
   assets,
   openLink,
   focusId,
+  readOnly = false,
 }: {
   editor: Editor;
   notes: NotesStore;
   assets: AssetStore;
   openLink: (href: string) => void;
   focusId: string | null;
+  readOnly?: boolean;
 }) {
   const key = useEditorState({ editor, selector: ({ editor }) => anchors(editor.state.doc, "note").map((a) => a.id).join(" ") });
   const ids = useMemo(() => (key ? key.split(" ") : []), [key]);
@@ -237,7 +243,10 @@ export function Sidenotes({
     const out = (e: Event) => chipOf(e) && leave();
     const click = (e: Event) => {
       const id = (e.target as HTMLElement).closest<HTMLElement>("[data-note-chip]")?.dataset.noteChip;
-      if (id) cards.current.get(id)?.querySelector<HTMLElement>(".ProseMirror")?.focus();
+      if (!id) return;
+      const card = cards.current.get(id);
+      if (readOnly) card?.scrollIntoView({ block: "nearest" });
+      else card?.querySelector<HTMLElement>(".ProseMirror")?.focus();
     };
     dom.addEventListener("pointerover", over);
     dom.addEventListener("pointerout", out);
@@ -247,7 +256,7 @@ export function Sidenotes({
       dom.removeEventListener("pointerout", out);
       dom.removeEventListener("click", click);
     };
-  }, [editor]);
+  }, [editor, readOnly]);
 
   useEffect(() => () => clearTimeout(timer.current), []);
   const leave = () => {
@@ -311,7 +320,7 @@ export function Sidenotes({
             style={{ top: tops[id] ?? spots[id].top, left: edge + GUTTER }}
           >
             {/* A note to send ticks here; one sent shows a muted check (features/feedback.feature). */}
-            {notes.pick &&
+            {!readOnly && notes.pick &&
               (notes.pick.sent(id) ? (
                 <span className="ll-note-sent">{notes.pick.sent(id)}</span>
               ) : (
@@ -319,6 +328,7 @@ export function Sidenotes({
               ))}
             <span className="ll-note-num">{i + 1}</span>
             <NoteEditor
+              readOnly={readOnly}
               assets={assets}
               autoFocus={focusId === id && autoFocused.current !== id}
               id={id}
@@ -332,7 +342,7 @@ export function Sidenotes({
                 return a ? editor.state.doc.textBetween(a.from, a.to, " ").trim() : "";
               }}
             />
-            <div className="ll-note-actions flex flex-col">
+            {!readOnly && <div className="ll-note-actions flex flex-col">
               <Tooltip>
                 <TooltipTrigger render={<Button aria-label="Finish sidenote" onClick={() => finish(id)} size="icon-xs" variant="ghost" />}><Check /></TooltipTrigger>
                 <TooltipPopup>Finish sidenote · ⌘Enter</TooltipPopup>
@@ -341,7 +351,7 @@ export function Sidenotes({
                 <TooltipTrigger render={<Button aria-label="Remove sidenote" onClick={() => remove(id)} size="icon-xs" variant="ghost" />}><X /></TooltipTrigger>
                 <TooltipPopup>Remove sidenote</TooltipPopup>
               </Tooltip>
-            </div>
+            </div>}
           </aside>
         ) : null,
       )}

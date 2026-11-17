@@ -139,7 +139,7 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
         (route, method),
         ("config" | "me" | "sync" | "sync-part" | "calendar/accounts" | "gmail/accounts" | "native/approval" | "devices", "GET")
             | (
-                "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
+                "publications/status" | "publications/publish" | "publications/unpublish" | "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
@@ -438,6 +438,9 @@ mod tests {
         }
         assert!(endpoint("native/approve", "POST").is_ok());
         assert!(endpoint("devices/name", "POST").is_ok());
+        for action in ["status", "publish", "unpublish"] {
+            assert!(endpoint(&format!("publications/{action}"), "POST").is_ok());
+        }
         for action in ["connect", "disconnect", "messages", "message", "thread", "counts", "modify", "send"] {
             assert!(endpoint(&format!("gmail/{action}"), "POST").is_ok());
         }
@@ -450,6 +453,9 @@ mod tests {
             ("me#x", "GET"),
             ("me?other=1", "GET"),
             ("relay/pairs", "POST"),
+            ("publications/publish", "GET"),
+            ("publications/publish?owner=other", "POST"),
+            ("published/token", "POST"),
             ("native/revoke-all", "POST"),
             ("devices/remove", "POST"),
             ("native/approval?id=3f9a1c07-0000-4000-8000-000000000000", "GET"),

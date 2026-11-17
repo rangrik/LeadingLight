@@ -50,6 +50,7 @@ type Shared = {
   hosts: Set<() => void>;
 };
 const shared = new Map<string, Shared>();
+export const thoughtsContent = (page: string) => { const state = shared.get(page); return state?.version != null ? state.doc : undefined; };
 function sharedFor(page: string): Shared {
   const s = shared.get(page) ?? { doc: { type: "doc", content: [] }, version: null, changes: [], saving: Promise.resolve(), hosts: new Set() };
   shared.set(page, s);

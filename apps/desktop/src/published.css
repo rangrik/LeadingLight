@@ -1,0 +1,16 @@
+/* The shared page uses the existing editor and margin, without the workspace shell. */
+body.ll-published-body { overflow: auto; user-select: text; }
+.ll-published { max-width: 1040px; margin: 0 auto; padding: 32px 24px 64px; overflow-wrap: anywhere; }
+.ll-published article { max-width: 700px; margin-inline: auto; }
+.ll-published[data-has-notes] article { margin-inline: 0; width: calc(100% - 256px); }
+.ll-published .ll-editor-root { margin-left: 0; padding-left: 0; padding-bottom: 48px; }
+.ll-published .ll-note { grid-template-columns: auto minmax(0, 1fr); }
+.ll-published .ll-editor table { table-layout: auto; }
+.ll-published .ll-editor :is(td, th) { min-width: 120px; }
+.ll-published .ll-editor input:disabled { cursor: default; }
+@media (max-width: 760px) {
+  .ll-published { padding: 24px 20px 48px; }
+  .ll-published[data-has-notes] article { width: 100%; }
+  .ll-published .ll-note { position: static; width: 100%; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .ll-published .ll-note-line { display: none; }
+}

@@ -1,3 +1,4 @@
+import { PublishedPages } from '~/components/published-pages';
 import { Copy, Laptop, Plus, RefreshCw, Smartphone, Tablet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/views/settings/confirm";
@@ -173,6 +174,7 @@ export function AccountSection() {
         <h2 className="text-section text-foreground">Agents from a browser</h2>
         <PairingSettings />
       </section>}
+      {user && <PublishedPages key={user.id} owner={user.id} />}
       <MobileAgentAccess />
 
       {user && <AddDeviceDialog account={user} onOpenChange={(next) => { setOpen(next ? "add" : ""); if (!next) load(); }} open={open === "add"} />}

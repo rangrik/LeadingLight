@@ -1,3 +1,4 @@
+import { PublishPage } from './publish-page';
 import { CalendarView } from '~/components/calendar-view';
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
@@ -197,6 +198,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
+                {isPageView(leaf.page) && <PublishPage key={leaf.page} page={leaf.page} />}
                 {isPageView(leaf.page) && (reportOf(pageOf(leaf.page)) ? <PageHistory className={cn(backCard)} page={leaf.page} /> : <div className="ll-page-actions" data-page-actions />)}
                 {!mobile && isPageView(leaf.page) && <AskButton className={cn("hidden @[24rem]/header:inline-flex", backCard)} page={leaf.page} />}
                 {mail && <MailActions className={cn(backCard)} view={leaf.page} />}

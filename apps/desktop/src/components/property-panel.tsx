@@ -1,3 +1,4 @@
+import { PublishDialog } from './publish-page';
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { AssignButton } from "~/components/assign";
 import { AlignLeft, ChevronsUpDown, Ellipsis, Plus } from "lucide-react";
@@ -171,6 +172,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
   const [editing, setEditing] = useState<PropDef | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const type = typeOf(typeId);
   const { type: typeProps, own } = propsOf(typeId, values);
   const shown = [...typeProps, ...own];
@@ -244,6 +246,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
             <Ellipsis />
           </MenuTrigger>
           <MenuPopup align="start">
+            <MenuItem onClick={() => setPublishing(true)}>Publish page…</MenuItem>
             {typeId !== NOTEBOOK_TYPE && <MenuItem onClick={() => setSaving(true)}>Save as type…</MenuItem>}
             {typeId !== NOTEBOOK_TYPE && !roleOf(page) && (
               <>
@@ -280,6 +283,7 @@ export function PropertyPanel({ page, typeId, values, setProp, setType, onDescri
           {own.map((p) => row(p, true))}
         </div>
       )}
+      {publishing && <PublishDialog page={page.id} onClose={() => setPublishing(false)} />}
       <DeletePageDialog
         onCancel={() => setDeleting(false)}
         onConfirm={(id) => {
