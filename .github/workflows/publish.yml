@@ -68,6 +68,14 @@ jobs:
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !inputs.rehearsal }}
+        with:
+          ref: ${{ steps.draft.outputs.sha }}
+          persist-credentials: false
+      - name: Check the deployed cloud before building downloads
+        if: ${{ !inputs.rehearsal }}
+        run: node scripts/release/check-cloud.mjs
 
   checks:
     needs: draft

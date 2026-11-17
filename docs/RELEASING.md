@@ -27,6 +27,13 @@ before merging. Do not enable auto-merge on either kind of PR.
    update archive with `latest.json`, `SHA256SUMS.txt`, and the iPhone and iPad build with its
    manifest, and then publishes. Until every step succeeds, the draft stays private.
 
+The cloud is deployed separately from the Mac, iPhone and iPad downloads. Before releasing a
+cloud feature, deploy the reviewed code using the command in [the cloud README](../apps/cloud/README.md).
+Run `node scripts/release/check-cloud.mjs` afterward. The release workflow runs this check before
+building downloads: native publishing must reach authentication, and the public reader and its
+table must exist with noindex and no-store responses. It uses invalid credentials and random
+missing links, never a person's account or page. Rehearsals skip the production check.
+
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.
 To request a specific version, add `Release-As: 0.3.0` to a conventional commit body.

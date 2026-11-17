@@ -41,6 +41,16 @@ Feature: Versioned GitHub releases
     And a maintainer can retry the draft by its version tag
     And a retry cannot replace files in a published release
 
+  Scenario: Stop a release when the cloud lacks publishing support
+    Given the installed app supports publishing but the deployed cloud still refuses its native routes
+    When a release is checked before building its downloads
+    Then it stops and tells the maintainer to deploy the matching cloud service
+    And the check sends no real credential or page content
+    When the cloud accepts the publishing routes and serves the unlisted reader
+    Then the check passes without publishing a page
+    And a missing publications table or reader also stops the release
+    And build rehearsals do not require a production deployment
+
   Scenario: Rehearse a build
     Given I run Publish release on main or on a branch with rehearsal enabled
     When checks, signing and packaging pass
