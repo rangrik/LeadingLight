@@ -84,7 +84,8 @@ Feature: Publish a read-only page by link
     And I can update or unpublish that copy
 
   Scenario: Manage a link after deleting the local page
-    Given I published a page and then deleted its local copy
+    Given my command-line tools are up to date
+    And I published a page and then deleted its local copy
     When I open "Account and devices" and "Manage published pages"
     Then I can still copy its link or unpublish it
     And only my account's published pages are listed
