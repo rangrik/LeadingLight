@@ -70,6 +70,9 @@ Nine recorded Playwright scenarios pass, including actual Shift-click, wheel eve
 keyboard shortcuts, editing, persistence, menus, resize and light/dark/narrow layouts.
 Workspace typecheck, desktop build and docs build pass. Clean capture has no console
 errors; reduced-motion emulation produces only the library's informational warning.
+Independent lifecycle checks also found an existing linkify warning after typing and
+opening another note. Sample links still work; the shared-editor cleanup is recorded
+in `docs/DEFERRED.md`.
 
 The 2,000-paragraph probe preserved typing and measured keydown to next animation
 frame at median 14.9 ms, maximum 28.4 ms after deferring document reads. This does not
