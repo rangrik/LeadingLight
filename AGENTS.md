@@ -77,38 +77,34 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
 
 1. Write or update the Gherkin in `features/` first. Concrete steps, concrete expectations, failure cases too.
 2. Build it.
-3. Typecheck. Do one short smoke in a headless browser yourself.
+3. Typecheck and run the relevant automated checks yourself. Record browser QA on every run,
+   including passing tests; `apps/desktop/qa/playwright.config.ts` enables video by default.
 4. Hand QA to a subagent: model Sonnet 5.5, effort xhigh. It drives the browser build
    (`pnpm --filter @leadinglight/desktop dev`, port 1420 or `$BERTH_PORT`, bound to 127.0.0.1) in the worktree's
    Berth agent browser (`berthd browser … --tab qa`), which the user can watch live in Shipyard.
-   It reports pass/fail per scenario with screenshots, plus anything that looks off. It never
+   It reports pass/fail per scenario with screenshots and video, plus anything that looks off. It never
    drives the native Tauri window.
 5. Fix what it found. Re-run QA on the failed scenarios.
-6. Only if part of the change can't be tested in the browser with full confidence (the menu bar,
-   global keys, the capture panel, anything WebKit does differently), also run
+6. Automate testing wherever possible; do not routinely ask the user to test. Cover native
+   boundaries with Rust tests, isolated fixtures, builds and packaging checks. When needed, run
    `pnpm install:dev-app`. It installs "LeadingLight Dev <hash>" (a hash of the branch, so it is
    this worktree's) beside the real app, with its own data, so the user's notes are never touched.
-   A global key such as ⌃⌥I belongs to whichever app started first; say so in the steps.
-   Don't drive it. Give the user numbered steps for exactly what the browser couldn't show, each
-   with what they should see, and wait for their report. The browser stays the first way; this
-   never replaces it.
+   Don't drive it. Ask for a manual check only when a specific hardware or native behavior
+   cannot be verified automatically. Explain that exact gap and give short numbered steps
+   with expected results. A global key such as ⌃⌥I belongs to whichever app started first.
 7. Anything put off instead of fixed goes in `docs/DEFERRED.md`: date, why not now, and when to revisit.
-8. Once the user says it works, or told you to finish without asking, deliver it yourself:
-   commit; merge main into the branch and run the change's scenarios again (see Traps); merge the
-   branch into main in the main checkout (`$BERTH_ROOT_PATH`) and push it. The push updates the
-   release PR, "chore(main): release x.y.z". Merge that too once Checks pass on it (run them on
-   its branch if none ran). The release then signs and notarizes the Mac app, signs the iPhone
-   and iPad build, and publishes; watch it (`gh run watch`), and if it fails, retry as
-   `docs/RELEASING.md` says. The installed apps update themselves: the Mac app offers Update and
-   restart (Settings › About checks at once), and on iPhone and iPad Update asks iOS to install
-   the release. Never put a local build (`pnpm install:app`) over the installed app: macOS sees a
-   different app and asks again for the Keychain and microphone. Remove your dev app and its data
-   (`pnpm install:dev-app --remove` in the worktree). Then tell the user what to try once the
-   update arrives. Last, clean up: stop the worktree's servers; free and delete the merged branch
-   (`git checkout --detach`, then `git -C "$BERTH_ROOT_PATH" branch -d "$BERTH_BRANCH"`); and
-   close the worktree with `"$BERTH_HOME/bin/berthd" worktree rm
-   "$BERTH_LOCATION/$BERTH_WORKTREE_NAME"`, which ends your session, so send your report before
-   it.
+8. Commit periodically at coherent milestones without asking for approval. Fetch main, merge
+   it into the feature branch when needed, and re-run the change's scenarios. Push the branch
+   and open a PR for every change. Attach an actual automated-test video to the PR, with a short
+   list of scenarios and any simulated native behavior. Keep the PR ready to merge and watch
+   its checks. Wait for recording/encoding to finish, then use `gh pr create/edit --attach`
+   (a current GitHub CLI) and verify the uploaded video is complete. Fix check failures yourself.
+   The user reviews the video and merges the PR. Never merge
+   into main, merge a release PR, or enable auto-merge without the user's explicit approval.
+   Release PRs follow the same review rule. Once approved and released, the installed app must
+   show an in-app alert with an Update button; test that flow for release-related changes.
+   Never put `pnpm install:app` over the installed app. Clean up the dev app, servers, branch
+   and worktree only after the PR is merged and the work is no longer needed for review.
 
 Playwright (`apps/desktop/qa`) stays for the headless smoke, the gallery screenshots and
 regression specs. Never automate the native window: no AppleScript, no desktop screenshots.
@@ -147,6 +143,7 @@ Each of these passed every check here and still failed for the user, or cost hou
 - Decision records and plans stay short.
 - Write plain English. If a word needs a definition, use a simpler word.
 - Watch the diff size. Removing code is the goal; every added line needs a reason.
-- Commit only when asked.
+- Commit periodically without approval. Every change goes through a PR with a testing video;
+  merging into main requires the user's explicit approval.
 - Use conventional commit and squash-PR titles (`feat:`, `fix:`, `perf:`) so release notes and
   version bumps work. Let the release bot change versions; see `docs/RELEASING.md`.

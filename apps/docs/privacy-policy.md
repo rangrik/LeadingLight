@@ -137,3 +137,12 @@ devices and provider accounts secure, and keep your sync recovery key private.
 We will update this page when data practices change and change the effective date above.
 Material changes to calendar permissions require a new Google consent grant. Contact
 [k.pranav.apk@gmail.com](mailto:k.pranav.apk@gmail.com) with questions about this policy.
+
+## Published pages
+
+Publishing is optional. It uploads a readable snapshot of the chosen page, its attachments and
+anchored sidenotes to our service, separate from encrypted sync. Anyone with the unlisted link
+can read it without an account. Later edits stay private until you update the published copy.
+Search engines are told not to index shared pages. Unpublishing deletes the online copy and
+revokes its link; it cannot remove copies readers already saved or forwarded.
+See [Publish a page](/organize/publishing).

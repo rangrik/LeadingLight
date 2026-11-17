@@ -37,8 +37,8 @@ The service stores encrypted sync envelopes. The sync recovery key never reaches
 
 Native Mac and iPad apps join this same account through approval in a browser or in an app that
 already syncs. The server stores
-only hashed device credentials and encrypted recovery-key envelopes. Native sessions are scoped
-to note sync and cannot grant browser agent access. Additive schema setup runs in the production
+only hashed device credentials and encrypted recovery-key envelopes. Native sessions use explicit workspace routes, including publishing,
+and cannot grant browser agent access. Additive schema setup runs in the production
 build before the web client is deployed. `/api/devices` lists an account's device sign-ins; a device renames itself and only a browser
 removes one. `accounts` keeps each account's sign-in provider and email for display. Both are
 additive in `schema.sql`. See [native sync](../../docs/NATIVE-SYNC.md) for limits
@@ -202,3 +202,22 @@ content or search terms. Attachments open in Gmail.
 Validate with `TEST_DATABASE_URL=... node --test src/gmail.test.mjs` and desktop
 `QA_PORT=... pnpm exec playwright test -c qa/playwright.config.ts --project=qa gmail.spec.ts`.
 The tests use synthetic Google responses; live Google consent and native acceptance are separate.
+
+## Published pages
+
+Run the additive migration before deploying the web and native clients. `/api/publications/status`,
+`/publish` and `/unpublish` accept authenticated POST requests with `{ page }`; publish also
+requires `snapshot`. Browser writes require the same origin; native credentials permit only
+these three named routes. `X-LeadingLight-Owner` prevents writes after an account switch.
+
+`GET /api/published/:token` returns only a published snapshot, without authentication. Tokens
+contain 192 random bits, remain stable on updates and change after unpublishing. No public list route
+exists; an authenticated status request without a page lists only the owner’s publications. `/p/:token` serves `published.html`, with noindex in its source HTML and HTTP headers.
+Do not block `/p/` in robots.txt: crawlers need to see noindex. Shared content is never cached
+by the service worker; public responses use no-store. Unpublish deletes the stored snapshot.
+
+These snapshots are deliberately readable by the service and anyone with a link, unlike the
+encrypted sync journal. Requests are capped at 3.5 MB including inline attachments; each account
+may publish up to 100 pages and 100 MB. Nothing is automatically published by sync or local edits.
+Verify with `src/publications.test.mjs` and `PUBLISH_QA=1 QA_PORT=...` for `qa/publishing.spec.ts`
+against the isolated browser test server. Cloud deployments remain separate from Mac releases.

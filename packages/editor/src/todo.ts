@@ -116,6 +116,7 @@ export const Todo = TaskItem.extend({
       check.setAttribute("viewBox", "0 0 24 24");
       const strike = svg("ll-strike");
       const label = item.querySelector("label")!;
+      label.querySelector("input")!.disabled = !props.editor.isEditable;
       label.append(check);
       item.append(strike);
       // In a Playful page a check also taps, like a pen on paper.

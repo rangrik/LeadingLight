@@ -70,6 +70,7 @@ export async function checkForUpdate(asked = false): Promise<void> {
     // An install that began while this check was out keeps its state and its update.
     if (appUpdate.get().state === "installing") return;
     install = found?.install ?? null;
+    if (!asked && before.state === "failed" && found?.version === before.version) return;
     appUpdate.set(found ? { state: "ready", version: found.version } : { state: "current" });
   } catch {
     if (asked && appUpdate.get().state === "checking") appUpdate.set({ state: "unreachable" });

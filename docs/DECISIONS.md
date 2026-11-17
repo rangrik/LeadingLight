@@ -1049,3 +1049,15 @@ upset. Then one mail at a time, one decision each, five at most. It ends, and sa
 took. Nothing nags: no counts, no badges, no streaks. There are no work-hours rules, because
 work hours differ from person to person; each mail says which account it came to. See
 `docs/MAIL.md`.
+
+## 56. Published pages are separate, unlisted snapshots (2026-11-16)
+
+Publishing uploads only the chosen page's visible content and anchored sidenotes to the
+existing cloud account. It is a readable copy, separate from encrypted sync. A random
+192-bit link permits reads without an account; only the owner can update or revoke it.
+Updates are explicit. Unpublishing deletes the snapshot; publishing again makes a new link.
+
+A separate reader entry point reuses the editor in read-only mode, including its sidenotes.
+It loads no workspace and caches no shared content. HTML and HTTP headers say noindex;
+robots.txt must allow crawlers to read that instruction. There is no public listing.
+Attachments travel with the snapshot, capped at 3.5 MB to fit the existing gateway.

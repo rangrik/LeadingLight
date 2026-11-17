@@ -382,6 +382,7 @@ export function BlockEditor({
         class: "ll-editor",
         role: "textbox",
         "aria-label": label,
+        "aria-readonly": String(!!readOnly),
         "aria-multiline": "true",
         ...(annotate && { spellcheck: "false" }),
       },
@@ -752,20 +753,20 @@ export function BlockEditor({
       {!readOnly && !annotate && <TableOfContents editor={editor} />}
       <EditorContent editor={editor} />
       {!readOnly && !annotate && !unreadable && <DocumentInkInput editor={editor} />}
-      {notes && <Sidenotes assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
-      {!annotate && <BlockHandle editor={editor} />}
-      <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}
+      {notes && <Sidenotes readOnly={readOnly} assets={assets} editor={editor} focusId={newNote} notes={notes} openLink={(href) => openRef.current(href)} />}
+      {!readOnly && !annotate && <BlockHandle editor={editor} />}
+      {!readOnly && <SelectionToolbar annotate={annotate} editor={editor} note={Boolean(notes)} onAsk={onAsk ? () => onAsk(selected(editor)) : undefined} askKeys={askKeys} quote={quote}
         onTurnInto={!readOnly && !annotate && onTurnInto ? () => {
           const selection = capturePageSelection(editor);
           if (!selection) return;
           onTurnInto(selection);
           editor.view.dispatch(editor.state.tr.setMeta("selectionToolbar", "hide"));
         } : undefined}
-      />
-      <TableToolbar editor={editor} />
+      />}
+      {!readOnly && <TableToolbar editor={editor} />}
       <MarkTip editor={editor} />
       {!readOnly && !annotate && grammarReview && <GrammarCoach editor={editor} at={grammarReview.at} scope={grammarReview.scope} onClose={() => setGrammarReview(null)} />}
-      <EmojiPicker editor={editor} />
+      {!readOnly && <EmojiPicker editor={editor} />}
     </div>
   );
 }

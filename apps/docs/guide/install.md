@@ -34,7 +34,7 @@ macOS may ask for permissions later, only when you use a feature that needs one:
 
 ## Update to a new version
 
-LeadingLight looks for a newer release when it opens and every four hours. When one is ready, a toast says so, such as "LeadingLight 0.9.0 is ready". Click **Update and restart**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. Nothing is downloaded before you click.
+LeadingLight looks for a newer release when it opens, every four hours, when you return to the app and when your connection comes back. When one is ready, an alert stays visible until you choose **Update and restart** or **Later**. It downloads the update, checks that it is LeadingLight's, installs it and reopens. Nothing is downloaded before you click.
 
 - **Later** hides the toast for that version, even after you quit and reopen. **Settings › About** still offers **Update and restart**, and a newer version brings the toast back.
 - To look yourself, open **Settings › About** and click **Check for updates**. It says **Up to date**, or **Couldn't check for updates** when you are offline.

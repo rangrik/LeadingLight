@@ -11,19 +11,21 @@ export default defineConfig({
   outputDir: ".results",
   timeout: 30_000,
   workers: 1,
-  reporter: [["list"]],
+  reporter: [["list"], ["html", { outputFolder: "report/playwright", open: "never" }]],
   // "gallery" only takes screenshots for design review (pnpm qa:gallery).
   projects: [
     { name: "qa", grepInvert: /@gallery/ },
     { name: "gallery", grep: /@gallery/ },
     { name: "ipad-webkit", testMatch: "ipad.spec.ts", use: { browserName: "webkit" } },
     { name: "iphone-webkit", testMatch: "iphone.spec.ts", use: { browserName: "webkit", isMobile: true } },
-    { name: "safari", testMatch: /(?:history|saving|smoke|cloud(?:-guards|-large)?|offline|calendar|gmail|account-return|browser-copy|native-account|pairing(?:-integration)?|task-work-layout|project-chat-history)\.spec\.ts/, use: { browserName: "webkit" } },
+    { name: "safari", testMatch: /(?:history|saving|smoke|cloud(?:-guards|-large)?|offline|calendar|gmail|account-return|app-update|publishing|browser-copy|native-account|pairing(?:-integration)?|task-work-layout|project-chat-history)\.spec\.ts/, use: { browserName: "webkit" } },
   ],
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     viewport: { width: 1280, height: 800 },
     headless: true,
+    launchOptions: { slowMo: process.env.QA_REVIEW_VIDEO ? 180 : 0 },
+    video: { mode: "on", size: { width: 1280, height: 800 }, show: { actions: { cursor: "pointer" }, test: { level: "step" } } },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

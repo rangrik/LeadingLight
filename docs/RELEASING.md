@@ -7,6 +7,10 @@ the Mac build is signed with the Apple secrets listed under Downloads and signin
 
 ## Normal release
 
+Every change is reviewed in a PR with an automated-test video. Commit and push work without
+asking; keep checks passing and leave the merge to the user. Release PRs also need approval
+before merging. Do not enable auto-merge on either kind of PR.
+
 1. Use conventional titles for commits on `main` (or squash-merged PR titles):
    `feat: add calendar view`, `fix: preserve cover position`, `perf: speed up search`.
    Features bump minor, fixes bump patch. `feat!: change storage format` marks a
@@ -91,7 +95,8 @@ the Keychain.
 ## Updates
 
 The Mac app reads `https://github.com/rangrik/LeadingLight/releases/latest/download/latest.json`
-when it opens and every four hours, and offers a newer version with one button. GitHub
+when it opens, every four hours and on return or reconnection. Its update alert stays visible
+until answered and offers a newer version with one button. GitHub
 serves that address only for a normal release marked latest. The app installs only an
 archive signed by the update key, whose public half is `plugins.updater.pubkey` in
 `tauri.conf.json`; packaging refuses a release whose archive does not verify with it.

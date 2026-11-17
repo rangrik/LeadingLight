@@ -84,6 +84,7 @@ To start an essay, open **Page options** and choose **Start an essay on this pag
 
 The **Page options** button ("…") sits in the page's property bar, the line under the title with the **Type** picker and **Add property**. It holds the page's own actions:
 
+- **Publish page…** shares a read-only copy, including sidenotes, by an unlisted link. See [Publish a page](/organize/publishing).
 - **Save as type…** turns the page's properties into a new type. See [Types and templates](/organize/types).
 - **Start an essay on this page** (or **Open essay**).
 - **To-do and highlight style**, with **Plain** and **Playful**. See below.

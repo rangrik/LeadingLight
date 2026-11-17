@@ -42,6 +42,7 @@ LeadingLight has no analytics or tracking of its own.
 | Use the built-in browser | It loads the sites you or an agent open, as any browser would. Its history, site data and downloads stay on your Mac. |
 | Connect Google Calendar | Google grants calendar access separately from workspace sign-in. Our service stores encrypted refresh tokens and fetches event data on demand. Calendar data is not end-to-end encrypted. Note agents can send calendar details to your model provider when you ask them to plan. Disconnect removes our saved grant. |
 | Connect Gmail for Mail | Our service reads and acts on your mail with Google's permission. Mail passes through it in memory, is not stored there and is not end-to-end encrypted. To write the few lines about each mail, the Mac app sends its text through your Claude Code or Codex to Anthropic or OpenAI. Those lines stay on the Mac and are deleted when you deal with the mail, or after 14 days. See the [privacy policy](/privacy-policy#gmail). |
+| Publish a page | A readable copy of the chosen page, attachments and anchored sidenotes is uploaded to our service. Anyone with its link can read it. It is separate from encrypted sync; unpublish to revoke the link. |
 | Turn on encrypted sync | Your notes are encrypted on your device before they're uploaded. The service stores only encrypted data and can't read it. Your sign-in (Google or GitHub) identifies your account. The service keeps that sign-in's email address and provider, so each of your devices can show which account it uses, and the name and last-online time of each installed app, for the device list. |
 | Use agents from a browser, iPhone or iPad | The device and your Mac exchange messages through an encrypted relay. The relay can't read prompts, answers or tool results, and your Claude Code or Codex sign-in never leaves the Mac. |
 | Turn on agent notifications on iPhone or iPad | Apple delivers an alert that says only "An agent on your Mac needs your response". The request itself is fetched through the encrypted relay. |
@@ -76,3 +77,12 @@ with your existing recovery key and pair the Mac again when needed.
 In the Mac app, quit LeadingLight and copy `~/Library/Application Support/com.leadinglight.app/` somewhere safe, or let Time Machine back it up. To restore, quit the app and put the folder back.
 
 To go back to an earlier version of one page, use its history instead. → [History and authorship](/organize/history)
+
+## Published pages
+
+Publishing is optional. It uploads a readable snapshot of the chosen page, its attachments and
+anchored sidenotes to our service, separate from encrypted sync. Anyone with the unlisted link
+can read it without an account. Later edits stay private until you update the published copy.
+Search engines are told not to index shared pages. Unpublishing deletes the online copy and
+revokes its link; it cannot remove copies readers already saved or forwarded.
+See [Publish a page](/organize/publishing).

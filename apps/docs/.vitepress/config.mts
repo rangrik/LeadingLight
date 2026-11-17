@@ -56,6 +56,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: "Pages and the sidebar", link: "/organize/pages" },
+          { text: "Publish a page", link: "/organize/publishing" },
           { text: "Icons, covers and descriptions", link: "/organize/page-header" },
           { text: "Properties", link: "/organize/properties" },
           { text: "Types and templates", link: "/organize/types" },

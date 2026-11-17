@@ -192,3 +192,12 @@ CREATE TABLE IF NOT EXISTS gmail_oauth (
   expires_at timestamptz NOT NULL DEFAULT now() + interval '10 minutes'
 );
 CREATE INDEX IF NOT EXISTS gmail_oauth_expiry ON gmail_oauth(expires_at);
+
+CREATE TABLE IF NOT EXISTS publications (
+  owner text NOT NULL,
+  page text NOT NULL,
+  token text NOT NULL UNIQUE,
+  snapshot jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(owner,page)
+);
