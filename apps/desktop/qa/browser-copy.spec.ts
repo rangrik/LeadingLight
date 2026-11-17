@@ -21,7 +21,7 @@ test.beforeEach(async ({ context, baseURL }) => {
 });
 const note = async (page: Page) => {
   await page.goto(old);
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Address migration');
   await page.getByRole('textbox', { name: 'Title' }).press('Enter');
   await page.keyboard.type('Keep my creative work and its history.');
@@ -58,7 +58,7 @@ test('existing destination refuses copying without changing either workspace', a
   await note(page);
   const existing = await context.newPage(); await existing.goto(next);
   await existing.getByRole('button', { name: 'Start a new workspace here' }).click();
-  await expect(existing.getByRole('navigation', { name: 'Recent' })).toBeVisible();
+  await expect(existing.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
   const before = await records(existing);
   const target = await copy(page);
   await expect(target.getByText(/This address already has a workspace/)).toBeVisible({ timeout: 20_000 });

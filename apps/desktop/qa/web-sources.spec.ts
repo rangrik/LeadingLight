@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 const url = "https://source.example/article";
@@ -97,7 +98,7 @@ test("slow article and media captures can be cancelled before saving another sou
     release();
     await page.waitForTimeout(200);
     expect(mediaRequests).toBe(stage === "article" ? 0 : 3);
-    await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "A source worth keeping", exact: true })).toHaveCount(0);
+    await expect((await findPage(page, 'A source worth keeping'))).toHaveCount(0);
     await page.unroute("https://source.example/**");
   }
   await paste(page, "https://another.example");

@@ -57,7 +57,7 @@ test('real relay connects browser approval and Stop to an encrypted test Mac', a
     await page.getByRole('button', { name: 'Use this Mac', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Connected', exact: true })).toBeDisabled();
     await page.getByRole('button', { name: 'Back to app' }).click();
-    await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+    await page.getByRole("button", { name: "New page", exact: true }).first().click();
     await page.getByRole('textbox', { name: 'Title' }).fill('Relay round trip');
     await page.getByRole('textbox', { name: 'Page body' }).fill('Private original words.');
     await page.getByRole('button', { name: 'Ask', exact: true }).click();

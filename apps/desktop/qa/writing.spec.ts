@@ -1,9 +1,10 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const open = async (page: Page, tools: object) => {
   await page.addInitScript((t) => localStorage.setItem("ll.writing", JSON.stringify(t)), tools);
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
 };
 
@@ -53,19 +54,16 @@ test("Narrow cards keep the title whole and show only whole counts", async ({ pa
   await open(page, {});
   await page.keyboard.type("One two three. I recieved teh note basically.");
   await page.getByRole("textbox", { name: "Title" }).fill("Left");
-  const nav = page.getByRole("navigation", { name: "Recent" });
   for (const title of ["Middle", "Right"]) {
-    const rows = await nav.getByRole("listitem").count();
-    await nav.getByRole("button", { name: "New page" }).click();
-    await expect(nav.getByRole("listitem")).toHaveCount(rows + 1);
+    await page.getByRole("button", { name: "New page", exact: true }).first().click();
     await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
     await page.getByRole("textbox", { name: "Title" }).fill(title);
     await page.keyboard.press("Enter");
     await page.keyboard.type("Some words to count here.");
   }
-  await nav.getByRole("button", { name: "Left", exact: true }).click();
-  await nav.getByRole("button", { name: "Middle", exact: true }).click({ modifiers: ["Shift"] });
-  await nav.getByRole("button", { name: "Right", exact: true }).click({ modifiers: ["Shift"] });
+  await (await findPage(page, 'Left')).click();
+  await (await findPage(page, 'Middle')).click({ modifiers: ["Shift"] });
+  await (await findPage(page, 'Right')).click({ modifiers: ["Shift"] });
   const headers = page.locator("[data-pane-area] section header");
   await expect(headers).toHaveCount(3);
   for (const header of await headers.all()) {

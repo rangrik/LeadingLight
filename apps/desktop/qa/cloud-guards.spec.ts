@@ -75,7 +75,7 @@ test('production browser Ask explains the installed-app requirement', async ({ p
   await expect(panel).toContainText('existing Claude Code or Codex sign-in');
   await expect(panel.getByRole('textbox', { name: 'Question' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Local agents');
   const body = page.getByRole('textbox', { name: 'Page body' });
   await body.fill('These selected words stay on this device.');

@@ -1,8 +1,9 @@
+import { findPage } from "./navigation";
 import { expect, test } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 const account = async (context: BrowserContext, owner: string) => context.addCookies([{ name: 'qa-user', value: owner, url: 'http://127.0.0.1:1431' }]);
 const create = async (page: Page, title: string, words: string) => {
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
   await page.getByRole('textbox', { name: 'Title' }).press('Enter');
   await page.keyboard.type(words);
@@ -39,7 +40,7 @@ test('two devices sync encrypted history and preserve conflicting edits', async 
   await expect(two.getByText('Up to date', { exact: true })).toBeVisible();
   await one.getByRole('button', { name: 'Back to app' }).click();
   await two.getByRole('button', { name: 'Back to app' }).click();
-  await two.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'Shared note', exact: true }).click();
+  await (await findPage(two, 'Shared note')).click();
   await expect(two.getByRole('textbox', { name: 'Page body' })).toContainText('Original words.');
   await a.setOffline(true); await b.setOffline(true);
   await one.getByRole('textbox', { name: 'Page body' }).fill('First device edits.');
@@ -48,7 +49,7 @@ test('two devices sync encrypted history and preserve conflicting edits', async 
   await one.evaluate(async () => { const m = await import('/src/lib/' + 'sync.ts'); await m.syncNow(); });
   await b.setOffline(false);
   await two.evaluate(async () => { const m = await import('/src/lib/' + 'sync.ts'); await m.syncNow(); });
-  await expect(two.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: /conflicting copy/ })).toBeVisible();
+  await expect((await findPage(two, /conflicting copy/))).toBeVisible();
   await expect(two.getByRole('textbox', { name: 'Page body' })).toContainText('Second device edits.');
   await a.close(); await b.close();
 });
@@ -80,7 +81,7 @@ test('wrong recovery keys and server errors preserve the saved key', async ({ pa
 for (const width of [390, 820]) test(`web workspace fits ${width}px`, async ({ page }) => {
   await page.setViewportSize({ width, height: 844 }); await page.goto('/');
   if (width < 768) await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Mobile note');
   await page.getByRole('textbox', { name: 'Title' }).press('Enter'); await page.keyboard.type('A thought on the go.');
   await page.getByRole('button', { name: 'Page actions', exact: true }).click();

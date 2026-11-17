@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test, type Page } from "@playwright/test";
 
 test.use({
@@ -7,7 +8,7 @@ test.use({
 
 async function addVoice(page: Page, words?: string) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Voice QA");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   if (words) {
@@ -143,7 +144,7 @@ for (const from of ["page", "closed page", "capture"] as const) test(`stopped au
   let caret = 0;
   if (from === "page") {
     await page.getByRole("button", { name: "Today", exact: true }).click();
-    await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice QA", exact: true }).click();
+    await (await findPage(page, 'Voice QA')).click();
     await page.getByRole("textbox", { name: "Page body" }).locator("p").last().click();
     await page.keyboard.type("Words added after stopping.");
     await page.getByRole("textbox", { name: "Page body" }).locator("p").first().click();
@@ -167,9 +168,9 @@ for (const from of ["page", "closed page", "capture"] as const) test(`stopped au
       const id = space.get().pages.find((p: any) => p.title === "Voice QA").id;
       return (await objects.get(id)).content?.content?.find((node: any) => node.type === "voiceRecording")?.attrs?.src;
     })).toMatch(/^data:audio\//);
-    await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice QA", exact: true }).click();
+    await (await findPage(page, 'Voice QA')).click();
   }
-  if (from === "capture") await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice recording", exact: true }).click();
+  if (from === "capture") await (await findPage(page, 'Voice recording')).click();
   await expect(page.locator('[data-media="voice"] audio')).toHaveAttribute("src", /^data:audio\//);
   await expect(page.getByRole("button", { name: "Retry transcription", exact: true })).toBeVisible();
   if (from === "page") {

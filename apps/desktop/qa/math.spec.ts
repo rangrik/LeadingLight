@@ -1,9 +1,10 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 // Seam: saved agent replies into our renderer; the upstream parser alone cannot catch missing KaTeX.
 test("Replies render math while preserving currency, code and invalid formulas", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Math reply");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.press("Meta+s");
@@ -20,7 +21,7 @@ test("Replies render math while preserving currency, code and invalid formulas",
     }]));
   });
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Math reply", exact: true }).click();
+  await (await findPage(page, 'Math reply')).click();
   await page.keyboard.press("Meta+j");
   const panel = page.getByRole("region", { name: "Agent" });
   await expect(panel.locator(".katex:visible")).toHaveCount(2);

@@ -1,8 +1,9 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Mermaid QA");
   await page.getByRole("textbox", { name: "Title", exact: true }).press("Enter");
 });
@@ -93,7 +94,7 @@ test("Agent-created Markdown renders across document types and round-trips", asy
     await runTool("", "create_page", { title: "Generated diagram", markdown: "```mermaid\nflowchart LR; A[Automatic] --> B[Diagram]\n```" });
     return space.get().pages.find((p: any) => p.title === "Generated diagram")!.id;
   });
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: /Generated diagram/ }).click();
+  await (await findPage(page, /Generated diagram/)).click();
   await expect(page.getByRole("img", { name: "Mermaid diagram", exact: true })).toContainText("Automatic");
   const types = await page.evaluate(async () => {
     const { space, putType } = await import("/src/lib/" + "space.ts");

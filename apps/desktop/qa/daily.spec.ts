@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 // Seam: a day not yet written in opens as a draft, stored by its first save (storeDraft in
@@ -17,6 +18,7 @@ test("Browsing days stores nothing; the first edit stores the day", async ({ pag
   await page.getByRole("button", { name: "Next day" }).click();
   await expect(title).toHaveValue(days[1]);
   await page.reload();
+  await page.getByRole("button", { name: "Library", exact: true }).click();
   await page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Daily notes" }).click();
   await expect(page.getByRole("link", { name: days[2] })).toBeVisible();
   await expect(page.getByRole("link", { name: days[0] })).toHaveCount(0);
@@ -34,13 +36,12 @@ test("A day lists what was made and edited that day, newest first", async ({ pag
     const noon = new Date().setHours(-12, 0, 0, 0); // yesterday, noon
     await createPage({ title: "Kickoff", createdAt: noon, updatedAt: noon });
   });
-  const nav = page.getByRole("navigation", { name: "Recent" });
   const body = page.getByRole("textbox", { name: "Page body" });
-  await nav.getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Pricing page");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("draft");
-  await nav.getByRole("button", { name: "Kickoff", exact: true }).click();
+  await (await findPage(page, 'Kickoff')).click();
   await body.click();
   await page.keyboard.type("notes");
   await page.getByRole("button", { name: "Today", exact: true }).click();

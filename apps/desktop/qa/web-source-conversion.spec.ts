@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // Seam: readable HTML becomes schema-valid blocks without dropping mixed text or counting media twice.
 test("Article conversion preserves mixed text, nested lists, and media once", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   const result = await page.evaluate(async () => {
     const sourceModule = "/src/lib/web-source.ts";
     const { readArticle } = await import(sourceModule);

@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 // The browser space under the QA flag, with the stand-in engine (lib/native-browser.ts): pages are
 // placeholders, so these check the space's own logic, not WebKit's.
-const tabs = (page: Page) => page.getByRole("list", { name: "Tabs" }).getByRole("button", { name: /^(?!Close )/ });
+const tabs = (page: Page) => page.getByRole("list", { name: "Tabs" }).getByRole("button", { name: /^(?!More for )/ });
 const bar = (page: Page) => page.getByRole("combobox", { name: "Search or enter address" });
 
 async function open(page: Page) {
@@ -10,11 +10,10 @@ async function open(page: Page) {
   // No runtime: no agents, and Saved stays under the space's own key.
   await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/");
-  await page.getByRole("button", { name: "Browser", exact: true }).click();
-  await expect(page.getByTestId("browser-space")).toBeVisible();
+  await page.getByRole("radio", { name: "Browser", exact: true }).click();
 }
 async function visit(page: Page, input: string) {
-  await page.keyboard.press("ControlOrMeta+t");
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
   await bar(page).fill(input);
   await page.keyboard.press("Enter");
   await expect(bar(page)).toBeHidden();

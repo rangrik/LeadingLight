@@ -105,7 +105,7 @@ const test = base.extend<{ runtime: Runtime }>({
 
 async function openBrowser(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Browser", exact: true }).click();
+  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
   await expect(address(page)).toBeVisible();
 }
 
@@ -397,9 +397,9 @@ test("Bookmarks and history survive reload and can be removed", async ({ page, r
 
 test("Browser shortcuts leave note tabs and note contents intact", async ({ page, runtime }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page", exact: true }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Keep this note");
-  await page.getByRole("button", { name: "Browser", exact: true }).click();
+  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
   await navigate(page, "localhost:1420/alpha");
   await address(page).press("Meta+t");
   await expect(tabList(page).getByRole("tab")).toHaveCount(2);
@@ -526,7 +526,7 @@ async function mockChat(page: Page, { pending, project }: { pending?: RuntimeReq
 
 async function openProjectChat(page: Page) {
   await page.goto("/?mac");
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Projects", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
   await page.evaluate(async () => {
     const { createPage, chatView } = await import(String("/src/lib/space.ts"));
     const { objects } = await import(String("/src/lib/objects.ts"));

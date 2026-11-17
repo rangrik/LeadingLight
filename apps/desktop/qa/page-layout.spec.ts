@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 test("Content width is editable, persistent, and fits a narrow pane", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Width check");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("Words kept while changing width.");
@@ -57,7 +57,7 @@ test("Content width is editable, persistent, and fits a narrow pane", async ({ p
 // Seam: typing scrolls only the active page, while pointer selection and Focus keep their rules.
 test("Ordinary typing keeps the cursor above the bottom", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   for (let i = 0; i < 30; i++) {
     await page.keyboard.type(`Line ${i}`);

@@ -1,12 +1,12 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 // One quick pass through the main path. The full scenarios live in features/.
 test("create a page, write, and reload", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("No pages yet")).toBeVisible();
+  await expect(page.getByText("Pin pages from Library to keep them here.")).toBeVisible();
 
-  const sidebar = page.getByRole("navigation", { name: "Recent" });
-  await sidebar.getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
 
   const title = page.getByRole("textbox", { name: "Title" });
   await expect(title).toBeFocused();
@@ -23,11 +23,11 @@ test("create a page, write, and reload", async ({ page }) => {
   await expect(page.getByRole("listbox", { name: "Insert block" })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(body.locator("h1")).toHaveText("Heading");
-  await expect(sidebar.getByRole("button", { name: "Smoke" })).toBeVisible();
+  await expect(await findPage(page, "Smoke")).toBeVisible();
 
   await page.waitForTimeout(800);
   await page.reload();
-  await expect(sidebar.getByRole("button", { name: "Smoke" })).toBeVisible();
+  await expect(await findPage(page, "Smoke")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Page body" }).locator("h1")).toHaveText("Heading");
   await page.screenshot({ path: "qa/report/smoke.png" });
 });

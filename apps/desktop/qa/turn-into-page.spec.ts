@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const source = (page: Page) => page.getByRole("region", { name: "Source", exact: true }).getByRole("textbox", { name: "Page body" });
@@ -8,7 +9,7 @@ const records = (page: Page) => page.evaluate(async () => {
 });
 async function start(page: Page, text: string) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Source");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type(text);
@@ -48,7 +49,7 @@ test("Selected words become an idea linked to a project, with undo and reload", 
   await expect(source(page).locator(".node-mention")).toContainText("Build a quiet");
   await page.keyboard.press("Meta+s");
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Source", exact: true }).click();
+  await (await findPage(page, 'Source')).click();
   await expect(source(page).locator(".node-mention")).toContainText("Build a quiet");
   const reloaded = (await records(page)).find((p: any) => p.id === idea.id);
   expect(reloaded.properties["idea-project"]).toEqual([house.id]);
@@ -166,7 +167,7 @@ test("Source changes before or during saving do not replace unrelated text", asy
   });
   await dialog(page).getByRole("button", { name: "Create idea", exact: true }).click();
   await expect(dialog(page)).toBeHidden();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Source", exact: true }).click();
+  await (await findPage(page, 'Source')).click();
   await expect(source(page)).toHaveText("Changed during save");
   expect((await records(page)).filter((p: any) => p.typeId === "idea")).toHaveLength(1);
   await expect(source(page).locator(".node-mention")).toHaveCount(0);

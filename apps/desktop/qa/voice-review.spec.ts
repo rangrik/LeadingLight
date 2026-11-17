@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test, type Page } from "@playwright/test";
 
 test.use({ launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] }, permissions: ["microphone"] });
@@ -29,7 +30,7 @@ test("report source links still open with a plain click", async ({ page }) => {
 
 async function record(page: Page) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Voice source");
   await page.getByRole("textbox", { name: "Title", exact: true }).press("Enter");
   await page.keyboard.type("/voice");
@@ -96,7 +97,7 @@ test("a selected voice passage becomes a project task without consuming the tran
   await expect(page.locator(".ll-page-link")).toContainText("Ask Sam");
   await page.keyboard.press("Meta+s");
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice source", exact: true }).click();
+  await (await findPage(page, 'Voice source')).click();
   await page.locator(".ll-page-link").getByRole("button", { name: "Ask Sam", exact: true }).click();
   const sourceLink = page.getByRole("link", { name: "Source recording", exact: true });
   await sourceLink.hover();
@@ -134,7 +135,7 @@ test("Quick capture autostarts once and keeps the original transcript for page r
     return saved?.content?.content?.find((n: any) => n.type === "voiceRecording")?.attrs.transcript;
   }).toBe(transcript);
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Captured voice", exact: true }).click();
+  await (await findPage(page, 'Captured voice')).click();
   const audio = await page.locator('[data-media="voice"] audio').getAttribute("src");
   await page.getByRole("textbox", { name: "Page body" }).locator("p").filter({ hasText: transcript }).click();
   await page.keyboard.press("End");
@@ -201,7 +202,7 @@ test("source edits before and during creation cannot overwrite recording content
   });
   await create(page).getByRole("button", { name: "Create idea", exact: true }).click();
   await expect(create(page)).toBeHidden();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Voice source", exact: true }).click();
+  await (await findPage(page, 'Voice source')).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("During save");
   await expect(page.getByRole("textbox", { name: "Page body" })).toContainText(transcript);
   expect((await records(page)).filter((p: any) => p.typeId === "idea")).toHaveLength(1);

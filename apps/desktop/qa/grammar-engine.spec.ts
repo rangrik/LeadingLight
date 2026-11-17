@@ -9,7 +9,7 @@ async function load(page: Page) {
 async function start(page: Page, inline = false) {
   if (inline) await page.addInitScript(() => localStorage.setItem("ll.writing", JSON.stringify({ grammar: true, grammarMode: "inline" })));
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await load(page);
 }
