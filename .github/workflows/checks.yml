@@ -57,6 +57,11 @@ jobs:
       - run: pnpm --filter @leadinglight/cloud test
       - run: pnpm --filter @leadinglight/desktop build
       - run: pnpm --filter @leadinglight/docs build
+      - name: Bypass the slow AWS Ubuntu mirror
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '\|^http://us-east-2\.ec2\.archive\.ubuntu\.com/ubuntu/|d' /etc/apt/apt-mirrors.txt
+          fi
       - run: pnpm --filter @leadinglight/desktop exec playwright install --with-deps chromium webkit
       - name: Start isolated cloud fixtures
         run: |

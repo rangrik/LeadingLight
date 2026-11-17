@@ -33,6 +33,13 @@ Feature: Versioned GitHub releases
     Then artifact names identify the initial pass, the pinned release commit and the run attempt
     And rerunning the workflow keeps the earlier attempt's recordings
 
+  Scenario: Browser dependencies bypass the slow regional mirror
+    Given the Ubuntu runner lists the slow AWS package mirror before Ubuntu's main archive
+    When release checks install Chromium and WebKit dependencies
+    Then the AWS mirror is removed from the runner's mirror list
+    And Ubuntu's main archive and security fallback remain available
+    And both browsers still run the recorded feature checks
+
   Scenario: A signing secret is missing
     Given the Developer ID certificate or the App Store Connect key is not in the repository's secrets
     When the Apple Silicon build reaches signing
