@@ -5,6 +5,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-17 | Broader workspace redesign (#29) | Its project rail, Resume and Recents conflict with the shared Notes/Browser sidebar; it also bundles separate reading, review and Work features. | Scope the independent features separately and reconcile them with the shared sidebar before merging. |
 | 2026-11-17 | Automatic cloud deployment before app releases (#40) | The required `VERCEL_TOKEN` is absent from the repository and `cloud-production` environment. Merging would block app releases. | Configure a dedicated deployment token and pass the release checks. |
 | 2026-11-16 | Published pages above 3.5 MB, including attachments | Inline snapshots fit the existing cloud gateway; larger uploads need separate attachment storage or staged chunks. Failed uploads preserve the previous publication. | A shared page needs larger attachments; keep updates atomic and revocation effective for every part. |
 | 2026-11-16 | Production publishing smoke | Browser/WebKit scenarios, native credentials and route tests, attachment tests and the isolated Mac build pass. Production still lacks this branch's routes. No manual acceptance gate is required for these covered paths. | After the approved deployment, verify the live endpoints with disposable content; ask for human input only if an untestable hardware issue appears. |
