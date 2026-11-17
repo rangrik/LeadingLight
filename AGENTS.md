@@ -97,7 +97,9 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
    it into the feature branch when needed, and re-run the change's scenarios. Push the branch
    and open a PR for every change. Attach an actual automated-test video to the PR, with a short
    list of scenarios and any simulated native behavior. Keep the PR ready to merge and watch
-   its checks; fix failures yourself. The user reviews the video and merges the PR. Never merge
+   its checks. Wait for recording/encoding to finish, then use `gh pr create/edit --attach`
+   (a current GitHub CLI) and verify the uploaded video is complete. Fix check failures yourself.
+   The user reviews the video and merges the PR. Never merge
    into main, merge a release PR, or enable auto-merge without the user's explicit approval.
    Release PRs follow the same review rule. Once approved and released, the installed app must
    show an in-app alert with an Update button; test that flow for release-related changes.
