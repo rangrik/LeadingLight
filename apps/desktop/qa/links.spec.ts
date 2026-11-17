@@ -1,12 +1,10 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
-const nav = (page: Page) => page.getByRole("navigation", { name: "Recent" });
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 
 async function create(page: Page, title: string) {
-  const count = await nav(page).getByRole("listitem").count();
-  await nav(page).getByRole("button", { name: "New page" }).click();
-  await expect(nav(page).getByRole("listitem")).toHaveCount(count + 1);
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
   await page.getByRole("textbox", { name: "Title" }).fill(title);
 }
@@ -26,7 +24,7 @@ test("A page with links reopens editable with its links", async ({ page }) => {
   await expect(body(page).locator(".node-pageLink")).toHaveCount(1);
   await page.waitForTimeout(700);
   await page.reload();
-  await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
+  await (await findPage(page, 'Notes')).click();
   await expect(body(page)).toHaveAttribute("contenteditable", "true");
   await expect(body(page).locator(".node-mention")).toContainText("Dune");
   await expect(body(page).locator(".node-pageLink")).toContainText("Dune");

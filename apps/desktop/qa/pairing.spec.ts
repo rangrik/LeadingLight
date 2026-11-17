@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test, type Page } from '@playwright/test';
 import { seal, unseal, type Envelope } from '../src/lib/remote-crypto';
 import type { PairRecord } from '../src/lib/remote';
@@ -151,7 +152,7 @@ async function connect(page: Page, mac: Awaited<ReturnType<typeof pairedMac>>, u
   await page.getByRole('button', { name: 'Use this Mac', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Connected', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: 'Back to app' }).click();
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Paired note');
   await page.getByRole('textbox', { name: 'Page body' }).fill('My original words.');
   await page.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -416,7 +417,7 @@ for (const [provider, access] of [['Claude', 'Approve for me'], ['Codex', 'Full 
     await expect.poll(mac.cursor, { timeout: 10_000 }).toBeGreaterThanOrEqual(last);
     await expect(page.getByRole('group', { name: 'Approval' })).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'Page body' })).toHaveText('My original words.');
-    await expect(page.getByRole('navigation', { name: 'Recent' })).not.toContainText('Late created page');
+    await expect(await findPage(page, "Late created page")).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Stopping', exact: true })).toBeDisabled();
     const terminal = await mac.terminal();
     await expect.poll(mac.cursor, { timeout: 10_000 }).toBeGreaterThanOrEqual(terminal);

@@ -7,7 +7,7 @@ import {
   BreadcrumbSeparator,
 } from "@leadinglight/ui/components/breadcrumb";
 import { Separator } from "@leadinglight/ui/components/separator";
-import { SidebarTrigger } from "@leadinglight/ui/components/sidebar";
+import { SidebarTrigger, useSidebar } from "@leadinglight/ui/components/sidebar";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { useMobile } from "~/lib/platform";
 import type { ReactNode } from "react";
@@ -36,6 +36,8 @@ type Props = {
 
 export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
   const mobile = useMobile();
+  const { isMobile, openMobile } = useSidebar();
+  if (isMobile) { sidebarOpen = openMobile; toggle = true; }
   return (
     <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region={!mobile || undefined}>
       <div
@@ -46,7 +48,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
         )}
         onPointerDown={onGrab}
       >
-        {lead && toggle && (
+        {lead && toggle && !sidebarOpen && (
           <>
             <SidebarTrigger className="-ml-1" />
             {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}

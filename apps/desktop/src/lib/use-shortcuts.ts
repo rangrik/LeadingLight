@@ -7,12 +7,12 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
-import { available, space, spaceKey } from "~/lib/browser-space";
+import { browserFocused, spaceKey } from "~/lib/browser-space";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
-import { MAIL_VIEW, browserView, pageOf } from "~/lib/space";
+import { MAIL_VIEW, pageOf } from "~/lib/space";
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
 import { openPaper, readPaper } from "~/lib/paper";
-import { closeTab, focusedPage, cycleTab, newTab, openBeside, openPage, reopenTab, travel } from "~/lib/panes";
+import { closeTab, focusedPage, cycleTab, newTab, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
 import { nodFront } from "~/lib/tail";
@@ -37,6 +37,7 @@ const TABS: Record<string, (() => void) | undefined> = {
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(view: "feed" | "captures" | "suggestions"): void }) {
   useEffect(() => {
     const run = (id: string) => {
+      if (id === "browser" && (useStore.getState().view.kind === "settings" || shown(COVERS))) return;
       if (useStore.getState().view.kind !== "settings") {
         // The browser space in front takes the keys that act on a tab (lib/browser-space.ts).
         if (spaceKey(id)) return;
@@ -87,9 +88,6 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
           return nodFront();
         case "shortcuts":
           return toggleShortcuts();
-        // Where the space can't be shown (the browser build), Browser is the streamed pane.
-        case "browser":
-          return available.get() ? undefined : openBeside(browserView(""));
         case "focus":
         case "syntax":
         case "style":
@@ -107,7 +105,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       if (!accel) return;
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd. The browser
       // space's own keys count only while it is in front; ⌘1 is the numbered "tab-1".
-      const front = available.get() && space.get().front;
+      const front = browserFocused();
       const own = (s: (typeof SHORTCUTS)[number]) => front || !(s as { browser?: boolean }).browser;
       const find = (a: string) => {
         const n = /^(.*\+)([1-9])$/.exec(a);

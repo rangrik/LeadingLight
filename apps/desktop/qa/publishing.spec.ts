@@ -6,7 +6,7 @@ test.skip(!process.env.PUBLISH_QA, 'Needs the isolated cloud test server.');
 test('publish with sidenotes, read on desktop and phone, update and revoke', async ({ page, context, browser, baseURL }, testInfo) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-${Date.now()}`, url: baseURL! }]);
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('A shared page');
   await page.getByRole('textbox', { name: 'Title', exact: true }).press('Enter');
   const body = page.getByRole('textbox', { name: 'Page body', exact: true });
@@ -71,7 +71,7 @@ test('publish with sidenotes, read on desktop and phone, update and revoke', asy
 
 test('sign in is required', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('button', { name: 'Publish page', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Publish page', exact: true });
   await expect(dialog.getByRole('button', { name: 'Account and devices' })).toBeVisible();
@@ -82,7 +82,7 @@ test('sign in is required', async ({ page }) => {
 test('retry failures and unpublish a deleted page from account settings', async ({ page, context, baseURL, request }) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-errors-${Date.now()}`, url: baseURL! }]);
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Revocable after deletion');
   await page.route('**/api/publications/status', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Try the connection again.' }) }));
   await page.getByRole('button', { name: 'Publish page', exact: true }).click();
@@ -122,7 +122,7 @@ test('retry failures and unpublish a deleted page from account settings', async 
 test('readers cannot replace broken or empty media', async ({ page, context, browser, baseURL }, testInfo) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-media-${Date.now()}`, url: baseURL! }]);
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Media without edit controls');
   await page.getByRole('textbox', { name: 'Title', exact: true }).press('Enter');
   await page.evaluate(() => (window as unknown as { __editor: { commands: { setContent: (doc: unknown) => void } } }).__editor.commands.setContent({ type: 'doc', content: [{ type: 'image', attrs: { src: 'data:image/png;base64,aA==', mime: 'image/png' } }, { type: 'audio' }, { type: 'video' }, { type: 'file' }, { type: 'embed' }] }));

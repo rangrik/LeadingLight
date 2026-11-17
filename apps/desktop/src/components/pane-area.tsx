@@ -21,11 +21,12 @@ import { TypeView } from "~/components/type-view";
 import { reportOf } from "~/lib/work";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
-import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, PERSONAL_BROWSER, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
 import { FeedbackButton } from "~/components/feedback";
+import { BrowserSpace } from "~/components/browser-space";
 import { BrowserPane } from "~/components/agent-browser";
 import { BrowserChat } from "~/components/browser-chat";
 import { AskView } from "~/components/agent-panel";
@@ -104,7 +105,8 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
   const area = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<Size>({ w: 0, h: 0, header: 0 });
   const { root, focus } = panes.use();
-  const { open: sidebarOpen, isMobile } = useSidebar();
+  const { open, openMobile, isMobile } = useSidebar();
+  const sidebarOpen = isMobile ? openMobile : open;
   space.use(); // titles and icons follow edits
   useLayoutEffect(() => {
     const el = area.current;
@@ -179,7 +181,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 </button>
               )}
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
-              {!folded && (
+              {!folded && leaf.page !== PERSONAL_BROWSER && (
               <PanelHeader
                 after={mail ? <MailCount view={leaf.page} /> : !phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
@@ -187,7 +189,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
-                toggle={!windowToggle}
+                toggle={!windowToggle || isMobile}
                 muted={split && leaf.id !== focus}
                 onGrab={split || tabbed ? (e) => armDrag(e, { page: leaf.page, label: shown.title, tab: tab.id }) : undefined}
                 onRoot={(e) => shown.parent && (leaf.back ? showIn(leaf.id, leaf.back) : visit(shown.parent.view, e))}
@@ -217,11 +219,13 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               )}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
-                className={cn("@container min-h-0 flex-1 overflow-y-auto", folded && "hidden")}
+                className={cn("@container min-h-0 flex-1 overflow-y-auto", leaf.page === PERSONAL_BROWSER && "flex flex-col", folded && "hidden")}
                 data-page-scroller
                 key={leaf.page}
               >
-                {!leaf.page ? (
+                {leaf.page === PERSONAL_BROWSER ? (
+                  <BrowserSpace placement={`${b.left},${b.top},${b.width},${b.height}`} active={front && !folded && (!isMobile || pane.id === focus)} focused={front && leaf.id === focus} lead={lead && (isMobile || (rect.x < EPS && rect.y < EPS))} mac={windowToggle} under={tabbed} onClose={split || tabbed ? () => closeTab(leaf.id) : undefined} />
+                ) : !leaf.page ? (
                   <NoPage className="h-full" />
                 ) : mail ? (
                   <MailView pane={leaf.id} view={leaf.page} />

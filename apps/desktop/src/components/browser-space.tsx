@@ -1,20 +1,19 @@
 // The browser space's page area (features/browser-space.feature): one rounded card with a single
 // row of controls, then the page. A native page is a view laid over the card (native_browser.rs);
 // when something of the app's opens over it, WebKit's picture of the page stands in for it.
-import { Bookmark, Bot, Check, ChevronLeft, ChevronRight, Ellipsis, ExternalLink, Globe, Link, Lock, PanelLeft, Pin, RotateCw, Sparkles, Square, TriangleAlert, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Bookmark, Bot, Check, ChevronLeft, ChevronRight, Ellipsis, ExternalLink, Globe, Link, Lock, Pin, RotateCw, Sparkles, Square, TriangleAlert, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Button, type ButtonProps } from "@leadinglight/ui/components/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@leadinglight/ui/components/empty";
 import { Input } from "@leadinglight/ui/components/input";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "@leadinglight/ui/components/menu";
-import { useSidebar } from "@leadinglight/ui/components/sidebar";
+import { SidebarTrigger, useSidebar } from "@leadinglight/ui/components/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { OVERLAYS } from "@/lib/overlays";
-import { BrowserCommand, shortURL } from "~/components/browser-command";
+import { shortURL } from "~/components/browser-command";
 import { SiteIcon } from "~/components/browser-sidebar";
 import { BrowserSurface } from "~/components/browser-surface";
-import { CARD } from "~/components/pane-area";
 import { safeBrowserURL, type BrowserEntry } from "~/lib/browser-data";
 import { askAboutBrowser } from "~/lib/ask";
 import { useShowing } from "~/lib/bar";
@@ -135,8 +134,10 @@ function Pill({ view, agentURL }: { view: Shown; agentURL: string }) {
   );
 }
 
-function Toolbar({ mac }: { mac: boolean }) {
-  const { open, toggleSidebar } = useSidebar();
+type Chrome = { mac: boolean; lead: boolean; under?: boolean; onClose?: () => void };
+function Toolbar({ mac, lead, under, onClose }: Chrome) {
+  const { open: desktopOpen, openMobile, isMobile } = useSidebar();
+  const open = isMobile ? openMobile : desktopOpen;
   const keys = useKeysFor();
   const view = shown.use();
   const { tabs, selected, closed } = space.use();
@@ -152,8 +153,8 @@ function Toolbar({ mac }: { mac: boolean }) {
   const forward = view.kind === "agent" ? !!agentState.state?.canGoForward : onPage && !!page?.forward;
   const asking = useShowing("ask");
   return (
-    <header className={cn("box-content flex h-9 shrink-0 items-center gap-0.5 border-b px-2 transition-[padding] duration-200 ease-out", mac && !open && "ps-[calc(var(--traffic-left)_+_0.75rem)]")} data-tauri-drag-region>
-      <Tool keys={keys("sidebar")} label={open ? "Hide the sidebar" : "Show the sidebar"} onClick={toggleSidebar}><PanelLeft /></Tool>
+    <header className={cn("flex h-(--header-height) shrink-0 items-center gap-0.5 px-2 transition-[padding] duration-200 ease-out", mac && lead && !open && !under && "ps-[calc(var(--traffic-left)_+_50px)]")} data-tauri-drag-region>
+      {lead && (!mac || isMobile) && !open && <SidebarTrigger />}
       <Tool disabled={!back} keys={keys("back")} label="Back" onClick={() => travel("back")}><ChevronLeft /></Tool>
       <Tool disabled={!forward} keys={keys("forward")} label="Forward" onClick={() => travel("forward")}><ChevronRight /></Tool>
       <div className="flex min-w-0 flex-1 justify-center px-3" data-tauri-drag-region>
@@ -183,6 +184,7 @@ function Toolbar({ mac }: { mac: boolean }) {
           <MenuItem disabled={!onPage} onClick={() => void closeTab()}><X />Close tab<MenuShortcut>{keys("close-tab")}</MenuShortcut></MenuItem>
         </MenuPopup>
       </Menu>
+      {onClose && <Tool label="Close page" onClick={onClose}><X /></Tool>}
     </header>
   );
 }
@@ -269,7 +271,7 @@ function Failed({ url, why }: { url: string; why: string }) {
 
 // The page area. In the Mac app the tab's view is laid exactly over it, at its bottom corners'
 // radius; zoomed notes change CSS pixels, so the notes webview's width goes along.
-function Page({ e }: { e: Engine | null }) {
+function Page({ e, active, placement }: { e: Engine | null; active: boolean; placement: string }) {
   const view = shown.use();
   const { tabs, selected } = space.use();
   const tab = tabs.find((t) => t.id === selected);
@@ -282,14 +284,14 @@ function Page({ e }: { e: Engine | null }) {
   const marks = standinMarks.use();
   const done = standinDone.use();
   const shownNow = standinShown.use();
-  const pageShown = !!e && view.kind === "tab" && !!tab && !page?.failed;
+  const pageShown = active && !!e && view.kind === "tab" && !!tab && !page?.failed;
 
   useLayoutEffect(() => {
     if (!e) return;
     if (!pageShown || !tab) {
       setFrozen(null);
       void e.hide().catch(() => {});
-      if (tab && view.kind === "tab") void ensure(tab.id);
+      if (active && tab && view.kind === "tab") void ensure(tab.id);
       return;
     }
     const id = tab.id;
@@ -342,7 +344,7 @@ function Page({ e }: { e: Engine | null }) {
     if (area.current) resize.observe(area.current);
     window.addEventListener("resize", kick);
     return () => { alive = false; resize.disconnect(); window.removeEventListener("resize", kick); cancelAnimationFrame(raf); };
-  }, [e, pageShown, covered, tab?.id, view.kind]);
+  }, [e, pageShown, covered, tab?.id, view.kind, active, placement]);
   // Leaving the space hides every page; they keep running for when it comes back.
   useEffect(() => () => void e?.hide().catch(() => {}), [e]);
 
@@ -350,7 +352,7 @@ function Page({ e }: { e: Engine | null }) {
     <div className="relative min-h-0 flex-1 overflow-hidden bg-background" data-testid="browser-page" ref={area}>
       {view.kind === "saved" || view.kind === "history" ? (
         <List kind={view.kind} />
-      ) : view.kind === "agent" ? (
+      ) : view.kind === "agent" && active ? (
         <AgentPage base={view.base} key={`${view.base}/${view.tab}`} tab={view.tab} />
       ) : !tab ? (
         <Empty className="absolute inset-0">
@@ -382,19 +384,19 @@ function Page({ e }: { e: Engine | null }) {
   );
 }
 
-export function BrowserSpace({ mac }: { mac: boolean }) {
+export function BrowserSpace({ active, focused, placement, ...chrome }: Chrome & { active: boolean; focused: boolean; placement: string }) {
   const e = useEngine();
   // Ask is about the browser while it is in front (lib/ask.ts), titled by the tab in view.
   useEffect(() => {
+    if (!active || !focused) return;
     const title = () => space.get().tabs.find((t) => t.id === space.get().selected)?.title ?? "";
     askAboutBrowser({ id: BROWSER_ASK, title, text: () => "", browser: true });
     return () => askAboutBrowser(null);
-  }, []);
+  }, [active, focused]);
   return (
-    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden", CARD)} data-testid="browser-space">
-      <Toolbar mac={mac} />
-      <Page e={e} />
-      <BrowserCommand />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-testid="browser-space">
+      <Toolbar {...chrome} />
+      <Page active={active} e={e} placement={placement} />
     </div>
   );
 }

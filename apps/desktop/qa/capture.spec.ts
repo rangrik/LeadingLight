@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
@@ -61,7 +62,7 @@ test("A captured idea keeps its project, shows in Today and opens beside", async
 
   await page.waitForTimeout(800);
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Walk the long way" }).click();
+  await (await findPage(page, 'Walk the long way')).click();
   const idea = pane(page, "Walk the long way");
   await expect(idea.getByRole("textbox", { name: "Page body" }).locator("ul li")).toHaveText("Along the river");
   await expect(idea.getByRole("button", { name: "House" })).toBeVisible();

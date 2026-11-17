@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const inbox = (page: Page) => page.getByRole("complementary", { name: "Captures", exact: true });
@@ -10,7 +11,7 @@ async function openInbox(page: Page) {
 }
 async function seed(page: Page) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).waitFor();
+  await page.getByRole("button", { name: "New page", exact: true }).first().waitFor();
   const id = await page.evaluate(async () => {
     const { createPage } = await import(String("/src/lib/space.ts"));
     const content = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Keep these words." }] }] };
@@ -24,7 +25,7 @@ async function seed(page: Page) {
     return idea.id;
   });
   await page.reload();
-  await expect(page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Garden lights", exact: true })).toBeVisible();
+  await expect((await findPage(page, 'Garden lights'))).toBeVisible();
   return id;
 }
 
@@ -130,7 +131,7 @@ test("Reviewing beside an open page keeps its words and empty states stay calm",
   await expect(body).toContainText("More words.");
   await expect(row(page, "Garden lights")).toHaveCount(0);
   await page.reload();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Garden lights", exact: true }).click();
+  await (await findPage(page, 'Garden lights')).click();
   await expect(page.getByRole("region", { name: "Garden lights", exact: true }).getByRole("textbox", { name: "Page body" })).toContainText("More words.");
   await openInbox(page);
   await inbox(page).getByRole("tab", { name: "Reviewed", exact: true }).click();

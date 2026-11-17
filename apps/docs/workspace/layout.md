@@ -10,11 +10,11 @@ several pages side by side, and each of those places can hold tabs, as a browser
 
 ## The window
 
-- **The sidebar** runs down the left. **LeadingLight** sits at its top, then **Today**,
-  **Calendar** (see [Calendar](/organize/calendar)), **Mail** (see [Mail](/organize/mail)),
-  **Browser** (see [The built-in browser](/ai/browser)), your types
-  (such as People or Books), any pinned pages, and **Recent**, the list of your pages with a
-  **New page** button. **Account and sync** and **Settings** are at the bottom.
+- **The sidebar** shows search, **New page**, shortcuts for Today, Calendar and Mail,
+  your pinned pages, and **Library**. Library holds all your pages and types.
+  **Notes** and **Browser** share this sidebar: use the footer switch, swipe horizontally
+  across the sidebar, or press <kbd>⌥⌘B</kbd>. Switching mode keeps your panes and edits in place.
+  Settings, Account and sync, and usage stay at the bottom.
 - **The page area** fills the rest. Each open page is a card with rounded corners, with a small
   gap between it, its neighbours and the window's edges.
 - **The bar** is the slim strip at the right edge of the window. See [The bar](/workspace/bar).
@@ -34,12 +34,12 @@ icon and title. A new page reads **Pages** then its title; a book reads **Books*
 
 ## Hide or resize the sidebar
 
-To hide the sidebar, click **Toggle Sidebar** or press <kbd>⌘&#92;</kbd>. The sidebar slides away and
+To hide the sidebar, click **Hide sidebar** or press <kbd>⌘&#92;</kbd>. The sidebar slides away and
 the pages take the full width. Do the same again to bring it back.
 
-In the Mac app, **Toggle Sidebar** sits in the title bar just right of the traffic lights, and it stays
-in the same place whether the sidebar is shown or hidden. In a browser it sits at the left of the
-first card's header.
+There is one sidebar button: **Hide sidebar** in the sidebar header while it is open,
+then **Toggle Sidebar** in the first pane when hidden. On Mac, the hidden sidebar's button
+sits beside the traffic lights. Other pane headers do not repeat it.
 
 To change the sidebar's width, point at the gap between the sidebar and the first card. A small grip
 shows and the pointer turns into a resize arrow. Drag left or right; the cards move with it. The
@@ -72,6 +72,14 @@ You can also drag a page that is already open by the breadcrumb in its card head
 an edge of another page to move it there. Dropping a page onto its own card does nothing. If you drag
 a sidebar row for a page that is already open, it moves rather than opening twice, and keeps its
 words and scroll position.
+
+### Keep a note beside a website
+
+Choose **Browser** in the sidebar footer, then Shift-click a tab or choose **Open beside** from
+its **More** menu. The browser and note share the existing pane layout. Selecting another
+browser tab changes the browser pane; selecting another note changes the notes pane. Browser
+shortcuts follow the pane you click, regardless of sidebar mode. Close either pane with its
+**Close page** button; closing a pane keeps its browser tabs available in the sidebar.
 
 ### Shift-click a sidebar row
 

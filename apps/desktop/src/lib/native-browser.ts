@@ -10,7 +10,7 @@ export type Rect = { x: number; y: number; w: number; h: number };
 export type Action = "load" | "back" | "forward" | "reload" | "stop" | "zoom";
 // What the page script does (lib/page-tools.ts asks for it); refs are read_tab's item numbers.
 export type PageOp = { kind: "read" } | { kind: "target"; ref: number; submit?: boolean } | { kind: "click"; ref: number } | { kind: "type"; ref: number; text: string; submit?: boolean } | { kind: "scroll"; down: boolean; ref?: number } | { kind: "mark"; ref: number; text: string } | { kind: "unmark" };
-type Events = { state(s: PageState): void; icon(id: string, icon: string): void; opened(o: Opened): void; key(front: boolean): void };
+type Events = { state(s: PageState): void; icon(id: string, icon: string): void; opened(o: Opened): void; key(front: boolean): void; focused(): void };
 
 export interface Engine {
   native: boolean;
@@ -68,6 +68,7 @@ const native: Engine = {
       listen<PageState>("native-browser://state", (e) => on.state(e.payload)),
       listen<{ id: string; icon: string }>("native-browser://icon", (e) => on.icon(e.payload.id, e.payload.icon)),
       listen<Opened>("native-browser://opened", (e) => on.opened(e.payload)),
+      listen("native-browser://focused", () => on.focused()),
       listen<boolean>("ll:browser-key", (e) => on.key(e.payload)),
     ]);
     return () => offs.forEach((off) => off());
@@ -107,7 +108,7 @@ function makeStandin(): Engine {
       else if (action !== "reload") return;
       visit(id);
     },
-    show: async (id) => standinShown.set(id),
+    show: async (id, rect) => { standinBounds.set(rect); standinShown.set(id); },
     hide: async () => standinShown.set(""),
     focus: async () => {},
     close: async (id) => void pages.delete(id),
@@ -143,6 +144,7 @@ export const standinDone = createStore<Record<string, number>>({});
 export const standinMarks = createStore<Record<string, string>>({});
 // The tab whose page the stand-in shows "live", as the Mac app shows one native view.
 export const standinShown = createStore("");
+export const standinBounds = createStore<Rect | null>(null);
 
 // The page script, run in the native view's client world: it shares the page's DOM, not its
 // scripts. It numbers the links, buttons and fields it reads, and acts on them by number. Never

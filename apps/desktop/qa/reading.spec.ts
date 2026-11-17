@@ -6,7 +6,7 @@ test.use({ launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=";
 async function create(page: Page, query = "") {
   await page.goto(`/${query}`);
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Reading test");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
 }
@@ -102,7 +102,7 @@ test("switching pages resets the recording controls", async ({ page }) => {
   await create(page);
   await page.getByRole("button", { name: "Quick record", exact: true }).click();
   await expect(page.getByText(/Recording ·/)).toBeVisible();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Another page");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await expect(page.getByRole("button", { name: "Quick record", exact: true })).toBeVisible();

@@ -1,14 +1,14 @@
 // shadcn sidebar-08 (base-vega) nav-projects, on COSS primitives (DropdownMenu* is COSS Menu*).
-// Changes: pages instead of projects, its label given (Pinned, Recent) with a New page action, a
-// Sort menu, New notebook and empty text for Recent, rows select instead of linking; the row menu is Rename,
+// Changes: pages instead of projects, its label given (Pinned or Library), New page and New notebook actions,
+// rows select instead of linking; the row menu is Open beside, Rename,
 // Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
 // beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
-import { ArrowUpDown, Ellipsis, Link, NotebookPen, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
+import { Columns2, Ellipsis, Link, NotebookPen, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@leadinglight/ui/lib/utils";
 import { Input } from "@leadinglight/ui/components/input";
-import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
+import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Popover, PopoverPopup } from "@leadinglight/ui/components/popover";
 import {
   SidebarGroup,
@@ -23,21 +23,14 @@ import {
   SidebarMenuSubItem,
   useSidebar,
 } from "@leadinglight/ui/components/sidebar";
-import { localPrefs } from "~/lib/local-prefs";
-import type { ObjectSummary } from "~/lib/objects";
 import { newNotebook } from "~/lib/notebooks";
 import { openPage } from "~/lib/panes";
 import { reportSaveError } from "~/lib/saving";
 import { Tooltip, TooltipTrigger, TooltipPopup } from "@leadinglight/ui/components/tooltip";
 import { StateDot } from "~/components/state-dot";
 
-// How Recent is ordered, newest first either way; kept on this Mac.
-export const recentOrder = localPrefs<{ by: "created" | "updated" }>("ll.recent", { by: "created" });
-export const byRecent = (a: ObjectSummary, b: ObjectSummary) =>
-  recentOrder.get().by === "updated" ? b.updatedAt - a.updatedAt : b.createdAt - a.createdAt;
-
 // What a row's menu does; a child row (Thoughts, an essay) only copies its link and deletes.
-type Actions = { onCopyLink: () => void; onDelete: () => void };
+type Actions = { onBeside?: () => void; onCopyLink: () => void; onDelete: () => void };
 type Child = Actions & { name: string; isActive: boolean; onSelect: (e: React.MouseEvent) => void; onDrag: (e: React.PointerEvent<HTMLElement>) => void };
 type Row = Child & {
   id: string;
@@ -129,6 +122,7 @@ function RowMenu({ item, onRename, className, showOnHover }: { item: Actions & P
         <span className="sr-only">More</span>
       </MenuTrigger>
       <MenuPopup align={isMobile ? "end" : "start"} className="w-48" side={isMobile ? "bottom" : "right"}>
+        {item.onBeside && <MenuItem onClick={item.onBeside}><Columns2 />Open beside</MenuItem>}
         {onRename && (
           <MenuItem onClick={onRename}>
             <PencilLine />
@@ -205,39 +199,16 @@ function PageRow({ item }: { item: Row }) {
   );
 }
 
-export function NavProjects({ label, projects, onCreate, sortable }: { label: string; projects: Row[]; onCreate?: () => void; sortable?: boolean }) {
-  const { by } = recentOrder.use();
+export function NavProjects({ label, projects, onCreate, onNotebook }: { label: string; projects: Row[]; onCreate?: () => void; onNotebook?: () => void }) {
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      {sortable && (
-        // Left of New page, 4 px apart; it opens below so it doesn't cover New page.
-        <Menu>
-          <MenuTrigger render={<SidebarGroupAction aria-label={`Sort ${label}`} className="right-9 aria-expanded:bg-sidebar-accent" />}>
-            <ArrowUpDown />
-          </MenuTrigger>
-          <MenuPopup align="start" side="bottom">
-            <MenuGroup>
-              <MenuGroupLabel>Sort by</MenuGroupLabel>
-              <MenuRadioGroup onValueChange={(v) => recentOrder.set({ by: v as "created" | "updated" })} value={by}>
-                <MenuRadioItem closeOnClick value="created">
-                  Created
-                </MenuRadioItem>
-                <MenuRadioItem closeOnClick value="updated">
-                  Updated
-                </MenuRadioItem>
-              </MenuRadioGroup>
-            </MenuGroup>
-          </MenuPopup>
-        </Menu>
-      )}
-      {onCreate && <Tooltip><TooltipTrigger render={<SidebarGroupAction aria-label="New notebook" className={sortable ? "right-17" : "right-9"} onClick={() => void newNotebook().then((page) => openPage(page.id)).catch(reportSaveError)} />}><NotebookPen /></TooltipTrigger><TooltipPopup>New notebook</TooltipPopup></Tooltip>}
+      {onCreate && <Tooltip><TooltipTrigger render={<SidebarGroupAction aria-label="New notebook" className="right-9" onClick={() => { onNotebook?.(); void newNotebook().then((page) => openPage(page.id)).catch(reportSaveError); }} />}><NotebookPen /></TooltipTrigger><TooltipPopup>New notebook</TooltipPopup></Tooltip>}
       {onCreate && (
         <SidebarGroupAction aria-label="New page" onClick={onCreate}>
           <Plus />
         </SidebarGroupAction>
       )}
-      {onCreate && projects.length === 0 && <p className="px-2 py-1.5 text-sm">No pages yet</p>}
       <SidebarMenu>
         {projects.map((item) => (
           <PageRow item={item} key={item.id} />

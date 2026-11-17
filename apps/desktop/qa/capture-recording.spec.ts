@@ -11,7 +11,7 @@ test("saving another recording returns the same reviewed page to the inbox", asy
   await page.goto("/");
   await openInbox();
   await expect(inbox.getByText("Nothing waiting here")).toBeVisible();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Recorded thought");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   for (let take = 0; take < 2; take++) {

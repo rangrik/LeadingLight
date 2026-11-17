@@ -49,16 +49,16 @@ const test = base.extend<{ runtime: Runtime }>({
     try { await use(runtime); } finally { server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve())); }
   },
 });
-async function open(page: Page) { await page.goto("/"); await page.getByRole("button", { name: "Browser", exact: true }).click(); await expect(address(page)).toBeVisible(); }
+async function open(page: Page) { await page.goto("/"); await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click(); await expect(address(page)).toBeVisible(); }
 async function menu(page: Page, name: string) { await pane(page).getByRole("button", { name: "Browser menu", exact: true }).click(); await page.getByRole("menuitem", { name, exact: true }).click(); }
 const saved = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key);
 
 // Seam: toolbar flex sizing must follow its pane, including a narrow split inside a larger window.
 test("Browser toolbar keeps a full address and every action in narrow panes", async ({ page, runtime }, info) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page", exact: true }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Beside Browser");
-  await page.getByRole("button", { name: "Browser", exact: true }).click();
+  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
   await address(page).fill("localhost:1420/wide"); await address(page).press("Enter");
   await expect(pane(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
   const layout = async (twoRows: boolean) => {

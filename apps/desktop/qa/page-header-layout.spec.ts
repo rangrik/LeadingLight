@@ -1,10 +1,8 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 async function create(page: Page, title: string) {
-  const nav = page.getByRole("navigation", { name: "Recent" });
-  const count = await nav.getByRole("listitem").count();
-  await nav.getByRole("button", { name: "New page" }).click();
-  await expect(nav.getByRole("listitem")).toHaveCount(count + 1);
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await expect(page.getByRole("textbox", { name: "Title" })).toHaveValue("");
   await page.getByRole("textbox", { name: "Title" }).fill(title);
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
@@ -17,7 +15,7 @@ test("Narrow split and single pages keep every header control inside the pane", 
   await page.keyboard.type("Alpha body");
   await create(page, "Beta");
   await page.keyboard.type("Beta body");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Alpha", exact: true }).click({ modifiers: ["Shift"] });
+  await (await findPage(page, 'Alpha')).click({ modifiers: ["Shift"] });
   await expect(page.locator("[data-page-scroller]")).toHaveCount(2);
   await page.keyboard.press("Meta+\\");
   const fits = () => expect.poll(() => page.locator("[data-page-scroller]").evaluateAll((boxes) => boxes.map((box) => box.scrollWidth - box.clientWidth))).toEqual([0, 0]);
@@ -68,7 +66,7 @@ test("Opening a saved page with headings does not slide its text sideways", asyn
     };
     requestAnimationFrame(record);
   });
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Headings", exact: true }).click();
+  await (await findPage(page, 'Headings')).click();
   await expect.poll(() => page.evaluate(() => (window as any).positions.length)).toBeGreaterThan(12);
   const positions: number[] = await page.evaluate(() => (window as any).positions);
   expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(1);

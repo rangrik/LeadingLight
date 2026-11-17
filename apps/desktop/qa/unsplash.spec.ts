@@ -22,7 +22,7 @@ test("Unsplash works without setup and reports a cover with its credit", async (
   });
   await page.route("https://images.unsplash.com/**", (r) => r.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="gray"/></svg>' }));
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add cover" }).click();
   await page.getByRole("tab", { name: "Unsplash" }).click();
@@ -45,7 +45,7 @@ test("Unsplash handles unavailable service, limits, empty results and offline se
   let status = 503;
   await page.route(service, (r) => status === 0 ? r.abort() : r.fulfill({ status, headers: cors, contentType: "application/json", body: "[]" }));
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add cover" }).click();
   await page.getByRole("tab", { name: "Unsplash" }).click();

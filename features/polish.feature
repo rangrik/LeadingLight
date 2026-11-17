@@ -55,10 +55,8 @@ Feature: Visual precision
     Then the toolbar stays on top of that block's handle
 
   Scenario: Sidebar geometry follows COSS
-    Then the app's logo tile, the "Recent" label and the page row icons share one left edge
+    Then the app's logo tile, the "Pinned" label and the page row icons share one left edge
     And every page row is 32 px tall with the icon and the text sharing one vertical centre
-    And the "New page" and "Sort Recent" buttons are vertically centred on the "Recent" label,
-      4 px apart
     And the row's "More" button is vertically centred on its row
 
   Scenario: Icons are 16 px and centred in their buttons

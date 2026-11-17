@@ -1,10 +1,11 @@
+import { findPage } from "./navigation";
 import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body", exact: true, includeHidden: true });
 const review = (page: Page) => page.getByRole("dialog", { name: "Review writing", exact: true });
 async function newPage(page: Page, text: string) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Writing practice");
   await body(page).fill(text);
 }
@@ -173,13 +174,12 @@ test("Review follows the active tab and leaves quiet drafting quiet with Suggest
   await newPage(page, "I recieved it.");
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("First draft");
   await page.getByRole("textbox", { name: "Title", exact: true }).press("Enter");
-  const recent = page.getByRole("navigation", { name: "Recent" });
-  await expect(recent.getByRole("button", { name: "First draft", exact: true })).toBeVisible();
-  await recent.getByRole("button", { name: "New page" }).click();
+  await expect((await findPage(page, 'First draft'))).toBeVisible();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("");
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Second draft");
   await body(page).fill("I ate a apple.");
-  await recent.getByRole("button", { name: "First draft", exact: true }).click({ modifiers: ["Meta"] });
+  await (await findPage(page, 'First draft')).click({ modifiers: ["Meta"] });
   await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("First draft");
   await page.getByRole("button", { name: "Suggestions", exact: true }).click();
   await expect(page.getByRole("button", { name: "Pin", exact: true })).toBeVisible();

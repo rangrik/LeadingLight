@@ -1,5 +1,5 @@
 Feature: The browser space
-  The browser is a place of its own in the Mac app: my tabs in the sidebar, one row of controls,
+  The browser is a pane in the Mac app: my tabs in the shared sidebar, one row of controls,
   a real page. My tabs are native pages. Agents keep their own streamed browsers.
 
   Background:
@@ -8,10 +8,12 @@ Feature: The browser space
   Scenario: Go to the browser and back
     When I press Browser in the sidebar, or ⌥⌘B
     Then the sidebar shows "Browser" under LeadingLight, a search field, Pinned, Tabs and Agents
-    And the page area has one row: sidebar toggle, Back, Forward, the address pill, Save and More
+    And my open panes stay as they are
+    When I select a browser tab or open a new one
+    Then its pane has Back, Forward, the address pill, Save and More
     And there is only one place that shows an address
-    And the command bar stays closed, unless I have no tabs
-    When I press ⌥⌘B again, or choose Notes under LeadingLight
+    And switching sidebar mode does not open the command bar
+    When I press ⌥⌘B again, or choose Notes in the sidebar footer
     Then my notes are as I left them
     And my tabs are still open when I return
 

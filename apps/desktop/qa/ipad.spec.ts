@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 import { mermaidTouch } from "./mermaid-touch";
 
@@ -98,7 +99,7 @@ test("touch navigation, offline edits, settings and capture", async ({ page, con
   await page.reload();
   await expect(body).toHaveText("Ideas on the train");
   await page.getByRole("button", { name: "Toggle sidebar" }).click();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Train notes" }).click();
+  await (await findPage(page, 'Train notes')).click();
   await expect(page.locator('[data-slot="sidebar"][data-mobile]')).toBeHidden();
   await page.getByRole("button", { name: "Toggle sidebar" }).click();
   await expect(page.getByRole("button", { name: "Browser", exact: true })).toHaveCount(0);
@@ -129,7 +130,7 @@ test("touch navigation, offline edits, settings and capture", async ({ page, con
   await capture.getByRole("button", { name: "Open beside", exact: true }).click();
   await expect(capture).toBeHidden();
   await page.getByRole("button", { name: "Toggle sidebar" }).click();
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Train notes" }).click();
+  await (await findPage(page, 'Train notes')).click();
   await page.setViewportSize({ width: 820, height: 1180 });
   await expect(body).toBeVisible();
   await page.screenshot({ path: `qa/report/ipad-${browserName}.png` });

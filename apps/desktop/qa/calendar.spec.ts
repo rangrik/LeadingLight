@@ -179,7 +179,7 @@ test('note agent calendar writes wait for approval and plan mode refuses direct 
     export function cancel(id) { runs.delete(id); }
   ` }));
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('My work');
   await page.getByRole('textbox', { name: 'Title', exact: true }).press('Enter');
   await page.keyboard.press('Meta+J');

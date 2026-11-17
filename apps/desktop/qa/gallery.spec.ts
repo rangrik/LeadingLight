@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 // Screenshots of the main states for design review. Run: pnpm qa:gallery
@@ -13,7 +14,7 @@ async function typeLines(page: Page, lines: string[]) {
 }
 
 async function writeSample(page: Page) {
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Trip to Kyoto");
   await page.keyboard.press("Enter");
   await expect(body(page)).toBeFocused();
@@ -105,7 +106,7 @@ test("gallery @gallery", async ({ page }) => {
   await page.waitForTimeout(250);
   await shot(page, "07a-code-controls");
 
-  const firstRow = page.getByRole("navigation", { name: "Recent" }).getByRole("listitem").first();
+  const firstRow = (await findPage(page, "Trip to Kyoto")).locator("..");
   await firstRow.hover();
   await firstRow.getByRole("button", { name: "More" }).click();
   await expect(page.getByRole("menuitem", { name: "Delete" })).toBeVisible();

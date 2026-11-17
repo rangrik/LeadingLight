@@ -24,7 +24,7 @@ You can also copy a link from a page's row in the sidebar (**More** › **Copy l
 
 ## Make a new page from the menu
 
-If the page doesn't exist yet, keep typing its name. The menu ends with **Create "Arrakis"** and one item for each type, with its icon, in the order of the sidebar's Types: Page, Person, Book, Meeting, Project, Task, Idea, Collection and any type you made.
+If the page doesn't exist yet, keep typing its name. The menu ends with **Create "Arrakis"** and one item for each type, with its icon, in the order of Library’s Types: Page, Person, Book, Meeting, Project, Task, Idea, Collection and any type you made.
 
 Pick a type and the page is made with that type and its properties, and the line links to it. You stay on the page you were writing.
 

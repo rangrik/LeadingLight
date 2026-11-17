@@ -51,7 +51,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 | <kbd>⌥⌘F</kbd> | **Feed** | Shows or hides what agents need from you. |
 | <kbd>⌥⌘K</kbd> | **Captures** | Shows or hides what you captured. |
 | <kbd>⌥⌘M</kbd> | **Mail** | Opens Mail. See [Mail](/organize/mail). |
-| <kbd>⌥⌘B</kbd> | **Browser** | Goes to the built-in browser, or back to your notes. <Badge type="info" text="Mac app" /> |
+| <kbd>⌥⌘B</kbd> | **Browser** | Switches the sidebar between Notes and Browser without changing open panes. |
 | <kbd>⌃⌥B</kbd> | **Browser from anywhere** | Brings the browser up from any app, or puts it away. <Badge type="info" text="Mac app" /> |
 | <kbd>⌘1–9</kbd> | **Tab 1–9** | In the browser, goes to a tab by its place. |
 | <kbd>⌃↩</kbd> | **Nod** | Does what tail's line offers on the page in front. |

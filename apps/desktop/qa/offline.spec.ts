@@ -7,7 +7,7 @@ test('production workspace reads and writes offline', async ({ page, context }) 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(process.env.OFFLINE_QA!);
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
-  await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title' }).fill('Offline note');
   await page.getByRole('textbox', { name: 'Title' }).press('Enter');
   await page.keyboard.type('These words stay with me.');

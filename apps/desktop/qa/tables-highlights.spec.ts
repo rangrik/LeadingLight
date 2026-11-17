@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 async function newPage(page: Page) {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Table and highlight QA");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
 }

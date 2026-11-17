@@ -1,9 +1,9 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 // Scenarios from features/appearance.feature: Shipyard's themes and Settings
 // (vendor/shipyard) wired into the app. The seam guarded: our shortcuts hook,
 // the alias and CSS wiring, and the theme applying over our COSS tokens.
-const pages = (page: Page) => page.getByRole("navigation", { name: "Recent" });
 const settingsNav = (page: Page) => page.getByRole("navigation", { name: "Settings sections" });
 const themeCard = (page: Page, id: string) => page.locator(`[data-testid="theme-option"][data-theme-id="${id}"]`);
 const rootVar = (page: Page, name: string) => page.evaluate((n) => document.documentElement.style.getPropertyValue(n), name);
@@ -17,7 +17,7 @@ async function openAppearance(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(pages(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
 });
 
 test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
@@ -25,7 +25,7 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await expect(settingsNav(page)).toBeVisible();
   await expect(settingsNav(page).getByRole("button", { name: "Back to app" })).toBeVisible();
   // The pages underneath are covered and inert, not unmounted (their edits are kept).
-  await expect(page.locator("[inert]").getByRole("navigation", { name: "Recent" })).toBeAttached();
+  await expect(page.locator("[inert]").getByRole("button", { name: "Library", exact: true, includeHidden: true })).toBeAttached();
   // Settings wears the app's shell: the same sidebar header, and ⌘\ folds it once, not twice.
   await expect(page.locator(".ll-settings").getByText("LeadingLight", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Meta+\\");
@@ -35,7 +35,7 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(settingsNav(page)).toBeHidden();
   await expect(page.locator("[inert]")).toHaveCount(0);
-  await expect(pages(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
 });
 
 // Seam: shown() in components/capture-box.tsx. Base UI keeps a closed Select's list mounted but
@@ -55,7 +55,7 @@ test("Escape closes Settings after a menu there was used", async ({ page }) => {
 // What it catches: a remount showing stale content, then saving it over the
 // page (QA, 2026-10-22), and keys reaching the page while Settings is open.
 test("Settings never touches the page's edits", async ({ page }) => {
-  await pages(page).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   const title = page.getByRole("textbox", { name: "Title" });
   await expect(title).toBeFocused();
   await title.fill("Kept");
@@ -84,7 +84,7 @@ test("Meta+N inside Settings makes a page and goes to it", async ({ page }) => {
   await page.keyboard.press("Meta+N");
   await expect(settingsNav(page)).toBeHidden();
   await expect(page.getByRole("textbox", { name: "Title" })).toBeFocused();
-  await expect(pages(page).getByRole("button", { name: "Untitled", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect((await findPage(page, 'Untitled'))).toHaveAttribute("aria-current", "page");
 });
 
 test("Picking a theme colours the whole app and survives a reload", async ({ page }) => {
@@ -98,7 +98,7 @@ test("Picking a theme colours the whole app and survives a reload", async ({ pag
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.screenshot({ path: "qa/report/appearance-dracula.png" });
   await page.reload();
-  await expect(pages(page)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
   expect(await rootVar(page, "--background")).toBe("#282a36");
 });
 
@@ -146,7 +146,7 @@ test("Meta+Alt+/ opens the Keyboard shortcuts sheet with our table", async ({ pa
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   // ⌘/ belongs to the editor's block menu, so no sheet.
-  await pages(page).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("a line");
   await page.keyboard.press("Meta+/");

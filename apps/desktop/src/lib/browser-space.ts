@@ -8,6 +8,7 @@ import { engine, type Opened, type PageState } from "~/lib/native-browser";
 import { browserBase, type BrowserTab } from "~/lib/project-runtime/browser";
 import { listChats } from "~/lib/project-runtime/chat";
 import { ask } from "~/lib/project-runtime/transport";
+import { focusPane, focusedPage, holder, openBeside, openPage, panes, PERSONAL_BROWSER } from "~/lib/panes";
 import { createStore } from "~/lib/state";
 
 export type SpaceTab = { id: string; url: string; title: string; icon?: string; pin?: string; from?: string };
@@ -55,7 +56,10 @@ export const liveOf = (id: string) => live.get()[id] ?? DEFAULT_LIVE;
 // The space can be shown in the Mac app, and in the browser build under the QA flag only.
 export const available = createStore(false);
 void engine.then((e) => available.set(!!e));
-export const useFront = () => available.use() && prefs.use().front;
+export const useFront = () => prefs.use().front;
+export const browserFocused = () => available.get() && focusedPage() === PERSONAL_BROWSER;
+export const showBrowser = (beside = false) => (beside ? openBeside : openPage)(PERSONAL_BROWSER);
+export function showBrowserList(view: Shown) { showBrowser(); shown.set(view); }
 
 function setTabs(tabs: SpaceTab[], selected = prefs.get().selected) {
   prefs.set({ tabs, selected: tabs.some((t) => t.id === selected) ? selected : "" });
@@ -79,13 +83,14 @@ export async function ensure(id: string) {
 // Back to the page in view, as when the command bar is dismissed.
 export async function refocus() {
   const id = prefs.get().selected;
-  if (id && made.has(id) && shown.get().kind === "tab") await (await engine)?.focus(id).catch(() => {});
+  if (browserFocused() && id && made.has(id) && shown.get().kind === "tab") await (await engine)?.focus(id).catch(() => {});
 }
 
-export function select(id: string, focus = false) {
+export function select(id: string, focus = false, beside = false) {
+  if (focus) showBrowser(beside);
   prefs.set({ selected: id });
   shown.set({ kind: "tab" });
-  void ensure(id).then(async () => focus && (await engine)?.focus(id).catch(() => {}));
+  void ensure(id).then(async () => focus && browserFocused() && (await engine)?.focus(id).catch(() => {}));
 }
 
 // Where a new tab goes: at a reopened tab's old place, else after the tab it came from and after
@@ -190,17 +195,16 @@ export function unpin(siteId: string) {
 }
 
 // A pinned tile shows its tab, or opens it again at the pinned address.
-export function openPinned(siteId: string) {
+export function openPinned(siteId: string, beside = false) {
+  showBrowser(beside);
   const tab = prefs.get().tabs.find((t) => t.pin === siteId);
   const site = prefs.get().pinned.find((p) => p.id === siteId);
   if (tab) select(tab.id, true);
   else if (site) void openTab(site.url, { pin: site.id });
 }
 
-// An empty browser opens ready to type; one with tabs shows the tab it left. A bar left open
-// when the browser went away is not brought back with it.
+// Sidebar mode is independent of the panes and their keyboard focus.
 export function enter() {
-  bar.set(prefs.get().tabs.length ? null : { mode: "new", text: "" });
   prefs.set({ front: true });
   void findBase();
 }
@@ -210,6 +214,8 @@ export function enter() {
 export function openInSpace(url?: string) {
   if (!available.get()) return false;
   enter();
+  showBrowser();
+  if (!url && !prefs.get().tabs.length) bar.set({ mode: "new", text: "" });
   if (url) {
     bar.set(null);
     void openTab(url);
@@ -288,22 +294,23 @@ function onOpened(o: Opened) {
 
 // ⌃⌥B: from another app, the browser comes up ready to type; pressed again in front, it goes away.
 async function onKey(front: boolean) {
-  if (front && prefs.get().front && available.get()) return bar.set(null), void (await engine)?.away();
+  if (front && browserFocused()) return bar.set(null), void (await engine)?.away();
   enter();
+  showBrowser();
   bar.set({ mode: "new", text: "" });
 }
 
-void engine.then((e) => e?.listen({ state: onState, icon: onIcon, opened: onOpened, key: (front) => void onKey(front) }));
-const menuKeys = () => spaceKeys(available.get() && prefs.get().front);
-prefs.subscribe(menuKeys);
+void engine.then((e) => e?.listen({ state: onState, icon: onIcon, opened: onOpened, key: (front) => void onKey(front), focused: () => { const pane = holder(PERSONAL_BROWSER); if (pane?.leaf.page === PERSONAL_BROWSER) focusPane(pane.leaf.id); } }));
+const menuKeys = () => spaceKeys(browserFocused());
+panes.subscribe(menuKeys);
 available.subscribe(menuKeys);
 
-// The menu bar's keys while the space is in front (lib/use-shortcuts.ts). True when it took one.
+// Browser keys follow pane focus, even while the sidebar lists notes.
 export function spaceKey(id: string): boolean {
-  if (!available.get()) return false;
   if (id === "browser") return void (prefs.get().front ? leave() : enter()), true;
+  if (!available.get()) return false;
   if (id === "browser-anywhere") return void onKey(true), true;
-  if (!prefs.get().front) return false;
+  if (!browserFocused()) return false;
   const { selected, tabs } = prefs.get();
   const tab = tabs.find((t) => t.id === selected);
   const onPage = shown.get().kind === "tab" && !!tab;

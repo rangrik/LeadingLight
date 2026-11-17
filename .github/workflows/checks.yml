@@ -63,7 +63,7 @@ jobs:
           node apps/cloud/test/browser-server.mjs > /tmp/leadinglight-cloud-qa.log 2>&1 &
           curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8787/api/config
       - name: Browser smoke and recorded feature checks
-        run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa --project=safari smoke.spec.ts saving.spec.ts unsplash.spec.ts publishing.spec.ts app-update.spec.ts
+        run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa --project=safari smoke.spec.ts saving.spec.ts unsplash.spec.ts publishing.spec.ts app-update.spec.ts sidebar-modes.spec.ts browser-space.spec.ts browser-ask.spec.ts panes.spec.ts pages.spec.ts
       - name: Keep review videos and test report
         if: always()
         id: review

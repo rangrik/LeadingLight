@@ -4,11 +4,12 @@ import type { HistoryEntry } from "../src/lib/history-types";
 // Seam: autosave, history and restore share one durable write; typing keeps its origin.
 test("milestones restore without erasing history or attribution", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Launch notes");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("First draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Save milestone" }).click();
   await page.getByLabel("Milestone name").fill("Before review");
   await page.getByRole("button", { name: "Save milestone", exact: true }).click();
@@ -19,7 +20,8 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await page.waitForTimeout(750);
   await page.reload();
   await expect(body).toContainText("Reviewed draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Page history" }).click();
   await page.getByRole("button", { name: /Before review/ }).click();
   await expect(page.getByRole("textbox", { name: "Version preview" })).toContainText("First draft");
@@ -27,7 +29,8 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await expect(page.getByRole("button", { name: /Restored version/ })).toBeVisible();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(body).toContainText("First draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Inspect authorship" }).click();
   const authorship = page.getByRole("dialog", { name: "Authorship", exact: true });
   await expect(authorship).toContainText("You");
@@ -38,7 +41,7 @@ test("milestones restore without erasing history or attribution", async ({ page 
 // Seam: agent tools must flush the user first and never inherit the user's attribution.
 test("an agent's words remain distinct after a human inserts text", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).fill("Mixed authors");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("My opening.");
@@ -54,7 +57,8 @@ test("an agent's words remain distinct after a human inserts text", async ({ pag
   await page.keyboard.type(" My addition.");
   await expect(body.locator('[data-origin="agent"]')).toContainText(["Agent conclusion."]);
   await expect(body.locator('[data-origin="human"]')).toContainText(["My opening.", " My addition."]);
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Page history" }).click();
   await expect(page.getByRole("button", { name: /Claude added conclusion/ })).toBeVisible();
 });
@@ -62,7 +66,7 @@ test("an agent's words remain distinct after a human inserts text", async ({ pag
 // Seam: replacing a selected agent word must attribute every replacement character to the user.
 test("replacing selected agent text credits all typed characters to me", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.evaluate(async () => {
     const { focusedPage } = await import("/src/lib/" + "panes.ts");
@@ -86,7 +90,7 @@ test("replacing selected agent text credits all typed characters to me", async (
 // Seam: deletion must flush pending edits before recording its reversible snapshot.
 test("immediate deletion keeps the last typed words", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("Last words before deletion");
   const restored = await page.evaluate(async () => {
@@ -106,7 +110,7 @@ test("immediate deletion keeps the last typed words", async ({ page }) => {
 // Seam: undoing a multi-page action is atomic and refuses any overlapping later edit.
 test("complete action undo refuses newer work without changing another page", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Recent" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
   const result = await page.evaluate(async () => {
     const { objects } = await import("/src/lib/" + "objects.ts");
     const { commitAction, undoAction } = await import("/src/lib/" + "history.ts");
@@ -133,7 +137,7 @@ test("complete action undo refuses newer work without changing another page", as
 // Seam: undoing an agent turn must not erase human work between two tool calls.
 test("an intervening human edit prevents whole-turn undo", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("navigation", { name: "Recent" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
   const result = await page.evaluate(async () => {
     const { objects } = await import("/src/lib/" + "objects.ts");
     const { undoAction, milestone } = await import("/src/lib/" + "history.ts");

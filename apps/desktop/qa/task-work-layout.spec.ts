@@ -1,3 +1,4 @@
+import { findPage } from "./navigation";
 import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 1100, height: 720 } });
@@ -13,7 +14,7 @@ for (const size of [13, 14]) {
     await page.route("**/api/**", (route) => route.fulfill({ json: { ready: false, providers: [] } }));
     await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
     await page.goto("/?mac");
-    await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Tasks", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
     await page.evaluate(async () => {
       const { createPage } = await import(String("/src/lib/space.ts"));
       const { openPage } = await import(String("/src/lib/panes.ts"));
@@ -27,7 +28,7 @@ for (const size of [13, 14]) {
       await createPage({ title: "Other fixture" });
       openPage(task.id);
     });
-    await page.getByRole("navigation", { name: "Recent" }).getByRole("button", { name: "Other fixture", exact: true }).click({ modifiers: ["Shift"] });
+    await (await findPage(page, 'Other fixture')).click({ modifiers: ["Shift"] });
     const pane = page.getByRole("region", { name: "Review layout fixture", exact: true });
     await expect(pane.getByRole("combobox", { name: "Type", exact: true })).toHaveText("Task");
     const card = pane.getByTestId("work-row");
