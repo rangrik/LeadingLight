@@ -30,7 +30,7 @@ Feature: Versioned GitHub releases
   Scenario: Keep recordings from both release checks
     Given a merged release runs checks before preparation and again for the exact release commit
     When both passes upload their browser videos and reports
-    Then each pass has its own artifact and neither upload replaces or conflicts with the other
+    Then artifact names identify the initial pass, the pinned release commit and the run attempt
     And rerunning the workflow keeps the earlier attempt's recordings
 
   Scenario: A signing secret is missing
