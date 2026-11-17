@@ -1,5 +1,12 @@
 # Deferred
 
+## 2026-11-16 — Selection outline in shared pages
+
+A shared page starting with an image shows ProseMirror's blue selection outline even though
+the reader cannot edit. Independent Chromium and WebKit QA reproduced it on valid and broken
+images. This predates the cloud deployment fix; keep that fix focused on release checks.
+Remove the outline in the next shared-reader visual pass, and check image-first and text-first pages.
+
 Issues and features we chose not to do yet: when, why not now, and what would bring each back.
 When one is picked up, move it out of this file and into the plan or the change that does it.
 

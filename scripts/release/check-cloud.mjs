@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export async function checkCloud(origin, send = fetch) {
   const request = (path, options) => send(new URL(path, origin), {
@@ -30,7 +31,7 @@ export async function checkCloud(origin, send = fetch) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   try {
     await checkCloud(process.argv[2] || 'https://leadinglight.app');
     console.log('Deployed cloud supports native publishing and the unlisted reader.');

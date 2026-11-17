@@ -49,6 +49,8 @@ Feature: Versioned GitHub releases
     When the cloud accepts the publishing routes and serves the unlisted reader
     Then the check passes without publishing a page
     And a missing publications table or reader also stops the release
+    And running the check through a symlink still performs it
+    And retrying an older draft uses the current cloud check without changing the draft's source
     And build rehearsals do not require a production deployment
 
   Scenario: Rehearse a build
