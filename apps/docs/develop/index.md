@@ -43,6 +43,9 @@ The browser build is the quickest way to work on the interface, and it is what t
 
 ## Check your work
 
+The [shared sidebar prototype](/develop/sidebar-prototype) provides a separate sample
+workspace for trying sidebar gestures and notes beside simulated browser tabs.
+
 | Command | What it does |
 | --- | --- |
 | `pnpm typecheck` | Type-checks every package. |
