@@ -68,9 +68,13 @@ Feature: A shared sidebar for notes and browsing
     And no external website or account is contacted
 
   Scenario: Recover from an empty or narrow workspace
+    Given two different browser tabs are open in a split
+    When I close one tab
+    Then the other tab is not duplicated into both panes
     When I close the last browser tab
     Then I can open a new tab from the empty browser pane
     When I use a narrow window with two panes
     Then each pane remains reachable and the sidebar can collapse
     When I reset the demo from Settings and account
     Then the original sample data returns
+    And edits to the currently open note disappear from the editor too

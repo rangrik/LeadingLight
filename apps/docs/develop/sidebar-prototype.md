@@ -29,7 +29,7 @@ Open `http://127.0.0.1:1436/sidebar-prototype.html`.
 4. Drag the divider to resize. With the divider focused, use **← / →**, or **Home**
    to reset it. Close either pane to give the remaining one the full width.
 5. Create a page with **New page** or **⌘N**, edit it, and pin it from its header.
-   **Library** contains all types. Search finds unpinned notes too.
+   **Library** contains all types. Title search finds unpinned notes too.
 6. Use **New tab** or **⌘T** to try another sample website. Links, the address field,
    Back and Forward work within the samples. Unknown addresses show an explanation.
 

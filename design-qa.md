@@ -36,6 +36,8 @@ width 272. It exposes the intentionally denser COSS rows and icon sizes.
 | P2 | Divider moved several pixels away from the grab point. | Account for workspace padding and pointer offset. Recorded pointer and keyboard resize checks pass. |
 | P2 | New page retained focus on the creation button. | Remount the title field per note and select Untitled. Creation scenario verifies title focus. |
 | P2 | Serializing the full document on each edit slowed long notes. | Defer reads until typing pauses; flush pending edits before pane changes and pagehide. Reload with save timers paused passes. |
+| P2 | Resetting the currently open note left its old editor content visible. | Reset remounts the workspace. The recorded reset scenario checks original text returns immediately. |
+| P2 | Closing a browser tab could duplicate its visible neighbor. | Choose an unopened replacement and keep panes unique. A two-browser regression scenario passes. |
 | P3 | Sidebar tooltip displayed two backslashes. | Correct the literal to show one shortcut key. |
 
 ## Fidelity surfaces
@@ -61,7 +63,7 @@ are intentional, not claims of pixel-identical recreation.
 
 ## Checks and limits
 
-Seven recorded Playwright scenarios pass, including actual Shift-click, wheel events,
+Eight recorded Playwright scenarios pass, including actual Shift-click, wheel events,
 keyboard shortcuts, editing, persistence, menus, resize and light/dark/narrow layouts.
 Workspace typecheck, desktop build and docs build pass. Clean capture has no console
 errors; reduced-motion emulation produces only the library's informational warning.

@@ -112,6 +112,11 @@ test("create and pin a note, filter the library, and reset isolated data", async
   await page.getByRole("button", { name: "Settings & account" }).click();
   await page.getByRole("menuitem", { name: "Reset sample workspace" }).click();
   await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue("Trip to Kyoto");
+  await page.getByRole("textbox", { name: "Page body" }).fill("Replace the current note.");
+  await page.getByRole("button", { name: "Settings & account" }).click();
+  await page.getByRole("menuitem", { name: "Reset sample workspace" }).click();
+  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("Before we go");
+  await expect(page.getByRole("textbox", { name: "Page body" })).not.toContainText("Replace the current note.");
   const keys = await page.evaluate(() => Object.keys(localStorage));
   expect(keys.filter((key) => !key.startsWith("ll.sidebar-prototype."))).toEqual([]);
 });
@@ -139,6 +144,18 @@ test("sample browser history, unknown address, and last tab recovery", async ({ 
   await page.getByRole("button", { name: /The reading room/ }).click();
   await expect(page.getByRole("heading", { name: "Make room for a good book" })).toBeVisible();
   expect(contacted).toEqual([]);
+});
+
+test("closing a tab in a browser split does not duplicate its neighbor", async ({ page }) => {
+  await page.getByRole("radio", { name: "Browser", exact: true }).check();
+  const tabs = page.getByLabel("Browser tabs", { exact: true });
+  await tabs.getByRole("button", { name: "Kyoto city guide", exact: true }).click();
+  await tabs.getByRole("button", { name: "Tokyo to Kyoto by train", exact: true }).click({ modifiers: ["Shift"] });
+  const row = tabs.getByRole("listitem").filter({ hasText: "Kyoto city guide" });
+  await row.hover(); await row.getByRole("button", { name: "Actions for Kyoto city guide" }).click();
+  await page.getByRole("menuitem", { name: "Close tab", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Tokyo → Kyoto" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Stay close to the old streets" })).toBeVisible();
 });
 
 test("visual review at desktop and narrow widths, light and dark", async ({ page }) => {

@@ -30,6 +30,7 @@ function Tip({ label, children }: { label: string; children: React.ReactElement 
 
 function Prototype() {
   const [demo, updateDemo] = useState(restore);
+  const [reset, setReset] = useState(0);
   const pending = useRef(new Map<string, () => EditorDoc>());
   const editTimer = useRef<number | undefined>(undefined);
   const withEdits = (s: DemoSave, edits: Map<string, EditorDoc>) => edits.size ? { ...s, items: s.items.map((i) => edits.has(i.id) ? { ...i, doc: edits.get(i.id)! } : i) } : s;
@@ -100,8 +101,10 @@ function Prototype() {
   };
   const closeTab = (id: string) => setDemo((s) => {
     const items = s.items.filter((i) => i.id !== id);
-    const next = items.find((i) => i.kind === "browser" && i.id !== "new-tab")?.id ?? "new-tab";
-    return { ...s, items, panes: s.panes.map((p) => p.item === id ? { ...p, item: next } : p) };
+    const visible = new Set(s.panes.filter((p) => p.item !== id).map((p) => p.item));
+    const next = items.find((i) => i.kind === "browser" && i.id !== "new-tab" && !visible.has(i.id))?.id ?? "new-tab";
+    const panes = s.panes.map((p) => p.item === id ? { ...p, item: next } : p).filter((p, index, all) => all.findIndex((other) => other.item === p.item) === index);
+    return { ...s, items, panes, focus: panes.some((p) => p.id === s.focus) ? s.focus : panes[0].id };
   });
   const split = (item: Item) => {
     const partner = demo.items.find((i) => i.kind === (item.kind === "browser" ? "note" : "browser") && i.id !== "new-tab");
@@ -194,13 +197,13 @@ function Prototype() {
           </RadioGroup><p className="mt-2 text-center text-[11px] text-muted-foreground">Swipe sideways · ⌥⌘B</p></div>
           <SidebarMenu><SidebarMenuItem><Menu><MenuTrigger render={<SidebarMenuButton />}><Settings /><span className="flex-1">Settings & account</span><MoreHorizontal /></MenuTrigger><MenuPopup side="top" align="start">
             <MenuItem onClick={() => setDialog("help")}><HelpCircle />How to try this prototype</MenuItem>
-            <MenuSeparator /><MenuItem onClick={() => { setDemo(seed()); setQuery(""); }}><ArrowLeft />Reset sample workspace</MenuItem>
+            <MenuSeparator /><MenuItem onClick={() => { setDemo(seed()); setReset((n) => n + 1); setQuery(""); }}><ArrowLeft />Reset sample workspace</MenuItem>
           </MenuPopup></Menu></SidebarMenuItem></SidebarMenu>
           <Button variant="ghost" size="xs" className="self-start text-muted-foreground" onClick={() => setDialog("help")}><HelpCircle />Prototype · sample data</Button>
         </SidebarFooter>
       </div>
     </Sidebar>
-    <div className="demo-workspace" ref={area} data-split={demo.panes.length === 2} style={{ "--split": `${demo.ratio}%` } as React.CSSProperties}>
+    <div key={reset} className="demo-workspace" ref={area} data-split={demo.panes.length === 2} style={{ "--split": `${demo.ratio}%` } as React.CSSProperties}>
       {demo.panes.map((pane, index) => {
         const item = demo.items.find((i) => i.id === pane.item)!;
         return <React.Fragment key={pane.id}>
