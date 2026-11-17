@@ -12,11 +12,11 @@ test('publish with sidenotes, read on desktop and phone, update and revoke', asy
   const body = page.getByRole('textbox', { name: 'Page body', exact: true });
   await expect(body).toBeFocused();
   await page.keyboard.type('A sentence with a sidenote.');
-  await page.keyboard.press('Meta+Shift+m');
+  await page.keyboard.press('ControlOrMeta+Shift+m');
   const note = page.getByRole('textbox', { name: 'Sidenote 1', exact: true });
   await expect(note).toBeVisible();
   await note.fill('A thought that readers should see.');
-  await note.press('Meta+Enter');
+  await note.press('ControlOrMeta+Enter');
   await page.getByRole('button', { name: 'Page options', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Publish page…', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Publish page', exact: true });
