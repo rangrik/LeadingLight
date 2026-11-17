@@ -59,6 +59,11 @@ release-commit checks and retries keep the earlier recordings intact.
 
 ## Retry a failed release
 
+If only cloud deployment or its live check failed, fix the credential or cloud problem and choose
+**Re-run failed jobs** on that run (`gh run rerun RUN_ID --failed`). This reuses the successful
+app builds and retries cloud and publication. Their artifacts last seven days; after that, use
+the full retry below. See [GitHub's retry behavior](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs).
+
 Open Actions → **Publish release** → **Run workflow**, choose `main`, disable
 **rehearsal** and enter the existing draft tag (for example `v0.2.0`). This rebuilds its exact commit, replaces
 only draft assets, and publishes on success. A published version cannot be overwritten.
@@ -161,4 +166,4 @@ Rust versions are pinned in the workflows. Runtime sources and checksums stay in
 `runtime/*/UPSTREAM.json`. Update these deliberately and test a complete release.
 PR checks have read-only permissions and no release secrets. Publication accepts
 only drafts on `main`, with a tag matching a commit in `main` and every app version.
-The Vercel key is unrelated to releases and must never enter a desktop build.
+The Vercel deployment token belongs only to the cloud job and must never enter a desktop build.

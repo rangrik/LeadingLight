@@ -14,5 +14,5 @@ fi
 
 # Vercel builds remotely so production database and OAuth secrets stay there.
 pnpm dlx vercel@65.7.0 deploy --cwd "$release_source" --prod --yes \
-  --scope "$VERCEL_ORG_ID" --token "$VERCEL_TOKEN" --meta "leadinglightReleaseSha=$RELEASE_SHA"
+  --scope "$VERCEL_ORG_ID" --meta "leadinglightReleaseSha=$RELEASE_SHA"
 node "$(dirname "$0")/check-cloud.mjs"
