@@ -67,13 +67,13 @@ When a page has grown properties you want on other pages too, make a type from i
 2. Enter a **Name**, such as "Novel". The **Plural** fills itself in; change it if it is wrong.
 3. Click **Save as type**.
 
-The new type gets the page's properties, and the page becomes one of it. The type shows under **Types** in the sidebar by its plural.
+The new type gets the page's properties, and the page becomes one of it. The type shows under **Types** in Library by its plural.
 
 To add just one of a page's own properties to its type, click the property's name and choose **Add to** *type*. See [Properties](/organize/properties).
 
 ## Open a type's list
 
-The **Types** section of the sidebar has one row per type, by its plural name. Click one to open its list:
+The **Types** section in Library has one row per type, by its plural name. Click one to open its list:
 
 - the type's icon and plural name at the top
 - **New** *type*, such as **New book**, to make a page of the type
@@ -115,11 +115,11 @@ The built-in types Page, Tag and Daily note, and the app's own types, have no **
 
 A type needs a name. With the name empty, the dialog says **Give the type a name** and stays open. Press <kbd>Esc</kbd> to leave without making one.
 
-The new type is listed last under **Types** in the sidebar and in Settings. It is offered everywhere a type is: the **Type** picker, **New** in the slash menu, and **Create** in the link menu.
+The new type is listed last under **Types** in Library and in Settings. It is offered everywhere a type is: the **Type** picker, **New** in the slash menu, and **Create** in the link menu.
 
 ## Settings › Types
 
-**Settings › Types** lists every type in the sidebar's order. Each row shows the type's icon, its plural, how many pages it has ("1 page", "0 pages") and an **Edit** button that opens **Type settings**. Settings stays open on Types after you save. **New type** sits above the list.
+**Settings › Types** lists every type in the Library's order. Each row shows the type's icon, its plural, how many pages it has ("1 page", "0 pages") and an **Edit** button that opens **Type settings**. Settings stays open on Types after you save. **New type** sits above the list.
 
 ## Templates
 

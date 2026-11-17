@@ -15,7 +15,7 @@ There are three ways to tag a page:
 - **From the Tags row.** Most starter types, such as Book and Person, already have a **Tags** property. Click its value to add tags. See [Properties](/organize/properties).
 - **In the text.** Type <kbd>#</kbd> and a word, such as "#reading", and pick the tag, or **Create #"reading"**. The tag links that line.
 
-A tag is a page of the type Tag. Each new tag is listed under **Tags** in the sidebar's Types. Tags don't appear in Recent.
+A tag is a page of the type Tag. Find tags through sidebar search or **Library › Tags**.
 
 The slash menu can make a tag too: type "/tag", press <kbd>Return</kbd> and type its name. See [Tasks and new objects](/organize/tasks).
 
@@ -58,7 +58,7 @@ Browsing days leaves nothing behind. A day's note is stored the first time you e
 
 Linking a day keeps it at once. Type "@today" in any page to link today's note; if it wasn't stored yet, it is now. See [Links and backlinks](/organize/links).
 
-Daily notes stay out of Recent. Find them all under **Daily notes** in the sidebar's Types, newest first.
+Find saved daily notes through sidebar search or **Library › Daily notes**, newest first.
 
 ## What happened today
 

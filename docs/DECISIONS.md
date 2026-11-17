@@ -1061,3 +1061,10 @@ A separate reader entry point reuses the editor in read-only mode, including its
 It loads no workspace and caches no shared content. HTML and HTTP headers say noindex;
 robots.txt must allow crawlers to read that instruction. There is no public listing.
 Attachments travel with the snapshot, capped at 3.5 MB to fit the existing gateway.
+
+## Shared sidebar modes (2026-11-17)
+
+Notes and Browser share one sidebar; its mode is independent of pane focus. Pins stay visible,
+all pages and types live in Library, and search finds unpinned pages. The personal native
+browser occupies one ordinary pane, so it can sit beside notes without remounting them.
+A native click reports focus to the pane store so shortcuts follow the pane, not the sidebar.

@@ -19,7 +19,7 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, ProtocolObject};
 use objc2::{define_class, msg_send, sel, AllocAnyThread, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBitmapImageFileType, NSBitmapImageRep, NSColor, NSEventModifierFlags, NSImage, NSImageCompressionFactor, NSPasteboard,
+    NSBitmapImageFileType, NSBitmapImageRep, NSColor, NSEvent, NSEventMask, NSEventModifierFlags, NSImage, NSImageCompressionFactor, NSPasteboard,
     NSPasteboardAccessBehavior, NSPasteboardDetectionPatternProbableWebURL, NSPasteboardTypeString, NSResponder, NSWindow,
 };
 use objc2_foundation::{
@@ -58,6 +58,15 @@ const FIND_ICON: &str = r#"(() => { const l = [...document.querySelectorAll('lin
 struct View {
     web: WebView,
     watch: Retained<Watch>,
+    focus_monitor: Option<Retained<AnyObject>>,
+}
+
+impl Drop for View {
+    fn drop(&mut self) {
+        if let Some(monitor) = &self.focus_monitor {
+            unsafe { NSEvent::removeMonitor(monitor) };
+        }
+    }
 }
 
 thread_local! {
@@ -329,6 +338,7 @@ fn build(app: &AppHandle, id: &str, url: Option<&str>, opener: Option<Retained<W
     let mut builder = WebViewBuilder::new()
         .with_bounds(Rect { position: LogicalPosition::new(0, 0).into(), size: LogicalSize::new(1, 1).into() })
         .with_visible(false)
+        .with_focused(false)
         .with_user_agent(safari_agent())
         .with_navigation_handler(|to| may_navigate(&to))
         // The app has no camera permission, and macOS ends an app that uses one without it.
@@ -356,7 +366,25 @@ fn build(app: &AppHandle, id: &str, url: Option<&str>, opener: Option<Retained<W
             page.addObserver_forKeyPath_options_context(&watch, &NSString::from_str(key), NSKeyValueObservingOptions::empty(), std::ptr::null_mut());
         }
     }
-    Ok(View { web, watch })
+    // A native page's clicks never reach React, so tell the pane store where the keyboard went.
+    let (handle, me) = (app.clone(), id.to_string());
+    let handler = RcBlock::new(move |event: NonNull<NSEvent>| {
+        let event_ref = unsafe { event.as_ref() };
+        let hit = VIEWS.with(|views| {
+            let Ok(views) = views.try_borrow() else { return false };
+            let Some(view) = views.get(&me) else { return false };
+            let page = view.web.webview();
+            if page.isHiddenOrHasHiddenAncestor() || page.window() != event_ref.window(mtm) { return false; }
+            let point = page.convertPoint_fromView(event_ref.locationInWindow(), None);
+            let bounds = page.bounds();
+            point.x >= bounds.origin.x && point.y >= bounds.origin.y
+                && point.x < bounds.origin.x + bounds.size.width && point.y < bounds.origin.y + bounds.size.height
+        });
+        if hit { let _ = handle.emit_to("main", "native-browser://focused", ()); }
+        event.as_ptr()
+    });
+    let focus_monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown, &handler) };
+    Ok(View { web, watch, focus_monitor })
 }
 
 fn keep(id: String, view: View) -> Result<(), String> {

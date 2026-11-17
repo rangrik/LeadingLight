@@ -1,14 +1,11 @@
 Feature: Pages
-  Pages are the first kind of object. They are listed in the sidebar under "Recent" (not "Pages",
-  which is also the name of a type), newest first: newest made, or last edited if chosen.
+  Pages appear in Library and in sidebar search. Pinned pages stay in the sidebar.
   Each page has a title field and a body (the block editor).
 
-  Names used below are accessible names (aria-label or visible text):
-  - sidebar: navigation "Recent" (labelled "Recent"); one button per page, named by its title ("Untitled" when empty)
-  - "New page" button at the right of the "Recent" label in the sidebar, with "Sort Recent" left of it
-  - "More" button on each row (the sidebar-08 "…", shown on hover), opening a menu with "Rename",
-    "Pin" ("Unpin" on a pinned page), "Copy link", a line, then "Delete" in the destructive colour
-  - "Pinned": a second sidebar group (navigation "Pinned") above "Recent", there only while a page is pinned
+  Names used below:
+  - sidebar row: search results or Pinned, one button per title ("Untitled" when empty)
+  - "New page": the button near the top of Notes
+  - "More": a row's menu with Open beside, Rename, Pin, Copy link and Delete
   - title field: textbox "Title"
   - body: textbox "Page body"
 
@@ -16,37 +13,24 @@ Feature: Pages
     Given the app is open in a browser with no stored data
 
   Scenario: First run shows an empty state
-    Then the sidebar shows the text "No pages yet"
+    Then the sidebar explains "Pin pages from Library to keep them here."
     And the main area shows "No page open" and a "New page" button
 
   Scenario: Creating a page from the sidebar
     When I click "New page" in the sidebar
-    Then the sidebar lists one page named "Untitled" and it is marked as the current page
+    Then Library lists one page named "Untitled" and it is marked as the current page
     And the title field is focused and empty
     And the body shows the placeholder "Type '/' for commands"
 
   Scenario: Creating a page from the empty state
     When I click "New page" in the main area
-    Then the sidebar lists one page named "Untitled"
+    Then Library lists one page named "Untitled"
 
-  Scenario: New pages go to the top of the list
+  Scenario: Library lists all pages by name
     Given I have created a page titled "First"
-    When I create a page titled "Second"
-    Then the sidebar lists "Second" above "First"
-
-  Scenario: Choosing how Recent is ordered
-    Given I have created a page titled "First", then one titled "Second"
-    Then Recent lists "Second" above "First"
-    When I click "Sort Recent" beside "New page"
-    Then a menu "Sort by" offers "Created" (chosen) and "Updated"
-    When I pick "Updated", then type in the body of "First"
-    Then within a second "First" moves above "Second"
-    When I open "Second" and change nothing
-    Then the order stays
-    When I reload
-    Then "Updated" is still chosen and "First" is still on top
-    When I pick "Created"
-    Then "Second" is back on top
+    When I create a page titled "Second" and open Library
+    Then Library lists "First" above "Second"
+    And typing a title in Search library filters the list
 
   Scenario: The title shows in the sidebar as I type
     Given I have created a page
@@ -107,13 +91,13 @@ Feature: Pages
   Scenario: Deleting the last page shows the empty state
     Given I have created a page titled "Only"
     When I delete the page "Only" and confirm
-    Then the sidebar shows "No pages yet"
+    Then sidebar search finds no pages
     And the main area shows "No page open"
 
   Scenario: A row's menu
     Given I have created a page titled "Draft"
     When I hover the sidebar row "Draft" and click "More"
-    Then the menu reads "Rename", "Pin", "Copy link", a line, "Delete", each with a 16 px icon
+    Then the menu reads "Open beside", "Rename", "Pin", "Copy link", a line, "Delete", each with a 16 px icon
     And "Delete" and its icon are in the destructive colour, in light and dark mode
     And on "Thoughts" or an essay under its page the menu reads "Copy link", a line, "Delete"
     And the page's own "Page options" menu ends with a line and "Delete page…" in the destructive colour
@@ -136,11 +120,11 @@ Feature: Pages
   Scenario: Pinning a page
     Given I have created pages titled "Old" and "New"
     When I choose "Pin" in the menu of "Old"
-    Then a "Pinned" group shows above "Recent" holding "Old", and "Recent" lists only "New"
+    Then Pinned holds "Old", and Library still lists both pages
     And the menu of "Old" now reads "Unpin"
     And after a reload "Old" is still pinned
     When I choose "Unpin" in its menu
-    Then "Pinned" is gone and "Recent" lists "New", "Old" again
+    Then Pinned has an empty hint and Library still lists both pages
     # Failure case: the open page saves its own properties, which must not undo the pin.
     When "Old" is open, I type "more" in its body and pin it at once, then reload
     Then "Old" is pinned and its body holds "more"
@@ -165,7 +149,8 @@ Feature: Pages
 
   Scenario: Thoughts and essays sit under their page
     Given page "Article" has a Thoughts page and an essay titled "On small teams"
-    Then the sidebar lists "Article" but not its Thoughts page or essay at the top level
+    Then Library lists "Article", its Thoughts page and its essay
+    And pinning "Article" keeps its children under it in the sidebar
     When I open "Article"
     Then "Thoughts" and "On small teams" show under it on a small tree, after xevrion's sidebar submenu
     When I open "Thoughts"

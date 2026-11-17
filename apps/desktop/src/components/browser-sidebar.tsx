@@ -1,8 +1,9 @@
 // The sidebar while the browser space is in front: the app sidebar's frame (sidebar-08 on COSS),
 // with the search field, pinned sites, my tabs and agents' browsers, then Saved, History and
 // Settings over the usage line. Rows are 32 px, 2 px apart, as in the design.
-import { Bookmark, Bot, History, Link, Pin, PinOff, Plus, Search, Settings, Sparkles, X } from "lucide-react";
+import { Bookmark, Bot, Columns2, Ellipsis, History, Link, Pin, PinOff, Plus, Search, Sparkles, X } from "lucide-react";
 import { ContextMenu, ContextMenuItem, ContextMenuPopup, ContextMenuSeparator, ContextMenuTrigger } from "@leadinglight/ui/components/context-menu";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
   SidebarContent,
@@ -19,9 +20,7 @@ import {
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { openSettings } from "@/views/settings/open";
-import { UsageButton } from "~/components/usage-button";
-import { acting, bar, closeTab, dataBase, hostOf, listed, live, openPinned, pin, select, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
+import { acting, bar, closeTab, dataBase, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
 import { useKeysFor } from "~/lib/keymap";
 import { useBrowserData } from "~/lib/project-runtime/browser";
 
@@ -54,11 +53,12 @@ function TabRow({ tab, active }: { tab: SpaceTab; active: boolean }) {
   return (
     <SidebarMenuItem>
       <ContextMenu>
-        <ContextMenuTrigger render={<SidebarMenuButton aria-current={active ? "page" : undefined} className="pe-7" isActive={active} onClick={() => select(tab.id, true)} />}>
+        <ContextMenuTrigger render={<SidebarMenuButton aria-current={active ? "page" : undefined} className="pe-7" isActive={active} onClick={(e) => select(tab.id, true, e.shiftKey)} />}>
           {page?.loading ? <Spinner className="size-4 text-muted-foreground" /> : <SiteIcon tab={tab} />}
           <span>{title}</span>
         </ContextMenuTrigger>
         <ContextMenuPopup>
+          <ContextMenuItem onClick={() => select(tab.id, true, true)}><Columns2 />Open beside</ContextMenuItem>
           <ContextMenuItem onClick={() => pin(tab.id)}><Pin />Pin</ContextMenuItem>
           <ContextMenuItem onClick={() => copy(tab.url)}><Link />Copy link</ContextMenuItem>
           <ContextMenuSeparator />
@@ -68,9 +68,15 @@ function TabRow({ tab, active }: { tab: SpaceTab; active: boolean }) {
       {claude ? (
         <SidebarMenuBadge aria-label={`${claude.who} is working in this tab`}><Sparkles className="size-3.5 text-info" /></SidebarMenuBadge>
       ) : (
-        <SidebarMenuAction aria-label={`Close ${title}`} className="top-1.5 right-[5px] [&>svg]:size-3.5 peer-data-[active=true]/menu-button:opacity-100" onClick={() => void closeTab(tab.id)} showOnHover>
-          <X />
-        </SidebarMenuAction>
+        <Menu>
+          <MenuTrigger render={<SidebarMenuAction aria-label={`More for ${title}`} showOnHover />}><Ellipsis /></MenuTrigger>
+          <MenuPopup side="right" align="start">
+            <MenuItem onClick={() => select(tab.id, true, true)}><Columns2 />Open beside</MenuItem>
+            <MenuItem onClick={() => pin(tab.id)}><Pin />Pin</MenuItem>
+            <MenuItem onClick={() => copy(tab.url)}><Link />Copy link</MenuItem>
+            <MenuItem onClick={() => void closeTab(tab.id)}><X />Close tab</MenuItem>
+          </MenuPopup>
+        </Menu>
       )}
     </SidebarMenuItem>
   );
@@ -83,7 +89,7 @@ function Tile({ site, tab, active }: { site: Site; tab?: SpaceTab; active: boole
         <TooltipTrigger
           render={
             <ContextMenuTrigger
-              render={<SidebarMenuButton aria-current={active ? "page" : undefined} aria-label={site.title} className="h-10 justify-center bg-sidebar-accent/70 p-0 data-[active=true]:inset-ring data-[active=true]:inset-ring-border" isActive={active} onClick={() => openPinned(site.id)} />}
+              render={<SidebarMenuButton aria-current={active ? "page" : undefined} aria-label={site.title} className="h-10 justify-center bg-sidebar-accent/70 p-0 data-[active=true]:inset-ring data-[active=true]:inset-ring-border" isActive={active} onClick={(e) => openPinned(site.id, e.shiftKey)} />}
             />
           }
         >
@@ -92,6 +98,7 @@ function Tile({ site, tab, active }: { site: Site; tab?: SpaceTab; active: boole
         <TooltipPopup side="bottom">{site.title || hostOf(site.url)}</TooltipPopup>
       </Tooltip>
       <ContextMenuPopup>
+        <ContextMenuItem onClick={() => openPinned(site.id, true)}><Columns2 />Open beside</ContextMenuItem>
         <ContextMenuItem onClick={() => unpin(site.id)}><PinOff />Unpin</ContextMenuItem>
         <ContextMenuItem onClick={() => copy(tab?.url ?? site.url)}><Link />Copy link</ContextMenuItem>
         {tab && <><ContextMenuSeparator /><ContextMenuItem onClick={() => void closeTab(tab.id)}><X />Close tab</ContextMenuItem></>}
@@ -103,7 +110,7 @@ function Tile({ site, tab, active }: { site: Site; tab?: SpaceTab; active: boole
 function AgentRow({ agent, active }: { agent: AgentTab; active: boolean }) {
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton aria-current={active ? "page" : undefined} isActive={active} onClick={() => shown.set({ kind: "agent", base: agent.base, tab: agent.tab })}>
+      <SidebarMenuButton aria-current={active ? "page" : undefined} isActive={active} onClick={() => showBrowserList({ kind: "agent", base: agent.base, tab: agent.tab })}>
         <Bot />
         <span>{agent.name}</span>
       </SidebarMenuButton>
@@ -166,18 +173,14 @@ export function BrowserSidebar() {
       <SidebarFooter>
         <SidebarMenu className="gap-0.5">
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={view.kind === "saved"} onClick={() => shown.set(view.kind === "saved" ? { kind: "tab" } : { kind: "saved" })}><Bookmark /><span>Saved</span></SidebarMenuButton>
+            <SidebarMenuButton isActive={view.kind === "saved"} onClick={() => showBrowserList(view.kind === "saved" ? { kind: "tab" } : { kind: "saved" })}><Bookmark /><span>Saved</span></SidebarMenuButton>
             {data.bookmarks.length > 0 && <SidebarMenuBadge className="font-normal text-muted-foreground">{data.bookmarks.length}</SidebarMenuBadge>}
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={view.kind === "history"} onClick={() => shown.set(view.kind === "history" ? { kind: "tab" } : { kind: "history" })}><History /><span>History</span></SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => openSettings()}><Settings /><span>Settings</span></SidebarMenuButton>
+            <SidebarMenuButton isActive={view.kind === "history"} onClick={() => showBrowserList(view.kind === "history" ? { kind: "tab" } : { kind: "history" })}><History /><span>History</span></SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-      <UsageButton />
     </>
   );
 }

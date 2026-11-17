@@ -5,11 +5,11 @@ description: Make, name, find, pin and delete pages, and choose how each page lo
 
 # Pages and the sidebar
 
-Everything you write in LeadingLight is a page. The sidebar lists your pages so you can get back to them, and each page has its own title, body and options.
+Everything you write in LeadingLight is a page. The sidebar keeps pinned pages in reach and Library holds the rest, and each page has its own title, body and options.
 
 ## Make a page
 
-Click **New page** at the right of the **Recent** label in the sidebar, or press <kbd>⌘N</kbd>. When you have no pages yet, the main area shows **No page open** with a **New page** button too.
+Click **New page** near the top of the Notes sidebar, or press <kbd>⌘N</kbd>. When you have no pages yet, the main area shows **No page open** with a **New page** button too.
 
 The new page opens with the cursor in its title. The body below shows *Type '/' for commands* until you start writing. Pages save as you type; there is nothing to confirm.
 
@@ -23,27 +23,21 @@ Type in the title field at the top of the page. The sidebar row and the card hea
 
 The card header above the page shows where you are: the type's plural name, then the page, as in **Pages › Trip to Kyoto**. Click the type's name to open the list of all pages of that type in the same card. <kbd>⇧</kbd>-click it to open the list beside the page instead.
 
-## Find pages in Recent
+## Find pages in Library
 
-**Recent** lists your pages, newest first. Daily notes, tags and tasks live in their own lists under **Types**, and templates in their type's settings, so none of them is in Recent. The exception is a task given to an agent: it is listed like any page, with a dot for its state. A page you open shows as the current row.
-
-To change the order, click **Sort Recent** beside **New page** and pick one:
-
-| Sort by | Order |
-| --- | --- |
-| **Created** | The newest page you made comes first. This is the default. |
-| **Updated** | The page you last edited comes first. Opening a page without changing it doesn't move it. |
-
-Your choice is kept after you close the app.
+Use **Search notes** to find any page by its title, including pages you have not pinned.
+**Library** opens all your pages in alphabetical order, with search and a list of types such
+as Books or Daily notes. Choose a type to open its full list. Templates stay in their type's settings.
+There is no Recent list.
 
 ## Pin a page
 
-Pinned pages sit in their own **Pinned** group above **Recent**, so the ones you use every day stay in reach.
+Pinned pages sit in their own **Pinned** group in the Notes sidebar, so the ones you use every day stay in reach.
 
-1. Hover a row in the sidebar and click **More** (the "…" button).
+1. Find the page in Library or Search notes, then click **More** (the "…" button).
 2. Choose **Pin**.
 
-The page moves from Recent into **Pinned**. To take it out, choose **Unpin** in the same menu. When no page is pinned, the Pinned group goes away.
+The page appears in **Pinned** and remains in Library. To take it out, choose **Unpin** in the same menu. When no page is pinned, a short hint explains where to find pages.
 
 ## The row menu
 
@@ -51,6 +45,7 @@ Hover any row in the sidebar and click **More** to see:
 
 | Item | What it does |
 | --- | --- |
+| **Open beside** | Opens the page beside the current pane. |
 | **Rename** | Opens a field under the row with the whole name selected. Type a new name and press <kbd>Return</kbd>, or click elsewhere. <kbd>Esc</kbd> keeps the old name, and so does an empty field. |
 | **Pin** / **Unpin** | Moves the page into or out of **Pinned**. |
 | **Copy link** | Copies a link to the page. A toast reads **Link copied**. Paste it into another page's body and it becomes a link that opens the page and follows its name if you rename it. |
@@ -62,7 +57,7 @@ Hover any row in the sidebar and click **More** to see:
 2. A dialog asks **Delete "Draft"?** and says the page and everything in it will be removed.
 3. Press <kbd>Return</kbd> or click **Delete** to confirm. <kbd>Esc</kbd> or **Cancel** keeps the page.
 
-After a delete, the next page in the list opens. If it was your last page, the sidebar shows **No pages yet**.
+After a delete, the next page in the list opens. If it was your last page, the main area shows **No page open**.
 
 Links to a deleted page from other pages read **Deleted page**, struck through. See [Links and backlinks](/organize/links).
 

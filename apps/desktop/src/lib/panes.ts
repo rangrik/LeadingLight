@@ -6,6 +6,7 @@ import { phone } from "./platform";
 import { go, type Leaf, newId, type PaneNode, pageIn, prune, readLayout, step, type Tab, tab } from "./tabs.ts";
 
 export { pageIn, type Leaf, type PaneNode, type Tab } from "./tabs.ts";
+export const PERSONAL_BROWSER = "web:";
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = "left" | "right" | "top" | "bottom";
 export type Divider = { id: string; dir: "row" | "col"; area: Rect; at: number };
@@ -151,9 +152,12 @@ export function showOnly(page: string | null) {
 // Focuses a page where it is open, else shows it in the focused pane's front tab.
 export function openPage(page: string) {
   const open = holder(page);
-  const here = paneOf(panes.get().focus);
+  const focused = paneOf(panes.get().focus);
+  const root = panes.get().root;
+  const here = page !== PERSONAL_BROWSER && focused?.page === PERSONAL_BROWSER && root
+    ? leaves(root).find((l) => l.page !== PERSONAL_BROWSER) ?? focused : focused;
   if (open) showTab(open.leaf.id, open.tab.id);
-  else if (here) showIn(here.id, page);
+  else if (here) { showIn(here.id, page); focusPane(here.id); }
   else showOnly(page);
 }
 
@@ -272,7 +276,7 @@ export function closePane(id: string) {
 
 // Shows another page in a given pane's front tab.
 export function showIn(id: string, page: string, back?: string) {
-  setLeaf(id, (l) => ({ ...withTabs(l, l.tabs.map((t) => (t.id === l.active ? go(t, page) : t))), ...(back && { back }) }));
+  setLeaf(id, (l) => ({ ...withTabs(l, l.tabs.map((t) => (t.id === l.active ? (page === PERSONAL_BROWSER || pageIn(t) === PERSONAL_BROWSER ? { ...t, pages: [page], at: 0 } : go(t, page)) : t))), ...(back && { back }) }));
 }
 
 // A deleted page leaves every tab's history; a tab it leaves empty closes, and a pane left with none.

@@ -77,7 +77,7 @@ export function SettingsView({ open, onOpenChange, style, windowToggle }: Props)
   return (
     <SidebarProvider className="ll-shell isolate h-svh min-h-0 overflow-hidden" onOpenChange={onOpenChange} open={open} style={style}>
       {/* Where the app's shell has it, beside the traffic lights (App.tsx). */}
-      {windowToggle && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20" />}
+      {windowToggle && !open && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20 hidden md:flex" />}
       <SettingsSidebar current={id} />
       <SidebarInset className="ll-inset h-svh overflow-hidden md:h-[calc(100svh_-_1rem)]">
         <PanelHeader current={current.title} root="Settings" sidebarOpen={open} toggle={!windowToggle} />

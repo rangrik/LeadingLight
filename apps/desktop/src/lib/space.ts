@@ -4,7 +4,7 @@ import { type LLObject, type ObjectPatch, type ObjectSummary, objects } from "./
 import { type PageIcon, readIcon } from "./page-meta";
 import { discardLive, editPage, flushLive } from "./live";
 import { reportSaveError } from "./saving";
-import { dropPage } from "./panes";
+import { dropPage, PERSONAL_BROWSER } from "./panes";
 import { unlinkFolder } from "./project-runtime/folders";
 import { createStore } from "./state";
 import { starter } from "./starter";
@@ -101,11 +101,12 @@ export const CALENDAR_VIEW = "calendar:";
 // Mail home, and the look (one mail, then the rest, then the end) as its own page, so the pane's Back works.
 export const MAIL_VIEW = "mail:";
 export const MAIL_LOOK = "mail:look";
-const VIEWS = [CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
+const VIEWS = [PERSONAL_BROWSER, CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
 // An empty view is a tab with no page yet.
 export const isPageView = (view: string) => !!view && !view.startsWith(TYPE_VIEW) && !view.startsWith(CHAT_VIEW) && !view.startsWith(BROWSER_VIEW) && !view.startsWith(MAIL_VIEW) && !VIEWS.includes(view);
 // The parent crumb opens what it names; a type's list has none.
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
+  if (view === PERSONAL_BROWSER) return { title: "Browser", icon: { kind: "icon", name: "globe", color: "gray" } };
   if (!view) return { title: "New tab" }; // a tab with no page yet
   if (view.startsWith(MAIL_VIEW)) return { title: "Mail" };
   if (view === CALENDAR_VIEW) return { title: "Calendar" };

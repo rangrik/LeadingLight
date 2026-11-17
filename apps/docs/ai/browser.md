@@ -19,11 +19,11 @@ load inside your notes, and nothing of the browser's is written into your projec
 
 ## The browser in the Mac app
 
-In the Mac app the browser is a place of its own. Press **Browser** in the sidebar, or
-<kbd>⌥⌘B</kbd>. The sidebar then shows **Browser** under LeadingLight, a search field,
-**Pinned**, your **Tabs** and **Agents**, with **Saved**, **History** and **Settings** at the
-bottom. The tab you left is in view; with no tabs, the command bar opens for an address. To go back to your notes, press <kbd>⌥⌘B</kbd> again, or click LeadingLight at the top
-and choose **Notes**. Your notes are as you left them, and your tabs stay open for next time.
+In the Mac app, choose **Browser** in the sidebar footer, swipe horizontally over the sidebar,
+or press <kbd>⌥⌘B</kbd>. The same sidebar then shows your pinned sites, tabs, search,
+Saved and History. Your open notes stay in place. Select a tab to show its page, or choose
+**New tab** to enter an address. Shift-click a tab or use its **More › Open beside** action
+to keep a note beside it. Switch back to **Notes** to browse pages without changing the split.
 
 Your pages are real Safari pages (WebKit), sharp at your screen's resolution, with their own
 sign-ins, apart from Safari's and from the notes. Websites can't reach the app or your notes.
@@ -104,7 +104,7 @@ browser in a web browser.
 
 - In a [project chat](/ai/project-chat), press **Browser** in the chat's header. The browser
   opens beside the chat, for that project's folder.
-- Outside the Mac app, press **Browser** in the sidebar. The browser opens beside your notes. No
+- Outside the Mac app, choose **Browser** in the sidebar footer, then **Open browser**. The browser opens beside your notes. No
   project is needed.
 
 A new browser shows an address field and **New tab**. No website opens until you enter an address.

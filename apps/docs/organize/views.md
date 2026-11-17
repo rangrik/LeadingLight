@@ -5,7 +5,7 @@ description: Show a type's pages or a tag's pages as a list, a table, a gallery 
 
 # Lists, tables and boards
 
-Every type has a list of its pages, opened from **Types** in the sidebar, and every tag's page lists what is tagged with it. You can show those pages four ways, sort them, and group them. Each type remembers how you left it.
+Every type has a list of its pages, opened from **Library › Types**, and every tag's page lists what is tagged with it. You can show those pages four ways, sort them, and group them. Each type remembers how you left it.
 
 ## Pick a view
 

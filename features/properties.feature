@@ -12,7 +12,7 @@ Feature: Properties and types
     as a button (opening its menu) and its value
   - property picker: popover "Add property" with a searchbox "Find or create a property"
   - property editor: dialog "Edit property"
-  - sidebar sections: "Types" (one row per type, by its plural name) and "Recent"
+  - sidebar sections: Library lists Types and all pages; Pinned stays in the sidebar
   - type view: what a type's sidebar row opens: its plural name, a "New" button, a
     "Type settings" button and its pages
   - type settings: dialog "Type settings"
