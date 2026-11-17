@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.1](https://github.com/rangrik/LeadingLight/compare/v0.7.0...v0.7.1) (2026-11-17)
+
+
+### Fixes
+
+* check deployed publishing before releasing apps ([#39](https://github.com/rangrik/LeadingLight/issues/39)) ([4ecc787](https://github.com/rangrik/LeadingLight/commit/4ecc7872562d9d264246328d43445f52b80cdc2b))
+
+
+### Build and releases
+
+* label recordings by release check pass ([#38](https://github.com/rangrik/LeadingLight/issues/38)) ([fbd7af3](https://github.com/rangrik/LeadingLight/commit/fbd7af3c78ab5d6b75322ffe3327c0cc143bdd0e))
+
 ## [0.7.0](https://github.com/rangrik/LeadingLight/compare/v0.6.1...v0.7.0) (2026-11-17)
 
 
