@@ -21,13 +21,30 @@ const assets: AssetStore = {
   open(asset) { window.open(asset.url, "_blank", "noopener"); },
 };
 const iconFor = (item: Item) => item.kind === "browser" ? <Globe /> : item.type === "Collections" ? <BookOpen /> : <FileText />;
+const saveDemo = (demo: DemoSave) => { try { localStorage.setItem(STORAGE, JSON.stringify(demo)); } catch { /* Storage is optional for this demo. */ } };
+type DemoSave = ReturnType<typeof restore>;
 
 function Tip({ label, children }: { label: string; children: React.ReactElement }) {
   return <Tooltip><TooltipTrigger render={children} /><TooltipPopup>{label}</TooltipPopup></Tooltip>;
 }
 
 function Prototype() {
-  const [demo, setDemo] = useState(restore);
+  const [demo, updateDemo] = useState(restore);
+  const pending = useRef(new Map<string, () => EditorDoc>());
+  const editTimer = useRef<number | undefined>(undefined);
+  const withEdits = (s: DemoSave, edits: Map<string, EditorDoc>) => edits.size ? { ...s, items: s.items.map((i) => edits.has(i.id) ? { ...i, doc: edits.get(i.id)! } : i) } : s;
+  const readEdits = () => new Map([...pending.current].map(([id, read]) => [id, read()]));
+  const setDemo = (change: React.SetStateAction<DemoSave>) => {
+    const edits = readEdits();
+    pending.current.clear();
+    updateDemo((s) => typeof change === "function" ? change(withEdits(s, edits)) : change);
+  };
+  const edit = (id: string, read: () => EditorDoc) => {
+    // Read large documents after typing pauses, or before a pane changes.
+    pending.current.set(id, read);
+    clearTimeout(editTimer.current);
+    editTimer.current = window.setTimeout(() => setDemo((s) => s), 250);
+  };
   const [query, setQuery] = useState("");
   const [dialog, setDialog] = useState<"library" | "tab" | "help" | null>(null);
   const [filter, setFilter] = useState("All");
@@ -35,16 +52,20 @@ function Prototype() {
   const [address, setAddress] = useState("");
   const sidebar = useRef<HTMLDivElement>(null);
   const area = useRef<HTMLDivElement>(null);
+  const resizeOffset = useRef(0);
   const state = useRef(demo);
   state.current = demo;
-  const { toggleSidebar, isMobile, openMobile, setOpenMobile } = useSidebar();
+  const { toggleSidebar, isMobile, openMobile, setOpenMobile, state: sidebarState } = useSidebar();
 
   useEffect(() => {
-    const save = () => { try { localStorage.setItem(STORAGE, JSON.stringify(state.current)); } catch { /* The demo still works when browser storage is full. */ } };
-    const timer = window.setTimeout(save, 250);
-    window.addEventListener("pagehide", save);
-    return () => { clearTimeout(timer); window.removeEventListener("pagehide", save); save(); };
+    const timer = window.setTimeout(() => saveDemo(withEdits(state.current, readEdits())), 250);
+    return () => clearTimeout(timer);
   }, [demo]);
+  useEffect(() => {
+    const save = () => saveDemo(withEdits(state.current, readEdits()));
+    window.addEventListener("pagehide", save);
+    return () => { clearTimeout(editTimer.current); window.removeEventListener("pagehide", save); save(); };
+  }, []);
 
   const switchMode = (mode: Mode) => { setQuery(""); setDemo((s) => ({ ...s, mode })); };
   const open = (id: string, beside = false) => {
@@ -137,7 +158,7 @@ function Prototype() {
   }
 
   return <>
-    <Sidebar variant="inset" className="demo-sidebar" aria-label="Shared sidebar">
+    <Sidebar variant="inset" className="demo-sidebar" aria-label="Shared sidebar" inert={!isMobile && sidebarState === "collapsed"} aria-hidden={!isMobile && sidebarState === "collapsed" || undefined}>
       <div ref={sidebar} data-testid="sidebar-gesture" className="flex h-full min-h-0 flex-col" onTouchStart={(e) => { touch.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }} onTouchEnd={(e) => {
         if (!touch.current || !e.changedTouches[0]) return;
         const dx = touch.current.x - e.changedTouches[0].clientX, dy = touch.current.y - e.changedTouches[0].clientY;
@@ -145,7 +166,7 @@ function Prototype() {
         if (Math.abs(dx) >= 64 && Math.abs(dx) > Math.abs(dy) * 1.5) switchMode(dx > 0 ? "browser" : "notes");
       }}>
         <SidebarHeader className="gap-5 px-3 pt-5 pb-3">
-          <div className="flex h-8 items-center gap-2.5 px-1"><img src="/icon.svg" className="size-7 rounded-lg" alt="" /><span className="flex-1 font-medium">LeadingLight</span><Tip label="Hide sidebar · ⌘\\"><Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Hide sidebar"><PanelLeft /></Button></Tip></div>
+          <div className="flex h-8 items-center gap-2.5 px-1"><img src="/icon.svg" className="size-7 rounded-lg" alt="" /><span className="flex-1 font-medium">LeadingLight</span><Tip label={"Hide sidebar · ⌘\\"}><Button variant="ghost" size="icon-sm" onClick={toggleSidebar} aria-label="Hide sidebar"><PanelLeft /></Button></Tip></div>
           <div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 z-10 size-4 text-muted-foreground" /><Input aria-label={demo.mode === "notes" ? "Search notes" : "Search tabs"} placeholder={demo.mode === "notes" ? "Search notes" : "Search tabs"} value={query} onChange={(e) => setQuery(e.target.value)} className="h-9 bg-sidebar-accent/50 pl-9 shadow-none" /></div>
           <div className="grid grid-cols-4 gap-1.5" aria-label={demo.mode === "notes" ? "Shortcuts" : "Pinned websites"}>
             {demo.mode === "notes" ? [["Today", CalendarDays, () => open("today-note")], ["Calendar", CalendarDays, () => open("calendar")], ["Mail", Mail, () => open("mail")], ["Browser", Globe, () => switchMode("browser")]].map(([label, Icon, click]) => {
@@ -168,8 +189,8 @@ function Prototype() {
         </SidebarContent>
         <SidebarFooter className="gap-3 px-3 pb-3">
           <div className="px-1"><RadioGroup aria-label="Sidebar mode" className="w-full flex-row gap-0.5" value={demo.mode} onValueChange={(v) => switchMode(v as Mode)} render={<SegmentedControl className="w-full" size="sm" />}>
-            <RadioPrimitive.Root value="notes" render={<SegmentedControlItem className="flex-1" />}><FileText />Notes</RadioPrimitive.Root>
-            <RadioPrimitive.Root value="browser" render={<SegmentedControlItem className="flex-1" />}><Globe />Browser</RadioPrimitive.Root>
+            <SegmentedControlItem className="flex-1" render={<RadioPrimitive.Root value="notes" />}><FileText />Notes</SegmentedControlItem>
+            <SegmentedControlItem className="flex-1" render={<RadioPrimitive.Root value="browser" />}><Globe />Browser</SegmentedControlItem>
           </RadioGroup><p className="mt-2 text-center text-[11px] text-muted-foreground">Swipe sideways · ⌥⌘B</p></div>
           <SidebarMenu><SidebarMenuItem><Menu><MenuTrigger render={<SidebarMenuButton />}><Settings /><span className="flex-1">Settings & account</span><MoreHorizontal /></MenuTrigger><MenuPopup side="top" align="start">
             <MenuItem onClick={() => setDialog("help")}><HelpCircle />How to try this prototype</MenuItem>
@@ -186,22 +207,25 @@ function Prototype() {
           {index > 0 && <Separator orientation="vertical" role="separator" tabIndex={0} aria-label="Resize panes" aria-valuemin={30} aria-valuemax={70} aria-valuenow={demo.ratio} className="demo-divider" onKeyDown={(e) => {
             if (!["ArrowLeft", "ArrowRight", "Home"].includes(e.key)) return;
             e.preventDefault(); setDemo((s) => ({ ...s, ratio: e.key === "Home" ? 50 : Math.max(30, Math.min(70, s.ratio + (e.key === "ArrowRight" ? 2 : -2))) }));
-          }} onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={(e) => {
+          }} onPointerDown={(e) => { e.preventDefault(); const box = e.currentTarget.getBoundingClientRect(); resizeOffset.current = e.clientX - box.left - box.width / 2; e.currentTarget.setPointerCapture(e.pointerId); }} onPointerMove={(e) => {
             if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-            const box = area.current?.getBoundingClientRect();
-            if (box) setDemo((s) => ({ ...s, ratio: Math.max(30, Math.min(70, (e.clientX - box.left) / box.width * 100)) }));
+            const frame = area.current;
+            if (!frame) return;
+            const box = frame.getBoundingClientRect(), css = getComputedStyle(frame);
+            const left = parseFloat(css.paddingLeft), width = box.width - left - parseFloat(css.paddingRight);
+            setDemo((s) => ({ ...s, ratio: Math.max(30, Math.min(70, (e.clientX - resizeOffset.current - box.left - left) / width * 100)) }));
           }} onPointerUp={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} />}
           <SidebarInset data-testid={`pane-${pane.id}`} className="demo-pane" data-focused={demo.focus === pane.id} onPointerDownCapture={() => setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id })} onFocusCapture={() => setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id })}>
             <header className="demo-pane-header">
-              <SidebarTrigger className="shrink-0" />
+              {index === 0 && (isMobile || sidebarState === "collapsed") && <SidebarTrigger className="shrink-0" />}
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{item.kind === "browser" ? "Browser" : item.type ?? item.title}<ChevronRight className="mx-1 inline size-3" /><span className="text-foreground">{item.title || "Untitled"}</span></span>
               {item.kind === "note" && <Tip label={item.pinned ? "Unpin page" : "Pin page"}><Button aria-label={item.pinned ? "Unpin page" : "Pin page"} variant="ghost" size="icon-sm" onClick={() => patch(item.id, { pinned: !item.pinned })}>{item.pinned ? <PinOff /> : <Pin />}</Button></Tip>}
               {demo.panes.length === 1 ? <Tip label={item.kind === "browser" ? "Open a note beside this tab" : "Open browser beside this note"}><Button aria-label="Open split view" variant="ghost" size="icon-sm" onClick={() => split(item)}><Columns2 /></Button></Tip> : <Tip label="Close this pane"><Button aria-label={`Close ${index === 0 ? "left" : "right"} pane`} variant="ghost" size="icon-sm" onClick={() => setDemo((s) => ({ ...s, panes: s.panes.filter((p) => p.id !== pane.id), focus: s.panes.find((p) => p.id !== pane.id)!.id }))}><X /></Button></Tip>}
             </header>
             {item.kind === "note" ? <div className="demo-page-scroll"><div className="demo-note">
-              <Input unstyled aria-label="Page title" className="demo-title" value={item.title} onChange={(e) => patch(item.id, { title: e.target.value })} />
+              <Input key={`title-${item.id}`} unstyled autoFocus={item.title === "Untitled"} aria-label="Page title" className="demo-title" value={item.title} onFocus={(e) => { if (item.title === "Untitled") e.target.select(); }} onChange={(e) => patch(item.id, { title: e.target.value })} />
               <div className="mb-8 flex items-center gap-2 text-xs text-muted-foreground"><FileText className="size-3.5" />{item.type === "Pages" ? "Page" : item.type}<span className="ml-auto inline-flex items-center gap-1"><Check className="size-3" />Saved in demo</span></div>
-              <BlockEditor key={item.id} content={item.doc ?? null} assets={assets} onChange={(read: () => EditorDoc) => patch(item.id, { doc: read() })} openLink={(url) => newTab(url)} />
+              <BlockEditor key={item.id} content={item.doc ?? null} assets={assets} onChange={(read: () => EditorDoc) => edit(item.id, read)} openLink={(url) => newTab(url)} />
             </div></div> : item.kind === "browser" ? <BrowserContent key={item.id} item={item} onNavigate={(url) => navigate(item.id, url)} onBack={() => travel(item, -1)} onForward={() => travel(item, 1)} onNew={() => setDialog("tab")} /> : <UtilityContent item={item} onOpen={() => open("meeting-note", true)} />}
           </SidebarInset>
         </React.Fragment>;

@@ -7,7 +7,17 @@ Feature: A shared sidebar for notes and browsing
     Then Trip to Kyoto is open in the real block editor
     And Notes shows pinned pages, a Library button and a New page button
     And there is no Recent section or Notes/Browser dropdown
+    And exactly one sidebar toggle is available, even with two panes
     And the prototype does not read or write my app's notes or browser tabs
+
+  Scenario: One shared sidebar toggle
+    Given two panes are open and the sidebar is visible
+    Then only the sidebar header offers Hide sidebar
+    When I hide the sidebar
+    Then only the first pane header offers Toggle Sidebar
+    And the hidden sidebar is not keyboard focusable
+    When I show it again
+    Then only the sidebar header offers Hide sidebar
 
   Scenario: Switch the shared sidebar without changing the document
     Given Trip to Kyoto is open
@@ -47,6 +57,7 @@ Feature: A shared sidebar for notes and browsing
     And searching the sidebar finds it
     When I reload the prototype
     Then my sample notes and pane arrangement remain
+    And text typed just before the reload remains, even before the save delay ends
 
   Scenario: Browse simulated pages
     When I open a new browser tab and choose a sample website

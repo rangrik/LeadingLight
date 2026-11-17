@@ -59,12 +59,27 @@ test("sidebar gestures ignore vertical scroll and pinch and latch one swipe", as
   await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue("Trip to Kyoto");
 });
 
+test("unsettled editor changes survive an immediate reload", async ({ page }) => {
+  await page.getByRole("textbox", { name: "Page body" }).click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.clock.install();
+  await page.clock.pauseAt(new Date());
+  await page.keyboard.insertText(" Remember the river walk.");
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("Remember the river walk.");
+});
+
 test("open beside menu, pointer and keyboard resize, and either pane can close", async ({ page }) => {
   await page.getByRole("radio", { name: "Browser", exact: true }).check();
   const row = page.getByLabel("Browser tabs", { exact: true }).getByRole("listitem").filter({ hasText: "Kyoto city guide" });
   await row.hover();
   await row.getByRole("button", { name: "Actions for Kyoto city guide" }).click();
   await page.getByRole("menuitem", { name: "Open beside", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^(Hide sidebar|Toggle Sidebar)$/ })).toHaveCount(1);
+  await page.getByRole("button", { name: "Hide sidebar", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^(Hide sidebar|Toggle Sidebar)$/ })).toHaveCount(1);
+  await page.getByRole("button", { name: "Toggle Sidebar", exact: true }).click();
+  await expect(page.getByRole("button", { name: /^(Hide sidebar|Toggle Sidebar)$/ })).toHaveCount(1);
   const divider = page.getByRole("separator", { name: "Resize panes" });
   await divider.focus(); await page.keyboard.press("ArrowRight");
   await expect(divider).toHaveAttribute("aria-valuenow", "52");
@@ -81,6 +96,7 @@ test("open beside menu, pointer and keyboard resize, and either pane can close",
 
 test("create and pin a note, filter the library, and reset isolated data", async ({ page }) => {
   await page.getByRole("button", { name: "New page" }).click();
+  await expect(page.getByRole("textbox", { name: "Page title" })).toBeFocused();
   await page.getByRole("textbox", { name: "Page title" }).fill("Coffee in Kyoto");
   await page.getByRole("textbox", { name: "Page body" }).fill("Try the little place by the river.");
   await page.getByRole("button", { name: "Pin page", exact: true }).click();
@@ -123,4 +139,25 @@ test("sample browser history, unknown address, and last tab recovery", async ({ 
   await page.getByRole("button", { name: /The reading room/ }).click();
   await expect(page.getByRole("heading", { name: "Make room for a good book" })).toBeVisible();
   expect(contacted).toEqual([]);
+});
+
+test("visual review at desktop and narrow widths, light and dark", async ({ page }) => {
+  await page.setViewportSize({ width: 1487, height: 1058 });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await expect(page.getByRole("textbox", { name: "Page title" })).toBeVisible();
+  await page.screenshot({ path: "qa/report/sidebar-prototype-notes-light.png", animations: "disabled" });
+  await page.getByRole("button", { name: "Open split view" }).click();
+  await page.getByRole("radio", { name: "Browser", exact: true }).check();
+  await page.screenshot({ path: "qa/report/sidebar-prototype-split-light.png", animations: "disabled" });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.screenshot({ path: "qa/report/sidebar-prototype-split-dark.png", animations: "disabled" });
+  await page.setViewportSize({ width: 900, height: 800 });
+  await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
+  const right = page.getByTestId("pane-right");
+  await right.scrollIntoViewIfNeeded();
+  await expect(right.getByRole("button", { name: "Close right pane" })).toBeInViewport();
+  await page.screenshot({ path: "qa/report/sidebar-prototype-narrow.png", animations: "disabled" });
+  await page.getByRole("button", { name: "Hide sidebar" }).click();
+  await page.getByRole("button", { name: "Toggle Sidebar" }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: /^(Hide sidebar|Toggle Sidebar)$/ })).toHaveCount(1);
 });

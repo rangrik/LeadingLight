@@ -35,6 +35,7 @@ Open `http://127.0.0.1:1436/sidebar-prototype.html`.
 
 **⌘\** hides or shows the sidebar. On Windows or Linux, use Ctrl in place of Command.
 Vertical scrolling and pinch gestures do not change the sidebar mode.
+There is one sidebar toggle: in the sidebar when open, or the first pane when hidden.
 
 ## What is simulated
 
