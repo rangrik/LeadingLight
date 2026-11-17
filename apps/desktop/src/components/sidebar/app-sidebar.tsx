@@ -203,12 +203,11 @@ export function AppSidebar({
             <>
               <SidebarContent>
                 <SidebarGroup className="gap-2 pb-0 pt-0">
-                  <InputGroup>
+                  <InputGroup className="h-8 **:data-[slot=input]:h-7.5">
                     <InputGroupInput
                       disabled={loading}
                       aria-label="Search notes"
                       placeholder="Search notes…"
-                      size="sm"
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                     />
@@ -219,12 +218,11 @@ export function AppSidebar({
                   <Button
                     disabled={loading}
                     aria-label="New page"
-                    className="w-full justify-start"
+                    className="h-8 w-full justify-start"
                     onClick={() => {
                       onCreate();
                       if (isMobile) setOpenMobile(false);
                     }}
-                    size="sm"
                     variant="ghost"
                   >
                     <Plus className="size-4" />
@@ -243,9 +241,8 @@ export function AppSidebar({
                               disabled={loading}
                               aria-label={name}
                               aria-current={active ? "page" : undefined}
-                              className="h-9 bg-sidebar-accent/60"
+                              className="h-8 bg-sidebar-accent/60"
                               onClick={select(run)}
-                              size="sm"
                               variant="ghost"
                             />
                           }

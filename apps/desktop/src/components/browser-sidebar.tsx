@@ -57,7 +57,7 @@ function TabRow({ tab, active }: { tab: SpaceTab; active: boolean }) {
   return (
     <SidebarMenuItem>
       <ContextMenu>
-        <ContextMenuTrigger render={<SidebarMenuButton aria-current={active ? "page" : undefined} className="pe-14" isActive={active} onClick={(e) => pick(e.shiftKey)} />}>
+        <ContextMenuTrigger render={<SidebarMenuButton aria-current={active ? "page" : undefined} className="group-has-data-[sidebar=menu-action]/menu-item:pe-14" isActive={active} onClick={(e) => pick(e.shiftKey)} />}>
           {page?.loading ? <Spinner className="size-4 text-muted-foreground" /> : <SiteIcon tab={tab} />}
           <span>{title}</span>
         </ContextMenuTrigger>
