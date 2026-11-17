@@ -74,6 +74,11 @@ Independent lifecycle checks also found an existing linkify warning after typing
 opening another note. Sample links still work; the shared-editor cleanup is recorded
 in `docs/DEFERRED.md`.
 
+Independent Sonnet 5.5 QA passed 40 scenarios (406 checks), with no required checks
+failing, page exceptions or external requests. Berth was unavailable, so it used nine
+recorded headless Chromium sessions. Remaining interaction refinements are listed
+with native promotion in `docs/DEFERRED.md`; cosmetic observations are not blockers.
+
 The 2,000-paragraph probe preserved typing and measured keydown to next animation
 frame at median 14.9 ms, maximum 28.4 ms after deferring document reads. This does not
 establish a 16 ms worst-case frame budget; the existing editor performance item in
