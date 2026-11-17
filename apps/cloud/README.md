@@ -45,6 +45,8 @@ additive in `schema.sql`. See [native sync](../../docs/NATIVE-SYNC.md) for limit
 and the required device acceptance.
 
 Redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --prod --yes --scope pranavs-projects-9ffa1d28`.
+Then run `node scripts/release/check-cloud.mjs`. Publishing in v0.7.0 needs this cloud deployment
+as well as the installed app update; an older cloud refuses the native publication routes.
 
 ## Verification
 

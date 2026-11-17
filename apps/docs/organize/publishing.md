@@ -31,6 +31,10 @@ dialog checks the current status so you can still manage the link. The page and 
 within 3.5 MB. Reduce large attachments if needed. Each account can keep up to 100 published pages
 and 100 MB. Missing attachments must finish syncing before you publish.
 
+If the installed app says “This native session cannot use this route,” the cloud service needs
+updating. Signing out or reinstalling will not fix that message. After the service is updated,
+press **Try again** in the same dialog.
+
 ## Privacy and search
 
 Published pages send a `noindex` instruction in both their HTML and HTTP headers. Search engines
