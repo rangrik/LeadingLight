@@ -28,6 +28,7 @@ Feature: A shared sidebar for notes and browsing
     Then the sidebar shows Notes again
     And vertical scrolling, a small diagonal movement and a pinch do not switch modes
     And one continuous swipe changes the mode only once
+    And app shortcuts do not change the workspace behind an open dialog
 
   Scenario: Write beside a browser tab
     Given Trip to Kyoto is open
@@ -75,6 +76,10 @@ Feature: A shared sidebar for notes and browsing
     Then I can open a new tab from the empty browser pane
     When I use a narrow window with two panes
     Then each pane remains reachable and the sidebar can collapse
+    And focusing a pane reveals all of its header controls
+    And horizontal scrolling over a page moves the workspace
+    When the sidebar opens as a sheet in a smaller window
+    Then horizontal gestures still switch its mode
     When I reset the demo from Settings and account
     Then the original sample data returns
     And edits to the currently open note disappear from the editor too

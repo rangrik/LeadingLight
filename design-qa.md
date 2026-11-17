@@ -38,6 +38,9 @@ width 272. It exposes the intentionally denser COSS rows and icon sizes.
 | P2 | Serializing the full document on each edit slowed long notes. | Defer reads until typing pauses; flush pending edits before pane changes and pagehide. Reload with save timers paused passes. |
 | P2 | Resetting the currently open note left its old editor content visible. | Reset remounts the workspace. The recorded reset scenario checks original text returns immediately. |
 | P2 | Closing a browser tab could duplicate its visible neighbor. | Choose an unopened replacement and keep panes unique. A two-browser regression scenario passes. |
+| P2 | Narrow panes trapped horizontal scrolling and could clip header controls after focus or resize. | Allow horizontal scroll chaining and reveal the focused pane on focus and workspace resize. The close control is fully in view at 900 px. |
+| P2 | Wheel gestures missed the sidebar's delayed sheet mount. | Attach the listener to the actual mounted node. The 740 px sheet gesture regression passes. |
+| P2 | App shortcuts could create a hidden note behind a dialog. | Consume workspace shortcuts while a dialog is open. Library checks retain the mode and create no Untitled note. |
 | P3 | Sidebar tooltip displayed two backslashes. | Correct the literal to show one shortcut key. |
 
 ## Fidelity surfaces
@@ -63,7 +66,7 @@ are intentional, not claims of pixel-identical recreation.
 
 ## Checks and limits
 
-Eight recorded Playwright scenarios pass, including actual Shift-click, wheel events,
+Nine recorded Playwright scenarios pass, including actual Shift-click, wheel events,
 keyboard shortcuts, editing, persistence, menus, resize and light/dark/narrow layouts.
 Workspace typecheck, desktop build and docs build pass. Clean capture has no console
 errors; reduced-motion emulation produces only the library's informational warning.

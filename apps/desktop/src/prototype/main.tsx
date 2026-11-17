@@ -51,12 +51,20 @@ function Prototype() {
   const [filter, setFilter] = useState("All");
   const [libraryQuery, setLibraryQuery] = useState("");
   const [address, setAddress] = useState("");
-  const sidebar = useRef<HTMLDivElement>(null);
+  const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   const area = useRef<HTMLDivElement>(null);
   const resizeOffset = useRef(0);
   const state = useRef(demo);
   state.current = demo;
-  const { toggleSidebar, isMobile, openMobile, setOpenMobile, state: sidebarState } = useSidebar();
+  const { toggleSidebar, isMobile, setOpenMobile, state: sidebarState } = useSidebar();
+
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => el.querySelector<HTMLElement>('[data-focused="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" }));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [reset]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => saveDemo(withEdits(state.current, readEdits())), 250);
@@ -113,18 +121,21 @@ function Prototype() {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.isComposing || e.repeat) return;
-      if ((e.metaKey || e.ctrlKey) && e.altKey && e.code === "KeyB") { e.preventDefault(); switchMode(state.current.mode === "notes" ? "browser" : "notes"); }
-      else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === "Backslash") { e.preventDefault(); toggleSidebar(); }
-      else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === "KeyN") { e.preventDefault(); newNote(); }
-      else if ((e.metaKey || e.ctrlKey) && !e.altKey && e.code === "KeyT") { e.preventDefault(); setDialog("tab"); }
+      if (e.isComposing || e.repeat || !(e.metaKey || e.ctrlKey)) return;
+      if (e.altKey ? e.code !== "KeyB" : !["Backslash", "KeyN", "KeyT"].includes(e.code)) return;
+      e.preventDefault();
+      if (dialog) return;
+      if (e.altKey) switchMode(state.current.mode === "notes" ? "browser" : "notes");
+      else if (e.code === "Backslash") toggleSidebar();
+      else if (e.code === "KeyN") newNote();
+      else setDialog("tab");
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
 
   useEffect(() => {
-    const el = sidebar.current;
+    const el = sidebar;
     if (!el) return;
     let total = 0, last = 0, latched = false;
     const wheel = (e: WheelEvent) => {
@@ -139,7 +150,7 @@ function Prototype() {
     };
     el.addEventListener("wheel", wheel, { passive: false });
     return () => el.removeEventListener("wheel", wheel);
-  }, [isMobile, openMobile]);
+  }, [sidebar]);
 
   const touch = useRef<{ x: number; y: number } | null>(null);
   const selected = new Set(demo.panes.map((p) => p.item));
@@ -162,7 +173,7 @@ function Prototype() {
 
   return <>
     <Sidebar variant="inset" className="demo-sidebar" aria-label="Shared sidebar" inert={!isMobile && sidebarState === "collapsed"} aria-hidden={!isMobile && sidebarState === "collapsed" || undefined}>
-      <div ref={sidebar} data-testid="sidebar-gesture" className="flex h-full min-h-0 flex-col" onTouchStart={(e) => { touch.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }} onTouchEnd={(e) => {
+      <div ref={setSidebar} data-testid="sidebar-gesture" className="flex h-full min-h-0 flex-col" onTouchStart={(e) => { touch.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }} onTouchEnd={(e) => {
         if (!touch.current || !e.changedTouches[0]) return;
         const dx = touch.current.x - e.changedTouches[0].clientX, dy = touch.current.y - e.changedTouches[0].clientY;
         touch.current = null;
@@ -218,10 +229,10 @@ function Prototype() {
             const left = parseFloat(css.paddingLeft), width = box.width - left - parseFloat(css.paddingRight);
             setDemo((s) => ({ ...s, ratio: Math.max(30, Math.min(70, (e.clientX - resizeOffset.current - box.left - left) / width * 100)) }));
           }} onPointerUp={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId); }} />}
-          <SidebarInset data-testid={`pane-${pane.id}`} className="demo-pane" data-focused={demo.focus === pane.id} onPointerDownCapture={() => setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id })} onFocusCapture={() => setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id })}>
+          <SidebarInset data-testid={`pane-${pane.id}`} className="demo-pane" data-focused={demo.focus === pane.id} onPointerDownCapture={() => setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id })} onFocusCapture={(e) => { e.currentTarget.scrollIntoView({ block: "nearest", inline: "nearest" }); setDemo((s) => s.focus === pane.id ? s : { ...s, focus: pane.id }); }}>
             <header className="demo-pane-header">
               {index === 0 && (isMobile || sidebarState === "collapsed") && <SidebarTrigger className="shrink-0" />}
-              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{item.kind === "browser" ? "Browser" : item.type ?? item.title}<ChevronRight className="mx-1 inline size-3" /><span className="text-foreground">{item.title || "Untitled"}</span></span>
+              <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{(item.kind === "browser" || item.type) && <>{item.kind === "browser" ? "Browser" : item.type}<ChevronRight className="mx-1 inline size-3" /></>}<span className="text-foreground">{item.title || "Untitled"}</span></span>
               {item.kind === "note" && <Tip label={item.pinned ? "Unpin page" : "Pin page"}><Button aria-label={item.pinned ? "Unpin page" : "Pin page"} variant="ghost" size="icon-sm" onClick={() => patch(item.id, { pinned: !item.pinned })}>{item.pinned ? <PinOff /> : <Pin />}</Button></Tip>}
               {demo.panes.length === 1 ? <Tip label={item.kind === "browser" ? "Open a note beside this tab" : "Open browser beside this note"}><Button aria-label="Open split view" variant="ghost" size="icon-sm" onClick={() => split(item)}><Columns2 /></Button></Tip> : <Tip label="Close this pane"><Button aria-label={`Close ${index === 0 ? "left" : "right"} pane`} variant="ghost" size="icon-sm" onClick={() => setDemo((s) => ({ ...s, panes: s.panes.filter((p) => p.id !== pane.id), focus: s.panes.find((p) => p.id !== pane.id)!.id }))}><X /></Button></Tip>}
             </header>
@@ -255,7 +266,7 @@ function BrowserContent({ item, onNavigate, onBack, onForward, onNew }: { item: 
     <Tip label="Forward"><Button variant="ghost" size="icon-sm" aria-label="Forward" disabled={(item.at ?? 0) >= (item.history?.length ?? 0) - 1} onClick={onForward}><ArrowRight /></Button></Tip>
     <Input aria-label="Website address" value={draft} onChange={(e) => setDraft(e.target.value)} className="h-7 min-w-0 flex-1 text-xs" placeholder="Enter a sample address" /><Button aria-label="Go to address" type="submit" size="icon-sm" variant="ghost"><ArrowRight /></Button>
   </form><div className="demo-page-scroll"><article className="demo-article">
-    {site ? <><p className="mb-10 text-[10px] font-medium tracking-[0.14em] text-muted-foreground">{site.section}</p><h1>{site.heading}</h1><p className="demo-intro">{site.intro}</p><Separator className="my-8" />{site.parts.map(([title, body]) => <section key={title}><h2>{title}</h2><p>{body}</p></section>)}<Button variant="link" className="mt-4 px-0" onClick={() => onNavigate(site.next)}>{site.nextLabel}<ArrowRight /></Button><p className="mt-12 text-xs text-muted-foreground">Sample website · local preview</p></> : <><Globe className="mb-5 size-8 text-muted-foreground" /><h1>{url ? "A sample browser" : "A fresh tab"}</h1><p className="demo-intro">{url ? "This prototype only opens the sample websites below. The address you entered has not been contacted." : "Open a sample website to try browsing beside your notes."}</p><Button variant="outline" onClick={onNew}>Choose a sample site</Button></>}
+    {site ? <><p className="mb-10 text-[10px] font-medium tracking-[0.14em] text-muted-foreground">{site.section}</p><h1>{site.heading}</h1><p className="demo-intro">{site.intro}</p><Separator className="my-8" />{site.parts.map(([title, body]) => <section key={title}><h2>{title}</h2><p>{body}</p></section>)}<Button variant="link" className="mt-4 px-0" onClick={() => onNavigate(site.next)}>{site.nextLabel}<ArrowRight /></Button><p className="mt-12 text-xs text-muted-foreground">Sample website · local preview</p></> : <><Globe className="mb-5 size-8 text-muted-foreground" /><h1>{url ? "A sample browser" : "A fresh tab"}</h1><p className="demo-intro">{url ? "Choose a sample website to continue in this prototype. The address you entered has not been contacted." : "Open a sample website to try browsing beside your notes."}</p><Button variant="outline" onClick={onNew}>Choose a sample site</Button></>}
   </article></div></>;
 }
 

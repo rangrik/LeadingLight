@@ -69,6 +69,15 @@ test("unsettled editor changes survive an immediate reload", async ({ page }) =>
   await expect(page.getByRole("textbox", { name: "Page body" })).toContainText("Remember the river walk.");
 });
 
+test("sidebar gestures work after the narrow-window sheet mounts", async ({ page }) => {
+  await page.setViewportSize({ width: 740, height: 800 });
+  await page.getByRole("button", { name: "Toggle Sidebar" }).click();
+  await page.getByRole("radio", { name: "Browser", exact: true }).check();
+  await page.getByTestId("sidebar-gesture").hover();
+  await page.mouse.wheel(-100, 0);
+  await expect(page.getByRole("radio", { name: "Notes", exact: true })).toBeChecked();
+});
+
 test("open beside menu, pointer and keyboard resize, and either pane can close", async ({ page }) => {
   await page.getByRole("radio", { name: "Browser", exact: true }).check();
   const row = page.getByLabel("Browser tabs", { exact: true }).getByRole("listitem").filter({ hasText: "Kyoto city guide" });
@@ -106,9 +115,14 @@ test("create and pin a note, filter the library, and reset isolated data", async
   await expect(page.getByText("Nothing matches this search.")).toBeVisible();
   await page.getByRole("textbox", { name: "Search notes" }).clear();
   await page.getByRole("button", { name: "Library", exact: true }).click();
+  await page.keyboard.press("ControlOrMeta+n");
+  await page.keyboard.press("Alt+Meta+b");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Untitled", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Books", exact: true }).click();
   await page.getByRole("button", { name: "The Dispossessed", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue("The Dispossessed");
+  await expect(page.getByRole("radio", { name: "Notes", exact: true })).toBeChecked();
   await page.getByRole("button", { name: "Settings & account" }).click();
   await page.getByRole("menuitem", { name: "Reset sample workspace" }).click();
   await expect(page.getByRole("textbox", { name: "Page title" })).toHaveValue("Trip to Kyoto");
@@ -171,8 +185,12 @@ test("visual review at desktop and narrow widths, light and dark", async ({ page
   await page.setViewportSize({ width: 900, height: 800 });
   await expect(page.getByRole("button", { name: "Hide sidebar" })).toBeVisible();
   const right = page.getByTestId("pane-right");
-  await right.scrollIntoViewIfNeeded();
-  await expect(right.getByRole("button", { name: "Close right pane" })).toBeInViewport();
+  await right.getByRole("textbox", { name: "Website address" }).focus();
+  await expect(right.getByRole("button", { name: "Close right pane" })).toBeInViewport({ ratio: 1 });
+  await right.locator(".demo-page-scroll").hover();
+  await page.mouse.wheel(-300, 0);
+  await expect.poll(() => page.locator(".demo-workspace").evaluate((el) => el.scrollLeft)).toBe(0);
+  await right.getByRole("textbox", { name: "Website address" }).focus();
   await page.screenshot({ path: "qa/report/sidebar-prototype-narrow.png", animations: "disabled" });
   await page.getByRole("button", { name: "Hide sidebar" }).click();
   await page.getByRole("button", { name: "Toggle Sidebar" }).scrollIntoViewIfNeeded();
