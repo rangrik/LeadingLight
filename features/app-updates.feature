@@ -15,8 +15,14 @@ Feature: The Mac app updates itself
     Given a release newer than this app is GitHub's latest
     And the app has been open for about 30 seconds, so the tools' update toast has had its turn
     Then the update toast shows with the buttons "Update and restart" and "Later"
-    And left alone it goes after 15 seconds and shows again at the next check, four hours on
+    And left alone it stays until I choose Update or Later
     And the version row reads "0.9.0 is ready" beside an "Update and restart" button
+
+  Scenario: Return to the app or reconnect
+    Given a newer release becomes available while I am away or offline
+    When I return to the app or regain a connection
+    Then the app checks for the new release and shows the update toast
+    And repeated foreground events within five minutes do not repeat the check
 
   Scenario: Update with one click
     When I click "Update and restart" in the update toast or in the version row

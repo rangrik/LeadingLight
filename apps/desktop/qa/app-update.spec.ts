@@ -8,12 +8,31 @@ test("The toast offers an update and installs it with one click", async ({ page 
   await expect(page.getByRole("button", { name: "New page" }).first()).toBeVisible();
   await page.clock.fastForward(31_000);
   await expect(page.getByText("LeadingLight 0.9.0 is ready")).toBeVisible();
+  await page.clock.fastForward(60_000);
+  await expect(page.getByText("LeadingLight 0.9.0 is ready")).toBeVisible();
   await page.getByRole("button", { name: "Update and restart" }).click();
   await expect(page.getByText("Updating to LeadingLight 0.9.0…")).toBeVisible();
   await expect(page.getByText("Updating to LeadingLight 0.9.0…")).toBeHidden();
   await page.keyboard.press("Meta+,");
   await page.getByTestId("settings-nav-about").click();
   await expect(page.getByTestId("settings-about").getByText("Up to date")).toBeVisible();
+});
+
+// Seam: foreground/reconnect events must find updates, while Later suppresses only its version.
+test("returning or reconnecting offers an update, and Later remembers its version", async ({ page }) => {
+  await page.goto("/?update=0.9.0&clis=current");
+  await expect(page.getByRole("button", { name: "New page" }).first()).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(page.getByText("LeadingLight 0.9.0 is ready")).toBeVisible();
+  await page.getByRole("button", { name: "Later", exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole("button", { name: "New page" }).first()).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.getByText("LeadingLight 0.9.0 is ready")).toHaveCount(0);
+  await page.goto("/?update=0.9.1&clis=current");
+  await expect(page.getByRole("button", { name: "New page" }).first()).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.getByText("LeadingLight 0.9.1 is ready")).toBeVisible();
 });
 
 test("A failed install says why and still offers the update", async ({ page }) => {

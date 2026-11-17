@@ -12,6 +12,7 @@ let byLink = false;
 void updateWay.then((way) => (byLink = way === "link"));
 
 let showing: string | null = null;
+let checking = false, lastCheck = 0;
 // The failure toast stays until answered, so a retry or a newer offer takes it away.
 let failed: string | null = null;
 const close = (id: string | null) => id && toastManager.close(id);
@@ -52,14 +53,16 @@ export async function updateAndRestart() {
   });
 }
 
-async function check() {
-  await checkForUpdate();
+async function check(resumed = false) {
+  if (checking || !navigator.onLine || (resumed && Date.now() - lastCheck < 5 * 60_000)) return;
+  checking = true; lastCheck = Date.now();
+  try { await checkForUpdate(); } finally { checking = false; }
   const { state, version } = appUpdate.get();
   if (state !== "ready" || !version || showing || version === updatePrefs.get().later) return;
   close(failed);
   const id = toastManager.add({
     type: "info",
-    timeout: 15_000,
+    timeout: 0,
     title: `LeadingLight ${version} is ready`,
     description: (
       <span className="flex gap-1.5">
@@ -87,11 +90,19 @@ async function check() {
 
 export function AppUpdates() {
   useEffect(() => {
+    const foreground = () => { if (document.visibilityState === "visible") void check(true); };
+    const online = () => void check();
     const first = window.setTimeout(check, 30_000);
     const again = window.setInterval(check, 4 * 3_600_000);
+    window.addEventListener("focus", foreground);
+    document.addEventListener("visibilitychange", foreground);
+    window.addEventListener("online", online);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(again);
+      window.removeEventListener("focus", foreground);
+      document.removeEventListener("visibilitychange", foreground);
+      window.removeEventListener("online", online);
     };
   }, []);
   return null;
