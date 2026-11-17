@@ -11,7 +11,7 @@ export default defineConfig({
   outputDir: ".results",
   timeout: 30_000,
   workers: 1,
-  reporter: [["list"], ["html", { outputFolder: "qa/report/playwright", open: "never" }]],
+  reporter: [["list"], ["html", { outputFolder: "report/playwright", open: "never" }]],
   // "gallery" only takes screenshots for design review (pnpm qa:gallery).
   projects: [
     { name: "qa", grepInvert: /@gallery/ },
