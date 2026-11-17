@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test';
 test.skip(!process.env.PUBLISH_QA, 'Needs the isolated cloud test server.');
 
 // Seam: the real publish UI must serve the latest local page to a visitor with no workspace.
-test('publish with sidenotes, read on desktop and phone, update and revoke', async ({ page, context, browser, baseURL }) => {
+test('publish with sidenotes, read on desktop and phone, update and revoke', async ({ page, context, browser, baseURL }, testInfo) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-${Date.now()}`, url: baseURL! }]);
   await page.goto('/');
   await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
@@ -25,7 +25,7 @@ test('publish with sidenotes, read on desktop and phone, update and revoke', asy
   await expect(share).toBeVisible();
   const url = await share.inputValue();
   await page.screenshot({ path: 'qa/report/publish-dialog.png' });
-  const visitor = await browser.newContext();
+  const visitor = await browser.newContext({ recordVideo: { dir: testInfo.outputPath('reader-video'), size: { width: 1280, height: 800 } } });
   const reader = await visitor.newPage();
   const errors: string[] = [];
   reader.on('pageerror', (error) => errors.push(error.message));
@@ -66,6 +66,7 @@ test('publish with sidenotes, read on desktop and phone, update and revoke', asy
   await expect(reader.getByRole('alert')).toHaveText('This page is unavailable');
   expect(errors).toEqual([]);
   await visitor.close();
+  await testInfo.attach('Signed-out reader', { path: await reader.video()!.path(), contentType: 'video/webm' });
 });
 
 test('sign in is required', async ({ page }) => {
@@ -118,7 +119,7 @@ test('retry failures and unpublish a deleted page from account settings', async 
 });
 
 // Seam: media node views have their own upload forms, outside the editor's contenteditable guard.
-test('readers cannot replace broken or empty media', async ({ page, context, browser, baseURL }) => {
+test('readers cannot replace broken or empty media', async ({ page, context, browser, baseURL }, testInfo) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-media-${Date.now()}`, url: baseURL! }]);
   await page.goto('/');
   await page.getByRole('navigation', { name: 'Recent' }).getByRole('button', { name: 'New page' }).click();
@@ -130,12 +131,13 @@ test('readers cannot replace broken or empty media', async ({ page, context, bro
   await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
   const link = dialog.getByRole('textbox', { name: 'Share link' });
   await expect(link).toBeVisible();
-  const visitor = await browser.newContext(), reader = await visitor.newPage();
+  const visitor = await browser.newContext({ recordVideo: { dir: testInfo.outputPath('reader-video'), size: { width: 1280, height: 800 } } }), reader = await visitor.newPage();
   await reader.goto(await link.inputValue());
   await expect(reader.getByRole('heading', { name: 'Media without edit controls' })).toBeVisible();
   await expect(reader.getByText("This image can't be shown")).toBeVisible();
   await expect(reader.locator('input[type=file], form, [contenteditable=true]')).toHaveCount(0);
   await visitor.close();
+  await testInfo.attach('Signed-out media', { path: await reader.video()!.path(), contentType: 'video/webm' });
 });
 
 // Seam: a malformed or newer public response must not crash into a blank page.
