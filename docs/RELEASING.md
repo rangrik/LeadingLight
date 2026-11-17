@@ -2,7 +2,7 @@
 
 [GitHub Releases](https://github.com/rangrik/LeadingLight/releases) hosts the app.
 GitHub Actions builds on a fresh Apple Silicon Mac; standard hosted runners are
-free for this public repository. No personal access token or paid service is needed;
+free for this public repository. No GitHub personal access token or paid service is needed;
 the Mac build is signed with the Apple secrets listed under Downloads and signing.
 
 ## Normal release
@@ -25,14 +25,25 @@ before merging. Do not enable auto-merge on either kind of PR.
    The workflow creates a tag and draft, validates
    that exact commit, then builds, signs, notarizes and checks the app. It uploads a DMG, a ZIP, the
    update archive with `latest.json`, `SHA256SUMS.txt`, and the iPhone and iPad build with its
-   manifest, and then publishes. Until every step succeeds, the draft stays private.
+   manifest. It deploys the same commit to the cloud, checks production, then publishes.
+   Until every step succeeds, the draft stays private.
 
-The cloud is deployed separately from the Mac, iPhone and iPad downloads. Before releasing a
-cloud feature, deploy the reviewed code using the command in [the cloud README](../apps/cloud/README.md).
-Run `node scripts/release/check-cloud.mjs` afterward. The release workflow runs this check before
-building downloads: native publishing must reach authentication, and the public reader and its
-table must exist with noindex and no-store responses. It uses invalid credentials and random
-missing links, never a person's account or page. Rehearsals skip the production check.
+After both platform builds pass, the workflow deploys the draft's exact commit to the existing
+Vercel cloud project. Vercel runs the additive migration and web build using its production secrets.
+Then `node scripts/release/check-cloud.mjs` checks native publishing and the public reader,
+including the table and noindex/no-store responses. It uses invalid credentials and random
+missing links, never a person's account or page. Deployment or check failure keeps the app release
+private. Rehearsals skip cloud deployment entirely, and production releases run one at a time.
+
+The GitHub environment `cloud-production` allows deployments from the `main` branch only.
+It holds `VERCEL_TOKEN` and the variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID` for
+`leadinglight-web`. Use a Vercel token scoped to that project; database and OAuth secrets stay
+in Vercel. Add or rotate it with `gh secret set VERCEL_TOKEN --env cloud-production`.
+Create the token in [Vercel's token settings](https://vercel.com/account/settings/tokens),
+name it `LeadingLight GitHub releases`, and scope it to `leadinglight-web`. The CLI's login
+credential cannot create this token and must not be copied into CI: it expires and refreshes
+through the local login. Paste the dedicated token only into the `gh secret set` prompt.
+Manual cloud recovery remains available through [the cloud README](../apps/cloud/README.md).
 
 Release Please updates `version.txt`, the Rust package and `Cargo.lock`, plus the desktop
 `package.json`, Tauri config and release manifest. Do not bump them separately.

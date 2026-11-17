@@ -47,23 +47,29 @@ Feature: Versioned GitHub releases
     And a maintainer can retry the draft by its version tag
     And a retry cannot replace files in a published release
 
-  Scenario: Stop a release when the cloud lacks publishing support
-    Given the installed app supports publishing but the deployed cloud still refuses its native routes
-    When a release is checked before building its downloads
-    Then it stops and tells the maintainer to deploy the matching cloud service
-    And the check sends no real credential or page content
-    When the cloud accepts the publishing routes and serves the unlisted reader
-    Then the check passes without publishing a page
-    And a missing publications table or reader also stops the release
-    And running the check through a symlink still performs it
-    And retrying an older draft uses the current cloud check without changing the draft's source
-    And build rehearsals do not require a production deployment
+  Scenario: Deploy the matching cloud before publishing the app
+    Given a reviewed release has passed checks and both app builds
+    When the release workflow runs on main
+    Then it deploys the release's exact commit to the existing cloud project
+    And Vercel runs the database migration before serving the new cloud code
+    And the workflow checks native publishing and the public reader on the production address
+    And that check sends no real account credential or page content
+    And only after the cloud check passes are the app downloads published
+    And production release workflows run one at a time
+
+  Scenario: A cloud deployment fails
+    Given a release's app downloads have been built
+    When the deployment credential is missing, the cloud build fails, or the live check fails
+    Then the release stays a draft and the installed app is not offered that release
+    And retrying the draft deploys the same release commit with the current deployment tools
+    And running the live check through a symlink still performs it
 
   Scenario: Rehearse a build
     Given I run Publish release on main or on a branch with rehearsal enabled
     When checks, signing and packaging pass
     Then the workflow stores the same signed downloads as build artifacts
     And it creates no tag or GitHub release
+    And it neither reads the production deployment credential nor deploys the cloud
 
   Scenario: A branch cannot publish
     Given I run Publish release on a branch with rehearsal disabled
@@ -73,4 +79,5 @@ Feature: Versioned GitHub releases
     Given a pull request comes from a fork
     When checks run
     Then they have read-only repository access and no signing secrets
+    And the cloud deployment credential is restricted to main
     And only the main branch can prepare or publish releases

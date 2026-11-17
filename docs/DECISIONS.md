@@ -490,6 +490,11 @@ build is signed with a Developer ID and notarized, and releases are normal relea
 Actions and reach only the step that signs; the app is compiled before it. A branch may
 rehearse a build, and only `main` publishes.
 
+Since 2026-11-17, the same workflow deploys the release commit to Vercel after both app builds
+pass, then checks the live cloud before publishing downloads. Production releases run one at
+a time; rehearsals never deploy. A project-scoped token in a main-only GitHub environment
+keeps deployment separate from app signing, and database and OAuth secrets stay in Vercel.
+
 ## 30. One bar for what wants a glance; tabs inside panes; one box for capture
 
 Agent asks, captures to review, tail's offers and the Ask thread were four surfaces: a lane on the

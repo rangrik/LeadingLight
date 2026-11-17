@@ -13,7 +13,7 @@ Register OAuth callbacks at `APP_ORIGIN/api/auth/callback/google`, `/github`, an
 
 ## Vercel deployment
 
-The canonical app address is [leadinglight.app](https://leadinglight.app), in Vercel team `pranavs-projects-9ffa1d28`, project `leadinglight-web`. Neon resource `leadinglight-web-db` uses the free plan in Washington, D.C. (`iad1`), connected only to Production. Neon Auth is off; Auth.js owns sign-in. The existing image service is separate. Deployments currently use the CLI, not a connected Git pipeline.
+The canonical app address is [leadinglight.app](https://leadinglight.app), in Vercel team `pranavs-projects-9ffa1d28`, project `leadinglight-web`. Neon resource `leadinglight-web-db` uses the free plan in Washington, D.C. (`iad1`), connected only to Production. Neon Auth is off; Auth.js owns sign-in. The existing image service is separate. The app release workflow deploys this project through the Vercel CLI after both app builds pass and before publishing the downloads.
 
 Production has `APP_ORIGIN`, `DATABASE_URL`, `AUTH_SECRET` and, since 2026-11-04, `CLOUD_ACCESS=public`. Each signed-in identity still has its own workspace; public access does not share notes, calendar grants or paired devices. Use the same sign-in provider on every device: matching emails do not link accounts. Vercel stores credentials as secrets; downloaded production env files contain `[SENSITIVE]` placeholders, not usable credentials. Initial schema setup runs in the Vercel build environment with a one-time build command before the normal frontend build.
 
@@ -44,7 +44,12 @@ removes one. `accounts` keeps each account's sign-in provider and email for disp
 additive in `schema.sql`. See [native sync](../../docs/NATIVE-SYNC.md) for limits
 and the required device acceptance.
 
-Redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --prod --yes --scope pranavs-projects-9ffa1d28`.
+Each release deploys its exact commit and runs `scripts/release/check-cloud.mjs` before publishing
+the app. The `cloud-production` GitHub environment holds a project-scoped deployment token and
+the Vercel project and team IDs; only `main` may use it. The remote build runs the additive schema
+migration with Vercel's existing production secrets. See [releases](../../docs/RELEASING.md).
+
+For manual recovery, redeploy from the linked repository root with `pnpm dlx vercel@65.7.0 deploy --prod --yes --scope pranavs-projects-9ffa1d28`.
 Then run `node scripts/release/check-cloud.mjs`. Publishing in v0.7.0 needs this cloud deployment
 as well as the installed app update; an older cloud refuses the native publication routes.
 
