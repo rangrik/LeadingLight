@@ -22,7 +22,7 @@ Feature: The Mac app updates itself
     Given a newer release becomes available while I am away or offline
     When I return to the app or regain a connection
     Then the app checks for the new release and shows the update toast
-    And repeated foreground events within five minutes do not repeat the check
+    And repeated foreground or connection events within five minutes share one scheduled check
 
   Scenario: Update with one click
     When I click "Update and restart" in the update toast or in the version row
@@ -55,6 +55,7 @@ Feature: The Mac app updates itself
     And "Download" opens the release page in the browser and closes the toast
     And "Dismiss" closes the toast
     And trying again takes the old message away, so there is never more than one
+    And a background check for the same version keeps the error and its reason visible
     And the installed app is unchanged and keeps running
 
   Scenario: iPhone and iPad install the release by its link

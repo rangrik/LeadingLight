@@ -36,6 +36,7 @@ test("returning or reconnecting offers an update, and Later remembers its versio
 });
 
 test("A failed install says why and still offers the update", async ({ page }) => {
+  await page.clock.install();
   await page.goto("/?update=fail&clis=current");
   await page.keyboard.press("Meta+,");
   await page.getByTestId("settings-nav-about").click();
@@ -47,6 +48,11 @@ test("A failed install says why and still offers the update", async ({ page }) =
   await expect(page.getByText("The download was interrupted.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Download" })).toBeVisible();
   await expect(about.getByText("Couldn't update to 0.9.0")).toBeVisible();
+  await page.clock.fastForward(6 * 60_000);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.clock.runFor(100);
+  await expect(about.getByText("Couldn't update to 0.9.0")).toBeVisible();
+  await expect(page.getByText("The download was interrupted.")).toBeVisible();
   await about.getByRole("button", { name: "Update and restart" }).click();
   await expect(page.getByText("Updating to LeadingLight 0.9.0…")).toBeVisible();
   await expect(page.getByText("Updating to LeadingLight 0.9.0…")).toBeHidden();

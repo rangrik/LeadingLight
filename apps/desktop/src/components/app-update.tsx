@@ -12,6 +12,7 @@ let byLink = false;
 void updateWay.then((way) => (byLink = way === "link"));
 
 let showing: string | null = null;
+let showingVersion = "";
 let checking = false, lastCheck = 0;
 // The failure toast stays until answered, so a retry or a newer offer takes it away.
 let failed: string | null = null;
@@ -53,12 +54,13 @@ export async function updateAndRestart() {
   });
 }
 
-async function check(resumed = false) {
-  if (checking || !navigator.onLine || (resumed && Date.now() - lastCheck < 5 * 60_000)) return;
+async function check() {
+  if (checking || !navigator.onLine) return;
   checking = true; lastCheck = Date.now();
   try { await checkForUpdate(); } finally { checking = false; }
   const { state, version } = appUpdate.get();
-  if (state !== "ready" || !version || showing || version === updatePrefs.get().later) return;
+  if (state !== "ready" || !version || (showing && version === showingVersion) || version === updatePrefs.get().later) return;
+  close(showing);
   close(failed);
   const id = toastManager.add({
     type: "info",
@@ -82,27 +84,33 @@ async function check(resumed = false) {
       </span>
     ),
     onClose: () => {
-      showing = null;
+      if (showing === id) showing = null;
     },
   });
   showing = id;
+  showingVersion = version;
 }
 
 export function AppUpdates() {
   useEffect(() => {
-    const foreground = () => { if (document.visibilityState === "visible") void check(true); };
-    const online = () => void check();
+    let resumed: number | undefined;
+    const resume = () => {
+      window.clearTimeout(resumed);
+      resumed = window.setTimeout(check, Math.max(0, 5 * 60_000 - (Date.now() - lastCheck)));
+    };
+    const foreground = () => { if (document.visibilityState === "visible") resume(); };
     const first = window.setTimeout(check, 30_000);
     const again = window.setInterval(check, 4 * 3_600_000);
     window.addEventListener("focus", foreground);
     document.addEventListener("visibilitychange", foreground);
-    window.addEventListener("online", online);
+    window.addEventListener("online", resume);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(again);
+      window.clearTimeout(resumed);
       window.removeEventListener("focus", foreground);
       document.removeEventListener("visibilitychange", foreground);
-      window.removeEventListener("online", online);
+      window.removeEventListener("online", resume);
     };
   }, []);
   return null;
