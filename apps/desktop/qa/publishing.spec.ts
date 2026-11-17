@@ -81,7 +81,7 @@ test('sign in is required', async ({ page }) => {
 // Seam: lost responses and local deletion must not strand a published link.
 test('retry failures and unpublish a deleted page from account settings', async ({ page, context, baseURL, request }) => {
   await context.addCookies([{ name: 'qa-user', value: `publishing-errors-${Date.now()}`, url: baseURL! }]);
-  await page.goto('/');
+  await page.goto('/?clis=current');
   await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Revocable after deletion');
   await page.route('**/api/publications/status', (route) => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Try the connection again.' }) }));
