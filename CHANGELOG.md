@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/rangrik/LeadingLight/compare/v0.7.1...v0.8.0) (2026-11-17)
+
+
+### Features
+
+* share sidebar modes across notes and browser panes ([#43](https://github.com/rangrik/LeadingLight/issues/43)) ([aa96067](https://github.com/rangrik/LeadingLight/commit/aa96067430850090d4352d41b85b1767cc0ffbc7))
+
+
+### Build and releases
+
+* **deps:** bump the actions group across 1 directory with 2 updates ([#4](https://github.com/rangrik/LeadingLight/issues/4)) ([45a98e1](https://github.com/rangrik/LeadingLight/commit/45a98e1b4ac4cdde73335f54cd0083cf415f3abe))
+
 ## [0.7.1](https://github.com/rangrik/LeadingLight/compare/v0.7.0...v0.7.1) (2026-11-17)
 
 
