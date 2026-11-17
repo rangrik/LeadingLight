@@ -36,6 +36,8 @@ PR or release. Publication therefore runs as a reusable job in the same workflow
 Bot-created release PR checks may need manual approval or dispatch; merge validation runs
 before any release is created, and the exact release commit is checked again.
 You can also run **Checks** manually on the release PR's branch before merging.
+Each check pass saves its browser videos and report under a separate artifact name;
+release-commit checks and retries keep the earlier recordings intact.
 
 ## Retry a failed release
 
