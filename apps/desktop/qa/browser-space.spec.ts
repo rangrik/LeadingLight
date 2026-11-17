@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 
 // The browser space under the QA flag, with the stand-in engine (lib/native-browser.ts): pages are
 // placeholders, so these check the space's own logic, not WebKit's.
-const tabs = (page: Page) => page.getByRole("list", { name: "Tabs" }).getByRole("button", { name: /^(?!More for )/ });
+const tabs = (page: Page) => page.getByRole("list", { name: "Tabs" }).getByRole("button", { name: /^(?!More for |Close )/ });
 const bar = (page: Page) => page.getByRole("combobox", { name: "Search or enter address" });
 
 async function open(page: Page) {

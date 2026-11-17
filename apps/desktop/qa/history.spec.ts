@@ -8,7 +8,8 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await page.getByRole("textbox", { name: "Title" }).fill("Launch notes");
   await page.getByRole("textbox", { name: "Title" }).press("Enter");
   await page.keyboard.type("First draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Save milestone" }).click();
   await page.getByLabel("Milestone name").fill("Before review");
   await page.getByRole("button", { name: "Save milestone", exact: true }).click();
@@ -19,7 +20,8 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await page.waitForTimeout(750);
   await page.reload();
   await expect(body).toContainText("Reviewed draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Page history" }).click();
   await page.getByRole("button", { name: /Before review/ }).click();
   await expect(page.getByRole("textbox", { name: "Version preview" })).toContainText("First draft");
@@ -27,7 +29,8 @@ test("milestones restore without erasing history or attribution", async ({ page 
   await expect(page.getByRole("button", { name: /Restored version/ })).toBeVisible();
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(body).toContainText("First draft");
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Inspect authorship" }).click();
   const authorship = page.getByRole("dialog", { name: "Authorship", exact: true });
   await expect(authorship).toContainText("You");
@@ -54,7 +57,8 @@ test("an agent's words remain distinct after a human inserts text", async ({ pag
   await page.keyboard.type(" My addition.");
   await expect(body.locator('[data-origin="agent"]')).toContainText(["Agent conclusion."]);
   await expect(body.locator('[data-origin="human"]')).toContainText(["My opening.", " My addition."]);
-  await page.getByRole("button", { name: "History and authorship" }).click();
+  await page.getByRole("button", { name: "Page actions" }).click();
+  await page.getByRole("menuitem", { name: "History and authorship" }).hover();
   await page.getByRole("menuitem", { name: "Page history" }).click();
   await expect(page.getByRole("button", { name: /Claude added conclusion/ })).toBeVisible();
 });

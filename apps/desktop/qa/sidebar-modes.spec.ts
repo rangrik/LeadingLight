@@ -41,7 +41,7 @@ test('modes preserve a mixed split and provide just one sidebar toggle', async (
   await expect(panes(page)).toHaveCount(2);
   await expect(toggle(page)).toHaveCount(1);
   await toggle(page).click();
-  await expect(page.locator('[data-sidebar-modes]')).toBeInViewport({ ratio: 0 });
+  await expect(page.locator('[data-sidebar-modes]')).not.toBeInViewport();
   await expect(toggle(page)).toHaveCount(1);
   await toggle(page).click();
   await mode(page, 'Notes').click();
