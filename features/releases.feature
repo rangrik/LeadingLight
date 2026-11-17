@@ -27,6 +27,12 @@ Feature: Versioned GitHub releases
     And the release carries the build and the manifest its install link reads
     And nothing goes to TestFlight or App Store Connect
 
+  Scenario: Keep recordings from both release checks
+    Given a merged release runs checks before preparation and again for the exact release commit
+    When both passes upload their browser videos and reports
+    Then artifact names identify the initial pass, the pinned release commit and the run attempt
+    And rerunning the workflow keeps the earlier attempt's recordings
+
   Scenario: A signing secret is missing
     Given the Developer ID certificate or the App Store Connect key is not in the repository's secrets
     When the Apple Silicon build reaches signing
