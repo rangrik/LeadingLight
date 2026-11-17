@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/rangrik/LeadingLight/compare/v0.6.1...v0.7.0) (2026-11-17)
+
+
+### Features
+
+* share read-only pages and keep update alerts visible ([#36](https://github.com/rangrik/LeadingLight/issues/36)) ([c24ffba](https://github.com/rangrik/LeadingLight/commit/c24ffba928d4bb0eff9699231d861ecd005f0a90))
+
 ## [0.6.1](https://github.com/rangrik/LeadingLight/compare/v0.6.0...v0.6.1) (2026-11-16)
 
 
