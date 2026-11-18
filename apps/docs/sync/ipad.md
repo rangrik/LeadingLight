@@ -46,6 +46,12 @@ Paste a fenced `mermaid` block or type `/mermaid` and tap **Mermaid diagram**. E
 the live preview. Tap **Hide source** to read the diagram by itself, or **Show source** to edit again.
 Diagrams render locally in the installed app, including offline, and follow light and dark appearance.
 
+## Search and create
+
+Tap **Search library** in the sidebar or the magnifying glass in the toolbar when the sidebar is closed. Choose **Pages**, **Types** or **Create** to narrow the same search. Your words stay in the field as you switch. With a hardware keyboard, use **⌘K** to open search and **⌘1–4** to change categories.
+
+Tap **New page** for a blank note, or type **new meeting Friday review** and choose the result to create a Meeting with that title. The selected result also offers **Open beside** for working in two panes.
+
 ## Narrow windows
 
 The app fits the window it is given, including a narrow window beside another app.

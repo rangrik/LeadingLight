@@ -191,3 +191,12 @@ Feature: LeadingLight on iPad
     Then the sidebar stays inset with each page on a rounded card
     And no glass, fades or iOS spacing apply
     And the tab strip keeps its divider line
+
+  Scenario: Search by touch with the sidebar closed
+    Given the iPad sidebar is closed
+    When I tap Search library in the workspace toolbar
+    Then All, Create, Pages and Types are in reach above the software keyboard
+    And switching category keeps my words
+    When I choose a custom type or enter "new meeting Friday review"
+    Then the new page uses that type in the focused pane
+    And I can open a search result beside the page or dismiss search by touch

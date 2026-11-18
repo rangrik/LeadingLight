@@ -204,3 +204,35 @@ test("safe areas continue the sidebar and the page", async ({ page }) => {
     expect(got).toMatchObject({ top: 0, bottom: got.height, side: got.inner, body: got.card });
   }
 });
+
+// A collapsed sidebar must still leave a touch path to search and split-pane results.
+test.describe("iPad workspace search", () => {
+  test.use({ hasTouch: true, viewport: { width: 1024, height: 820 } });
+  test("search, create a Meeting and reopen a note beside it", async ({ page }) => {
+    await page.goto("/?ipad");
+    await page.getByRole("button", { name: "Hide sidebar" }).tap();
+    const search = page.getByRole("button", { name: "Search library", exact: true });
+    await search.tap();
+    const dialog = page.getByRole("dialog", { name: "Search library" });
+    const field = dialog.getByRole("combobox");
+    await expect(field).toBeFocused();
+    await dialog.getByRole("button", { name: "New page" }).tap();
+    const title = page.getByRole("textbox", { name: "Title", exact: true });
+    await title.fill("Trip checklist");
+    await search.tap();
+    await field.fill("Trip");
+    await dialog.getByRole("radio", { name: "Pages" }).tap();
+    await expect(field).toHaveValue("Trip");
+    await dialog.getByRole("radio", { name: "Create" }).tap();
+    await field.fill("new meeting Friday review");
+    await dialog.getByRole("option", { name: "Meeting “Friday review”" }).tap();
+    await expect(title).toHaveValue("Friday review");
+    await page.keyboard.press("Meta+k");
+    await field.fill("Trip checklist");
+    await dialog.getByRole("button", { name: /Open beside/ }).tap();
+    await expect(page.locator("[data-pane]:visible")).toHaveCount(2);
+    await search.tap();
+    await dialog.getByRole("button", { name: "Close search" }).tap();
+    await expect(dialog).toBeHidden();
+  });
+});

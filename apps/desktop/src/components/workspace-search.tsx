@@ -1,6 +1,6 @@
 // COSS p-command-1, with workspace groups, recent pages, type creation and page actions.
 // Changes: shared shortcut state, asynchronous body search, and split-aware navigation.
-import { ArrowLeft, ArrowRight, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pin, PinOff, Plus, SquareSplitHorizontal, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AutocompleteRow } from "@leadinglight/ui/components/autocomplete";
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
@@ -15,11 +15,12 @@ import { available, browserFocused, enter, hostOf, leave, refocus, select, space
 import { pageLabel } from "~/lib/labels";
 import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
+import { phone, useMobile } from "~/lib/platform";
 import { focusedPage, openFrom } from "~/lib/panes";
 import { iconFor, isPageView, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { ABOUT } from "~/lib/tail-memory";
-import { createNote, openSearch, searchScopes, searchViews, workspaceSearch, type SearchView } from "~/lib/workspace-search";
+import { closeSearch, createNote, openSearch, searchScopes, searchViews, workspaceSearch, type SearchView } from "~/lib/workspace-search";
 
 type Modifiers = { shiftKey: boolean; metaKey: boolean };
 type Item = { value: string; label: string; sub?: string; icon: ReactNode; page?: ObjectSummary; beside?: boolean; run(e: Modifiers): void | Promise<void> };
@@ -55,7 +56,7 @@ export function WorkspaceSearch({ returnFocus }: { returnFocus: RefObject<HTMLEl
   };
   return (
     <CommandDialog open={!!state} onOpenChange={(open) => { if (!open) close(); }}>
-      <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={restoreFocus}>
+      <CommandDialogPopup aria-label="Search library" className="ll-workspace-search max-h-[min(38rem,85svh)]" finalFocus={restoreFocus}>
         {state && <SearchContents view={state.view} navigate={navigate} />}
       </CommandDialogPopup>
     </CommandDialog>
@@ -66,6 +67,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const { pages, types } = space.use();
   const { tabs } = browser.use();
   const canBrowse = available.use();
+  const mobile = useMobile();
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
@@ -171,7 +173,10 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   };
   const searching = searchPages && !!q && body.query !== q;
   const renderItem = (item: Item) => (
-    <CommandItem className="min-w-0 gap-2" key={item.value} aria-label={item.label} aria-current={item.page && item.page.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onClick={(e) => {
+    <CommandItem className="min-w-0 gap-2" key={item.value} aria-label={item.label} aria-current={item.page && item.page.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onPointerDownCapture={(event) => {
+      // WebKit sends the tap's click only if the touch pointerdown keeps its default.
+      if (event.pointerType === "touch") event.preventBaseUIHandler();
+    }} onClick={(e) => {
       const keys = e.detail === 0 ? modifiers.current : e;
       modifiers.current = plain;
       void item.run(keys);
@@ -181,24 +186,27 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   );
   return (
     <Command key={`${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
-      <div className="relative flex items-center gap-1 pe-3">
-        <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
-          modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
-          if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
-            e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
-          }
-        }} /></div>
-        {view !== "create" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
-      </div>
-      <div className="relative px-3 pb-2">
-        <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
-          {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
-            <Tooltip key={v}>
-              <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
-              <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
-            </Tooltip>
-          ))}
-        </SegmentedControl>
+      <div className="ll-search-controls">
+        <div className="relative flex items-center gap-1 pe-3">
+          <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
+            modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
+            if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
+              e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
+            }
+          }} /></div>
+          {view !== "create" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
+          {mobile && <Button size="icon" variant="ghost" aria-label="Close search" onClick={closeSearch}><X /></Button>}
+        </div>
+        <div className="relative px-3 pb-2">
+          <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
+            {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
+              <Tooltip key={v}>
+                <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
+                <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
+              </Tooltip>
+            ))}
+          </SegmentedControl>
+        </div>
       </div>
       <CommandPanel>
         <CommandEmpty>{searching ? "Searching page text…" : view === "create" || view === "types" ? "No matching types." : view === "tabs" ? "No matching browser tabs." : q ? "No matches." : view === "search" ? "No recent pages yet." : "No pages yet."}</CommandEmpty>
@@ -212,12 +220,12 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
         </CommandList>
       </CommandPanel>
       {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
-      <CommandFooter className="relative flex-wrap px-3 py-2">
-        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
+      {(!mobile || (!phone && active?.beside)) && <CommandFooter className="relative flex-wrap px-3 py-2">
+        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span>{!mobile && <Kbd>⇧↩</Kbd>}</Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
         {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
-        <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>
-      </CommandFooter>
+        {!mobile && <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>}
+      </CommandFooter>}
     </Command>
   );
 }

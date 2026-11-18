@@ -183,6 +183,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
               {!folded && leaf.page !== PERSONAL_BROWSER && (
               <PanelHeader
+                workspace
                 after={mail ? <MailCount view={leaf.page} /> : !phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
                 icon={mail ? <Mail className="size-4 shrink-0" /> : shown.icon && <PageIconView icon={shown.icon} />}

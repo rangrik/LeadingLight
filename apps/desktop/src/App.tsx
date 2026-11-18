@@ -375,7 +375,7 @@ export default function App() {
               <PaneArea windowToggle={mac} />
             ) : (
               <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", CARD)}>
-                <PanelHeader current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
+                <PanelHeader workspace current={null} sidebarOpen={sidebarOpen} toggle={!mac} />
                 <Empty className="min-h-0 flex-1">
                   <EmptyHeader>
                     <EmptyMedia variant="icon">

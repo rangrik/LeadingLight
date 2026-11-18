@@ -102,6 +102,19 @@ html[data-ipad] {
 [data-ipad] .ll-capture-overlay { top: calc(var(--ll-top) + 12px); }
 [data-ipad] .ll-capture-box { max-height: calc(var(--ll-height) - 24px); }
 [data-ipad] [data-page-scroller] { overscroll-behavior: contain; scroll-padding-top: 12px; scroll-padding-bottom: 24px; }
+/* Keep search and its scrollable results inside the keyboard's visible area. */
+[data-ipad] [data-slot="command-dialog-viewport"]:has(> .ll-workspace-search) {
+  container: library / size; top: var(--ll-top); bottom: auto; height: var(--ll-height);
+  padding: min(3dvh, 24px) max(12px, var(--ll-safe-right)) 8px max(12px, var(--ll-safe-left));
+}
+[data-ipad] .ll-workspace-search { max-height: min(38rem, 100%); }
+[data-ipad] .ll-workspace-search :is(button, [data-slot="command-item"], [role="radio"]) { min-height: 44px; }
+[data-ipad] .ll-workspace-search :is([role="radio"], [aria-label="Close search"]) { min-width: 44px; }
+@container library (min-width: 565px) and (max-height: 230px) {
+  .ll-search-controls { display: flex; align-items: center; }
+  .ll-search-controls > :first-child { flex: 1; min-width: 0; padding-inline-end: 0; }
+  .ll-search-controls > :last-child { padding-block-end: 0; }
+}
 /* The keyboard changes the visible region without changing viewport units. */
 [data-ipad] .ll-mobile-agents {
   container: mobile-agents / size;
