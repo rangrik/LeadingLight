@@ -110,6 +110,21 @@ html[data-ipad] {
   height: min(850px, var(--ll-height)); max-height: var(--ll-height); width: auto; margin-inline: auto;
   transform: none; border: 0;
 }
+/* Remote work stays beside the page and grows only as the conversation needs room. */
+[data-slot="dialog-viewport"]:has(> .ll-remote-work) { pointer-events: none; }
+.ll-mobile-agents.ll-remote-work {
+  position: fixed; inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto;
+  width: min(36rem, calc(100% - 24px)); height: auto; max-height: min(72dvh, 46rem);
+  container-type: normal; pointer-events: auto;
+}
+[data-ipad] .ll-remote-work {
+  bottom: auto; top: calc(var(--ll-top) + var(--ll-height) - 8px);
+  max-height: calc(var(--ll-height) - 16px); transform: translateY(-100%);
+}
+.ll-remote-work [data-slot="dialog-header"] { padding: 14px 48px 10px 16px; }
+.ll-remote-work [data-slot="dialog-title"] { font-size: 1rem; line-height: 1.4; }
+.ll-remote-work [aria-label="Conversation messages"]:empty { display: none; }
+.ll-remote-work .ll-mobile-agent-request { flex: 1 1 auto; max-height: none; }
 [data-ipad] .ll-mobile-agents > [aria-label="Close"] { width: 44px; height: 44px; }
 [data-ipad] .ll-mobile-agents > [aria-label="Close"]::after { min-width: 100%; min-height: 100%; }
 @container mobile-agents (height < 36rem) {

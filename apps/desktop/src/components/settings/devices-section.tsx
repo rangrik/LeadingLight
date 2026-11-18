@@ -9,7 +9,7 @@ import { Switch } from "@leadinglight/ui/components/switch";
 import { toastManager } from "@leadinglight/ui/components/toast";
 import { ConfirmDialog } from "@/views/settings/confirm";
 import { MobileAgentsButton } from "~/components/mobile-agents";
-import { connectMobileAgents, disconnectMobileAgents, mobileAgents, refreshMobileAgents } from "~/lib/mobile-agents";
+import { connectMobileAgents, disconnectMobileAgents, mobileAgents, refreshMobileAgents, useRemoteWork } from "~/lib/mobile-agents";
 import { platform, useMobile } from "~/lib/platform";
 import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { ask } from "~/lib/project-runtime/transport";
@@ -24,8 +24,10 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 // Project agents on a Mac, reached from iPhone or iPad. Shown at the foot of Account and devices.
 export function MobileAgentAccess() {
   const mobile = useMobile(), os = platform.use();
+  const beta = useRemoteWork(), { user } = useCloud();
+  if (mobile && user?.remoteWork === false) return null;
   // Sharing a Mac needs the Mac's runtime, which a browser has only in development.
-  return mobile ? <ConnectMac /> : os === "macos" || import.meta.env.DEV ? <ShareMac /> : null;
+  return mobile ? <ConnectMac /> : os === "macos" || import.meta.env.DEV ? <>{beta && <ConnectMac />}<ShareMac /></> : null;
 }
 
 function ShareMac() {
@@ -90,6 +92,7 @@ function ShareMac() {
 }
 
 function ConnectMac() {
+  const mobile = useMobile();
   const state = mobileAgents.use();
   const notifications = mobileNotifications.use();
   const [code, setCode] = useState("");
@@ -112,11 +115,11 @@ function ConnectMac() {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(disconnectMobileAgents)}>Disconnect</Button>
       </SettingsRow>
       <div className="py-4"><MobileAgentsButton /></div>
-      <SettingsRow label="Agent notifications" description={notifications.registered ? "Alerts are enabled for permissions and questions. Details stay inside the app." : "Get a generic alert when an agent needs your response, including when this app is closed."}>
+      {mobile && <SettingsRow label="Agent notifications" description={notifications.registered ? "Alerts are enabled for permissions and questions. Details stay inside the app." : "Get a generic alert when an agent needs your response, including when this app is closed."}>
         <Switch aria-label="Agent notifications" checked={notifications.enabled} disabled={notifications.busy} onCheckedChange={(value) => void setMobileNotifications(value)} />
-      </SettingsRow>
+      </SettingsRow>}
     </SettingsGroup>}
-    {(notifications.error || notifications.cleanupError) && <div className="space-y-2 py-3"><p role="status" className="text-sm text-muted-foreground">{notifications.cleanupError || notifications.error}</p><Button size="sm" variant="outline" disabled={notifications.busy} onClick={() => void refreshMobileNotifications()}>Check notifications</Button></div>}
+    {mobile && (notifications.error || notifications.cleanupError) && <div className="space-y-2 py-3"><p role="status" className="text-sm text-muted-foreground">{notifications.cleanupError || notifications.error}</p><Button size="sm" variant="outline" disabled={notifications.busy} onClick={() => void refreshMobileNotifications()}>Check notifications</Button></div>}
     {(error || state.error) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || state.error}</p>}
     <p className="text-sm text-muted-foreground">No mobile sign-in or note sync is needed. Agent processes and files stay on your Mac; Claude and Codex still contact their model providers.</p>
   </>;

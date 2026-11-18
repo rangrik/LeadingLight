@@ -98,3 +98,11 @@ iOS controls alert delivery; requests remain available in the app when alerts ar
 Privately installed Ad Hoc builds support these notifications; App Store submission is not required.
 
 The conversation and approval controls resize above the keyboard, including in landscape.
+
+## Remote work beta
+
+Turn on **Settings → Account and devices → Beta features → Remote work** on a signed-in device. The choice follows your account across devices. A MacBook can pair to your home Mac with the same connection code as an iPhone or iPad.
+
+Open **Remote work** from a project task, the sidebar, or **Notes** on iPhone. A task opens its own conversation in its project. From the sidebar, choose a shared project if several are available. The bottom of the conversation names the Mac and project. Type what you want done and send it. **Agent options** lets you choose the agent and model for a new conversation or insert a prompt to edit before sending.
+
+A permission request or question replaces the message field until you answer. If the Mac goes offline, your draft stays on this device. If a folder is missing, link the project folder on the host Mac and share it in **Account and devices**. Turning the beta off closes the beta workspace. Work already running stays on the host.

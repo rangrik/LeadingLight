@@ -139,7 +139,7 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
         (route, method),
         ("config" | "me" | "sync" | "sync-part" | "calendar/accounts" | "gmail/accounts" | "native/approval" | "devices", "GET")
             | (
-                "publications/status" | "publications/publish" | "publications/unpublish" | "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
+                "account/remote-work" | "publications/status" | "publications/publish" | "publications/unpublish" | "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
@@ -438,6 +438,7 @@ mod tests {
         }
         assert!(endpoint("native/approve", "POST").is_ok());
         assert!(endpoint("devices/name", "POST").is_ok());
+        assert!(endpoint("account/remote-work", "POST").is_ok());
         for action in ["status", "publish", "unpublish"] {
             assert!(endpoint(&format!("publications/{action}"), "POST").is_ok());
         }

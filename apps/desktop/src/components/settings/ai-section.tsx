@@ -24,12 +24,15 @@ import { type RuntimeStatus, runtimeStatus } from "~/lib/project-runtime/transpo
 import { space } from "~/lib/space";
 import { beat, lastBeat, openAbout, readAfter, readsOn, readsOnByDefault } from "~/lib/tail";
 import { ABOUT } from "~/lib/tail-memory";
+import { useCloud } from "~/lib/cloud";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { openSection } from "~/components/settings/settings-view";
 
 // Settings › AI: the Claude Code sign-in the answers come through, and how they are asked.
 export function AiSection() {
   const mobile = useMobile();
+  const { user } = useCloud();
+  if (mobile && user?.remoteWork === false) return <SettingsPage title="AI" description="Manage remote work in your account settings."><Button variant="outline" onClick={() => openSection("account")}>Account and devices</Button></SettingsPage>;
   return mobile ? <SettingsPage title="AI" description="Connect a Mac inside LeadingLight to run project agents with its Claude Code or Codex account."><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => openSection("account")}>Connect a Mac</Button><MobileAgentsButton /></div></SettingsPage> : <DesktopAiSection />;
 }
 

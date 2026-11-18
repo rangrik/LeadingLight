@@ -14,6 +14,8 @@ import { agentOfTask, assign, isTask, NO_TASK_TYPE, projectFor, taskTypes } from
 import { codex, effortFor, loadCodex } from "~/lib/codex";
 import { pageLabel } from "~/lib/labels";
 import { openBeside } from "~/lib/panes";
+import { MobileAgentsButton } from "~/components/mobile-agents";
+import { useRemoteWork } from "~/lib/mobile-agents";
 import { folders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { chatView, pageOf, space, typeOf } from "~/lib/space";
@@ -23,17 +25,17 @@ import { runOf, subtasksOf } from "~/lib/work";
 // The dialog is COSS's "Dialog with form"; how the work goes shows under the task's title (work-panel.tsx).
 
 // The page's project, while projects are on: what Assign needs.
-export function useProject(pageId: string) {
+export function useProject(pageId: string, remote = false) {
   const { enabled } = projectPrefs.use();
   const all = folders.use();
   const { pages } = space.use();
-  const [project, setProject] = useState<string>();
+  const [resolved, setResolved] = useState<{ pageId: string; project?: string }>();
   useEffect(() => {
     let live = true;
-    if (enabled) void projectFor(pageId).then((p) => live && setProject(p));
+    if (enabled || remote) void projectFor(pageId, remote ? (id) => pageOf(id)?.typeId === "project" || all.has(id) : undefined).then((p) => live && setResolved({ pageId, project: p }));
     return () => void (live = false);
-  }, [enabled, all, pages, pageId]);
-  return enabled ? project : undefined;
+  }, [enabled, all, pages, pageId, remote]);
+  return (enabled || remote) && resolved?.pageId === pageId ? resolved.project : undefined;
 }
 
 // The project chat on one conversation, beside the page.
@@ -214,11 +216,13 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
 // In the line under the title, on a page of a project not yet given to an agent.
 export function AssignButton({ pageId }: { pageId: string }) {
   const [open, setOpen] = useState(false);
-  const project = useProject(pageId);
+  const remote = useRemoteWork();
+  const project = useProject(pageId, remote);
   const page = pageOf(pageId);
   // A task whose subtasks are at work is theirs; with none started, it can still go to one agent whole.
   // The project itself is never the task: its pages and tasks are.
-  if (!project || project === pageId || !page || page.typeId === "notebook" || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
+  if (!project || (!remote && project === pageId) || !page || page.typeId === "notebook" || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
+  if (remote) return <MobileAgentsButton page={{ project, projectTitle: pageLabel(pageOf(project)?.title || ""), task: pageId !== project ? { id: pageId, title: page.title } : undefined }} />;
   return (
     <>
       <Button className="text-muted-foreground" onClick={() => setOpen(true)} size="sm" variant="ghost">

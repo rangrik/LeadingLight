@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { isNative } from './platform';
 
 type Config = { allowed?: boolean; ready: boolean; providers: { id: string; name: string }[] };
-export type Account = { id: string; name: string; email?: string; provider?: string };
+export type Account = { id: string; name: string; email?: string; provider?: string; remoteWork?: boolean };
 // `known` is the account this device's notes use, kept so a signed-out or offline device can still name it.
 // `left` means signed out on purpose; `ended` means the service said the sign-in is no longer good.
 type State = { initialized: boolean; verifying: boolean; config: Config; user: Account | null; known: (Account & { left?: boolean }) | null; ended: boolean; error: string; sync: string };
@@ -39,7 +39,18 @@ export async function cloudApi<T>(path: string, body?: unknown, method = body ? 
   if (!response.ok) throw new CloudError(result.error || 'Cloud is unavailable.', response.status);
   return result;
 }
+let accountRevision = 0;
+export async function setRemoteWork(enabled: boolean) {
+  const owner = state.user?.id;
+  if (!owner) throw new Error('Sign in to change this setting.');
+  await cloudApi('account/remote-work', { enabled }, 'POST', owner);
+  if (state.user?.id === owner) {
+    accountRevision++;
+    setCloud({ user: { ...state.user, remoteWork: enabled } });
+  }
+}
 export async function refreshCloud() {
+  const revision = accountRevision;
   try {
     const config = await cloudApi<Config>('config');
     let ended = false;
@@ -48,6 +59,7 @@ export async function refreshCloud() {
       ended = Boolean(state.known && !state.known.left);
       return null;
     }) : null;
+    if (revision !== accountRevision) return;
     if (user) remember({ id: user.id, name: user.name, email: user.email, provider: user.provider });
     setCloud({ initialized: true, config, user, ended, error: '' });
   } catch (e) { setCloud({ initialized: true, error: e instanceof Error ? e.message : String(e) }); }
@@ -69,14 +81,14 @@ export async function signOut() {
   if (await isNative) {
     await cloudApi('native/revoke', {});
     (await import('./native-account')).nativeConnection.set({ pending: false, message: '' });
-    left(); setCloud({ user: null, sync: 'Off', error: '' });
+    accountRevision++; left(); setCloud({ user: null, sync: 'Off', error: '' });
     return;
   }
   const { csrfToken } = await cloudApi<{ csrfToken: string }>('auth/csrf');
   const response = await fetch('/api/auth/signout', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Auth-Return-Redirect': '1' }, body: new URLSearchParams({ csrfToken, callbackUrl: location.origin }) });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.url || new URL(result.url, location.origin).searchParams.has('error')) throw new Error('Sign-out failed. You are still signed in. Try again.');
-  left(); setCloud({ user: null, sync: 'Off' });
+  accountRevision++; left(); setCloud({ user: null, sync: 'Off' });
 }
 let started = false;
 export function startCloud() {

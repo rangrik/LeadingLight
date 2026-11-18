@@ -52,15 +52,15 @@ export function madeInside(hereId: string | undefined, typeId: string): Record<s
 }
 
 // A page's project: itself when it has a folder, else a page it relates to or one linking to it.
-export async function projectFor(pageId: string): Promise<string | undefined> {
+export async function projectFor(pageId: string, matches = linked): Promise<string | undefined> {
   const p = pageOf(pageId);
   if (!p) return;
-  if (linked(pageId)) return pageId;
+  if (matches(pageId)) return pageId;
   const near = relationsOf(p);
-  const found = near.find(linked);
+  const found = near.find(matches);
   if (found) return found;
-  for (const id of near) if (pageOf(id) && relationsOf(pageOf(id)!).some(linked)) return relationsOf(pageOf(id)!).find(linked);
-  return (await objects.containing(pageId)).find((o) => linked(o.id))?.id;
+  for (const id of near) if (pageOf(id) && relationsOf(pageOf(id)!).some(matches)) return relationsOf(pageOf(id)!).find(matches);
+  return (await objects.containing(pageId)).find((o) => matches(o.id))?.id;
 }
 
 const sessionFor = (agentId: string) => `task-${agentId.replace(/[^a-z0-9]/gi, "").slice(0, 12)}`;

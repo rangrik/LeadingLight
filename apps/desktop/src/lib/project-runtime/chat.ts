@@ -252,26 +252,27 @@ export const inRecord = (w: Window, draft: string) =>
 
 // The runtime says what changed; the chat on screen reads it again. Followed only while a chat
 // is on screen.
-const watching = new Map<string, { key: string; conv: Conversation }>();
+const watching = new Map<string, { key: string; conv: Conversation; pollHost: boolean }>();
 let unlisten: (() => void) | null = null;
 const heard = (e: RuntimeEvent) => {
   const name = (e.data?.session ?? e.data?.name) as string | undefined;
-  for (const { key, conv } of watching.values())
+  for (const { key, conv, pollHost } of watching.values())
     // Its own session's news, or a worker's it waits on.
-    if (e.type === "runtime.connected" || (name && (name === conv.session || chatOf(key).get().workers.includes(name)))) void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
+    if (!pollHost && (e.type === "runtime.connected" || (name && (name === conv.session || chatOf(key).get().workers.includes(name))))) void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
 };
 
 // Follows a chat while it is on screen: its changes, and the reply being written. The Feed follows
 // every agent's chat too, without the reply (reply: false); a chat stays followed while either does.
 const followers = new Map<string, number>();
-export function watch(key: string, conv: Conversation, { reply = true } = {}): () => void {
-  if (watching.get(key)?.conv.id !== conv.id || !followers.get(key)) watching.set(key, { key, conv });
+export function watch(key: string, conv: Conversation, { reply = true, pollHost = false } = {}): () => void {
+  if (watching.get(key)?.conv.id !== conv.id || !followers.get(key)) watching.set(key, { key, conv, pollHost });
   followers.set(key, (followers.get(key) ?? 0) + 1);
-  unlisten ??= onRuntimeEvent(heard);
+  if (!pollHost) unlisten ??= onRuntimeEvent(heard);
   void sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
   const poll = reply
     ? window.setInterval(async () => {
         if (key.startsWith("mobile:") && document.visibilityState === "hidden") return;
+        if (pollHost) await sync(key, conv).catch((err) => patch(key, { error: String(err.message ?? err) }));
         const c = chatOf(key).get();
         if (c.session?.agent_state !== "running" || !c.conv?.session) return;
         const d = await askIn<{ text?: string }>(key, "GET", `/v1/sessions/${c.conv.session}/draft`).catch(() => null);
@@ -285,7 +286,7 @@ export function watch(key: string, conv: Conversation, { reply = true } = {}): (
     if (left > 0) return void followers.set(key, left);
     followers.delete(key);
     watching.delete(key);
-    if (!watching.size) {
+    if (![...watching.values()].some((chat) => !chat.pollHost)) {
       unlisten?.();
       unlisten = null;
     }
@@ -355,7 +356,7 @@ async function sendTo(key: string, id: string, location: string, text: string, p
       else if (running && r.turn === `${conv.session}#${running.n}`) patch(key, { submissions: observeMessageSubmissionCanonical(c.submissions, [id]), steered: [...c.steered, { id, text, at: Date.now() }] });
     }
     patch(key, { conv, submissions: acceptMessageSubmission(chatOf(key).get().submissions, id) });
-    if (watching.has(key)) watching.set(key, { key, conv });
+    if (watching.has(key)) watching.set(key, { key, conv, pollHost });
     await sync(key, conv);
     return conv;
   } catch (err) {
@@ -431,7 +432,7 @@ async function change(key: string, route: "mode" | "model", next: Partial<Conver
   if (!c.conv?.session || !c.session || c.session.exited) return;
   await ask("POST", `/v1/sessions/${c.conv.session}/${route}`, next);
   const conv = { ...c.conv, ...next };
-  if (watching.has(key)) watching.set(key, { key, conv });
+  if (watching.has(key)) watching.set(key, { key, conv, pollHost });
   patch(key, { conv });
 }
 export const setMode = (key: string, mode: string) => change(key, "mode", { mode });
