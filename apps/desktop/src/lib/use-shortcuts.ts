@@ -20,7 +20,8 @@ import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
-export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+const DIALOGS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed])`;
+export const COVERS = `${DIALOGS}, ${POPUP}`;
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
@@ -44,7 +45,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         if (useStore.getState().view.kind === "settings") closeSettings();
         return openSearch();
       }
-      if ((id === "new-page" || id === "new-tab") && shown(COVERS)) return;
+      if ((id === "new-page" || id === "new-tab") && shown(DIALOGS)) return;
       if (id === "browser" && (useStore.getState().view.kind === "settings" || shown(COVERS))) return;
       if (useStore.getState().view.kind !== "settings") {
         // The browser space in front takes the keys that act on a tab (lib/browser-space.ts).

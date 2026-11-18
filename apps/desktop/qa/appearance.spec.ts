@@ -141,7 +141,8 @@ test("Meta+Alt+/ opens the Keyboard shortcuts sheet with our table", async ({ pa
   await page.keyboard.press("Meta+Alt+/");
   const sheet = page.getByRole("dialog");
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByText("New page")).toBeVisible();
+  await expect(sheet.getByText("New note or browser tab in the focused pane")).toBeVisible();
+  await expect(sheet.getByText("Search pages, types and browser tabs")).toBeVisible();
   await expect(sheet.getByText("Settings", { exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
