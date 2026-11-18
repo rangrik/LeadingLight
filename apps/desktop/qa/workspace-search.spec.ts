@@ -206,7 +206,7 @@ test('search restores the editor and focuses a chosen note', async ({ page }) =>
   await page.keyboard.type(' after');
   await expect(body).toHaveText('Before after');
   await body.click();
-  await page.keyboard.press('Home');
+  for (let i = 0; i < 'Before after'.length; i++) await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowRight');
   await expect.poll(() => page.evaluate(() => Reflect.get(window, '__editor').state.selection.from)).toBe(2);
   await page.keyboard.press('Meta+k');
