@@ -529,6 +529,7 @@ test("remote task keeps its draft through an unshare and reopens its conversatio
   await page.route("**/api/me", (r) => r.fulfill({ json: { id: "demo-owner", name: "Demo" } }));
   await page.goto("/");
   await page.getByRole("button", { name: "Remote work", exact: true }).first().waitFor();
+  await page.waitForFunction(async () => (await import(String("/src/lib/space.ts"))).space.get().types.length > 0);
   const task = await page.evaluate(async () => {
     const { createPage } = await import(String("/src/lib/space.ts"));
     const { openPage } = await import(String("/src/lib/panes.ts"));
