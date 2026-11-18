@@ -1,11 +1,11 @@
 ---
-title: Agents on your Mac from iPhone and iPad
+title: Remote work on your Mac
 description: Pair inside LeadingLight and control project agents running on your own Mac.
 ---
 
-# Agents on your Mac from iPhone and iPad <Badge type="warning" text="Preview" />
+# Remote work on your Mac
 
-The installed iPhone and iPad apps can start, read, answer and stop project agents on your Mac.
+The installed Mac, iPhone and iPad apps can start, read, answer and stop project agents on your Mac.
 The Mac runs Claude Code or Codex with your existing sign-in and keeps the project files and
 conversation. You only need LeadingLight on each device. Note sync is optional.
 
@@ -15,11 +15,11 @@ conversation. You only need LeadingLight on each device. Note sync is optional.
    LeadingLight account on the Mac in **Settings → Account and devices**. Your mobile device pairs with a
    code; it does not need a separate account or VPN app.
 2. On the Mac, enable project chats in **Settings → AI**, then link a page to a project folder.
-3. Further down that page, under **Agents from iPhone and iPad**, choose the projects to share, then enable **Mobile access**.
+3. In **Settings → Account and devices → Share this Mac**, choose the projects to share, then enable **Mobile access**.
 4. Press **Copy code**. In LeadingLight on your iPhone or iPad, open **Settings → Account and devices**,
    paste it into **Mac connection code**, and press **Connect Mac**.
-5. Open **Agents on Mac** from **Notes** on iPhone, the sidebar on iPad, or Account and devices. Choose a project and a conversation,
-   or start **New chat** with Claude Code or Codex. The provider must already be installed and
+5. Open **Remote work** from **Notes** on iPhone, the sidebar on iPad, or Account and devices. A single shared project opens directly. Choose a conversation
+   or send a new request with Claude Code or Codex. The provider must already be installed and
    signed in on the Mac.
 
 Connection codes are secrets. They authorize control of the selected project agents from devices
@@ -99,10 +99,10 @@ Privately installed Ad Hoc builds support these notifications; App Store submiss
 
 The conversation and approval controls resize above the keyboard, including in landscape.
 
-## Remote work beta
+## Working from another device
 
-Turn on **Settings → Account and devices → Beta features → Remote work** on a signed-in device. The choice follows your account across devices. A MacBook can pair to your home Mac with the same connection code as an iPhone or iPad.
+Pair a MacBook with the same connection code as an iPhone or iPad. Only the host Mac needs a LeadingLight account.
 
 Open **Remote work** from a project task, the sidebar, or **Notes** on iPhone. A task opens its own conversation in its project. From the sidebar, choose a shared project if several are available. The bottom of the conversation names the Mac and project. Type what you want done and send it. **Agent options** lets you choose the agent and model for a new conversation or insert a prompt to edit before sending.
 
-A permission request or question replaces the message field until you answer. If the Mac goes offline, your draft stays on this device. If a folder is missing, link the project folder on the host Mac and share it in **Account and devices**. Turning the beta off closes the beta workspace. Work already running stays on the host.
+A permission request or question replaces the message field until you answer. If the Mac goes offline, your draft stays on this device. If a folder is missing, link the project folder on the host Mac and share it in **Account and devices**. To cut off access, turn off **Mobile access** on the host Mac. Work already running stays on the host.

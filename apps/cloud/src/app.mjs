@@ -43,16 +43,7 @@ export function application({ env, sql, auth }) {
         if (!enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
         return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });
       }
-      if (path === '/api/me') {
-        const [prefs] = await sql`SELECT remote_work FROM account_preferences WHERE owner=${user.id}`;
-        return json({ ...user, ...await signIn(sql, user, !native), remoteWork: prefs?.remote_work, ...(native ? { expiresAt: native.expiresAt } : {}) });
-      }
-      if (path === '/api/account/remote-work' && request.method === 'POST') {
-        const { enabled } = await limitedBody(request, 128);
-        if (typeof enabled !== 'boolean') return json({ error: 'Choose on or off.' }, 400);
-        await sql`INSERT INTO account_preferences(owner,remote_work) VALUES(${user.id},${enabled}) ON CONFLICT(owner) DO UPDATE SET remote_work=EXCLUDED.remote_work`;
-        return json({ enabled });
-      }
+      if (path === '/api/me') return json({ ...user, ...await signIn(sql, user, !native), ...(native ? { expiresAt: native.expiresAt } : {}) });
       if (path === '/api/devices' || path.startsWith('/api/devices/')) return await devicesRequest({ request, sql, user, session: native?.sessionId, readBody: limitedBody });
       if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
       if (path.startsWith('/api/native/')) return await nativeAccountRequest({ request, sql, user, session: native?.sessionId, allowed: enabled(env, user.id), readBody: limitedBody });

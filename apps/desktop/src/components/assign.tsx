@@ -217,12 +217,13 @@ export function AssignDialog({ pageId, open, onOpenChange }: { pageId: string; o
 export function AssignButton({ pageId }: { pageId: string }) {
   const [open, setOpen] = useState(false);
   const remote = useRemoteWork();
+  const localFolders = folders.use();
   const project = useProject(pageId, remote);
   const page = pageOf(pageId);
   // A task whose subtasks are at work is theirs; with none started, it can still go to one agent whole.
   // The project itself is never the task: its pages and tasks are.
   if (!project || (!remote && project === pageId) || !page || page.typeId === "notebook" || agentOfTask(page) || runOf(page) || page.properties.report || page.properties.role || subtasksOf(page.id).some((s) => agentOfTask(s))) return null;
-  if (remote) return <MobileAgentsButton page={{ project, projectTitle: pageLabel(pageOf(project)?.title || ""), task: pageId !== project ? { id: pageId, title: page.title } : undefined }} />;
+  if (remote && (project === pageId || !localFolders.has(project) || page.properties.remoteWork)) return <MobileAgentsButton page={{ project, projectTitle: pageLabel(pageOf(project)?.title || ""), task: pageId !== project ? { id: pageId, title: page.title } : undefined }} />;
   return (
     <>
       <Button className="text-muted-foreground" onClick={() => setOpen(true)} size="sm" variant="ghost">

@@ -419,7 +419,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
-          {(mobile || remoteWork) && <MobileAgentsHost />}
+          {remoteWork && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>

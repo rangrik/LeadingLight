@@ -17,7 +17,7 @@ import { toastManager } from "@leadinglight/ui/components/toast";
 import { AddDeviceDialog } from "~/components/add-device";
 import { PairingSettings } from "~/components/pairing-settings";
 import { MobileAgentAccess } from "~/components/settings/devices-section";
-import { accountLine, cloudApi, setRemoteWork, signIn, signOut, useCloud } from "~/lib/cloud";
+import { accountLine, cloudApi, signIn, signOut, useCloud } from "~/lib/cloud";
 import { type Device, devices, nameDevice, refreshDevices, removeDevice } from "~/lib/devices";
 import { formatAgo } from "~/lib/format";
 import { cancelNativeConnection, nativeConnection, openNativeApproval } from "~/lib/native-account";
@@ -90,12 +90,6 @@ export function AccountSection() {
         <SettingsGroup title="Account">
           <SettingsRow description={accountLine(user) || undefined} label={user.name}>
             <Button disabled={busy} onClick={() => setOpen("out")} size="sm" variant="outline">Sign out</Button>
-          </SettingsRow>
-        </SettingsGroup>
-
-        <SettingsGroup title="Beta features">
-          <SettingsRow label="Remote work" description="Use one composer to work on a shared project on your Mac from another Mac, iPad or iPhone.">
-            <Switch aria-label="Remote work beta" checked={user.remoteWork === true} disabled={busy} onCheckedChange={(enabled) => void run(() => setRemoteWork(enabled))} />
           </SettingsRow>
         </SettingsGroup>
 

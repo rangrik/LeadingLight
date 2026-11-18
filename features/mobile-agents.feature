@@ -51,7 +51,7 @@ Feature: Control Mac project agents from iPhone and iPad
 
   Scenario: Reach Mac agents from the iPhone's Notes screen
     Given I connected my iPhone to a Mac in Settings > Devices
-    When I return to the app and open Notes > Agents on Mac
+    When I return to the app and open Notes > Remote work
     Then I can choose a shared project and start a conversation
     And its request reaches the paired Mac rather than a local runtime
     When I close the conversation and open Today

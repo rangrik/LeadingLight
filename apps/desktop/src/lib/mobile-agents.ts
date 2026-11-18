@@ -1,10 +1,9 @@
-import { useCloud } from "./cloud";
 import { platform, isNative } from "./platform";
 import { createStore } from "./state";
 
 export function useRemoteWork() {
   const os = platform.use();
-  return useCloud().user?.remoteWork === true && (os === "macos" || os === "ios" || import.meta.env.DEV);
+  return os === "macos" || os === "ios" || import.meta.env.DEV;
 }
 
 export type MacConnection = { id: string; name: string; url: string };

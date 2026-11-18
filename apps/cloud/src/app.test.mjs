@@ -71,23 +71,3 @@ test('encrypted sync stays durable, idempotent and isolated', { skip: !process.e
     assert.equal((await (await request(app, '/api/sync', a)).json()).events.length, 1);
   } finally { await sql`DELETE FROM sync_events WHERE owner IN (${a},${b})`; await sql.end(); }
 });
-
-// A beta switch follows the signed-in account across devices, including when sync is off.
-test('remote work defaults off and changes only for the authenticated owner', { skip: !process.env.TEST_DATABASE_URL }, async () => {
-  const sql = database(process.env.TEST_DATABASE_URL), a = randomUUID(), b = randomUUID();
-  const app = application({ env: { APP_ORIGIN: origin }, sql, auth });
-  const path = '/api/account/remote-work';
-  const read = async (owner) => (await (await request(app, '/api/me', owner)).json()).remoteWork;
-  try {
-    await sql.unsafe(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
-    assert.equal(await read(a), undefined);
-    assert.equal((await request(app, path, null, { enabled: true })).status, 401);
-    assert.equal((await request(app, path, a, { enabled: 'yes' })).status, 400);
-    assert.equal((await request(app, path, a, { enabled: true }, 'POST', 'https://other.test')).status, 403);
-    assert.equal((await request(app, path, a, { enabled: true })).status, 200);
-    assert.equal(await read(a), true);
-    assert.equal(await read(b), undefined);
-    assert.equal((await request(app, path, a, { enabled: false })).status, 200);
-    assert.equal(await read(a), false);
-  } finally { await sql`DELETE FROM account_preferences WHERE owner=${a}`; await sql.end(); }
-});

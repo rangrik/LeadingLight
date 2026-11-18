@@ -57,12 +57,11 @@ async function fixture(page: Page, agent = "claude", kind = "approval") {
 
 async function open(page: Page) {
   await page.goto("/?ipad");
-  const agents = page.getByRole("button", { name: "Agents on Mac", exact: true }).first();
+  const agents = page.getByRole("button", { name: "Remote work", exact: true }).first();
   const toggle = page.getByRole("button", { name: "Toggle sidebar" }).first();
   await expect(agents.or(toggle).first()).toBeVisible();
   if (!await agents.isVisible()) await toggle.click();
-  await page.getByRole("button", { name: "Agents on Mac", exact: true }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Shared Research", exact: true }).click();
+  await page.getByRole("button", { name: "Remote work", exact: true }).first().click();
 }
 
 test("decline feedback survives reload and retries the exact answer without broader permission", async ({ page }) => {
@@ -168,7 +167,7 @@ for (const storageFailure of [false, true]) test(`an answer expiring after the d
   const hold = mock.holdRequests();
   await hold.started;
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Agents on Studio Mac", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Remote work", exact: true })).toBeHidden();
   mock.requests[0].state = "expired";
   if (storageFailure) await page.evaluate(() => {
     const set = Storage.prototype.setItem;
@@ -184,9 +183,9 @@ for (const storageFailure of [false, true]) test(`an answer expiring after the d
   } else await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("ll.restore.mobile:mac-feedback:p-shared:conv-feedback") ?? "null")?.text)).toBe("Keep this unsent feedback");
   await open(page);
   const message = page.getByRole("textbox", { name: "Message to agent", exact: true });
-  await expect(message).toHaveValue("Keep this unsent feedback");
+  await expect(message).toHaveText("Keep this unsent feedback");
   await open(page);
-  await expect(message).toHaveValue("Keep this unsent feedback");
+  await expect(message).toHaveText("Keep this unsent feedback");
   expect(mock.replies()).toHaveLength(0);
   expect(mock.sends()).toHaveLength(0);
 });

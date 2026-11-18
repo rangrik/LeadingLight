@@ -5,7 +5,7 @@ import { createServer } from "vite";
 const project = "p-demoatlas";
 const connection = { id: "demo-studio", name: "Studio Mac (demo)", url: "https://example.invalid" };
 const sessions = new Map();
-let enabled = true, paired = true;
+let paired = true;
 const status = () => ({ online: paired, connection: paired ? connection : null });
 const response = (body, status = 200) => ({ status, body });
 
@@ -84,8 +84,7 @@ const server = await createServer({
           result = { url: new URL("/", `http://${req.headers.host}`).href };
         }
         else if (path === "/api/me" && left) { res.writeHead(401, { "content-type": "application/json" }); res.end('{"error":"Signed out"}'); return; }
-        else if (path === "/api/me") result = { id: "demo-owner", name: "Demo account", remoteWork: enabled };
-        else if (path === "/api/account/remote-work") { enabled = value.enabled === true; result = { enabled }; }
+        else if (path === "/api/me") result = { id: "demo-owner", name: "Demo account" };
         else if (path === "/__mobile/request") result = mac(value);
         else if (path === "/__mobile/connect") { paired = true; result = status(); }
         else if (path === "/__mobile/disconnect") { paired = false; result = null; }

@@ -58,7 +58,7 @@ See [Accounts and encrypted sync](/sync/). Sync is optional; local saving never 
 
 ## Agents on your Mac
 
-Connect your Mac in **Settings → Account and devices**, then open **Notes → Agents on Mac** to start or continue
+Connect your Mac in **Settings → Account and devices**, then open **Notes → Remote work** to start or continue
 project work. Both devices only need LeadingLight and internet access; your Mac runs the agent and keeps working when the phone
 is closed. The phone needs no workspace sign-in. See [Mac agent setup](/sync/mobile-agents).
 

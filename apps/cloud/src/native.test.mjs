@@ -40,7 +40,6 @@ async function fixture(run) {
   };
   try { await run({ sql, owner, other, app, browser, native, start, approve, claim }); }
   finally {
-    await sql`DELETE FROM account_preferences WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM mobile_connections WHERE owner IN (${owner},${other})`;
     await sql`DELETE FROM native_requests WHERE id IN ${sql(ids.length ? ids : [randomUUID()])}`;
     await sql`DELETE FROM native_sessions WHERE owner IN (${owner},${other})`;
@@ -64,16 +63,6 @@ test('native authentication preserves browser origin checks and route scope', as
     assert.equal((await call(app, path, {}, { origin, 'test-user': 'new-account', 'x-leadinglight-owner': 'previous-account' })).status, 409);
   }
 });
-
-test('installed devices change and read the same remote work preference', options, () => fixture(async ({ native, start, approve, claim }) => {
-  const a = await start(), b = await start();
-  await approve(a); await approve(b);
-  const mac = await claim(a), ipad = await claim(b);
-  for (const enabled of [true, false]) {
-    assert.equal((await native('account/remote-work', { enabled }, ipad.token)).status, 200);
-    assert.equal((await (await native('me', undefined, mac.token)).json()).remoteWork, enabled);
-  }
-}));
 
 // Native account routing must admit connection setup without admitting browser credential reuse.
 test('native Mac sessions register and remove only their own mobile connection', options, () => fixture(async ({ sql, owner, other, native, start, approve, claim }) => {

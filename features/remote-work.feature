@@ -1,14 +1,12 @@
-Feature: Remote work beta
-  Scenario: The account chooses the beta
-    Given an installed Mac app and an installed iPad app signed in to the same account
-    When I enable Remote work in Account and devices on the iPad
-    Then both devices see Remote work after their next account refresh
-    When I turn it off, or sign out
-    Then the beta workspace closes and its entry points disappear
-    And another account has its own choice
+Feature: Work on a paired Mac
+  Scenario: Pair without signing in on the controller
+    Given the home Mac has enabled access and shared a project folder
+    When I open Remote work on an unpaired Mac, iPad or iPhone
+    Then I can connect using the host's connection code
+    And the controller needs no account preference or sign-in
 
   Scenario Outline: Work runs on the shared project
-    Given I use the beta on <device> paired to Home Mac
+    Given I use <device> paired to Home Mac
     When I open Remote work with one shared project named Atlas
     Then I can write straight into one composer with Home Mac and Atlas visible
     When I send a message

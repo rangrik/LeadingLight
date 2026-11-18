@@ -49,10 +49,6 @@ CREATE TABLE IF NOT EXISTS native_sessions (
 CREATE INDEX IF NOT EXISTS native_sessions_owner ON native_sessions(owner);
 ALTER TABLE native_sessions ADD COLUMN IF NOT EXISTS last_seen timestamptz;
 ALTER TABLE native_sessions ADD COLUMN IF NOT EXISTS kind text;
-CREATE TABLE IF NOT EXISTS account_preferences (
-  owner text PRIMARY KEY,
-  remote_work boolean NOT NULL DEFAULT false
-);
 CREATE TABLE IF NOT EXISTS accounts (
   owner text PRIMARY KEY,
   provider text NOT NULL,

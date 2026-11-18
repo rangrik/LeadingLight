@@ -34,7 +34,7 @@ The first section of Settings. **Account and sync** in the sidebar, just above *
 - **Devices**: the apps signed in to your account. **Add a device** approves a new one by its code; a device renames itself here, and a browser at leadinglight.app removes one.
 - **Recovery key**: **Show…** the key and tick it as saved.
 - **Agents from a browser**: pair a web browser with the agents on your Mac.
-- **Agents from iPhone and iPad** <Badge type="info" text="Mac app" />: let your iPhone or iPad start and answer the agents on this Mac. On iPhone and iPad, this part connects to your Mac instead.
+- **Share this Mac** <Badge type="info" text="Mac app" />: let a paired Mac, iPhone or iPad start and answer agents on this Mac. On iPhone and iPad, this part connects to your Mac instead.
 
 See [Accounts and encrypted sync](/sync/), [Agents from a browser](/sync/pairing) and [Agents from iPhone and iPad](/sync/mobile-agents).
 
@@ -109,7 +109,7 @@ Claude through Claude Code, and GPT through Codex, both on this Mac. There is no
 - **Agents**: the agents you can mention with `@`, each a Claude Code agent file. **Show folder** opens the folder where yours go.
 - **Privacy**: **What leaves this Mac**, in plain words.
 
-On iPhone and iPad this section explains that agents run on your Mac, with **Connect a Mac** and **Agents on Mac**.
+On iPhone and iPad this section explains that agents run on your Mac, with **Connect a Mac** and **Remote work**.
 
 See [AI overview and setup](/ai/), [Ask Claude about a page](/ai/ask), [Tail and suggestions](/ai/tail) and [Projects linked to folders](/ai/projects).
 
