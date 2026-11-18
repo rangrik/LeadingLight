@@ -16,6 +16,7 @@ export default defineConfig({
   projects: [
     { name: "qa", grepInvert: /@gallery/ },
     { name: "gallery", grep: /@gallery/ },
+    { name: "remote-work-webkit", testMatch: "mobile-agents.spec.ts", grep: /remote work beta|remote task/, use: { browserName: "webkit" } },
     { name: "ipad-webkit", testMatch: "ipad.spec.ts", use: { browserName: "webkit" } },
     { name: "iphone-webkit", testMatch: "iphone.spec.ts", use: { browserName: "webkit", isMobile: true } },
     { name: "safari", testMatch: /(?:sidebar-modes|browser-space|history|saving|smoke|cloud(?:-guards|-large)?|offline|calendar|gmail|account-return|app-update|publishing|browser-copy|native-account|pairing(?:-integration)?|task-work-layout|project-chat-history)\.spec\.ts/, use: { browserName: "webkit" } },

@@ -6,7 +6,7 @@ test.setTimeout(60_000);
 
 // A lost network acknowledgement must not duplicate a launch or fall back to this device's runtime.
 async function mac(page: Page, paired = true) {
-  const state = { paired, online: true, dropStart: false, dropApproval: false, dropFeedback: false, failStop: false, approval: true };
+  const state = { paired, shared: true, online: true, dropStart: false, dropApproval: false, dropFeedback: false, failStop: false, approval: true };
   const calls: { method: string; path: string; body: any; expectedConnection: string }[] = [];
   const starts: any[] = [], sends: any[] = [], stops: string[] = [], local: string[] = [];
   const conversations: any[] = [], sessions: any[] = [];
@@ -25,7 +25,7 @@ async function mac(page: Page, paired = true) {
     let status = 200, body: any = {};
     const path = args.path as string, method = args.method as string, value = args.body;
     const session = path.split("/")[3];
-    if (path === "/v1/locations") body = [{ name: "p-shared", path: "/Users/test/Projects/Shared Research" }];
+    if (path === "/v1/locations") body = state.shared ? [{ name: "p-shared", path: "/Users/test/Projects/Shared Research" }] : [];
     else if (path.startsWith("/v1/conversations?")) { if (held) { const hold = held; held = undefined; hold.began(); await hold.wait; } body = conversations; }
     else if (path === "/v1/sessions" && method === "GET") body = sessions;
     else if (path === "/v1/sessions" && method === "POST") {
@@ -486,4 +486,86 @@ test("switching Macs cannot send an old pending prompt to the new connection", a
   await expect.poll(() => mock.starts.length).toBe(1);
   expect(mock.starts[0].prompt).toBe("Now run on Travel Mac");
   expect(mock.calls.find((c) => c.method === "POST" && c.path === "/v1/sessions")?.expectedConnection).toBe("mac-b");
+});
+
+// Remote review uses the paired Mac even when the controller has a runtime of its own.
+for (const device of ["mac", "ipad", "iphone"]) test(`remote work beta on ${device} starts and reviews on the paired Mac`, async ({ page }) => {
+  const mock = await mac(page);
+  await page.setViewportSize(device === "mac" ? { width: 1280, height: 800 } : device === "ipad" ? { width: 820, height: 1180 } : { width: 390, height: 844 });
+  await page.route("**/api/**", (r) => r.fulfill({ json: { devices: [], accounts: [], pairs: [], events: [] } }));
+  await page.route("**/api/config", (r) => r.fulfill({ json: { ready: true, providers: [] } }));
+  let enabled = true;
+  await page.route("**/api/me", (r) => r.fulfill({ json: { id: "demo-owner", name: "Demo", remoteWork: enabled } }));
+  await page.route("**/api/account/remote-work", (r) => { enabled = r.request().postDataJSON().enabled; return r.fulfill({ json: { enabled } }); });
+  await page.goto(device === "mac" ? "/" : `/?${device}`);
+  if (device === "iphone") await page.getByRole("button", { name: "Notes", exact: true }).last().click();
+  else await sidebar(page);
+  const entry = page.getByRole("button", { name: "Remote work", exact: true }).first();
+  await entry.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Studio Mac · Shared Research", { exact: true })).toBeVisible();
+  const input = dialog.getByRole("textbox", { name: "Message to agent" });
+  await input.fill("Review the project notes");
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await expect(input).toHaveCount(0);
+  await fs.mkdir("qa/report/remote-work", { recursive: true });
+  await page.screenshot({ path: `qa/report/remote-work/${device}-review.png` });
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
+  await expect(input).toBeVisible();
+  await input.fill("Thank you. Summarize the changes.");
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => mock.sends.length).toBe(1);
+  expect(mock.starts.map((x) => x.location)).toEqual(["p-shared"]);
+  expect(mock.calls.every((c) => c.expectedConnection === "mac-a")).toBe(true);
+  if (device !== "mac") expect(mock.local).toEqual([]);
+  if (device === "mac") {
+    await dialog.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByTestId("settings-nav-account").click();
+    await page.getByRole("switch", { name: "Remote work beta" }).click();
+    await expect.poll(() => enabled).toBe(false);
+    await page.reload();
+    await expect(entry).toHaveCount(0);
+  }
+});
+
+// A task link identifies a project on the paired host even if this controller has no folder.
+test("remote task keeps its draft through an unshare and reopens its conversation", async ({ page }) => {
+  const mock = await mac(page);
+  await page.route("**/api/config", (r) => r.fulfill({ json: { ready: true, providers: [] } }));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { id: "demo-owner", name: "Demo", remoteWork: true } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Remote work", exact: true }).first().waitFor();
+  const task = await page.evaluate(async () => {
+    const { createPage } = await import(String("/src/lib/space.ts"));
+    const { openPage } = await import(String("/src/lib/panes.ts"));
+    await createPage({ id: "shared", title: "Shared Research", typeId: "project" });
+    const task = await createPage({ title: "Review the field notes", typeId: "task", properties: { "task-project": ["shared"] } });
+    openPage(task.id); return task.id;
+  });
+  const entry = page.getByRole("button", { name: "Remote work on Review the field notes", exact: true });
+  await entry.click();
+  const dialog = page.getByRole("dialog");
+  const input = dialog.getByRole("textbox", { name: "Message to agent" });
+  await expect(input).toHaveText("Review the field notes");
+  await input.fill("Review only the November field notes");
+  mock.state.online = false;
+  await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeDisabled({ timeout: 12_000 });
+  await expect(input).toHaveText("Review only the November field notes");
+  mock.state.online = true; mock.state.shared = false;
+  await expect(dialog.getByText(/Link and share the folder for Shared Research/)).toBeVisible({ timeout: 12_000 });
+  await expect(input).toHaveCount(0);
+  expect(mock.starts).toHaveLength(0);
+  mock.state.shared = true;
+  await expect(input).toHaveText("Review only the November field notes", { timeout: 12_000 });
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
+  await expect(input).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("mobile:")) localStorage.removeItem(k); });
+  await entry.click();
+  await expect(dialog.getByText("I found the project on your Mac.", { exact: true })).toBeVisible();
+  expect(mock.starts.map((s) => s.name)).toEqual([`mobile-task-${task}`]);
 });

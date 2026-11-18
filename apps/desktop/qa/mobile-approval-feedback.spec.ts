@@ -57,8 +57,10 @@ async function fixture(page: Page, agent = "claude", kind = "approval") {
 
 async function open(page: Page) {
   await page.goto("/?ipad");
-  await expect(page.getByRole("button", { name: "Toggle sidebar" }).first()).toBeVisible();
-  if (!await page.getByRole("button", { name: "Agents on Mac", exact: true }).first().isVisible()) await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
+  const agents = page.getByRole("button", { name: "Agents on Mac", exact: true }).first();
+  const toggle = page.getByRole("button", { name: "Toggle sidebar" }).first();
+  await expect(agents.or(toggle).first()).toBeVisible();
+  if (!await agents.isVisible()) await toggle.click();
   await page.getByRole("button", { name: "Agents on Mac", exact: true }).first().click();
   await page.getByRole("dialog").getByRole("button", { name: "Shared Research", exact: true }).click();
 }

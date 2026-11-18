@@ -39,3 +39,9 @@ Feature: Remote work beta
     When Home Mac cannot be reached
     Then my draft stays with its project and I can retry when it reconnects
     And no work is sent to a different machine
+
+  Scenario: A different box shares a project with the same name
+    Given an existing task conversation on my home Mac
+    When I open that task on a device paired to another Mac
+    Then it names the original Mac if the conversation cannot be found
+    And I cannot launch a replacement agent from that task

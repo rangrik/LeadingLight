@@ -29,6 +29,8 @@ const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(loca
 const label = (p: Project) => p.path.split("/").filter(Boolean).at(-1) || p.name;
 
 export type MobileAgentTarget = { connection: string; project: string; conversation: string; request: string; generation: number };
+type TaskConnection = { host: string; name: string; project: string; conversation: string };
+const taskConnection = (id?: string) => id ? pageOf(id)?.properties.remoteWork as TaskConnection | undefined : undefined;
 type PageWork = { project: string; projectTitle: string; task?: { id: string; title: string } };
 type Panel = { open: boolean; target: MobileAgentTarget | null; owner?: string; page?: PageWork };
 const closed: Panel = { open: false, target: null };
@@ -42,7 +44,8 @@ function connectionSettings() {
 export function MobileAgentsButton({ className, page }: { className?: string; page?: PageWork } = {}) {
   const beta = useRemoteWork(), { user } = useCloud();
   if (user?.remoteWork === false) return null;
-  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => panel.set({ open: true, target: null, owner: beta ? user?.id : undefined, page })}><Bot />{beta ? "Remote work" : "Agents on Mac"}</Button>;
+  const host = taskConnection(page?.task?.id)?.name;
+  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => panel.set({ open: true, target: null, owner: beta ? user?.id : undefined, page })}><Bot />{host ? `Work on ${host}` : beta ? "Remote work" : "Agents on Mac"}</Button>;
 }
 
 export function MobileAgentsHost() {
@@ -129,8 +132,8 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
   const mobile = useMobile();
   const task = page?.task;
   const taskSession = task && `mobile-task-${task.id}`;
-  const binding = task && pageOf(task.id)?.properties.remoteWork as { host: string; project: string; conversation: string } | undefined;
-  const boundConversation = binding?.host === host && binding.project === project.name ? binding.conversation : undefined;
+  const binding = taskConnection(task?.id);
+  const boundConversation = binding?.conversation;
   const namespace = `mobile:${host}:${project.name}${task ? `:${task.id}` : ""}`;
   const [list, setList] = useState<Conversation[]>([]);
   const [conversationsLoaded, setConversationsLoaded] = useState(false);
@@ -184,7 +187,7 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
     return macAsk<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(project.name)}&limit=200`).then((all) => { sameHost(); setList(all);
       if (taskSession) {
         const own = all.find((c) => c.session === taskSession);
-        if (own) setCurrent(own.id);
+        if (own && !boundConversation) setCurrent(own.id);
       }
       setConversationsLoaded(true); return all; });
   };
@@ -267,8 +270,8 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
         const result = await macCall("POST", `/v1/sessions/${target.session}/send`, { text: intent.text, when: "now", idem_key: intent.id });
         if (result.status >= 400) { if (result.status < 500) keep(null); throw new Error((result.body as { error?: string })?.error || "The Mac has not confirmed this message. Check and retry."); }
       }
-      if (target && task && !boundConversation) {
-        const remoteWork = { host, project: project.name, conversation: target.id };
+      if (target && task && (!boundConversation || binding?.host !== host)) {
+        const remoteWork = { host, name: hostName, project: project.name, conversation: target.id };
         await editPage(task.id, { properties: (props) => ({ ...props, remoteWork }) });
       }
       keep(null);
@@ -291,8 +294,11 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
       {!online && <p role="status" className="text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
       {(error || online && (pollError || chat.error)) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || pollError || chat.error}</p>}
   </>;
+  if (binding && conversationsLoaded && !list.some((c) => c.id === binding.conversation && c.location === binding.project)) {
+    return <p role="status" className="px-4 pb-4 text-sm">This task’s conversation is unavailable here. Open its shared project on {binding.name || "the original Mac"} to continue.</p>;
+  }
   return <div className="ll-mobile-agent-chat flex min-h-0 min-w-0 flex-1 flex-col" data-testid="mobile-agent-chat" data-request={!!front || undefined}>
-    {(!beta || !task && list.length > 0 || working) && <div className="ll-mobile-agent-toolbar flex shrink-0 items-center gap-2 border-y px-4 py-2">
+    {(!beta || !waiting && (!task && list.length > 0 || working)) && <div className="ll-mobile-agent-toolbar flex shrink-0 items-center gap-2 border-y px-4 py-2">
       {!task && <Select value={current || "new"} onValueChange={(value) => { clearTarget(); setCurrent(value === "new" ? null : value); }} disabled={busy || !!pending}>
         <SelectTrigger className="min-w-0 flex-1" aria-label="Conversation"><SelectValue placeholder="New chat">{conv?.title || "New chat"}</SelectValue></SelectTrigger>
         <SelectPopup><SelectItem value="new">New chat</SelectItem>{list.map((c) => <SelectItem key={c.id} value={c.id}>{c.title || c.agent}</SelectItem>)}</SelectPopup>
@@ -303,7 +309,7 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
         setBusy(true); setError("");
         void macAsk("POST", `/v1/sessions/${chat.conv.session}/interrupt`).catch((e) => setError(message(e))).finally(() => setBusy(false));
       }}><Square />Stop</Button>}
-      {beta && working && <span role="status" className="text-xs text-muted-foreground">{waiting ? "Needs review" : "Working"}</span>}
+      {beta && working && <span role="status" className="text-xs text-muted-foreground">Working</span>}
     </div>}
     <div ref={messages} className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-label="Conversation messages">
       {!front && <>{notice}{savedFeedback}</>}
@@ -316,8 +322,8 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
       {front.kind === "question" ? <QuestionCard request={front} answer={draft?.answer ?? {}} index={draft?.index ?? 0} busy={answerBusy} onAnswer={(a, i, submit) => answer(key, front, a, i, submit)} /> : <ApprovalCard request={front} busy={answerBusy} allowedChoices={["allow", "deny", "approve_each", "keep_planning"]} feedback={{ value: draft?.answer.message ?? (feedback.value?.request === front.id ? feedback.value.text : ""), onChange: (message) => answer(key, front, { ...draft?.answer, message }, 0, false), separate: conv?.agent === "codex" }} onChoose={choose} />}
     </div>}
     {beta ? <div className="shrink-0 px-3 pb-3">
-      <p className="mb-1 truncate text-xs text-muted-foreground">{hostName} · {page?.projectTitle || label(project)}{!online ? " · Offline" : ""}</p>
-      {!waiting && <RemoteComposer text={pending?.text ?? text} onText={setText} onSend={send} pending={!!pending} busy={busy}
+      <p className="mb-1 truncate text-xs text-muted-foreground">{hostName} · {page?.projectTitle || label(project)}{!online ? " · Offline" : waiting ? " · Needs review" : ""}</p>
+      {!waiting && (!current || chatReady) && <RemoteComposer text={pending?.text ?? text} onText={setText} onSend={send} pending={!!pending} busy={busy}
         ready={online && conversationsLoaded && (!current || chatReady) && !feedback.sending}
         agent={conv?.agent || agent} model={conv?.model || model} started={!!current} onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel} />}
       {pending && !busy && <Button size="xs" variant="ghost" onClick={() => setDismiss(true)}>Dismiss saved request</Button>}

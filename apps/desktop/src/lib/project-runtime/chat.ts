@@ -356,7 +356,7 @@ async function sendTo(key: string, id: string, location: string, text: string, p
       else if (running && r.turn === `${conv.session}#${running.n}`) patch(key, { submissions: observeMessageSubmissionCanonical(c.submissions, [id]), steered: [...c.steered, { id, text, at: Date.now() }] });
     }
     patch(key, { conv, submissions: acceptMessageSubmission(chatOf(key).get().submissions, id) });
-    if (watching.has(key)) watching.set(key, { key, conv, pollHost });
+    if (watching.has(key)) watching.get(key)!.conv = conv;
     await sync(key, conv);
     return conv;
   } catch (err) {
@@ -432,7 +432,7 @@ async function change(key: string, route: "mode" | "model", next: Partial<Conver
   if (!c.conv?.session || !c.session || c.session.exited) return;
   await ask("POST", `/v1/sessions/${c.conv.session}/${route}`, next);
   const conv = { ...c.conv, ...next };
-  if (watching.has(key)) watching.set(key, { key, conv, pollHost });
+  if (watching.has(key)) watching.get(key)!.conv = conv;
   patch(key, { conv });
 }
 export const setMode = (key: string, mode: string) => change(key, "mode", { mode });
