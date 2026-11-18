@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/rangrik/LeadingLight/compare/v0.9.0...v0.10.0) (2026-11-18)
+
+
+### Features
+
+* work on a paired Mac from Mac, iPhone and iPad ([#48](https://github.com/rangrik/LeadingLight/issues/48)) ([c9225c4](https://github.com/rangrik/LeadingLight/commit/c9225c4f0adb0f14f339ddce89a7c3714a6075b0))
+
+
+### Fixes
+
+* keep typing in search when it reopens ([#50](https://github.com/rangrik/LeadingLight/issues/50)) ([9ed7631](https://github.com/rangrik/LeadingLight/commit/9ed7631bfbe2870233fa2e67935c4fc88f627ba3))
+
 ## [0.9.0](https://github.com/rangrik/LeadingLight/compare/v0.8.0...v0.9.0) (2026-11-18)
 
 
