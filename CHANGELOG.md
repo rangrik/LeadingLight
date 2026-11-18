@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.0](https://github.com/rangrik/LeadingLight/compare/v0.8.0...v0.9.0) (2026-11-18)
+
+
+### Features
+
+* combine library search with quick page creation ([#46](https://github.com/rangrik/LeadingLight/issues/46)) ([cdf58a2](https://github.com/rangrik/LeadingLight/commit/cdf58a2effe7eee31c15f1293f4a9e2d8ef3686a))
+
+
+### Fixes
+
+* sync mail automatically across devices and restore the Dock window ([#47](https://github.com/rangrik/LeadingLight/issues/47)) ([9699437](https://github.com/rangrik/LeadingLight/commit/969943751728489b70e30f4929e1b95426b0af39))
+
 ## [0.8.0](https://github.com/rangrik/LeadingLight/compare/v0.7.1...v0.8.0) (2026-11-17)
 
 
