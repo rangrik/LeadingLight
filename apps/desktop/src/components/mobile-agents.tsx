@@ -74,7 +74,7 @@ export function MobileAgentsHost() {
         <DialogTitle>{beta ? page?.task?.title || "Remote work" : `Agents on ${state.connection?.name || "Mac"}`}</DialogTitle>
         <DialogDescription className={beta ? "sr-only" : undefined}>Work runs on your Mac, including while this app is closed.</DialogDescription>
       </DialogHeader>
-      {active && <MobileProjects page={page} beta={beta} key={state.connection?.id || "unpaired"} target={target?.connection === state.connection?.id ? target : null} />}
+      {active && <MobileProjects page={page} beta={beta} key={`${state.connection?.id}:${page?.project || ""}:${page?.task?.id || ""}`} target={target?.connection === state.connection?.id ? target : null} />}
     </DialogPopup>
   </Dialog>;
 }
@@ -123,7 +123,7 @@ function MobileProjects({ target, page, beta }: { target: MobileAgentTarget | nu
       <MobileProjectChat beta={beta} hostName={state.connection.name} page={page} key={selected.name} project={selected} host={state.connection.id} online={state.online} target={target?.project === selected.name ? target : null} />
     </> : <div className="space-y-2 overflow-y-auto p-6 pt-0">
       {projects.map((p) => <Button key={p.name} variant="outline" className="w-full justify-start" disabled={p.missing} onClick={() => { clearTarget(); setSelected(p); }}>{label(p)}{p.missing ? " · Folder unavailable" : ""}</Button>)}
-      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? page ? `Link and share the folder for ${page.projectTitle} in Account and devices on ${state.connection.name}.` : "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
+      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? page ? `Link and share the folder for ${page.projectTitle} on ${state.connection.name}. Link the project to its folder, then select it in Account and devices.` : "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
     </div>}
   </div>;
 }
@@ -135,6 +135,7 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
   const binding = taskConnection(task?.id);
   const boundConversation = binding?.conversation;
   const namespace = `mobile:${host}:${project.name}${task ? `:${task.id}` : ""}`;
+  const freshTaskDraft = useRef(!!task && !binding && localStorage.getItem(`${namespace}:draft`) === null);
   const [list, setList] = useState<Conversation[]>([]);
   const [conversationsLoaded, setConversationsLoaded] = useState(false);
   const [current, setCurrent] = useState<string | null>(() => boundConversation || read(`${namespace}:chosen`, null));
@@ -187,7 +188,11 @@ function MobileProjectChat({ project, host, hostName, beta, page, online, target
     return macAsk<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(project.name)}&limit=200`).then((all) => { sameHost(); setList(all);
       if (taskSession) {
         const own = all.find((c) => c.session === taskSession);
-        if (own && !boundConversation) setCurrent(own.id);
+        if (own && !boundConversation) {
+          setCurrent(own.id);
+          if (freshTaskDraft.current) setText((draft) => draft === task?.title ? "" : draft);
+        }
+        freshTaskDraft.current = false;
       }
       setConversationsLoaded(true); return all; });
   };

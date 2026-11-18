@@ -111,6 +111,7 @@ html[data-ipad] {
   transform: none; border: 0;
 }
 /* Remote work stays beside the page and grows only as the conversation needs room. */
+[data-slot="dialog-backdrop"]:has(+ [data-slot="dialog-viewport"] > .ll-remote-work) { display: none; }
 [data-slot="dialog-viewport"]:has(> .ll-remote-work) { pointer-events: none; }
 .ll-mobile-agents.ll-remote-work {
   position: fixed; inset: auto max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) auto;

@@ -50,7 +50,7 @@ export async function setRemoteWork(enabled: boolean) {
   }
 }
 export async function refreshCloud() {
-  const revision = accountRevision;
+  const revision = ++accountRevision;
   try {
     const config = await cloudApi<Config>('config');
     let ended = false;
@@ -62,7 +62,7 @@ export async function refreshCloud() {
     if (revision !== accountRevision) return;
     if (user) remember({ id: user.id, name: user.name, email: user.email, provider: user.provider });
     setCloud({ initialized: true, config, user, ended, error: '' });
-  } catch (e) { setCloud({ initialized: true, error: e instanceof Error ? e.message : String(e) }); }
+  } catch (e) { if (revision === accountRevision) setCloud({ initialized: true, error: e instanceof Error ? e.message : String(e) }); }
 }
 export async function signIn(provider: string) {
   if (await isNative) return (await import('./native-account')).connectNativeAccount();
