@@ -1068,3 +1068,10 @@ Notes and Browser share one sidebar; its mode is independent of pane focus. Pins
 all pages and types live in Library, and search finds unpinned pages. The personal native
 browser occupies one ordinary pane, so it can sit beside notes without remounting them.
 A native click reports focus to the pane store so shortcuts follow the pane, not the sidebar.
+
+## Mail progress belongs to the signed-in workspace
+
+The Gmail service stores the import date, account labels, Later choices and daily look encrypted
+with the service’s Gmail key. Each device fetches its own inbox and checks for changes every
+minute. Revision checks preserve simultaneous decisions. Existing local choices migrate on
+connection. Message text, reply drafts and reader output stay out of the progress record.

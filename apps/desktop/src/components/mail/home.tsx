@@ -103,7 +103,7 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
           <Keyed disabled={m.offline} k="↵" onClick={go!}>
             Start
           </Keyed>
-          <Small>Older mail stays in Gmail, untouched. It never shows up here.</Small>
+          <Small>Choose once. New mail arrives automatically. Older mail stays in Gmail.</Small>
         </div>
       </>
     );

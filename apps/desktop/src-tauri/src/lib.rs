@@ -277,19 +277,13 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 let (app, event) = (_app, _event);
-                if let RunEvent::Opened { ref urls } = event {
-                    if urls.iter().any(|url| url.host_str() == Some("connected") && matches!(url.path(), "/gmail" | "/calendar")) {
-                        if let Some(main) = app.get_webview_window(capture::MAIN) {
-                            let _ = main.show();
-                            let _ = main.unminimize();
-                            let _ = main.set_focus();
-                        }
-                    }
-                }
-                // The Dock icon brings the hidden main window back.
-                if let RunEvent::Reopen { has_visible_windows: false, .. } = event {
+                let returning = matches!(&event, RunEvent::Opened { urls } if urls.iter().any(|url| url.host_str() == Some("connected") && matches!(url.path(), "/gmail" | "/calendar")));
+                // An auxiliary window may still be visible when the main window is hidden.
+                if returning || matches!(event, RunEvent::Reopen { .. }) {
                     if let Some(main) = app.get_webview_window(capture::MAIN) {
+                        let _ = app.show();
                         let _ = main.show();
+                        let _ = main.unminimize();
                         let _ = main.set_focus();
                     }
                 }
