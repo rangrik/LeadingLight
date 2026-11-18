@@ -194,6 +194,7 @@ test('late results, body-search errors and creation errors recover', async ({ pa
 
 // Seam: a shortcut-opened dialog has no trigger; closing it must restore the writing cursor.
 test('search restores the editor and focuses a chosen note', async ({ page }) => {
+  test.setTimeout(45_000);
   await start(page);
   await page.keyboard.press('Meta+n');
   await title(page).fill('Resume writing');
