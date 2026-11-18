@@ -95,7 +95,7 @@ Feature: Mail is a look, not an inbox
     And "7 days" is chosen from "3 days", "7 days" and "14 days"
     And "Add another account" is centred on the last account's row
     When I press Enter
-    Then the title is "Reading the last 7 days"
+    Then the first emails can be opened while the reader prepares their lines
     And mail older than 7 days is never listed, read or changed
 
   Scenario: The weight comes first

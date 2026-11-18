@@ -1,3 +1,4 @@
+import { mailProgress } from './mail-progress.mjs';
 import { connectionContext, connectionRedirect } from './account-return.mjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { seal, unseal } from './calendar.mjs';
@@ -108,6 +109,7 @@ export async function content(message, api) {
 export async function gmailRequest({ request, env, sql, user, readBody, fetcher = fetch }) {
   need(gmailReady(env), 503, 'Gmail is not configured on this installation yet.');
   const action = new URL(request.url).pathname.slice('/api/gmail/'.length);
+  if (action === 'progress') return mailProgress({ request, sql, owner: user.id, readBody, key: key(env) });
   if (action === 'accounts' && request.method === 'GET') return json({ accounts: await sql`SELECT account,email FROM gmail_accounts WHERE owner=${user.id} ORDER BY email` });
   need(['connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].includes(action), 404, 'Unknown Gmail action.');
   need(request.method === 'POST', 405, 'Use POST for Gmail actions.');

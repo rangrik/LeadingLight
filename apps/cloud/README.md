@@ -223,3 +223,6 @@ encrypted sync journal. Requests are capped at 3.5 MB including inline attachmen
 may publish up to 100 pages and 100 MB. Nothing is automatically published by sync or local edits.
 Verify with `src/publications.test.mjs` and `PUBLISH_QA=1 QA_PORT=...` for `qa/publishing.spec.ts`
 against the isolated browser test server. Cloud deployments remain separate from Mac releases.
+
+Mail progress uses the `gmail_progress` table. Apply the additive schema with
+`pnpm --filter @leadinglight/cloud migrate` before deploying the updated Gmail service and clients.

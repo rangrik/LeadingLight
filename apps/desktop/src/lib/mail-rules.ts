@@ -44,7 +44,7 @@ export type Mail = {
 export type Item = { mail: Mail; lines?: Lines; group?: Group; kept: boolean; fresh?: boolean };
 export type Outcome = "done" | "replied" | "task" | "later";
 // What today's look did. set is fixed when he starts; left is what waited when it closed; dues are tasks' dates.
-export type Day = { day: string; set: string[]; handled: Record<string, Outcome>; dues: Record<string, string>; cleared: number; started: number; ended: number; closed: boolean; left: number };
+export type Day = { day: string; set: string[]; handled: Record<string, Outcome>; dues: Record<string, string>; cleared: number; clearedKeys?: Record<string, true>; started: number; ended: number; closed: boolean; left: number };
 export type Read = { at: number; lines?: Lines; group?: Group; needs?: boolean };
 // senders: whether an address (senderKey) is new to the account, found once and kept.
 export type MailState = { start: number; days: number; ran: number; kinds: Record<string, Kind>; kept: Record<string, string>; read: Record<string, Read>; senders: Record<string, boolean>; today: Day };
@@ -236,7 +236,7 @@ export function say(x: Snapshot): Said {
   }
   const all = [...x.look, ...x.waiting];
   // Before its first run, and unless it said why it can't, the reader is about to read.
-  if (!x.ran && !x.unread) return said("reading", "", "Reading your mail…", `Reading the last ${x.days} days`, "This takes about a minute. Today shows the result.");
+  if (!x.ran && !x.unread && !all.length && !x.rest.length && !x.today.started) return said("reading", "", "Reading your mail…", `Reading the last ${x.days} days`, "This takes about a minute. Today shows the result.");
   const d = x.today;
   if (d.closed) {
     const due = all.filter((i) => i.lines?.due === isoDay(x.now) && !d.set.includes(i.mail.key)).length;
@@ -254,7 +254,7 @@ export function say(x: Snapshot): Said {
   const n = all.length;
   if (!n) return x.rest.length ? said("rest", "Nothing needs you", `${x.rest.length} other${s(x.rest.length)} to clear`, "Nothing needs you") : said("none", "", "", "Nothing needs you", "There is nothing new.");
   if (all.every((i) => !i.lines)) {
-    if (x.reading) return said("reading", "", "Reading your mail…", `${n} new from people`);
+    if (!x.unread) return said("unread", `${n} new from people`, "not read for you yet", `${n} new from people`, "You can read these while their summaries are being prepared.");
     return said("unread", `${n} new from people`, "not read for you yet", `${n} new from people`, `LeadingLight could not read these for you.${x.unread ? ` ${x.unread}` : ""}`);
   }
   const m = minutes(x.look);

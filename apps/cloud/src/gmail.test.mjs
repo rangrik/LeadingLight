@@ -36,7 +36,7 @@ test('routes enforce workspace, origin, rollout and the native allowlist', async
   assert.equal((await app(request({ origin: env.APP_ORIGIN, 'test-user': 'alice', 'x-leadinglight-owner': 'bob' }))).status, 409);
   assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/accounts`)), true);
   assert.equal((await app(new Request(`${env.APP_ORIGIN}/api/gmail/accounts`, { headers: { authorization: 'Bearer invalid' } }))).status, 401);
-  for (const action of ['connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send']) assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: 'POST' })), true);
+  for (const action of ['progress', 'connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send']) assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: 'POST' })), true);
   for (const action of ['callback', 'delete', 'trash']) assert.equal(nativeRoute(new Request(`${env.APP_ORIGIN}/api/gmail/${action}`, { method: 'POST' })), false);
 });
 
@@ -72,6 +72,15 @@ test('OAuth, multi-account reads, search, paging, refresh and disconnect isolati
   const callback = (request, user = owner) => gmailCallback({ request, env, sql, user: { id: user }, fetcher });
   try {
     await sql.unsafe(await readFile(new URL('./schema.sql', import.meta.url), 'utf8'));
+    const progress = { start: 1, days: 3, kinds: {}, kept: {}, today: { day: '2026-11-17', set: [], handled: {}, dues: {}, started: 0, ended: 0, left: 0, cleared: 0, closed: false } };
+    assert.deepEqual(await (await run('progress')).json(), { revision: 0, state: null });
+    const write = () => run('progress', { revision: 0, state: progress });
+    const writes = await Promise.allSettled([write(), write()]);
+    assert.equal(writes.filter((r) => r.status === 'fulfilled').length, 1);
+    assert.equal(writes.find((r) => r.status === 'rejected').reason.status, 409);
+    assert.deepEqual(await (await run('progress')).json(), { revision: 1, state: progress });
+    assert.equal((await (await run('progress', undefined, other)).json()).state, null);
+    await assert.rejects(run('progress', { revision: 1, state: { ...progress, body: 'private' } }), /Invalid mail progress/);
     const request = await connect();
     await assert.rejects(callback(request, other), /another workspace/);
     assert.match((await callback(request)).headers.get('location'), /gmail=connected/);
@@ -142,5 +151,5 @@ test('OAuth, multi-account reads, search, paging, refresh and disconnect isolati
     await sql`UPDATE gmail_accounts SET tokens=${encrypted} WHERE owner=${owner} AND account=${account}`;
     disconnectOnRefresh = true; await assert.rejects(run('messages', { account }), /disconnected/);
     assert.equal((await (await run('accounts')).json()).accounts.length, 0);
-  } finally { await sql`DELETE FROM gmail_accounts WHERE owner=${owner}`; await sql`DELETE FROM gmail_oauth WHERE owner=${owner}`; await sql.end(); }
+  } finally { await sql`DELETE FROM gmail_progress WHERE owner=${owner}`; await sql`DELETE FROM gmail_accounts WHERE owner=${owner}`; await sql`DELETE FROM gmail_oauth WHERE owner=${owner}`; await sql.end(); }
 });

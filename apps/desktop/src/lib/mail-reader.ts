@@ -11,6 +11,7 @@ import { tailTurn } from "./turn";
 // tail turn (lib/turn.ts tailTurn, src-tauri/src/agent.rs with tail set), so the model has no
 // tools and no notes. It reads only mail that came since it last ran, and its lines stay here.
 
+const INBOX_INTERVAL = 60_000;
 const EVERY = 30 * 60_000;
 const AGAIN = 2 * 60_000;
 // Mail can show up in Gmail a little after it was sent.
@@ -20,6 +21,7 @@ const PEOPLE = 4;
 const REST = 60;
 let running: Promise<void> | null = null;
 let finished = 0;
+let readerOwner: string | null = null;
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 // Why it could not read, as the end of "LeadingLight could not read these for you."
@@ -41,6 +43,7 @@ async function ask(people: { mail: Mail; thread: ThreadPart[] }[], rest: Mail[])
 async function senders(owner: string, src: Source, mails: Mail[], state: MailState, own: string[]) {
   const found: Record<string, boolean> = {};
   for (const m of mails.filter((m) => fromPeople(m, own) && !(senderKey(m) in state.senders)).slice(0, 10)) {
+    if (readerInput().owner !== owner) return;
     if (senderKey(m) in found) continue;
     try {
       found[senderKey(m)] = (await src.sent(m.account, m.address)) === 1;
@@ -52,11 +55,12 @@ async function senders(owner: string, src: Source, mails: Mail[], state: MailSta
 }
 
 async function read() {
-  await refresh();
   const { owner, mails, state, own } = readerInput();
   if (!owner || !state.start) return;
   const src = await mailSource(), started = Date.now(), today = isoDay(started);
+  const current = () => readerInput().owner === owner;
   await senders(owner, src, mails, state, own);
+  if (!current()) return;
   const since = state.ran ? state.ran - MARGIN : 0;
   // A date that passed after its lines were written is read once more, to say what it means now.
   const passed = (m: Mail) => { const r = state.read[m.key], due = r?.lines?.due; return !!due && due < today && isoDay(r.at) <= due; };
@@ -66,7 +70,8 @@ async function read() {
     setReader({ reading: true });
     await new Promise((r) => setTimeout(r, 600));
     await saveReads(owner, src.reads!(todo.map((m) => m.key), started), started);
-    return setReader({ reading: false, unread: "" });
+    if (current()) setReader({ reading: false, unread: "" });
+    return;
   }
   if (!(await isNative)) return setReader({ unread: todo.length ? "Reading needs the Mac app." : "" });
   setReader({ reading: !!todo.length });
@@ -74,34 +79,46 @@ async function read() {
     const reads: Record<string, Read> = {};
     // The rest first: a skim can find one that does need him, which is then read in full.
     const rest = todo.filter((m) => !fromPeople(m, own));
-    for (let i = 0; i < rest.length; i += REST) Object.assign(reads, await ask([], rest.slice(i, i + REST)));
+    for (let i = 0; i < rest.length; i += REST) {
+      if (!current()) return;
+      Object.assign(reads, await ask([], rest.slice(i, i + REST)));
+    }
     // Kept at once, so a later failure does not lose the skim.
     if (rest.length) await saveReads(owner, reads);
     const people = [...todo.filter((m) => fromPeople(m, own)), ...rest.filter((m) => reads[m.key]?.needs && !own.includes(m.address.toLowerCase()))];
     for (let i = 0; i < people.length; i += PEOPLE) {
+      if (!current()) return;
       const batch = people.slice(i, i + PEOPLE);
       const threads = await Promise.all(batch.map((m) => src.thread(m.account, m.threadId).catch(() => [])));
+      if (!current()) return;
       for (const [k, r] of Object.entries(await ask(batch.map((mail, j) => ({ mail, thread: threads[j] })), []))) reads[k] = { ...reads[k], ...r };
       await saveReads(owner, reads);
     }
     await saveReads(owner, reads, started);
-    setReader({ unread: "" });
+    if (current()) setReader({ unread: "" });
   } catch (e) {
-    setReader({ unread: reason(e) });
+    if (current()) setReader({ unread: reason(e) });
   } finally {
-    setReader({ reading: false });
+    if (current()) setReader({ reading: false });
   }
 }
 
 // Runs once at a time; without force, not again within two minutes of the last run.
-export function runReader(o: { force?: boolean } = {}): Promise<void> {
+export async function runReader(o: { force?: boolean } = {}): Promise<void> {
+  await refresh();
+  const { owner } = readerInput();
+  if (readerOwner !== owner) { readerOwner = owner; running = null; finished = 0; }
   if (!running && !o.force && Date.now() - finished < AGAIN) return Promise.resolve();
-  return (running ??= read()
+  if (running) return running;
+  const job = read()
     .catch(console.error)
     .finally(() => {
+      if (running !== job) return;
       running = null;
       finished = Date.now();
-    }));
+    });
+  running = job;
+  await running;
 }
 
 // Mounted once by the app: when it opens, when it comes to the front, and every 30 minutes.
@@ -110,11 +127,13 @@ export function useMailReader() {
   useEffect(() => {
     void runReader({ force: true });
     const front = () => document.visibilityState === "visible" && void runReader();
+    const inbox = setInterval(() => { if (navigator.onLine) void refresh(); }, INBOX_INTERVAL);
     const timer = setInterval(() => void runReader({ force: true }), EVERY);
     window.addEventListener("focus", front);
     document.addEventListener("visibilitychange", front);
     return () => {
       clearInterval(timer);
+      clearInterval(inbox);
       window.removeEventListener("focus", front);
       document.removeEventListener("visibilitychange", front);
     };
