@@ -3,12 +3,13 @@ Feature: One sidebar for notes and browsing
 
   Scenario: A quiet notes sidebar
     Given I have saved pages and pinned pages
-    Then Notes shows search, New page, shortcuts, Pinned and Library
+    Then Notes shows Search library, New page, a type picker, shortcuts and Pinned
     And there is no Recent list or mode dropdown
-    When I open Library
-    Then I can find every listed page, browse its type, pin it, rename it or delete it
+    When I open Search library
+    Then I can find every saved page, browse its type, pin it or open it beside
+    And a pinned page keeps its rename and delete menu
     When I search for a page that is not pinned
-    Then I can open it from the sidebar
+    Then I can open it from search in either sidebar mode
     And a search with no matches says so
 
   Scenario: Change mode without changing panes

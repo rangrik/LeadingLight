@@ -359,3 +359,5 @@ review a request, revoke access, or see the same results yourself.
 - [Projects linked to folders](/ai/projects)
 - [Saving web sources](/capture/web-sources)
 - [Settings](/customize/settings)
+
+Press <kbd>⌘K</kbd> for **Search library** while browsing: find a note, a type, or another open browser tab without changing sidebar modes first. <kbd>⌘N</kbd> opens a new browser-tab address picker when the browser pane has focus. In a split, click the note pane first to make <kbd>⌘N</kbd> create a note instead.

@@ -39,7 +39,7 @@ Type `/` on an empty line. The slash menu lists every kind of block: text, headi
 
 ## 4. Make a book, and link to it
 
-1. In **Library › Types**, click **Books**, then **New book**. Call it *Dune*.
+1. Press <kbd>⌘K</kbd>, type **new book**, and press Return. Call it *Dune*.
 2. A Book comes with properties: **Author**, **Rating**, **Status**, **Finished on** and **Tags**. Click a value to set it. For **Author**, type a name, such as *Frank Herbert*, and choose **Create person “Frank Herbert”** to make a Person page at the same time.
 3. Go back to *Trip to Kyoto*. Type `@Dun` and choose *Dune* from the menu. The link shows the book's icon and follows it if you rename the book.
 

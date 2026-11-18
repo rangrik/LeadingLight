@@ -1,7 +1,8 @@
 {
   "_": "LeadingLight's keyboard shortcuts, in Shipyard's shape (vendor/shipyard/app/src/lib/shortcuts.ts reads it through an alias; src-tauri/src/menu.rs builds the Mac menu bar from it). group is the menu an item is in; accel, when set, puts it there with that accelerator, so macOS cannot take the key first. Never give ⌘C, ⌘V, ⌘A or ⌘F an accelerator: text fields need them. browser marks a key the browser space has only while it is in front, so the editor keeps ⌘D. The editor's own keys (⌘B, ⌘I, ⌘/ for the block menu, …) stay out: its toolbar shows them. Settings › Shortcuts can change any key here (lib/keymap.ts).",
   "shortcuts": [
-    { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N" },
+    { "id": "new-page", "group": "File", "label": "New page", "keys": "⌘N", "accel": "CmdOrCtrl+N", "what": "New note or browser tab in the focused pane" },
+    { "id": "search", "group": "Go", "label": "Search library…", "keys": "⌘K", "accel": "CmdOrCtrl+K", "what": "Search pages, types and browser tabs" },
     { "id": "new-tab", "group": "File", "label": "New tab", "keys": "⌘T", "accel": "CmdOrCtrl+T" },
     { "id": "open-location", "group": "File", "label": "Open location…", "keys": "⌘L", "accel": "CmdOrCtrl+L", "browser": true, "what": "Go somewhere in this browser tab" },
     { "id": "new-idea", "group": "File", "label": "New idea", "keys": "⌃⌥I", "accel": "Ctrl+Alt+I" },

@@ -1,5 +1,5 @@
 Feature: Pages
-  Pages appear in Library and in sidebar search. Pinned pages stay in the sidebar.
+  Pages appear in Search library. Pinned pages stay in the sidebar.
   Each page has a title field and a body (the block editor).
 
   Names used below:
@@ -13,7 +13,7 @@ Feature: Pages
     Given the app is open in a browser with no stored data
 
   Scenario: First run shows an empty state
-    Then the sidebar explains "Pin pages from Library to keep them here."
+    Then the sidebar explains "Pin pages from Search library to keep them here."
     And the main area shows "No page open" and a "New page" button
 
   Scenario: Creating a page from the sidebar
@@ -26,10 +26,10 @@ Feature: Pages
     When I click "New page" in the main area
     Then Library lists one page named "Untitled"
 
-  Scenario: Library lists all pages by name
+  Scenario: Library lists recent pages first
     Given I have created a page titled "First"
     When I create a page titled "Second" and open Library
-    Then Library lists "First" above "Second"
+    Then Library lists "Second" above "First"
     And typing a title in Search library filters the list
 
   Scenario: The title shows in the sidebar as I type

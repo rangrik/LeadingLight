@@ -53,7 +53,7 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, leaves, PERSONAL_BROWSER, openBeside, openFresh, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
+import { focusedPage, leaves, PERSONAL_BROWSER, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
 import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
@@ -61,9 +61,9 @@ import { folders, loadFolders } from "~/lib/project-runtime/folders";
 import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { AGENT, taskOfAgent } from "~/lib/work";
-import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf, typeView } from "~/lib/space";
-import { PAGE_TYPE } from "~/lib/store";
-import { newPage } from "~/lib/templates";
+import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf } from "~/lib/space";
+import { createNote } from "~/lib/workspace-search";
+import { WorkspaceSearch } from "~/components/workspace-search";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
 import { readCapture, startTail, tookCapture } from "~/lib/tail";
@@ -132,7 +132,7 @@ export default function App() {
     return () => window.clearTimeout(t);
   }, []);
 
-  const { pages, types } = space.use();
+  const { pages } = space.use();
   const { root } = panes.use();
   const current = focusedPage();
   const [sidebarOpen, setSidebarOpen] = useState(() => localStorage.getItem(SIDEBAR_KEY) !== "false");
@@ -192,11 +192,12 @@ export default function App() {
 
   useEffect(() => loaded ? watchAccountReturns((integration) => { useStore.getState().setView({ kind: 'workspace' }); leaveBrowser(); openPage(integration === 'gmail' ? MAIL_VIEW : CALENDAR_VIEW); }) : undefined, [loaded]);
 
+  const creating = useRef(false);
   const create = useCallback(() => {
-    if (!loaded) return;
-    newPage(PAGE_TYPE)
-      .then((obj) => (phone ? openFresh : openPage)(obj.id))
-      .catch(console.error);
+    if (!loaded || creating.current) return;
+    creating.current = true;
+    void createNote().catch(() => toastManager.add({ type: "error", title: "Could not create a page. Try again." }))
+      .finally(() => { creating.current = false; });
   }, [loaded]);
 
   // The capture box (features/capture.feature): in the app a panel of its own (capture.rs),
@@ -299,7 +300,7 @@ export default function App() {
 
   // A Thoughts page or an essay sits under its page in the sidebar (the crumbs: describe()).
   const navPages = pages
-    .filter((p) => p.typeId !== ABOUT && !p.properties.templateOf)
+    .filter((p) => isPinned(p) && p.typeId !== ABOUT && !p.properties.templateOf)
     .sort((a, b) => pageLabel(a.title).localeCompare(pageLabel(b.title)))
     .map((p) => {
       // Its Thoughts page and essay; its reports read in the page itself.
@@ -335,17 +336,6 @@ export default function App() {
         }),
       };
     });
-  // The app's own types (agents, reports, feedback) are listed once there is one of them; tail's
-  // page about you is reached from Settings and search, so tail never adds a row here.
-  const navTypes = types.filter((t) => !t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))).map((t) => ({
-    id: t.id,
-    name: t.plural,
-    icon: <RowIcon icon={t.icon} />,
-    isActive: current === typeView(t.id),
-    onSelect: opener(typeView(t.id)),
-    onDrag: (e: React.PointerEvent<HTMLElement>) => armDrag(e, { page: typeView(t.id), label: t.plural }),
-  }));
-
   // Layout from shadcn's sidebar-08 page.tsx. Changes: the inset is a bare stage and each open
   // page is a card in it with its own header (see PaneArea); the header is 36 px in the app (see
   // chrome) and a window drag area with room for the traffic lights.
@@ -371,10 +361,8 @@ export default function App() {
           loading={!loaded}
           onCreate={create}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}
-          pages={navPages}
           pinned={navPages.filter((p) => p.pinned)}
           todayActive={current !== undefined && current === dayShown(today())}
-          types={navTypes}
         />
         <SidebarInset className="ll-inset relative h-svh overflow-hidden bg-transparent md:h-[calc(100svh_-_1rem)] md:peer-data-[variant=inset]:shadow-none">
           {loaded && <BrowserAddressBanner />}
@@ -408,6 +396,7 @@ export default function App() {
           {root && !mobile && <AskBar />}
         </SidebarInset>
         <BrowserCommand />
+        {loaded && <WorkspaceSearch />}
         <BarStrip onCapture={toggleCapture} />
         </>}
         <DeletePageDialog

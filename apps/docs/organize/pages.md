@@ -5,13 +5,15 @@ description: Make, name, find, pin and delete pages, and choose how each page lo
 
 # Pages and the sidebar
 
-Everything you write in LeadingLight is a page. The sidebar keeps pinned pages in reach and Library holds the rest, and each page has its own title, body and options.
+Everything you write in LeadingLight is a page. The sidebar keeps pinned pages in reach and Search library holds the rest, and each page has its own title, body and options.
 
 ## Make a page
 
 Click **New page** near the top of the Notes sidebar, or press <kbd>⌘N</kbd>. When you have no pages yet, the main area shows **No page open** with a **New page** button too.
 
-The new page opens with the cursor in its title. The body below shows *Type '/' for commands* until you start writing. Pages save as you type; there is nothing to confirm.
+The new page opens in a new tab with the cursor in its title. Your previous tab stays open. In a browser pane, <kbd>⌘N</kbd> opens the address picker for a new browser tab. The body below shows *Type '/' for commands* until you start writing. Pages save as you type; there is nothing to confirm.
+
+Use the arrow beside **New page** to choose any type, including your own types. You can also press <kbd>⌘K</kbd> and type **new meeting** or **new book**. The new page uses that type's default template. **New daily note** opens today's note.
 
 ## Give it a title
 
@@ -25,19 +27,20 @@ The card header above the page shows where you are: the type's plural name, then
 
 ## Find pages in Library
 
-Use **Search notes** to find any page by its title, including pages you have not pinned.
-**Library** opens all your pages in alphabetical order, with search and a list of types such
-as Books or Daily notes. Choose a type to open its full list. Templates stay in their type's settings.
-There is no Recent list.
+Press <kbd>⌘K</kbd> or choose **Search library** in either sidebar mode. The same search works with the sidebar hidden. Recent pages appear first, ordered by their last change. **Browse all pages** lists every saved page, including daily notes and unpinned pages.
+
+Search by title, words in the body, or type. A search for **book** offers matching books, **Books** to open that type's list, and **New book**. **Browse types** lists all your types. Templates stay in their type's settings.
+
+Open a browser-tab result to return to that website, or a note result to return to Notes. In a mixed split, the other pane stays open. Use **Open beside**, <kbd>⇧Return</kbd> or Shift-click to open a result beside the current pane. <kbd>⌘</kbd>-click opens a note in a new tab. <kbd>Esc</kbd> closes search and returns focus.
 
 ## Pin a page
 
 Pinned pages sit in their own **Pinned** group in the Notes sidebar, so the ones you use every day stay in reach.
 
-1. Find the page in Library or Search notes, then click **More** (the "…" button).
-2. Choose **Pin**.
+1. Find the page in **Search library** and highlight it with the arrow keys or pointer.
+2. Choose **Pin** at the foot of search.
 
-The page appears in **Pinned** and remains in Library. To take it out, choose **Unpin** in the same menu. When no page is pinned, a short hint explains where to find pages.
+The page appears in **Pinned** and remains in Library. To take it out, choose **Unpin** in search or in the sidebar row's menu. When no page is pinned, a short hint explains where to find pages.
 
 ## The row menu
 

@@ -59,6 +59,7 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
   await page.goto("/");
   await page.evaluate(() => localStorage.setItem("seeded", "1"));
   await expect(await findPage(page, "Trip")).toContainText("✈️");
+  await page.keyboard.press("Escape");
   await page.getByRole("textbox", { name: "Title" }).hover();
   await page.getByRole("button", { name: "Add description" }).click();
   await page.keyboard.type("Ten days");
@@ -81,8 +82,10 @@ test("Saving a page keeps properties this version doesn't know", async ({ page }
 // or a second Description row left beside the line under the title.
 test("An old Description property joins the line under the title", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Library", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books", exact: true })).toBeVisible();
+  if (await page.getByRole("dialog", { name: "Search library", exact: true }).isVisible()) await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Search library", exact: true }).click();
+  await page.getByRole("option", { name: "Browse types", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Search library" }).getByRole("option", { name: "Books", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.evaluate(
     () =>
@@ -121,7 +124,9 @@ test("Pages stored before types existed survive the upgrade", async ({ page }) =
   );
   await page.goto("/");
   await expect(await findPage(page, "From v1")).toBeVisible();
-  await page.getByRole("button", { name: "Library", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "Types" }).getByRole("button", { name: "Books", exact: true })).toBeVisible();
+  if (await page.getByRole("dialog", { name: "Search library", exact: true }).isVisible()) await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Search library", exact: true }).click();
+  await page.getByRole("option", { name: "Browse types", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Search library" }).getByRole("option", { name: "Books", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 });

@@ -25,7 +25,7 @@ type Live = {
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
   // The cursor at the end of the body, for a page opened to write on.
-  focus: () => void;
+  focus: (where?: "title") => void;
 };
 const live = new Map<string, Live>();
 const waiting = new Map<string, ((page: Live) => void)[]>();

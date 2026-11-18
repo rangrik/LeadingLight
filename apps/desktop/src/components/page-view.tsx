@@ -249,7 +249,7 @@ export function PageView({ page }: { page: LLObject }) {
       },
       insertQuote: (quote) => editorRef.current?.insertQuote(quote),
       reveal: (anchor) => editorRef.current?.reveal(anchor),
-      focus: () => { if (bodyRef.current?.offsetParent) editorRef.current?.focus("end"); },
+      focus: (where) => { if (where === "title" && titleRef.current?.offsetParent) titleRef.current.focus(); else if (bodyRef.current?.offsetParent) editorRef.current?.focus("end"); },
     });
     return () => {
       leavingEditor?.finishPendingInk();

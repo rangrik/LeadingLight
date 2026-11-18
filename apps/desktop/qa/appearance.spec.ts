@@ -17,7 +17,7 @@ async function openAppearance(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
 });
 
 test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
@@ -25,7 +25,7 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await expect(settingsNav(page)).toBeVisible();
   await expect(settingsNav(page).getByRole("button", { name: "Back to app" })).toBeVisible();
   // The pages underneath are covered and inert, not unmounted (their edits are kept).
-  await expect(page.locator("[inert]").getByRole("button", { name: "Library", exact: true, includeHidden: true })).toBeAttached();
+  await expect(page.locator("[inert]").getByRole("button", { name: "Search library", exact: true, includeHidden: true })).toBeAttached();
   // Settings wears the app's shell: the same sidebar header, and ⌘\ folds it once, not twice.
   await expect(page.locator(".ll-settings").getByText("LeadingLight", { exact: true }).first()).toBeVisible();
   await page.keyboard.press("Meta+\\");
@@ -35,7 +35,7 @@ test("Settings opens with Meta+, and closes with Escape", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(settingsNav(page)).toBeHidden();
   await expect(page.locator("[inert]")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
 });
 
 // Seam: shown() in components/capture-box.tsx. Base UI keeps a closed Select's list mounted but
@@ -98,7 +98,7 @@ test("Picking a theme colours the whole app and survives a reload", async ({ pag
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.screenshot({ path: "qa/report/appearance-dracula.png" });
   await page.reload();
-  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
   expect(await rootVar(page, "--background")).toBe("#282a36");
 });
 

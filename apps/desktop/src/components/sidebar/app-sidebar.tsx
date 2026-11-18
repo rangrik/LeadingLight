@@ -1,11 +1,8 @@
 // shadcn sidebar-08 (base-vega), on COSS primitives.
-// Changes: shared Notes/Browser modes, pinned pages and a searchable Library, one sidebar toggle.
-import { CalendarDays, CalendarCheck, ChevronRight, FileText, Globe, Library, Mail, Plus, Search, Settings } from "lucide-react";
+// Changes: shared Notes/Browser modes, pinned pages and shared search, one sidebar toggle.
+import { CalendarDays, CalendarCheck, ChevronDown, FileText, Globe, Mail, Plus, Search, Settings } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@leadinglight/ui/components/button";
-import { Dialog, DialogHeader, DialogPanel, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@leadinglight/ui/components/input-group";
-import { Input } from "@leadinglight/ui/components/input";
 import { RadioGroup, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
 import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
 import {
@@ -31,7 +28,7 @@ import { useKeysFor } from "~/lib/keymap";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
-import { NavTypes } from "./nav-types";
+import { openSearch } from "~/lib/workspace-search";
 
 function Mark({ className }: { className?: string }) {
   return (
@@ -74,8 +71,6 @@ const switchMode = (browser: boolean) => (browser ? enter() : leave());
 
 export function AppSidebar({
   pinned,
-  pages,
-  types,
   onCreate,
   onToday,
   todayActive,
@@ -90,17 +85,12 @@ export function AppSidebar({
   onToday: (e: React.MouseEvent) => void;
   todayActive: boolean;
   pinned: React.ComponentProps<typeof NavProjects>["projects"];
-  pages: React.ComponentProps<typeof NavProjects>["projects"];
-  types: React.ComponentProps<typeof NavTypes>["types"];
   onCreate: () => void;
 }) {
   const { isMobile, state, setOpenMobile } = useSidebar();
   const mobile = useMobile();
   const front = space.use().front && !mobile;
   const keys = useKeysFor();
-  const [query, setQuery] = useState("");
-  const [library, setLibrary] = useState(false);
-  const [libraryQuery, setLibraryQuery] = useState("");
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
@@ -127,31 +117,19 @@ export function AppSidebar({
     sidebar.addEventListener("wheel", wheel, { passive: false });
     return () => sidebar.removeEventListener("wheel", wheel);
   }, [sidebar, mobile]);
-  const select =
-    (fn: (e: React.MouseEvent) => void, closeLibrary = false) =>
-    (e: React.MouseEvent) => {
-      fn(e);
-      if (closeLibrary) setLibrary(false);
-      if (isMobile) setOpenMobile(false);
-    };
-  const navigable = (items: typeof pages, closeLibrary = false) =>
-    items.map((p) => ({
-      ...p,
-      onSelect: select(p.onSelect, closeLibrary),
-      onBeside: () => {
-        p.onBeside?.();
-        if (closeLibrary) setLibrary(false);
-      },
-      onDelete: () => {
-        setLibrary(false);
-        p.onDelete();
-      },
-      children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect, closeLibrary) })),
-    }));
-  const matches = (items: typeof pages, search: string) =>
-    items.filter((p) => p.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
-  const searching = !!query.trim();
-  const results = searching ? matches(pages, query) : pinned;
+  const select = (fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
+    fn(e);
+    if (isMobile) setOpenMobile(false);
+  };
+  const navigable = pinned.map((p) => ({
+    ...p,
+    onSelect: select(p.onSelect),
+    children: p.children.map((c) => ({ ...c, onSelect: select(c.onSelect) })),
+  }));
+  const search = (create = false) => {
+    if (isMobile) setOpenMobile(false);
+    openSearch(create ? "create" : "search");
+  };
   return (
     <>
       <Sidebar
@@ -181,6 +159,12 @@ export function AppSidebar({
           }}
         >
           <AppSidebarHeader subtitle={front ? "Browser" : "Notes"} />
+          <SidebarGroup className="pt-0 pb-1">
+            <Button aria-label="Search library" disabled={loading} variant="outline" className="h-8 w-full justify-start" onClick={() => search()}>
+              <Search className="size-4" />
+              Search library<span className="ml-auto text-xs text-muted-foreground">{keys("search")}</span>
+            </Button>
+          </SidebarGroup>
           {front ? (
             native ? (
               browser
@@ -203,22 +187,11 @@ export function AppSidebar({
             <>
               <SidebarContent>
                 <SidebarGroup className="gap-2 pb-0 pt-0">
-                  <InputGroup className="h-8 **:data-[slot=input]:h-7.5">
-                    <InputGroupInput
-                      disabled={loading}
-                      aria-label="Search notes"
-                      placeholder="Search notes…"
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                    />
-                    <InputGroupAddon>
-                      <Search className="size-4 text-muted-foreground" />
-                    </InputGroupAddon>
-                  </InputGroup>
+                  <div className="flex items-center gap-1">
                   <Button
                     disabled={loading}
                     aria-label="New page"
-                    className="h-8 w-full justify-start"
+                    className="h-8 min-w-0 flex-1 justify-start"
                     onClick={() => {
                       onCreate();
                       if (isMobile) setOpenMobile(false);
@@ -228,6 +201,13 @@ export function AppSidebar({
                     <Plus className="size-4" />
                     New page<span className="ml-auto text-xs text-muted-foreground">{keys("new-page")}</span>
                   </Button>
+                  <Tooltip>
+                    <TooltipTrigger render={<Button disabled={loading} aria-label="Choose page type" size="icon-sm" variant="ghost" onClick={() => search(true)} />}>
+                      <ChevronDown className="size-4" />
+                    </TooltipTrigger>
+                    <TooltipPopup>Create any type of page</TooltipPopup>
+                  </Tooltip>
+                  </div>
                   <div className="grid grid-cols-3 gap-1" aria-label="Shortcuts">
                     {[
                       { name: "Today", Icon: CalendarCheck, run: onToday, active: todayActive },
@@ -254,31 +234,10 @@ export function AppSidebar({
                     ))}
                   </div>
                 </SidebarGroup>
-                <nav aria-label={searching ? "Search results" : "Pinned"}>
-                  <NavProjects label={searching ? "Results" : "Pinned"} projects={navigable(results)} />
-                  {!results.length && (
-                    <p className="px-4 pb-3 text-xs leading-relaxed text-muted-foreground">
-                      {searching ? "No pages match this search." : "Pin pages from Library to keep them here."}
-                    </p>
-                  )}
+                <nav aria-label="Pinned">
+                  <NavProjects label="Pinned" projects={navigable} />
+                  {!pinned.length && <p className="px-4 pb-3 text-xs leading-relaxed text-muted-foreground">Pin pages from Search library to keep them here.</p>}
                 </nav>
-                <SidebarGroup className="pt-0">
-                  <SidebarMenu>
-                    <SidebarMenuItem>
-                      <SidebarMenuButton
-                        disabled={loading}
-                        onClick={() => {
-                          setLibraryQuery("");
-                          setLibrary(true);
-                        }}
-                      >
-                        <Library />
-                        <span>Library</span>
-                        <ChevronRight className="ml-auto size-4" />
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  </SidebarMenu>
-                </SidebarGroup>
               </SidebarContent>
             </>
           )}
@@ -320,41 +279,6 @@ export function AppSidebar({
           {!mobile && <UsageButton />}
         </div>
       </Sidebar>
-      <Dialog open={library} onOpenChange={setLibrary}>
-        <DialogPopup className="max-h-[80svh] sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Library</DialogTitle>
-          </DialogHeader>
-          <DialogPanel>
-            <Input
-              aria-label="Search library"
-              className="mt-4"
-              placeholder="Find a page…"
-              value={libraryQuery}
-              onChange={(e) => setLibraryQuery(e.target.value)}
-            />
-            <div className="mt-3 flex min-h-0 flex-1 gap-4 overflow-y-auto">
-              <nav aria-label="Types" className="w-36 shrink-0">
-                <NavTypes types={types.map((t) => ({ ...t, onSelect: select(t.onSelect, true) }))} />
-              </nav>
-              <nav aria-label="Library" className="min-w-0 flex-1">
-                <NavProjects
-                  label="All pages"
-                  projects={navigable(matches(pages, libraryQuery), true)}
-                  onCreate={() => {
-                    setLibrary(false);
-                    onCreate();
-                  }}
-                  onNotebook={() => setLibrary(false)}
-                />
-                {!matches(pages, libraryQuery).length && (
-                  <p className="p-2 text-sm text-muted-foreground">No pages match. Try another search.</p>
-                )}
-              </nav>
-            </div>
-          </DialogPanel>
-        </DialogPopup>
-      </Dialog>
     </>
   );
 }

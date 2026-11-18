@@ -110,7 +110,7 @@ test("immediate deletion keeps the last typed words", async ({ page }) => {
 // Seam: undoing a multi-page action is atomic and refuses any overlapping later edit.
 test("complete action undo refuses newer work without changing another page", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
   const result = await page.evaluate(async () => {
     const { objects } = await import("/src/lib/" + "objects.ts");
     const { commitAction, undoAction } = await import("/src/lib/" + "history.ts");
@@ -137,7 +137,7 @@ test("complete action undo refuses newer work without changing another page", as
 // Seam: undoing an agent turn must not erase human work between two tool calls.
 test("an intervening human edit prevents whole-turn undo", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
   const result = await page.evaluate(async () => {
     const { objects } = await import("/src/lib/" + "objects.ts");
     const { undoAction, milestone } = await import("/src/lib/" + "history.ts");
