@@ -290,3 +290,9 @@ Feature: Idea capture
     When I close the main window with the red button
     Then the Dock icon stays, ⌃⌥I still opens the box, and clicking the Dock icon brings the window back
     And ⌘Q quits
+
+
+  Scenario: Dock click restores the main window even when another panel is visible
+    Given the main window is hidden or minimized with an unfinished note
+    When I click LeadingLight in the Dock
+    Then the same main window is shown, unminimized and focused with the note intact
