@@ -29,6 +29,7 @@ Feature: One search for the workspace
     Then I can choose any user-created or built-in user type
     And creating a Book uses its default template in a new note tab
     And creating a daily note opens today's note without duplicating it
+    And today's note is ready to type in when it opens
     And a failed creation keeps the picker open with an error and allows retry
     And changing the query clears the old creation error
     And a successful pin retry clears its error

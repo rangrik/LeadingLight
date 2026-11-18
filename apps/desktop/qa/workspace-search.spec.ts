@@ -92,6 +92,15 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await input(page).fill('agent revision');
   await expect(dialog(page).getByRole('option', { name: 'Archive 0', exact: true })).toBeVisible();
   await page.screenshot({ path: 'qa/report/search-library.png' });
+  await input(page).fill('new daily');
+  await page.keyboard.press('Enter');
+  const body = page.getByRole('textbox', { name: 'Page body' });
+  await expect(body).toBeFocused();
+  await page.keyboard.type('Plan for today');
+  await search(page, 'new daily');
+  await page.keyboard.press('Enter');
+  await expect(body).toBeFocused();
+  await expect(body).toContainText('Plan for today');
 });
 
 // Seam: focused pane routing versus independent sidebar mode and native overlay suppression.
