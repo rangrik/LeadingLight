@@ -208,12 +208,12 @@ test('search restores the editor and focuses a chosen note', async ({ page }) =>
   await body.click();
   await page.keyboard.press('Home');
   await page.keyboard.press('ArrowRight');
-  const selection = await page.evaluate(() => Reflect.get(window, '__editor').state.selection.from);
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__editor').state.selection.from)).toBe(2);
   await page.keyboard.press('Meta+k');
   await expect(dialog(page)).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(body).toBeFocused();
-  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__editor').state.selection.from)).toBe(selection);
+  await expect.poll(() => page.evaluate(() => Reflect.get(window, '__editor').state.selection.from)).toBe(2);
   await search(page);
   await page.keyboard.press('Meta+k');
   await expect(body).toBeFocused();
