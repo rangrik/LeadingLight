@@ -134,7 +134,7 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
   };
   const searching = searchPages && !!q && body.query !== q;
   return (
-    <Command filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
+    <Command key={`${view}:${start}`} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
       {view !== "search" && <div className="relative flex items-center gap-2 px-3 pt-2 text-sm"><Button aria-label="Back to search" size="icon-sm" variant="ghost" onClick={() => changeView("search")}><ArrowLeft /></Button><span>{names[view]}</span></div>}
       <CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={view === "create" ? "Choose a type…" : "Search pages, types, tabs…"} readOnly={busy} onKeyDownCapture={(e) => {
         modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;

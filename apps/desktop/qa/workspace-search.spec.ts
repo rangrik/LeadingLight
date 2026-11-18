@@ -27,9 +27,13 @@ test('large libraries page through results and search every page', async ({ page
   await search(page);
   await dialog(page).getByRole('option', { name: 'Browse all pages' }).click();
   await expect(dialog(page).getByRole('option')).toHaveCount(101);
+  await expect(input(page)).toBeFocused();
+  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('data-highlighted', '');
   await expect(dialog(page).getByText('Pages · 1–100 of 201')).toBeVisible();
   await dialog(page).getByRole('option', { name: 'Next pages' }).click();
   await expect(dialog(page).getByRole('option')).toHaveCount(102);
+  await expect(input(page)).toBeFocused();
+  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('data-highlighted', '');
   await dialog(page).getByRole('option', { name: 'Next pages' }).click();
   await expect(dialog(page).getByRole('option', { name: 'Saved 0', exact: true })).toBeVisible();
   await expect(dialog(page).getByRole('option', { name: 'Next pages' })).toHaveCount(0);

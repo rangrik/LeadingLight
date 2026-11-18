@@ -21,6 +21,7 @@ Feature: One search for the workspace
     When I browse all pages or search for a word in every page
     Then at most 100 page results are drawn at once
     And I can go to the next or previous 100 results
+    And each list opens at its first result with keyboard focus in search
     And changing the query searches the whole library from the first result
 
   Scenario: Create any user type without hunting through Library
