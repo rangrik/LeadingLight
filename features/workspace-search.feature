@@ -61,4 +61,5 @@ Feature: One search for the workspace
     And native browser content is hidden while the search window is open
     When I press Escape
     Then the search closes and focus returns to the previous pane
+    And the writing cursor stays at the same position, including after a mouse click
     And search shortcuts remain configurable in Settings

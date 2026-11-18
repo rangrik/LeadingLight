@@ -9,7 +9,7 @@ import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
 import { available, browserFocused, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
-import { editPage, liveContent, whenLive } from "~/lib/live";
+import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom } from "~/lib/panes";
 import { iconFor, isPageView, space, typeOf, typeView } from "~/lib/space";
@@ -35,9 +35,17 @@ export function WorkspaceSearch({ returnFocus }: { returnFocus: RefObject<HTMLEl
     workspaceSearch.set(null);
     fn();
   };
+  const restoreFocus = () => {
+    const target = returnFocus.current;
+    if (navigated.current || browserFocused() || !target?.isConnected || !target.getClientRects().length) return false;
+    const id = focusedPage();
+    const editor = id && target.matches('.ProseMirror[aria-label="Page body"]') ? liveEditor(id) : null;
+    if (editor) { editor.refocus(); return false; }
+    return target;
+  };
   return (
     <CommandDialog open={!!state} onOpenChange={(open) => { if (!open) close(); }}>
-      <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={() => !navigated.current && !browserFocused() && returnFocus.current?.isConnected && returnFocus.current.getClientRects().length ? returnFocus.current : false}>
+      <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={restoreFocus}>
         {state && <SearchContents initial={state.view} navigate={navigate} />}
       </CommandDialogPopup>
     </CommandDialog>
