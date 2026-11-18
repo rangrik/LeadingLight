@@ -21,6 +21,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
 import { CloudButton } from "~/components/cloud-settings";
+import { useRemoteWork } from "~/lib/mobile-agents";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { enter, leave, space } from "~/lib/browser-space";
@@ -90,6 +91,7 @@ export function AppSidebar({
   const { isMobile, state, setOpenMobile } = useSidebar();
   const mobile = useMobile();
   const front = space.use().front && !mobile;
+  const remoteWork = useRemoteWork();
   const keys = useKeysFor();
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   useEffect(() => isMobile ? workspaceSearch.subscribe(() => { if (workspaceSearch.get()) setOpenMobile(false); }) : undefined, [isMobile, setOpenMobile]);
@@ -266,7 +268,7 @@ export function AppSidebar({
                 <TooltipPopup>Swipe across the sidebar or press {keys("browser")}</TooltipPopup>
               </Tooltip>
             )}
-            {mobile && <MobileAgentsButton />}
+            {remoteWork && <MobileAgentsButton onOpen={isMobile ? () => setOpenMobile(false) : undefined} />}
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={select(() => openSettings())}>

@@ -1,5 +1,10 @@
-import { isNative } from "./platform";
+import { platform, isNative } from "./platform";
 import { createStore } from "./state";
+
+export function useRemoteWork() {
+  const os = platform.use();
+  return os === "macos" || os === "ios" || import.meta.env.DEV;
+}
 
 export type MacConnection = { id: string; name: string; url: string };
 type Status = { connection: MacConnection | null; online: boolean; error?: string | null };
@@ -13,15 +18,14 @@ const set = (status: Status) => mobileAgents.set({ ...status, initialized: true,
 
 async function command<T>(action: "status" | "connect" | "disconnect" | "request", args: Record<string, unknown> = {}): Promise<T> {
   if (await isNative) return (await import("@tauri-apps/api/core")).invoke<T>(`mobile_agents_${action}`, args);
-  const preview = new URLSearchParams(location.search);
-  if (import.meta.env.DEV && (preview.has("ipad") || preview.has("iphone"))) {
+  if (import.meta.env.DEV) {
     const response = await fetch(`/__mobile/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(args), signal: AbortSignal.timeout(25_000) });
     if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("The mobile preview has no Mac connection. Use the installed iPhone or iPad app.");
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "The Mac connection failed.");
     return result as T;
   }
-  throw new Error("Use the installed iPhone or iPad app to connect to your Mac.");
+  throw new Error("Use the installed Mac, iPhone or iPad app to connect to your Mac.");
 }
 
 export function refreshMobileAgents(): Promise<void> {

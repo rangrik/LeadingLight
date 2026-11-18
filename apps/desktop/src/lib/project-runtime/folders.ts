@@ -14,7 +14,7 @@ export type FolderState = { folder: ProjectFolder; missing: boolean; repo?: bool
 export const folders = createStore<Map<string, FolderState>>(new Map());
 
 // A location name of the page's own: berthd takes letters, digits, dots and dashes.
-const locationOf = (pageId: string) => `p-${pageId.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
+export const locationOf = (pageId: string) => `p-${pageId.replace(/[^A-Za-z0-9]/g, "").slice(0, 24)}`;
 
 let loaded: Promise<void> | null = null;
 let listening = false;

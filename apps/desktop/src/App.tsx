@@ -38,6 +38,7 @@ import { armDrag } from "~/components/pane-drag";
 import { PanelHeader } from "~/components/panel-header";
 import { PhoneShell } from "~/components/phone-shell";
 import { MailRoot } from "~/components/mail";
+import { useRemoteWork } from "~/lib/mobile-agents";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { BrowserSidebar } from "~/components/browser-sidebar";
@@ -102,6 +103,7 @@ export default function App() {
   useBerthConnection();
   useEffect(watchStillness, []);
   const mobile = useMobile();
+  const remoteWork = useRemoteWork();
   useEffect(() => mobile ? watchViewport() : undefined, [mobile]);
   const [gmailReturn] = useState(() => new URL(location.href).searchParams.has('gmail'));
   const [calendarReturn] = useState(() => new URL(location.href).searchParams.has('calendar'));
@@ -418,7 +420,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
-          {mobile && <MobileAgentsHost />}
+          {remoteWork && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
               <Suspense fallback={null}>

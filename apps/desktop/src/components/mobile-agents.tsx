@@ -1,63 +1,86 @@
-import { ArrowLeft, Bot, Plus, RefreshCw, Send, Square } from "lucide-react";
+import { ArrowLeft, Bot, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/views/settings/confirm";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
-import { Field, FieldLabel } from "@leadinglight/ui/components/field";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
-import { Textarea } from "@leadinglight/ui/components/textarea";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { turnsOf } from "~/components/project-chat";
 import { Turn } from "~/components/thread-view";
 import { initMobileNotifications } from "~/lib/mobile-notifications";
 import { createStore } from "~/lib/state";
 import { useApprovalFeedback } from "~/lib/project-runtime/approval-feedback";
-import { mobileAgents, mobileCall, refreshMobileAgents } from "~/lib/mobile-agents";
+import { mobileAgents, mobileCall, refreshMobileAgents, useRemoteWork } from "~/lib/mobile-agents";
 import { answer, chatOf, type Conversation, watch } from "~/lib/project-runtime/chat";
 import { deliveryOf, mergeRequests, type RuntimeRequest } from "~/lib/project-runtime/requests";
-import { ask } from "~/lib/project-runtime/transport";
+import { editPage } from "~/lib/live";
+import { pageOf } from "~/lib/space";
+import { useCloud } from "~/lib/cloud";
+import { useMobile } from "~/lib/platform";
+import { locationOf } from "~/lib/project-runtime/folders";
+import { RemoteComposer } from "~/components/remote-composer";
 
 type Project = { name: string; path: string; missing?: boolean };
-type Intent = { id: string; name: string; text: string; agent: string; conversation?: string };
+type Intent = { id: string; name: string; text: string; agent: string; model?: string; conversation?: string };
 const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 const read = <T,>(key: string, fallback: T): T => { try { return JSON.parse(localStorage.getItem(key) ?? "null") ?? fallback; } catch { return fallback; } };
 const label = (p: Project) => p.path.split("/").filter(Boolean).at(-1) || p.name;
 
 export type MobileAgentTarget = { connection: string; project: string; conversation: string; request: string; generation: number };
-const panel = createStore<{ open: boolean; target: MobileAgentTarget | null }>({ open: false, target: null });
+type TaskConnection = { host: string; name: string; project: string; conversation: string };
+const taskConnection = (id?: string) => id ? pageOf(id)?.properties.remoteWork as TaskConnection | undefined : undefined;
+type PageWork = { project: string; projectTitle: string; task?: { id: string; title: string } };
+type Panel = { open: boolean; target: MobileAgentTarget | null; owner?: string; page?: PageWork };
+const closed: Panel = { open: false, target: null };
+const panel = createStore<Panel>(closed);
 const clearTarget = () => panel.set({ ...panel.get(), target: null });
+function connectionSettings() {
+  panel.set(closed);
+  window.dispatchEvent(new Event("leadinglight:cloud-account"));
+}
 
-export function MobileAgentsButton({ className }: { className?: string } = {}) {
-  return <Button className={className} variant="outline" size="sm" onClick={() => panel.set({ open: true, target: null })}><Bot />Agents on Mac</Button>;
+export function MobileAgentsButton({ className, page, onOpen }: { className?: string; page?: PageWork; onOpen?: () => void } = {}) {
+  const supported = useRemoteWork(), { user } = useCloud();
+  if (!supported) return null;
+  const host = taskConnection(page?.task?.id)?.name;
+  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); }}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
 }
 
 export function MobileAgentsHost() {
-  const { open, target } = panel.use();
+  const { open, target, owner, page } = panel.use();
+  const mobile = useMobile(), { user } = useCloud();
+  const active = open && (!owner || user?.id === owner);
   const state = mobileAgents.use();
   useEffect(() => {
+    if (open && !active) panel.set(closed);
+  }, [open, active]);
+  useEffect(() => () => panel.set(closed), []);
+  useEffect(() => {
+    if (!mobile) return;
     const receive = (event: Event) => {
       const value = (event as CustomEvent<MobileAgentTarget>).detail;
       if (!value || value.connection !== mobileAgents.get().connection?.id || ![value.project, value.conversation, value.request].every((v) => typeof v === "string" && v.length) || !Number.isInteger(value.generation) || value.generation < 1) return;
-      panel.set({ open: true, target: value });
+      panel.set({ open: true, target: value, owner: user?.id });
     };
     window.addEventListener("leadinglight:mobile-agent-request", receive);
     void initMobileNotifications();
     return () => window.removeEventListener("leadinglight:mobile-agent-request", receive);
-  }, []);
-  return <Dialog open={open} onOpenChange={(open) => panel.set({ open, target: open ? panel.get().target : null })}>
-    <DialogPopup className="ll-mobile-agents h-[min(850px,calc(100svh-4rem))] max-w-3xl" bottomStickOnMobile={false}>
+  }, [mobile, user?.id]);
+  return <Dialog modal={false} open={active} onOpenChange={(next) => { if (!next) panel.set(closed); }}>
+    <DialogPopup className="ll-mobile-agents ll-remote-work" bottomStickOnMobile={false}>
       <DialogHeader className="shrink-0 pr-12">
-        <DialogTitle>Agents on {state.connection?.name || "Mac"}</DialogTitle>
-        <DialogDescription>Work runs on your Mac, including while this app is closed.</DialogDescription>
+        <DialogTitle>{page?.task?.title || "Remote work"}</DialogTitle>
+        <DialogDescription className="sr-only">Work runs on your Mac, including while this app is closed.</DialogDescription>
       </DialogHeader>
-      {open && <MobileProjects key={state.connection?.id || "unpaired"} target={target?.connection === state.connection?.id ? target : null} />}
+      {active && <MobileProjects page={page} key={`${state.connection?.id}:${page?.project || ""}:${page?.task?.id || ""}`} target={target?.connection === state.connection?.id ? target : null} />}
     </DialogPopup>
   </Dialog>;
 }
 
-function MobileProjects({ target }: { target: MobileAgentTarget | null }) {
+function MobileProjects({ target, page }: { target: MobileAgentTarget | null; page?: PageWork }) {
   const state = mobileAgents.use();
   const [projects, setProjects] = useState<Project[]>([]);
+  const required = page ? locationOf(page.project) : target?.project;
   const [listTarget, setListTarget] = useState<string>();
   const [selected, setSelected] = useState<Project | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -68,9 +91,16 @@ function MobileProjects({ target }: { target: MobileAgentTarget | null }) {
     const refresh = async () => {
       try {
         await refreshMobileAgents();
-        if (mobileAgents.get().connection) {
-          const list = await ask<Project[]>("GET", "/v1/locations");
-          if (!done) { setProjects(list); setListTarget(target?.project); setSelected((p) => list.find((x) => !x.missing && x.name === (target?.project ?? p?.name)) ?? null); }
+        const host = mobileAgents.get().connection;
+        if (host && !done) {
+          const reply = await mobileCall<Project[]>("GET", "/v1/locations", undefined, host.id);
+          if (reply.status !== 200 || !Array.isArray(reply.body)) throw new Error("Could not check the shared folders on this Mac.");
+          const list = reply.body.filter((p) => !required || p.name === required);
+          if (!done) {
+            setProjects(list);
+            setListTarget(required);
+            setSelected((p) => list.find((x) => !x.missing && x.name === (required ?? p?.name)) ?? (list.length === 1 && !list[0].missing ? list[0] : null));
+          }
         }
         if (!done) setError("");
       } catch (e) { if (!done) setError(message(e)); }
@@ -78,30 +108,37 @@ function MobileProjects({ target }: { target: MobileAgentTarget | null }) {
     };
     void refresh();
     return () => { done = true; clearTimeout(timer); };
-  }, [target?.project]);
-  if (!state.connection) return <p className="p-6 text-sm text-muted-foreground">Connect your Mac in Settings → Account and devices. No mobile sign-in is needed.</p>;
+  }, [required]);
+  if (!state.connection) return <div className="px-6 pb-6">{loaded && <Button variant="outline" onClick={connectionSettings}>Connect a Mac</Button>}</div>;
   return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
     {!state.online && !selected && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
     {target && listTarget !== target.project && !error && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Opening the notified project…</p>}
     {target && listTarget === target.project && !projects.some((p) => p.name === target.project && !p.missing) && <p role="alert" className="px-6 pb-3 text-sm text-muted-foreground">This project is no longer shared by your Mac.</p>}
     {error && (!selected || target && listTarget !== target.project) && <p role="alert" className="px-6 pb-3 text-sm text-destructive-foreground">{error}</p>}
     {selected ? <>
-      <div className="ll-mobile-agent-back px-3 pb-2"><Button size="sm" variant="ghost" onClick={() => { clearTarget(); setSelected(null); }}><ArrowLeft />{label(selected)}</Button></div>
-      <MobileProjectChat key={selected.name} project={selected} host={state.connection.id} online={state.online} target={target?.project === selected.name ? target : null} />
+      {(!required && projects.length > 1) && <div className="ll-mobile-agent-back px-3 pb-2"><Button size="sm" variant="ghost" onClick={() => { clearTarget(); setSelected(null); }}><ArrowLeft />Shared projects</Button></div>}
+      <MobileProjectChat hostName={state.connection.name} page={page} key={selected.name} project={selected} host={state.connection.id} online={state.online} target={target?.project === selected.name ? target : null} />
     </> : <div className="space-y-2 overflow-y-auto p-6 pt-0">
       {projects.map((p) => <Button key={p.name} variant="outline" className="w-full justify-start" disabled={p.missing} onClick={() => { clearTarget(); setSelected(p); }}>{label(p)}{p.missing ? " · Folder unavailable" : ""}</Button>)}
-      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
+      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? page ? `Link and share the folder for ${page.projectTitle} on ${state.connection.name}. Link the project to its folder, then select it in Account and devices.` : "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
     </div>}
   </div>;
 }
 
-function MobileProjectChat({ project, host, online, target }: { project: Project; host: string; online: boolean; target: MobileAgentTarget | null }) {
-  const namespace = `mobile:${host}:${project.name}`;
+function MobileProjectChat({ project, host, hostName, page, online, target }: { page?: PageWork; hostName: string; project: Project; host: string; online: boolean; target: MobileAgentTarget | null }) {
+  const mobile = useMobile();
+  const task = page?.task;
+  const taskSession = task && `mobile-task-${task.id}`;
+  const binding = taskConnection(task?.id);
+  const boundConversation = binding?.conversation;
+  const namespace = `mobile:${host}:${project.name}${task ? `:${task.id}` : ""}`;
+  const freshTaskDraft = useRef(!!task && !binding && localStorage.getItem(`${namespace}:draft`) === null);
   const [list, setList] = useState<Conversation[]>([]);
   const [conversationsLoaded, setConversationsLoaded] = useState(false);
-  const [current, setCurrent] = useState<string | null>(() => read(`${namespace}:chosen`, null));
+  const [current, setCurrent] = useState<string | null>(() => boundConversation || read(`${namespace}:chosen`, null));
   const [agent, setAgent] = useState("claude");
-  const [text, setText] = useState(() => read(`${namespace}:draft`, ""));
+  const [model, setModel] = useState("");
+  const [text, setText] = useState(() => read(`${namespace}:draft`, boundConversation ? "" : task?.title || ""));
   const [pending, setPending] = useState<Intent | null>(() => read(`${namespace}:pending`, null));
   const [dismiss, setDismiss] = useState(false);
   const [dismissFeedback, setDismissFeedback] = useState(false);
@@ -145,7 +182,16 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
   useEffect(() => { localStorage.setItem(`${namespace}:chosen`, JSON.stringify(current)); }, [namespace, current]);
   const refresh = () => {
     sameHost();
-    return macAsk<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(project.name)}&limit=200`).then((all) => { sameHost(); setList(all); setConversationsLoaded(true); return all; });
+    return macAsk<Conversation[]>("GET", `/v1/conversations?location=${encodeURIComponent(project.name)}&limit=200`).then((all) => { sameHost(); setList(all);
+      if (taskSession) {
+        const own = all.find((c) => c.session === taskSession);
+        if (own && !boundConversation) {
+          setCurrent(own.id);
+          if (freshTaskDraft.current) setText((draft) => draft === task?.title ? "" : draft);
+        }
+        freshTaskDraft.current = false;
+      }
+      setConversationsLoaded(true); return all; });
   };
   useEffect(() => {
     let done = false;
@@ -154,7 +200,7 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
     void poll();
     return () => { done = true; clearTimeout(timer); };
   }, [project.name]);
-  useEffect(() => conv ? watch(key, conv) : undefined, [key, conv?.id, conv?.session, conv?.live]);
+  useEffect(() => conv ? watch(key, conv, { pollHost: !mobile }) : undefined, [key, conv?.id, conv?.session, conv?.live, mobile]);
   useEffect(() => { if (target && !blockedTarget) setCurrent(target.conversation); }, [target, blockedTarget]);
   useEffect(() => {
     if (!target || blockedTarget || !conv || conv.id !== target.conversation) return;
@@ -199,15 +245,20 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
   const working = chat.session?.agent_state === "running" || chat.session?.agent_state === "waiting";
   const keep = (intent: Intent | null) => { localStorage.setItem(`${namespace}:pending`, JSON.stringify(intent)); if (mounted.current) setPending(intent); };
   const send = async () => {
-    if (busy || !online || !!current && !chatReady || waiting || feedback.sending || (!pending && !text.trim())) return;
-    const intent = pending ?? { id: crypto.randomUUID(), name: `mobile-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`, text: text.trim(), agent, conversation: current ?? undefined };
+    if (busy || !online || !conversationsLoaded || !!current && !chatReady || waiting || feedback.sending || (!pending && !text.trim())) return;
+    const intent = pending ?? { id: crypto.randomUUID(), name: taskSession ?? `mobile-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`, text: text.trim(), agent, model: model || undefined, conversation: current ?? undefined };
     keep(intent); setBusy(true); setError(""); setRestoreNotice("");
     try {
       const all = await refresh();
       sameHost();
       let target = all.find((c) => intent.conversation ? c.id === intent.conversation : c.session === intent.name);
+      if (task && target && !intent.conversation && !pending) {
+        keep(null);
+        setCurrent(target.id);
+        throw new Error("This task already has a conversation. Review it before sending your draft.");
+      }
       if (!intent.conversation && !target) {
-        const result = await macCall("POST", "/v1/sessions", { name: intent.name, location: project.name, agent: intent.agent, driver: intent.agent, prompt: intent.text, title: intent.text.split("\n")[0].slice(0, 200) });
+        const result = await macCall("POST", "/v1/sessions", { name: intent.name, location: project.name, agent: intent.agent, driver: intent.agent, model: intent.model, prompt: intent.text, title: intent.text.split("\n")[0].slice(0, 200) });
         if (result.status >= 400 && result.status !== 409) { if (result.status < 500) keep(null); throw new Error((result.body as { error?: string })?.error || "The Mac has not confirmed this start. Check and retry."); }
         target = (await refresh()).find((c) => c.session === intent.name);
         if (!target) throw new Error("The Mac has not confirmed this start. Check and retry to find the same agent.");
@@ -220,6 +271,10 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
         }
         const result = await macCall("POST", `/v1/sessions/${target.session}/send`, { text: intent.text, when: "now", idem_key: intent.id });
         if (result.status >= 400) { if (result.status < 500) keep(null); throw new Error((result.body as { error?: string })?.error || "The Mac has not confirmed this message. Check and retry."); }
+      }
+      if (target && task && (!boundConversation || binding?.host !== host)) {
+        const remoteWork = { host, name: hostName, project: project.name, conversation: target.id };
+        await editPage(task.id, { properties: (props) => ({ ...props, remoteWork }) });
       }
       keep(null);
       if (mounted.current && target) { setCurrent(target.id); setText(""); await refresh(); }
@@ -241,38 +296,39 @@ function MobileProjectChat({ project, host, online, target }: { project: Project
       {!online && <p role="status" className="text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
       {(error || online && (pollError || chat.error)) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || pollError || chat.error}</p>}
   </>;
+  if (binding && conversationsLoaded && !list.some((c) => c.id === binding.conversation && c.location === binding.project)) {
+    return <p role="status" className="px-4 pb-4 text-sm">This task’s conversation is unavailable here. Open its shared project on {binding.name || "the original Mac"} to continue.</p>;
+  }
   return <div className="ll-mobile-agent-chat flex min-h-0 min-w-0 flex-1 flex-col" data-testid="mobile-agent-chat" data-request={!!front || undefined}>
-    <div className="ll-mobile-agent-toolbar flex shrink-0 items-center gap-2 border-y px-4 py-2">
-      <Select value={current || "new"} onValueChange={(value) => { clearTarget(); setCurrent(value === "new" ? null : value); }} disabled={busy || !!pending}>
+    {((!task && list.length > 0) || working) && <div className="ll-mobile-agent-toolbar flex shrink-0 items-center gap-2 border-y px-4 py-2">
+      {!task && <Select value={current || "new"} onValueChange={(value) => { clearTarget(); setCurrent(value === "new" ? null : value); }} disabled={busy || !!pending}>
         <SelectTrigger className="min-w-0 flex-1" aria-label="Conversation"><SelectValue placeholder="New chat">{conv?.title || "New chat"}</SelectValue></SelectTrigger>
         <SelectPopup><SelectItem value="new">New chat</SelectItem>{list.map((c) => <SelectItem key={c.id} value={c.id}>{c.title || c.agent}</SelectItem>)}</SelectPopup>
-      </Select>
-      <Button size="icon-sm" variant="ghost" aria-label="New chat" disabled={busy || !!pending} onClick={() => { clearTarget(); setCurrent(null); }}><Plus /></Button>
+      </Select>}
       {working && <Button className="ll-mobile-agent-stop" size="sm" variant="outline" disabled={!online || busy} onClick={() => {
         if (!chat.conv?.session) return;
         setBusy(true); setError("");
         void macAsk("POST", `/v1/sessions/${chat.conv.session}/interrupt`).catch((e) => setError(message(e))).finally(() => setBusy(false));
       }}><Square />Stop</Button>}
-    </div>
+      {!waiting && working && <span role="status" className="text-xs text-muted-foreground">Working</span>}
+    </div>}
     <div ref={messages} className="min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto px-4 py-4" aria-label="Conversation messages">
       {!front && <>{notice}{savedFeedback}</>}
       {turns.map((turn, i) => <Turn key={i} items={turn.items} live={!!working && i === turns.length - 1} waiting={!!front} page={label(project)} onGoAhead={() => {}} />)}
-      {!turns.length && <p className="text-sm text-muted-foreground">{current ? "Loading conversation…" : "Ask an agent to work in this project on your Mac."}</p>}
+      {!turns.length && current && <p className="text-sm text-muted-foreground">Loading conversation…</p>}
     </div>
     {front && <div ref={request} className="ll-mobile-agent-request min-h-0 max-h-[45%] shrink-0 overflow-y-auto">
       <div className="px-4 pb-2"><DeliveryLine delivery={delivery} error={chat.deliveries[front.id]?.error} onRetry={retryAnswer} /></div>
       <div className="px-4">{notice}{savedFeedback}</div>
       {front.kind === "question" ? <QuestionCard request={front} answer={draft?.answer ?? {}} index={draft?.index ?? 0} busy={answerBusy} onAnswer={(a, i, submit) => answer(key, front, a, i, submit)} /> : <ApprovalCard request={front} busy={answerBusy} allowedChoices={["allow", "deny", "approve_each", "keep_planning"]} feedback={{ value: draft?.answer.message ?? (feedback.value?.request === front.id ? feedback.value.text : ""), onChange: (message) => answer(key, front, { ...draft?.answer, message }, 0, false), separate: conv?.agent === "codex" }} onChoose={choose} />}
     </div>}
-    <form className="ll-mobile-agent-compose shrink-0 space-y-2 border-t p-4" data-pending={!!pending || undefined} onSubmit={(e) => { e.preventDefault(); void send(); }}>
-      <Field><FieldLabel className="sr-only">Message to agent</FieldLabel><Textarea aria-label="Message to agent" className="max-h-32" value={pending?.text ?? text} disabled={busy || !!pending} onChange={(e) => setText(e.target.value)} placeholder="Ask your Mac to…" /></Field>
-      <div className="flex items-center gap-2">
-        {!current && <Select value={agent} onValueChange={(value) => value && setAgent(value)} disabled={busy || !!pending}><SelectTrigger className="w-32 min-w-0 shrink" aria-label="Agent"><SelectValue>{agent === "codex" ? "Codex" : "Claude Code"}</SelectValue></SelectTrigger><SelectPopup><SelectItem value="claude">Claude Code</SelectItem><SelectItem value="codex">Codex</SelectItem></SelectPopup></Select>}
-        <Button className="ml-auto shrink-0" type="submit" size="sm" disabled={busy || !online || !!waiting || feedback.sending || !!current && !chatReady || !pending && !text.trim()}>{pending ? <RefreshCw /> : <Send />}{busy ? "Sending…" : pending ? "Check and retry" : "Send"}</Button>
-      </div>
-      <p className="text-xs text-muted-foreground">Approval required</p>
+    <div className="ll-remote-footer shrink-0 px-3 pb-3">
+      <p className="mb-1 truncate text-xs text-muted-foreground">{hostName} · {page?.projectTitle || label(project)}{!online ? " · Offline" : waiting ? " · Needs review" : ""}</p>
+      {!waiting && (!current || chatReady) && <RemoteComposer text={pending?.text ?? text} onText={setText} onSend={send} pending={!!pending} busy={busy}
+        ready={online && conversationsLoaded && (!current || chatReady) && !feedback.sending}
+        agent={conv?.agent || agent} model={conv?.model || model} started={!!current} onAgent={(value) => { setAgent(value); setModel(""); }} onModel={setModel} />}
       {pending && !busy && <Button size="xs" variant="ghost" onClick={() => setDismiss(true)}>Dismiss saved request</Button>}
-    </form>
+    </div>
     <ConfirmDialog open={dismissFeedback} onOpenChange={setDismissFeedback} title="Dismiss saved feedback?" description={<span className="ll-mobile-agent-dismiss">{feedback.value?.attempted ? "The Mac may have received this feedback. Check the conversation before dismissing; sending the same words again may repeat them." : "This removes the saved feedback. Your decision on the request stays unchanged."}</span>} confirm="Dismiss feedback" onConfirm={feedback.dismiss} />
     <ConfirmDialog open={dismiss} onOpenChange={setDismiss} title="Dismiss saved request?" description={<span className="ll-mobile-agent-dismiss">Check the conversation on your Mac first. Dismissing does not stop an agent or undo a message. Sending these words again as a new request may repeat the work.</span>} confirm="Dismiss request" onConfirm={() => { if (pending) setText(pending.text); keep(null); setError(""); }} />
   </div>;

@@ -6,7 +6,7 @@ test.setTimeout(60_000);
 
 // A lost network acknowledgement must not duplicate a launch or fall back to this device's runtime.
 async function mac(page: Page, paired = true) {
-  const state = { paired, online: true, dropStart: false, dropApproval: false, dropFeedback: false, failStop: false, approval: true };
+  const state = { paired, shared: true, online: true, dropStart: false, dropApproval: false, dropFeedback: false, failStop: false, approval: true };
   const calls: { method: string; path: string; body: any; expectedConnection: string }[] = [];
   const starts: any[] = [], sends: any[] = [], stops: string[] = [], local: string[] = [];
   const conversations: any[] = [], sessions: any[] = [];
@@ -25,7 +25,7 @@ async function mac(page: Page, paired = true) {
     let status = 200, body: any = {};
     const path = args.path as string, method = args.method as string, value = args.body;
     const session = path.split("/")[3];
-    if (path === "/v1/locations") body = [{ name: "p-shared", path: "/Users/test/Projects/Shared Research" }];
+    if (path === "/v1/locations") body = state.shared ? [{ name: "p-shared", path: "/Users/test/Projects/Shared Research" }] : [];
     else if (path.startsWith("/v1/conversations?")) { if (held) { const hold = held; held = undefined; hold.began(); await hold.wait; } body = conversations; }
     else if (path === "/v1/sessions" && method === "GET") body = sessions;
     else if (path === "/v1/sessions" && method === "POST") {
@@ -79,10 +79,9 @@ async function sidebar(page: Page) {
 
 async function openAgents(page: Page) {
   await sidebar(page);
-  await page.getByRole("button", { name: "Agents on Mac", exact: true }).first().click();
-  await expect(page.getByRole("dialog").getByRole("heading", { name: "Agents on Studio Mac" })).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Shared Research", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toBeVisible();
+  await page.getByRole("button", { name: "Remote work", exact: true }).first().click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Remote work" })).toBeVisible();
+  await expect(page.getByRole("dialog").getByText(/Studio Mac · Shared Research/)).toBeVisible();
 }
 
 // Native keyboards resize visualViewport without shrinking the CSS layout viewport.
@@ -117,7 +116,7 @@ for (const device of ["iphone", "ipad"] as const) test(`${device} agent composer
       }).toBe(true);
     }
     expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
-    await expect(field).toHaveValue("Keep my message through rotation");
+    await expect(field).toHaveText("Keep my message through rotation");
     await page.screenshot({ path: `qa/report/mobile-agents/${device}-${browserName}-keyboard-${view.visible}${view.font ? "-large" : ""}.png` });
   }
   await dialog.getByRole("button", { name: "Send", exact: true }).tap();
@@ -140,8 +139,7 @@ test("connect a Mac and start, approve, continue and stop its shared project age
   await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:test-code");
   await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Agents on Mac", exact: true }).last().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Shared Research", exact: true }).click();
+  await page.getByRole("button", { name: "Remote work", exact: true }).last().click();
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Summarize this project");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
@@ -220,7 +218,7 @@ test("an ambiguous start is found after reopening without starting a second agen
   await expect(page.getByRole("button", { name: "Check and retry", exact: true })).toBeVisible();
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await openAgents(page);
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep working while my phone is closed");
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveText("Keep working while my phone is closed");
   await expect(page.getByRole("button", { name: "Check and retry", exact: true })).toBeEnabled({ timeout: 10_000 });
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => {
@@ -274,17 +272,19 @@ test("offline phone keeps its draft and Codex starts only after explicit send", 
   const mock = await mac(page); mock.state.approval = false;
   await page.goto("/?ipad");
   await openAgents(page);
+  await page.getByRole("button", { name: "Agent options" }).click();
   await page.getByRole("combobox", { name: "Agent", exact: true }).click();
   await page.getByRole("option", { name: "Codex", exact: true }).click();
+  await page.getByRole("button", { name: "Agent options" }).click();
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Review my local files");
   mock.state.online = false;
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled({ timeout: 10_000 });
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Review my local files");
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveText("Review my local files");
   await fs.mkdir("qa/report/mobile-agents", { recursive: true });
   await page.screenshot({ path: "qa/report/mobile-agents/iphone-offline-draft.png", fullPage: true });
   const overflow = await page.getByRole("dialog").evaluate((element) => element.scrollWidth > element.clientWidth + 1);
   expect(overflow).toBe(false);
-  const caption = await page.getByText("Approval required", { exact: true }).boundingBox();
+  const caption = await page.getByText(/Studio Mac · Shared Research · Offline/).boundingBox();
   const sendButton = await page.getByRole("button", { name: "Send", exact: true }).boundingBox();
   expect(caption && sendButton && Math.min(caption.x + caption.width, sendButton.x + sendButton.width) - Math.max(caption.x, sendButton.x) > 1 && Math.min(caption.y + caption.height, sendButton.y + sendButton.height) - Math.max(caption.y, sendButton.y) > 1).toBe(false);
   mock.state.online = true;
@@ -325,8 +325,11 @@ for (const agent of ["claude", "codex"]) test(`${agent} decline feedback survive
   await page.goto("/?ipad");
   await openAgents(page);
   if (agent === "codex") {
+    await page.getByRole("button", { name: "Agent options" }).click();
     await page.getByRole("combobox", { name: "Agent", exact: true }).click();
     await page.getByRole("option", { name: "Codex", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toBeFocused();
+    await page.keyboard.press("Escape");
   }
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Ask before changing this file");
   await page.getByRole("button", { name: "Send", exact: true }).click();
@@ -377,10 +380,10 @@ test("expired approval feedback returns to a saved message draft", async ({ page
   await page.getByRole("textbox", { name: /^Feedback for agent/ }).fill("Keep my unsent feedback");
   mock.requests.get(mock.starts[0].name)![0].state = "expired";
   await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeHidden();
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep my unsent feedback");
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveText("Keep my unsent feedback");
   await page.reload();
   await openAgents(page);
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("Keep my unsent feedback");
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveText("Keep my unsent feedback");
   expect(mock.calls.filter((c) => c.path.endsWith("/respond"))).toHaveLength(0);
   expect(mock.sends).toHaveLength(0);
 });
@@ -395,7 +398,8 @@ test("notification opens only its current Mac request without answering", async 
   await page.getByRole("textbox", { name: "Message to agent" }).fill("First notification conversation");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect(page.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("combobox", { name: "Conversation", exact: true }).click();
+  await page.getByRole("option", { name: "New chat", exact: true }).click();
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Second notification conversation");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => mock.starts.length).toBe(2);
@@ -477,13 +481,84 @@ test("switching Macs cannot send an old pending prompt to the new connection", a
   await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Travel Mac", { exact: true })).toBeVisible();
   hold.release();
-  await page.getByRole("button", { name: "Agents on Mac", exact: true }).last().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Shared Research", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveValue("");
+  await page.getByRole("button", { name: "Remote work", exact: true }).last().click();
+  await expect(page.getByRole("textbox", { name: "Message to agent" })).toHaveText("");
   expect(mock.starts).toEqual([]);
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Now run on Travel Mac");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => mock.starts.length).toBe(1);
   expect(mock.starts[0].prompt).toBe("Now run on Travel Mac");
   expect(mock.calls.find((c) => c.method === "POST" && c.path === "/v1/sessions")?.expectedConnection).toBe("mac-b");
+});
+
+// Remote review uses the paired Mac even when the controller has a runtime of its own.
+for (const device of ["mac", "ipad", "iphone"]) test(`remote work on ${device} starts and reviews on the paired Mac`, async ({ page }) => {
+  const mock = await mac(page);
+  await page.setViewportSize(device === "mac" ? { width: 1280, height: 800 } : device === "ipad" ? { width: 820, height: 1180 } : { width: 390, height: 844 });
+  await page.route("**/api/**", (r) => r.fulfill({ json: { devices: [], accounts: [], pairs: [], events: [] } }));
+  await page.route("**/api/config", (r) => r.fulfill({ json: { ready: true, providers: [] } }));
+  await page.route("**/api/me", (r) => r.fulfill({ status: 401, json: { error: "Signed out" } }));
+  await page.goto(device === "mac" ? "/" : `/?${device}`);
+  if (device === "iphone") await page.getByRole("button", { name: "Notes", exact: true }).last().click();
+  else await sidebar(page);
+  const entry = page.getByRole("button", { name: "Remote work", exact: true }).first();
+  await entry.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Studio Mac · Shared Research", { exact: true })).toBeVisible();
+  const input = dialog.getByRole("textbox", { name: "Message to agent" });
+  await input.fill("Review the project notes");
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await expect(input).toHaveCount(0);
+  await fs.mkdir("qa/report/remote-work", { recursive: true });
+  await page.screenshot({ path: `qa/report/remote-work/${device}-review.png` });
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
+  await expect(input).toBeVisible();
+  await input.fill("Thank you. Summarize the changes.");
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => mock.sends.length).toBe(1);
+  expect(mock.starts.map((x) => x.location)).toEqual(["p-shared"]);
+  expect(mock.calls.every((c) => c.expectedConnection === "mac-a")).toBe(true);
+  if (device !== "mac") expect(mock.local).toEqual([]);
+});
+
+// A task link identifies a project on the paired host even if this controller has no folder.
+test("remote task keeps its draft through an unshare and reopens its conversation", async ({ page }) => {
+  const mock = await mac(page);
+  await page.route("**/api/config", (r) => r.fulfill({ json: { ready: true, providers: [] } }));
+  await page.route("**/api/me", (r) => r.fulfill({ json: { id: "demo-owner", name: "Demo" } }));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Remote work", exact: true }).first().waitFor();
+  await page.waitForFunction(async () => (await import(String("/src/lib/space.ts"))).space.get().types.length > 0);
+  const task = await page.evaluate(async () => {
+    const { createPage } = await import(String("/src/lib/space.ts"));
+    const { openPage } = await import(String("/src/lib/panes.ts"));
+    await createPage({ id: "shared", title: "Shared Research", typeId: "project" });
+    const task = await createPage({ title: "Review the field notes", typeId: "task", properties: { "task-project": ["shared"] } });
+    openPage(task.id); return task.id;
+  });
+  const entry = page.getByRole("button", { name: "Remote work on Review the field notes", exact: true });
+  await entry.click();
+  const dialog = page.getByRole("dialog");
+  const input = dialog.getByRole("textbox", { name: "Message to agent" });
+  await expect(input).toHaveText("Review the field notes");
+  await input.fill("Review only the November field notes");
+  mock.state.online = false;
+  await expect(dialog.getByRole("button", { name: "Send", exact: true })).toBeDisabled({ timeout: 12_000 });
+  await expect(input).toHaveText("Review only the November field notes");
+  mock.state.online = true; mock.state.shared = false;
+  await expect(dialog.getByText(/Link and share the folder for Shared Research/)).toBeVisible({ timeout: 12_000 });
+  await expect(input).toHaveCount(0);
+  expect(mock.starts).toHaveLength(0);
+  mock.state.shared = true;
+  await expect(input).toHaveText("Review only the November field notes", { timeout: 12_000 });
+  await dialog.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog.getByRole("group", { name: "Approval", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: /Allow once/ }).click();
+  await expect(input).toBeVisible();
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (k.startsWith("mobile:")) localStorage.removeItem(k); });
+  await entry.click();
+  await expect(dialog.getByText("I found the project on your Mac.", { exact: true })).toBeVisible();
+  expect(mock.starts.map((s) => s.name)).toEqual([`mobile-task-${task}`]);
 });

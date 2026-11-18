@@ -25,7 +25,7 @@ const message = (e: unknown) => e instanceof Error ? e.message : String(e);
 export function MobileAgentAccess() {
   const mobile = useMobile(), os = platform.use();
   // Sharing a Mac needs the Mac's runtime, which a browser has only in development.
-  return mobile ? <ConnectMac /> : os === "macos" || import.meta.env.DEV ? <ShareMac /> : null;
+  return mobile ? <ConnectMac /> : os === "macos" || import.meta.env.DEV ? <><ConnectMac /><ShareMac /></> : null;
 }
 
 function ShareMac() {
@@ -65,8 +65,8 @@ function ShareMac() {
     catch { setError("The code could not be copied. Allow clipboard access and try again."); }
   };
   return <>
-    <SettingsGroup title="Agents from iPhone and iPad" description="Keep this Mac awake and online. LeadingLight carries encrypted messages between your devices. Your Claude Code and Codex accounts stay here.">
-      {!cloud.user && <SettingsRow label="Sign in first" description="Sign in on this Mac, above, to enable the connection. Your phone pairs with a code; note sync is optional." />}
+    <SettingsGroup title="Share this Mac" description="Keep this Mac awake and online. LeadingLight carries encrypted messages between your devices. Your Claude Code and Codex accounts stay here.">
+      {!cloud.user && <SettingsRow label="Sign in first" description="Sign in on this Mac, above, to enable the connection. Your other device pairs with a code. Note sync is optional." />}
       <SettingsRow label="Mobile access" description={host?.error || (host?.enabled ? `Available on ${host.name}. Paired devices can start and answer agents in the projects below.` : "Off until you enable it and choose projects to share.")}>
         <Switch checked={host?.enabled ?? false} disabled={busy || !host || (!host.enabled && (!cloud.user || !host.projects.length))} onCheckedChange={(enabled) => void change({ enabled })} />
       </SettingsRow>
@@ -85,11 +85,12 @@ function ShareMac() {
     </SettingsGroup>
     {(error || host?.error) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || host?.error}</p>}
     <Button size="sm" variant="outline" disabled={busy} onClick={read}><RefreshCw />Check connection</Button>
-    <ConfirmDialog open={rotate} onOpenChange={setRotate} title="Replace connection code?" description="All paired phones and tablets will need the new code. Running work stays on this Mac." confirm="Replace code" onConfirm={() => change({ rotate: true })} />
+    <ConfirmDialog open={rotate} onOpenChange={setRotate} title="Replace connection code?" description="All paired devices will need the new code. Running work stays on this Mac." confirm="Replace code" onConfirm={() => change({ rotate: true })} />
   </>;
 }
 
 function ConnectMac() {
+  const mobile = useMobile();
   const state = mobileAgents.use();
   const notifications = mobileNotifications.use();
   const [code, setCode] = useState("");
@@ -112,12 +113,12 @@ function ConnectMac() {
         <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(disconnectMobileAgents)}>Disconnect</Button>
       </SettingsRow>
       <div className="py-4"><MobileAgentsButton /></div>
-      <SettingsRow label="Agent notifications" description={notifications.registered ? "Alerts are enabled for permissions and questions. Details stay inside the app." : "Get a generic alert when an agent needs your response, including when this app is closed."}>
+      {mobile && <SettingsRow label="Agent notifications" description={notifications.registered ? "Alerts are enabled for permissions and questions. Details stay inside the app." : "Get a generic alert when an agent needs your response, including when this app is closed."}>
         <Switch aria-label="Agent notifications" checked={notifications.enabled} disabled={notifications.busy} onCheckedChange={(value) => void setMobileNotifications(value)} />
-      </SettingsRow>
+      </SettingsRow>}
     </SettingsGroup>}
-    {(notifications.error || notifications.cleanupError) && <div className="space-y-2 py-3"><p role="status" className="text-sm text-muted-foreground">{notifications.cleanupError || notifications.error}</p><Button size="sm" variant="outline" disabled={notifications.busy} onClick={() => void refreshMobileNotifications()}>Check notifications</Button></div>}
+    {mobile && (notifications.error || notifications.cleanupError) && <div className="space-y-2 py-3"><p role="status" className="text-sm text-muted-foreground">{notifications.cleanupError || notifications.error}</p><Button size="sm" variant="outline" disabled={notifications.busy} onClick={() => void refreshMobileNotifications()}>Check notifications</Button></div>}
     {(error || state.error) && <p role="alert" className="break-words text-sm text-destructive-foreground">{error || state.error}</p>}
-    <p className="text-sm text-muted-foreground">No mobile sign-in or note sync is needed. Agent processes and files stay on your Mac; Claude and Codex still contact their model providers.</p>
+    <p className="text-sm text-muted-foreground">The connecting device only needs the code. Agent processes and files stay on your Mac; Claude and Codex still contact their model providers.</p>
   </>;
 }
