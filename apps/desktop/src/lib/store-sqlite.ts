@@ -122,7 +122,7 @@ export const sqliteStore: ObjectStore = {
       "SELECT * FROM objects WHERE deleted_at IS NULL AND (content LIKE $1 ESCAPE '\\' OR properties LIKE $1 ESCAPE '\\')",
       [like(text)],
     );
-    return rows.map(fromRow).filter((page) => searchable(page).includes(text.toLowerCase()));
+    return rows.map(fromRow).filter((page) => !text || searchable(page).includes(text.toLowerCase()));
   },
 
   async catalog() {

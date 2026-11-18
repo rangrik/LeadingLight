@@ -1,4 +1,4 @@
-import { bar, leave, refocus } from "./browser-space";
+import { bar, refocus } from "./browser-space";
 import { DAILY, dayPage, today } from "./daily";
 import { focusPane, leaves, openFresh, openTab, panes, PERSONAL_BROWSER } from "./panes";
 import { whenLive } from "./live";
@@ -24,7 +24,6 @@ export async function createNote(type = PAGE_TYPE, navigate: (show: () => void) 
   const target = here?.page === PERSONAL_BROWSER ? all.find((p) => p.page !== PERSONAL_BROWSER) ?? here : here;
   const id = type === DAILY ? await dayPage(today()) : (await newPage(type)).id;
   navigate(() => {
-    leave();
     if (target && panes.get().root && leaves(panes.get().root!).some((p) => p.id === target.id)) focusPane(target.id);
     (phone ? openFresh : openTab)(id);
     if (type !== DAILY) whenLive(id, (page) => page.focus("title"));

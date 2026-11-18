@@ -10,7 +10,7 @@ import { SiteIcon } from "~/components/browser-sidebar";
 import { available, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
 import { editPage, liveContent } from "~/lib/live";
-import { docText, objects, type ObjectSummary } from "~/lib/objects";
+import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom } from "~/lib/panes";
 import { iconFor, space, typeOf, typeView } from "~/lib/space";
 import { ABOUT } from "~/lib/tail-memory";
@@ -65,9 +65,8 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     if (!q || !searchPages) return;
     let current = true;
     const timer = setTimeout(() => {
-      void Promise.all(tokens.map((token) => objects.containing(token))).then((found) => {
+      void pageTexts.read(pages).then((hits) => {
         if (!current) return;
-        const hits = new Map(found.flat().map((p) => [p.id, docText(liveContent(p.id) ?? p.content)]));
         // An open editor can be newer than its last committed save.
         for (const p of pages) { const doc = liveContent(p.id); if (doc) hits.set(p.id, docText(doc)); }
         setBody({ query: q, hits });
@@ -82,11 +81,11 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     working.current = true;
     setBusy(true);
     setError("");
-    try { await createNote(id, navigate); }
+    try { await createNote(id, (show) => navigate(() => { leave(); show(); })); }
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
-  const pageItems = pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.query === q ? body.hits.get(p.id) ?? "" : ""))
+  const pageItems = pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
     .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
   const results: Group[] = [];
   const add = (value: string, items: Item[]) => { if (items.length) results.push({ value, items }); };

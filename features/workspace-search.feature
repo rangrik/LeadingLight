@@ -38,6 +38,7 @@ Feature: One search for the workspace
     Then a new page opens in a new note tab and the previous page is kept
     When I press Command+N in the browser pane
     Then the new browser-tab address picker opens without creating a note
+    And the sidebar stays in its chosen mode
     And Command+T continues to open a tab
     And holding the shortcut or pressing it behind a dialog does not create extra pages
 
@@ -45,6 +46,7 @@ Feature: One search for the workspace
     Given the sidebar is hidden
     When I press Command+K or invoke Search library from the native menu
     Then the same search window opens and takes keyboard focus
+    And Command+K replaces an open browser address picker with Search library
     And native browser content is hidden while the search window is open
     When I press Escape
     Then the search closes and focus returns to the previous pane

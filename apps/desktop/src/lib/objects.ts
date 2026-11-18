@@ -3,7 +3,7 @@ import { checkNotebookType, NOTEBOOK_TYPE } from "./page-format";
 import type { EditorDoc } from "@leadinglight/editor/editor";
 import { resolveAssetUrls } from "./assets";
 import { isNative } from "./platform";
-import type { ObjectStore } from "./store";
+import type { ObjectStore, ObjectSummary } from "./store";
 import { localStore } from "./store-local";
 import { sqliteStore } from "./store-sqlite";
 import { withHistory } from "./history-store";
@@ -59,3 +59,38 @@ export function docText(doc: EditorDoc | null): string {
   if (doc) walk(doc);
   return lines.filter((l) => l.trim()).join("\n");
 }
+
+// Search reads plain text once, then only rereads pages whose summaries changed.
+// Keep assets out of this path: images need not load to find their page's words.
+const textIndex = new Map<string, { stamp: number; text: string }>();
+let indexing: Promise<void> | undefined;
+let indexed = false;
+const changedDuringIndex = new Set<string>();
+onHistory((entry) => {
+  for (const change of entry.changes) {
+    const id = (change.after ?? change.before)!.id;
+    textIndex.delete(id);
+    if (indexing && !indexed) changedDuringIndex.add(id);
+  }
+});
+export const pageTexts = {
+  async read(pages: ObjectSummary[]): Promise<Map<string, string>> {
+    const db = await store;
+    if (!indexing) {
+      const stamps = new Map(pages.map((p) => [p.id, p.updatedAt]));
+      indexing = db.containing("").then((all) => {
+        for (const p of all) if (!changedDuringIndex.has(p.id)) textIndex.set(p.id, { stamp: stamps.get(p.id) ?? p.updatedAt, text: docText(p.content) });
+        indexed = true;
+        changedDuringIndex.clear();
+      }).catch((error) => { indexing = undefined; throw error; });
+    }
+    await indexing;
+    const current = new Set(pages.map((p) => p.id));
+    for (const id of textIndex.keys()) if (!current.has(id)) textIndex.delete(id);
+    await Promise.all(pages.filter((p) => textIndex.get(p.id)?.stamp !== p.updatedAt).map(async (p) => {
+      const page = await db.get(p.id);
+      if (page) textIndex.set(p.id, { stamp: p.updatedAt, text: docText(page.content) });
+    }));
+    return new Map(pages.map((p) => [p.id, textIndex.get(p.id)?.text ?? ""]));
+  },
+};

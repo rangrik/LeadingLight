@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 // Use the same search controls as a person, rather than opening panes through stores.
 export async function findPage(page: Page, name: string | RegExp) {
   const dialog = page.getByRole('dialog', { name: 'Search library', exact: true });
-  if (!await dialog.isVisible()) await page.getByRole('button', { name: 'Search library', exact: true }).click();
+  if (!await dialog.getByRole('combobox').isVisible()) await page.getByRole('button', { name: 'Search library', exact: true }).click();
   await dialog.getByRole('combobox').fill(typeof name === 'string' ? name : name.source.replace(/^\^|\$$/g, ''));
   return dialog.getByRole('option', { name, exact: true });
 }

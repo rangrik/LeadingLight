@@ -1,4 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
+import type { ObjectStore } from '../src/lib/store';
 
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Search library', exact: true });
 const input = (page: Page) => dialog(page).getByRole('combobox');
@@ -51,6 +52,15 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await expect(dialog(page).getByRole('option')).toHaveCount(26);
   await input(page).fill('Archive 23');
   await expect(dialog(page).getByRole('option', { name: 'Archive 23', exact: true })).toBeVisible();
+  await page.evaluate(async () => {
+    const { space } = await import('/src/lib/' + 'space.ts');
+    const { editPage } = await import('/src/lib/' + 'live.ts');
+    await editPage(space.get().pages.find((p: { title: string }) => p.title === 'Archive 0').id, { content: () => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'An agent revision' }] }] }) });
+  });
+  await dialog(page).getByRole('button', { name: 'Back to search' }).click();
+  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('aria-label', 'Archive 0');
+  await input(page).fill('agent revision');
+  await expect(dialog(page).getByRole('option', { name: 'Archive 0', exact: true })).toBeVisible();
   await page.screenshot({ path: 'qa/report/search-library.png' });
 });
 
@@ -64,7 +74,10 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Walking-guide');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
+  await page.keyboard.press('Meta+l');
+  await expect(page.getByRole('combobox', { name: 'Search or enter address' })).toBeVisible();
   await search(page, 'Kyoto itinerary');
+  await expect(page.getByRole('combobox', { name: 'Search or enter address' })).not.toBeVisible();
   await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toBe('');
   await page.keyboard.press('Shift+Enter');
   await expect(page.locator('[data-pane]')).toHaveCount(2);
@@ -92,6 +105,11 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await expect(title(page)).toHaveValue('Packing');
   await expect(page.locator('[data-pane]')).toHaveCount(2);
   await page.screenshot({ path: 'qa/report/search-split.png' });
+  await page.setViewportSize({ width: 700, height: 800 });
+  await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
+  await search(page, 'Packing');
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await page.keyboard.press('Escape');
 });
 
 // Seam: async search cancellation and failure recovery; the current query must always win.
@@ -99,16 +117,17 @@ test('late results, body-search errors and creation errors recover', async ({ pa
   await start(page);
   await page.evaluate(async () => {
     const { createPage, putType, typeOf } = await import('/src/lib/' + 'space.ts');
-    const { objects } = await import('/src/lib/' + 'objects.ts');
+    const { objects, pageTexts } = await import('/src/lib/' + 'objects.ts');
     await createPage({ title: 'Slow result', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'alpha' }] }] } });
-    await createPage({ title: 'Fast result', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'beta' }] }] } });
+    await createPage({ title: 'Fast result', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'be', marks: [{ type: 'bold' }] }, { type: 'text', text: 'ta' }] }] } });
     const template = await createPage({ title: 'Recipe template', properties: { templateOf: 'recipe' }, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ingredients and method' }] }] } });
     await putType({ ...typeOf('page'), id: 'recipe', name: 'Recipe', plural: 'Recipes', template: template.id });
-    const containing = objects.containing;
-    objects.containing = async (q: string) => { if (q === 'alpha') await new Promise(r => setTimeout(r, 800)); if (q === 'unavailable') throw Error('offline fixture'); return containing(q); };
+    const read = pageTexts.read;
+    let reads = 0;
+    pageTexts.read = async (pages: Parameters<typeof read>[0]) => { const n = ++reads; if (n === 1) await new Promise(r => setTimeout(r, 800)); if (n === 3) throw Error('offline fixture'); return read(pages); };
     const create = objects.create;
     let fail = true;
-    objects.create = async (...args: Parameters<typeof objects.create>) => { if (fail && args[0]?.typeId === 'recipe') { fail = false; throw Error('disk fixture'); } return create(...args); };
+    objects.create = async (...args: Parameters<ObjectStore["create"]>) => { if (fail && args[0]?.typeId === 'recipe') { fail = false; throw Error('disk fixture'); } return create(...args); };
   });
   await search(page, 'alpha');
   await page.waitForTimeout(220);

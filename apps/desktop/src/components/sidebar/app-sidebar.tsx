@@ -28,7 +28,7 @@ import { useKeysFor } from "~/lib/keymap";
 import { openFrom, openBeside } from "~/lib/panes";
 import { CALENDAR_VIEW, MAIL_VIEW, browserView } from "~/lib/space";
 import { NavProjects } from "./nav-projects";
-import { openSearch } from "~/lib/workspace-search";
+import { openSearch, workspaceSearch } from "~/lib/workspace-search";
 
 function Mark({ className }: { className?: string }) {
   return (
@@ -92,6 +92,7 @@ export function AppSidebar({
   const front = space.use().front && !mobile;
   const keys = useKeysFor();
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
+  useEffect(() => isMobile ? workspaceSearch.subscribe(() => { if (workspaceSearch.get()) setOpenMobile(false); }) : undefined, [isMobile, setOpenMobile]);
   const touch = useRef<{ x: number; y: number } | null>(null);
   useEffect(() => {
     if (!sidebar || mobile) return;

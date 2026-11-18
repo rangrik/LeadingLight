@@ -1076,3 +1076,6 @@ all-page and type views live in that window. Results include note text, types, c
 commands and personal browser tabs. Explicit result navigation reveals its sidebar mode;
 ordinary pane focus still leaves the mode alone. ⌘N follows the focused pane and keeps
 its previous tab. A new typed page uses the existing template and daily-note paths.
+
+Search keeps a plain-text index in memory, built on demand without resolving image assets.
+It rereads only changed pages; formatting cannot split a word out of the results.

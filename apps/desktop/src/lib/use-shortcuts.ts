@@ -40,7 +40,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
     const run = (id: string) => {
       if (id === "search") {
         if (workspaceSearch.get()) return closeSearch();
-        if (shown(COVERS)) return;
+        if ([...document.querySelectorAll(COVERS)].some((el) => el.getClientRects().length && !el.closest("[data-browser-command], [data-sidebar=sidebar]"))) return;
         if (useStore.getState().view.kind === "settings") closeSettings();
         return openSearch();
       }

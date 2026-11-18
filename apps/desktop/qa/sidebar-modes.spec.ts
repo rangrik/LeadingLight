@@ -55,7 +55,6 @@ test('modes preserve a mixed split and provide just one sidebar toggle', async (
 
 // Seam: explicit split navigation and keyboard routing across a native browser and a note.
 test('Open beside is discoverable and subsequent selections keep the other pane', async ({ page }) => {
-  test.setTimeout(60_000);
   await setup(page);
   await newBrowser(page, 'https://kyoto.example/Walking-guide');
   await page.getByRole('button', { name: 'New tab', exact: true }).click();
@@ -72,6 +71,7 @@ test('Open beside is discoverable and subsequent selections keep the other pane'
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Kyoto research');
   await mode(page, 'Notes').click();
   await page.getByRole('button', { name: 'New page', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Packing list');
   await expect(panes(page)).toHaveCount(2);
   await expect(page.getByTestId('standin-page')).toBeVisible();
