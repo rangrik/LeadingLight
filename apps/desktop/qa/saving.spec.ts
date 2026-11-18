@@ -84,7 +84,7 @@ test("An old Description property joins the line under the title", async ({ page
   await page.goto("/");
   if (await page.getByRole("dialog", { name: "Search library", exact: true }).isVisible()) await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Search library", exact: true }).click();
-  await page.getByRole("option", { name: "Browse types", exact: true }).click();
+  await page.getByRole("radio", { name: "Types", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Search library" }).getByRole("option", { name: "Books", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.evaluate(
@@ -126,7 +126,7 @@ test("Pages stored before types existed survive the upgrade", async ({ page }) =
   await expect(await findPage(page, "From v1")).toBeVisible();
   if (await page.getByRole("dialog", { name: "Search library", exact: true }).isVisible()) await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Search library", exact: true }).click();
-  await page.getByRole("option", { name: "Browse types", exact: true }).click();
+  await page.getByRole("radio", { name: "Types", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Search library" }).getByRole("option", { name: "Books", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
 });

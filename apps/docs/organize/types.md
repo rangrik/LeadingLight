@@ -67,13 +67,13 @@ When a page has grown properties you want on other pages too, make a type from i
 2. Enter a **Name**, such as "Novel". The **Plural** fills itself in; change it if it is wrong.
 3. Click **Save as type**.
 
-The new type gets the page's properties, and the page becomes one of it. The type shows in **Search library › Browse types** by its plural.
+The new type gets the page's properties, and the page becomes one of it. The type shows in **Search library › Types** by its plural.
 
 To add just one of a page's own properties to its type, click the property's name and choose **Add to** *type*. See [Properties](/organize/properties).
 
 ## Open a type's list
 
-**Search library › Browse types** has one row per type, by its plural name. Click one to open its list:
+**Search library › Types** has one row per type, by its plural name. Click one to open its list:
 
 - the type's icon and plural name at the top
 - **New** *type*, such as **New book**, to make a page of the type
@@ -115,7 +115,7 @@ The built-in types Page, Tag and Daily note, and the app's own types, have no **
 
 A type needs a name. With the name empty, the dialog says **Give the type a name** and stays open. Press <kbd>Esc</kbd> to leave without making one.
 
-The new type is listed last in **Search library › Browse types** and in Settings. It is offered everywhere a type is: the **Type** picker, **New** in the slash menu, and **Create** in the link menu.
+The new type is listed last in **Search library › Types** and in Settings. It is offered everywhere a type is: the **Type** picker, **New** in the slash menu, and **Create** in the link menu.
 
 ## Settings › Types
 

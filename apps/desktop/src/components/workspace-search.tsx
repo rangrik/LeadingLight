@@ -1,9 +1,13 @@
 // COSS p-command-1, with workspace groups, recent pages, type creation and page actions.
 // Changes: shared shortcut state, asynchronous body search, and split-aware navigation.
-import { ArrowLeft, ArrowRight, FolderOpen, Layers, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft, ArrowRight, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { AutocompleteRow } from "@leadinglight/ui/components/autocomplete";
+import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
+import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
 import { Button } from "@leadinglight/ui/components/button";
 import { Command, CommandCollection, CommandDialog, CommandDialogPopup, CommandEmpty, CommandFooter, CommandGroup, CommandGroupLabel, CommandInput, CommandItem, CommandList, CommandPanel } from "@leadinglight/ui/components/command";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
@@ -13,8 +17,9 @@ import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom } from "~/lib/panes";
 import { iconFor, isPageView, space, typeOf, typeView } from "~/lib/space";
+import { PAGE_TYPE } from "~/lib/store";
 import { ABOUT } from "~/lib/tail-memory";
-import { createNote, workspaceSearch, type SearchView } from "~/lib/workspace-search";
+import { createNote, openSearch, searchScopes, searchViews, workspaceSearch, type SearchView } from "~/lib/workspace-search";
 
 type Modifiers = { shiftKey: boolean; metaKey: boolean };
 type Item = { value: string; label: string; sub?: string; icon: ReactNode; page?: ObjectSummary; beside?: boolean; run(e: Modifiers): void | Promise<void> };
@@ -22,7 +27,12 @@ type Group = { value: string; items: Item[] };
 const countPages = (count: number) => `${count} ${count === 1 ? "page" : "pages"}`;
 const plain: Modifiers = { shiftKey: false, metaKey: false };
 const PAGE_SIZE = 100;
-const names: Record<SearchView, string> = { search: "Search library", pages: "All pages", types: "Types", create: "Create page" };
+const placeholders: Record<SearchView, string> = { search: "Search your workspace…", pages: "Find a page…", types: "Find a type…", tabs: "Find a browser tab…", create: "Find a type or name a page…" };
+const typeGroups = [
+  { name: "Writing", ids: ["page", "daily", "idea", "notebook"] },
+  { name: "Planning", ids: ["task", "meeting", "project"] },
+  { name: "Reference", ids: ["person", "book", "collection", "tag"] },
+];
 
 export function WorkspaceSearch({ returnFocus }: { returnFocus: RefObject<HTMLElement | null> }) {
   const state = workspaceSearch.use();
@@ -46,17 +56,16 @@ export function WorkspaceSearch({ returnFocus }: { returnFocus: RefObject<HTMLEl
   return (
     <CommandDialog open={!!state} onOpenChange={(open) => { if (!open) close(); }}>
       <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={restoreFocus}>
-        {state && <SearchContents initial={state.view} navigate={navigate} />}
+        {state && <SearchContents view={state.view} navigate={navigate} />}
       </CommandDialogPopup>
     </CommandDialog>
   );
 }
 
-function SearchContents({ initial, navigate }: { initial: SearchView; navigate(fn: () => void): void }) {
+function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () => void): void }) {
   const { pages, types } = space.use();
   const { tabs } = browser.use();
   const canBrowse = available.use();
-  const [view, setView] = useState(initial);
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
@@ -71,6 +80,8 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
   const tokens = useMemo(() => q.split(/\s+/).filter(Boolean), [q]);
   const matches = (...words: string[]) => tokens.every((token) => words.some((word) => word.toLocaleLowerCase().includes(token)));
   const searchPages = view === "search" || view === "pages";
+  const createGrid = view === "create" && !q;
+  useLayoutEffect(() => { setOffset(0); setError(""); }, [view]);
   useEffect(() => {
     if (!q || !searchPages) return;
     let current = true;
@@ -85,23 +96,26 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     return () => { current = false; clearTimeout(timer); };
   }, [q, searchPages, tokens, pages, retry]);
   const changeQuery = (next: string) => { setQuery(next); setOffset(0); setError(""); };
-  const changeView = (next: SearchView) => { setView(next); changeQuery(""); input.current?.focus(); };
   const open = (id: string, e: Modifiers) => navigate(() => {
     leave();
     openFrom(id, e);
     if (isPageView(id)) requestAnimationFrame(() => whenLive(id, (page) => page.focus()));
   });
-  const create = async (id: string) => {
+  const create = async (id: string, title?: string) => {
     if (working.current) return;
     working.current = true;
     setBusy(true);
     setError("");
-    try { await createNote(id, (show) => navigate(() => { leave(); show(); })); }
+    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title); }
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
-  const pageItems = useMemo(() => pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
-    .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [pages, types, q, tokens, body.hits]);
+  const titleRank = (title: string) => {
+    const name = title.trim().toLocaleLowerCase();
+    return name === q ? 2 : Number(name.startsWith(q));
+  };
+  const pageItems = useMemo(() => !searchPages ? [] : pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
+    .sort((a, b) => (q ? titleRank(b.title) - titleRank(a.title) : 0) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [searchPages, pages, types, q, tokens, body.hits]);
   const recent = view === "search" && !q;
   const start = Math.min(offset, Math.max(0, Math.ceil(pageItems.length / PAGE_SIZE) - 1) * PAGE_SIZE);
   const range = `${(start + 1).toLocaleString()}–${Math.min(start + PAGE_SIZE, pageItems.length).toLocaleString()} of ${pageItems.length.toLocaleString()}`;
@@ -116,22 +130,37 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
       ...(start + PAGE_SIZE < pageItems.length ? [{ value: "next", label: "Next pages", sub: `${Math.min(PAGE_SIZE, pageItems.length - start - PAGE_SIZE)} more`, icon: <ArrowRight />, run: () => setOffset(start + PAGE_SIZE) }] : []),
     ]);
   }
-  if (view === "search" && !q) add("Library", [
-    { value: "create", label: "Create page…", sub: "Choose any type", icon: <Plus />, run: () => changeView("create") },
-    { value: "pages", label: "Browse all pages", sub: countPages(pageItems.length), icon: <FolderOpen />, run: () => changeView("pages") },
-    { value: "types", label: "Browse types", icon: <Layers />, run: () => changeView("types") },
-  ]);
-  if (view === "search" && canBrowse) add("Browser tabs", tabs.filter((t) => matches(t.title, t.url)).map((t) => ({
+  if ((view === "search" || view === "tabs") && canBrowse) add("Browser tabs", tabs.filter((t) => matches(t.title, t.url)).map((t) => ({
     value: `tab:${t.id}`, label: t.title || hostOf(t.url), sub: hostOf(t.url), icon: <SiteIcon tab={t} />, beside: true, run: (e) => navigate(() => { enter(); select(t.id, true, e.shiftKey); }),
   })));
   if (view === "types" || (view === "search" && q)) add("Types", types.filter((t) => (!t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))) && matches(t.name, t.plural)).sort((a, b) => Number([b.name, b.plural].some((name) => name.toLocaleLowerCase() === q)) - Number([a.name, a.plural].some((name) => name.toLocaleLowerCase() === q))).map((t) => ({
     value: `type:${t.id}`, label: t.plural, sub: countPages(pages.filter((p) => p.typeId === t.id && !p.properties.templateOf).length), icon: <RowIcon icon={t.icon} />, beside: true, run: (e) => open(typeView(t.id), e),
   })));
   if (view === "create" || (view === "search" && q)) {
-    const wanted = q.replace(/^(?:new|create)\b\s*/, "").split(/\s+/).filter(Boolean);
-    add("Create", types.filter((t) => !t.made && wanted.every((word) => `${t.name} ${t.plural}`.toLocaleLowerCase().includes(word))).sort((a, b) => Number(b.name.toLocaleLowerCase() === wanted.join(" ")) - Number(a.name.toLocaleLowerCase() === wanted.join(" "))).map((t) => ({
-      value: `new:${t.id}`, label: `New ${t.name.toLocaleLowerCase()}`, sub: t.id === "daily" ? "Today" : undefined, icon: <Plus />, run: () => create(t.id),
-    })));
+    const explicit = /^(?:new|create)(?:\s+|$)/i.exec(query.trim());
+    const words = query.trim().slice(explicit?.[0].length ?? 0).trim();
+    const needle = words.toLocaleLowerCase();
+    const actions = types.filter((t) => !t.made).flatMap((t) => {
+      const names = [t.name, t.plural].map((name) => name.toLocaleLowerCase());
+      const prefix = names.sort((a, b) => b.length - a.length).find((name) => needle === name || needle.startsWith(name + " "));
+      const title = explicit && prefix ? words.slice(prefix.length).trim() : "";
+      if (title && t.id === "daily") return [];
+      if (!title && !needle.split(/\s+/).every((word) => names.some((name) => name.includes(word)))) return [];
+      const label = view === "create" ? t.name : `New ${t.name.toLocaleLowerCase()}`;
+      return [{ id: t.id, rank: prefix?.length ?? 0, value: `new:${t.id}`, label: title ? `${label} “${title}”` : label,
+        sub: !createGrid && t.id === "daily" ? "Today" : undefined, icon: <RowIcon icon={t.icon} />, run: () => create(t.id, title) }];
+    }).sort((a, b) => b.rank - a.rank);
+    if (createGrid) {
+      for (const group of typeGroups) add(group.name, group.ids.flatMap((id) => actions.filter((a) => a.id === id)));
+      add("My types", actions.filter((a) => !typeGroups.some((group) => group.ids.includes(a.id))));
+    } else if (explicit && view === "search" && actions.some((action) => action.rank > 0)) {
+      results.unshift({ value: "Create", items: actions });
+    } else add("Create", actions);
+  }
+  const canNamePage = view === "create" || (view === "search" && body.query === q && !body.error);
+  if (q && !results.length && canNamePage) {
+    const title = query.trim();
+    add("Create", [{ value: "new:title", label: `New page “${title}”`, icon: <Plus />, run: () => create(PAGE_TYPE, title) }]);
   }
   const active = results.flatMap((g) => g.items).find((i) => i.value === highlight) ?? results[0]?.items[0];
   const pin = async () => {
@@ -141,34 +170,52 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     catch { setError("Could not change this pin. Try again."); }
   };
   const searching = searchPages && !!q && body.query !== q;
+  const renderItem = (item: Item) => (
+    <CommandItem className="min-w-0 gap-2" key={item.value} aria-label={item.label} aria-current={item.page && item.page.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onClick={(e) => {
+      const keys = e.detail === 0 ? modifiers.current : e;
+      modifiers.current = plain;
+      void item.run(keys);
+    }}>
+      <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">{item.icon}</span><span className="min-w-0 flex-1 truncate">{item.label}</span>{item.sub && <span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground">{item.sub}</span>}
+    </CommandItem>
+  );
   return (
-    <Command key={`${view}:${start}`} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
-      {view !== "search" && <div className="relative flex items-center gap-2 px-3 pt-2 text-sm"><Button aria-label="Back to search" size="icon-sm" variant="ghost" onClick={() => changeView("search")}><ArrowLeft /></Button><span>{names[view]}</span></div>}
-      <CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={view === "create" ? "Choose a type…" : "Search pages, types, tabs…"} readOnly={busy} onKeyDownCapture={(e) => {
-        modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
-        if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
-          e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
-        }
-      }} />
+    <Command key={`${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
+      <div className="relative flex items-center gap-1 pe-3">
+        <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
+          modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
+          if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
+            e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
+          }
+        }} /></div>
+        {view !== "create" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
+      </div>
+      <div className="relative px-3 pb-2">
+        <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
+          {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
+            <Tooltip key={v}>
+              <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
+              <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
+            </Tooltip>
+          ))}
+        </SegmentedControl>
+      </div>
       <CommandPanel>
-        <CommandEmpty>{searching ? "Searching page text…" : "No matches. Try a page title, words from a page, or a type."}</CommandEmpty>
+        <CommandEmpty>{searching ? "Searching page text…" : view === "create" || view === "types" ? "No matching types." : view === "tabs" ? "No matching browser tabs." : q ? "No matches." : view === "search" ? "No recent pages yet." : "No pages yet."}</CommandEmpty>
         <CommandList>
           {(group: Group) => <Fragment key={group.value}><CommandGroup items={group.items}>
             <CommandGroupLabel>{group.value}</CommandGroupLabel>
-            <CommandCollection>{(item: Item) => <CommandItem className="gap-2" key={item.value} aria-label={item.label} aria-current={item.page?.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onClick={(e) => {
-              const keys = e.detail === 0 ? modifiers.current : e;
-              modifiers.current = plain;
-              void item.run(keys);
-            }}>
-              <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4">{item.icon}</span><span className="min-w-0 flex-1 truncate">{item.label}</span><span className="max-w-[35%] shrink-0 truncate text-xs text-muted-foreground">{item.sub}</span>
-            </CommandItem>}</CommandCollection>
+            {createGrid ? group.items.map((item, i) => i % 2 === 0 && (
+              <AutocompleteRow className="grid grid-cols-2 gap-x-2" key={item.value}>{group.items.slice(i, i + 2).map(renderItem)}</AutocompleteRow>
+            )) : <CommandCollection>{renderItem}</CommandCollection>}
           </CommandGroup></Fragment>}
         </CommandList>
       </CommandPanel>
-      {(error || (body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
+      {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
       <CommandFooter className="relative flex-wrap px-3 py-2">
-        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : <span className="px-2"><Kbd>↩</Kbd> {view === "create" ? "Create" : "Open"}</span>}
+        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
+        {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
         <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>
       </CommandFooter>
     </Command>

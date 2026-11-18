@@ -7,7 +7,7 @@ import { closeSettings, openSettings } from "@/views/settings/open";
 import { POPUP, shown } from "~/components/capture-box";
 import { openAsk } from "~/lib/ask";
 import { accelOf, sendKeys } from "~/lib/keymap";
-import { browserFocused, spaceKey } from "~/lib/browser-space";
+import { available, browserFocused, spaceKey } from "~/lib/browser-space";
 import { liveContent, liveEditor, liveProperties } from "~/lib/live";
 import { MAIL_VIEW, pageOf } from "~/lib/space";
 import { NOTEBOOK_TYPE } from "~/lib/page-format";
@@ -15,7 +15,7 @@ import { openPaper, readPaper } from "~/lib/paper";
 import { closeTab, focusedPage, cycleTab, newTab, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
-import { closeSearch, openSearch, workspaceSearch } from "~/lib/workspace-search";
+import { closeSearch, openSearch, searchViews, workspaceSearch } from "~/lib/workspace-search";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
@@ -44,6 +44,11 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
         if ([...document.querySelectorAll(COVERS)].some((el) => el.getClientRects().length && !el.closest("[data-browser-command], [data-sidebar=sidebar]"))) return;
         if (useStore.getState().view.kind === "settings") closeSettings();
         return openSearch();
+      }
+      if (workspaceSearch.get() && /^tab-[1-9]$/.test(id)) {
+        const view = searchViews[Number(id.slice(4)) - 1];
+        if (view && (view !== "tabs" || available.get())) openSearch(view);
+        return;
       }
       if ((id === "new-page" || id === "new-tab") && shown(DIALOGS)) return;
       if (id === "browser" && (useStore.getState().view.kind === "settings" || shown(COVERS))) return;
@@ -115,7 +120,7 @@ export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggle
       // Control alone matches a Ctrl accelerator first; otherwise it stands in for Cmd. The browser
       // space's own keys count only while it is in front; ⌘1 is the numbered "tab-1".
       const front = browserFocused();
-      const own = (s: (typeof SHORTCUTS)[number]) => front || !(s as { browser?: boolean }).browser;
+      const own = (s: (typeof SHORTCUTS)[number]) => front || !(s as { browser?: boolean }).browser || (s.id === "tab" && !!workspaceSearch.get());
       const find = (a: string) => {
         const n = /^(.*\+)([1-9])$/.exec(a);
         const counted = n && SHORTCUTS.find((s) => s.count && s.accel === `${n[1]}{n}` && own(s));

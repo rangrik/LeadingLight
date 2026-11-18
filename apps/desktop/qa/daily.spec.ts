@@ -20,7 +20,7 @@ test("Browsing days stores nothing; the first edit stores the day", async ({ pag
   await page.reload();
   if (await page.getByRole("dialog", { name: "Search library", exact: true }).isVisible()) await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Search library", exact: true }).click();
-  await page.getByRole("option", { name: "Browse types", exact: true }).click();
+  await page.getByRole("radio", { name: "Types", exact: true }).click();
   await page.getByRole("dialog", { name: "Search library" }).getByRole("option", { name: "Daily notes" }).click();
   await expect(page.getByRole("link", { name: days[2] })).toBeVisible();
   await expect(page.getByRole("link", { name: days[0] })).toHaveCount(0);

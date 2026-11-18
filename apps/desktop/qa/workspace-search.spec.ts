@@ -5,7 +5,7 @@ const dialog = (page: Page) => page.getByRole('dialog', { name: 'Search library'
 const input = (page: Page) => dialog(page).getByRole('combobox');
 const title = (page: Page) => page.getByRole('textbox', { name: 'Title', exact: true });
 async function search(page: Page, query = '') {
-  if (!await dialog(page).isVisible()) await page.keyboard.press('Meta+k');
+  if (!await input(page).isVisible()) await page.keyboard.press('Meta+k');
   await expect(input(page)).toBeFocused();
   await input(page).fill(query);
 }
@@ -25,7 +25,7 @@ test('large libraries page through results and search every page', async ({ page
     for (let n = 0; n < 201; n++) await createPage({ title: `Saved ${n}`, createdAt: n + 1, updatedAt: n + 1 });
   });
   await search(page);
-  await dialog(page).getByRole('option', { name: 'Browse all pages' }).click();
+  await dialog(page).getByRole('radio', { name: 'Pages' }).click();
   await expect(dialog(page).getByRole('option')).toHaveCount(101);
   await expect(input(page)).toBeFocused();
   await expect(dialog(page).getByRole('option').first()).toHaveAttribute('data-highlighted', '');
@@ -78,7 +78,7 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await expect(dialog(page).getByRole('option', { name: 'Books', exact: true })).toBeVisible();
   await expect(dialog(page).getByRole('option', { name: 'New book', exact: true })).toBeVisible();
   await input(page).fill('');
-  await dialog(page).getByRole('option', { name: 'Browse all pages' }).click();
+  await dialog(page).getByRole('radio', { name: 'Pages' }).click();
   await expect(dialog(page).getByRole('option')).toHaveCount(26);
   await input(page).fill('Archive 23');
   await expect(dialog(page).getByRole('option', { name: 'Archive 23', exact: true })).toBeVisible();
@@ -87,7 +87,9 @@ test('recent pages, full library, body search and type creation', async ({ page 
     const { editPage } = await import('/src/lib/' + 'live.ts');
     await editPage(space.get().pages.find((p: { title: string }) => p.title === 'Archive 0').id, { content: () => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'An agent revision' }] }] }) });
   });
-  await dialog(page).getByRole('button', { name: 'Back to search' }).click();
+  await dialog(page).getByRole('radio', { name: 'All', exact: true }).click();
+  await expect(input(page)).toHaveValue('Archive 23');
+  await input(page).fill('');
   await expect(dialog(page).getByRole('option').first()).toHaveAttribute('aria-label', 'Archive 0');
   await input(page).fill('agent revision');
   await expect(dialog(page).getByRole('option', { name: 'Archive 0', exact: true })).toBeVisible();
@@ -113,6 +115,19 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Walking-guide');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
+  await search(page, 'Kyoto');
+  const category = (name: string) => dialog(page).getByRole('radio', { name, exact: true });
+  await category('Pages').click();
+  await expect(input(page)).toHaveValue('Kyoto');
+  await expect(dialog(page).getByRole('option')).toHaveCount(1);
+  await expect(dialog(page).getByRole('option', { name: 'Kyoto itinerary' })).toBeVisible();
+  await page.keyboard.press('Meta+5');
+  await expect(category('Tabs')).toBeChecked();
+  await expect(dialog(page).getByRole('option')).toHaveCount(1);
+  await expect(dialog(page).getByText(/Walking-guide/).first()).toBeVisible();
+  await category('All').click();
+  await expect(dialog(page).getByRole('option')).toHaveCount(2);
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Meta+l');
   await expect(page.getByRole('combobox', { name: 'Search or enter address' })).toBeVisible();
   await search(page, 'Kyoto itinerary');
@@ -162,7 +177,7 @@ test('late results, body-search errors and creation errors recover', async ({ pa
     await createPage({ title: 'Slow result', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'alpha' }] }] } });
     await createPage({ title: 'Fast result', content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'be', marks: [{ type: 'bold' }] }, { type: 'text', text: 'ta' }] }] } });
     const template = await createPage({ title: 'Recipe template', properties: { templateOf: 'recipe' }, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Ingredients and method' }] }] } });
-    await putType({ ...typeOf('page'), id: 'recipe', name: 'Recipe', plural: 'Recipes', template: template.id });
+    await putType({ ...typeOf('page'), id: 'recipe', name: 'Family recipe', plural: 'Family recipes', template: template.id });
     const read = pageTexts.read;
     let reads = 0;
     pageTexts.read = async (pages: Parameters<typeof read>[0]) => { const n = ++reads; if (n === 1) await new Promise(r => setTimeout(r, 800)); if (n === 3) throw Error('offline fixture'); return read(pages); };
@@ -178,11 +193,15 @@ test('late results, body-search errors and creation errors recover', async ({ pa
   await expect(dialog(page).getByRole('option', { name: 'Slow result', exact: true })).toHaveCount(0);
   await input(page).fill('unavailable');
   await expect(dialog(page).getByText(/Page text could not be searched/)).toBeVisible();
-  await input(page).fill('new recipe');
+  await page.keyboard.press('Meta+2');
+  await input(page).fill('');
+  await expect(dialog(page).getByRole('gridcell', { name: 'Family recipe', exact: true })).toBeVisible();
+  await input(page).fill('new family recipe Pantry soup');
   await page.keyboard.press('Enter');
   await expect(dialog(page).getByText(/Could not create this page/)).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(dialog(page)).not.toBeVisible();
+  await expect(title(page)).toHaveValue('Pantry soup');
   await expect(page.getByRole('textbox', { name: 'Page body' })).toContainText('Ingredients and method');
   await search(page);
   const before = await page.evaluate(async () => (await import('/src/lib/' + 'space.ts')).space.get().pages.length);
@@ -264,4 +283,40 @@ test('typing goes into search when Cmd K immediately follows opening a result', 
   await expect(body).toHaveText('Original text');
   await page.reload();
   await expect(body).toHaveText('Original text');
+});
+
+// An explicit creation command must win even when a saved page has the exact same title.
+test('create a plain page or a named typed page from the first screen', async ({ page }) => {
+  await start(page);
+  await search(page);
+  await dialog(page).getByRole('button', { name: 'New page', exact: true }).click();
+  await expect(title(page)).toBeFocused();
+  await title(page).fill('New');
+  await page.keyboard.press('Meta+n');
+  await expect(title(page)).toHaveValue('');
+  await title(page).fill('new meeting Friday review');
+  await search(page, 'New');
+  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('aria-label', 'New');
+  await input(page).fill('new meeting Friday review');
+  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('aria-label', 'New meeting “Friday review”');
+  await page.keyboard.press('Enter');
+  await expect(title(page)).toHaveValue('Friday review');
+  await expect(page.getByRole('textbox', { name: 'Page body' })).toBeFocused();
+  await search(page, 'Friday review');
+  await expect(dialog(page).getByRole('option', { name: 'Friday review', exact: true })).toContainText('Meeting');
+  await page.keyboard.press('Meta+2');
+  await expect(input(page)).toHaveValue('Friday review');
+  await expect(dialog(page).getByRole('option', { name: 'New page “Friday review”' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'Page body' })).toBeFocused();
+  await expect(title(page)).toHaveValue('Friday review');
+  await search(page, 'Neighborhood walk');
+  await expect(dialog(page).getByRole('option', { name: 'New page “Neighborhood walk”' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(title(page)).toHaveValue('Neighborhood walk');
+  await page.getByRole('button', { name: 'Choose page type' }).click();
+  await expect(dialog(page).getByRole('gridcell', { name: 'Book', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'qa/report/search-create-types.png' });
+  await dialog(page).getByRole('gridcell', { name: 'Book', exact: true }).click();
+  await expect(title(page)).toBeFocused();
 });
