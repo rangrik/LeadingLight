@@ -85,6 +85,8 @@ Feature: One search for the workspace
     Then a blank page opens with its title ready to edit
     When my search for "Neighborhood walk" finishes without a match
     Then I can press Return to create a page already titled "Neighborhood walk"
+    When I switch to Create with "Kyoto" still in the search field
+    Then I can create a page titled "Kyoto" even if other pages matched my search
     When I type "new meeting Friday review" in search and press Return
     Then a Meeting titled "Friday review" opens with its body ready to edit
     And a saved page containing those search words cannot take precedence over the creation command

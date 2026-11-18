@@ -27,7 +27,7 @@ type Group = { value: string; items: Item[] };
 const countPages = (count: number) => `${count} ${count === 1 ? "page" : "pages"}`;
 const plain: Modifiers = { shiftKey: false, metaKey: false };
 const PAGE_SIZE = 100;
-const placeholders: Record<SearchView, string> = { search: "Search your workspace…", pages: "Find a page…", types: "Find a type…", tabs: "Find a browser tab…", create: "Find a page type…" };
+const placeholders: Record<SearchView, string> = { search: "Search your workspace…", pages: "Find a page…", types: "Find a type…", tabs: "Find a browser tab…", create: "Find a type or name a page…" };
 const typeGroups = [
   { name: "Writing", ids: ["page", "daily", "idea", "notebook"] },
   { name: "Planning", ids: ["task", "meeting", "project"] },
@@ -153,7 +153,8 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       results.unshift({ value: "Create", items: actions });
     } else add("Create", actions);
   }
-  if (view === "search" && q && !results.length && body.query === q && !body.error) {
+  const canNamePage = view === "create" || (view === "search" && body.query === q && !body.error);
+  if (q && !results.length && canNamePage) {
     const title = query.trim();
     add("Create", [{ value: "new:title", label: `New page “${title}”`, icon: <Plus />, run: () => create(PAGE_TYPE, title) }]);
   }

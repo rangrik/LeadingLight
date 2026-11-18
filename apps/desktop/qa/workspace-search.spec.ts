@@ -299,7 +299,13 @@ test('create a plain page or a named typed page from the first screen', async ({
   await expect(page.getByRole('textbox', { name: 'Page body' })).toBeFocused();
   await search(page, 'Friday review');
   await expect(dialog(page).getByRole('option', { name: 'Friday review', exact: true })).toContainText('Meeting');
-  await input(page).fill('Neighborhood walk');
+  await page.keyboard.press('Meta+2');
+  await expect(input(page)).toHaveValue('Friday review');
+  await expect(dialog(page).getByRole('option', { name: 'New page “Friday review”' })).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'Page body' })).toBeFocused();
+  await expect(title(page)).toHaveValue('Friday review');
+  await search(page, 'Neighborhood walk');
   await expect(dialog(page).getByRole('option', { name: 'New page “Neighborhood walk”' })).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(title(page)).toHaveValue('Neighborhood walk');
