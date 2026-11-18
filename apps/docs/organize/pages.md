@@ -27,9 +27,13 @@ The card header above the page shows where you are: the type's plural name, then
 
 ## Find pages in Library
 
-Press <kbd>⌘K</kbd> or choose **Search library** in either sidebar mode. The same search works with the sidebar hidden. Recent pages appear first, ordered by their last change. **Browse all pages** lists every saved page, including daily notes and unpinned pages.
+Press <kbd>⌘K</kbd> or choose **Search library** in either sidebar mode. The same search works with the sidebar hidden. Recent pages appear first, ordered by their last change. The **Pages** category lists every saved page, including daily notes and unpinned pages.
 
-Search by title, words in the body, or type. A search for **book** offers matching books, **Books** to open that type's list, and **New book**. **Browse types** lists all your types. Templates stay in their type's settings.
+Search by title, words in the body, or type. A search for **book** offers matching books, **Books** to open that type's list, and **New book**. **Types** lists all your types. **Tabs** shows open websites when the browser is available. Switching categories keeps the words you typed. Templates stay in their type's settings.
+
+Click **New page** at the top of search for a blank page. If your search finds nothing, press Return on **New page “…”** to use your search as the title. To choose a type, click **Create**. Its icons are grouped into Writing, Planning, Reference and My types. You can also type **new meeting Friday review** in **All** and press Return to start a Meeting with that title. Your custom types and their default templates work the same way. **New daily note** opens today’s note.
+
+While search is open, <kbd>⌘1</kbd> selects All, <kbd>⌘2</kbd> Create, <kbd>⌘3</kbd> Pages, <kbd>⌘4</kbd> Types and <kbd>⌘5</kbd> Tabs when available.
 
 Large lists show 100 pages at a time. **Next pages** and **Previous 100 pages** move through the results. Typing always searches the whole library.
 

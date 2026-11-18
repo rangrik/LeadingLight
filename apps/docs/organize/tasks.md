@@ -9,7 +9,7 @@ A task is a to-do that is a page of its own. It can have a due date and a projec
 
 ## What a task is
 
-Task is a starter type, listed as **Tasks** in **Search library › Browse types**, after Projects. Each task has these properties, in this order:
+Task is a starter type, listed as **Tasks** in **Search library › Types**, after Projects. Each task has these properties, in this order:
 
 | Property | Holds |
 | --- | --- |

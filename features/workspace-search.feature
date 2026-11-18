@@ -25,7 +25,7 @@ Feature: One search for the workspace
     And changing the query searches the whole library from the first result
 
   Scenario: Create any user type without hunting through Library
-    When I choose New page's type picker or Create page in Search library
+    When I choose New page's type picker or the Create category in Search library
     Then I can choose any user-created or built-in user type
     And creating a Book uses its default template in a new note tab
     And creating a daily note opens today's note without duplicating it
@@ -70,3 +70,27 @@ Feature: One search for the workspace
     And I type "cedar" without clicking the search field
     Then the search field contains "cedar" and keeps keyboard focus
     And the note still contains exactly "Original text" after I close search and reload
+
+  Scenario: Narrow a search from the first screen
+    Given a page and an open website both match "Kyoto"
+    When I type "Kyoto" in Search library and select Pages
+    Then only matching pages appear and the search field still contains "Kyoto"
+    When I select Tabs and then All
+    Then I can find the website in Tabs and both results in All without retyping
+
+  Scenario: Create from the first screen
+    When I click New page in Search library
+    Then a blank page opens with its title ready to edit
+    When my search for "Neighborhood walk" finishes without a match
+    Then I can press Return to create a page already titled "Neighborhood walk"
+    When I type "new meeting Friday review" in search and press Return
+    Then a Meeting titled "Friday review" opens with its body ready to edit
+    And a saved page containing those search words cannot take precedence over the creation command
+
+  Scenario: Recognize and choose a type
+    Given I have a custom type named "Field trip"
+    When I open the Create category
+    Then I can select a type by its name and icon, grouped by purpose
+    And Field trip appears under My types
+    When I type "new field trip Spring walk" and press Return
+    Then a Field trip titled "Spring walk" opens using its type's template
