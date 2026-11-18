@@ -90,7 +90,7 @@ Feature: One search for the workspace
     When I type "new meeting Friday review" in search and press Return
     Then a Meeting titled "Friday review" opens with its body ready to edit
     And a saved page containing those search words cannot take precedence over the creation command
-    When I search for a saved page named "New"
+    When I search for a saved page named "New" and a newer page begins with "New"
     Then that page is selected first and I can pin it
 
   Scenario: Recognize and choose a type

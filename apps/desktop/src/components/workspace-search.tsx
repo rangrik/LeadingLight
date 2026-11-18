@@ -110,8 +110,12 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
+  const titleRank = (title: string) => {
+    const name = title.trim().toLocaleLowerCase();
+    return name === q ? 2 : Number(name.startsWith(q));
+  };
   const pageItems = useMemo(() => !searchPages ? [] : pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
-    .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [searchPages, pages, types, q, tokens, body.hits]);
+    .sort((a, b) => (q ? titleRank(b.title) - titleRank(a.title) : 0) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [searchPages, pages, types, q, tokens, body.hits]);
   const recent = view === "search" && !q;
   const start = Math.min(offset, Math.max(0, Math.ceil(pageItems.length / PAGE_SIZE) - 1) * PAGE_SIZE);
   const range = `${(start + 1).toLocaleString()}–${Math.min(start + PAGE_SIZE, pageItems.length).toLocaleString()} of ${pageItems.length.toLocaleString()}`;
