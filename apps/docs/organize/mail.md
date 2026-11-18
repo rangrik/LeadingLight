@@ -31,7 +31,9 @@ saved access; your mail stays in Google. When an account needs signing in again,
 second row, such as "Work mail needs reconnecting", with **Reconnect**.
 
 The first time, Mail offers to **Start fresh** from the last 3, 7 or 14 days. Older mail stays in
-Gmail, untouched, and never shows here.
+Gmail. This is a one-time starting date for the workspace. Each connected device checks for new
+mail every minute and catches up when you return. Your Later choices, account labels and progress
+through today’s mail follow you. You can close either Mac.
 
 ## Going through mail
 

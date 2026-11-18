@@ -1079,3 +1079,10 @@ its previous tab. A new typed page uses the existing template and daily-note pat
 
 Search keeps a plain-text index in memory, built on demand without resolving image assets.
 It rereads only changed pages; formatting cannot split a word out of the results.
+
+## Mail progress belongs to the signed-in workspace
+
+The Gmail service stores the import date, account labels, Later choices and daily look encrypted
+with the service’s Gmail key. Each device fetches its own inbox and checks for changes every
+minute. Revision checks preserve simultaneous decisions. Existing local choices migrate on
+connection. Message text, reply drafts and reader output stay out of the progress record.

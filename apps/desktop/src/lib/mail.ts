@@ -3,14 +3,12 @@ import { CloudError, cloudState, onCloud } from "./cloud";
 import { gmailApi, mailText, type MailAccount, type MailMessage, type MailPage, type MailSummary } from "./gmail";
 import { commitAction, undoAction } from "./history";
 import { action } from "./history-types";
-import { type Account, compose, conversations, daysTo, order, fromPeople, isoDay, type Item, kindOf, LABEL, LOOK, type Kind, type Mail, mailKey, type MailState, type Outcome, parseState, type Read, type Said, say, sender, senderKey, type Snapshot } from "./mail-rules";
+import { type Account, compose, conversations, daysTo, order, fromPeople, isoDay, type Item, kindOf, LABEL, LOOK, type Kind, type Mail, mailKey, type MailState, type Outcome, newDay, parseState, type Read, type Said, say, sender, senderKey, type Snapshot } from "./mail-rules";
+import { mergeProgress, progressOf, type RemoteProgress } from "./mail-progress";
 import { propOf, putProp } from "./space";
 import { createStore } from "./state";
 import { newObject } from "./store";
 import { pageInit } from "./templates";
-
-// Mail's data (docs/MAIL.md, section 4): what waits, the look, and the actions the
-// screens call. All of it stays on this device, per workspace owner, like Calendar's hidden list.
 
 export type Label = "INBOX" | "UNREAD";
 export type ThreadPart = { from: string; date: number; text: string; files?: { name: string; size: number }[] };
@@ -56,24 +54,14 @@ const source: Promise<Source> = demoOn ? import("./mail-demo").then((m) => m.dem
 export const mailSource = () => source;
 const ownerNow = () => (demoOn ? "demo" : (cloudState().user?.id ?? null));
 
-// The demo keeps its state in memory, so a reload starts it over.
-const memory = new Map<string, string>();
 const keyOf = (owner: string) => `leadinglight.mail:${owner}`;
-async function load(owner: string): Promise<MailState> {
-  if (demoOn && !memory.has(owner)) memory.set(owner, JSON.stringify((await source).seed!(Date.now())));
-  if (demoOn) return parseState(memory.get(owner)!, Date.now());
+let baseline: RemoteProgress = { revision: 0, state: null };
+function save() {
+  if (!owner || demoOn) return;
   try {
-    return parseState(localStorage.getItem(keyOf(owner)), Date.now());
+    localStorage.setItem(keyOf(owner), JSON.stringify({ ...state, baseline }));
   } catch {
-    return parseState(null, Date.now());
-  }
-}
-function save(owner: string, s: MailState) {
-  if (demoOn) return void memory.set(owner, JSON.stringify(s));
-  try {
-    localStorage.setItem(keyOf(owner), JSON.stringify(s));
-  } catch {
-    // Private mode: Mail works for this session only.
+    // Storage can be unavailable in a private window.
   }
 }
 
@@ -99,7 +87,9 @@ function picture(): MailView {
   const { look, waiting } = compose(people, state.today, now);
   later.sort((a, b) => (a.lines?.due ?? "9999-12-31").localeCompare(b.lines?.due ?? "9999-12-31") || a.mail.date - b.mail.date);
   const snap: Snapshot = { now, accounts, started: !!state.start, days: state.days, reading: status.reading, unread: status.unread, ran: state.ran, offline: typeof navigator !== "undefined" && !navigator.onLine, look, waiting, rest, later, today: state.today };
-  return { ...snap, owner, loading: status.loading, error: status.error, said: say(snap), state, later };
+  const said = say(snap);
+  if (snap.started && status.error && !snap.offline) said.small = status.error;
+  return { ...snap, owner, loading: status.loading, error: status.error, said, state, later };
 }
 export const mail = createStore<MailView>(picture());
 export const useMail = mail.use;
@@ -107,30 +97,81 @@ const publish = () => mail.set(picture());
 
 async function change(edit: (s: MailState) => void) {
   if (!owner) throw new Error("Sign in to LeadingLight to use Mail.");
-  const who = owner;
-  const s = await load(who);
-  edit(s);
-  if (owner !== who) return;
-  save(who, (state = s));
+  const before = JSON.stringify(progressOf(state));
+  const next = structuredClone(state);
+  if (next.today.day !== isoDay(Date.now())) next.today = newDay(Date.now());
+  edit(next);
+  state = next;
+  save();
   publish();
+  if (!demoOn && before !== JSON.stringify(progressOf(next))) {
+    void syncProgress().catch(() => { /* Retried on the next automatic check. */ });
+  }
 }
 
 // A workspace's mail never shows in another: switching drops it, and late answers are ignored.
-let generation = 0, refreshing = 0;
+let generation = 0;
 // A full listing of the window when the app opens, after Start fresh and every 30 minutes; in
 // between, only mail since the last listing, merged by key.
 const FULL = 30 * 60_000, MARGIN = 15 * 60_000;
 let listed = { any: 0, full: 0 };
 function reset(next: string | null) {
   generation++;
+  exchange = null;
+  needsFullListing = false;
+  activeRefresh = null;
+  baseline = { revision: 0, state: null };
   listed = { any: 0, full: 0 };
   owner = next;
   accounts = [];
   mails = [];
-  state = parseState(null, Date.now());
+  let raw: string | null = null;
+  if (next && !demoOn) {
+    try {
+      raw = localStorage.getItem(keyOf(next));
+      baseline = JSON.parse(raw ?? "null")?.baseline ?? baseline;
+    } catch { /* Start from the server if storage is unavailable. */ }
+  }
+  state = parseState(raw, Date.now());
   status = { loading: false, error: "", reading: false, unread: "" };
   publish();
 }
+let needsFullListing = false;
+let exchange: Promise<void> | null = null;
+function syncProgress(): Promise<void> {
+  if (demoOn || !owner || !navigator.onLine) return Promise.resolve();
+  if (exchange) return exchange;
+  const run = generation;
+  const current = () => run === generation && owner === ownerNow();
+  exchange = (async () => {
+    let incoming = false;
+    for (let attempt = 0; attempt < 5 && current(); attempt++) {
+      const remote = await gmailApi<RemoteProgress>("progress");
+      if (!current()) break;
+      const local = progressOf(state);
+      const merged = mergeProgress(baseline.state, local, remote.state);
+      incoming ||= JSON.stringify(merged) !== JSON.stringify(local);
+      baseline = remote;
+      state = { ...state, ...merged };
+      if (state.today.day !== isoDay(Date.now())) state.today = newDay(Date.now());
+      save();
+      const proposed = { ...progressOf(state), today: merged.today.day > state.today.day ? merged.today : state.today };
+      if ((!proposed.start && !Object.keys(proposed.kinds).length && !remote.state) || JSON.stringify(proposed) === JSON.stringify(remote.state)) break;
+      try {
+        const { revision } = await gmailApi<{ revision: number }>("progress", { revision: remote.revision, state: proposed });
+        if (!current()) break;
+        baseline = { revision, state: proposed };
+        save();
+        if (JSON.stringify(progressOf(state)) === JSON.stringify(proposed)) break;
+      } catch (error) {
+        if (!(error instanceof CloudError && error.status === 409)) throw error;
+      }
+    }
+    if (current() && incoming) { needsFullListing = true; publish(); }
+  })().finally(() => { if (current()) exchange = null; });
+  return exchange;
+}
+
 // The reader lists the new workspace's mail first, then reads it.
 onCloud(() => {
   if (!demoOn && ownerNow() !== owner) {
@@ -147,16 +188,46 @@ const toMail = (s: MailSummary, a: MailAccount, kind: Kind): Mail => ({ ...s, re
 const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // Lists each account's inbox since the start-fresh day (or, before it, how much is waiting).
-export async function refresh(o: { full?: boolean } = {}) {
+let activeRefresh: Promise<void> | null = null;
+let fullRequested = false;
+export function refresh(o: { full?: boolean } = {}): Promise<void> {
   const who = ownerNow();
   if (who !== owner) reset(who);
-  if (!who) return;
-  const run = generation, request = ++refreshing, src = await source;
+  if (!who) return Promise.resolve();
+  fullRequested ||= !!o.full;
+  if (activeRefresh) return activeRefresh;
+  const run = generation;
+  activeRefresh = (async () => {
+    do {
+      const full = fullRequested;
+      fullRequested = false;
+      await listInbox(run, full);
+    } while (run === generation && fullRequested);
+  })().finally(() => { if (run === generation) activeRefresh = null; });
+  return activeRefresh;
+}
+
+async function listInbox(run: number, requestedFull: boolean) {
+  const src = await source;
+  if (run !== generation) return;
   status.loading = true;
   publish();
   try {
-    const s = await load(who), list = await src.accounts(), at = Date.now();
-    const full = !!o.full || !listed.full || at - listed.full > FULL;
+    const list = await src.accounts();
+    if (run !== generation) return;
+    if (demoOn && !listed.any && !state.start && !accounts.length) state = src.seed!(Date.now());
+    let progressError = "";
+    if (list.length) {
+      try { await syncProgress(); }
+      catch (error) {
+        if (!state.start) throw error;
+        progressError = "Mail progress will update when the workspace reconnects.";
+      }
+    }
+    if (run !== generation) return;
+    if (state.today.day !== isoDay(Date.now())) state = { ...state, today: newDay(Date.now()) };
+    const s = state, at = Date.now();
+    const full = requestedFull || needsFullListing || !listed.full || at - listed.full > FULL;
     const after = full ? s.start : Math.max(s.start, listed.any - MARGIN);
     const found: Mail[] = [];
     let whole = full;
@@ -173,23 +244,26 @@ export async function refresh(o: { full?: boolean } = {}) {
         throw e;
       }
     }));
-    if (run !== generation || request !== refreshing) return;
+    if (run !== generation) return;
     // Lines and keeps for mail gone from a live inbox go too: it was dealt with, here or in Gmail.
     const live = new Set(next.filter((a) => !a.out).map((a) => a.account)), present = new Set(found.map((m) => m.key));
     const gone = (k: string) => whole && live.has(JSON.parse(k)[0]) && !present.has(k);
-    for (const k of Object.keys(s.read)) if (gone(k)) delete s.read[k];
-    for (const k of Object.keys(s.kept)) if (gone(k)) delete s.kept[k];
-    save(who, (state = s));
-    accounts = next;
-    const merged = new Map((full ? [] : mails).map((m) => [m.key, m]));
+    for (const k of Object.keys(state.read)) if (gone(k)) delete state.read[k];
+    const goneKeeps = Object.keys(state.kept).filter(gone);
+    if (goneKeeps.length) await change((next) => { for (const k of goneKeeps) delete next.kept[k]; });
+    if (run !== generation) return;
+    save();
+    accounts = next.map((a) => ({ ...a, kind: kindOf(a.email, state.kinds[a.email]) }));
+    const merged = new Map((whole ? [] : mails).map((m) => [m.key, m]));
     for (const m of found) merged.set(m.key, m);
     mails = conversations([...merged.values()].filter((m) => live.has(m.account))).sort((a, b) => a.date - b.date);
+    needsFullListing = false;
     if (s.start) listed = { any: at, full: full ? at : listed.full };
-    status.error = "";
+    status.error = progressError;
   } catch (e) {
-    if (run === generation && request === refreshing) status.error = why(e);
+    if (run === generation) status.error = why(e);
   } finally {
-    if (run === generation && request === refreshing) {
+    if (run === generation) {
       status.loading = false;
       publish();
     }
@@ -361,7 +435,11 @@ export async function clearRest(items: Item[] = mail.get().rest): Promise<Done &
   const run = generation, keys = new Set(items.map((i) => i.mail.key));
   const reads = Object.fromEntries(items.map((i) => [i.mail.key, state.read[i.mail.key]]));
   await change((s) => {
-    s.today.cleared += items.length;
+    s.today.clearedKeys ??= {};
+    for (const k of keys) {
+      if (!s.today.clearedKeys[k]) s.today.cleared++;
+      s.today.clearedKeys[k] = true;
+    }
     s.today.started ||= Date.now();
     for (const k of keys) delete s.read[k];
   });
@@ -370,7 +448,12 @@ export async function clearRest(items: Item[] = mail.get().rest): Promise<Done &
   const back = async (list: Item[]) => {
     if (run !== generation || !list.length) return;
     await change((s) => {
-      s.today.cleared -= list.length;
+      for (const { mail } of list) {
+        if (s.today.clearedKeys?.[mail.key]) {
+          delete s.today.clearedKeys[mail.key];
+          s.today.cleared--;
+        }
+      }
       for (const i of list) if (reads[i.mail.key]) s.read[i.mail.key] = reads[i.mail.key];
     });
     mails = [...mails, ...list.map((i) => i.mail)].sort((a, b) => a.date - b.date);

@@ -51,7 +51,7 @@ time-sensitive each mail is.
 
 **Once.** He connects his two accounts (this exists). Mail shows "Start fresh": how much is
 waiting, and that he does not have to read it. He picks 3, 7 or 14 days (7 is chosen) and presses
-Start. LeadingLight reads those days. Older mail stays in Gmail, untouched, and never shows here.
+Start. This sets the starting date for the workspace. Each connected device checks for new mail on return and every minute.
 
 **Any day, any hour.**
 
@@ -272,7 +272,7 @@ Other states:
 | Stopped at five | Mail is done for now | `5 handled. 6 more wait for the next look.` with a `Keep going` outline button, then the waiting rows |
 | Not read | 4 new from people | `LeadingLight could not read these for you. Claude is at its limit until 6 PM.` Rows show subject, then `Meera Iyer · 2:14 PM`, and the Account tag on the right with no When. The small text reads `Sorted by sender only · Personal and Work`. On the phone the sentence is `Your Mac has not read these yet.` |
 | Signed out | as normal, for the accounts that work | a bordered row: `circle-alert` **Work mail needs reconnecting** · Google signed LeadingLight out, `Reconnect`. The sentence ends `This is your personal mail only.` |
-| First time | Start fresh | `14,236 mails are in your two inboxes.` Then each account on its own line: its Account tag (72 px column), then in muted text `pranav.k@gmail.com · 11,902 waiting`. Then `Start from the last` and Tabs `3 days`, `7 days`, `14 days`. Then primary `Start` with Kbd `↵` and in 12 px muted: `Older mail stays in Gmail, untouched. It never shows up here.` |
+| First time | Start fresh | `14,236 mails are in your two inboxes.` Then each account on its own line: its Account tag (72 px column), then in muted text `pranav.k@gmail.com · 11,902 waiting`. Then `Start from the last` and Tabs `3 days`, `7 days`, `14 days`. Then primary `Start` with Kbd `↵` and in 12 px muted: `Choose once. New mail arrives automatically. Older mail stays in Gmail.` |
 | Reading | Reading the last 7 days | a spinner and `This takes about a minute. Today shows the result.` over three Skeleton rows |
 | Offline | as last read | the small text becomes `You're offline. Read for you at 2:58 PM.` Buttons that change Gmail are disabled. |
 
