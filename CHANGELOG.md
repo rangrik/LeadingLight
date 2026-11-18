@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/rangrik/LeadingLight/compare/v0.10.0...v0.11.0) (2026-11-18)
+
+
+### Features
+
+* bring search categories and page creation into one palette ([#52](https://github.com/rangrik/LeadingLight/issues/52)) ([fc1681b](https://github.com/rangrik/LeadingLight/commit/fc1681b3845a55289764927a4bde63f9d9b18395))
+
 ## [0.10.0](https://github.com/rangrik/LeadingLight/compare/v0.9.0...v0.10.0) (2026-11-18)
 
 
