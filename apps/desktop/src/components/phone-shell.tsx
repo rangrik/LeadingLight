@@ -1,11 +1,9 @@
-// COSS sidebar-08 lists and p-input-group-1, composed for one-handed navigation.
-import { CalendarDays, ChevronRight, FileText, Inbox, NotebookPen, PenLine, Plus, Search, Settings, X } from "lucide-react";
-import { useEffect, useState } from "react";
+// COSS sidebar-08 lists, composed for one-handed navigation.
+import { CalendarDays, ChevronRight, FileText, Inbox, NotebookPen, PenLine, Plus, Search, Settings } from "lucide-react";
+import { useEffect, useState, type RefObject } from "react";
 import { openSettings } from "@/views/settings/open";
 import { Button } from "@leadinglight/ui/components/button";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@leadinglight/ui/components/collapsible";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@leadinglight/ui/components/empty";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@leadinglight/ui/components/input-group";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@leadinglight/ui/components/sidebar";
 import { CloudButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
@@ -14,12 +12,14 @@ import { PaneArea } from "~/components/pane-area";
 import { captured, captureOf } from "~/lib/capture-inbox";
 import { dayPage, dailyTitle, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
-import { docText, objects, type ObjectSummary } from "~/lib/objects";
+import type { ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFresh, panes } from "~/lib/panes";
 import { flushAll, reportSaveError } from "~/lib/saving";
-import { iconFor, INBOX_VIEW, isPageView, pageOf, space, typeOf, typeView } from "~/lib/space";
+import { iconFor, INBOX_VIEW, isPageView, pageOf, space, typeOf } from "~/lib/space";
 import { newNotebook } from "~/lib/notebooks";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
+import { WorkspaceSearch } from "~/components/workspace-search";
+import { openSearch } from "~/lib/workspace-search";
 import { ABOUT } from "~/lib/tail-memory";
 
 type Screen = "today" | "notes" | "page";
@@ -39,62 +39,29 @@ function NoteRows({ pages, onOpen }: { pages: ObjectSummary[]; onOpen: (id: stri
   </SidebarMenuItem>)}</SidebarMenu>;
 }
 
-function PhoneNotes({ active, onOpen }: { active: boolean; onOpen: (id: string) => void }) {
-  const { pages, types } = space.use();
-  const [query, setQuery] = useState("");
-  const [matches, setMatches] = useState<string[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState(false);
-  const [retry, setRetry] = useState(0);
+function PhoneNotes({ onOpen }: { onOpen: (id: string) => void }) {
+  const { pages } = space.use();
   const [limit, setLimit] = useState(40);
-  const needle = query.trim().toLocaleLowerCase();
-  useEffect(() => {
-    if (!active) return;
-    let stale = false;
-    setMatches([]);
-    setError(false);
-    setSearching(!!needle);
-    setLimit(40);
-    if (!needle) return;
-    const timer = window.setTimeout(() => {
-      void flushAll().then(() => objects.containing(needle)).then((found) => {
-        if (!stale) setMatches(found.filter((p) => docText(p.content).toLocaleLowerCase().includes(needle)).map((p) => p.id));
-      }).catch(() => { if (!stale) setError(true); }).finally(() => { if (!stale) setSearching(false); });
-    }, 180);
-    return () => { stale = true; clearTimeout(timer); };
-  }, [needle, retry, active, pages]);
-  const shown = pages.filter(visible).filter((p) => !needle || p.title.toLocaleLowerCase().includes(needle) || matches.includes(p.id)).sort(recent);
+  const shown = pages.filter(visible).sort(recent);
   return <>
     <h1 className="text-[34px] font-bold leading-[41px]">Notes</h1>
-    <InputGroup className="mt-5">
-      <InputGroupInput aria-label="Search notes" autoComplete="off" onChange={(e) => setQuery(e.target.value)} placeholder="Search your words" type="search" value={query} />
-      <InputGroupAddon><Search aria-hidden="true" className="size-4" /></InputGroupAddon>
-      {query && <InputGroupAddon align="inline-end"><Button aria-label="Clear search" onClick={() => setQuery("")} size="icon" variant="ghost"><X /></Button></InputGroupAddon>}
-    </InputGroup>
-    {!needle && <div className="my-5 space-y-2">
+    <div className="my-5 space-y-2">
       <Button className="w-full justify-start" onClick={() => onOpen(INBOX_VIEW)} variant="outline"><Inbox />Captures<ChevronRight className="ml-auto" /></Button>
       <MobileAgentsButton className="min-h-12 w-full justify-start" />
-      <Collapsible>
-        <CollapsibleTrigger render={<Button className="w-full justify-start" variant="ghost" />}><FileText />Browse by type</CollapsibleTrigger>
-        <CollapsiblePanel><SidebarMenu>{types.filter((t) => !t.made || pages.some((p) => p.typeId === t.id)).map((type) => <SidebarMenuItem key={type.id}>
-          <SidebarMenuButton onClick={() => onOpen(typeView(type.id))}><RowIcon icon={type.icon} /><span>{type.plural}</span></SidebarMenuButton>
-        </SidebarMenuItem>)}</SidebarMenu></CollapsiblePanel>
-      </Collapsible>
-    </div>}
-    <h2 className="mt-6 mb-2 text-sm font-medium text-muted-foreground">{needle ? "Search results" : "Recent notes"}</h2>
-    {searching && <p className="py-3 text-sm text-muted-foreground" role="status">Searching your notes…</p>}
-    {error && <div className="py-3 text-sm" role="alert">Couldn’t search the text of your notes. <Button onClick={() => setRetry(retry + 1)} variant="ghost">Try again</Button></div>}
+      <Button className="w-full justify-start" onClick={() => openSearch("types")} variant="ghost"><FileText />Browse by type</Button>
+    </div>
+    <h2 className="mt-6 mb-2 text-sm font-medium text-muted-foreground">Recent notes</h2>
     <NoteRows onOpen={onOpen} pages={shown.slice(0, limit)} />
-    {!shown.length && !searching && !error && <Empty className="px-0 py-8"><EmptyHeader>
-      <EmptyTitle>{needle ? "No notes found" : "Your notes will be here"}</EmptyTitle>
-      <EmptyDescription>{needle ? "Try another word or clear the search." : "Capture a thought or start a new page. You can organize it later."}</EmptyDescription>
+    {!shown.length && <Empty className="px-0 py-8"><EmptyHeader>
+      <EmptyTitle>Your notes will be here</EmptyTitle>
+      <EmptyDescription>Capture a thought or start a new page. You can organize it later.</EmptyDescription>
     </EmptyHeader></Empty>}
     {shown.length > limit && <Button className="mt-3 w-full" onClick={() => setLimit(limit + 40)} variant="outline">Show more notes</Button>}
-    {!needle && <div className="mt-8 border-t pt-4"><CloudButton /></div>}
+    <div className="mt-8 border-t pt-4"><CloudButton /></div>
   </>;
 }
 
-export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; onCapture: () => void; onCreate: () => void }) {
+export function PhoneShell({ loaded, onCapture, onCreate, returnFocus }: { returnFocus: RefObject<HTMLElement | null>; loaded: boolean; onCapture: () => void; onCreate: () => void }) {
   const { pages } = space.use();
   const { root } = panes.use();
   const [screen, setScreen] = useState<Screen>("today");
@@ -165,7 +132,7 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
       {!loaded && <p className="mt-5 text-sm text-muted-foreground" role="status">Opening your notes…</p>}
     </main>}
     <main aria-label="Notes" className={screen === "notes" ? "min-h-0 flex-1 overflow-y-auto px-5 pt-3 pb-(--ll-tabbar-room) scroll-pb-(--ll-tabbar-room)" : "hidden"} inert={screen !== "notes" || undefined}>
-      <PhoneNotes active={screen === "notes"} onOpen={open} />
+      <PhoneNotes onOpen={open} />
     </main>
     {/* WebKit loses scroll when display:none gives the editor a zero-height pane. */}
     <div className={`absolute inset-0 flex ${screen === "page" ? "" : "invisible pointer-events-none"}`} inert={screen !== "page" || undefined}>
@@ -178,7 +145,9 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
         <Button aria-current={tab === "today" ? "page" : undefined} className="h-full flex-col gap-0.5 text-[10px] font-medium" onClick={() => navigate("today")} variant="ghost"><CalendarDays />Today</Button>
         <Button aria-current={tab === "notes" ? "page" : undefined} className="h-full flex-col gap-0.5 text-[10px] font-medium" onClick={() => navigate("notes")} variant="ghost"><FileText />Notes</Button>
       </div>
+      <Button aria-label="Search library" className="ll-glass size-(--ll-tabbar-height) shrink-0 rounded-full" disabled={!loaded} onClick={() => openSearch()} variant="ghost"><Search /></Button>
       <Button aria-label="Quick capture" className="size-(--ll-tabbar-height) rounded-full" data-quick-capture disabled={!loaded} onClick={onCapture}><Plus /></Button>
     </nav>
+    {loaded && <WorkspaceSearch returnFocus={returnFocus} onNavigate={() => setScreen("page")} />}
   </div>;
 }
