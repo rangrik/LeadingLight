@@ -63,3 +63,10 @@ Feature: One search for the workspace
     Then the search closes and focus returns to the previous pane
     And the writing cursor stays at the same position, including after a mouse click
     And search shortcuts remain configurable in Settings
+
+  Scenario: Reopening search immediately keeps typing out of the selected note
+    Given a note named "Field guide" contains "Original text"
+    When I open "Field guide" from search and immediately press Command+K again
+    And I type "cedar" without clicking the search field
+    Then the search field contains "cedar" and keeps keyboard focus
+    And the note still contains exactly "Original text" after I close search and reload

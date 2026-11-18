@@ -33,7 +33,7 @@ Search by title, words in the body, or type. A search for **book** offers matchi
 
 Large lists show 100 pages at a time. **Next pages** and **Previous 100 pages** move through the results. Typing always searches the whole library.
 
-Open a browser-tab result to return to that website, or a note result to return to Notes. In a mixed split, the other pane stays open. Use **Open beside**, <kbd>⇧Return</kbd> or Shift-click to open a result beside the current pane. <kbd>⌘</kbd>-click opens a note in a new tab. <kbd>Esc</kbd> closes search and returns focus.
+Open a browser-tab result to return to that website, or a note result to return to Notes. In a mixed split, the other pane stays open. Use **Open beside**, <kbd>⇧Return</kbd> or Shift-click to open a result beside the current pane. <kbd>⌘</kbd>-click opens a note in a new tab. <kbd>Esc</kbd> closes search and returns focus. After opening a result, press <kbd>⌘K</kbd> again to type a new search immediately.
 
 ## Pin a page
 
