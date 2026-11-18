@@ -104,7 +104,7 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [pages, types, q, tokens, body.hits]);
   const recent = view === "search" && !q;
   const start = Math.min(offset, Math.max(0, Math.ceil(pageItems.length / PAGE_SIZE) - 1) * PAGE_SIZE);
-  const range = `${start + 1}–${Math.min(start + PAGE_SIZE, pageItems.length)} of ${pageItems.length.toLocaleString()}`;
+  const range = `${(start + 1).toLocaleString()}–${Math.min(start + PAGE_SIZE, pageItems.length).toLocaleString()} of ${pageItems.length.toLocaleString()}`;
   const results: Group[] = [];
   const add = (value: string, items: Item[]) => { if (items.length) results.push({ value, items }); };
   if (searchPages) {
