@@ -1,3 +1,4 @@
+import { cn } from "@leadinglight/ui/lib/utils";
 // shadcn sidebar-08 (base-vega), on COSS primitives.
 // Changes: shared Notes/Browser modes, pinned pages and shared search, one sidebar toggle.
 import { CalendarDays, CalendarCheck, ChevronDown, FileText, Globe, Mail, Plus, Search, Settings } from "lucide-react";
@@ -163,7 +164,7 @@ export function AppSidebar({
         >
           <AppSidebarHeader subtitle={front ? "Browser" : "Notes"} />
           <SidebarGroup className="pt-0 pb-1">
-            <Button aria-label="Search library" disabled={loading} variant="outline" className="h-8 w-full justify-start" onClick={() => search()}>
+            <Button aria-label="Search library" disabled={loading} variant="outline" className={cn("h-8 w-full justify-start", mobile && "min-h-11")} onClick={() => search()}>
               <Search className="size-4" />
               Search library<span className="ml-auto text-xs text-muted-foreground">{keys("search")}</span>
             </Button>

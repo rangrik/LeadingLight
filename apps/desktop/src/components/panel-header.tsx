@@ -1,6 +1,3 @@
-import { Search } from "lucide-react";
-import { Button } from "@leadinglight/ui/components/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -12,8 +9,7 @@ import {
 import { Separator } from "@leadinglight/ui/components/separator";
 import { SidebarTrigger, useSidebar } from "@leadinglight/ui/components/sidebar";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { phone, useMobile } from "~/lib/platform";
-import { openSearch } from "~/lib/workspace-search";
+import { useMobile } from "~/lib/platform";
 import type { ReactNode } from "react";
 
 // The inset panel's top band, from sidebar-08's page.tsx: the sidebar trigger and the crumbs.
@@ -31,7 +27,6 @@ type Props = {
   icon?: ReactNode;
   lead?: boolean;
   toggle?: boolean;
-  workspace?: boolean;
   muted?: boolean;
   // Pressing the crumbs, not the bar: the bar itself drags the window in the app.
   onGrab?: (e: React.PointerEvent<HTMLElement>) => void;
@@ -39,7 +34,7 @@ type Props = {
   children?: ReactNode;
 };
 
-export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, workspace, muted, onGrab, after, children, nav, under }: Props) {
+export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
   const mobile = useMobile();
   const { isMobile, openMobile } = useSidebar();
   if (isMobile) { sidebarOpen = openMobile; toggle = true; }
@@ -56,10 +51,6 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
         {lead && toggle && !sidebarOpen && (
           <>
             <SidebarTrigger className="-ml-1" />
-            {workspace && mobile && !phone && <Tooltip>
-              <TooltipTrigger render={<Button aria-label="Search library" className="min-h-11 min-w-11 shrink-0" size="icon" variant="ghost" onClick={() => openSearch()} />}><Search /></TooltipTrigger>
-              <TooltipPopup>Search library</TooltipPopup>
-            </Tooltip>}
             {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
             <Separator className="mr-2 h-4" orientation="vertical" />
           </>

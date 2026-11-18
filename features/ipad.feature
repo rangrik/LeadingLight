@@ -194,9 +194,11 @@ Feature: LeadingLight on iPad
 
   Scenario: Search by touch with the sidebar closed
     Given the iPad sidebar is closed
-    When I tap Search library in the workspace toolbar
+    When I tap Search library in the right-hand toolbar
     Then All, Create, Pages and Types are in reach above the software keyboard
     And switching category keeps my words
     When I choose a custom type or enter "new meeting Friday review"
     Then the new page uses that type in the focused pane
     And I can open a search result beside the page or dismiss search by touch
+    When I do that in a narrow window and reopen search above the keyboard
+    Then I can still tap the first result and the toolbar search button stays within reach

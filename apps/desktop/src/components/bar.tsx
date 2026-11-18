@@ -1,8 +1,9 @@
-import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Sparkles } from "lucide-react";
+import { Inbox, type LucideIcon, MessageSquareDashed, MessagesSquare, Pin, Plus, Search, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@leadinglight/ui/components/badge";
 import { Button } from "@leadinglight/ui/components/button";
 import { Kbd } from "@leadinglight/ui/components/kbd";
+import { useSidebar } from "@leadinglight/ui/components/sidebar";
 import { Toggle } from "@leadinglight/ui/components/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
@@ -15,6 +16,7 @@ import { Suggestions } from "~/components/suggestions";
 import { closeAsk, openAsk } from "~/lib/ask";
 import { bar, type BarView, NAMES, narrow, PANEL, showing, toggleBar, useNarrow, useShowing } from "~/lib/bar";
 import { discoverVoiceCaptures, toReview } from "~/lib/capture-inbox";
+import { openSearch } from "~/lib/workspace-search";
 import { wantFocus } from "~/lib/feed";
 import { useKeysFor } from "~/lib/keymap";
 import { focusedPage, panes } from "~/lib/panes";
@@ -84,9 +86,10 @@ function StripButton({ view }: { view: BarView }) {
   );
 }
 
-export function BarStrip({ onCapture }: { onCapture: () => void }) {
+export function BarStrip({ onCapture, loaded }: { onCapture: () => void; loaded: boolean }) {
   const mobile = useMobile();
   const keys = useKeysFor()("new-idea");
+  const { isMobile, open, openMobile } = useSidebar();
   // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
   useEffect(() => {
     let front = focusedPage();
@@ -101,7 +104,11 @@ export function BarStrip({ onCapture }: { onCapture: () => void }) {
   return (
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
-    <nav aria-label="Bar" className="flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]" data-bar data-tauri-drag-region={!mobile || undefined}>
+    <nav aria-label="Bar" className={cn("flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]", mobile && "w-11")} data-bar data-tauri-drag-region={!mobile || undefined}>
+      {mobile && !(isMobile ? openMobile : open) && <Tooltip>
+        <TooltipTrigger render={<Button aria-label="Search library" disabled={!loaded} className="min-h-11 min-w-11" size="icon" variant="ghost" onClick={() => openSearch()} />}><Search /></TooltipTrigger>
+        <TooltipPopup side="left">Search library</TooltipPopup>
+      </Tooltip>}
       {ORDER.filter((v) => !mobile || v === "captures").map((v) => (
         <StripButton key={v} view={v} />
       ))}

@@ -235,4 +235,30 @@ test.describe("iPad workspace search", () => {
     await dialog.getByRole("button", { name: "Close search" }).tap();
     await expect(dialog).toBeHidden();
   });
+  test("search stays reachable in a narrow split with the keyboard up", async ({ page }) => {
+    await page.addInitScript(() => {
+      const viewport = Object.assign(new EventTarget(), { height: 700, width: 375, offsetTop: 0, offsetLeft: 0, scale: 1 });
+      Object.defineProperty(window, "visualViewport", { value: viewport });
+    });
+    await page.setViewportSize({ width: 375, height: 700 });
+    await page.goto("/?ipad");
+    const search = page.getByRole("button", { name: "Search library", exact: true });
+    const dialog = page.getByRole("dialog", { name: "Search library" });
+    for (const title of ["Trip budget", "Itinerary"]) {
+      await search.tap();
+      await dialog.getByRole("button", { name: "New page" }).tap();
+      await page.getByRole("textbox", { name: "Title", exact: true }).fill(title);
+    }
+    await search.tap();
+    await dialog.getByRole("combobox").fill("Trip budget");
+    await dialog.getByRole("button", { name: "Open beside" }).tap();
+    await search.tap();
+    await page.evaluate(() => {
+      Object.assign(window.visualViewport!, { height: 260 });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    await dialog.getByRole("combobox").fill("Itinerary");
+    await dialog.getByRole("option", { name: "Itinerary", exact: true }).tap();
+    await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Itinerary");
+  });
 });
