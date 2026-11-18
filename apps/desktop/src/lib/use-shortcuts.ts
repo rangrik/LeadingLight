@@ -15,11 +15,13 @@ import { openPaper, readPaper } from "~/lib/paper";
 import { closeTab, focusedPage, cycleTab, newTab, openPage, reopenTab, travel } from "~/lib/panes";
 import { isDesktop } from "~/lib/platform";
 import { flushAll } from "~/lib/saving";
+import { closeSearch, openSearch, workspaceSearch } from "~/lib/workspace-search";
 import { nodFront } from "~/lib/tail";
 import { toggleTool } from "~/lib/writing";
 
 // A dialog (the capture box among them) or a menu open over the page; a toast, also a dialog, is not.
-export const COVERS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed]), ${POPUP}`;
+const DIALOGS = `[role=dialog]:not([data-closed], [data-slot^=toast] *), [role=alertdialog]:not([data-closed])`;
+export const COVERS = `${DIALOGS}, ${POPUP}`;
 const TABS: Record<string, (() => void) | undefined> = {
   "new-tab": () => newTab(),
   "close-tab": () => closeTab(),
@@ -37,11 +39,18 @@ const TABS: Record<string, (() => void) | undefined> = {
 export function useShortcuts(actions: { newPage(): void; newIdea(): void; toggleSidebar(): void; toggleView(view: "feed" | "captures" | "suggestions"): void }) {
   useEffect(() => {
     const run = (id: string) => {
+      if (id === "search") {
+        if (workspaceSearch.get()) return closeSearch();
+        if ([...document.querySelectorAll(COVERS)].some((el) => el.getClientRects().length && !el.closest("[data-browser-command], [data-sidebar=sidebar]"))) return;
+        if (useStore.getState().view.kind === "settings") closeSettings();
+        return openSearch();
+      }
+      if ((id === "new-page" || id === "new-tab") && shown(DIALOGS)) return;
       if (id === "browser" && (useStore.getState().view.kind === "settings" || shown(COVERS))) return;
       if (useStore.getState().view.kind !== "settings") {
         // The browser space in front takes the keys that act on a tab (lib/browser-space.ts).
         if (spaceKey(id)) return;
-        const browser = new CustomEvent("ll:browser-shortcut", { detail: id, cancelable: true });
+        const browser = new CustomEvent("ll:browser-shortcut", { detail: id === "new-page" ? "new-tab" : id, cancelable: true });
         if (!window.dispatchEvent(browser)) return;
       }
       // Tabs and history act on the panes, so not while Settings covers them.

@@ -17,7 +17,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 
 | Keys | Menu item | What it does |
 | --- | --- | --- |
-| <kbd>⌘N</kbd> | **New page** | Makes a new page and opens it, with the title ready to type. |
+| <kbd>⌘N</kbd> | **New page** | Creates a note in a new tab, or opens a new browser-tab address picker, following the focused pane. |
 | <kbd>⌘T</kbd> | **New tab** | Opens a new tab. |
 | <kbd>⌃⌥I</kbd> | **New idea** | Opens the capture box for a quick idea. In the Mac app it works over any app. |
 | <kbd>⌘W</kbd> | **Close tab** | Closes the tab in front. Closing a pane's last tab closes the pane. |
@@ -46,6 +46,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 
 | Keys | Menu item | What it does |
 | --- | --- | --- |
+| <kbd>⌘K</kbd> | **Search library…** | Finds pages, types and browser tabs, and creates any type of page. |
 | <kbd>⌘J</kbd> | **Ask about this…** | Asks Claude about the selected words, or the page. |
 | <kbd>⌥⌘S</kbd> | **Suggestions** | Shows or hides tail's suggestions. |
 | <kbd>⌥⌘F</kbd> | **Feed** | Shows or hides what agents need from you. |

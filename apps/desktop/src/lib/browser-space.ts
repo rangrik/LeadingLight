@@ -316,6 +316,7 @@ export function spaceKey(id: string): boolean {
   const onPage = shown.get().kind === "tab" && !!tab;
   if (id.startsWith("tab-")) return nth(Number(id.slice(4))), true;
   switch (id) {
+    case "new-page":
     case "new-tab": bar.set({ mode: "new", text: "" }); return true;
     case "open-location": bar.set(onPage ? { mode: "here", text: tab!.url } : { mode: "new", text: "" }); return true;
     case "close-tab": if (onPage) void closeTab(); else shown.set({ kind: "tab" }); return true;

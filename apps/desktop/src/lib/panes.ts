@@ -304,12 +304,13 @@ export function resizePanes(split: string, ratio: number) {
   if (root) panes.set({ root: setRatio(root, split, ratio), focus });
 }
 
-// Shift-click: show a page next to the focused one, or focus it where it is already open.
+// Shift-click: move an inactive tab beside this pane, or focus a page already visible elsewhere.
 export function openBeside(page: string) {
   if (phone) return openPage(page);
   const open = holder(page);
   const here = paneOf(panes.get().focus);
-  if (open) showTab(open.leaf.id, open.tab.id);
+  if (open && open.leaf.id === here?.id && open.tab.id !== here.active) placePage(page, here.id, "right");
+  else if (open) showTab(open.leaf.id, open.tab.id);
   else if (here) placePage(page, here.id, "right");
   else showOnly(page);
 }

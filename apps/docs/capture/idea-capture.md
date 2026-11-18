@@ -29,7 +29,7 @@ close the box, the keyboard goes back to that app, and the idea is saved in Lead
 Clicking anywhere outside the box closes it too, and what you typed is saved.
 
 The shortcut keeps working after you close LeadingLight's window with the red button: the app keeps
-running, its Dock icon stays, and clicking the Dock icon brings the window back. Only <kbd>⌘Q</kbd>
+running, its Dock icon stays, and clicking the Dock icon brings the same window forward, including when it is minimized. Only <kbd>⌘Q</kbd>
 quits. To have the shortcut work after you restart your Mac, turn on **Open at login** in
 **Settings › Capture**.
 

@@ -58,7 +58,7 @@ test('existing destination refuses copying without changing either workspace', a
   await note(page);
   const existing = await context.newPage(); await existing.goto(next);
   await existing.getByRole('button', { name: 'Start a new workspace here' }).click();
-  await expect(existing.getByRole("button", { name: "Library", exact: true })).toBeEnabled();
+  await expect(existing.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
   const before = await records(existing);
   const target = await copy(page);
   await expect(target.getByText(/This address already has a workspace/)).toBeVisible({ timeout: 20_000 });

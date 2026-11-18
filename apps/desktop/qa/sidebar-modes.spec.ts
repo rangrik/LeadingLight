@@ -1,9 +1,9 @@
+import { findPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const panes = (page: Page) => page.locator('[data-pane]');
 const mode = (page: Page, name: string) => page.getByRole('radio', { name, exact: true });
 const toggle = (page: Page) => page.getByRole('button', { name: /^(Hide sidebar|Toggle Sidebar)$/ });
-const search = (page: Page) => page.getByRole('textbox', { name: 'Search notes', exact: true });
 async function setup(page: Page) {
   await page.addInitScript(() => localStorage.setItem('ll.browser.standin', '1'));
   await page.route('**/__runtime/**', (route) => route.fulfill({ json: [] }));
@@ -22,8 +22,7 @@ async function newBrowser(page: Page, url: string) {
 async function split(page: Page) {
   await newBrowser(page, 'https://kyoto.example/Walking-guide');
   await mode(page, 'Notes').click();
-  await search(page).fill('Kyoto research');
-  await page.getByRole('navigation', { name: 'Search results' }).getByRole('button', { name: 'Kyoto research', exact: true }).click({ modifiers: ['Shift'] });
+  await (await findPage(page, 'Kyoto research')).click({ modifiers: ['Shift'] });
   await expect(panes(page)).toHaveCount(2);
 }
 
@@ -62,8 +61,7 @@ test('Open beside is discoverable and subsequent selections keep the other pane'
   await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Train-times');
   await page.keyboard.press('Enter');
   await mode(page, 'Notes').click();
-  await search(page).fill('Kyoto research');
-  await page.getByRole('navigation', { name: 'Search results' }).getByRole('button', { name: 'Kyoto research', exact: true }).click();
+  await (await findPage(page, 'Kyoto research')).click();
   await mode(page, 'Browser').click();
   await page.getByRole('button', { name: 'More for Walking-guide' }).click();
   await page.getByRole('menuitem', { name: 'Open beside' }).click();
@@ -73,10 +71,14 @@ test('Open beside is discoverable and subsequent selections keep the other pane'
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Kyoto research');
   await mode(page, 'Notes').click();
   await page.getByRole('button', { name: 'New page', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Packing list');
   await expect(panes(page)).toHaveCount(2);
   await expect(page.getByTestId('standin-page')).toBeVisible();
   await page.getByRole('textbox', { name: 'Page body' }).click();
+  await page.keyboard.press('ControlOrMeta+w');
+  await expect(panes(page)).toHaveCount(2);
+  await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Kyoto research');
   await page.keyboard.press('ControlOrMeta+w');
   await expect(panes(page)).toHaveCount(1);
   await expect(page.getByTestId('standin-page')).toContainText('Train-times');
@@ -96,9 +98,9 @@ test('gestures are directional, latched and available in the narrow sidebar shee
   await page.waitForTimeout(300);
   await sidebar.dispatchEvent('wheel', { deltaX: -80, deltaY: 0 });
   await expect(mode(page, 'Notes')).toBeChecked();
-  await page.getByRole('button', { name: 'Library', exact: true }).click();
+  await page.getByRole('button', { name: 'Search library', exact: true }).click();
   await page.keyboard.press('Alt+Meta+b');
-  await expect(page.getByRole('dialog', { name: 'Library' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Search library' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(mode(page, 'Notes')).toBeChecked();
   await page.setViewportSize({ width: 700, height: 800 });
@@ -110,13 +112,12 @@ test('gestures are directional, latched and available in the narrow sidebar shee
 // Seam: the all-page Library and pins against persisted real note metadata.
 test('Library finds, pins and opens notes without a Recents list', async ({ page }) => {
   await setup(page);
-  await page.getByRole('button', { name: 'Library', exact: true }).click();
-  const library = page.getByRole('dialog', { name: 'Library' });
-  await library.getByRole('textbox', { name: 'Search library' }).fill('missing');
-  await expect(library.getByText('No pages match. Try another search.')).toBeVisible();
-  await library.getByRole('textbox', { name: 'Search library' }).fill('Kyoto');
-  await library.getByRole('button', { name: 'More', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Pin', exact: true }).click();
+  await page.getByRole('button', { name: 'Search library', exact: true }).click();
+  const library = page.getByRole('dialog', { name: 'Search library' });
+  await library.getByRole('combobox').fill('missing');
+  await expect(library.getByText('No matches. Try a page title, words from a page, or a type.')).toBeVisible();
+  await library.getByRole('combobox').fill('Kyoto');
+  await library.getByRole('button', { name: 'Pin', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('navigation', { name: 'Pinned', exact: true }).getByRole('button', { name: 'Kyoto research', exact: true })).toBeVisible();
   await page.reload();
@@ -143,8 +144,9 @@ test('the browser moves with its pane and hides behind an inactive pane tab', as
     return !!native && Math.abs(native.x - box.x) < 1 && Math.abs(native.y - box.y) < 1 && Math.abs(native.w - box.width) < 1;
   })).toBe(true);
   await browser.click();
-  await page.getByRole('button', { name: 'Library', exact: true }).click();
-  await page.getByRole('navigation', { name: 'Types' }).getByRole('button', { name: 'Books', exact: true }).click({ modifiers: ['Meta'] });
+  await page.getByRole('button', { name: 'Search library', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Search library' }).getByRole('combobox').fill('books');
+  await page.getByRole('option', { name: 'Books', exact: true }).click({ modifiers: ['Meta'] });
   await expect(page.getByTestId('browser-space')).toBeHidden();
   await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toBe('');
   await page.getByRole('tab', { name: /^Browser Close tab$/ }).click();

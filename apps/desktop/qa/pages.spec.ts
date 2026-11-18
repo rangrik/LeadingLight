@@ -1,9 +1,9 @@
-import { findPage } from "./navigation";
+import { findPinnedPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 // Scenarios from features/pages.feature.
-const row = findPage;
-const listItem = async (page: Page, name: string) => (await findPage(page, name)).locator("..");
+const row = findPinnedPage;
+const listItem = async (page: Page, name: string) => (await findPinnedPage(page, name)).locator("..");
 const title = (page: Page) => page.getByRole("textbox", { name: "Title" });
 const body = (page: Page) => page.getByRole("textbox", { name: "Page body" });
 
@@ -41,7 +41,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("First run shows an empty state", async ({ page }) => {
-  await expect(page.getByText("Pin pages from Library to keep them here.")).toBeVisible();
+  await expect(page.getByText("Pin pages from Search library to keep them here.")).toBeVisible();
   const main = page.getByRole("main");
   await expect(main.getByText("No page open")).toBeVisible();
   await expect(main.getByRole("button", { name: "New page" })).toBeVisible();
@@ -60,12 +60,12 @@ test("Creating a page from the empty state", async ({ page }) => {
   await expect((await row(page, "Untitled"))).toBeVisible();
 });
 
-test("Library lists all pages alphabetically", async ({ page }) => {
+test("Library lists recent pages first", async ({ page }) => {
   await createPage(page, "First");
   await expect((await row(page, "First"))).toBeVisible();
   await createPage(page, "Second");
-  await page.getByRole("button", { name: "Library", exact: true }).click();
-  await expect(page.getByRole("navigation", { name: "Library", exact: true }).getByRole("listitem")).toHaveText([/^First/, /^Second/]);
+  await page.getByRole("button", { name: "Search library", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Search library" }).getByRole("option").filter({ hasText: /^(First|Second)/ })).toHaveText([/^Second/, /^First/]);
 });
 
 test("The title shows in the sidebar as I type", async ({ page }) => {
@@ -164,8 +164,7 @@ test("Deleting the last page shows the empty state", async ({ page }) => {
   await expect((await row(page, "Only"))).toBeVisible();
   await chooseDelete(page, "Only");
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
-  await page.getByRole("textbox", { name: "Search notes" }).fill("");
-  await expect(page.getByText("Pin pages from Library to keep them here.")).toBeVisible();
+  await expect(page.getByText("Pin pages from Search library to keep them here.")).toBeVisible();
   await expect(page.getByRole("main").getByText("No page open")).toBeVisible();
 });
 

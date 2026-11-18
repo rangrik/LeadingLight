@@ -22,7 +22,7 @@ Feature: Mail is a look, not an inbox
     When I connect Gmail
     Then Google asks to let LeadingLight read, reply to and put away my mail
     And "pranav.k@gmail.com" is Personal and "pranav@northlane.io" is Work, guessed from the address
-    And I can change either, and the change is kept on this device
+    And I can change either, and the change follows the workspace
     And connecting an account again replaces its connection without a second copy
     But if I refuse the permission to put mail away, nothing is connected and Mail says why
 
@@ -74,6 +74,19 @@ Feature: Mail is a look, not an inbox
     Then a dialog lists each address with Personal or Work and Disconnect, then "Add account"
     And it says "Disconnect removes saved access. Your mail stays in Google."
 
+  Scenario: Mail follows the workspace while devices come and go
+    Given I chose three days on one Mac and its choice reached the server
+    When I quit that Mac and open Mail on another signed-in device the next morning
+    Then the second device shows new Gmail and unfinished mail from that starting date
+    And it never asks me to pick an import window or switch devices
+
+  Scenario: Two open devices receive changes without touching either device's sync controls
+    Given Mail is open on two devices in the same workspace
+    When I keep one conversation for later on each before either sees the other change
+    Then both conversations are kept for later on both devices
+    And a third device returning from offline catches up automatically
+    And a slow summary on one device cannot delay fetching new mail there
+
   Scenario: Start fresh
     Given I have never started Mail
     Then Today's row reads "Mail is connected · start fresh from the last 7 days" with "Start fresh"
@@ -82,7 +95,7 @@ Feature: Mail is a look, not an inbox
     And "7 days" is chosen from "3 days", "7 days" and "14 days"
     And "Add another account" is centred on the last account's row
     When I press Enter
-    Then the title is "Reading the last 7 days"
+    Then the first emails can be opened while the reader prepares their lines
     And mail older than 7 days is never listed, read or changed
 
   Scenario: The weight comes first

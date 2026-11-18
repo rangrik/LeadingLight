@@ -228,7 +228,7 @@ export const localStore: ObjectStore = {
     const needle = text.toLowerCase();
     const all = await tx<LLObject[]>(OBJECTS, "readonly", (s) => s.getAll());
     return all
-      .filter((o) => searchable(o).includes(needle))
+      .filter((o) => !needle || searchable(o).includes(needle))
       .map(complete);
   },
 

@@ -205,3 +205,9 @@ CREATE TABLE IF NOT EXISTS publications (
   updated_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(owner,page)
 );
+
+CREATE TABLE IF NOT EXISTS gmail_progress (
+  owner text PRIMARY KEY,
+  revision integer NOT NULL,
+  sealed text NOT NULL
+);

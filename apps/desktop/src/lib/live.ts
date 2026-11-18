@@ -25,7 +25,7 @@ type Live = {
   insertQuote: (quote: { text: string; id: string; href: string; label: string }) => void;
   reveal: (anchor: string) => void;
   // The cursor at the end of the body, for a page opened to write on.
-  focus: () => void;
+  focus: (where?: "title") => void;
 };
 const live = new Map<string, Live>();
 const waiting = new Map<string, ((page: Live) => void)[]>();
@@ -89,6 +89,6 @@ export async function editPage(id: string, change: Change, context?: ChangeConte
   const properties = change.properties?.(obj.properties);
   const patch = { ...(title !== undefined && { title }), ...(typeId !== undefined && { typeId }), ...(properties && { properties }) };
   await objects.update(id, { ...patch, ...(content && { content }) }, context);
-  patchSummary(id, patch);
+  patchSummary(id, { ...patch, updatedAt: Date.now() });
   markSaved();
 }

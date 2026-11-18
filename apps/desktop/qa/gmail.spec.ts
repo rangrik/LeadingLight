@@ -22,28 +22,29 @@ const READ = {
   daniel: lines("work", "Daniel needs a cost estimate", { due: "2026-11-20", task: { title: "Send Daniel the estimate", due: "2026-11-20", ack: "Got it, Daniel." } }),
 };
 
-async function service(page: Page, o: { read?: boolean; html?: string; out?: string } = {}) {
+async function service(page: Page, o: { read?: boolean; html?: string; out?: string; workspace?: string; inbox?: Msg[] } = {}) {
   const calls = { modify: [] as any[], send: [] as any[], external: [] as string[], senders: [] as any[] };
   let accounts = [{ account: "personal", email: "pranav.k@gmail.com" }, { account: "work", email: "pranav@northlane.io" }];
   page.on("request", (r) => !new URL(r.url()).hostname.match(/^(127\.0\.0\.1|localhost)$/) && calls.external.push(r.url()));
   await page.clock.install({ time: now });
   const state = { start: at(0, 0) - 7 * 86_400_000, days: 7, ran: o.read === false ? 0 : at(14, 58), kinds: {}, kept: {}, today: { day: "2026-11-14", set: [], handled: {}, cleared: 0, started: 0, ended: 0, closed: false, left: 0 },
     read: o.read === false ? {} : { ...Object.fromEntries(Object.entries(READ).map(([id, l]) => [key(MAIL.find((m) => m.id === id)!.account, id), { at: at(14, 58), lines: l }])), [key("personal", "amazon")]: { at: at(14, 58), group: "Receipts" }, [key("work", "news")]: { at: at(14, 58), group: "Newsletters" } } };
-  await page.addInitScript((s) => localStorage.getItem("leadinglight.mail:mail-owner") || localStorage.setItem("leadinglight.mail:mail-owner", s), JSON.stringify(state));
+  if (!o.workspace) await page.addInitScript((s) => localStorage.getItem("leadinglight.mail:mail-owner") || localStorage.setItem("leadinglight.mail:mail-owner", s), JSON.stringify(state));
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname, body = route.request().postDataJSON();
     const json = (result: unknown) => route.fulfill({ json: result });
     if (path === "/api/config") return json({ ready: true, allowed: true, providers: [] });
-    if (path === "/api/me") return json({ id: "mail-owner", name: "Pranav K" });
+    if (path === "/api/me") return json({ id: o.workspace ?? "mail-owner", name: "Pranav K" });
     if (path === "/api/auth/csrf") return json({ csrfToken: "t" });
     if (path === "/api/auth/signout") return json({ url: "/" });
     if (path === "/api/gmail/accounts") return json({ accounts });
+    if (path === "/api/gmail/progress") return o.workspace ? route.continue() : json(body ? { revision: 1 } : { revision: 0, state: null });
     if (path === "/api/gmail/counts") return json({ inbox: 10 });
     if (path === "/api/gmail/messages") {
       // A new-sender lookup: Sunita has written once, everyone else before.
       if (body.query) return (calls.senders.push(body), json({ nextPageToken: null, messages: Array(body.query === "from:sunita@gmail.com" ? 1 : 2).fill({}) }));
       if (body.account === o.out) return route.fulfill({ status: 401, json: { error: "Gmail access expired. Reconnect this account." } });
-      return json({ nextPageToken: null, messages: MAIL.filter((m) => m.account === body.account).map((m) => ({ ...m, threadId: `t-${m.id}`, to: "", cc: "", replyTo: m.replyTo ?? "", snippet: "Hello", unread: true, labels: ["INBOX", "UNREAD", ...(m.labels ?? [])], unsubscribe: !!m.unsubscribe })) });
+      return json({ nextPageToken: null, messages: (o.inbox ?? MAIL).filter((m) => m.account === body.account && (!body.after || m.date >= body.after * 1000)).map((m) => ({ ...m, threadId: `t-${m.id}`, to: "", cc: "", replyTo: m.replyTo ?? "", snippet: "Hello", unread: true, labels: ["INBOX", "UNREAD", ...(m.labels ?? [])], unsubscribe: !!m.unsubscribe })) });
     }
     if (path === "/api/gmail/thread") return json({ messages: [{ id: "x", threadId: body.id, from: "Sender <s@example.test>", date: at(9, 0), text: "", html: o.html ?? "<p>Hello there</p>", attachments: [] }] });
     if (path === "/api/gmail/modify") return (calls.modify.push(body), json({}));
@@ -69,6 +70,7 @@ test("retry the service, connect Gmail, and pick up the new account", async ({ p
     if (path === "/api/gmail/accounts") return route.fulfill(failed
       ? { status: 403, json: { error: "This native session cannot use this route." } }
       : { json: { accounts: connected ? [{ account: "personal", email: "mail@example.test" }] : [] } });
+    if (path === "/api/gmail/progress") return route.fulfill({ json: { revision: 0, state: null } });
     if (path === "/api/gmail/connect") return route.fulfill({ json: { url: "https://accounts.google.com/o/oauth2/v2/auth?state=qa" } });
     return route.fulfill({ json: { inbox: 3 } });
   });
@@ -224,4 +226,57 @@ test("Look opens the rest, and J stops at the last mail", async ({ page }) => {
   await page.getByRole("button", { name: /^Go through/ }).click();
   for (let i = 0; i < 5; i++) await page.keyboard.press("j");
   await expect(page.getByText("4 of 4")).toBeVisible();
+});
+
+// A real progress row connects independent browser profiles. Only Google and sign-in are fixtures.
+test("mail follows all connected devices and catches up after the first closes", async ({ browser, page, baseURL }, testInfo) => {
+  test.skip(!process.env.PUBLISH_QA, "Needs the isolated workspace server.");
+  const workspace = `mail-qa-${crypto.randomUUID()}`;
+  const inbox = MAIL.slice(0, 4);
+  const open = async (device: Page) => {
+    await device.context().addCookies([{ name: "qa-user", value: workspace, url: baseURL! }]);
+    await service(device, { workspace, inbox });
+    await device.goto(`${baseURL}/?clis=current`);
+    await device.getByRole("button", { name: "Mail", exact: true }).first().click();
+  };
+  await open(page);
+  await page.getByRole("tab", { name: "3 days" }).click();
+  await page.getByRole("button", { name: /^Start(?:\s|$)/ }).click();
+  await expect(page.getByRole("button", { name: /Expense claim approved/ })).toBeVisible();
+
+  const extra = () => browser.newContext({ recordVideo: { dir: testInfo.outputPath("devices"), size: { width: 1280, height: 800 } } });
+  const second = await extra(), third = await extra();
+  try {
+    const b = await second.newPage(), c = await third.newPage();
+    await open(b);
+    await expect(b.getByRole("button", { name: /Expense claim approved/ })).toBeVisible();
+    await page.getByRole("button", { name: /Expense claim approved/ }).click();
+    await b.getByRole("button", { name: /Re: Design review/ }).click();
+    let arrived = 0, release!: () => void;
+    const bothReady = new Promise<void>((resolve) => { release = resolve; });
+    for (const device of [page, b]) {
+      await device.route("**/api/gmail/progress", async (route) => {
+        if (Object.keys(route.request().postDataJSON()?.state?.kept ?? {}).length && arrived < 2) {
+          if (++arrived === 2) release();
+          await bothReady;
+        }
+        await route.continue();
+      });
+    }
+    await Promise.all([page, b].map((device) => device.getByRole("button", { name: /^Later/ }).click()));
+    await expect.poll(async () => Object.keys((await (await page.request.get(`${baseURL}/api/gmail/progress`)).json()).state.kept).sort()).toEqual([key("work", "arjun"), key("work", "meera")]);
+    await b.getByRole("button", { name: "Mail", exact: true }).first().click();
+    await page.close();
+    await b.clock.fastForward(61_000);
+    await expect(b.getByText(/back in your next look/)).toHaveCount(2);
+    await open(c);
+    await expect(c.getByText(/back in your next look/)).toHaveCount(2);
+    await expect(c.getByText("New since yesterday", { exact: true })).toHaveCount(0);
+    inbox.push({ ...MAIL[2], id: "new", subject: "New since yesterday", date: at(15, 3) + 86_400_000 });
+    await c.clock.fastForward(86_400_000);
+    await c.clock.fastForward(61_000);
+    await expect(c.getByRole("button", { name: /New since yesterday/ })).toBeVisible();
+    await expect(c.getByRole("button", { name: /Expense claim approved/ })).toBeVisible();
+    await c.screenshot({ path: testInfo.outputPath("next-morning.png") });
+  } finally { await second.close(); await third.close(); }
 });
