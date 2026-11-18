@@ -16,6 +16,32 @@ async function start(page: Page) {
   await expect(page.getByRole('button', { name: 'Search library', exact: true })).toBeEnabled();
 }
 
+// Seam: rendering a library must stay bounded without making later pages unreachable.
+test('large libraries page through results and search every page', async ({ page }) => {
+  test.setTimeout(60_000);
+  await start(page);
+  await page.evaluate(async () => {
+    const { createPage } = await import('/src/lib/' + 'space.ts');
+    for (let n = 0; n < 201; n++) await createPage({ title: `Saved ${n}`, createdAt: n + 1, updatedAt: n + 1 });
+  });
+  await search(page);
+  await dialog(page).getByRole('option', { name: 'Browse all pages' }).click();
+  await expect(dialog(page).getByRole('option')).toHaveCount(101);
+  await expect(dialog(page).getByText('Pages · 1–100 of 201')).toBeVisible();
+  await dialog(page).getByRole('option', { name: 'Next pages' }).click();
+  await expect(dialog(page).getByRole('option')).toHaveCount(102);
+  await dialog(page).getByRole('option', { name: 'Next pages' }).click();
+  await expect(dialog(page).getByRole('option', { name: 'Saved 0', exact: true })).toBeVisible();
+  await expect(dialog(page).getByRole('option', { name: 'Next pages' })).toHaveCount(0);
+  await dialog(page).getByRole('option', { name: 'Previous 100 pages' }).click();
+  await expect(dialog(page).getByText('Pages · 101–200 of 201')).toBeVisible();
+  await input(page).fill('Saved 200');
+  await expect(dialog(page).getByRole('option')).toHaveCount(1);
+  await expect(dialog(page).getByRole('option', { name: 'Saved 200', exact: true })).toBeVisible();
+  await input(page).fill('Saved');
+  await expect(dialog(page).getByText('Pages · 1–100 of 201')).toBeVisible();
+});
+
 // Seam: saved summaries and the new palette. New/edited typed pages must survive search and reload.
 test('recent pages, full library, body search and type creation', async ({ page }) => {
   await start(page);
@@ -106,9 +132,11 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await expect(page.locator('[data-pane]')).toHaveCount(2);
   await page.screenshot({ path: 'qa/report/search-split.png' });
   await page.setViewportSize({ width: 700, height: 800 });
+  await expect(page.getByTestId('browser-space')).not.toBeVisible();
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
   await search(page, 'Packing');
-  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await expect(page.locator('[role="dialog"][data-sidebar="sidebar"]')).not.toBeVisible();
+  await expect(dialog(page)).toBeVisible();
   await page.keyboard.press('Escape');
 });
 
@@ -149,4 +177,37 @@ test('late results, body-search errors and creation errors recover', async ({ pa
   expect(await page.evaluate(async () => (await import('/src/lib/' + 'space.ts')).space.get().pages.length)).toBe(before);
   await page.keyboard.press('Meta+k');
   await expect(dialog(page)).not.toBeVisible();
+});
+
+// Seam: a shortcut-opened dialog has no trigger; closing it must restore the writing cursor.
+test('search restores the editor and focuses a chosen note', async ({ page }) => {
+  await start(page);
+  await page.keyboard.press('Meta+n');
+  await title(page).fill('Resume writing');
+  await title(page).press('Enter');
+  const body = page.getByRole('textbox', { name: 'Page body', exact: true });
+  await page.keyboard.type('Before');
+  await search(page, 'no match');
+  await page.keyboard.press('Escape');
+  await expect(body).toBeFocused();
+  await page.keyboard.type(' after');
+  await expect(body).toHaveText('Before after');
+  await search(page);
+  await page.keyboard.press('Meta+k');
+  await expect(body).toBeFocused();
+  await page.getByRole('button', { name: 'Search library', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(body).toBeFocused();
+  await title(page).click();
+  await search(page);
+  await page.keyboard.press('Escape');
+  await expect(title(page)).toBeFocused();
+  await page.keyboard.press('Meta+n');
+  await expect(title(page)).toHaveValue('');
+  await title(page).fill('Another note');
+  await search(page, 'Resume writing');
+  await page.keyboard.press('Enter');
+  await expect(body).toBeFocused();
+  await page.keyboard.type(' again');
+  await expect(body).toHaveText('Before after again');
 });

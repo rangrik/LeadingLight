@@ -396,7 +396,7 @@ export default function App() {
           {root && !mobile && <AskBar />}
         </SidebarInset>
         <BrowserCommand />
-        {loaded && <WorkspaceSearch />}
+        {loaded && <WorkspaceSearch returnFocus={captureFrom} />}
         <BarStrip onCapture={toggleCapture} />
         </>}
         <DeletePageDialog

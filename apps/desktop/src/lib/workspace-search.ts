@@ -26,7 +26,7 @@ export async function createNote(type = PAGE_TYPE, navigate: (show: () => void) 
   navigate(() => {
     if (target && panes.get().root && leaves(panes.get().root!).some((p) => p.id === target.id)) focusPane(target.id);
     (phone ? openFresh : openTab)(id);
-    if (type !== DAILY) whenLive(id, (page) => page.focus("title"));
+    if (type !== DAILY) requestAnimationFrame(() => whenLive(id, (page) => page.focus("title")));
   });
   return id;
 }

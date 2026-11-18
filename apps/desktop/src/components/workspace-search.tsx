@@ -1,18 +1,18 @@
 // COSS p-command-1, with workspace groups, recent pages, type creation and page actions.
 // Changes: shared shortcut state, asynchronous body search, and split-aware navigation.
-import { ArrowLeft, FolderOpen, Layers, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, ArrowRight, FolderOpen, Layers, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Command, CommandCollection, CommandDialog, CommandDialogPopup, CommandEmpty, CommandFooter, CommandGroup, CommandGroupLabel, CommandInput, CommandItem, CommandList, CommandPanel } from "@leadinglight/ui/components/command";
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
-import { available, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
+import { available, browserFocused, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
-import { editPage, liveContent } from "~/lib/live";
+import { editPage, liveContent, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFrom } from "~/lib/panes";
-import { iconFor, space, typeOf, typeView } from "~/lib/space";
+import { iconFor, isPageView, space, typeOf, typeView } from "~/lib/space";
 import { ABOUT } from "~/lib/tail-memory";
 import { createNote, workspaceSearch, type SearchView } from "~/lib/workspace-search";
 
@@ -21,9 +21,10 @@ type Item = { value: string; label: string; sub?: string; icon: ReactNode; page?
 type Group = { value: string; items: Item[] };
 const countPages = (count: number) => `${count} ${count === 1 ? "page" : "pages"}`;
 const plain: Modifiers = { shiftKey: false, metaKey: false };
+const PAGE_SIZE = 100;
 const names: Record<SearchView, string> = { search: "Search library", pages: "All pages", types: "Types", create: "Create page" };
 
-export function WorkspaceSearch() {
+export function WorkspaceSearch({ returnFocus }: { returnFocus: RefObject<HTMLElement | null> }) {
   const state = workspaceSearch.use();
   const navigated = useRef(false);
   const previous = useRef(state);
@@ -36,7 +37,7 @@ export function WorkspaceSearch() {
   };
   return (
     <CommandDialog open={!!state} onOpenChange={(open) => { if (!open) close(); }}>
-      <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={() => !navigated.current}>
+      <CommandDialogPopup aria-label="Search library" className="max-h-[min(38rem,85svh)]" finalFocus={() => !navigated.current && !browserFocused() && returnFocus.current?.isConnected && returnFocus.current.getClientRects().length ? returnFocus.current : false}>
         {state && <SearchContents initial={state.view} navigate={navigate} />}
       </CommandDialogPopup>
     </CommandDialog>
@@ -49,6 +50,7 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
   const canBrowse = available.use();
   const [view, setView] = useState(initial);
   const [query, setQuery] = useState("");
+  const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
   const [body, setBody] = useState<{ query: string; hits: Map<string, string>; error?: boolean }>({ query: "", hits: new Map() });
   const [retry, setRetry] = useState(0);
@@ -74,8 +76,13 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     }, 150);
     return () => { current = false; clearTimeout(timer); };
   }, [q, searchPages, tokens, pages, retry]);
-  const changeView = (next: SearchView) => { setView(next); setQuery(""); setError(""); input.current?.focus(); };
-  const open = (id: string, e: Modifiers) => navigate(() => { leave(); openFrom(id, e); });
+  const changeQuery = (next: string) => { setQuery(next); setOffset(0); setError(""); };
+  const changeView = (next: SearchView) => { setView(next); changeQuery(""); input.current?.focus(); };
+  const open = (id: string, e: Modifiers) => navigate(() => {
+    leave();
+    openFrom(id, e);
+    if (isPageView(id)) requestAnimationFrame(() => whenLive(id, (page) => page.focus()));
+  });
   const create = async (id: string) => {
     if (working.current) return;
     working.current = true;
@@ -85,14 +92,21 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
-  const pageItems = pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
-    .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt);
+  const pageItems = useMemo(() => pages.filter((p) => !p.properties.templateOf && (p.typeId !== ABOUT || q)).filter((p) => !q || matches(pageLabel(p.title), typeOf(p.typeId).name, typeOf(p.typeId).plural, body.hits.get(p.id) ?? ""))
+    .sort((a, b) => Number(!!q && b.title.toLocaleLowerCase().startsWith(q)) - Number(!!q && a.title.toLocaleLowerCase().startsWith(q)) || b.updatedAt - a.updatedAt || b.createdAt - a.createdAt), [pages, types, q, tokens, body.hits]);
+  const recent = view === "search" && !q;
+  const start = Math.min(offset, Math.max(0, Math.ceil(pageItems.length / PAGE_SIZE) - 1) * PAGE_SIZE);
+  const range = `${start + 1}–${Math.min(start + PAGE_SIZE, pageItems.length)} of ${pageItems.length.toLocaleString()}`;
   const results: Group[] = [];
   const add = (value: string, items: Item[]) => { if (items.length) results.push({ value, items }); };
   if (searchPages) {
-    add(!q && view === "search" ? "Recent pages" : "Pages", (view === "search" && !q ? pageItems.slice(0, 8) : pageItems).map((p) => ({
+    add(recent ? "Recent pages" : pageItems.length > PAGE_SIZE ? `Pages · ${range}` : "Pages", (recent ? pageItems.slice(0, 8) : pageItems.slice(start, start + PAGE_SIZE)).map((p) => ({
       value: `page:${p.id}`, label: pageLabel(p.title), sub: typeOf(p.typeId).name, icon: <RowIcon icon={iconFor(p)} />, page: p, beside: true, run: (e) => open(p.id, e),
     })));
+    if (!recent && pageItems.length > PAGE_SIZE) add("More pages", [
+      ...(start ? [{ value: "previous", label: "Previous 100 pages", icon: <ArrowLeft />, run: () => setOffset(start - PAGE_SIZE) }] : []),
+      ...(start + PAGE_SIZE < pageItems.length ? [{ value: "next", label: "Next pages", sub: `${Math.min(PAGE_SIZE, pageItems.length - start - PAGE_SIZE)} more`, icon: <ArrowRight />, run: () => setOffset(start + PAGE_SIZE) }] : []),
+    ]);
   }
   if (view === "search" && !q) add("Library", [
     { value: "create", label: "Create page…", sub: "Choose any type", icon: <Plus />, run: () => changeView("create") },
@@ -102,24 +116,25 @@ function SearchContents({ initial, navigate }: { initial: SearchView; navigate(f
   if (view === "search" && canBrowse) add("Browser tabs", tabs.filter((t) => matches(t.title, t.url)).map((t) => ({
     value: `tab:${t.id}`, label: t.title || hostOf(t.url), sub: hostOf(t.url), icon: <SiteIcon tab={t} />, beside: true, run: (e) => navigate(() => { enter(); select(t.id, true, e.shiftKey); }),
   })));
-  if (view === "types" || (view === "search" && q)) add("Types", types.filter((t) => (!t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))) && matches(t.name, t.plural)).map((t) => ({
+  if (view === "types" || (view === "search" && q)) add("Types", types.filter((t) => (!t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))) && matches(t.name, t.plural)).sort((a, b) => Number([b.name, b.plural].some((name) => name.toLocaleLowerCase() === q)) - Number([a.name, a.plural].some((name) => name.toLocaleLowerCase() === q))).map((t) => ({
     value: `type:${t.id}`, label: t.plural, sub: countPages(pages.filter((p) => p.typeId === t.id && !p.properties.templateOf).length), icon: <RowIcon icon={t.icon} />, beside: true, run: (e) => open(typeView(t.id), e),
   })));
   if (view === "create" || (view === "search" && q)) {
     const wanted = q.replace(/^(?:new|create)\b\s*/, "").split(/\s+/).filter(Boolean);
     add("Create", types.filter((t) => !t.made && wanted.every((word) => `${t.name} ${t.plural}`.toLocaleLowerCase().includes(word))).sort((a, b) => Number(b.name.toLocaleLowerCase() === wanted.join(" ")) - Number(a.name.toLocaleLowerCase() === wanted.join(" "))).map((t) => ({
-      value: `new:${t.id}`, label: `New ${t.name.toLocaleLowerCase()}`, sub: t.id === "daily" ? "Today" : "New tab", icon: <Plus />, run: () => create(t.id),
+      value: `new:${t.id}`, label: `New ${t.name.toLocaleLowerCase()}`, sub: t.id === "daily" ? "Today" : undefined, icon: <Plus />, run: () => create(t.id),
     })));
   }
   const active = results.flatMap((g) => g.items).find((i) => i.value === highlight) ?? results[0]?.items[0];
   const pin = async () => {
     if (!active?.page || working.current) return;
+    setError("");
     try { await editPage(active.page.id, { properties: ({ pinned, ...rest }) => pinned ? rest : { ...rest, pinned: true } }); }
     catch { setError("Could not change this pin. Try again."); }
   };
   const searching = searchPages && !!q && body.query !== q;
   return (
-    <Command filter={null} items={results} value={query} onValueChange={setQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
+    <Command filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
       {view !== "search" && <div className="relative flex items-center gap-2 px-3 pt-2 text-sm"><Button aria-label="Back to search" size="icon-sm" variant="ghost" onClick={() => changeView("search")}><ArrowLeft /></Button><span>{names[view]}</span></div>}
       <CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={view === "create" ? "Choose a type…" : "Search pages, types, tabs…"} readOnly={busy} onKeyDownCapture={(e) => {
         modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;

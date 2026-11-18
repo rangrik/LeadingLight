@@ -16,12 +16,21 @@ Feature: One search for the workspace
     Then I can open Meetings, a matching meeting, or create a new Meeting
     And a failed body search explains the failure while title search still works
 
+  Scenario: A large library stays quick to browse
+    Given I have 2000 saved pages
+    When I browse all pages or search for a word in every page
+    Then at most 100 page results are drawn at once
+    And I can go to the next or previous 100 results
+    And changing the query searches the whole library from the first result
+
   Scenario: Create any user type without hunting through Library
     When I choose New page's type picker or Create page in Search library
     Then I can choose any user-created or built-in user type
     And creating a Book uses its default template in a new note tab
     And creating a daily note opens today's note without duplicating it
     And a failed creation keeps the picker open with an error and allows retry
+    And changing the query clears the old creation error
+    And a successful pin retry clears its error
 
   Scenario: Jump between notes and websites while keeping a split
     Given a note and a browser tab are open side by side
