@@ -1,4 +1,4 @@
-import { findPage } from "./navigation";
+import { findPage, findPinnedPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const body = (page: Page, pane: string) =>
@@ -16,7 +16,7 @@ test("Two pages side by side each keep their own edits", async ({ page }) => {
   await page.goto("/");
   await create(page, "Left");
   await create(page, "Right");
-  const left = (await findPage(page, "Left"));
+  const left = (await findPinnedPage(page, "Left"));
   await left.scrollIntoViewIfNeeded();
   const row = (await left.boundingBox())!;
   const area = (await page.locator("[data-pane-area]").boundingBox())!;

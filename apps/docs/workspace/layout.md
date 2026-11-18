@@ -10,8 +10,8 @@ several pages side by side, and each of those places can hold tabs, as a browser
 
 ## The window
 
-- **The sidebar** shows search, **New page**, shortcuts for Today, Calendar and Mail,
-  your pinned pages, and **Library**. Library holds all your pages and types.
+- **The sidebar** shows **Search library** (<kbd>⌘K</kbd>), **New page** with a type picker, shortcuts for Today, Calendar and Mail,
+  and your pinned pages. Search library finds pages, types and open browser tabs from either mode.
   **Notes** and **Browser** share this sidebar: use the footer switch, swipe horizontally
   across the sidebar, or press <kbd>⌥⌘B</kbd>. Switching mode keeps your panes and edits in place.
   Settings, Account and sync, and usage stay at the bottom.
@@ -51,6 +51,8 @@ sidebar uses the same width, and hiding and showing the sidebar brings it back a
 ::: tip
 <kbd>⌘B</kbd> always makes text bold. It never hides the sidebar.
 :::
+
+Press <kbd>⌘N</kbd> to create a new note tab or browser tab, following the pane you last clicked. The sidebar mode does not change which pane gets the new tab.
 
 ## Open pages side by side
 

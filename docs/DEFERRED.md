@@ -291,6 +291,11 @@ activation. Evidence: [investigation](NATIVE-RECORDING-FOCUS.md).
 
 ## 2026-10-29 — Occasional long-page typing samples over 16 ms
 
+Rechecked November 17 with 2,000 paragraphs: main p50 16.7–18.6 ms and p95
+19.2–26.7 ms; unified search p50 16.7–18.3 ms and p95 19.4–21.3 ms. No regression
+or search-index work while typing with search closed. The existing 16 ms gap remains
+for the separate typing performance pass. Evidence: `/tmp/ll-search-review/report.md`.
+
 Before merging current main, 2,000-paragraph baseline/fixed runs averaged about 11 ms
 with occasional 20–21 ms samples. Final merged-source runs averaged 14.45/15.06 ms,
 with p95 18.1/18.0 ms and maximum 22.1 ms. The strict 16 ms budget is not met; these

@@ -109,7 +109,7 @@ export function BrowserCommand() {
   const items = useMemo(() => groups(query, here, tabs, data.bookmarks, data.history, copied, selected), [query, here, tabs, data, copied, selected]);
   return (
     <CommandDialog onOpenChange={(open) => { if (!open) { bar.set(null); void refocus(); } }} open={!!state}>
-      <CommandDialogPopup aria-label={here ? "Go somewhere in this tab" : "Open"} backdropClassName="bg-black/16 backdrop-blur-none dark:bg-black/34" className="max-h-[min(34rem,80vh)] max-w-[40rem] rounded-[0.875rem] before:hidden sm:mt-8">
+      <CommandDialogPopup data-browser-command aria-label={here ? "Go somewhere in this tab" : "Open"} backdropClassName="bg-black/16 backdrop-blur-none dark:bg-black/34" className="max-h-[min(34rem,80vh)] max-w-[40rem] rounded-[0.875rem] before:hidden sm:mt-8">
         <Command filter={null} items={items} onValueChange={setQuery} value={query}>
           <div className="border-b">
             <CommandInput aria-label="Search or enter address" className="text-base sm:h-10 sm:text-base" onFocus={(e) => e.currentTarget.select()} placeholder="Search or enter address" />

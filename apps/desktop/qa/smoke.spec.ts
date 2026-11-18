@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // One quick pass through the main path. The full scenarios live in features/.
 test("create a page, write, and reload", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Pin pages from Library to keep them here.")).toBeVisible();
+  await expect(page.getByText("Pin pages from Search library to keep them here.")).toBeVisible();
 
   await page.getByRole("button", { name: "New page", exact: true }).first().click();
 
@@ -28,6 +28,7 @@ test("create a page, write, and reload", async ({ page }) => {
   await page.waitForTimeout(800);
   await page.reload();
   await expect(await findPage(page, "Smoke")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("textbox", { name: "Page body" }).locator("h1")).toHaveText("Heading");
   await page.screenshot({ path: "qa/report/smoke.png" });
 });

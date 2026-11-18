@@ -1069,6 +1069,17 @@ all pages and types live in Library, and search finds unpinned pages. The person
 browser occupies one ordinary pane, so it can sit beside notes without remounting them.
 A native click reports focus to the pane store so shortcuts follow the pane, not the sidebar.
 
+## Search and Library share one command window (2026-11-17)
+
+Both sidebar modes and ⌘K open Search library. Recent changes lead the empty search;
+all-page and type views live in that window. Results include note text, types, creation
+commands and personal browser tabs. Explicit result navigation reveals its sidebar mode;
+ordinary pane focus still leaves the mode alone. ⌘N follows the focused pane and keeps
+its previous tab. A new typed page uses the existing template and daily-note paths.
+
+Search keeps a plain-text index in memory, built on demand without resolving image assets.
+It rereads only changed pages; formatting cannot split a word out of the results.
+
 ## Mail progress belongs to the signed-in workspace
 
 The Gmail service stores the import date, account labels, Later choices and daily look encrypted
