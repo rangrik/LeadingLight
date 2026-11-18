@@ -22,7 +22,7 @@ function envelope(value) {
 export function nativeRoute(request) {
   const path = new URL(request.url).pathname;
   return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts', '/api/gmail/accounts', '/api/gmail/progress', '/api/native/approval', '/api/devices'].includes(path)
-    || request.method === 'POST' && ['/api/publications/status', '/api/publications/publish', '/api/publications/unpublish', '/api/sync', '/api/native/revoke', '/api/native/approve', '/api/devices/name', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['progress', 'connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].map((action) => `/api/gmail/${action}`), ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
+    || request.method === 'POST' && ['/api/account/remote-work', '/api/publications/status', '/api/publications/publish', '/api/publications/unpublish', '/api/sync', '/api/native/revoke', '/api/native/approve', '/api/devices/name', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['progress', 'connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].map((action) => `/api/gmail/${action}`), ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
 }
 
 export async function authenticateNative(request, sql) {

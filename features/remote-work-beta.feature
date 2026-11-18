@@ -1,7 +1,7 @@
 Feature: Remote work beta
   Scenario: The account chooses the beta
-    Given two devices signed in to the same account
-    When I enable Remote work in Account and devices
+    Given an installed Mac app and an installed iPad app signed in to the same account
+    When I enable Remote work in Account and devices on the iPad
     Then both devices see Remote work after their next account refresh
     When I turn it off, or sign out
     Then the beta workspace closes and its entry points disappear
