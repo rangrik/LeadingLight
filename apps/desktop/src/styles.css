@@ -115,16 +115,6 @@ html[data-ipad] {
   .ll-search-controls > :first-child { flex: 1; min-width: 0; padding-inline-end: 0; }
   .ll-search-controls > :last-child { padding-block-end: 0; }
 }
-/* With little height, keep page actions beside the results so they cannot cover the first row. */
-@container library (max-height: 240px) {
-  .ll-workspace-search:has(> [data-slot="command-footer"]) {
-    display: grid; height: 100%; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) auto;
-  }
-  .ll-workspace-search > .ll-search-controls { grid-column: 1 / -1; }
-  .ll-workspace-search > [data-slot="command-footer"] {
-    flex-flow: column nowrap; align-items: stretch; justify-content: start; gap: 0; overflow-y: auto; padding: 0;
-  }
-}
 /* The keyboard changes the visible region without changing viewport units. */
 [data-ipad] .ll-mobile-agents {
   container: mobile-agents / size;
@@ -269,6 +259,17 @@ html[data-ipad].dark {
   background: linear-gradient(var(--ll-fade, var(--background)), transparent);
 }
 html[data-ipad]:not([data-phone]) [data-tab-row] { border-bottom-color: transparent; }
+
+/* With little height, keep page actions beside the results so they cannot cover the first row. */
+@container library (max-height: 240px) {
+  .ll-workspace-search:has(> [data-slot="command-footer"]) {
+    display: grid; height: 100%; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) auto;
+  }
+  .ll-workspace-search > .ll-search-controls { grid-column: 1 / -1; }
+  .ll-workspace-search > [data-slot="command-footer"] {
+    flex-flow: column nowrap; align-items: stretch; justify-content: start; gap: 0; overflow-y: auto; padding: 0;
+  }
+}
 
 /* Bar buttons on glass: one capsule per group, 16 px from the bar's edges (HIG Toolbars). */
 [data-ipad] [data-slot="sidebar-trigger"] { width: 44px; height: 44px; margin-inline-start: 0; }
