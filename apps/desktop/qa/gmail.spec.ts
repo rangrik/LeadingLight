@@ -44,7 +44,7 @@ async function service(page: Page, o: { read?: boolean; html?: string; out?: str
       // A new-sender lookup: Sunita has written once, everyone else before.
       if (body.query) return (calls.senders.push(body), json({ nextPageToken: null, messages: Array(body.query === "from:sunita@gmail.com" ? 1 : 2).fill({}) }));
       if (body.account === o.out) return route.fulfill({ status: 401, json: { error: "Gmail access expired. Reconnect this account." } });
-      return json({ nextPageToken: null, messages: (o.inbox ?? MAIL).filter((m) => m.account === body.account).map((m) => ({ ...m, threadId: `t-${m.id}`, to: "", cc: "", replyTo: m.replyTo ?? "", snippet: "Hello", unread: true, labels: ["INBOX", "UNREAD", ...(m.labels ?? [])], unsubscribe: !!m.unsubscribe })) });
+      return json({ nextPageToken: null, messages: (o.inbox ?? MAIL).filter((m) => m.account === body.account && (!body.after || m.date >= body.after * 1000)).map((m) => ({ ...m, threadId: `t-${m.id}`, to: "", cc: "", replyTo: m.replyTo ?? "", snippet: "Hello", unread: true, labels: ["INBOX", "UNREAD", ...(m.labels ?? [])], unsubscribe: !!m.unsubscribe })) });
     }
     if (path === "/api/gmail/thread") return json({ messages: [{ id: "x", threadId: body.id, from: "Sender <s@example.test>", date: at(9, 0), text: "", html: o.html ?? "<p>Hello there</p>", attachments: [] }] });
     if (path === "/api/gmail/modify") return (calls.modify.push(body), json({}));
@@ -267,11 +267,12 @@ test("mail follows all connected devices and catches up after the first closes",
     await expect.poll(async () => Object.keys((await (await page.request.get(`${baseURL}/api/gmail/progress`)).json()).state.kept).sort()).toEqual([key("work", "arjun"), key("work", "meera")]);
     await b.getByRole("button", { name: "Mail", exact: true }).first().click();
     await page.close();
-    inbox.push({ ...MAIL[2], id: "new", subject: "New since yesterday", date: at(15, 3) });
     await b.clock.fastForward(61_000);
     await expect(b.getByText(/back in your next look/)).toHaveCount(2);
     await open(c);
     await expect(c.getByText(/back in your next look/)).toHaveCount(2);
+    await expect(c.getByText("New since yesterday", { exact: true })).toHaveCount(0);
+    inbox.push({ ...MAIL[2], id: "new", subject: "New since yesterday", date: at(15, 3) + 86_400_000 });
     await c.clock.fastForward(86_400_000);
     await c.clock.fastForward(61_000);
     await expect(c.getByRole("button", { name: /New since yesterday/ })).toBeVisible();

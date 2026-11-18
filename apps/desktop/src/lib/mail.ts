@@ -87,7 +87,9 @@ function picture(): MailView {
   const { look, waiting } = compose(people, state.today, now);
   later.sort((a, b) => (a.lines?.due ?? "9999-12-31").localeCompare(b.lines?.due ?? "9999-12-31") || a.mail.date - b.mail.date);
   const snap: Snapshot = { now, accounts, started: !!state.start, days: state.days, reading: status.reading, unread: status.unread, ran: state.ran, offline: typeof navigator !== "undefined" && !navigator.onLine, look, waiting, rest, later, today: state.today };
-  return { ...snap, owner, loading: status.loading, error: status.error, said: say(snap), state, later };
+  const said = say(snap);
+  if (snap.started && status.error && !snap.offline) said.small = status.error;
+  return { ...snap, owner, loading: status.loading, error: status.error, said, state, later };
 }
 export const mail = createStore<MailView>(picture());
 export const useMail = mail.use;
@@ -214,7 +216,14 @@ async function listInbox(run: number, requestedFull: boolean) {
     const list = await src.accounts();
     if (run !== generation) return;
     if (demoOn && !listed.any && !state.start && !accounts.length) state = src.seed!(Date.now());
-    if (list.length) await syncProgress();
+    let progressError = "";
+    if (list.length) {
+      try { await syncProgress(); }
+      catch (error) {
+        if (!state.start) throw error;
+        progressError = "Mail progress will update when the workspace reconnects.";
+      }
+    }
     if (run !== generation) return;
     if (state.today.day !== isoDay(Date.now())) state = { ...state, today: newDay(Date.now()) };
     const s = state, at = Date.now();
@@ -250,7 +259,7 @@ async function listInbox(run: number, requestedFull: boolean) {
     mails = conversations([...merged.values()].filter((m) => live.has(m.account))).sort((a, b) => a.date - b.date);
     needsFullListing = false;
     if (s.start) listed = { any: at, full: full ? at : listed.full };
-    status.error = "";
+    status.error = progressError;
   } catch (e) {
     if (run === generation) status.error = why(e);
   } finally {
