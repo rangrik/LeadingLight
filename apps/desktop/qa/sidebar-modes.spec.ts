@@ -115,7 +115,7 @@ test('Library finds, pins and opens notes without a Recents list', async ({ page
   await page.getByRole('button', { name: 'Search library', exact: true }).click();
   const library = page.getByRole('dialog', { name: 'Search library' });
   await library.getByRole('combobox').fill('missing');
-  await expect(library.getByText('No matches. Try a page title, words from a page, or a type.')).toBeVisible();
+  await expect(library.getByRole('option', { name: 'New page “missing”', exact: true })).toBeVisible();
   await library.getByRole('combobox').fill('Kyoto');
   await library.getByRole('button', { name: 'Pin', exact: true }).click();
   await page.keyboard.press('Escape');

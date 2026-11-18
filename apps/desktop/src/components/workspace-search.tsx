@@ -149,7 +149,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     if (createGrid) {
       for (const group of typeGroups) add(group.name, group.ids.flatMap((id) => actions.filter((a) => a.id === id)));
       add("My types", actions.filter((a) => !typeGroups.some((group) => group.ids.includes(a.id))));
-    } else if (explicit && view === "search" && actions.length) {
+    } else if (explicit && view === "search" && actions.some((action) => action.rank > 0)) {
       results.unshift({ value: "Create", items: actions });
     } else add("Create", actions);
   }
