@@ -57,7 +57,7 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           <>
             <SidebarTrigger className="-ml-1" />
             {workspace && mobile && !phone && <Tooltip>
-              <TooltipTrigger render={<Button aria-label="Search library" className="size-11 shrink-0" size="icon" variant="ghost" onClick={() => openSearch()} />}><Search /></TooltipTrigger>
+              <TooltipTrigger render={<Button aria-label="Search library" className="min-h-11 min-w-11 shrink-0" size="icon" variant="ghost" onClick={() => openSearch()} />}><Search /></TooltipTrigger>
               <TooltipPopup>Search library</TooltipPopup>
             </Tooltip>}
             {/* COSS's Separator sizes by its own data-orientation, so h-4 instead of data-vertical:h-4. */}
