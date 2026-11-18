@@ -36,7 +36,7 @@ Find saved ideas under **Notes › Captures**. You can organize or review them w
 
 ## Find and resume
 
-Tap the magnifying glass beside **Quick capture** from Today, Notes or an open page. Search finds titles and words in your notes offline. Tap **Pages**, **Types** or **Create** to narrow the same query. With a hardware keyboard, **⌘K** opens search.
+Tap the magnifying glass beside **Quick capture** from Today, Notes or an open page. While typing on a page, the magnifying glass moves to the page toolbar. Search finds titles and words in your notes offline. Tap **Pages**, **Types** or **Create** to narrow the same query. With a hardware keyboard, **⌘K** opens search.
 
 Tap **New page** for a blank note. To create a specific type, tap **Create** and its icon, or enter **new meeting Friday review** and tap the result. It opens a Meeting with the title filled in, ready to write. **Notes** keeps your recent notes and **Browse by type** one tap away.
 

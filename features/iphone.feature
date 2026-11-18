@@ -190,4 +190,5 @@ Feature: LeadingLight on iPhone
     Then the new page opens in the single phone pane
     When I search for the page I was already editing from Notes
     Then tapping its result reveals the editor and Back returns to Notes
-    And I can dismiss search by touch with the keyboard open
+    When the keyboard hides the tab bar while I write
+    Then I can open search from the page toolbar and dismiss it by touch

@@ -294,9 +294,13 @@ html[data-phone][data-keyboard] { --ll-tabbar-room: 24px; }
 [data-phone] .ll-tabbar [aria-current="page"] { background-color: var(--ll-glass-selected); font-weight: 600; }
 /* Only the keyboard or a modal covers the tab bar; Settings stops at the safe line, so it hides. */
 [data-phone][data-keyboard] .ll-tabbar, [data-phone] .ll-shell[inert] .ll-tabbar { visibility: hidden; }
+[data-phone] .ll-phone-edit-search { display: none; }
+[data-phone][data-keyboard] .ll-phone-edit-search { display: inline-flex; }
 /* Sized here: COSS's sm: button height would make it an oval in landscape. */
-[data-phone] .ll-tabbar > [data-quick-capture] {
+[data-phone] .ll-tabbar > button {
   width: var(--ll-tabbar-height); height: var(--ll-tabbar-height);
+}
+[data-phone] .ll-tabbar > [data-quick-capture] {
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-white) 16%, transparent), var(--ll-glass-shadow);
 }
 [data-phone] .ll-phone [data-page-scroller] { padding-bottom: var(--ll-tabbar-room); scroll-padding-bottom: var(--ll-tabbar-room); }

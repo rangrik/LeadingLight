@@ -3,7 +3,7 @@ import { CalendarView } from '~/components/calendar-view';
 // The open pages, side by side. From Shipyard (MIT, Copyright (c) 2026 Sean Brydon),
 // app/src/components/workspace/pane-layer.tsx and pane.tsx. Changes: pages only, each a card
 // with its own header (crumbs and a close button) and tab row (tab-row.tsx), no Compare tabs.
-import { Mail, X } from "lucide-react";
+import { Mail, Search, X } from "lucide-react";
 import { MailActions, MailCount, MailView } from "~/components/mail";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -35,6 +35,7 @@ import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
 import { MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { readPaper } from "~/lib/paper";
+import { openSearch } from "~/lib/workspace-search";
 import { phone, useMobile } from "~/lib/platform";
 
 type Size = { w: number; h: number; header: number };
@@ -199,6 +200,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
                     like Close page: on the card in front, the others on hover. Ask gives way in
                     narrow cards, so the title stays whole; ⌘J still asks. */}
+                {phone && <Button aria-label="Search library" className="ll-phone-edit-search" onClick={() => openSearch()} size="icon" variant="ghost"><Search /></Button>}
                 {!mobile && isPageView(leaf.page) && <FeedbackButton className={cn(backCard)} pageId={leaf.page} />}
                 {isPageView(leaf.page) && <PublishPage key={leaf.page} page={leaf.page} />}
                 {isPageView(leaf.page) && (reportOf(pageOf(leaf.page)) ? <PageHistory className={cn(backCard)} page={leaf.page} /> : <div className="ll-page-actions" data-page-actions />)}

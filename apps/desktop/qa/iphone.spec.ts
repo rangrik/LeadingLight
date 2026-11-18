@@ -206,6 +206,10 @@ test("small phone, keyboard, landscape, navigation and settings", async ({ page,
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Keep the words in landscape too");
   await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
   await expect(nav(page)).toBeHidden(); // the keyboard covers the tab bar
+  await page.getByRole("button", { name: "Search library", exact: true }).tap();
+  await library(page).getByRole("combobox").fill("thought");
+  await expect(library(page).getByRole("option", { name: "A thought on a small phone", exact: true })).toBeVisible();
+  await library(page).getByRole("button", { name: "Close search" }).tap();
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => {
     Object.assign(window.visualViewport!, { height: 390, width: 844 });
@@ -268,7 +272,6 @@ test("Back from a second page opened in Notes returns to Notes", async ({ page }
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Recent notes", exact: true })).toBeVisible();
 });
-
 
 // Opening a result already mounted behind Today or Notes must still reveal the phone editor.
 test("phone search creates a named type and reopens the same page from Notes", async ({ page }) => {
