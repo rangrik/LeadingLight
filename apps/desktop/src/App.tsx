@@ -62,7 +62,7 @@ import { projectPrefs } from "~/lib/project-runtime/prefs";
 import { flushAll } from "~/lib/saving";
 import { AGENT, taskOfAgent } from "~/lib/work";
 import { createPage, foldDescriptions, iconFor, listed, loadSpace, removePage, space, typeOf } from "~/lib/space";
-import { createNote } from "~/lib/workspace-search";
+import { createNote, workspaceSearch } from "~/lib/workspace-search";
 import { WorkspaceSearch } from "~/components/workspace-search";
 import { useCodeColors } from "~/lib/use-code-colors";
 import { useShortcuts } from "~/lib/use-shortcuts";
@@ -107,6 +107,7 @@ export default function App() {
   const [calendarReturn] = useState(() => new URL(location.href).searchParams.has('calendar'));
   const view = useStore((s) => s.view);
   const settings = view.kind === "settings";
+  const searching = workspaceSearch.use();
   // Settings is Shipyard's page, laid over the shell; it takes the keyboard, and
   // gives it back to where it was (the last place focused in the shell).
   const settingsRef = useRef<HTMLDivElement>(null);
@@ -346,7 +347,7 @@ export default function App() {
         // Nothing slides while the sidebar's edge is dragged, so the sidebar keeps up with the pointer.
         className="ll-shell isolate h-svh min-h-0 overflow-hidden data-resizing:**:transition-none"
         data-resizing={resizing || undefined}
-        inert={settings || undefined}
+        inert={settings || !!searching}
         onOpenChange={(open) => !settings && setSidebarOpen(open)}
         open={sidebarOpen}
         style={chrome(mac, sidebarWidth)}

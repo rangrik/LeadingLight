@@ -234,3 +234,34 @@ test('search restores the editor and focuses a chosen note', async ({ page }) =>
   await page.keyboard.type(' again');
   await expect(body).toHaveText('Before after again');
 });
+
+// A result can still be focusing its editor when the next search starts.
+test('typing goes into search when Cmd K immediately follows opening a result', async ({ page }) => {
+  await page.clock.install();
+  await start(page);
+  await page.keyboard.press('Meta+n');
+  await title(page).fill('Field guide');
+  await title(page).press('Enter');
+  const body = page.getByRole('textbox', { name: 'Page body', exact: true });
+  await expect(body).toBeFocused();
+  await page.keyboard.type('Original text');
+  await page.keyboard.press('Meta+n');
+  await expect(title(page)).toHaveValue('');
+  await search(page, 'Field guide');
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 100)));
+  await page.keyboard.press('Enter');
+  await page.clock.runFor(16);
+  await page.keyboard.press('Meta+k');
+  await page.keyboard.type('cedar');
+  // Type again after the editor's deferred focus has had a chance to run.
+  await page.clock.runFor(32);
+  await page.keyboard.type(' trail');
+  await expect(input(page)).toHaveValue('cedar trail');
+  await expect(input(page)).toBeFocused();
+  await page.clock.resume();
+  await page.keyboard.press('Escape');
+  await expect(title(page)).toHaveValue('Field guide');
+  await expect(body).toHaveText('Original text');
+  await page.reload();
+  await expect(body).toHaveText('Original text');
+});
