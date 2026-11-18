@@ -77,6 +77,8 @@ Feature: One search for the workspace
     Then only matching pages appear and the search field still contains "Kyoto"
     When I select Tabs and then All
     Then I can find the website in Tabs and both results in All without retyping
+    And all categories fit in a window 320 pixels wide
+    And an empty category shows no Return action
 
   Scenario: Create from the first screen
     When I click New page in Search library
@@ -92,5 +94,6 @@ Feature: One search for the workspace
     When I open the Create category
     Then I can select a type by its name and icon, grouped by purpose
     And Field trip appears under My types
+    And create actions are never marked as the currently open page
     When I type "new field trip Spring walk" and press Return
     Then a Field trip titled "Spring walk" opens using its type's template

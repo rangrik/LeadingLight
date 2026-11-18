@@ -166,7 +166,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   };
   const searching = searchPages && !!q && body.query !== q;
   const renderItem = (item: Item) => (
-    <CommandItem className="min-w-0 gap-2" key={item.value} aria-label={item.label} aria-current={item.page?.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onClick={(e) => {
+    <CommandItem className="min-w-0 gap-2" key={item.value} aria-label={item.label} aria-current={item.page && item.page.id === focusedPage() ? "page" : undefined} value={item.value} disabled={busy} onClick={(e) => {
       const keys = e.detail === 0 ? modifiers.current : e;
       modifiers.current = plain;
       void item.run(keys);
@@ -189,7 +189,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
         <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
           {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
             <Tooltip key={v}>
-              <TooltipTrigger render={<SegmentedControlItem aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
+              <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
               <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
             </Tooltip>
           ))}
@@ -206,9 +206,9 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
           </CommandGroup></Fragment>}
         </CommandList>
       </CommandPanel>
-      {(error || (body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
+      {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
       <CommandFooter className="relative flex-wrap px-3 py-2">
-        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : <span className="px-2"><Kbd>↩</Kbd> {active?.value.startsWith("new:") ? "Create" : "Open"}</span>}
+        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
         {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
         <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>
