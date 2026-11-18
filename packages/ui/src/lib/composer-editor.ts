@@ -356,6 +356,8 @@ function focusComposerInput(
   preventDefault: boolean,
 ): void {
   if (event.defaultPrevented || !(event.target instanceof Element)) return;
+  // LeadingLight: keep focus in menus rendered outside the form.
+  if (!event.currentTarget.contains(event.target)) return;
   const interactive = event.target.closest(
     "button, a, input, select, textarea, label, summary, [data-slot='composer-input'], [contenteditable], [role='button'], [role='combobox'], [role='menuitem'], [tabindex]:not([tabindex='-1'])",
   );

@@ -275,7 +275,7 @@ test("offline phone keeps its draft and Codex starts only after explicit send", 
   await page.getByRole("button", { name: "Agent options" }).click();
   await page.getByRole("combobox", { name: "Agent", exact: true }).click();
   await page.getByRole("option", { name: "Codex", exact: true }).click();
-  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Agent options" }).click();
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Review my local files");
   mock.state.online = false;
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeDisabled({ timeout: 10_000 });
@@ -328,6 +328,7 @@ for (const agent of ["claude", "codex"]) test(`${agent} decline feedback survive
     await page.getByRole("button", { name: "Agent options" }).click();
     await page.getByRole("combobox", { name: "Agent", exact: true }).click();
     await page.getByRole("option", { name: "Codex", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Agent", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
   }
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Ask before changing this file");

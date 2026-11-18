@@ -268,7 +268,7 @@ export function AppSidebar({
                 <TooltipPopup>Swipe across the sidebar or press {keys("browser")}</TooltipPopup>
               </Tooltip>
             )}
-            {remoteWork && <MobileAgentsButton />}
+            {remoteWork && <MobileAgentsButton onOpen={isMobile ? () => setOpenMobile(false) : undefined} />}
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton onClick={select(() => openSettings())}>

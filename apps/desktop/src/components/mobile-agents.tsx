@@ -39,11 +39,11 @@ function connectionSettings() {
   window.dispatchEvent(new Event("leadinglight:cloud-account"));
 }
 
-export function MobileAgentsButton({ className, page }: { className?: string; page?: PageWork } = {}) {
+export function MobileAgentsButton({ className, page, onOpen }: { className?: string; page?: PageWork; onOpen?: () => void } = {}) {
   const supported = useRemoteWork(), { user } = useCloud();
   if (!supported) return null;
   const host = taskConnection(page?.task?.id)?.name;
-  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => panel.set({ open: true, target: null, owner: user?.id, page })}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
+  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); }}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
 }
 
 export function MobileAgentsHost() {
