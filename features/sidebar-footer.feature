@@ -13,13 +13,15 @@ Feature: A quiet sidebar footer
     And Account and sync, then Settings, sit at the right end
     And the mode control and each button are 28 px tall with 16 px icons centred, all on one line
     And the first icon starts where "Claude" starts, and the gear ends where "4%" ends
-    And the footer is 88 px tall, where it was over 150 px
+    And the footer is 88 px tall, where it was 218 px
 
   Scenario: Each icon says what it is
     When I hover each toolbar control
     Then its tooltip reads "Notes · ⌥⌘B", "Browser · ⌥⌘B", "Remote work", "Account and sync" and "Settings · ⌘,"
     And a screen reader hears the same names
     And no control relies on the browser's title tooltip
+    When I close Remote work and focus returns to its icon with its tooltip showing
+    Then a click on the usage line still opens the usage card
 
   Scenario: Switching mode from the toolbar
     When I click the Browser icon

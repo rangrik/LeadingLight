@@ -47,6 +47,10 @@ test("each icon says what it is and opens its place", async ({ page }) => {
   await page.keyboard.press("Escape");
   await controls(page)[2].click();
   await expect(page.getByRole("dialog").getByRole("heading", { name: "Remote work" })).toBeVisible();
+  // Focus returns to the icon and opens its tooltip over the usage line; the line must still take the click.
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Usage" }).click({ timeout: 3000 });
+  await expect(page.getByRole("region", { name: "Claude" })).toBeVisible();
 });
 
 test("iPad keeps Remote work, Account and Settings, without mode or usage", async ({ page }) => {
