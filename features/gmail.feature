@@ -170,8 +170,24 @@ Feature: Mail is a look, not an inbox
     And Meera's date reads "Wed, Nov 18 · 4 days" and Arjun's is empty
     And a mail due today shows "Today" as an amber tag
 
+  Scenario: Open one email from the list after stopping a look
+    Given Mail home says "Mail is done for now" and shows Daniel and Meera under "Waiting for the next look"
+    When I click Daniel's row
+    Then the list stays on the left and Daniel's mail opens on the right
+    And Daniel's full message and mail headers are shown immediately
+    When I click Meera's row
+    Then the same reading pane shows Meera's full message
+    And the look stays closed and neither mail is marked read or archived
+
+  Scenario: Read individual mail in a narrow pane
+    Given Mail is open in a pane too narrow to show the list and message side by side
+    When I open a mail from "Kept for later"
+    Then its full message is shown and I can return with "Back to mail list"
+    When I go back and open a different mail
+    Then the reading pane shows the new mail, even if the first mail finishes loading later
+
   Scenario: Where a mail came from and where a reply goes
-    When I open Sunita's mail and press "Show all"
+    When I open Sunita's mail
     Then the mail's header reads "To pranav.k@gmail.com" and "Sent Sat, Nov 14, 9:05 AM", and "Cc" when it has one
     And it does not repeat the sender, who is named under the headline
     Given Kavya's mail was sent to everyone@northlane.io, with a Reply-To of people@northlane.io

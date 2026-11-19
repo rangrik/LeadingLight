@@ -22,12 +22,12 @@ const READ = {
   daniel: lines("work", "Daniel needs a cost estimate", { due: "2026-11-20", task: { title: "Send Daniel the estimate", due: "2026-11-20", ack: "Got it, Daniel." } }),
 };
 
-async function service(page: Page, o: { read?: boolean; html?: string; out?: string; workspace?: string; inbox?: Msg[] } = {}) {
+async function service(page: Page, o: { read?: boolean; html?: string; out?: string; workspace?: string; inbox?: Msg[]; closed?: boolean; kept?: string } = {}) {
   const calls = { modify: [] as any[], send: [] as any[], external: [] as string[], senders: [] as any[] };
   let accounts = [{ account: "personal", email: "pranav.k@gmail.com" }, { account: "work", email: "pranav@northlane.io" }];
   page.on("request", (r) => !new URL(r.url()).hostname.match(/^(127\.0\.0\.1|localhost)$/) && calls.external.push(r.url()));
   await page.clock.install({ time: now });
-  const state = { start: at(0, 0) - 7 * 86_400_000, days: 7, ran: o.read === false ? 0 : at(14, 58), kinds: {}, kept: {}, today: { day: "2026-11-14", set: [], handled: {}, cleared: 0, started: 0, ended: 0, closed: false, left: 0 },
+  const state = { start: at(0, 0) - 7 * 86_400_000, days: 7, ran: o.read === false ? 0 : at(14, 58), kinds: {}, kept: o.kept ? { [o.kept]: "2026-11-14" } : {}, today: { day: "2026-11-14", set: [], handled: {}, cleared: 0, started: o.closed ? at(14, 59) : 0, ended: o.closed ? at(15, 0) : 0, closed: !!o.closed, left: o.closed ? 4 : 0 },
     read: o.read === false ? {} : { ...Object.fromEntries(Object.entries(READ).map(([id, l]) => [key(MAIL.find((m) => m.id === id)!.account, id), { at: at(14, 58), lines: l }])), [key("personal", "amazon")]: { at: at(14, 58), group: "Receipts" }, [key("work", "news")]: { at: at(14, 58), group: "Newsletters" } } };
   if (!o.workspace) await page.addInitScript((s) => localStorage.getItem("leadinglight.mail:mail-owner") || localStorage.setItem("leadinglight.mail:mail-owner", s), JSON.stringify(state));
   await page.route("**/api/**", async (route) => {
@@ -46,7 +46,7 @@ async function service(page: Page, o: { read?: boolean; html?: string; out?: str
       if (body.account === o.out) return route.fulfill({ status: 401, json: { error: "Gmail access expired. Reconnect this account." } });
       return json({ nextPageToken: null, messages: (o.inbox ?? MAIL).filter((m) => m.account === body.account && (!body.after || m.date >= body.after * 1000)).map((m) => ({ ...m, threadId: `t-${m.id}`, to: "", cc: "", replyTo: m.replyTo ?? "", snippet: "Hello", unread: true, labels: ["INBOX", "UNREAD", ...(m.labels ?? [])], unsubscribe: !!m.unsubscribe })) });
     }
-    if (path === "/api/gmail/thread") return json({ messages: [{ id: "x", threadId: body.id, from: "Sender <s@example.test>", date: at(9, 0), text: "", html: o.html ?? "<p>Hello there</p>", attachments: [] }] });
+    if (path === "/api/gmail/thread") return json({ messages: [{ id: "x", threadId: body.id, from: "Sender <s@example.test>", date: at(9, 0), text: o.html ? "" : `Full message for ${body.id}.`, html: o.html ?? "", attachments: [] }] });
     if (path === "/api/gmail/modify") return (calls.modify.push(body), json({}));
     if (path === "/api/gmail/send") return (calls.send.push(body), json({}));
     return json({});
@@ -59,6 +59,66 @@ const today = async (page: Page) => {
 };
 const row = (page: Page) => page.getByTestId("mail-row");
 const toast = (page: Page, text: string) => page.locator("[data-slot=toast-title]", { hasText: text });
+
+// Seam: a closed look has clickable waiting rows, and reading a row makes no Gmail changes.
+test("read a specific waiting email beside the list", async ({ page }, info) => {
+  const { calls } = await service(page, { closed: true });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mail", exact: true }).first().click();
+  const daniel = page.getByRole("button", { name: /Daniel needs a cost estimate/ });
+  const meera = page.getByRole("button", { name: /Meera wants to move/ });
+  const reader = page.getByRole("region", { name: "Selected email" });
+  const paused = page.getByRole("heading", { name: "Mail is done for now" });
+  await expect(paused).toBeVisible();
+  await daniel.click();
+  await expect(daniel).toHaveAttribute("aria-current", "true");
+  await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-daniel.");
+  await expect(reader.getByTestId("mail-heads")).toBeVisible();
+  expect((await reader.boundingBox())!.x).toBeGreaterThan((await daniel.boundingBox())!.x + (await daniel.boundingBox())!.width);
+  await page.screenshot({ path: info.outputPath("reading-pane.png") });
+  await reader.getByRole("button", { name: /Show less/ }).click();
+  await expect(reader.getByTestId("mail-heads")).toHaveCount(0);
+  await meera.click();
+  await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-meera.");
+  await expect(reader.getByTestId("mail-heads")).toBeVisible();
+  expect(calls.modify).toEqual([]);
+  expect(calls.send).toEqual([]);
+  await reader.getByRole("button", { name: /^Done/ }).click();
+  await expect(meera).toHaveCount(0);
+  await expect(page.getByText(/3 more wait for the next look/)).toBeVisible();
+  await toast(page, "Done: Meera Iyer").getByRole("button", { name: /^Undo/ }).click();
+  await expect(meera).toBeVisible();
+  await expect(paused).toBeVisible();
+});
+
+// Seam: the narrow view returns to its list and ignores a thread response after switching rows.
+test("read kept mail and return to the list in a narrow pane", async ({ page }, info) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await service(page, { kept: key("personal", "sunita") });
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/gmail/thread", async (route) => {
+    if (route.request().postDataJSON().id === "t-sunita") await hold;
+    await route.fallback();
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mail", exact: true }).first().click();
+  const sunita = page.getByRole("button", { name: /Sunita asks if you will renew/ });
+  const reader = page.getByRole("region", { name: "Selected email" });
+  const back = reader.getByRole("button", { name: "Back to mail list" });
+  await sunita.click();
+  await expect(back).toBeFocused();
+  await expect(sunita).toBeHidden();
+  await expect(reader.getByTestId("mail-heads")).toBeVisible();
+  await back.click();
+  await expect(sunita).toBeFocused();
+  await page.getByRole("button", { name: /Your expense claim was approved/ }).click();
+  const late = page.waitForResponse((response) => response.url().endsWith("/api/gmail/thread") && response.request().postDataJSON().id === "t-sunita");
+  release();
+  await (await late).finished();
+  await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-arjun.");
+  await page.screenshot({ path: info.outputPath("narrow-reading-pane.png") });
+});
 
 // Seam: a fixed service must recover from the native-route error and finish connecting without a reload.
 test("retry the service, connect Gmail, and pick up the new account", async ({ page, context }) => {

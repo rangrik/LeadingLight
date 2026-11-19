@@ -24,11 +24,11 @@ const CHOICES = [["reply", "Reply", "R"], ["done", "Done", "E"], ["task", "Make 
 const ACK = "Got it. I'll get back to you on this.";
 const size = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
-export function MailCard({ item, pane, view, trouble, step }: { item: Item; pane: string; view: string; trouble?: Trouble; step: (by: number) => void }) {
+export function MailCard({ item, pane, view, trouble, step, close }: { item: Item; pane: string; view: string; trouble?: Trouble; step: (by: number) => void; close?: () => void }) {
   const { now, offline } = useMail();
   const { mail: m, lines: l } = item;
   const [mode, setMode] = useState<"reply" | "task" | null>(trouble?.reply ? "reply" : null);
-  const [open, setOpen] = useState(!l);
+  const [open, setOpen] = useState(true);
   const drafts = l?.replies ?? [];
   const [pick, setPick] = useState(trouble?.reply ? drafts.length : 0);
   const [text, setText] = useState(trouble?.reply ?? "");
@@ -65,7 +65,7 @@ export function MailCard({ item, pane, view, trouble, step }: { item: Item; pane
   useMailKeys(pane, view, (e, typing, button) => {
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (e.metaKey && k === "Enter") return mode === "reply" ? (send(), true) : mode === "task" ? (make(), true) : false;
-    if (k === "Escape") return mode ? (setMode(null), true) : (back(pane), true);
+    if (k === "Escape") return mode ? (setMode(null), true) : (close ? close() : back(pane), true);
     if (typing) return k === "Enter" && e.target === titleBox.current ? (make(), true) : false;
     if (e.metaKey || e.ctrlKey || e.altKey || busy) return false;
     if (mode === "reply" && /^[1-9]$/.test(k) && +k <= drafts.length + 1) return (choosePick(+k - 1), true);
@@ -76,10 +76,11 @@ export function MailCard({ item, pane, view, trouble, step }: { item: Item; pane
     if (k === "Enter" && filled && !button) return (choose(filled), true);
   });
 
+  const Heading = close ? "h2" : "h1";
   return (
-    <article className="ll-rise">
+    <article className={cn("ll-rise", !close && "pt-10")}>
       <Tags item={item} now={now} />
-      <h1 className="mt-2.5 text-balance font-semibold text-2xl leading-8 tracking-[-0.4px]">{l ? l.headline : m.subject || "(No subject)"}</h1>
+      <Heading className="mt-2.5 text-balance font-semibold text-2xl leading-8 tracking-[-0.4px]">{l ? l.headline : m.subject || "(No subject)"}</Heading>
       {/* The name, then the address and when; narrow, the address takes its own line. */}
       <p className="mt-1.5 flex min-w-0 gap-2 whitespace-nowrap text-muted-foreground @max-[34rem]:flex-col @max-[34rem]:gap-0" data-testid="mail-who">
         {m.name !== m.address && <span className="shrink-0 font-medium text-foreground">{m.name}</span>}
@@ -239,7 +240,7 @@ function Original({ item, open, setOpen }: { item: Item; open: boolean; setOpen:
           {m.subject || "(No subject)"}
           {!open && files.length > 0 && ` · ${files.length} file${files.length === 1 ? "" : "s"}`}
         </span>
-        <Button onClick={() => setOpen((o) => !o)} size="xs" variant="ghost">
+        <Button aria-expanded={open} onClick={() => setOpen((o) => !o)} size="xs" variant="ghost">
           {open ? "Show less" : "Show all"}
           <Key k="O" />
         </Button>

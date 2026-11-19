@@ -250,14 +250,15 @@ Reached from the sidebar's Mail row. It is the same information as Today's row, 
       `Was Fri, Nov 13` all muted. Today and Tomorrow are the `warning` Badge with the clock.
       Empty for Nothing to do.
   - Under 544 px the two move to a third line, left-aligned, 8 px apart.
-  - Clicking a row opens the look at that mail.
+  - Clicking a row opens the full mail in a reading pane to the right. In a narrow pane, the
+    mail takes the list's place and **Back to mail list** returns to it.
 - The rest, under a hairline the width of the column: line 1 `22 others, nothing to
   do`, line 2 `9 receipts · 8 newsletters · 5 notifications`, then `Clear all` (outline xs) and
   `Look` (ghost xs). Look opens the rest even while mails wait; there, Clear all, Later and Esc
   return to Mail home.
-- Days away: the label `Start with these` (12 px medium muted, 32 px tall) over the five, and
-  `Waiting for the next look` over the others, which are plain rows.
-- `Kept for later`: the same label style, plain rows, line 2 ends ` · back in your next look`.
+- Days away: the label `Start with these` (12 px medium muted, 32 px tall) over the five.
+  Mail outside the current look appears under `Waiting for the next look` and opens on click.
+- `Kept for later`: the same label style and clickable rows, line 2 ends ` · back in your next look`.
 - A sign-in code: when a mail in the last 10 minutes carries a 4 to 8 digit code, a bordered row
   above the list: `key-round` icon, **GitHub code 481 920** · 1 min ago, `Copy` (outline xs, turns
   into `Copied` with a check). This needs no reader.
@@ -300,7 +301,7 @@ Top to bottom:
    Needs a reply, Make a task for Needs work.
 7. **The mail**, 32 px lower, in a `rounded-lg border` box. Its header (40 px) shows the subject
    in 12 px medium muted (` · 1 file` added when it has files), and a ghost xs button `Show all` /
-   `Show less` with Kbd O. Closed, the body shows about three lines and fades out. Open, it shows
+   `Show less` with Kbd O. The mail starts open. Closed, the body shows about three lines and fades out. Open, it shows
    first the mail's own header as 12 px lines, labels muted: `To` (the address it was sent to,
    which may be a list such as `everyone@northlane.io`), `Cc` when there is one, and `Sent`
    (`Sat, Nov 14, 9:05 AM`). Not From: the sender is already named under the headline. Then

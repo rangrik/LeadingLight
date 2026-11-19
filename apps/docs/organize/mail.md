@@ -37,6 +37,10 @@ through today’s mail follow you. You can close either Mac.
 
 ## Going through mail
 
+To open a specific email, click its row in Mail. The full message opens beside the list, including
+mail waiting for the next look or kept for later. In a narrow pane, use **Back to mail list** to
+pick another message.
+
 Today shows one row: how many mails need you, about how long, the nearest date ("nothing due
 before Wed", "one is due today"), and who is upset, when someone is. Press **Go through**.
 
@@ -49,8 +53,8 @@ Each mail starts with the same tags, in the same order:
 - **New sender** on the first mail from an address.
 
 Then a headline, who wrote it with their address, and three lines: what happened, where it
-stands, and your part. The mail itself is underneath; **Show all** (O) opens it with its From,
-To and Sent lines. Mail due today or tomorrow comes first.
+stands, and your part. The full mail is open underneath, with its To and Sent lines and Cc when
+present. Use **Show less** (O) to collapse it. Mail due today or tomorrow comes first.
 
 Four choices, always in the same order:
 

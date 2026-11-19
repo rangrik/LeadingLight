@@ -1,7 +1,7 @@
 // Mail home (design 5.2): the same words as Today's row, with the list. Before any account is
 // connected, how to connect.
-import { CircleAlert } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, CircleAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Skeleton } from "@leadinglight/ui/components/skeleton";
 import { Spinner } from "@leadinglight/ui/components/spinner";
@@ -13,12 +13,14 @@ import { ago, type Item, minutesOf, restWords, VERDICT } from "~/lib/mail-rules"
 import { doClear, goThrough, Keyed, openLook, run } from "./act";
 import { connection, connectNow, openAccounts } from "./accounts";
 import { useMailKeys } from "./keys";
+import { MailCard } from "./look";
 import { AccountTag, WhenCell } from "./tags";
 
 export const Title = ({ children }: { children: React.ReactNode }) => <h1 className="text-balance pt-10 font-bold font-heading text-[2.25rem] leading-[1.2] tracking-tight">{children}</h1>;
 const Lede = ({ children }: { children: React.ReactNode }) => <p className="mt-2 text-pretty text-base leading-[1.6]">{children}</p>;
 const Small = ({ children, className }: { children: React.ReactNode; className?: string }) => <span className={cn("text-muted-foreground text-xs", className)}>{children}</span>;
 const Label = ({ children }: { children: React.ReactNode }) => <p className="mt-4 flex h-8 items-center font-medium text-muted-foreground text-xs">{children}</p>;
+const column = "w-full max-w-[760px] px-16 pb-12 @max-xl:px-6";
 
 export function Home({ pane, view, demo }: { pane: string; view: string; demo: boolean }) {
   const m = useMail();
@@ -26,20 +28,41 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
   const c = connection.use();
   const s = m.said;
   const [days, setDays] = useState<3 | 7 | 14>(7);
+  const [key, setKey] = useState("");
+  const list = useRef<HTMLDivElement>(null);
+  const backButton = useRef<HTMLButtonElement>(null);
+  const items = [...m.look, ...m.waiting, ...m.later];
+  const position = items.findIndex((i) => i.mail.key === key);
+  const selected = items[position];
+  const notice = c.notice && <p className="mt-4 text-muted-foreground" role="status">{c.notice}</p>;
   const go = s.state === "first" ? () => run(startFresh(days)) : ["needs", "away", "started", "unread", "due"].includes(s.state) ? () => goThrough(s.state) : null;
   useMailKeys(pane, view, (e, typing, button) => {
-    if (e.key !== "Enter" || typing || button || e.metaKey || e.ctrlKey || !go) return;
+    if (selected || e.key !== "Enter" || typing || button || e.metaKey || e.ctrlKey || !go) return;
     return (go(), true);
   });
+  const selectedRow = () => list.current?.querySelector<HTMLButtonElement>('button[aria-current="true"]');
+  useEffect(() => {
+    if (!selected) return;
+    const row = selectedRow();
+    if (row?.offsetParent) {
+      row.scrollIntoView({ block: "nearest" });
+      if (list.current?.contains(document.activeElement)) row.focus({ preventScroll: true });
+    } else backButton.current?.focus({ preventScroll: true });
+  }, [selected?.mail.key]);
+  const close = () => {
+    const row = selectedRow();
+    setKey("");
+    requestAnimationFrame(() => row?.focus());
+  };
 
   if (!m.accounts.length) {
     const signedOut = !demo && !cloud.user;
     return (
-      <>
+      <div className={column}>
         <Title>Mail</Title>
         <Lede>LeadingLight reads your new mail and tells you what needs you. Nothing is sent or put away unless you say so.</Lede>
         {c.waiting && <p className="mt-2 text-muted-foreground">Finish in the browser window that opened. This page updates by itself.</p>}
-        {c.notice && <p className="mt-2 text-muted-foreground" role="status">{c.notice}</p>}
+        {notice}
         {(m.error || c.error) && !signedOut && (
           <div className="mt-4 flex flex-wrap items-center gap-3" role="alert">
             <p className="text-sm">{c.error || m.error}</p>
@@ -59,13 +82,13 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
             </Button>
           )}
         </div>
-      </>
+      </div>
     );
   }
 
   if (s.state === "first")
     return (
-      <>
+      <div className={column}>
         <Title>Start fresh</Title>
         <Lede>{s.line}</Lede>
         <div className="mt-3 flex flex-col gap-1.5 text-muted-foreground tabular-nums">
@@ -105,12 +128,13 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
           </Keyed>
           <Small>Choose once. New mail arrives automatically. Older mail stays in Gmail.</Small>
         </div>
-      </>
+        {notice}
+      </div>
     );
 
   if (s.state === "reading")
     return (
-      <>
+      <div className={column}>
         <Title>{s.title}</Title>
         <p className="mt-4 flex items-center gap-2.5 text-muted-foreground">
           <Spinner className="size-4" />
@@ -119,91 +143,102 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
         {["w-full", "w-[78%]", "w-[64%]"].map((w) => (
           <Skeleton className={cn("mt-4 h-9 rounded-lg", w)} key={w} />
         ))}
-      </>
+        {notice}
+      </div>
     );
 
   const unread = s.state === "unread";
-  const label = s.state === "away" || s.state === "paused";
   const rest = restWords(m.rest, !m.unread);
+  const row = (i: Item, note?: string) => <Row item={i} key={i.mail.key} note={note} now={m.now} onClick={() => setKey(i.mail.key)} selected={i === selected} unread={note ? !i.lines : unread} />;
   return (
-    <>
-      <Title>{s.title}</Title>
-      {s.line ? <Lede>{s.line}</Lede> : s.small && <Small className="mt-2 block">{s.small}</Small>}
-      {s.signedOut.map((words) => (
-        <div className="mt-4 flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2.5 text-sm" key={words}>
-          <CircleAlert className="size-4 shrink-0 text-warning" />
-          <span className="min-w-0 flex-auto truncate text-muted-foreground">
-            <span className="font-medium text-foreground">{words}</span> · Google signed LeadingLight out
-          </span>
-          <Button className="ms-auto" onClick={openAccounts} size="xs" variant="outline">
-            Reconnect
-          </Button>
-        </div>
-      ))}
-      {(go || s.state === "paused" || s.state === "done") && (
-        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-          {go && (
-            <Keyed k="↵" onClick={go}>
-              {s.state === "started" ? "Continue" : "Go through"}
-            </Keyed>
-          )}
-          {s.state === "paused" && (
-            <Button onClick={() => run(keepGoing().then(() => openLook()))} variant="outline">
-              Keep going
-            </Button>
-          )}
-          {(s.line || s.state === "done") && <Small>{s.small}</Small>}
-        </div>
-      )}
-      {label && s.state === "away" && <Label>Start with these</Label>}
-      {s.state !== "paused" && s.state !== "done" && m.look.length > 0 && (
-        <div className={cn("-mx-2 flex flex-col", !label && "mt-6")}>
-          {m.look.map((i) => (
-            <Row item={i} key={i.mail.key} now={m.now} onClick={() => openLook(i.mail.key)} unread={unread} />
+    <div className={cn("h-full", selected && "grid grid-rows-[minmax(0,1fr)] @[50rem]/mail:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
+      <div className={cn("@container min-w-0 h-full overflow-y-auto", selected && "hidden @[50rem]/mail:block")} ref={list}>
+        <div className={cn(column, selected && "px-6")}>
+          <Title>{s.title}</Title>
+          {s.line ? <Lede>{s.line}</Lede> : s.small && <Small className="mt-2 block">{s.small}</Small>}
+          {s.signedOut.map((words) => (
+            <div className="mt-4 flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2.5 text-sm" key={words}>
+              <CircleAlert className="size-4 shrink-0 text-warning" />
+              <span className="min-w-0 flex-auto truncate text-muted-foreground">
+                <span className="font-medium text-foreground">{words}</span> · Google signed LeadingLight out
+              </span>
+              <Button className="ms-auto" onClick={openAccounts} size="xs" variant="outline">
+                Reconnect
+              </Button>
+            </div>
           ))}
+          {(go || s.state === "paused" || s.state === "done") && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+              {go && (
+                <Keyed k="↵" onClick={go}>
+                  {s.state === "started" ? "Continue" : "Go through"}
+                </Keyed>
+              )}
+              {s.state === "paused" && (
+                <Button onClick={() => run(keepGoing().then(() => openLook()))} variant="outline">
+                  Keep going
+                </Button>
+              )}
+              {(s.line || s.state === "done") && <Small>{s.small}</Small>}
+            </div>
+          )}
+          {s.state === "away" && <Label>Start with these</Label>}
+          {m.look.length > 0 && (
+            <div className={cn("-mx-2 flex flex-col", s.state !== "away" && "mt-6")}>
+              {m.look.map((i) => row(i))}
+            </div>
+          )}
+          {m.waiting.length > 0 && (
+            <>
+              <Label>Waiting for the next look</Label>
+              <div className="-mx-2 flex flex-col">
+                {m.waiting.map((i) => row(i))}
+              </div>
+            </>
+          )}
+          {m.rest.length > 0 && (
+            <div className={cn("relative flex min-h-15 items-center gap-3 pt-4 pb-2 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-border", m.look.length || m.waiting.length ? "mt-2" : "mt-6")}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{rest.headline}</span>
+                <span className="block truncate text-muted-foreground text-xs">{rest.counts}</span>
+              </span>
+              <Button disabled={m.offline} onClick={() => run(doClear())} size="xs" variant="outline">
+                Clear all
+              </Button>
+              <Button className="-me-[7px]" onClick={() => openLook("", true)} size="xs" variant="ghost">
+                Look
+              </Button>
+            </div>
+          )}
+          {m.later.length > 0 && (
+            <>
+              <Label>Kept for later</Label>
+              <div className="-mx-2 flex flex-col">
+                {m.later.map((i) => row(i, "back in your next look"))}
+              </div>
+            </>
+          )}
+          {notice}
         </div>
-      )}
-      {m.waiting.length > 0 && label && (
-        <>
-          <Label>Waiting for the next look</Label>
-          <div className="-mx-2 flex flex-col">
-            {m.waiting.map((i) => (
-              <Row item={i} key={i.mail.key} now={m.now} unread={unread} />
-            ))}
+      </div>
+      {selected && (
+        <section aria-label="Selected email" className="@container min-w-0 overflow-y-auto @[50rem]/mail:border-s" key={key}>
+          <div className="w-full max-w-[760px] px-6 pt-4 pb-12 @[50rem]/mail:pt-10 @[50rem]/mail:px-8">
+            <Button className="-ms-2 mb-4 @[50rem]/mail:hidden" onClick={close} ref={backButton} size="sm" variant="ghost">
+              <ChevronLeft />
+              Back to mail list
+            </Button>
+            <MailCard close={close} item={selected} pane={pane} step={(by) => setKey(items[position + by]?.mail.key ?? key)} view={view} />
           </div>
-        </>
+        </section>
       )}
-      {m.rest.length > 0 && (
-        <div className={cn("relative flex min-h-15 items-center gap-3 pt-4 pb-2 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-border", m.look.length && s.state !== "paused" && s.state !== "done" ? "mt-2" : "mt-6")}>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{rest.headline}</span>
-            <span className="block truncate text-muted-foreground text-xs">{rest.counts}</span>
-          </span>
-          <Button disabled={m.offline} onClick={() => run(doClear())} size="xs" variant="outline">
-            Clear all
-          </Button>
-          <Button className="-me-[7px]" onClick={() => openLook("", true)} size="xs" variant="ghost">
-            Look
-          </Button>
-        </div>
-      )}
-      {m.later.length > 0 && (
-        <>
-          <Label>Kept for later</Label>
-          <div className="-mx-2 flex flex-col">
-            {m.later.map((i) => (
-              <Row item={i} key={i.mail.key} note="back in your next look" now={m.now} unread={!i.lines} />
-            ))}
-          </div>
-        </>
-      )}
-    </>
+    </div>
   );
 }
 
 // The headline (or, not read, the subject), then what it is and who; at the right, the account
 // and the date in two columns that line up down the list. Narrow, those two take a third line.
-function Row({ item, now, unread, note, onClick }: { item: Item; now: number; unread: boolean; note?: string; onClick?: () => void }) {
+function Row({ item, now, unread, note, onClick, selected }: { item: Item; now: number; unread: boolean; note?: string; onClick: () => void; selected: boolean }) {
   const { mail: m, lines: l } = item;
   const read = l && !unread, mins = read && l.verdict !== "work" && minutesOf(item);
   const sub = (read ? [VERDICT[l.verdict], mins && `${mins} min`, m.name] : [m.name, ago(m.date, now)]).filter(Boolean).join(" · ") + (note ? ` · ${note}` : "");
@@ -221,12 +256,9 @@ function Row({ item, now, unread, note, onClick }: { item: Item; now: number; un
       </span>
     </>
   );
-  const box = "flex h-auto min-h-13 w-full items-center gap-3 rounded-md border border-transparent p-[7px] text-left font-normal @max-[34rem]:flex-wrap @max-[34rem]:gap-y-1.5";
-  return onClick ? (
-    <Button className={cn(box, "justify-start whitespace-normal transition-colors duration-150 ease-out sm:h-auto")} onClick={onClick} variant="ghost">
+  return (
+    <Button aria-current={selected || undefined} className="flex h-auto min-h-13 w-full items-center justify-start gap-3 whitespace-normal rounded-md p-[7px] text-left font-normal transition-colors duration-150 ease-out aria-[current=true]:bg-accent @max-[34rem]:flex-wrap @max-[34rem]:gap-y-1.5 sm:h-auto" onClick={onClick} variant="ghost">
       {inner}
     </Button>
-  ) : (
-    <div className={cn(box, "text-sm")}>{inner}</div>
   );
 }
