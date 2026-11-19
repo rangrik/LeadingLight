@@ -113,4 +113,5 @@ Feature: A local-first web app with optional accounts and sync
     And the next sync delivers both the pending page and its collection with their history
     And a device from another account still cannot read the parts
     And retrying an already saved multi-part event sends no new parts, even if the library fills again
+    And a signed-in Mac, iPhone, or iPad can check the saved event by ID before sending its parts again
     And a new event that exceeds the remaining space stays queued on the device
