@@ -75,6 +75,9 @@ pnpm install:dev-app                       # this worktree's own "LeadingLight D
 
 ## How a change gets built
 
+Before starting development, run `git fetch origin main` in the repository. Only then create
+the new worktree and its feature branch from the freshly fetched `origin/main`.
+
 1. Write or update the Gherkin in `features/` first. Concrete steps, concrete expectations, failure cases too.
 2. Build it.
 3. Typecheck and run the relevant automated checks yourself. Record browser QA on every run,
