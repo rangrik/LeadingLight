@@ -5,7 +5,6 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type R
 import { AutocompleteRow } from "@leadinglight/ui/components/autocomplete";
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
 import { SegmentedControl, SegmentedControlItem } from "@leadinglight/ui/components/segmented-control";
-import { useIsMobile } from "@leadinglight/ui/hooks/use-media-query";
 import { Button } from "@leadinglight/ui/components/button";
 import { Command, CommandCollection, CommandDialog, CommandDialogPopup, CommandEmpty, CommandFooter, CommandGroup, CommandGroupLabel, CommandInput, CommandItem, CommandList, CommandPanel } from "@leadinglight/ui/components/command";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
@@ -70,8 +69,6 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const { tabs } = browser.use();
   const canBrowse = available.use();
   const mobile = useMobile();
-  const narrow = useIsMobile();
-  const compact = mobile && narrow;
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
@@ -225,7 +222,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       </CommandPanel>
       {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
       {(!mobile || (!phone && active?.beside)) && <CommandFooter className="relative flex-wrap px-3 py-2">
-        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>{compact ? "Open in new pane" : "Open beside"}</span>{!mobile && <Kbd>⇧↩</Kbd>}</Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
+        {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>{mobile ? "Open in new pane" : "Open beside"}</span>{!mobile && <Kbd>⇧↩</Kbd>}</Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
         {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
         {!mobile && <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>}
