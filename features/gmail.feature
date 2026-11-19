@@ -170,8 +170,35 @@ Feature: Mail is a look, not an inbox
     And Meera's date reads "Wed, Nov 18 · 4 days" and Arjun's is empty
     And a mail due today shows "Today" as an amber tag
 
+  Scenario: Open one email from the list after stopping a look
+    Given Mail home says "Mail is done for now" and shows Daniel and Meera under "Waiting for the next look"
+    When I click Daniel's row
+    Then the list stays on the left and Daniel's mail opens on the right
+    And Daniel's full message and mail headers are shown immediately
+    When I click Meera's row
+    Then the same reading pane shows Meera's full message
+    And the look stays closed and neither mail is marked read or archived
+
+  Scenario: Read individual mail in a narrow pane
+    Given Mail is open in a pane too narrow to show the list and message side by side
+    When I open a mail from "Kept for later"
+    Then its full message is shown with "Mail / Message" in the header
+    And the header's Back arrow and Mail breadcrumb each return to the list and restore focus to the row
+    When I go back and open a different mail
+    Then the reading pane shows the new mail, even if the first mail finishes loading later
+
+  Scenario: Open individual emails on iPhone and iPad
+    Given a Gmail account is connected and the current look has ended
+    When I open "Mail" from Today on iPhone or the sidebar on iPad
+    And I tap a waiting mail
+    Then its body and headers are expanded
+    And on an iPad with a wide pane the list stays beside the message
+    When I return with the header's Back arrow and tap another mail
+    Then that message opens expanded
+    And tapping Done removes it and tapping Undo brings it back
+
   Scenario: Where a mail came from and where a reply goes
-    When I open Sunita's mail and press "Show all"
+    When I open Sunita's mail
     Then the mail's header reads "To pranav.k@gmail.com" and "Sent Sat, Nov 14, 9:05 AM", and "Cc" when it has one
     And it does not repeat the sender, who is named under the headline
     Given Kavya's mail was sent to everyone@northlane.io, with a Reply-To of people@northlane.io
