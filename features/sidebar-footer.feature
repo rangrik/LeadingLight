@@ -55,10 +55,7 @@ Feature: A quiet sidebar footer
   Scenario: Toasts never cover the footer
     Given the sidebar is open
     When a toast appears, such as "Codex update available"
-    Then it sits at the bottom left of the pages, beside the sidebar
-    And every footer control can still be clicked while it shows
-    Given a browser page is open
-    When a toast appears
-    Then it fits over the sidebar, above the footer, so the native page cannot cut it
+    Then it fits over the sidebar, just above the footer, and covers no page
+    And every footer control, and the page beside it, can still be clicked while it shows
     When the sidebar is hidden
     Then toasts return to the window's bottom left corner

@@ -26,10 +26,11 @@ for (const scheme of ["light", "dark"] as const) for (const width of [200, 400])
 
 test("each icon says what it is and opens its place", async ({ page }) => {
   await page.goto("/");
-  // The launch toast sits beside the sidebar, never over the footer.
-  const toast = page.getByText("Codex update available");
-  await expect(toast).toBeVisible({ timeout: 15_000 });
-  expect((await toast.boundingBox())!.x).toBeGreaterThan((await footer(page).boundingBox())!.x + 240);
+  // The launch toast fits over the sidebar, above the footer, off the pages.
+  await expect(page.getByText("Codex update available")).toBeVisible({ timeout: 15_000 });
+  const f = (await footer(page).boundingBox())!;
+  // Measured once it has risen into place; its lowest row is its buttons.
+  await expect.poll(async () => { const t = (await page.getByRole("button", { name: "Skip", exact: true }).boundingBox())!; return t.y + t.height < f.y && t.x + t.width <= f.x + f.width; }).toBe(true);
   const names = ["Notes · ⌥⌘B", "Browser · ⌥⌘B", "Remote work", "Account and sync", "Settings · ⌘,"];
   for (const [i, control] of controls(page).entries()) {
     await control.hover();

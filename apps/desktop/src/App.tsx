@@ -54,7 +54,7 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, leaves, isPersonalBrowser, browserTabId, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
+import { focusedPage, isPersonalBrowser, browserTabId, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
 import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
@@ -157,11 +157,11 @@ export default function App() {
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
-  // Toasts sit beside the open sidebar, off its footer; with the browser in front they fit over it, as a native page would cut them (styles.css).
+  // Toasts fit over the open sidebar, above its footer: off the pages, where a native page would cut them (styles.css).
   useEffect(() => {
-    document.documentElement.toggleAttribute("data-toasts-beside", !!root && leaves(root).some((l) => isPersonalBrowser(l.page)) && sidebarOpen);
-    document.documentElement.style.setProperty("--toast-room", `${sidebarOpen ? sidebarWidth : 0}px`);
-  }, [root, sidebarOpen, sidebarWidth]);
+    document.documentElement.toggleAttribute("data-toasts-beside", sidebarOpen);
+    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth}px`);
+  }, [sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
