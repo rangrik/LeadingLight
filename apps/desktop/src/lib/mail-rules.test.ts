@@ -62,7 +62,7 @@ test("the words for Today and Mail home", () => {
   const daniel = item(upset, { kept: true });
   assert.deepEqual(row(snap([], { today: done, later: [daniel] })).slice(0, 3), ["1 is due today", "you kept it for later", "1 is due today"]);
   assert.match(ending(snap([], { today: done, later: [daniel] })).line, /One thing is still due today\.$/);
-  assert.deepEqual(row(snap([], { today: { ...done, left: 6 } })).slice(0, 2), ["Mail done for now", "4 handled · 6 for the next look"]);
+  assert.deepEqual(row(snap([], { today: { ...done, left: 6 }, waiting: away.waiting.slice(1) })).slice(0, 2), ["Mail done for now", "4 handled · 5 for the next look"]);
   assert.deepEqual(row(snap([], { started: false, accounts: [{ ...accounts[0], inbox: 11902 }, { ...accounts[1], inbox: 2334 }] })), ["Mail is connected", "start fresh from the last 7 days", "Start fresh", "14,236 mails are in your two inboxes."]);
   const out = say(snap([item(lines("reply"))], { accounts: [accounts[0], { ...accounts[1], out: true }] }));
   assert.deepEqual([out.signedOut, out.line], [["Work mail needs reconnecting"], "About 3 minutes. There are no deadlines. This is your personal mail only."]);

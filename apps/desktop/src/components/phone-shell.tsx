@@ -1,5 +1,5 @@
 // COSS sidebar-08 lists and p-input-group-1, composed for one-handed navigation.
-import { CalendarDays, ChevronRight, FileText, Inbox, NotebookPen, PenLine, Plus, Search, Settings, X } from "lucide-react";
+import { CalendarDays, ChevronRight, FileText, Inbox, Mail, NotebookPen, PenLine, Plus, Search, Settings, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { openSettings } from "@/views/settings/open";
 import { Button } from "@leadinglight/ui/components/button";
@@ -14,10 +14,11 @@ import { PaneArea } from "~/components/pane-area";
 import { captured, captureOf } from "~/lib/capture-inbox";
 import { dayPage, dailyTitle, today } from "~/lib/daily";
 import { pageLabel } from "~/lib/labels";
+import { useMail } from "~/lib/mail";
 import { docText, objects, type ObjectSummary } from "~/lib/objects";
 import { focusedPage, openFresh, panes } from "~/lib/panes";
 import { flushAll, reportSaveError } from "~/lib/saving";
-import { iconFor, INBOX_VIEW, isPageView, pageOf, space, typeOf, typeView } from "~/lib/space";
+import { iconFor, INBOX_VIEW, isPageView, MAIL_VIEW, pageOf, space, typeOf, typeView } from "~/lib/space";
 import { newNotebook } from "~/lib/notebooks";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { ABOUT } from "~/lib/tail-memory";
@@ -97,6 +98,7 @@ function PhoneNotes({ active, onOpen }: { active: boolean; onOpen: (id: string) 
 export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; onCapture: () => void; onCreate: () => void }) {
   const { pages } = space.use();
   const { root } = panes.use();
+  const { said } = useMail();
   const [screen, setScreen] = useState<Screen>("today");
   const [day, setDay] = useState(today);
   const [last, setLast] = useState(() => localStorage.getItem("ll.phone.last") ?? "");
@@ -157,6 +159,9 @@ export function PhoneShell({ loaded, onCapture, onCreate }: { loaded: boolean; o
           <PenLine /><span className="min-w-0 flex-1 text-left"><span className="block text-sm text-muted-foreground">Continue writing</span><span className="block truncate">{pageLabel(resume.title)}</span></span><ChevronRight />
         </Button>}
         <Button className="min-h-12 w-full justify-start" disabled={!loaded} onClick={() => void dayPage(day).then(open).catch(reportSaveError)} variant="outline"><CalendarDays />Write about today<ChevronRight className="ml-auto" /></Button>
+        <Button aria-label="Mail" className="h-auto min-h-16 w-full justify-start px-3 py-3" disabled={!loaded} onClick={() => open(MAIL_VIEW)} variant="outline">
+          <Mail /><span className="min-w-0 flex-1 text-left"><span className="block">Mail</span>{said.lead && <span className="block truncate text-muted-foreground text-xs">{said.lead}{said.rest && ` · ${said.rest}`}</span>}</span><ChevronRight />
+        </Button>
       </section>
       {!!captures.length && <section aria-label="Recent captures" className="mt-8">
         <div className="mb-1 flex items-center justify-between gap-2"><h2 className="text-sm font-medium text-muted-foreground">Recent captures</h2><Button onClick={() => open(INBOX_VIEW)} variant="ghost">See all</Button></div>

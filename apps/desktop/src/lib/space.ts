@@ -98,8 +98,9 @@ export const INBOX_VIEW = "inbox:";
 export const ASK_VIEW = "ask:";
 export const SUGGESTIONS_VIEW = "suggestions:";
 export const CALENDAR_VIEW = "calendar:";
-// Mail home, and the look (one mail, then the rest, then the end) as its own page, so the pane's Back works.
+// Mail home, a selected message, and the guided look share the pane's history.
 export const MAIL_VIEW = "mail:";
+export const MAIL_READING = "mail:read";
 export const MAIL_LOOK = "mail:look";
 const VIEWS = [CALENDAR_VIEW, FEED_VIEW, INBOX_VIEW, ASK_VIEW, SUGGESTIONS_VIEW];
 // An empty view is a tab with no page yet.
@@ -108,6 +109,7 @@ export const isPageView = (view: string) => !!view && !isPersonalBrowser(view) &
 export function describe(view: string): { title: string; icon?: PageIcon; parent?: { title: string; view: string } } {
   if (isPersonalBrowser(view)) return { title: "Browser", icon: { kind: "icon", name: "globe", color: "gray" } };
   if (!view) return { title: "New tab" }; // a tab with no page yet
+  if (view === MAIL_READING) return { title: "Message", parent: { title: "Mail", view: MAIL_VIEW } };
   if (view.startsWith(MAIL_VIEW)) return { title: "Mail" };
   if (view === CALENDAR_VIEW) return { title: "Calendar" };
   if (view === INBOX_VIEW) return { title: "Captures" };

@@ -245,7 +245,7 @@ export function say(x: Snapshot): Said {
     const kept = x.later.filter((i) => i.lines?.due && daysTo(i.lines.due, x.now) === 0).length;
     if (kept) return said("due", `${kept} ${kept === 1 ? "is" : "are"} due today`, `you kept ${kept === 1 ? "it" : "them"} for later`, `${kept} ${kept === 1 ? "is" : "are"} due today`, `You kept ${kept === 1 ? "it" : "them"} for later.`);
     const handled = Object.keys(d.handled).length;
-    if (d.left) return said("paused", "Mail done for now", `${handled} handled · ${d.left} for the next look`, "Mail is done for now", `${handled} handled. ${d.left} more wait${d.left === 1 ? "s" : ""} for the next look.`);
+    if (d.left && all.length) return said("paused", "Mail done for now", `${handled} handled · ${all.length} for the next look`, "Mail is done for now", `${handled} handled. ${all.length} more wait${all.length === 1 ? "s" : ""} for the next look.`);
     const done = did(d);
     return { ...said("done", "Mail done", [done, `${took(d, x.now)} min`].filter(Boolean).join(" · "), "Mail is done for today", `${done ? `${done}. ` : ""}It took ${mins(took(d, x.now))}.${nextDue(x)}`), small: "New mail waits for tomorrow's look. Anything that cannot wait shows up on Today." };
   }
