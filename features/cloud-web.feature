@@ -104,3 +104,13 @@ Feature: A local-first web app with optional accounts and sync
     When I enter a different key or the service fails during verification
     Then the existing key stays saved
     And a new device must verify its key before syncing
+
+  Scenario: A full library can use the space taken by attachment transfer encoding
+    Given an older Mac uploaded encrypted attachment parts as text
+    And that text filled the library's 500 MB sync allowance
+    When the service stores those parts as their original encrypted bytes
+    Then the same signed-in devices receive byte-for-byte identical parts at the same IDs
+    And the next sync delivers both the pending page and its collection with their history
+    And a device from another account still cannot read the parts
+    And an already saved event can be retried even if the library fills again
+    And a new event that exceeds the remaining space stays queued on the device

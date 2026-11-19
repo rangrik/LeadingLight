@@ -1,3 +1,4 @@
+import { readPart, saveSyncEvent } from './sync-storage.mjs';
 import { publicationRequest, publishedRequest, publicationHeaders } from './publications.mjs';
 import { gmailRequest, gmailCallback, gmailReady } from './gmail.mjs';
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
@@ -54,8 +55,8 @@ export function application({ env, sql, auth }) {
       if (path === '/api/sync-part' && request.method === 'GET') {
         const id = url.searchParams.get('id');
         if (!bounded(id, 200)) return json({ error: 'Invalid part.' }, 400);
-        const rows = await sql`SELECT envelope FROM sync_events WHERE owner=${user.id} AND id=${id} AND envelope->>'kind'='part'`;
-        return rows.length ? json(rows[0].envelope) : json({ error: 'Sync part not found.' }, 404);
+        const rows = await sql`SELECT envelope,part_bytes FROM sync_events WHERE owner=${user.id} AND id=${id} AND envelope->>'kind'='part'`;
+        return rows.length ? json(readPart(rows[0])) : json({ error: 'Sync part not found.' }, 404);
       }
       if (path === '/api/sync' && request.method === 'GET') {
         const after = url.searchParams.get('after') ?? '0';
@@ -74,13 +75,7 @@ export function application({ env, sql, auth }) {
         const e = body.envelope;
         const validData = e?.kind === 'manifest' ? Array.isArray(e.parts) && e.parts.length > 0 && e.parts.length <= 200 && e.parts.every((part) => bounded(part, 200)) : bounded(e?.data, 3_900_000);
         if (!bounded(body.id, 200) || !body.id || e?.v !== 1 || !bounded(e.iv, 32) || !validData) return json({ error: 'Invalid encrypted event.' }, 400);
-        const saved = await sql.begin(async (tx) => {
-          await tx`SELECT pg_advisory_xact_lock(hashtextextended(${user.id},0))`;
-          const [{ bytes }] = await tx`SELECT coalesce(sum(pg_column_size(envelope)),0)::bigint AS bytes FROM sync_events WHERE owner=${user.id}`;
-          if (Number(bytes) > 500_000_000) return false;
-          await tx`INSERT INTO sync_events(owner,id,envelope) VALUES(${user.id},${body.id},${tx.json(body.envelope)}) ON CONFLICT(owner,id) DO NOTHING`;
-          return true;
-        });
+        const saved = await saveSyncEvent(sql, user.id, body);
         return saved ? json({ ok: true }) : json({ error: 'Sync storage is full. Your local notes are safe.' }, 413);
       }
       return json({ error: 'Not found.' }, 404);

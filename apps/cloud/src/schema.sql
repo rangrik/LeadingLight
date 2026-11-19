@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS sync_events (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(owner,id)
 );
+ALTER TABLE sync_events ADD COLUMN IF NOT EXISTS part_bytes bytea;
 CREATE INDEX IF NOT EXISTS sync_events_pull ON sync_events(owner,seq);
 CREATE TABLE IF NOT EXISTS native_requests (
   id uuid PRIMARY KEY,
