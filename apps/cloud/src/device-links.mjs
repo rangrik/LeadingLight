@@ -49,6 +49,13 @@ export async function deviceLinks({ request, sql, user, session, allowed, readBo
     const [self] =
       await tx`SELECT device_name,sync_requires_link FROM native_sessions WHERE id=${session} AND owner=${user.id} AND revoked_at IS NULL AND expires_at>now()`;
     require(self, 401, 'This device was signed out.');
+    async function trustedForNotes() {
+      if (!self.sync_requires_link) return true;
+      const [grant] = await tx`SELECT 1 FROM device_links l JOIN native_sessions t ON t.id=l.target
+        WHERE l.requester=${session} AND l.share_notes AND l.state='approved'
+        AND t.revoked_at IS NULL AND t.expires_at>now() LIMIT 1`;
+      return Boolean(grant);
+    }
     if (op === 'presence') {
       const pk = publicKey(body.key),
         projects = body.projects;
@@ -56,12 +63,7 @@ export async function deviceLinks({ request, sql, user, session, allowed, readBo
         projects.length <= 200 &&
         projects.every(projectId) &&
         typeof body.sync === 'boolean', 400, 'Invalid device availability.');
-      let canSync = body.sync;
-      if (canSync && self.sync_requires_link) {
-        const [grant] =
-          await tx`SELECT 1 FROM device_links l JOIN native_sessions t ON t.id=l.target WHERE l.requester=${session} AND l.share_notes AND l.state='approved' AND t.revoked_at IS NULL AND t.expires_at>now() LIMIT 1`;
-        canSync = !!grant;
-      }
+      const canSync = body.sync && await trustedForNotes();
       const rows =
         await tx`INSERT INTO device_presence(session_id,public_key,can_sync,projects) VALUES(${session},${tx.json(pk)},${canSync},${tx.json(projects)}) ON CONFLICT(session_id) DO UPDATE SET seen=now(),can_sync=excluded.can_sync,projects=excluded.projects WHERE device_presence.public_key=excluded.public_key RETURNING session_id`;
       require(rows.length, 409, 'This installation lost its device key. Sign out and sign in again.');
@@ -130,6 +132,7 @@ export async function deviceLinks({ request, sql, user, session, allowed, readBo
       await tx`UPDATE device_links SET channel=${channel} WHERE id=${l.id}`;
       return json({ channel, hostToken, clientToken });
     }
+    if (l.share_notes) require(await trustedForNotes(), 403, 'This device no longer has access to sync.');
     require(op === 'approve', 404, 'Unknown connection action.');
     const e = body.envelope;
     require(e &&

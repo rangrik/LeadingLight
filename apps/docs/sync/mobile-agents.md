@@ -16,4 +16,6 @@ Approval is remembered. Open **Settings → Account and devices → Device conne
 
 When the Mac has no sync key, approving a project shares only that project’s work.
 
+If a report exceeds the remote preview size, open it on the Mac to read the rest and mark it reviewed.
+
 For note sync alone, use **Connect a device** in Account and devices. Pick a device that already has the library key and match the number there. This gives the requesting device access to your encrypted notes. To recover a library after losing all trusted devices, use the recovery key.

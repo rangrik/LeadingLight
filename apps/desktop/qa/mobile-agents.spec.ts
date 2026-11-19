@@ -129,15 +129,13 @@ for (const device of ["iphone", "ipad"] as const) test(`${device} agent composer
   await expect(dialog.getByRole("combobox", { name: "Conversation", exact: true })).toBeVisible();
 });
 
-test("connect a Mac and start, approve, continue and stop its shared project agent", async ({ page }) => {
-  const mock = await mac(page, false);
+test("a connected Mac can start, approve, continue and stop its shared project agent", async ({ page }) => {
+  const mock = await mac(page);
   await page.goto("/?ipad");
   await sidebar(page);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await expect(page.getByTestId("settings-nav-account")).toBeVisible();
   await page.getByTestId("settings-nav-account").click();
-  await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:test-code");
-  await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Remote work", exact: true }).last().click();
   await page.getByRole("textbox", { name: "Message to agent" }).fill("Summarize this project");
@@ -242,15 +240,13 @@ test("an ambiguous start is found after reopening without starting a second agen
 });
 
 // The phone shell must retain a route to the paired Mac without its desktop sidebar.
-test("iPhone pairs in Devices and opens Mac agents from Notes", async ({ page }) => {
+test("iPhone keeps its paired Mac and opens its agents from Notes", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  const mock = await mac(page, false); mock.state.approval = false;
+  const mock = await mac(page); mock.state.approval = false;
   await page.goto("/?iphone");
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
   await page.getByTestId("settings-nav-account").click();
-  await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:test-code");
-  await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
   await expect(page.getByText("Studio Mac", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Toggle sidebar" }).first().click();
   await page.getByRole("button", { name: /Back to app/ }).click();
@@ -427,43 +423,19 @@ test("notification opens only its current Mac request without answering", async 
   expect(mock.sends).toHaveLength(0);
 });
 
-test("Mac settings share only checked projects and can disable the grant", async ({ page }) => {
+test("the Mac can stop devices paired with an earlier build", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  const changes: any[] = [];
-  let host = { enabled: false, projects: [] as string[], name: "Host Mac", code: "llmac2:test-code" };
-  const relay = { channel: "00000000-0000-4000-8000-000000000001", hostToken: "a".repeat(43), clientToken: "b".repeat(43) };
-  await page.route("**/api/config", (route) => route.fulfill({ json: { ready: true, allowed: true, providers: [] } }));
-  await page.route("**/api/me", (route) => route.fulfill({ json: { id: "test-owner", name: "Test account" } }));
-  await page.route("**/api/mobile-relay/channels", (route) => route.fulfill({ json: relay }));
-  await page.route("**/__runtime/**", async (route) => {
-    const path = new URL(route.request().url()).pathname;
-    let body: unknown = {};
-    if (path.endsWith("/status")) body = { state: "ready", home: "/tmp/fixture" };
-    if (path.endsWith("/v1/mobile")) {
-      if (route.request().method() === "PUT") { const change = route.request().postDataJSON(); changes.push(change); host = { ...host, ...change }; }
-      body = host;
-    }
-    if (path.endsWith("/v1/locations")) body = [{ name: "p-one", path: "/Projects/One" }, { name: "p-two", path: "/Projects/Two" }];
-    await route.fulfill({ json: body });
+  const changes: unknown[] = [];
+  await page.route("**/__runtime/v1/mobile", async route => {
+    if (route.request().method() === "PUT") changes.push(route.request().postDataJSON());
+    await route.fulfill({json:{enabled:changes.length===0}});
   });
-  await page.goto("/");
-  await page.evaluate(async () => {
-    const module = "/src/lib/objects.ts";
-    const { objects } = await import(/* @vite-ignore */ module);
-    for (const [pageId, location, path] of [["one", "p-one", "/Projects/One"], ["two", "p-two", "/Projects/Two"]]) {
-      await objects.putFolder({ pageId, location, path, folderId: pageId, createdAt: 1, updatedAt: 1 });
-    }
-  });
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.goto("/?mac");
+  await page.getByRole("button", {name:"Settings", exact:true}).click();
   await page.getByTestId("settings-nav-account").click();
-  await page.getByRole("checkbox", { name: "One", exact: true }).click();
-  await page.getByRole("switch", { name: "Mobile access", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Copy code", exact: true })).toBeEnabled();
-  expect(changes).toEqual([{ projects: ["p-one"] }, { enabled: true, relay }]);
-  await expect(page.getByRole("checkbox", { name: "Two", exact: true })).not.toBeChecked();
-  await page.getByRole("switch", { name: "Mobile access", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Copy code", exact: true })).toBeDisabled();
-  expect(changes.at(-1)).toEqual({ enabled: false });
+  await page.getByRole("button", {name:"Stop sharing", exact:true}).click();
+  await expect(page.getByText("Devices paired with a code")).toHaveCount(0);
+  expect(changes).toEqual([{enabled:false}]);
 });
 
 test("switching Macs cannot send an old pending prompt to the new connection", async ({ page }) => {
@@ -477,8 +449,8 @@ test("switching Macs cannot send an old pending prompt to the new connection", a
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByTestId("settings-nav-account").click();
-  await page.getByLabel("Mac connection code", { exact: true }).fill("llmac2:second");
-  await page.getByRole("button", { name: "Connect Mac", exact: true }).click();
+  // The matching flow is covered separately. Here a newly approved Mac arrives during a send.
+  await page.evaluate(async () => (await import(String("/src/lib/mobile-agents.ts"))).connectMobileAgents("llmac2:second"));
   await expect(page.getByText("Travel Mac", { exact: true })).toBeVisible();
   hold.release();
   await page.getByRole("button", { name: "Remote work", exact: true }).last().click();

@@ -88,8 +88,9 @@ export async function pollDevices(force = false) {
   polling = (async () => {
     const pair = await deviceKey(owner),
       mac = platform.get() === 'macos' || (import.meta.env.DEV && platform.get() === 'browser');
-    if (mac) await loadFolders().catch(() => {});
-    const projects = mac
+    const canHost = mac && (!bound() || bound() === owner);
+    if (canHost) await loadFolders().catch(() => {});
+    const projects = canHost
       ? Array.from(folders.get())
           .filter(([, s]) => !s.missing)
           .map(([id]) => id)
@@ -159,6 +160,7 @@ export async function approveLink(link: Link, chosen: number) {
   let code: string | undefined;
   try {
     if (link.project) {
+      if (bound() && bound() !== owner) throw new Error('This project belongs to a different library.');
       const f = folders.get().get(link.project);
       if (!f || f.missing || !pageOf(link.project)) throw new Error('Link the project folder on this Mac first.');
       const relay = await api('channel', { id: link.id }, owner);

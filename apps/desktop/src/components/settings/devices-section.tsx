@@ -58,10 +58,12 @@ export function MobileAgentAccess() {
   useEffect(() => {
     void refreshMobileAgents();
   }, []);
-  if (!state.connection) return os === 'macos' ? <EarlierMacAccess /> : null;
+  const host =
+    os === 'macos' || (import.meta.env.DEV && os === 'browser' && new URLSearchParams(location.search).has('mac'));
+  if (!state.connection) return host ? <EarlierMacAccess /> : null;
   return (
     <>
-      {os === 'macos' && <EarlierMacAccess />}
+      {host && <EarlierMacAccess />}
       <SettingsGroup title="Remote Mac">
         <SettingsRow label={state.connection.name} description={state.online ? 'Online' : 'Offline'}>
           <MobileAgentsButton />

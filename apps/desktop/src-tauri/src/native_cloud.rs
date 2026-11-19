@@ -157,7 +157,7 @@ async fn request(
     token: Option<&str>,
     expected_owner: Option<&str>,
 ) -> Result<CloudResponse, String> {
-    let client = crate::network_client()
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .build()

@@ -224,6 +224,9 @@ export function DeviceConnectionSettings() {
     [error, setError] = useState('');
   if (!cloud.user || s.owner !== cloud.user.id || !s.session) return null;
   const links = s.links.filter((l) => l.state === 'approved');
+  const last = s.links.filter((l) => l.requester === s.session && !l.project).at(-1);
+  const noteStatus =
+    last?.state === 'denied' ? 'Request declined.' : last?.state === 'expired' ? 'Request expired. You can ask again.' : '';
   return (
     <SettingsGroup
       title="Device connections"
@@ -246,7 +249,12 @@ export function DeviceConnectionSettings() {
           </Button>
         </SettingsRow>
       ))}
-      {!links.length && (
+      {(s.error || noteStatus) && (
+        <p role="status" className="py-2 text-sm">
+          {s.error || noteStatus}
+        </p>
+      )}
+      {!links.length && !noteStatus && (
         <p className="py-3 text-sm text-muted-foreground">Approve a device once to use it away from home.</p>
       )}
       <Dialog
@@ -301,8 +309,8 @@ export function ProjectConnection({ project }: { project: string }) {
   const [accepting, setAccepting] = useState<string>();
   const loc = locationOf(project);
   useEffect(() => {
-    if (allowed && !local) void refreshMobileAgents();
-  }, [allowed, local?.folder.folderId]);
+    if (allowed && (!local || local.missing)) void refreshMobileAgents();
+  }, [allowed, local?.folder.folderId, local?.missing]);
   useEffect(() => {
     setReviews([]);
     setOpen(undefined);
@@ -344,7 +352,7 @@ export function ProjectConnection({ project }: { project: string }) {
       clearInterval(timer);
       window.removeEventListener('focus', load);
     };
-  }, [allowed, host, loc, local?.folder.folderId, cloud.user?.id]);
+  }, [allowed, host, loc, local?.folder.folderId, local?.missing, cloud.user?.id]);
   const last = useMemo(() => s.links.filter((l) => l.project === project && l.requester === s.session).at(-1), [s, project]);
   if (!allowed || (local && !local.missing) || (!host && (!cloud.user || s.owner !== cloud.user.id))) return null;
   return (
@@ -367,7 +375,13 @@ export function ProjectConnection({ project }: { project: string }) {
         }
       >
         {host && !problem && state.online ? (
-          <span className="text-sm text-muted-foreground">Online</span>
+          s.devices.filter((d) => d.online && d.projects.includes(project)).length > 1 ? (
+            <Button size="sm" variant="outline" onClick={() => connectionPicker.set({ project })}>
+              Change Mac
+            </Button>
+          ) : (
+            <span className="text-sm text-muted-foreground">Online</span>
+          )
         ) : (
           <Button
             size="sm"
@@ -411,10 +425,15 @@ export function ProjectConnection({ project }: { project: string }) {
           <DialogPanel className="space-y-3">
             <h3 className="font-medium">{open?.reportTitle}</h3>
             <p className="whitespace-pre-wrap text-sm">{open?.text}</p>
+            {open?.truncated && (
+              <p className="text-sm text-muted-foreground">
+                This report exceeds the remote preview size. Open it on the Mac to read the rest.
+              </p>
+            )}
           </DialogPanel>
           <DialogFooter>
             <Button
-              disabled={!open || accepting === open.report}
+              disabled={!open || open.truncated || accepting === open.report}
               onClick={() => {
                 if (!open) return;
                 const id = open.report;

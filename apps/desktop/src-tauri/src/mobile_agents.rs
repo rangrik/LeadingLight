@@ -288,7 +288,7 @@ fn open(
     serde_json::from_slice(raw).map_err(|_| "The Mac returned an invalid reply.".into())
 }
 fn client() -> Result<reqwest::Client, String> {
-    crate::network_client()
+    reqwest::Client::builder()
         .no_proxy()
         .https_only(true)
         .redirect(reqwest::redirect::Policy::none())
@@ -607,12 +607,7 @@ pub async fn mobile_agents_request(
             "The Mac connection changed. Reopen the conversation before continuing.".into(),
         );
     }
-    let result = request(&connection, &method, &path, body.as_ref()).await;
-    #[cfg(all(target_os = "ios", debug_assertions))]
-    if path.ends_with("/reviews") && std::env::var("LL_QA_CELLULAR").as_deref() == Ok("1") {
-        eprintln!("LL QA cellular project reviews HTTP {:?}", result.as_ref().map(|r| r.status));
-    }
-    result
+    request(&connection, &method, &path, body.as_ref()).await
 }
 
 #[cfg(test)]

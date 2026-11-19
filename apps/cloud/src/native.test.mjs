@@ -215,4 +215,12 @@ test('number matching gives one signed-in device one project and revoking it clo
     else assert.equal((await (end==='deny'?host:phone).call(end,{id})).status,200);
     assert.equal((await host.call('approve',{id,envelope})).status,409);
   }
+  // A Mac with only a folder can approve that project without unlocking note sync.
+  await sql`UPDATE device_presence SET can_sync=false WHERE session_id=${host.id}`;
+  assert.equal((await phone.call('start',{target:host.id,project:null})).status,409);
+  const remote=await (await phone.call('start',{target:host.id,project:'project-A'})).json();
+  assert.equal((await host.call('channel',{id:remote.id})).status,200);
+  assert.equal((await host.call('approve',{id:remote.id,envelope})).status,200);
+  assert.equal((await sync()).status,403);
+
 }));

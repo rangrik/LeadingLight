@@ -3,7 +3,7 @@ import { Copy, Laptop, Plus, RefreshCw, Smartphone, Tablet } from "lucide-react"
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/views/settings/confirm";
 import { DeviceConnectionSettings } from "~/components/device-connections";
-import { connectionPicker } from "~/lib/device-links";
+import { connectionPicker, deviceLinks } from "~/lib/device-links";
 import { SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import { Badge } from "@leadinglight/ui/components/badge";
@@ -36,6 +36,7 @@ const online = (d: Device) => !d.lastSeen
 // Settings › Account and devices: who is signed in, sync, the devices on the account, and the recovery key.
 export function AccountSection() {
   const cloud = useCloud(), os = platform.use(), native = os !== "browser", mobile = useMobile();
+  const trustedDevices = deviceLinks.use();
   const list = devices.use(), connection = nativeConnection.use();
   const [error, setError] = useState(""), [busy, setBusy] = useState(false), [recovery, setRecovery] = useState<string>(), [keyError, setKeyError] = useState("");
   const [open, setOpen] = useState<"" | "add" | "key" | "out" | "all" | "name">(""), [removing, setRemoving] = useState<Device>();
@@ -102,7 +103,7 @@ export function AccountSection() {
           {key ? <SettingsRow description="Turn off to keep this device to itself for a while. Nothing is deleted." label={`Sync ${it}`}>
             <Switch checked={syncing} disabled={busy} onCheckedChange={(on) => { if (on) void run(async () => { await enableSync(); await syncNow(); }); else disableSync(); }} />
           </SettingsRow> : <SettingsRow className="max-sm:flex-wrap max-sm:gap-y-3" description="Turning it on makes a recovery key and keeps a locked copy of your notes for your other devices." label="Sync is off here">
-            <Button disabled={busy || !cloud.config.allowed} onClick={() => native && list?.some(d=>!d.current) ? connectionPicker.set({project:null}) : void turnOn()}>Turn on sync</Button>
+            <Button disabled={busy || !cloud.config.allowed} onClick={() => native && trustedDevices.owner === user?.id && trustedDevices.devices.some(d=>d.sync) ? connectionPicker.set({project:null}) : void turnOn()}>Turn on sync</Button>
           </SettingsRow>}
           {(key ? mismatch : recovery !== undefined) && <Form className="space-y-3 py-4" onSubmit={(event) => { event.preventDefault(); void turnOn(); }}>
             <Field>

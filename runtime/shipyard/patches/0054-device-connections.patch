@@ -16,10 +16,10 @@ index c0efc2c..9a8a8b2 100644
  	route("GET /v1/phone", b.getPhone)
 diff --git a/internal/box/device_links.go b/internal/box/device_links.go
 new file mode 100644
-index 0000000..5f0175e
+index 0000000..626a007
 --- /dev/null
 +++ b/internal/box/device_links.go
-@@ -0,0 +1,254 @@
+@@ -0,0 +1,255 @@
 +package box
 +
 +import (
@@ -143,6 +143,7 @@ index 0000000..5f0175e
 +	Report      string `json:"report"`
 +	ReportTitle string `json:"reportTitle"`
 +	Text        string `json:"text"`
++	Truncated   bool   `json:"truncated,omitempty"`
 +}
 +type deviceReviews struct {
 +	Folder  string         `json:"folder"`
@@ -224,7 +225,7 @@ index 0000000..5f0175e
 +		return httpError{409, "The project folder changed."}
 +	}
 +	for _, row := range s.Reviews {
-+		if row.Report == id {
++		if row.Report == id && !row.Truncated {
 +			action, err := json.Marshal(reviewAction{s.Folder, row.Task, id})
 +			if err != nil {
 +				return err
