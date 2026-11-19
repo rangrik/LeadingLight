@@ -1,7 +1,7 @@
 {
   "repo": "https://github.com/cosscom/shipyard.git",
   "commit": "a6ee436af12210c00aca4a40f8f69955afd18fc1",
-  "version": "0.3.31-ll.33",
+  "version": "0.3.31-ll.34",
   "license": "MIT",
   "notices": {
     "LICENSE": "vendor/shipyard/LICENSE",
@@ -65,6 +65,7 @@
     "0050-desktop-browser-defaults.patch",
     "0051-personal-browser-permissions.patch",
     "0052-agents-browser-is-visible.patch",
-    "0053-own-browser-steps-need-no-approval.patch"
+    "0053-own-browser-steps-need-no-approval.patch",
+    "0054-device-connections.patch"
   ]
 }

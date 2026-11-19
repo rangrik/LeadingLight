@@ -29,7 +29,8 @@ place for your account:
 | --- | --- |
 | **Account** | Who you are signed in as, and **Sign out** |
 | **Sync** | Whether this device syncs, its status, and **Sync now** |
-| **Devices** | The apps signed in to your account, and **Add a device** |
+| **Devices** | The apps signed in to your account |
+| **Device connections** | Connect a signed-in device or remove its access |
 | **Recovery key** | **Show…** the key, and tick it as saved |
 | **Agents from a browser** | Pair a web browser with the agents on your Mac. See [Agents from a browser](/sync/pairing) |
 | **Agents from iPhone and iPad** | Let your iPhone or iPad start and answer the agents on your Mac. See [Agents from iPhone and iPad](/sync/mobile-agents) |
@@ -63,44 +64,13 @@ before says **Last used here**.
 
 ### In the Mac, iPad or iPhone app
 
-Press **Connect this Mac** (or iPad, or iPhone). The app shows a code of 8 characters and waits.
-There are two ways in.
+Open **Settings › Account and devices** and sign in through the browser. Return to LeadingLight. Your device keeps its sign-in in the system Keychain.
 
-**From a device that already syncs.** No recovery key is needed and no browser opens.
+On a device joining an existing library, choose **Connect a device**, then choose the device that has your notes. Keep LeadingLight open on both. The requesting device shows a number. On the other device, choose that number from the three shown. **Deny** declines an unexpected request. A request expires after two minutes.
 
-1. On a Mac, iPad, iPhone or browser where LeadingLight already syncs, open **Account and
-   devices** and press **Add a device**.
-2. Type the code and press **Continue**.
-3. It asks "Let LeadingLight on Mac open your notes?" with your account and the code. Check the
-   code is the one on the new device, then press **Approve**.
-4. It says "LeadingLight on Mac is connected. It will finish syncing by itself." The new device
-   appears in **Devices**, marked **New**.
+On your first device, choose **Turn on sync** to create your library and save its recovery key. If all your devices are unavailable, use your saved recovery key.
 
-A code nobody is waiting with gets "No device is waiting with that code. Check the code on your new
-device." After ten wrong codes in ten minutes it says "Too many codes tried. Wait ten minutes, then
-try again."
-
-**Add a device** is off on a device where sync is off or paused, because that device has no key
-to hand over.
-
-**From your browser.** Use this for your first device. Press **Continue in the browser** under the
-code. On the Mac, this opens Safari.
-
-1. In the browser, sign in if you need to. A **Connect your device** window names the device and
-   shows the code. Check that it matches the code in the app.
-2. If this browser already syncs, its recovery key is used. If not, paste your recovery key in
-   **Recovery key, if you already use sync**. Leave it blank only if you have never set up sync.
-   Signing in is not enough on its own: the service never holds your key, so a browser that has
-   not synced at this address cannot hand it over.
-3. Press **Connect this device**. The browser says **Device approved**.
-
-Either way the recovery key reaches the new device encrypted, so the service never sees it. The
-device keeps its sign-in in the system Keychain. A code is good for ten minutes and can be
-approved once; after that, press Connect again. An approval link that has expired says so and asks
-for nothing; start again on the new device.
-
-Signing in to your workspace is separate from Claude Code and Codex. Agents keep using the CLI
-account already signed in on your Mac. See [Overview and setup](/ai/).
+To work on your Mac’s project, open the project and choose **Connect**. The approval names the project you will be able to use. [Remote work on your Mac](/sync/mobile-agents)
 
 ## Your devices
 
