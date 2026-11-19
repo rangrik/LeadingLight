@@ -192,7 +192,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     <Command key={`${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
       <div className="ll-search-controls">
         <div className="relative flex items-center gap-1 pe-3">
-          <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={compact && view === "search" ? "Search…" : placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
+          <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={mobile && view === "search" ? "Search…" : placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
             modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
             if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
               e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
