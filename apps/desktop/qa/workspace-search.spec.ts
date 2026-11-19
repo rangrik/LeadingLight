@@ -64,7 +64,7 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await expect(title(page)).toHaveValue('');
   await title(page).fill('Friday review');
   await search(page);
-  await expect(dialog(page).getByRole('option').first()).toHaveText('Friday reviewPage');
+  await expect(dialog(page).getByRole('group', { name: 'Recent pages' }).getByRole('option').first()).toHaveText('Friday reviewPage');
   await expect(dialog(page).getByRole('option', { name: 'The Creative Act', exact: true })).toBeVisible();
   await input(page).fill('northern lights');
   await expect(dialog(page).getByRole('option', { name: 'The Creative Act', exact: true })).toBeVisible();
@@ -90,7 +90,7 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await dialog(page).getByRole('radio', { name: 'All', exact: true }).click();
   await expect(input(page)).toHaveValue('Archive 23');
   await input(page).fill('');
-  await expect(dialog(page).getByRole('option').first()).toHaveAttribute('aria-label', 'Archive 0');
+  await expect(dialog(page).getByRole('group', { name: 'Recent pages' }).getByRole('option').first()).toHaveAttribute('aria-label', 'Archive 0');
   await input(page).fill('agent revision');
   await expect(dialog(page).getByRole('option', { name: 'Archive 0', exact: true })).toBeVisible();
   await page.screenshot({ path: 'qa/report/search-library.png' });
@@ -132,7 +132,7 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await expect(page.getByRole('combobox', { name: 'Search or enter address' })).toBeVisible();
   await search(page, 'Kyoto itinerary');
   await expect(page.getByRole('combobox', { name: 'Search or enter address' })).not.toBeVisible();
-  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toBe('');
+  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toEqual([]);
   await page.keyboard.press('Shift+Enter');
   await expect(page.locator('[data-pane]')).toHaveCount(2);
   await expect(page.getByRole('radio', { name: 'Notes', exact: true })).toBeChecked();
@@ -289,7 +289,7 @@ test('typing goes into search when Cmd K immediately follows opening a result', 
 test('create a plain page or a named typed page from the first screen', async ({ page }) => {
   await start(page);
   await search(page);
-  await dialog(page).getByRole('button', { name: 'New page', exact: true }).click();
+  await dialog(page).getByRole('option', { name: 'Page', exact: true }).click();
   await expect(title(page)).toBeFocused();
   await title(page).fill('New');
   await page.keyboard.press('Meta+n');
@@ -319,4 +319,81 @@ test('create a plain page or a named typed page from the first screen', async ({
   await page.screenshot({ path: 'qa/report/search-create-types.png' });
   await dialog(page).getByRole('gridcell', { name: 'Book', exact: true }).click();
   await expect(title(page)).toBeFocused();
+});
+
+// Category changes remount the command input. Both traversal directions must preserve the query and focus.
+test('Tab cycles search categories and wraps without losing the query', async ({ page }) => {
+  await start(page);
+  await search(page, 'field notes');
+  for (const [key, category] of [
+    ['Shift+Tab', 'Tabs'], ['Tab', 'All'], ['Tab', 'Create'], ['Tab', 'Pages'],
+    ['Tab', 'Types'], ['Tab', 'Tabs'], ['Tab', 'All'], ['Meta+3', 'Pages'],
+  ]) {
+    await page.keyboard.press(key);
+    await expect(dialog(page).getByRole('radio', { name: category, exact: true })).toBeChecked();
+    await expect(input(page)).toBeFocused();
+    await expect(input(page)).toHaveValue('field notes');
+  }
+});
+
+// A browser tab and its native surface used to share one identity across the workspace.
+test('Quick create keeps the source tab and opens beside the focused pane', async ({ page }) => {
+  test.setTimeout(120_000);
+  await start(page);
+  const address = page.getByRole('combobox', { name: 'Search or enter address' });
+  const panes = page.locator('[data-pane]:visible');
+  const websites = page.getByTestId('standin-page').filter({ visible: true });
+  async function create(choice: 'Idea' | 'Page' | 'Browser tab', beside = false) {
+    await page.keyboard.press('Meta+k');
+    const rows = dialog(page).getByRole('group', { name: 'Create', exact: true }).getByRole('option');
+    await expect(rows).toHaveText(['Idea', 'Page', 'Browser tab']);
+    await expect(rows.first()).toHaveAttribute('data-highlighted', '');
+    const index = ['Idea', 'Page', 'Browser tab'].indexOf(choice);
+    for (let i = 0; i < index; i++) await page.keyboard.press('ArrowDown');
+    await expect(rows.nth(index)).toHaveAttribute('data-highlighted', '');
+    await page.keyboard.press(beside ? 'Shift+Enter' : 'Enter');
+    await expect(dialog(page)).toBeHidden();
+  }
+
+  await create('Idea');
+  await expect(title(page)).toBeFocused();
+  await title(page).fill('Field notes');
+  await create('Page');
+  await expect(title(page)).toBeFocused();
+  await title(page).fill('Reading list');
+  await expect(page.getByRole('tab', { name: /^Field notes/ })).toBeVisible();
+  await create('Browser tab');
+  await expect(address).toBeFocused();
+  await address.fill('https://atlas.example/Maps');
+  await address.press('Enter');
+  await expect(websites).toContainText('atlas.example');
+  await expect(panes).toHaveCount(1);
+
+  await create('Browser tab', true);
+  await expect(address).toBeFocused();
+  await address.press('Escape');
+  await expect(panes).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /Enter address/ })).toBeVisible();
+  await page.keyboard.press('Meta+l');
+  await address.fill('https://library.example/Books');
+  await address.press('Enter');
+  await expect(websites).toHaveCount(2);
+  await expect(page.locator('[data-testid="standin-page"][data-live="true"]:visible')).toHaveCount(2);
+  await page.reload();
+  await expect(page.locator('[data-testid="standin-page"][data-live="true"]:visible')).toHaveCount(2);
+  await websites.filter({ hasText: 'library.example' }).click();
+  await create('Page');
+  await expect(title(page)).toBeFocused();
+  await expect(panes).toHaveCount(2);
+  await expect(websites).toContainText('atlas.example');
+  await page.getByRole('tab', { name: /^Books Close tab$/ }).click();
+  await websites.filter({ hasText: 'atlas.example' }).click();
+  await create('Idea', true);
+  await expect(title(page)).toBeFocused();
+  await title(page).fill('Map idea');
+  await expect(panes).toHaveCount(3);
+  await expect(websites).toHaveCount(2);
+  await create('Page', true);
+  await expect(title(page).and(page.locator(':focus'))).toHaveValue('');
+  await expect(panes).toHaveCount(4);
 });

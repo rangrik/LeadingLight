@@ -6,7 +6,10 @@ import { phone } from "./platform";
 import { go, type Leaf, newId, type PaneNode, pageIn, prune, readLayout, step, type Tab, tab } from "./tabs.ts";
 
 export { pageIn, type Leaf, type PaneNode, type Tab } from "./tabs.ts";
-export const PERSONAL_BROWSER = "web:";
+export const BROWSER_HOME = "web:list:";
+export const browserPage = (id: string) => id ? `web:${id}` : BROWSER_HOME;
+export const isPersonalBrowser = (page?: string): page is `web:${string}` => !!page?.startsWith("web:");
+export const browserTabId = (page?: string) => isPersonalBrowser(page) && page !== BROWSER_HOME ? page.slice(4) : "";
 export type Rect = { x: number; y: number; w: number; h: number };
 export type Side = "left" | "right" | "top" | "bottom";
 export type Divider = { id: string; dir: "row" | "col"; area: Rect; at: number };
@@ -154,8 +157,8 @@ export function openPage(page: string) {
   const open = holder(page);
   const focused = paneOf(panes.get().focus);
   const root = panes.get().root;
-  const here = page !== PERSONAL_BROWSER && focused?.page === PERSONAL_BROWSER && root
-    ? leaves(root).find((l) => l.page !== PERSONAL_BROWSER) ?? focused : focused;
+  const here = !isPersonalBrowser(page) && isPersonalBrowser(focused?.page) && root
+    ? leaves(root).find((l) => !isPersonalBrowser(l.page)) ?? focused : focused;
   if (open) showTab(open.leaf.id, open.tab.id);
   else if (here) { showIn(here.id, page); focusPane(here.id); }
   else showOnly(page);
@@ -276,7 +279,7 @@ export function closePane(id: string) {
 
 // Shows another page in a given pane's front tab.
 export function showIn(id: string, page: string, back?: string) {
-  setLeaf(id, (l) => ({ ...withTabs(l, l.tabs.map((t) => (t.id === l.active ? (page === PERSONAL_BROWSER || pageIn(t) === PERSONAL_BROWSER ? { ...t, pages: [page], at: 0 } : go(t, page)) : t))), ...(back && { back }) }));
+  setLeaf(id, (l) => ({ ...withTabs(l, l.tabs.map((t) => (t.id === l.active ? (isPersonalBrowser(page) || isPersonalBrowser(pageIn(t)) ? { ...t, pages: [page], at: 0 } : go(t, page)) : t))), ...(back && { back }) }));
 }
 
 // A deleted page leaves every tab's history; a tab it leaves empty closes, and a pane left with none.
@@ -317,11 +320,11 @@ export function openBeside(page: string) {
 
 // Opens the panes kept from last time (localStorage, as other layout state is), then keeps every
 // change. False when nothing was kept, so the caller opens a page as before.
-export function restorePanes(exists: (page: string) => boolean) {
+export function restorePanes(exists: (page: string) => boolean, legacyBrowser?: string) {
   const KEY = phone ? "ll.phone.panes" : "ll.panes";
   let kept: ReturnType<typeof readLayout> = null;
   try {
-    kept = readLayout(JSON.parse(localStorage.getItem(KEY) ?? "null"), exists);
+    kept = readLayout(JSON.parse(localStorage.getItem(KEY) ?? "null"), exists, (p) => p === "web:" ? browserPage(legacyBrowser ?? "") : p);
   } catch {
     // Damaged: opened as before.
   }

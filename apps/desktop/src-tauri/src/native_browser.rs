@@ -380,7 +380,7 @@ fn build(app: &AppHandle, id: &str, url: Option<&str>, opener: Option<Retained<W
             point.x >= bounds.origin.x && point.y >= bounds.origin.y
                 && point.x < bounds.origin.x + bounds.size.width && point.y < bounds.origin.y + bounds.size.height
         });
-        if hit { let _ = handle.emit_to("main", "native-browser://focused", ()); }
+        if hit { let _ = handle.emit_to("main", "native-browser://focused", &me); }
         event.as_ptr()
     });
     let focus_monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown, &handler) };
@@ -526,29 +526,21 @@ pub fn native_browser_navigate(id: String, action: String, url: Option<String>, 
 // Shows one page over the rect, and hides the rest: only the tab in view is drawn.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-pub fn native_browser_show(app: AppHandle, id: String, x: f64, y: f64, w: f64, h: f64, width: f64, radius: f64) -> Result<(), String> {
+pub fn native_browser_show(id: String, x: f64, y: f64, w: f64, h: f64, width: f64, radius: f64) -> Result<(), String> {
     MainThreadMarker::new().ok_or(OFF_MAIN)?;
     VIEWS.with(|views| {
         let views = views.try_borrow().map_err(|_| "The native page is busy.")?;
         let view = views.get(&id).ok_or("No native page is open.")?;
         place(&view.web.webview(), x, y, w, h, width, radius);
-        for v in views.iter().filter(|(other, _)| **other != id).map(|(_, v)| v) {
-            give_back_keys(&app, v);
-            v.web.set_visible(false).map_err(text)?;
-        }
         view.web.set_visible(true).map_err(text)
     })
 }
 
 #[tauri::command]
-pub fn native_browser_hide(app: AppHandle) -> Result<(), String> {
-    MainThreadMarker::new().ok_or(OFF_MAIN)?;
-    VIEWS.with(|views| {
-        for view in views.try_borrow().map_err(|_| "The native page is busy.")?.values() {
-            give_back_keys(&app, view);
-            view.web.set_visible(false).map_err(text)?;
-        }
-        Ok(())
+pub fn native_browser_hide(app: AppHandle, id: String) -> Result<(), String> {
+    with_view(&id, |view| {
+        give_back_keys(&app, view);
+        view.web.set_visible(false).map_err(text)
     })
 }
 
