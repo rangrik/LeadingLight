@@ -65,6 +65,13 @@ export function application({ env, sql, auth }) {
         return rows.length ? json(readPart(rows[0])) : json({ error: 'Sync part not found.' }, 404);
       }
       if (path === '/api/sync' && request.method === 'GET') {
+        if (url.searchParams.has('has')) {
+          const id = url.searchParams.get('has');
+          if (!id || !bounded(id, 200)) return json({ error: 'Invalid event ID.' }, 400);
+          const rows = await sql`SELECT 1 FROM sync_events WHERE owner=${user.id} AND id=${id}
+            AND coalesce(envelope->>'kind','event') != 'part'`;
+          return json({ stored: rows.length > 0 });
+        }
         const after = url.searchParams.get('after') ?? '0';
         if (!/^\d{1,18}$/.test(after)) return json({ error: 'Invalid cursor.' }, 400);
         const rows = await sql`SELECT seq::text,id,envelope FROM sync_events WHERE owner=${user.id} AND seq>${after} AND coalesce(envelope->>'kind','event') != 'part' ORDER BY sync_events.seq LIMIT 50`;

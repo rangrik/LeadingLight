@@ -229,7 +229,7 @@ Mail progress uses the `gmail_progress` table. Apply the additive schema with
 
 ### Encrypted sync storage
 
-The gateway stores new attachment parts as encrypted bytes. It returns the original Base64 text to every app version. Older parts remain readable. The 500 MB allowance counts both formats and includes the incoming write. Retrying a saved event uses no extra space.
+The gateway stores new attachment parts as encrypted bytes. It returns the original Base64 text to every app version. Older parts remain readable. The 500 MB allowance counts both formats and includes the incoming write. Retrying a saved event uses no extra space. Before sending new attachment parts, the client checks whether its workspace already holds the completed event.
 
 After deploying the gateway, run `node src/compact-sync.mjs inspect WORKSPACE_ID` from `apps/cloud` with its database connection to see how many bytes transfer encoding occupies. Run the same command with `compact` to reclaim that space. It works in short transactions and can be restarted. History, identifiers, encryption and cursors are preserved.
 

@@ -112,5 +112,5 @@ Feature: A local-first web app with optional accounts and sync
     Then the same signed-in devices receive byte-for-byte identical parts at the same IDs
     And the next sync delivers both the pending page and its collection with their history
     And a device from another account still cannot read the parts
-    And an already saved event can be retried even if the library fills again
+    And retrying an already saved multi-part event sends no new parts, even if the library fills again
     And a new event that exceeds the remaining space stays queued on the device
