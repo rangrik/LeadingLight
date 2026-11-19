@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/rangrik/LeadingLight/compare/v0.12.1...v0.13.0) (2026-11-19)
+
+
+### Features
+
+* approve devices for sync and remote project reviews ([#61](https://github.com/rangrik/LeadingLight/issues/61)) ([6636b73](https://github.com/rangrik/LeadingLight/commit/6636b735cbfcda4a9f7195a491f1b58cf5417d11))
+
 ## [0.12.1](https://github.com/rangrik/LeadingLight/compare/v0.12.0...v0.12.1) (2026-11-19)
 
 
