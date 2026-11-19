@@ -411,5 +411,7 @@ html[data-ipad] [data-actions] > .ll-page-actions { width: max-content; min-widt
 @keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
 .ll-rise { animation: ll-rise 180ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .ll-rise { animation: none; } }
-/* While the browser is in front, toasts fit over the sidebar: a native page would cut them (App.tsx). */
-html[data-toasts-beside] [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); right: auto; max-width: calc(var(--toast-room) - 1.5rem); }
+/* Toasts sit beside the open sidebar so they never cover its footer's buttons (App.tsx). */
+@media (min-width: 768px) { html [data-slot="toast-viewport"][data-position*="left"] { left: calc(var(--toast-room, 0px) + var(--toast-inset)); } }
+/* While the browser is in front, toasts fit over the sidebar, above its footer: a native page would cut them. */
+html[data-toasts-beside] [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); bottom: calc(var(--toast-inset) + 6rem); right: auto; max-width: calc(var(--toast-room) - 1.5rem); }

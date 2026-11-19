@@ -11,8 +11,9 @@ Feature: A quiet sidebar footer
     Then the footer is the usage line, then the toolbar, and nothing else
     And the toolbar has Notes and Browser as one two-icon segmented control, then Remote work, on the left
     And Account and sync, then Settings, sit at the right end
-    And every toolbar control is 28 px tall with its 16 px icon centred, all on one line
-    And the footer is at most 84 px tall, where it was over 150 px
+    And the mode control and each button are 28 px tall with 16 px icons centred, all on one line
+    And the first icon starts where "Claude" starts, and the gear ends where "4%" ends
+    And the footer is 88 px tall, where it was over 150 px
 
   Scenario: Each icon says what it is
     When I hover each toolbar control
@@ -47,4 +48,15 @@ Feature: A quiet sidebar footer
     Given the iPad layout
     Then the toolbar shows Remote work on the left and Account and sync and Settings on the right
     And there is no mode control and no usage line
-    And each button can be tapped across 44 px
+    And each button can be tapped across 44 px without overlapping its neighbour's
+
+  Scenario: Toasts never cover the footer
+    Given the sidebar is open
+    When a toast appears, such as "Codex update available"
+    Then it sits at the bottom left of the pages, beside the sidebar
+    And every footer control can still be clicked while it shows
+    Given a browser page is open
+    When a toast appears
+    Then it fits over the sidebar, above the footer, so the native page cannot cut it
+    When the sidebar is hidden
+    Then toasts return to the window's bottom left corner

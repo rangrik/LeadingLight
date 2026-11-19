@@ -157,10 +157,10 @@ export default function App() {
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
-  // Toasts stay over the sidebar while the browser is in front: a native page would cut them (styles.css).
+  // Toasts sit beside the open sidebar, off its footer; with the browser in front they fit over it, as a native page would cut them (styles.css).
   useEffect(() => {
     document.documentElement.toggleAttribute("data-toasts-beside", !!root && leaves(root).some((l) => isPersonalBrowser(l.page)) && sidebarOpen);
-    document.documentElement.style.setProperty("--toast-room", `${sidebarWidth}px`);
+    document.documentElement.style.setProperty("--toast-room", `${sidebarOpen ? sidebarWidth : 0}px`);
   }, [root, sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.

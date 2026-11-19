@@ -244,7 +244,7 @@ export function AppSidebar({
           )}
           <SidebarFooter>
             {!mobile && <UsageButton />}
-            <div className="flex items-center gap-0.5 pe-0.5">
+            <div className="flex items-center gap-0.5 pe-0.5 pointer-coarse:gap-4">
               {!mobile && (
                 <RadioGroup
                   aria-label="Sidebar mode"
@@ -255,9 +255,9 @@ export function AppSidebar({
                 >
                   {([["notes", "Notes", FileText], ["browser", "Browser", Globe]] as const).map(([value, name, Icon]) => (
                     <Tooltip key={value}>
-                      <TooltipTrigger render={<SegmentedControlItem aria-label={name} className="h-6 w-7 px-0 sm:h-6" render={<RadioPrimitive.Root value={value} />} />}>
+                      <SegmentedControlItem aria-label={name} className="h-6 w-7 px-0 sm:h-6" render={<TooltipTrigger render={<RadioPrimitive.Root value={value} />} />}>
                         <Icon />
-                      </TooltipTrigger>
+                      </SegmentedControlItem>
                       <TooltipPopup>{name} · {keys("browser")}</TooltipPopup>
                     </Tooltip>
                   ))}
