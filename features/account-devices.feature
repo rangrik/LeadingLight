@@ -130,13 +130,14 @@ Feature: One place for your account and devices
     Then a dialog shows the whole key, wrapped to fit a phone, with "Copy"
     And closing the dialog hides the key again
 
-  Scenario: The sidebar row says where sync stands
-    Then with no account it says nothing beside "Account and sync"
-    And signed in and current it reads "Synced"
-    And while changes move it reads "Syncing"
-    And with sync off or paused it reads "Sync off" or "Paused"
-    And when a page could not sync, or the account is the wrong one, it reads "Check"
-    And each word is short enough that "Account and sync" is never cut off
+  Scenario: The sidebar's cloud says where sync stands
+    Then with no account it is a plain cloud named "Account and sync"
+    And signed in and current it is a cloud with a tick, named "Account and sync · Synced"
+    And while changes move it is a cloud with arrows, "Syncing"
+    And offline, with sync off or paused it is a crossed-out cloud, "Offline", "Sync off" or "Paused"
+    And when a page could not sync, the account is the wrong one, or sign-in ended, it is an amber
+      cloud with "!", "Check" or "Sign in"
+    And its tooltip and its name for a screen reader carry the same words
 
   Scenario: Agents keep working from the same page
     When I open Account and devices on the Mac

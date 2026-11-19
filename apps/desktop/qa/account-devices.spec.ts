@@ -19,7 +19,7 @@ const cloud = (page: Page, me: { status: number; body: object } | 'unreachable')
 test('a sign-in that ended says so, and an unreachable service does not', async ({ page }) => {
   await synced(page); await cloud(page, { status: 401, body: { error: 'This connection expired or was revoked.' } });
   await page.goto('/');
-  await expect(row(page)).toContainText('Sign in');
+  await expect(row(page)).toHaveAccessibleName('Account and sync · Sign in');
   await row(page).click();
   const section = page.getByTestId('settings-account');
   await expect(section.getByRole('status').filter({ hasText: 'This browser is signed out of sync' })).toContainText('alex@example.test · Google');
@@ -28,7 +28,7 @@ test('a sign-in that ended says so, and an unreachable service does not', async 
 
   await page.unroute('**/api/**'); await cloud(page, 'unreachable');
   await page.reload();
-  await expect(row(page)).toContainText('Offline');
+  await expect(row(page)).toHaveAccessibleName('Account and sync · Offline');
   await row(page).click();
   await expect(section).toContainText('alex@example.test · Google');
   await expect(section.getByText('signed out of sync')).toHaveCount(0);
@@ -39,7 +39,7 @@ test('a sign-in that ended says so, and an unreachable service does not', async 
 test('another account is told whose notes these are and cannot sync them', async ({ page }) => {
   await synced(page); await cloud(page, { status: 200, body: { id: 'owner-b', name: 'Alex Rivera', email: 'alex-r@example.test', provider: 'github' } });
   await page.goto('/');
-  await expect(row(page)).toContainText('Check');
+  await expect(row(page)).toHaveAccessibleName('Account and sync · Check');
   await row(page).click();
   const section = page.getByTestId('settings-account');
   await expect(section.getByRole('alert').filter({ hasText: 'These notes sync with alex@example.test · Google' })).toContainText('You are signed in as alex-r@example.test · GitHub');

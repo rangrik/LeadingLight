@@ -13,7 +13,7 @@ Open Settings in any of these ways:
 
 - Press <kbd>⌘,</kbd>.
 - Choose **Go › Settings…** in the Mac app's menu bar.
-- Click **Settings** at the bottom of the sidebar.
+- Click **Settings**, the gear at the bottom right of the sidebar.
 
 Settings takes the place of your pages. Its sidebar lists the sections, under **Back to app**, and the chosen section fills the panel. It opens on **Appearance**. <kbd>⌘&#92;</kbd> folds and unfolds its sidebar, as it does on a page.
 
@@ -27,7 +27,10 @@ While Settings is open, the pages underneath can't be clicked or typed into, and
 
 ## Account and devices
 
-The first section of Settings. **Account and sync** in the sidebar, just above **Settings**, opens it too, and says where sync stands. You can keep writing without an account.
+The first section of Settings. **Account and sync**, the cloud beside **Settings** at the bottom of the sidebar, opens it too. Its
+icon shows where sync stands: a tick when synced, arrows while syncing, a line through it when
+offline or sync is off or paused, and an amber **!** when something needs a look. Point at it to
+read the word. You can keep writing without an account.
 
 - **Account**: who you are signed in as, by email and provider, and **Sign out**.
 - **Sync**: turn sync on, **Sync now**, or switch it off on this device.

@@ -98,24 +98,22 @@ To stop the checks, turn off **Check for updates** in the **Command-line tools**
 
 ## See how much of your plan is left
 
-The **Usage** button at the bottom of the sidebar shows a ring for Claude and one for Codex, each with its name and the most-used of its limits, such as "Claude 39%". The outer ring is the weekly limit and the inner ring the five-hour limit; a plan without a five-hour limit has only the outer ring. A ring fills as you use the plan:
+The **Usage** line near the bottom of the sidebar shows Claude and Codex side by side, each with its name, the most-used of its limits, such as "Claude 39%", and a thin bar under them that fills as you use the plan:
 
 | Used | Colour |
 |---|---|
-| Under 75% | Green |
+| Under 75% | Grey |
 | 75% and over | Amber, and the percentage too |
 | 90% and over | Red, and the percentage too |
-
-In a narrow sidebar the names give way and the rings and percentages stay.
 
 Click **Usage** for the details. For each plan, the card shows a row for each limit, such as "5h 14% used" with "Resets in 59m", and a bar with a tick at what an even pace would have used by now. A bar short of its tick means you're under pace. Under each bar it says how much is in reserve and whether it lasts until the reset, or, when you're over pace, how short you are and when it runs out at this pace. At 100% it reads **Limit reached**. If your Codex plan has credits for use past the limits, the card shows them too.
 
 The numbers come from Claude Code and Codex themselves, so the app never reads your sign-in. They're checked when the app opens, every five minutes while it's open, and when you open the card if the last check is over a minute old. The bottom of the card says when they were last checked, with a refresh button. If a check fails, the last numbers stay, with a line saying they couldn't be checked.
 
-If a tool is signed out, its ring is empty and dimmed, and the card says, for example, "Sign in with claude auth login to see usage."
+If a tool is signed out, its bar is empty and dimmed, and the card says, for example, "Sign in with claude auth login to see usage."
 
 ::: tip
-Ask, Tail and project chats all use your plan. Tail's use shows in the same rings.
+Ask, Tail and project chats all use your plan. Tail's use shows in the same bars.
 :::
 
 ## What leaves your Mac

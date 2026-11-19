@@ -22,7 +22,7 @@ device, and sync says "Cloud access has not been enabled for this account yet."
 
 ## Account and devices
 
-Press **Account and sync** in the sidebar. It opens **Settings › Account and devices**, the one
+Press **Account and sync**, the cloud at the bottom of the sidebar. It opens **Settings › Account and devices**, the one
 place for your account:
 
 | Part | What it is for |
