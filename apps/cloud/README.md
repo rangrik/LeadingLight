@@ -233,4 +233,4 @@ The gateway stores new attachment parts as encrypted bytes. It returns the origi
 
 After deploying the gateway, run `node src/compact-sync.mjs inspect WORKSPACE_ID` from `apps/cloud` with its database connection to see how many bytes transfer encoding occupies. Run the same command with `compact` to reclaim that space. It works in short transactions and can be restarted. History, identifiers, encryption and cursors are preserved.
 
-To roll the cloud service back past this change, pause sync writes during maintenance and run `restore` for each workspace with non-null `sync_events.part_bytes`. Confirm no packed rows remain before switching the gateway. Restoring needs room for the original text representation.
+To roll the cloud service back past this change, pause sync writes during maintenance. List affected workspaces with `SELECT DISTINCT owner FROM sync_events WHERE part_bytes IS NOT NULL` and run `restore` for each one. Repeat the query and confirm it returns no rows before switching the gateway. Restoring needs room for the original text representation.
