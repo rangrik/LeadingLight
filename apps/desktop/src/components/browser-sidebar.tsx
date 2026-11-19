@@ -1,7 +1,7 @@
 // The sidebar while the browser space is in front: the app sidebar's frame (sidebar-08 on COSS),
 // with the search field, pinned sites, my tabs and agents' browsers, then Saved, History and
 // Settings over the usage line. Rows are 32 px, 2 px apart, as in the design.
-import { Bookmark, Bot, Columns2, Ellipsis, History, Link, Pin, PinOff, Plus, Search, Sparkles, X } from "lucide-react";
+import { Bookmark, Bot, Columns2, Ellipsis, Globe, History, Link, Pin, PinOff, Plus, Search, Sparkles, X } from "lucide-react";
 import { ContextMenu, ContextMenuItem, ContextMenuPopup, ContextMenuSeparator, ContextMenuTrigger } from "@leadinglight/ui/components/context-menu";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
 import { Kbd } from "@leadinglight/ui/components/kbd";
@@ -21,8 +21,8 @@ import {
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { acting, bar, browserFocused, closeTab, dataBase, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
-import { panes } from "~/lib/panes";
+import { acting, bar, browserFocused, browserView, closeTab, dataBase, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
+import { browserTabId, focusedPage, panes } from "~/lib/panes";
 import { useKeysFor } from "~/lib/keymap";
 import { useBrowserData } from "~/lib/project-runtime/browser";
 
@@ -32,6 +32,7 @@ const TILES = ["bg-teal-600", "bg-indigo-500", "bg-violet-500", "bg-orange-600",
 export function SiteIcon({ tab, large }: { tab: Pick<SpaceTab, "url" | "title" | "icon">; large?: boolean }) {
   const size = large ? "size-5 rounded-md" : "size-4 rounded-[4px]";
   const kept = space.use().icons[hostOf(tab.url)];
+  if (!tab.url) return <Globe className={size} />;
   if (tab.icon || kept) return <img alt="" className={cn("shrink-0 object-contain", size)} src={tab.icon || kept} />;
   const bare = hostOf(tab.url).replace(/:\d+$/, "");
   const labels = bare.split(".");
@@ -138,7 +139,7 @@ export function BrowserSidebar() {
   const ownsKeys = browserFocused();
   const pick = usePick();
   const { tabs, selected, pinned, base } = space.use();
-  const view = shown.use();
+  const view = browserView(browserTabId(focusedPage()), shown.use());
   const [data] = useBrowserData(dataBase(base));
   const agents = useAgentTabs(true);
   const keys = useKeysFor();

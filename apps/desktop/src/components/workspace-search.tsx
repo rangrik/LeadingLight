@@ -1,6 +1,6 @@
 // COSS p-command-1, with workspace groups, recent pages, type creation and page actions.
 // Changes: shared shortcut state, asynchronous body search, and split-aware navigation.
-import { ArrowLeft, ArrowRight, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, Pin, PinOff, Plus, SquareSplitHorizontal } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AutocompleteRow } from "@leadinglight/ui/components/autocomplete";
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
@@ -11,10 +11,11 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
-import { available, browserFocused, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
+import { available, browserFocused, enter, hostOf, leave, newBrowserTab, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
 import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
+import { useMobile } from "~/lib/platform";
 import { focusedPage, openFrom } from "~/lib/panes";
 import { iconFor, isPageView, space, typeOf, typeView } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
@@ -66,6 +67,8 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const { pages, types } = space.use();
   const { tabs } = browser.use();
   const canBrowse = available.use();
+  const mobile = useMobile();
+  const categories = searchViews.filter((v) => v !== "tabs" || canBrowse);
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
@@ -101,12 +104,12 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     openFrom(id, e);
     if (isPageView(id)) requestAnimationFrame(() => whenLive(id, (page) => page.focus()));
   });
-  const create = async (id: string, title?: string) => {
+  const create = async (id: string, title?: string, placement?: "tab" | "beside") => {
     if (working.current) return;
     working.current = true;
     setBusy(true);
     setError("");
-    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title); }
+    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title, placement); }
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
@@ -121,6 +124,16 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const range = `${(start + 1).toLocaleString()}–${Math.min(start + PAGE_SIZE, pageItems.length).toLocaleString()} of ${pageItems.length.toLocaleString()}`;
   const results: Group[] = [];
   const add = (value: string, items: Item[]) => { if (items.length) results.push({ value, items }); };
+  const quickCreate = recent && !mobile;
+  if (quickCreate) {
+    const items: Item[] = ["idea", PAGE_TYPE].map((id) => ({
+      value: `new:${id}`, label: typeOf(id).name, icon: <RowIcon icon={typeOf(id).icon} />, beside: true,
+      run: (e) => create(id, undefined, e.shiftKey ? "beside" : "tab"),
+    }));
+    if (canBrowse) items.push({ value: "new:browser", label: "Browser tab", icon: <Globe />, beside: true,
+      run: (e) => navigate(() => { enter(); newBrowserTab(e.shiftKey); }) });
+    add("Create", items);
+  }
   if (searchPages) {
     add(recent ? "Recent pages" : pageItems.length > PAGE_SIZE ? `Pages · ${range}` : "Pages", (recent ? pageItems.slice(0, 8) : pageItems.slice(start, start + PAGE_SIZE)).map((p) => ({
       value: `page:${p.id}`, label: pageLabel(p.title), sub: typeOf(p.typeId).name, icon: <RowIcon icon={iconFor(p)} />, page: p, beside: true, run: (e) => open(p.id, e),
@@ -183,16 +196,22 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     <Command key={`${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
       <div className="relative flex items-center gap-1 pe-3">
         <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
+          if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && !mobile) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!busy) openSearch(categories[(categories.indexOf(view) + (e.shiftKey ? -1 : 1) + categories.length) % categories.length]);
+            return;
+          }
           modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
           if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
             e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
           }
         }} /></div>
-        {view !== "create" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
+        {view !== "create" && !quickCreate && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
       </div>
       <div className="relative px-3 pb-2">
         <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
-          {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
+          {categories.map((v, i) => (
             <Tooltip key={v}>
               <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
               <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
@@ -213,10 +232,11 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       </CommandPanel>
       {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
       <CommandFooter className="relative flex-wrap px-3 py-2">
+        {quickCreate && active?.value.startsWith("new:") && <span className="px-2"><Kbd>↩</Kbd> Create</span>}
         {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>Open beside</span><Kbd>⇧↩</Kbd></Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
         {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
-        <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>
+        <span className="ms-auto flex items-center gap-1.5">{!mobile && <span className="me-2 hidden sm:inline"><Kbd>tab</Kbd> Category</span>}<Kbd>esc</Kbd>Close</span>
       </CommandFooter>
     </Command>
   );

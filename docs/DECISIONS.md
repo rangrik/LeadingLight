@@ -1008,7 +1008,8 @@ announced itself as HeadlessChrome, so Google and ChatGPT asked it to prove it w
 
 My tabs are now WKWebViews laid over the browser space (`native_browser.rs`). Tested in the dev
 app: full Retina pixels, sound, Safari's user agent with no robot checks, and a website data
-store of their own. Pages see none of the app: the view is made with wry directly, not through
+store of their own. Each personal tab has a stable pane key so two websites can stay visible in a split.
+Pages see none of the app: the view is made with wry directly, not through
 Tauri's multi-webview mode, which would also have changed how ⌘ keys reach the notes webview.
 
 Agents keep their own streamed Chromium tabs, one per chat, apart from my tabs and from each
@@ -1071,8 +1072,8 @@ A native click reports focus to the pane store so shortcuts follow the pane, not
 
 ## Search and Library share one command window (2026-11-17)
 
-Both sidebar modes and ⌘K open Search library. Recent changes lead the empty search;
-all-page and type views live in that window. Results include note text, types, creation
+Both sidebar modes and ⌘K open Search library. On Mac the empty search offers Idea, Page and Browser tab above recent pages.
+The same window holds all pages and types. Results include note text, types, creation
 commands and personal browser tabs. Explicit result navigation reveals its sidebar mode;
 ordinary pane focus still leaves the mode alone. ⌘N follows the focused pane and keeps
 its previous tab. A new typed page uses the existing template and daily-note paths.
