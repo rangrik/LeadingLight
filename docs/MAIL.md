@@ -2,7 +2,7 @@
 
 The design and build spec for Mail. The contract for what is built is `features/gmail.feature`;
 this page holds the reasons, the exact words and the sizes. The Mac app and the browser build
-follow sections 5.0 to 5.6, 6 and 7. The iPhone (5.7) is not built yet. "He" below is the
+follow sections 5.0 to 5.6, 6 and 7. Section 5.7 describes the planned phone look. "He" below is the
 person the design was made for, not a rule about who uses it.
 
 ## 1. Who this is for
@@ -92,9 +92,8 @@ away is said plainly on that mail (`Was Fri, Nov 13`), with what it means now.
 - A task made from a mail takes the mail's date.
 - He leaves knowing the next date, so nothing has to be held in his head.
 
-**On the phone.** Today gets one row, built like Continue writing: `Mail / 4 need you · about 5
-min`. A tap opens a sheet, as Capture does, with the same mail, one per screen, and the choices
-at the thumb.
+**On the phone.** Today has a Mail row alongside Continue writing. It opens the Mail list. Tap
+a message to read it, then use the header's Back arrow or Mail breadcrumb to return.
 
 ## 4. The reader (what makes the lines)
 
@@ -250,8 +249,9 @@ Reached from the sidebar's Mail row. It is the same information as Today's row, 
       `Was Fri, Nov 13` all muted. Today and Tomorrow are the `warning` Badge with the clock.
       Empty for Nothing to do.
   - Under 544 px the two move to a third line, left-aligned, 8 px apart.
-  - Clicking a row opens the full mail in a reading pane to the right. In a narrow pane, the
-    mail takes the list's place and **Back to mail list** returns to it.
+  - Selecting a row opens the full mail in a reading pane to the right. On iPhone and in narrow
+    panes, the message takes the list's place. The header's **Back** arrow and **Mail** breadcrumb
+    return to the list.
 - The rest, under a hairline the width of the column: line 1 `22 others, nothing to
   do`, line 2 `9 receipts · 8 newsletters · 5 notifications`, then `Clear all` (outline xs) and
   `Look` (ghost xs). Look opens the rest even while mails wait; there, Clear all, Later and Esc

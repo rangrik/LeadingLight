@@ -1,5 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 
+// Keep the header visible in recordings of Mail navigation.
+test.use({ video: { mode: "on", size: { width: 1280, height: 800 }, show: { actions: { cursor: "pointer" } } } });
+
 // Mail against a mocked service (features/gmail.feature). The browser build has no model, so the
 // reader's lines are seeded where the app keeps them.
 const now = new Date(2026, 10, 14, 15, 2);
@@ -105,20 +108,67 @@ test("read kept mail and return to the list in a narrow pane", async ({ page }, 
   await page.getByRole("button", { name: "Mail", exact: true }).first().click();
   const sunita = page.getByRole("button", { name: /Sunita asks if you will renew/ });
   const reader = page.getByRole("region", { name: "Selected email" });
-  const back = reader.getByRole("button", { name: "Back to mail list" });
+  const header = page.getByRole("region", { name: "Message", exact: true });
+  const back = header.getByRole("button", { name: "Back", exact: true });
+  const mailCrumb = header.getByRole("navigation", { name: "breadcrumb" }).getByRole("button", { name: "Mail", exact: true });
   await sunita.click();
-  await expect(back).toBeFocused();
+  await expect(mailCrumb).toBeFocused();
   await expect(sunita).toBeHidden();
   await expect(reader.getByTestId("mail-heads")).toBeVisible();
   await back.click();
   await expect(sunita).toBeFocused();
-  await page.getByRole("button", { name: /Your expense claim was approved/ }).click();
+  const arjun = page.getByRole("button", { name: /Your expense claim was approved/ });
+  await arjun.click();
   const late = page.waitForResponse((response) => response.url().endsWith("/api/gmail/thread") && response.request().postDataJSON().id === "t-sunita");
   release();
   await (await late).finished();
   await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-arjun.");
   await page.screenshot({ path: info.outputPath("narrow-reading-pane.png") });
+  await mailCrumb.click();
+  await expect(arjun).toBeFocused();
 });
+
+for (const device of ["iphone", "ipad"] as const) {
+  test.describe(`${device} Mail`, () => {
+    const phone = device === "iphone";
+    test.use({ hasTouch: true, viewport: phone ? { width: 390, height: 844 } : { width: 1194, height: 834 } });
+
+    // Seam: the phone shell must mount Mail and return through its own Today history.
+    test("open, switch, and act on messages with touch", async ({ page }, info) => {
+      await service(page, { closed: true });
+      await page.goto(`/?${device}`);
+      await page.getByRole("button", { name: "Mail", exact: true }).tap();
+      const daniel = page.getByRole("button", { name: /Daniel needs a cost estimate/ });
+      const meera = page.getByRole("button", { name: /Meera wants to move/ });
+      const reader = page.getByRole("region", { name: "Selected email" });
+      const back = page.getByRole("region", { name: "Message", exact: true }).getByRole("button", { name: "Back", exact: true });
+      await daniel.tap();
+      await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-daniel.");
+      await expect(reader.getByTestId("mail-heads")).toBeVisible();
+      if (!phone) {
+        await expect(daniel).toBeVisible();
+        expect((await reader.boundingBox())!.x).toBeGreaterThan((await daniel.boundingBox())!.x + (await daniel.boundingBox())!.width);
+        await page.screenshot({ path: info.outputPath("ipad-landscape.png") });
+        await page.setViewportSize({ width: 820, height: 1180 });
+      }
+      await expect(daniel).toBeHidden();
+      await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-daniel.");
+      await page.screenshot({ path: info.outputPath(`${device}-portrait.png`) });
+      await back.tap();
+      await meera.tap();
+      await expect(reader.getByTestId("mail-body")).toHaveText("Full message for t-meera.");
+      await reader.getByRole("button", { name: /^Done/ }).tap();
+      await expect(reader).toHaveCount(0);
+      await expect(meera).toHaveCount(0);
+      await toast(page, "Done: Meera Iyer").getByRole("button", { name: /^Undo/ }).tap();
+      await expect(meera).toBeVisible();
+      if (phone) {
+        await page.getByRole("button", { name: "Back", exact: true }).tap();
+        await expect(page.getByRole("heading", { name: "Today", exact: true })).toBeVisible();
+      }
+    });
+  });
+}
 
 // Seam: a fixed service must recover from the native-route error and finish connecting without a reload.
 test("retry the service, connect Gmail, and pick up the new account", async ({ page, context }) => {

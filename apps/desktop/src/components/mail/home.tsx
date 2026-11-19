@@ -1,6 +1,6 @@
 // Mail home (design 5.2): the same words as Today's row, with the list. Before any account is
 // connected, how to connect.
-import { ChevronLeft, CircleAlert } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@leadinglight/ui/components/button";
 import { Skeleton } from "@leadinglight/ui/components/skeleton";
@@ -10,7 +10,10 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { useCloud } from "~/lib/cloud";
 import { keepGoing, refresh, startFresh, useMail } from "~/lib/mail";
 import { ago, type Item, minutesOf, restWords, VERDICT } from "~/lib/mail-rules";
-import { doClear, goThrough, Keyed, openLook, run } from "./act";
+import { showIn } from "~/lib/panes";
+import { phone } from "~/lib/platform";
+import { MAIL_READING } from "~/lib/space";
+import { back, doClear, goThrough, Keyed, openLook, run } from "./act";
 import { connection, connectNow, openAccounts } from "./accounts";
 import { useMailKeys } from "./keys";
 import { MailCard } from "./look";
@@ -22,7 +25,7 @@ const Small = ({ children, className }: { children: React.ReactNode; className?:
 const Label = ({ children }: { children: React.ReactNode }) => <p className="mt-4 flex h-8 items-center font-medium text-muted-foreground text-xs">{children}</p>;
 const column = "w-full max-w-[760px] px-16 pb-12 @max-xl:px-6";
 
-export function Home({ pane, view, demo }: { pane: string; view: string; demo: boolean }) {
+export function Home({ pane, view, demo, active }: { pane: string; view: string; demo: boolean; active: boolean }) {
   const m = useMail();
   const cloud = useCloud();
   const c = connection.use();
@@ -30,29 +33,33 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
   const [days, setDays] = useState<3 | 7 | 14>(7);
   const [key, setKey] = useState("");
   const list = useRef<HTMLDivElement>(null);
-  const backButton = useRef<HTMLButtonElement>(null);
+  const wasReading = useRef(false);
   const items = [...m.look, ...m.waiting, ...m.later];
   const position = items.findIndex((i) => i.mail.key === key);
-  const selected = items[position];
+  const reading = view === MAIL_READING;
+  const selected = reading ? items[position] : undefined;
   const notice = c.notice && <p className="mt-4 text-muted-foreground" role="status">{c.notice}</p>;
   const go = s.state === "first" ? () => run(startFresh(days)) : ["needs", "away", "started", "unread", "due"].includes(s.state) ? () => goThrough(s.state) : null;
   useMailKeys(pane, view, (e, typing, button) => {
     if (selected || e.key !== "Enter" || typing || button || e.metaKey || e.ctrlKey || !go) return;
     return (go(), true);
   });
-  const selectedRow = () => list.current?.querySelector<HTMLButtonElement>('button[aria-current="true"]');
   useEffect(() => {
-    if (!selected) return;
-    const row = selectedRow();
+    const returning = wasReading.current && !reading;
+    wasReading.current = reading;
+    if (!active) return;
+    if (reading && !selected) return back(pane);
+    if (!reading && !returning) return;
+    const row = list.current?.querySelector<HTMLButtonElement>(`[data-mail-key="${CSS.escape(key)}"]`);
+    if (!reading) return row?.focus();
     if (row?.offsetParent) {
       row.scrollIntoView({ block: "nearest" });
       if (list.current?.contains(document.activeElement)) row.focus({ preventScroll: true });
-    } else backButton.current?.focus({ preventScroll: true });
-  }, [selected?.mail.key]);
-  const close = () => {
-    const row = selectedRow();
-    setKey("");
-    requestAnimationFrame(() => row?.focus());
+    } else list.current?.closest("[data-pane]")?.querySelector<HTMLButtonElement>('header [data-slot="breadcrumb-link"]')?.focus({ preventScroll: true });
+  }, [active, key, reading, selected?.mail.key, pane]);
+  const select = (next: string) => {
+    setKey(next);
+    showIn(pane, MAIL_READING);
   };
 
   if (!m.accounts.length) {
@@ -149,10 +156,10 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
 
   const unread = s.state === "unread";
   const rest = restWords(m.rest, !m.unread);
-  const row = (i: Item, note?: string) => <Row item={i} key={i.mail.key} note={note} now={m.now} onClick={() => setKey(i.mail.key)} selected={i === selected} unread={note ? !i.lines : unread} />;
+  const row = (i: Item, note?: string) => <Row item={i} key={i.mail.key} note={note} now={m.now} onClick={() => select(i.mail.key)} selected={i === selected} unread={note ? !i.lines : unread} />;
   return (
-    <div className={cn("h-full", selected && "grid grid-rows-[minmax(0,1fr)] @[50rem]/mail:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
-      <div className={cn("@container min-w-0 h-full overflow-y-auto", selected && "hidden @[50rem]/mail:block")} ref={list}>
+    <div className={cn("h-full", selected && "grid grid-rows-[minmax(0,1fr)]", selected && !phone && "@[50rem]/mail:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]")}>
+      <div className={cn("@container min-w-0 h-full overflow-y-auto", selected && (phone ? "hidden" : "hidden @[50rem]/mail:block"))} ref={list}>
         <div className={cn(column, selected && "px-6")}>
           <Title>{s.title}</Title>
           {s.line ? <Lede>{s.line}</Lede> : s.small && <Small className="mt-2 block">{s.small}</Small>}
@@ -222,13 +229,9 @@ export function Home({ pane, view, demo }: { pane: string; view: string; demo: b
         </div>
       </div>
       {selected && (
-        <section aria-label="Selected email" className="@container min-w-0 overflow-y-auto @[50rem]/mail:border-s" key={key}>
-          <div className="w-full max-w-[760px] px-6 pt-4 pb-12 @[50rem]/mail:pt-10 @[50rem]/mail:px-8">
-            <Button className="-ms-2 mb-4 @[50rem]/mail:hidden" onClick={close} ref={backButton} size="sm" variant="ghost">
-              <ChevronLeft />
-              Back to mail list
-            </Button>
-            <MailCard close={close} item={selected} pane={pane} step={(by) => setKey(items[position + by]?.mail.key ?? key)} view={view} />
+        <section aria-label="Selected email" className={cn("@container min-w-0 overflow-y-auto", !phone && "@[50rem]/mail:border-s")} key={key}>
+          <div className={cn("w-full max-w-[760px] px-6 pt-6 pb-12", !phone && "@[50rem]/mail:pt-10 @[50rem]/mail:px-8")}>
+            <MailCard close={() => back(pane)} item={selected} pane={pane} step={(by) => setKey(items[position + by]?.mail.key ?? key)} view={view} />
           </div>
         </section>
       )}
@@ -257,7 +260,7 @@ function Row({ item, now, unread, note, onClick, selected }: { item: Item; now: 
     </>
   );
   return (
-    <Button aria-current={selected || undefined} className="flex h-auto min-h-13 w-full items-center justify-start gap-3 whitespace-normal rounded-md p-[7px] text-left font-normal transition-colors duration-150 ease-out aria-[current=true]:bg-accent @max-[34rem]:flex-wrap @max-[34rem]:gap-y-1.5 sm:h-auto" onClick={onClick} variant="ghost">
+    <Button aria-current={selected || undefined} className="flex h-auto min-h-13 w-full items-center justify-start gap-3 whitespace-normal rounded-md p-[7px] text-left font-normal transition-colors duration-150 ease-out aria-[current=true]:bg-accent @max-[34rem]:flex-wrap @max-[34rem]:gap-y-1.5 sm:h-auto" data-mail-key={m.key} onClick={onClick} variant="ghost">
       {inner}
     </Button>
   );

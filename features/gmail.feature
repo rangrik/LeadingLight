@@ -182,9 +182,20 @@ Feature: Mail is a look, not an inbox
   Scenario: Read individual mail in a narrow pane
     Given Mail is open in a pane too narrow to show the list and message side by side
     When I open a mail from "Kept for later"
-    Then its full message is shown and I can return with "Back to mail list"
+    Then its full message is shown with "Mail / Message" in the header
+    And the header's Back arrow and Mail breadcrumb each return to the list and restore focus to the row
     When I go back and open a different mail
     Then the reading pane shows the new mail, even if the first mail finishes loading later
+
+  Scenario: Open individual emails on iPhone and iPad
+    Given a Gmail account is connected and the current look has ended
+    When I open "Mail" from Today on iPhone or the sidebar on iPad
+    And I tap a waiting mail
+    Then its body and headers are expanded
+    And on an iPad with a wide pane the list stays beside the message
+    When I return with the header's Back arrow and tap another mail
+    Then that message opens expanded
+    And tapping Done removes it and tapping Undo brings it back
 
   Scenario: Where a mail came from and where a reply goes
     When I open Sunita's mail

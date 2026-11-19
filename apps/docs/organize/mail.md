@@ -16,8 +16,9 @@ mail's lines runs only in the Mac app.
 
 ## Connect accounts
 
-Sign into LeadingLight through **Account and sync**, then open **Mail** in the sidebar (or press
-<kbd>⌥⌘M</kbd>) and choose **Connect Gmail**. Signed out, the button reads **Sign in to connect
+Sign into LeadingLight through **Account and sync**, then open **Mail** from the sidebar on Mac and
+iPad, or from **Today** on iPhone. On Mac, <kbd>⌥⌘M</kbd> also opens Mail. Choose **Connect Gmail**.
+Signed out, the button reads **Sign in to connect
 Gmail** and opens **Settings › Account and devices**. On the Mac, Google opens in Safari. Sign into
 the same LeadingLight workspace in Safari before connecting. Allow access, and Safari returns to
 Mail in the app with the account ready. If Safari waits, choose **Open LeadingLight**. Returning
@@ -37,9 +38,10 @@ through today’s mail follow you. You can close either Mac.
 
 ## Going through mail
 
-To open a specific email, click its row in Mail. The full message opens beside the list, including
-mail waiting for the next look or kept for later. In a narrow pane, use **Back to mail list** to
-pick another message.
+To open a specific email, select its row in Mail. This works for mail waiting for the next look
+and mail kept for later. The full message opens beside the list when the pane is wide enough. On
+iPhone and in narrow panes, the message takes the list's place. Use the header's **Back** arrow or
+**Mail** breadcrumb to return to the list.
 
 Today shows one row: how many mails need you, about how long, the nearest date ("nothing due
 before Wed", "one is due today"), and who is upset, when someone is. Press **Go through**.
