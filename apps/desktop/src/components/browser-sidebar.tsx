@@ -156,7 +156,8 @@ export function BrowserSidebar() {
   const pick = usePick();
   const { tabs, selected } = space.use();
   const open = listed(tabs);
-  const agents = useAgentTabs(true);
+  const { isMobile, state } = useSidebar();
+  const agents = useAgentTabs(isMobile || state === "expanded");
   const keys = useKeysFor();
   return (
     <>

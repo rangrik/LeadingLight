@@ -372,6 +372,8 @@ export function useAgentTabs(active: boolean) {
       return next.titles;
     };
     const read = async () => {
+      // The list is always in the sidebar now, so a hidden window does not ask.
+      if (document.hidden) return;
       const locs = await ask<Loc[]>("GET", "/v1/locations").catch(() => [] as Loc[]);
       const found = await Promise.all(locs.flatMap((l) => (l.worktrees ?? []).map(async (w) => {
         const base = browserBase(l.name, w.name);
