@@ -191,3 +191,26 @@ Feature: LeadingLight on iPad
     Then the sidebar stays inset with each page on a rounded card
     And no glass, fades or iOS spacing apply
     And the tab strip keeps its divider line
+
+  Scenario: Search by touch with the sidebar closed
+    Given the iPad sidebar is closed
+    When I tap Search library in the right-hand toolbar
+    Then All, Create, Pages and Types are in reach above the software keyboard
+    And switching category keeps my words
+    When I choose a custom type or enter "new meeting Friday review"
+    Then the new page uses that type in the focused pane
+    And Open in new pane places a result beside the current page when both pages fit
+    When I choose Open in new pane in a narrow window and reopen search above the keyboard
+    Then I can still tap the first result and the toolbar search button stays within reach
+
+  Scenario: Drive search and quick create with an iPad keyboard
+    Given I have a note open on iPad and a keyboard connected
+    When I press Command+K
+    Then Library opens with the input focused and Idea selected above recent pages
+    And Page is available under Create
+    When I type a search and press Tab or Shift+Tab
+    Then the category changes and the input keeps its text and focus
+    When I press Shift+Return on a page result or a Create action
+    Then it opens in a new pane and the original note stays open
+    When I choose Idea or Page with Return
+    Then the new note opens in a tab in the focused pane

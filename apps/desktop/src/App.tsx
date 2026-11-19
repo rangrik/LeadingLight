@@ -402,7 +402,7 @@ export default function App() {
         </SidebarInset>
         <BrowserCommand />
         {loaded && <WorkspaceSearch returnFocus={captureFrom} />}
-        <BarStrip onCapture={toggleCapture} />
+        <BarStrip loaded={loaded} onCapture={toggleCapture} />
         </>}
         <DeletePageDialog
           onCancel={() => setPendingDelete(null)}
