@@ -36,7 +36,8 @@ export function DeviceConnections() {
     os = platform.use(),
     s = deviceLinks.use(),
     pick = connectionPicker.use();
-  const [time, setTime] = useState(Date.now),
+  const time = Date.now();
+  const [, setTime] = useState(time),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [allowed, setAllowed] = useState(import.meta.env.DEV);

@@ -101,6 +101,9 @@ export async function pollDevices(force = false) {
       { key: await crypto.subtle.exportKey('jwk', pair.publicKey), sync: hasKey(owner), projects },
       owner,
     );
+    if(!result || typeof result.session!=='string' || !Array.isArray(result.links) || !Array.isArray(result.devices)){
+      throw new Error('Device approval is unavailable. Try again when both apps and the service are updated.');
+    }
     requireOwner(owner);
     deviceLinks.set({ ...result, owner, error: '' });
     const seen = new Map(receipts(owner));
