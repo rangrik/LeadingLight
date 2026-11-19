@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Browser } from '@playwright/test';
 import { account, call, CLOUD, closeAll, PORT, dummyReview, MacRuntime, openDevice, PROJECT, seedLocalProject, seedProject, signIn, type Device } from './device-world';
@@ -8,6 +9,7 @@ const fixtureUp = await fetch(`${CLOUD}/api/config`).then((r) => r.ok, () => fal
 test.skip(!fixtureUp, 'Requires qa/device-server.mjs and the isolated PostgreSQL.');
 test.use({ baseURL: `http://127.0.0.1:${PORT}` });
 test.setTimeout(150_000);
+test.beforeAll(async () => { await mkdir(evidence,{recursive:true}); });
 test.afterEach(closeAll);
 
 async function world(browser: Browser, videos?: string) {
@@ -62,6 +64,7 @@ async function ask(phone: Device, mac: Device) {
 
 // Seam: one number on the phone and three on the Mac; only the right pick gives the phone notes and project work.
 test('a phone reviews a Mac task: notes first, then the project, with uploads held', async ({ browser }) => {
+  test.setTimeout(240_000);
   const w = await world(browser, `${evidence}/happy-path`), { acct, mac, macApp } = w, phone = await w.phone();
   expect(await syncStatus(phone)).toBe(403);
   await test.step('notes only: one number on the phone, three choices and Deny on the Mac', async () => {

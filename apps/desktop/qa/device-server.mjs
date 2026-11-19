@@ -21,7 +21,7 @@ createServer(async (req, res) => {
   // The only way to age a request: the real one lasts two minutes.
   if (path === '/__qa/expire') {
     const id = new URL(req.url, env.APP_ORIGIN).searchParams.get('id');
-    await sql`UPDATE device_links SET expires_at=now()-interval '1 second' WHERE id=${id}`;
+    await sql`UPDATE device_links SET expires_at=now()-interval '1 second' WHERE id=${id} AND owner LIKE 'qa-dev-%'`;
     return res.end('ok');
   }
   const response = await app(new Request(new URL(req.url, env.APP_ORIGIN), { method: req.method, headers: req.headers, ...(req.method !== 'GET' && req.method !== 'HEAD' ? { body: Readable.toWeb(req), duplex: 'half' } : {}) }));
