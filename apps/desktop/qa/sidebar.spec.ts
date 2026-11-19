@@ -32,7 +32,7 @@ async function split(page: Page) {
 }
 
 // Seam: one sidebar list versus pane state. Picking a tab or a note must leave the other list,
-// the mounted editor and the split alone, through a hidden sidebar and a restart.
+// the mounted editor and the split alone, light only the row in front, and survive a restart.
 test('notes and tabs share one list, a mixed split and one sidebar toggle', async ({ page }) => {
   await setup(page);
   await expect(page.getByRole('radio', { name: 'Browser', exact: true })).toHaveCount(0);
@@ -42,10 +42,13 @@ test('notes and tabs share one list, a mixed split and one sidebar toggle', asyn
   await note.press('ControlOrMeta+End');
   await note.pressSequentially(' Keep this edit.');
   const row = await findPinnedPage(page, 'Kyoto research');
-  await tabs(page).getByRole('button', { name: 'Walking-guide', exact: true }).click();
-  await expect(row).toBeVisible();
+  const tab = tabs(page).getByRole('button', { name: 'Walking-guide', exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-current', 'page');
+  await expect(row).not.toHaveAttribute('aria-current', 'page');
   await row.click();
-  await expect(tabs(page).getByRole('button', { name: 'Walking-guide', exact: true })).toBeVisible();
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await expect(tab).not.toHaveAttribute('aria-current', 'page');
   await expect(note).toContainText('Keep this edit.');
   await expect(panes(page)).toHaveCount(2);
   await expect(toggle(page)).toHaveCount(1);
@@ -58,7 +61,7 @@ test('notes and tabs share one list, a mixed split and one sidebar toggle', asyn
   await expect(panes(page)).toHaveCount(2);
   await expect(note).toContainText('Keep this edit.');
   await expect(row).toBeVisible();
-  await expect(tabs(page).getByRole('button', { name: 'Walking-guide', exact: true })).toBeVisible();
+  await expect(tab).toBeVisible();
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
   await page.screenshot({ path: 'qa/report/sidebar-split.png' });
 });
@@ -131,6 +134,10 @@ test('a pinned site joins Pinned, and Saved and History are named icons', async 
   await expect(saved).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible();
   await page.screenshot({ path: 'qa/report/sidebar-saved.png' });
+  await (await findPinnedPage(page, 'Kyoto research')).click();
+  await expect(saved).toHaveAttribute('aria-pressed', 'false');
+  await saved.click();
+  await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible();
   await saved.click();
   await expect(page.getByTestId('standin-page')).toContainText('Walking-guide');
   await page.setViewportSize({ width: 700, height: 800 });

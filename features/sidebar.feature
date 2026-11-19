@@ -22,6 +22,7 @@ Feature: One sidebar for notes and browsing
     When I click a pinned page
     Then the note shows and Tabs still lists "Walking-guide"
     And my edits are as I left them
+    And only the row of the page with the keyboard is lit: the tab, then the page, never both
 
   Scenario: Open a new tab
     Given no tab is open
@@ -42,6 +43,10 @@ Feature: One sidebar for notes and browsing
     Then their tooltips read "Saved" and "History"
     When I click Saved
     Then the browser pane lists my saved pages and the icon stays lit
+    When I click a pinned page
+    Then the icon is no longer lit
+    When I click Saved
+    Then the browser pane lists my saved pages again
     When I click Saved again
     Then the pane shows the tab I was on
 

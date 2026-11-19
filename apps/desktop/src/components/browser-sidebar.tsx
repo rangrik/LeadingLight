@@ -17,8 +17,8 @@ import {
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { acting, bar, browserFocused, browserView, closeTab, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
-import { browserTabId, focusedPage, panes } from "~/lib/panes";
+import { acting, bar, browserFocused, closeTab, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
+import { BROWSER_HOME, browserTabId, focusedPage, panes } from "~/lib/panes";
 import { useKeysFor } from "~/lib/keymap";
 
 // The site's icon, or the one kept for its host, else a letter tile in the site's own colour, as
@@ -129,21 +129,24 @@ function AgentRow({ agent, active }: { agent: AgentTab; active: boolean }) {
   );
 }
 
-// What the browser pane shows: a tab, Saved, History or an agent's browser.
-function useView() {
+// What the pane with the keyboard shows of the browser, so rows light as page rows do: its tab,
+// or the list in the browser's home page. A note in front lights nothing here.
+function useFront() {
   panes.use();
-  return browserView(browserTabId(focusedPage()), shown.use());
+  const list = shown.use();
+  const page = focusedPage();
+  return { tab: browserTabId(page), list: page === BROWSER_HOME ? list : undefined };
 }
 
 export function PinnedSites() {
-  const { tabs, selected, pinned } = space.use();
-  const view = useView();
+  const { tabs, pinned } = space.use();
+  const front = useFront();
   if (!pinned.length) return null;
   return (
     <div className="mb-1 grid grid-cols-4 gap-2" role="list" aria-label="Pinned sites">
       {pinned.map((site) => {
         const tab = tabs.find((t) => t.pin === site.id);
-        return <div key={site.id} role="listitem"><Tile active={!!tab && view.kind === "tab" && selected === tab.id} site={site} tab={tab} /></div>;
+        return <div key={site.id} role="listitem"><Tile active={!!tab && front.tab === tab.id} site={site} tab={tab} /></div>;
       })}
     </div>
   );
@@ -152,7 +155,7 @@ export function PinnedSites() {
 const LISTS = [["saved", "Saved", Bookmark, "right-9"], ["history", "History", History, ""]] as const;
 
 export function BrowserSidebar() {
-  const view = useView();
+  const front = useFront();
   const pick = usePick();
   const { tabs, selected } = space.use();
   const open = listed(tabs);
@@ -165,7 +168,7 @@ export function BrowserSidebar() {
         <SidebarGroupLabel>Tabs</SidebarGroupLabel>
         {LISTS.map(([kind, name, Icon, place]) => (
           <Tooltip key={kind}>
-            <TooltipTrigger render={<SidebarGroupAction aria-label={name} aria-pressed={view.kind === kind} className={cn("aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground", place)} onClick={() => pick(() => view.kind !== kind ? showBrowserList({ kind }) : selected ? select(selected, true) : showBrowserList({ kind: "tab" }))} />}><Icon /></TooltipTrigger>
+            <TooltipTrigger render={<SidebarGroupAction aria-label={name} aria-pressed={front.list?.kind === kind} className={cn("aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground", place)} onClick={() => pick(() => front.list?.kind !== kind ? showBrowserList({ kind }) : selected ? select(selected, true) : showBrowserList({ kind: "tab" }))} />}><Icon /></TooltipTrigger>
             <TooltipPopup side="bottom">{name}</TooltipPopup>
           </Tooltip>
         ))}
@@ -174,13 +177,13 @@ export function BrowserSidebar() {
             <SidebarMenuButton aria-label="New tab" onClick={() => pick(() => bar.set({ mode: "new", text: "" }))}>
               <Plus />
               <span className="flex-1">New tab</span>
-              {browserFocused() && <span className="text-xs text-muted-foreground">{keys("new-tab")}</span>}
+              {browserFocused() && <span className="pe-1 font-medium text-xs text-muted-foreground">{keys("new-tab")}</span>}
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
         {open.length > 0 && (
           <SidebarMenu aria-label="Tabs" className="mt-1">
-            {open.map((tab) => <TabRow active={view.kind === "tab" && selected === tab.id} key={tab.id} tab={tab} />)}
+            {open.map((tab) => <TabRow active={front.tab === tab.id} key={tab.id} tab={tab} />)}
           </SidebarMenu>
         )}
       </SidebarGroup>
@@ -188,7 +191,7 @@ export function BrowserSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>Agents</SidebarGroupLabel>
           <SidebarMenu aria-label="Agents">
-            {agents.map((a) => <AgentRow active={view.kind === "agent" && view.base === a.base && view.tab === a.tab} agent={a} key={`${a.base}/${a.tab}`} />)}
+            {agents.map((a) => <AgentRow active={front.list?.kind === "agent" && front.list.base === a.base && front.list.tab === a.tab} agent={a} key={`${a.base}/${a.tab}`} />)}
           </SidebarMenu>
         </SidebarGroup>
       )}
