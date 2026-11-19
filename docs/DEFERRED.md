@@ -5,6 +5,7 @@ When one is picked up, move it out of this file and into the plan or the change 
 
 | Date | Item | Why not now | Revisit when |
 |---|---|---|---|
+| 2026-11-19 | Interrupted attachment uploads can leave parts that still count toward the sync limit. | A device may still be uploading the note that uses those parts. The storage repair preserves them. | Before reclaiming unfinished uploads, add a way to distinguish abandoned parts from an active upload and test a device reconnecting during cleanup. |
 | 2026-11-18 | "Claude 100%" in the sidebar's usage line shows "Cla… 100%" at the narrowest sidebar (200 px) | Only at 200 px with a limit fully used; the percentage, bar and colour still read. Fitting it would mean shorter names or a second line for everyone. | People keep the sidebar at its narrowest, or a third plan joins the line. |
 | 2026-11-17 | Broader workspace redesign (#29) | Its project rail, Resume and Recents conflict with the shared Notes/Browser sidebar; it also bundles separate reading, review and Work features. | Scope the independent features separately and reconcile them with the shared sidebar before merging. |
 | 2026-11-17 | Automatic cloud deployment before app releases (#40) | The required `VERCEL_TOKEN` is absent from the repository and `cloud-production` environment. Merging would block app releases. | Configure a dedicated deployment token and pass the release checks. |
