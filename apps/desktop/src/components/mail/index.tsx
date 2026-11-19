@@ -9,7 +9,7 @@ import { cn } from "@leadinglight/ui/lib/utils";
 import { endLook, mail, startLook, useMail } from "~/lib/mail";
 import { MAIL_LOOK } from "~/lib/space";
 import { look, lookOpen, place, run } from "./act";
-import { connection, openAccounts } from "./accounts";
+import { openAccounts } from "./accounts";
 import { Home } from "./home";
 import { MailCard } from "./look";
 import { EndView, RestView } from "./rest";
@@ -38,14 +38,12 @@ const stepFrom = (key: string, by: number) => {
   if (to !== at) look.set({ ...look.get(), key: m.look[to].mail.key, trouble: undefined });
 };
 
-export function MailView({ view, pane }: { view: string; pane: string }) {
+export function MailView({ view, pane, active }: { view: string; pane: string; active: boolean }) {
   const m = useMail();
-  const { notice } = connection.use();
   return (
     // A workspace's mail never shows in another: a new owner starts the view over.
-    <div className="w-full max-w-[760px] px-16 pb-12 @max-xl:px-6" data-testid="mail-view" key={m.owner ?? ""}>
-      {view === MAIL_LOOK ? <Look pane={pane} /> : <Home demo={demo} pane={pane} view={view} />}
-      {view !== MAIL_LOOK && !!m.accounts.length && notice && <p className="mt-4 text-muted-foreground" role="status">{notice}</p>}
+    <div className={view === MAIL_LOOK ? "w-full max-w-[760px] px-16 pb-12 @max-xl:px-6" : "@container/mail size-full"} data-testid="mail-view" key={m.owner ?? ""}>
+      {view === MAIL_LOOK ? <Look pane={pane} /> : <Home active={active} demo={demo} pane={pane} view={view} />}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { watchAccountReturns } from '~/lib/account-return';
-import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
+import { CALENDAR_VIEW, MAIL_READING, MAIL_VIEW } from '~/lib/space';
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -176,6 +176,7 @@ export default function App() {
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
+          if (id === MAIL_READING) return false;
           if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
           if (isPersonalBrowser(id)) return !mobile && (mac || browserAvailable.get()) && (!browserTabId(id) || browserSpace.get().tabs.some((t) => t.id === browserTabId(id)));
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
@@ -440,7 +441,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
-          {!phone && <MailRoot />}
+          <MailRoot />
           {!mobile && <CliUpdates />}
           <AppUpdates />
           <ZoomHud />
