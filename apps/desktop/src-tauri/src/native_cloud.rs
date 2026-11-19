@@ -114,12 +114,14 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
     let params: Vec<_> = url.query_pairs().collect();
     let valid_query = match (route, method) {
         ("sync", "GET") => {
-            params.is_empty()
-                || params.len() == 1
-                    && params[0].0 == "after"
-                    && !params[0].1.is_empty()
-                    && params[0].1.len() <= 18
-                    && params[0].1.bytes().all(|c| c.is_ascii_digit())
+            let cursor = params.iter().any(|(name, value)| {
+                name == "after" && !value.is_empty() && value.len() <= 18
+                    && value.bytes().all(|c| c.is_ascii_digit())
+            });
+            let receipt = params.iter().any(|(name, value)| {
+                name == "has" && !value.is_empty() && value.len() <= 200
+            });
+            params.is_empty() || cursor && (params.len() == 1 || params.len() == 2 && receipt)
         }
         ("sync-part", "GET") => {
             params.len() == 1
@@ -428,6 +430,8 @@ mod tests {
             "me",
             "config",
             "sync?after=123",
+            "sync?has=baseline%3Aexample&after=0",
+            "sync?after=123&has=example",
             "sync-part?id=a%3Apart%3A1",
             "calendar/accounts",
             "gmail/accounts",
@@ -462,6 +466,9 @@ mod tests {
             ("native/approval?id=3f9a1c07-0000-4000-8000-000000000000", "GET"),
             ("native/approval?code=3F9A1C0", "GET"),
             ("sync?after=1&after=2", "GET"),
+            ("sync?has=&after=0", "GET"),
+            ("sync?has=a&after=oops", "GET"),
+            ("sync?has=a&after=0&has=b", "GET"),
             ("sync", "DELETE"),
             ("calendar/callback", "GET"),
             ("gmail/callback", "GET"),
