@@ -62,10 +62,14 @@ test('encrypted sync stays durable, idempotent and isolated', { skip: !process.e
     const events = (await (await request(reconnected, '/api/sync', a)).json()).events;
     assert.equal(events.length, 1);
     assert.deepEqual(events[0].envelope, encrypted.envelope);
+    const saved = (who, id) => request(app, `/api/sync?has=${encodeURIComponent(id)}`, who).then((r) => r.json());
+    assert.deepEqual(await saved(a, encrypted.id), { stored: true });
+    assert.deepEqual(await saved(b, encrypted.id), { stored: false });
     assert.deepEqual((await (await request(reconnected, `/api/sync?after=${events[0].seq}`, a)).json()).events, []);
     assert.equal((await request(app, '/api/sync', a, { ...encrypted, envelope: { ...encrypted.envelope, kind: 'manifest', parts: Array(201).fill('part') } })).status, 400);
     const part = { id: randomUUID(), envelope: { ...encrypted.envelope, kind: 'part' } };
     assert.equal((await request(app, '/api/sync', a, part)).status, 200);
+    assert.deepEqual(await saved(a, part.id), { stored: false });
     assert.equal((await request(app, `/api/sync-part?id=${part.id}`, b)).status, 404);
     assert.deepEqual(await (await request(app, `/api/sync-part?id=${part.id}`, a)).json(), part.envelope);
     assert.equal((await (await request(app, '/api/sync', a)).json()).events.length, 1);

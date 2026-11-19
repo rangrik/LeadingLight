@@ -91,6 +91,10 @@ async function sent(owner: string, id: string, write = false): Promise<boolean> 
 }
 async function sendEnvelope(owner: string, id: string, envelope: Envelope) {
   if (envelope.data.length > 2_000_000) {
+    // Encrypting a retry produces new part IDs even when the first manifest is already durable.
+    const after = localStorage.getItem(cursorName(owner)) || '0';
+    const reply = await cloudApi<{ stored?: boolean }>(`sync?has=${encodeURIComponent(id)}&after=${after}`, undefined, 'GET', owner);
+    if (reply.stored) { assertOwner(owner); await sent(owner, id, true); return; }
     const parts: string[] = [];
     for (let start = 0; start < envelope.data.length; start += 2_000_000) {
       const part = `${id}:part:${envelope.iv}:${parts.length}`; parts.push(part);

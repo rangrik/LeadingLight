@@ -226,3 +226,11 @@ against the isolated browser test server. Cloud deployments remain separate from
 
 Mail progress uses the `gmail_progress` table. Apply the additive schema with
 `pnpm --filter @leadinglight/cloud migrate` before deploying the updated Gmail service and clients.
+
+### Encrypted sync storage
+
+The gateway stores new attachment parts as encrypted bytes. It returns the original Base64 text to every app version. Older parts remain readable. The 500 MB allowance counts both formats and includes the incoming write. Retrying a saved event uses no extra space. Before sending new attachment parts, the client checks whether its workspace already holds the completed event.
+
+After deploying the gateway, run `node src/compact-sync.mjs inspect WORKSPACE_ID` from `apps/cloud` with its database connection to see how many bytes transfer encoding occupies. Run the same command with `compact` to reclaim that space. It works in short transactions and can be restarted. History, identifiers, encryption and cursors are preserved.
+
+To roll the cloud service back past this change, pause sync writes during maintenance. List affected workspaces with `SELECT DISTINCT owner FROM sync_events WHERE part_bytes IS NOT NULL` and run `restore` for each one. Repeat the query and confirm it returns no rows before switching the gateway. Restoring needs room for the original text representation.
