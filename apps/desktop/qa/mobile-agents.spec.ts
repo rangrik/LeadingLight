@@ -400,7 +400,9 @@ test("notification opens only its current Mac request without answering", async 
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => mock.starts.length).toBe(2);
   await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("searchbox", { name: "Search notes" }).fill("No matching notes");
+  await page.getByRole("button", { name: "Search library", exact: true }).click();
+  await page.getByRole("dialog", { name: "Search library" }).getByRole("combobox").fill("No matching notes");
+  await page.getByRole("button", { name: "Close search" }).click();
   await page.getByRole("navigation", { name: "Phone navigation" }).getByRole("button", { name: "Today", exact: true }).click();
   const target = { connection: "mac-a", project: "p-shared", conversation: "conv-1", request: "request:one", generation: 1 };
   const notify = (detail: typeof target) => page.evaluate((detail) => window.dispatchEvent(new CustomEvent("leadinglight:mobile-agent-request", { detail })), detail);

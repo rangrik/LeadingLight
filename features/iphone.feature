@@ -7,7 +7,7 @@ Feature: LeadingLight on iPhone
     Then Today shows a Capture a thought action and a daily note action
     And at most three recent captures are shown
     And Today has no unread counts, streaks or overdue warnings
-    And Today and Notes are tabs in a floating bar at the bottom, with a round Quick capture button beside it
+    And Today and Notes are tabs in a floating bar at the bottom, with Search and Quick capture beside it
     And the Mac and iPad keep their existing navigation
 
   Scenario: Capture without organizing
@@ -33,7 +33,7 @@ Feature: LeadingLight on iPhone
     When I open Notes and search for "headphones"
     Then I can open "Train" from the results
     And clearing search returns to recent notes
-    And an unmatched search says no notes were found
+    And an unmatched search offers to create a page with those words as its title
     And I can browse Captures and my page types from Notes
 
   Scenario: Leave a page and come back
@@ -181,3 +181,16 @@ Feature: LeadingLight on iPhone
     And iOS versions before 26 get flat icons made from the same file
     When the Xcode project is generated again
     Then the layered icon is still the app's icon
+
+  Scenario: Find and create pages from any phone screen
+    When I tap Search in Today, Notes or an open page, or press Command+K
+    Then a focused search shows All, Create, Pages and Types
+    And the search field shows “Search…” in a narrow phone window
+    And switching category keeps the text I entered
+    And Idea and Page appear in Create above recent pages when the field is empty
+    When I tap Idea or Page, or enter "new meeting Friday review"
+    Then the new page opens in the single phone pane
+    When I search for the page I was already editing from Notes
+    Then tapping its result reveals the editor and Back returns to Notes
+    When the keyboard hides the tab bar while I write
+    Then I can open search from the page toolbar and dismiss it by touch

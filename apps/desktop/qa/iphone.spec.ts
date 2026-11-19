@@ -8,6 +8,11 @@ test("Mermaid supports iPhone touch editing and offline saves", async ({ page })
 });
 const nav = (page: Page) => page.getByRole("navigation", { name: "Phone navigation" });
 const capture = (page: Page) => page.getByRole("dialog", { name: "New idea" });
+const library = (page: Page) => page.getByRole("dialog", { name: "Search library" });
+async function search(page: Page, words: string) {
+  await nav(page).getByRole("button", { name: "Search library" }).tap();
+  await library(page).getByRole("combobox").fill(words);
+}
 async function newNote(page: Page, title: string, text: string) {
   await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
   await page.getByRole("button", { name: "New page", exact: true }).click();
@@ -26,13 +31,13 @@ test("phone home, offline writing, return and search", async ({ page, context, b
   await newNote(page, "Train", "Remember the headphones and charger");
   // Back at a page's first entry returns to the tab it came from.
   await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByRole("searchbox", { name: "Search notes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent notes", exact: true })).toBeVisible();
   await nav(page).getByRole("button", { name: "Today", exact: true }).click();
   await page.getByRole("button", { name: "Continue writing" }).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Remember the headphones and charger");
   await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
-  await page.getByRole("searchbox", { name: "Search notes" }).fill("headphones");
-  await page.getByRole("button", { name: "Train Page" }).click();
+  await search(page, "headphones");
+  await library(page).getByRole("option", { name: "Train", exact: true }).tap();
   await page.getByRole("textbox", { name: "Title", exact: true }).click();
   await expect(page.getByRole("button", { name: "Back", exact: true })).toBeVisible();
   await page.waitForTimeout(700);
@@ -41,16 +46,17 @@ test("phone home, offline writing, return and search", async ({ page, context, b
   await page.getByRole("button", { name: "Continue writing" }).click();
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Remember the headphones and charger");
   await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
-  await page.getByRole("searchbox", { name: "Search notes" }).fill("not in any note");
-  await expect(page.getByText("No notes found", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Clear search" }).click();
+  await search(page, "not in any note");
+  await expect(library(page).getByRole("option", { name: "New page “not in any note”" })).toBeVisible();
+  await library(page).getByRole("button", { name: "Close search" }).tap();
   await expect(page.getByRole("button", { name: "Train Page" })).toBeVisible();
   await page.screenshot({ path: `qa/report/iphone-${browserName}-notes.png` });
-  await page.getByRole("searchbox", { name: "Search notes" }).fill("headphones");
-  await page.getByRole("button", { name: "Train Page" }).click();
+  await search(page, "headphones");
+  await library(page).getByRole("option", { name: "Train", exact: true }).tap();
   await page.getByRole("textbox", { name: "Page body" }).fill("Only the charger now");
   await nav(page).getByRole("button", { name: "Notes", exact: true }).click();
-  await expect(page.getByText("No notes found", { exact: true })).toBeVisible();
+  await search(page, "headphones");
+  await expect(library(page).getByRole("option", { name: "New page “headphones”" })).toBeVisible();
 });
 
 // Hiding a zero-height editor resets WebKit's scroll position despite retaining its content.
@@ -200,6 +206,10 @@ test("small phone, keyboard, landscape, navigation and settings", async ({ page,
   await expect(page.getByRole("textbox", { name: "Page body" })).toHaveText("Keep the words in landscape too");
   await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
   await expect(nav(page)).toBeHidden(); // the keyboard covers the tab bar
+  await page.getByRole("button", { name: "Search library", exact: true }).tap();
+  await library(page).getByRole("combobox").fill("thought");
+  await expect(library(page).getByRole("option", { name: "A thought on a small phone", exact: true })).toBeVisible();
+  await library(page).getByRole("button", { name: "Close search" }).tap();
   await page.setViewportSize({ width: 844, height: 390 });
   await page.evaluate(() => {
     Object.assign(window.visualViewport!, { height: 390, width: 844 });
@@ -260,5 +270,53 @@ test("Back from a second page opened in Notes returns to Notes", async ({ page }
   await newNote(page, "First", "One");
   await newNote(page, "Second", "Two");
   await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByRole("searchbox", { name: "Search notes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent notes", exact: true })).toBeVisible();
+});
+
+// Opening a result already mounted behind Today or Notes must still reveal the phone editor.
+test("phone search creates a named type and reopens the same page from Notes", async ({ page }) => {
+  await page.goto("/?iphone");
+  await search(page, "new meeting Field review");
+  await library(page).getByRole("radio", { name: "Create" }).tap();
+  await expect(library(page).getByRole("combobox")).toHaveValue("new meeting Field review");
+  await library(page).getByRole("option", { name: "Meeting “Field review”" }).tap();
+  await expect(page.getByRole("textbox", { name: "Title", exact: true })).toHaveValue("Field review");
+  await nav(page).getByRole("button", { name: "Notes", exact: true }).tap();
+  await page.keyboard.press("Meta+k");
+  await expect(library(page).getByRole("combobox")).toBeFocused();
+  await library(page).getByRole("combobox").fill("Field review");
+  await library(page).getByRole("option", { name: "Field review", exact: true }).tap();
+  await expect(page.getByRole("textbox", { name: "Page body" })).toBeVisible();
+  await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
+  await page.getByRole("button", { name: "Back", exact: true }).tap();
+  await expect(page.getByRole("heading", { name: "Recent notes" })).toBeVisible();
+});
+
+// The phone opens a quick-create note in one pane and keeps its originating tab.
+test("phone quick create opens an Idea and a Page from Library", async ({ page }) => {
+  await page.goto("/?iphone");
+  await search(page, "");
+  const choices = library(page).getByRole("group", { name: "Create", exact: true }).getByRole("option");
+  await expect(choices).toHaveText(["Idea", "Page"]);
+  await choices.getByText("Idea", { exact: true }).tap();
+  const title = page.getByRole("textbox", { name: "Title", exact: true });
+  await expect(title).toBeFocused();
+  await title.fill("A trail to try");
+  await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  await back.tap();
+  await expect(page.getByRole("main", { name: "Today" })).toBeVisible();
+
+  await nav(page).getByRole("button", { name: "Notes", exact: true }).tap();
+  await search(page, "");
+  await choices.getByText("Page", { exact: true }).tap();
+  await expect(title).toBeFocused();
+  await expect(title).toHaveValue("");
+  await title.fill("Packing list");
+  await back.tap();
+  await expect(page.getByRole("heading", { name: "Recent notes" })).toBeVisible();
+  await search(page, "A trail to try");
+  await library(page).getByRole("option", { name: "A trail to try", exact: true }).tap();
+  await expect(title).toHaveValue("A trail to try");
+  await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
 });

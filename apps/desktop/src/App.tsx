@@ -356,7 +356,7 @@ export default function App() {
         open={sidebarOpen}
         style={chrome(mac, sidebarWidth)}
       >
-        {phone ? <PhoneShell loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
+        {phone ? <PhoneShell returnFocus={captureFrom} loaded={loaded} onCapture={toggleCapture} onCreate={create} /> : <>
         {/* The hidden sidebar's button leaves room for the traffic lights. */}
         {mac && !sidebarOpen && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20 hidden md:flex" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}

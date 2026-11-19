@@ -13,8 +13,8 @@ iOS 16.4 or later. No account is needed to write or capture offline.
 **Today** is a quiet starting point. Capture a thought, continue your last note, or write about
 today. Only three recent captures appear here. There are no unread badges or streaks to catch up on.
 
-**Today** and **Notes** sit in a glass bar that floats at the bottom of the screen, with a round
-**Quick capture** button beside it. The bar hides while the keyboard is open. Pages open one at a
+**Today** and **Notes** sit in a glass bar that floats at the bottom of the screen, with **Search** and
+**Quick capture** beside it. The bar hides while the keyboard is open. Pages open one at a
 time. The round back button above a page returns to the page before it, or to Today or Notes when
 there is none. **⋯** (**Page actions**) at the other end holds the page's actions, including
 **History and authorship**.
@@ -36,8 +36,9 @@ Find saved ideas under **Notes › Captures**. You can organize or review them w
 
 ## Find and resume
 
-**Notes** searches titles and saved text on this device. Clear the search to return to recent notes,
-or use **Browse by type**. The **+** at the top of Notes creates a new page.
+Tap the magnifying glass beside **Quick capture** from Today, Notes or an open page. While typing on a page, the magnifying glass moves to the page toolbar. Search finds titles and words in your notes offline. Tap **Pages**, **Types** or **Create** to narrow the same query. With a hardware keyboard, **⌘K** opens search.
+
+Tap **Idea** or **Page** under **Create** for a blank note. A new note opens in the editor, and **Back** returns to Today or Notes. To create a specific type, tap **Create** and its icon, or enter **new meeting Friday review** and tap the result. It opens a Meeting with the title filled in, ready to write. **Notes** keeps your recent notes and **Browse by type** one tap away.
 
 Tap **Today** while writing, then **Continue writing** to return. Your editor stays open while you
 look around. Page properties sit behind **Page details**, and sidenotes appear below the text.
