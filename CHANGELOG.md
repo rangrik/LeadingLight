@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/rangrik/LeadingLight/compare/v0.11.0...v0.12.0) (2026-11-19)
+
+
+### Features
+
+* quick-create tabs from workspace search ([#56](https://github.com/rangrik/LeadingLight/issues/56)) ([00e9ad7](https://github.com/rangrik/LeadingLight/commit/00e9ad78ba04ea8d69e52e799f409dd5ecdb3138))
+
 ## [0.11.0](https://github.com/rangrik/LeadingLight/compare/v0.10.0...v0.11.0) (2026-11-18)
 
 
