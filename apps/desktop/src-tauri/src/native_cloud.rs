@@ -119,7 +119,7 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
                     && value.bytes().all(|c| c.is_ascii_digit())
             });
             let receipt = params.iter().any(|(name, value)| {
-                name == "has" && !value.is_empty() && value.len() <= 200
+                name == "has" && !value.is_empty() && value.encode_utf16().count() <= 200
             });
             params.is_empty() || cursor && (params.len() == 1 || params.len() == 2 && receipt)
         }
@@ -440,6 +440,10 @@ mod tests {
             "devices",
         ] {
             assert!(endpoint(path, "GET").is_ok());
+        }
+        for (size, allowed) in [(100, true), (101, false)] {
+            let path = format!("sync?has={}&after=0", "🌱".repeat(size));
+            assert_eq!(endpoint(&path, "GET").is_ok(), allowed);
         }
         assert!(endpoint("native/approve", "POST").is_ok());
         assert!(endpoint("devices/name", "POST").is_ok());
