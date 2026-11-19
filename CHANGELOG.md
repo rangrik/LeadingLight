@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/rangrik/LeadingLight/compare/v0.13.0...v0.13.1) (2026-11-19)
+
+
+### Fixes
+
+* reclaim transfer encoding space for encrypted note sync ([#63](https://github.com/rangrik/LeadingLight/issues/63)) ([6a4137a](https://github.com/rangrik/LeadingLight/commit/6a4137a0a82054162d0fde89883d767ff4158e7f))
+
 ## [0.13.0](https://github.com/rangrik/LeadingLight/compare/v0.12.1...v0.13.0) (2026-11-19)
 
 
