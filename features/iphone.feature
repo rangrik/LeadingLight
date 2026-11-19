@@ -187,7 +187,8 @@ Feature: LeadingLight on iPhone
     Then a focused search shows All, Create, Pages and Types
     And the search field shows “Search…” in a narrow phone window
     And switching category keeps the text I entered
-    When I tap New page or enter "new meeting Friday review"
+    And Idea and Page appear in Create above recent pages when the field is empty
+    When I tap Idea or Page, or enter "new meeting Friday review"
     Then the new page opens in the single phone pane
     When I search for the page I was already editing from Notes
     Then tapping its result reveals the editor and Back returns to Notes

@@ -53,6 +53,9 @@
 .ll-capture .ll-handle { display: none; }
 .ll-capture[data-web] .is-empty::before { content: none; }
 
+/* A tooltip only explains, so it never takes a click meant for what lies under it. */
+[data-slot="tooltip-positioner"] { pointer-events: none; }
+
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], [data-slot="segmented-control-item"], a, [type="checkbox"]):focus-visible {
   outline: none;
@@ -260,6 +263,18 @@ html[data-ipad].dark {
 }
 html[data-ipad]:not([data-phone]) [data-tab-row] { border-bottom-color: transparent; }
 
+html[data-ipad][data-keyboard]:not([data-phone]) [data-slot="command-dialog-viewport"]:has(> .ll-workspace-search) { padding-block: 4px; }
+/* With little height, keep page actions beside the results so they cannot cover the first row. */
+@container library (max-height: 240px) {
+  .ll-workspace-search:has(> [data-slot="command-footer"]) {
+    display: grid; height: 100%; grid-template: auto minmax(0, 1fr) / minmax(0, 1fr) auto;
+  }
+  .ll-workspace-search > .ll-search-controls { grid-column: 1 / -1; }
+  .ll-workspace-search > [data-slot="command-footer"] {
+    flex-flow: column nowrap; align-items: stretch; justify-content: start; gap: 0; overflow-y: auto; padding: 0;
+  }
+}
+
 /* Bar buttons on glass: one capsule per group, 16 px from the bar's edges (HIG Toolbars). */
 [data-ipad] [data-slot="sidebar-trigger"] { width: 44px; height: 44px; margin-inline-start: 0; }
 [data-ipad] [data-slot="sidebar-trigger"] + [data-slot="separator"] { display: none; }
@@ -428,5 +443,5 @@ html[data-ipad] [data-actions] > .ll-page-actions { width: max-content; min-widt
 @keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
 .ll-rise { animation: ll-rise 180ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .ll-rise { animation: none; } }
-/* While the browser is in front, toasts fit over the sidebar: a native page would cut them (App.tsx). */
-html[data-toasts-beside] [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); right: auto; max-width: calc(var(--toast-room) - 1.5rem); }
+/* Toasts fit over the open sidebar, above its footer: off its buttons and off the pages, where a native page would cut them (App.tsx). */
+@media (min-width: 768px) { html[data-toasts-beside]:not([data-ipad]) [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); bottom: calc(var(--toast-inset) + 6rem); right: auto; max-width: calc(var(--toast-room) - 1.5rem); } }

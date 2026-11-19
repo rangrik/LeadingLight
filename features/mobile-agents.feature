@@ -4,11 +4,10 @@ Feature: Control Mac project agents from iPhone and iPad
 
   Scenario: The Mac chooses what a device can reach
     Given I linked two project folders in LeadingLight on my Mac
-    When I open Settings > Devices and share only one project
-    And enable mobile access while signed in to LeadingLight on the Mac
-    Then I can copy a connection code for this Mac
+    When my signed-in iPhone requests one project and I approve its matching number
+    Then the phone can reach that project alone
     And neither device needs a VPN app or an inbound network port
-    And a device without that code cannot read or control agents
+    And an unapproved device cannot read or control agents
 
   Scenario: The relay cannot read or forge agent requests
     Given my Mac and mobile device share a connection secret that the relay never receives
@@ -20,7 +19,7 @@ Feature: Control Mac project agents from iPhone and iPad
 
   Scenario: Pair inside LeadingLight on iPhone or iPad
     Given the Mac registered a connection using its LeadingLight account
-    When I paste the Mac's code into Settings > Devices on my iPhone or iPad
+    When I request the Mac from the project on my iPhone or iPad and choose the matching number on the Mac
     Then I see the Mac's name and only its shared projects
     And the connection message and project list line up with the dialog heading on phone and tablet
     And the device keeps its connection secret in Keychain
@@ -134,6 +133,6 @@ Feature: Control Mac project agents from iPhone and iPad
     When it asks to read, resume, answer or stop that agent
     Then the Mac refuses the request
     And terminal, arbitrary file, runtime administration and note-tool bridge routes are unavailable
-    When I remove a shared project, disable access or replace the code on the Mac
+    When I remove a shared project, remove the device connection or stop earlier sharing on the Mac
     Then further requests with the old access are refused
     And already running work stays on the Mac for me to review or stop there

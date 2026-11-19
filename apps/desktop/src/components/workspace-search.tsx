@@ -1,6 +1,6 @@
 // COSS p-command-1, with workspace groups, recent pages, type creation and page actions.
 // Changes: shared shortcut state, asynchronous body search, and split-aware navigation.
-import { ArrowLeft, ArrowRight, Pin, PinOff, Plus, SquareSplitHorizontal, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, Pin, PinOff, Plus, SquareSplitHorizontal, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { AutocompleteRow } from "@leadinglight/ui/components/autocomplete";
 import { RadioGroupPrimitive, RadioPrimitive } from "@leadinglight/ui/components/radio-group";
@@ -11,7 +11,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
-import { available, browserFocused, enter, hostOf, leave, refocus, select, space as browser } from "~/lib/browser-space";
+import { available, browserFocused, enter, hostOf, leave, newBrowserTab, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
 import { phone, useMobile } from "~/lib/platform";
 import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
@@ -69,6 +69,8 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const { tabs } = browser.use();
   const canBrowse = available.use();
   const mobile = useMobile();
+  const tablet = mobile && !phone;
+  const categories = searchViews.filter((v) => v !== "tabs" || canBrowse);
   const [query, setQuery] = useState("");
   const [offset, setOffset] = useState(0);
   const [highlight, setHighlight] = useState("");
@@ -104,12 +106,12 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     if (phone) openFresh(id); else openFrom(id, e);
     if (isPageView(id)) requestAnimationFrame(() => whenLive(id, (page) => page.focus()));
   });
-  const create = async (id: string, title?: string) => {
+  const create = async (id: string, title?: string, placement?: "tab" | "beside") => {
     if (working.current) return;
     working.current = true;
     setBusy(true);
     setError("");
-    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title); }
+    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title, placement); }
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
@@ -124,6 +126,16 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const range = `${(start + 1).toLocaleString()}–${Math.min(start + PAGE_SIZE, pageItems.length).toLocaleString()} of ${pageItems.length.toLocaleString()}`;
   const results: Group[] = [];
   const add = (value: string, items: Item[]) => { if (items.length) results.push({ value, items }); };
+  const quickCreate = recent;
+  if (quickCreate) {
+    const items: Item[] = ["idea", PAGE_TYPE].map((id) => ({
+      value: `new:${id}`, label: typeOf(id).name, icon: <RowIcon icon={typeOf(id).icon} />, beside: !phone,
+      run: (e) => create(id, undefined, e.shiftKey ? "beside" : "tab"),
+    }));
+    if (canBrowse && !mobile) items.push({ value: "new:browser", label: "Browser tab", icon: <Globe />, beside: true,
+      run: (e) => navigate(() => { enter(); newBrowserTab(e.shiftKey); }) });
+    add("Create", items);
+  }
   if (searchPages) {
     add(recent ? "Recent pages" : pageItems.length > PAGE_SIZE ? `Pages · ${range}` : "Pages", (recent ? pageItems.slice(0, 8) : pageItems.slice(start, start + PAGE_SIZE)).map((p) => ({
       value: `page:${p.id}`, label: pageLabel(p.title), sub: typeOf(p.typeId).name, icon: <RowIcon icon={iconFor(p)} />, page: p, beside: true, run: (e) => open(p.id, e),
@@ -151,7 +163,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       if (!title && !needle.split(/\s+/).every((word) => names.some((name) => name.includes(word)))) return [];
       const label = view === "create" ? t.name : `New ${t.name.toLocaleLowerCase()}`;
       return [{ id: t.id, rank: prefix?.length ?? 0, value: `new:${t.id}`, label: title ? `${label} “${title}”` : label,
-        sub: !createGrid && t.id === "daily" ? "Today" : undefined, icon: <RowIcon icon={t.icon} />, run: () => create(t.id, title) }];
+        sub: !createGrid && t.id === "daily" ? "Today" : undefined, icon: <RowIcon icon={t.icon} />, beside: tablet, run: (e: Modifiers) => create(t.id, title, tablet && e.shiftKey ? "beside" : undefined) }];
     }).sort((a, b) => b.rank - a.rank);
     if (createGrid) {
       for (const group of typeGroups) add(group.name, group.ids.flatMap((id) => actions.filter((a) => a.id === id)));
@@ -163,7 +175,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   const canNamePage = view === "create" || (view === "search" && body.query === q && !body.error);
   if (q && !results.length && canNamePage) {
     const title = query.trim();
-    add("Create", [{ value: "new:title", label: `New page “${title}”`, icon: <Plus />, run: () => create(PAGE_TYPE, title) }]);
+    add("Create", [{ value: "new:title", label: `New page “${title}”`, icon: <Plus />, beside: tablet, run: (e) => create(PAGE_TYPE, title, tablet && e.shiftKey ? "beside" : undefined) }]);
   }
   const active = results.flatMap((g) => g.items).find((i) => i.value === highlight) ?? results[0]?.items[0];
   const pin = async () => {
@@ -186,21 +198,27 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     </CommandItem>
   );
   return (
-    <Command key={`${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
+    <Command key={mobile ? "mobile" : `${view}:${start}`} grid={createGrid} filter={null} items={results} value={query} onValueChange={changeQuery} onItemHighlighted={(value) => { if (value !== undefined) setHighlight(typeof value === "string" ? value : (value as Item)?.value ?? ""); }}>
       <div className="ll-search-controls">
         <div className="relative flex items-center gap-1 pe-3">
           <div className="min-w-0 flex-1"><CommandInput ref={input} aria-label={view === "create" ? "Choose page type" : "Search library"} placeholder={mobile && view === "search" ? "Search…" : placeholders[view]} readOnly={busy} onKeyDownCapture={(e) => {
+            if (e.key === "Tab" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.nativeEvent.isComposing && !phone) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!busy) openSearch(categories[(categories.indexOf(view) + (e.shiftKey ? -1 : 1) + categories.length) % categories.length]);
+              return;
+            }
             modifiers.current = e.key === "Enter" ? { shiftKey: e.shiftKey, metaKey: e.metaKey } : plain;
-            if (e.key === "Enter" && (e.shiftKey || e.metaKey) && active && !busy) {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing && (e.shiftKey || e.metaKey) && active && !busy) {
               e.preventDefault(); e.stopPropagation(); void active.run(modifiers.current); modifiers.current = plain;
             }
           }} /></div>
-          {view !== "create" && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
+          {view !== "create" && !quickCreate && <Button size="sm" variant="outline" disabled={busy} onClick={() => void create(PAGE_TYPE)}><Plus />New page</Button>}
           {mobile && <Button size="icon" variant="ghost" aria-label="Close search" onClick={closeSearch}><X /></Button>}
         </div>
         <div className="relative px-3 pb-2">
           <SegmentedControl size="sm" aria-label="Search category" render={<RadioGroupPrimitive value={view} disabled={busy} onValueChange={(v) => openSearch(v as SearchView)} />}>
-            {searchViews.filter((v) => v !== "tabs" || canBrowse).map((v, i) => (
+            {categories.map((v, i) => (
               <Tooltip key={v}>
                 <TooltipTrigger render={<SegmentedControlItem className="max-[360px]:px-1" aria-keyshortcuts={`Meta+${i + 1} Control+${i + 1}`} render={<RadioPrimitive.Root value={v} />} onClick={() => input.current?.focus()} />}>{searchScopes[v]}</TooltipTrigger>
                 <TooltipPopup>{searchScopes[v]} <Kbd>⌘{i + 1}</Kbd></TooltipPopup>
@@ -222,10 +240,11 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       </CommandPanel>
       {(error || (searchPages && body.query === q && body.error)) && <div role="status" className="relative px-4 py-2 text-sm text-destructive-foreground">{error || "Page text could not be searched. Title and type results are still available."}{!error && <Button size="sm" variant="ghost" onClick={() => setRetry((n) => n + 1)}>Retry</Button>}</div>}
       {(!mobile || (!phone && active?.beside)) && <CommandFooter className="relative flex-wrap px-3 py-2">
+        {!mobile && quickCreate && active?.value.startsWith("new:") && <span className="px-2"><Kbd>↩</Kbd> Create</span>}
         {active?.beside ? <Button disabled={busy} size="sm" variant="ghost" onClick={() => void active.run({ shiftKey: true, metaKey: false })}><SquareSplitHorizontal /><span>{mobile ? "Open in new pane" : "Open beside"}</span>{!mobile && <Kbd>⇧↩</Kbd>}</Button> : active && <span className="px-2"><Kbd>↩</Kbd> {active.value.startsWith("new:") ? "Create" : "Open"}</span>}
         {active?.page && <Button disabled={busy} size="sm" variant="ghost" onClick={() => void pin()}>{active.page.properties.pinned ? <PinOff /> : <Pin />}{active.page.properties.pinned ? "Unpin" : "Pin"}</Button>}
         {createGrid && <span className="hidden text-muted-foreground sm:inline">Try “new book Dune”</span>}
-        {!mobile && <span className="ms-auto flex items-center gap-1.5"><Kbd>esc</Kbd>Close</span>}
+        {!mobile && <span className="ms-auto flex items-center gap-1.5"><span className="me-2 hidden sm:inline"><Kbd>tab</Kbd> Category</span><Kbd>esc</Kbd>Close</span>}
       </CommandFooter>}
     </Command>
   );

@@ -8,7 +8,7 @@ import { engine, type Opened, type PageState } from "~/lib/native-browser";
 import { browserBase, type BrowserTab } from "~/lib/project-runtime/browser";
 import { listChats } from "~/lib/project-runtime/chat";
 import { ask } from "~/lib/project-runtime/transport";
-import { focusPane, focusedPage, holder, openBeside, openPage, panes, PERSONAL_BROWSER } from "~/lib/panes";
+import { BROWSER_HOME, browserPage, browserTabId, dropPage, focusPane, focusedPage, holder, isPersonalBrowser, lastTabClose, leaves, openBeside, openPage, openTab as openWorkspaceTab, panes, restoreBrowserTab, showIn, tabPosition, type TabPosition } from "~/lib/panes";
 import { createStore } from "~/lib/state";
 
 export type SpaceTab = { id: string; url: string; title: string; icon?: string; pin?: string; from?: string };
@@ -18,7 +18,7 @@ export type AgentTab = { base: string; tab: string; name: string; url: string; b
 export type Shown = { kind: "tab" } | { kind: "saved" } | { kind: "history" } | { kind: "agent"; base: string; tab: string };
 export type Bar = { mode: "new" | "here"; text: string };
 
-type Closed = Omit<SpaceTab, "id"> & { at?: number };
+type Closed = Omit<SpaceTab, "id"> & { at?: number; time?: number; position?: TabPosition };
 // icons: the last sites' icons by host, for history and saved rows, which have no tab.
 type Kept = { front: boolean; tabs: SpaceTab[]; selected: string; closed: Closed[]; pinned: Site[]; base: string; icons: Record<string, string> };
 const prefs = localPrefs<Kept>("ll.browser.space", { front: false, tabs: [], selected: "", closed: [], pinned: [], base: "", icons: {} });
@@ -26,15 +26,15 @@ const prefs = localPrefs<Kept>("ll.browser.space", { front: false, tabs: [], sel
 // Damaged storage is dropped piece by piece, never trusted: a bad address must not load.
 const ID = /^[a-zA-Z0-9-]{1,64}$/;
 const icon = (v: unknown) => (typeof v === "string" && v.startsWith("data:image/") && v.length < 40_000 ? v : undefined);
-function entries<T extends { url: string; title: string; icon?: string }>(list: unknown, max: number, id = false): T[] {
+function entries<T extends { url: string; title: string; icon?: string }>(list: unknown, max: number, id = false, blanks = false): T[] {
   if (!Array.isArray(list)) return [];
-  return list.filter((e) => e && safeBrowserURL(e.url) && typeof e.title === "string" && (!id || ID.test(e.id))).slice(0, max).map((e) => ({ ...e, icon: icon(e.icon) }));
+  return list.filter((e) => e && (safeBrowserURL(e.url) || (blanks && e.url === "")) && typeof e.title === "string" && (!id || (typeof e.id === "string" && ID.test(e.id)))).slice(0, max).map((e) => ({ ...e, icon: icon(e.icon) }));
 }
 {
   const p = prefs.get();
-  const tabs = entries<SpaceTab>(p.tabs, 200, true);
+  const tabs = entries<SpaceTab>(p.tabs, 200, true, true);
   const icons = Object.fromEntries(Object.entries(p.icons && typeof p.icons === "object" ? p.icons : {}).filter(([, v]) => icon(v)));
-  prefs.set({ front: p.front === true, tabs, selected: tabs.some((t) => t.id === p.selected) ? p.selected : (tabs[0]?.id ?? ""), closed: entries(p.closed, 20), pinned: entries<Site>(p.pinned, 40, true), base: typeof p.base === "string" ? p.base : "", icons });
+  prefs.set({ front: p.front === true, tabs, selected: tabs.some((t) => t.id === p.selected) ? p.selected : (tabs[0]?.id ?? ""), closed: entries(p.closed, 20, false, true), pinned: entries<Site>(p.pinned, 40, true), base: typeof p.base === "string" ? p.base : "", icons });
 }
 
 export const space = prefs;
@@ -57,9 +57,26 @@ export const liveOf = (id: string) => live.get()[id] ?? DEFAULT_LIVE;
 export const available = createStore(false);
 void engine.then((e) => available.set(!!e));
 export const useFront = () => prefs.use().front;
-export const browserFocused = () => available.get() && focusedPage() === PERSONAL_BROWSER;
-export const showBrowser = (beside = false) => (beside ? openBeside : openPage)(PERSONAL_BROWSER);
-export function showBrowserList(view: Shown) { showBrowser(); shown.set(view); }
+export const browserFocused = () => available.get() && isPersonalBrowser(focusedPage());
+const tabView = { kind: "tab" } as const;
+export const browserView = (selected: string, home: Shown) => selected ? tabView : home;
+
+function showBrowser(page = browserPage(prefs.get().selected), beside = false) {
+  if (beside) return openBeside(page);
+  if (holder(page)) return openPage(page);
+  const { root } = panes.get();
+  if (root && !browserFocused()) {
+    const existing = leaves(root).find((l) => isPersonalBrowser(l.page));
+    if (existing) focusPane(existing.id);
+    else {
+      const previous = browserPage(prefs.get().selected);
+      if (holder(previous)) openPage(previous);
+    }
+  }
+  openPage(page);
+}
+
+export function showBrowserList(view: Shown) { showBrowser(BROWSER_HOME); shown.set(view); }
 
 function setTabs(tabs: SpaceTab[], selected = prefs.get().selected) {
   prefs.set({ tabs, selected: tabs.some((t) => t.id === selected) ? selected : "" });
@@ -76,21 +93,20 @@ export async function ensure(id: string) {
   const e = await engine;
   const tab = prefs.get().tabs.find((t) => t.id === id);
   if (!e || !tab) return;
-  if (!made.has(id)) made.set(id, e.open(id, tab.url).catch(() => {}));
+  if (!made.has(id)) made.set(id, e.open(id, tab.url || undefined).catch(() => {}));
   await made.get(id);
 }
 
 // Back to the page in view, as when the command bar is dismissed.
 export async function refocus() {
   const id = prefs.get().selected;
-  if (browserFocused() && id && made.has(id) && shown.get().kind === "tab") await (await engine)?.focus(id).catch(() => {});
+  if (id && browserTabId(focusedPage()) === id && made.has(id) && prefs.get().tabs.some((t) => t.id === id && t.url)) await (await engine)?.focus(id).catch(() => {});
 }
 
 export function select(id: string, focus = false, beside = false) {
-  if (focus) showBrowser(beside);
+  if (focus) showBrowser(browserPage(id), beside);
   prefs.set({ selected: id });
-  shown.set({ kind: "tab" });
-  void ensure(id).then(async () => focus && browserFocused() && (await engine)?.focus(id).catch(() => {}));
+  void ensure(id).then(async () => focus && focusedPage() === browserPage(id) && (await engine)?.focus(id).catch(() => {}));
 }
 
 // Where a new tab goes: at a reopened tab's old place, else after the tab it came from and after
@@ -103,15 +119,24 @@ function place(tabs: SpaceTab[], tab: SpaceTab, after?: string, back?: number) {
   return [...tabs.slice(0, at + 1), tab, ...tabs.slice(at + 1)];
 }
 
-export async function openTab(url: string, { after = prefs.get().selected, front = true, pin, at }: { after?: string; front?: boolean; pin?: string; at?: number } = {}) {
+export async function openTab(url: string, { after = prefs.get().selected, front = true, pin, at, beside = false, position }: { after?: string; front?: boolean; pin?: string; at?: number; beside?: boolean; position?: TabPosition } = {}) {
   const e = await engine;
   if (!e) return;
   const id = newId("t");
-  const opening = e.open(id, url).catch(() => {});
+  const opening = e.open(id, url || undefined).catch(() => {});
   made.set(id, opening);
-  setTabs(place(prefs.get().tabs, { id, url, title: hostOf(url), pin, from: front ? undefined : after }, after, at));
+  setTabs(place(prefs.get().tabs, { id, url, title: hostOf(url) || "New tab", pin, from: front ? undefined : after }, after, at));
   await opening;
-  if (front) select(id, true);
+  if (position) restoreBrowserTab(browserPage(id), position);
+  else if (front) select(id, true, beside);
+}
+
+export function newBrowserTab(beside: boolean) {
+  const id = newId("t");
+  const { tabs, selected } = prefs.get();
+  setTabs(place(tabs, { id, url: "", title: "New tab" }, selected), id);
+  (beside ? openBeside : openWorkspaceTab)(browserPage(id));
+  bar.set({ mode: "here", text: "" });
 }
 
 // What the command bar was given: an address or words to search for, here or in a new tab.
@@ -119,11 +144,10 @@ export async function openTab(url: string, { after = prefs.get().selected, front
 export async function go(input: string, here: boolean) {
   const url = browserAddress(input);
   const id = prefs.get().selected;
-  if (!here || !id || shown.get().kind !== "tab") return openTab(url);
+  if (!here || !id || focusedPage() !== browserPage(id)) return openTab(url);
   const e = await engine;
   await ensure(id);
   await e?.navigate(id, "load", url);
-  shown.set({ kind: "tab" });
   void e?.focus(id).catch(() => {});
 }
 
@@ -153,12 +177,19 @@ export async function closeTab(id = prefs.get().selected) {
   const order = listed(tabs);
   const i = order.findIndex((t) => t.id === id);
   const next = id !== selected ? selected : (order[i + 1] ?? order[i - 1])?.id ?? "";
-  prefs.set({ tabs: rest, selected: next, closed: [{ ...gone, at }, ...closed].slice(0, 20) });
+  const page = browserPage(id);
+  const open = holder(page);
+  const entry = { ...gone, at, time: Date.now(), position: open ? tabPosition(open.leaf) : undefined };
+  prefs.set({ tabs: rest, selected: next, closed: [entry, ...closed].slice(0, 20) });
+  const root = panes.get().root;
+  const neighbour = next && !holder(browserPage(next)) ? browserPage(next) : "";
+  if (open?.leaf.tabs.length === 1 && (neighbour || root?.kind === "leaf")) showIn(open.leaf.id, neighbour || BROWSER_HOME);
+  else dropPage(page, null);
+  if (!next) shown.set({ kind: "tab" });
   made.delete(id);
   const { [id]: ___, ...others } = live.get();
   live.set(others);
   await (await engine)?.close(id).catch(() => {});
-  if (next && id === selected) select(next);
 }
 
 export async function reopen() {
@@ -166,7 +197,7 @@ export async function reopen() {
   if (!last) return;
   prefs.set({ closed });
   const at = typeof last.at === "number" ? Math.min(Math.max(0, last.at), prefs.get().tabs.length) : undefined;
-  await openTab(last.url, { at, pin: last.pin && prefs.get().pinned.some((p) => p.id === last.pin) ? last.pin : undefined });
+  await openTab(last.url, { at, position: last.position, pin: last.pin && prefs.get().pinned.some((p) => p.id === last.pin) ? last.pin : undefined });
 }
 
 export function nth(n: number) {
@@ -183,7 +214,7 @@ export function cycle(step: 1 | -1) {
 
 export function pin(id: string) {
   const tab = prefs.get().tabs.find((t) => t.id === id);
-  if (!tab || tab.pin) return;
+  if (!tab?.url || tab.pin) return;
   const site: Site = { id: newId("p"), url: tab.url, title: tab.title, icon: tab.icon };
   prefs.set({ pinned: [...prefs.get().pinned, site] });
   patchTab(id, { pin: site.id });
@@ -196,11 +227,10 @@ export function unpin(siteId: string) {
 
 // A pinned tile shows its tab, or opens it again at the pinned address.
 export function openPinned(siteId: string, beside = false) {
-  showBrowser(beside);
   const tab = prefs.get().tabs.find((t) => t.pin === siteId);
   const site = prefs.get().pinned.find((p) => p.id === siteId);
-  if (tab) select(tab.id, true);
-  else if (site) void openTab(site.url, { pin: site.id });
+  if (tab) select(tab.id, true, beside);
+  else if (site) void openTab(site.url, { pin: site.id, beside });
 }
 
 // Sidebar mode is independent of the panes and their keyboard focus.
@@ -300,9 +330,13 @@ async function onKey(front: boolean) {
   bar.set({ mode: "new", text: "" });
 }
 
-void engine.then((e) => e?.listen({ state: onState, icon: onIcon, opened: onOpened, key: (front) => void onKey(front), focused: () => { const pane = holder(PERSONAL_BROWSER); if (pane?.leaf.page === PERSONAL_BROWSER) focusPane(pane.leaf.id); } }));
+void engine.then((e) => e?.listen({ state: onState, icon: onIcon, opened: onOpened, key: (front) => void onKey(front), focused: (id) => { const page = browserPage(id); const pane = holder(page); if (pane?.leaf.page === page) focusPane(pane.leaf.id); } }));
 const menuKeys = () => spaceKeys(browserFocused());
-panes.subscribe(menuKeys);
+panes.subscribe(() => {
+  const selected = browserTabId(focusedPage());
+  if (selected && selected !== prefs.get().selected) prefs.set({ selected });
+  menuKeys();
+});
 available.subscribe(menuKeys);
 
 // Browser keys follow pane focus, even while the sidebar lists notes.
@@ -310,17 +344,21 @@ export function spaceKey(id: string): boolean {
   if (id === "browser") return void (prefs.get().front ? leave() : enter()), true;
   if (!available.get()) return false;
   if (id === "browser-anywhere") return void onKey(true), true;
+  if (id === "reopen-tab") {
+    const last = prefs.get().closed[0];
+    if (last && (last.time ?? 0) >= lastTabClose() && (last.position || browserFocused())) { void reopen(); return true; }
+    return false;
+  }
   if (!browserFocused()) return false;
   const { selected, tabs } = prefs.get();
   const tab = tabs.find((t) => t.id === selected);
-  const onPage = shown.get().kind === "tab" && !!tab;
+  const onPage = !!tab && focusedPage() === browserPage(tab.id);
   if (id.startsWith("tab-")) return nth(Number(id.slice(4))), true;
   switch (id) {
     case "new-page":
     case "new-tab": bar.set({ mode: "new", text: "" }); return true;
     case "open-location": bar.set(onPage ? { mode: "here", text: tab!.url } : { mode: "new", text: "" }); return true;
-    case "close-tab": if (onPage) void closeTab(); else shown.set({ kind: "tab" }); return true;
-    case "reopen-tab": void reopen(); return true;
+    case "close-tab": if (onPage) void closeTab(); else { shown.set(tabView); showBrowser(); } return true;
     case "back": case "forward": case "reload": if (onPage) void act(id); return true;
     case "zoom-in": case "zoom-out": case "zoom-reset": if (onPage) void zoom(id === "zoom-in" ? 1 : id === "zoom-out" ? -1 : 0); return true;
     case "next-tab": case "previous-tab": cycle(id === "next-tab" ? 1 : -1); return true;

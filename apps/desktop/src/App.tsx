@@ -1,5 +1,6 @@
 import { watchAccountReturns } from '~/lib/account-return';
-import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
+import { CALENDAR_VIEW, MAIL_READING, MAIL_VIEW } from '~/lib/space';
+import { DeviceConnections } from "~/components/device-connections";
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -43,7 +44,7 @@ import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
 import { BrowserSidebar } from "~/components/browser-sidebar";
 import { BrowserCommand } from "~/components/browser-command";
-import { available as browserAvailable, leave as leaveBrowser, useFront } from "~/lib/browser-space";
+import { available as browserAvailable, space as browserSpace, leave as leaveBrowser, useFront } from "~/lib/browser-space";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
@@ -54,7 +55,7 @@ import { parentOf, roleOf } from "~/lib/linked";
 import { copyPageLink } from "~/lib/links";
 import { editPage } from "~/lib/live";
 import type { ObjectSummary } from "~/lib/objects";
-import { focusedPage, leaves, PERSONAL_BROWSER, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
+import { focusedPage, isPersonalBrowser, browserTabId, openBeside, openFrom, openPage, panes, restorePanes, showOnly } from "~/lib/panes";
 import { isDesktop, phone, useMobile } from "~/lib/platform";
 import { watchViewport } from "~/lib/viewport";
 import { serveAgents } from "~/lib/project-runtime/bridge";
@@ -157,11 +158,11 @@ export default function App() {
   useEffect(() => void (loaded && projectsOn && linkedFolders && serveAgents()), [loaded, projectsOn, linkedFolders]);
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarOpen)), [sidebarOpen]);
-  // Toasts stay over the sidebar while the browser is in front: a native page would cut them (styles.css).
+  // Toasts fit over the open sidebar, above its footer: off the pages, where a native page would cut them (styles.css).
   useEffect(() => {
-    document.documentElement.toggleAttribute("data-toasts-beside", !!root && leaves(root).some((l) => l.page === PERSONAL_BROWSER) && sidebarOpen);
+    document.documentElement.toggleAttribute("data-toasts-beside", sidebarOpen);
     document.documentElement.style.setProperty("--toast-room", `${sidebarWidth}px`);
-  }, [root, sidebarOpen, sidebarWidth]);
+  }, [sidebarOpen, sidebarWidth]);
   useEffect(() => void (resizing || localStorage.setItem(WIDTH_KEY, String(sidebarWidth))), [resizing, sidebarWidth]);
   // The composer's @mentions of other pages read the same list as the sidebar.
   useEffect(() => setAskPages(pages.filter(listed).map((p) => ({ id: p.id, title: p.title }))), [pages]);
@@ -176,8 +177,9 @@ export default function App() {
         void startTail();
         // Browser tabs restore on demand; a browser belonging to a deleted page does not.
         const exists = (id: string) => {
+          if (id === MAIL_READING) return false;
           if (mobile && ([ASK_VIEW, FEED_VIEW, SUGGESTIONS_VIEW].includes(id) || id.startsWith(BROWSER_VIEW) || id.startsWith(CHAT_VIEW))) return false;
-          if (id === PERSONAL_BROWSER) return !mobile && (mac || browserAvailable.get());
+          if (isPersonalBrowser(id)) return !mobile && (mac || browserAvailable.get()) && (!browserTabId(id) || browserSpace.get().tabs.some((t) => t.id === browserTabId(id)));
           const page = id.startsWith(BROWSER_VIEW) ? id.slice(BROWSER_VIEW.length).split("/")[0] : isPageView(id) ? id : "";
           // In the Mac app a streamed pane is only an agent's tab beside its chat; personal browsing is the browser space.
           if (mac && id.startsWith(BROWSER_VIEW) && !page && !id.split("/")[2]) return false;
@@ -188,7 +190,7 @@ export default function App() {
         if (gmailReturn) { openPage(MAIL_VIEW); return; }
         if (calendarReturn) { openPage(CALENDAR_VIEW); return; }
         const work = atWork(list);
-        if (!restorePanes(exists)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null);
+        if (!restorePanes(exists, browserSpace.get().selected)) showOnly(list.filter((p) => listed(p) && (p.typeId !== "task" || work.has(p.id)) && !typeOf(p.typeId).made && !parentOf(p)).sort((a, b) => b.updatedAt - a.updatedAt)[0]?.id ?? null);
       })
       .catch(console.error);
   }, []);
@@ -420,6 +422,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
+          <DeviceConnections />
           {remoteWork && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">
@@ -440,7 +443,7 @@ export default function App() {
             </div>
           ))}
           <ShortcutsSheet />
-          {!phone && <MailRoot />}
+          <MailRoot />
           {!mobile && <CliUpdates />}
           <AppUpdates />
           <ZoomHud />

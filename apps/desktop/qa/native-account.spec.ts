@@ -68,7 +68,7 @@ test('a syncing client approves a device by its code, then signs every device ou
   }, { id, recovery });
   await page.goto('/');
   await page.getByRole('button', { name: 'Account and sync' }).click();
-  await page.getByRole('button', { name: 'Add a device', exact: true }).click();
+  await page.getByRole('button', { name: 'Add an older app', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('textbox', { name: 'Code from the new device' }).click();
   await page.keyboard.type(`${request.id.slice(0, 4)} ${request.id.slice(4, 8)}`);

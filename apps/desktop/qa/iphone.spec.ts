@@ -291,3 +291,32 @@ test("phone search creates a named type and reopens the same page from Notes", a
   await page.getByRole("button", { name: "Back", exact: true }).tap();
   await expect(page.getByRole("heading", { name: "Recent notes" })).toBeVisible();
 });
+
+// The phone opens a quick-create note in one pane and keeps its originating tab.
+test("phone quick create opens an Idea and a Page from Library", async ({ page }) => {
+  await page.goto("/?iphone");
+  await search(page, "");
+  const choices = library(page).getByRole("group", { name: "Create", exact: true }).getByRole("option");
+  await expect(choices).toHaveText(["Idea", "Page"]);
+  await choices.getByText("Idea", { exact: true }).tap();
+  const title = page.getByRole("textbox", { name: "Title", exact: true });
+  await expect(title).toBeFocused();
+  await title.fill("A trail to try");
+  await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
+  const back = page.getByRole("button", { name: "Back", exact: true });
+  await back.tap();
+  await expect(page.getByRole("main", { name: "Today" })).toBeVisible();
+
+  await nav(page).getByRole("button", { name: "Notes", exact: true }).tap();
+  await search(page, "");
+  await choices.getByText("Page", { exact: true }).tap();
+  await expect(title).toBeFocused();
+  await expect(title).toHaveValue("");
+  await title.fill("Packing list");
+  await back.tap();
+  await expect(page.getByRole("heading", { name: "Recent notes" })).toBeVisible();
+  await search(page, "A trail to try");
+  await library(page).getByRole("option", { name: "A trail to try", exact: true }).tap();
+  await expect(title).toHaveValue("A trail to try");
+  await expect(page.locator("[data-pane]:visible")).toHaveCount(1);
+});

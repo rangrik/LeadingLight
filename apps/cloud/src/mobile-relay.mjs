@@ -25,7 +25,11 @@ async function connection(sql, request, channel, role) {
   const [row] = await sql`SELECT * FROM mobile_connections WHERE id=${channel} FOR UPDATE`;
   const expected = row?.[role === 'host' ? 'host_hash' : 'client_hash'];
   require(expected && timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(sha(token), 'hex')), 403, 'Mac connection authorization failed.');
-  require(recent(row.last_seen || row.created_at, 30 * 86400_000), 410, 'This connection expired. Copy a new code from the Mac.');
+  require(recent(row.last_seen || row.created_at, 30 * 86400_000), 410, 'This connection expired. Request the Mac again from the project.');
+  if (row.device_link) {
+    const [link] = await sql`SELECT l.state,l.expires_at,a.revoked_at AS a_revoked,b.revoked_at AS b_revoked,least(a.expires_at,b.expires_at) AS valid_until FROM device_links l JOIN native_sessions a ON a.id=l.requester JOIN native_sessions b ON b.id=l.target WHERE l.channel=${channel}`;
+    require(link && !link.a_revoked && !link.b_revoked && Date.parse(link.valid_until)>Date.now() && (link.state==='approved' || role==='host' && link.state==='pending' && Date.parse(link.expires_at)>Date.now()),403,'Device access has ended.');
+  }
   return row;
 }
 

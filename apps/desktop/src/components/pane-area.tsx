@@ -21,7 +21,7 @@ import { TypeView } from "~/components/type-view";
 import { reportOf } from "~/lib/work";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
-import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, PERSONAL_BROWSER, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, browserTabId, isPersonalBrowser, type Rect, resizePanes, showIn, travel } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
@@ -33,7 +33,7 @@ import { AskView } from "~/components/agent-panel";
 import { Suggestions } from "~/components/suggestions";
 import { ProjectChat } from "~/components/project-chat";
 import { PageHistory } from "~/components/page-history";
-import { MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
+import { MAIL_READING, MAIL_VIEW, CALENDAR_VIEW, ASK_VIEW, BROWSER_VIEW, CHAT_VIEW, describe, draftOf, FEED_VIEW, INBOX_VIEW, isPageView, pageOf, space, SUGGESTIONS_VIEW, TYPE_VIEW } from "~/lib/space";
 import { readPaper } from "~/lib/paper";
 import { openSearch } from "~/lib/workspace-search";
 import { phone, useMobile } from "~/lib/platform";
@@ -160,6 +160,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
           // Touch has no hover: on iOS every pane shows its buttons, so none sit there invisible.
           const backCard = !mobile && split && leaf.id !== focus && BACK_CARD;
           const mail = leaf.page.startsWith(MAIL_VIEW);
+          const readingMail = leaf.page === MAIL_READING;
           return (
             <section
               aria-label={shown.title}
@@ -182,19 +183,20 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 </button>
               )}
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
-              {!folded && leaf.page !== PERSONAL_BROWSER && (
+              {!folded && !isPersonalBrowser(leaf.page) && (
               <PanelHeader
                 after={mail ? <MailCount view={leaf.page} /> : !phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
-                icon={mail ? <Mail className="size-4 shrink-0" /> : shown.icon && <PageIconView icon={shown.icon} />}
+                icon={mail && !readingMail ? <Mail className="size-4 shrink-0" /> : shown.icon && <PageIconView icon={shown.icon} />}
                 lead={lead && (isMobile || (mobile && folding) || (rect.x < EPS && rect.y < EPS))}
                 nav={<History pane={leaf.id} tab={tab} />}
                 under={tabbed}
                 toggle={!windowToggle || isMobile}
                 muted={split && leaf.id !== focus}
                 onGrab={split || tabbed ? (e) => armDrag(e, { page: leaf.page, label: shown.title, tab: tab.id }) : undefined}
-                onRoot={(e) => shown.parent && (leaf.back ? showIn(leaf.id, leaf.back) : visit(shown.parent.view, e))}
+                onRoot={(e) => readingMail ? travel(-1, leaf.id) : shown.parent && (leaf.back ? showIn(leaf.id, leaf.back) : visit(shown.parent.view, e))}
                 root={shown.parent?.title}
+                showRootInCompact={readingMail}
                 sidebarOpen={sidebarOpen}
               >
                 {/* Every page's card has Ask, and the Writing menu if its type uses the tools, shown
@@ -221,16 +223,16 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               )}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
-                className={cn("@container min-h-0 flex-1 overflow-y-auto", leaf.page === PERSONAL_BROWSER && "flex flex-col", folded && "hidden")}
+                className={cn("@container min-h-0 flex-1 overflow-y-auto", isPersonalBrowser(leaf.page) && "flex flex-col", folded && "hidden")}
                 data-page-scroller
-                key={leaf.page}
+                key={readingMail ? MAIL_VIEW : leaf.page}
               >
-                {leaf.page === PERSONAL_BROWSER ? (
-                  <BrowserSpace placement={`${b.left},${b.top},${b.width},${b.height}`} active={front && !folded && (!isMobile || pane.id === focus)} focused={front && leaf.id === focus} lead={lead && (isMobile || (rect.x < EPS && rect.y < EPS))} mac={windowToggle} under={tabbed} onClose={split || tabbed ? () => closeTab(leaf.id) : undefined} />
+                {isPersonalBrowser(leaf.page) ? (
+                  <BrowserSpace selected={browserTabId(leaf.page)} placement={`${b.left},${b.top},${b.width},${b.height}`} active={front && !folded && (!isMobile || pane.id === focus)} focused={front && leaf.id === focus} lead={lead && (isMobile || (rect.x < EPS && rect.y < EPS))} mac={windowToggle} under={tabbed} onClose={split || tabbed ? () => closeTab(leaf.id) : undefined} />
                 ) : !leaf.page ? (
                   <NoPage className="h-full" />
                 ) : mail ? (
-                  <MailView pane={leaf.id} view={leaf.page} />
+                  <MailView active={front && leaf.id === focus} pane={leaf.id} view={leaf.page} />
                 ) : leaf.page === CALENDAR_VIEW ? (
                   <CalendarView />
                 ) : leaf.page === INBOX_VIEW ? (

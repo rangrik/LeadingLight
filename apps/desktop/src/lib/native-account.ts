@@ -4,7 +4,7 @@ import { createStore } from './state';
 import { openAccountBrowser } from './account-browser';
 
 type KeyEnvelope = { publicKey: JsonWebKey; iv: string; data: string };
-export type NativeApproval = { id: string; deviceName: string; publicKey: JsonWebKey; expiresAt: string };
+export type NativeApproval = { signinOnly?:boolean; id: string; deviceName: string; publicKey: JsonWebKey; expiresAt: string };
 export const nativeConnection = createStore<{ pending: boolean; message: string; code?: string; url?: string }>({ pending: false, message: '' });
 export const connectionCode = (id: string) => id.replaceAll('-', '').slice(0, 8).toUpperCase();
 export function snapshotSyncSettings(owner: string) {
@@ -37,7 +37,7 @@ export async function openNativeApproval() {
   if (url) await openAccountBrowser(url);
 }
 
-export async function connectNativeAccount() {
+export async function connectNativeAccount(signinOnly=false, openBrowser=signinOnly) {
   if (nativeConnection.get().pending) return;
   cancelled = false;
   setCloud({ verifying: true });
@@ -45,17 +45,23 @@ export async function connectNativeAccount() {
   try {
     const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
     const deviceName = await platformReady === 'ios' ? (phone ? 'LeadingLight on iPhone' : 'LeadingLight on iPad') : 'LeadingLight on Mac';
-    const start = await cloudApi<{ id: string; expiresAt: string; approvalUrl: string }>('native/start', { deviceName, publicKey: await crypto.subtle.exportKey('jwk', pair.publicKey) });
+    const start = await cloudApi<{ id: string; expiresAt: string; approvalUrl: string }>('native/start', { deviceName, signinOnly, publicKey: await crypto.subtle.exportKey('jwk', pair.publicKey) });
     const approvalUrl = new URL(start.approvalUrl);
     if (approvalUrl.origin !== 'https://leadinglight.app' || approvalUrl.searchParams.get('connect') !== start.id) throw new Error('The sign-in link was invalid. Please try again.');
     nativeConnection.set({ pending: true, message: '', code: connectionCode(start.id), url: approvalUrl.href });
+    if(openBrowser) await openNativeApproval();
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       if (cancelled) throw new Error('');
       if (document.visibilityState === 'hidden' || !navigator.onLine) continue;
-      const result = await cloudApi<{ status: 'pending' | 'approved'; user?: { id: string; name: string }; keyEnvelope?: KeyEnvelope }>('native/poll', { id: start.id });
-      if (result.status !== 'approved' || !result.user || !result.keyEnvelope) continue;
+      const result = await cloudApi<{ status: 'pending' | 'approved'; user?: { id: string; name: string }; keyEnvelope?: KeyEnvelope; signinOnly?:boolean }>('native/poll', { id: start.id });
+      if (result.status !== 'approved' || !result.user) continue;
+      if(signinOnly && result.signinOnly && !result.keyEnvelope){
+        await cloudApi('native/confirm',{});setCloud({verifying:false});
+        await refreshCloud();nativeConnection.set({pending:false,message:'Signed in. Choose a device to set up note sync.'});return;
+      }
+      if(!result.keyEnvelope)throw new Error('The approval did not include a library key. Start again.');
       const { enableSync, keySavedName, syncNow } = await import('./sync');
       const rollback = snapshotSyncSettings(result.user.id);
       try {

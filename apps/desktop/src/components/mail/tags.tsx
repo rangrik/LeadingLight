@@ -38,7 +38,7 @@ export function AccountTag({ account, size, tip }: { account: string; size?: "lg
 export function Tags({ item, now }: { item: Item; now: number }) {
   const l = item.lines, w = when(l, now), mins = minutesOf(item);
   return (
-    <div className="flex flex-wrap gap-1.5 pt-10" data-testid="mail-tags">
+    <div className="flex flex-wrap gap-1.5" data-testid="mail-tags">
       {l ? (
         <Badge size="lg" variant={l.verdict === "none" ? "success" : "secondary"}>
           {l.verdict === "none" || l.verdict === "work" ? VERDICT[l.verdict] : `${VERDICT[l.verdict]} · ${mins} min`}

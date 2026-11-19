@@ -33,18 +33,15 @@ Feature: Connect the installed app to the same encrypted workspace
     Then I read that the connection expired and to start again on the new device
     And no recovery key field is shown and Connect this device is disabled
 
-  Scenario: Approve a new Mac from an app that already syncs
-    Given LeadingLight on my first Mac is signed in and syncing
-    And my new Mac shows code "3F9A1C07" after I press "Connect this Mac", and no browser opens
-    When I open Account and devices on the first Mac, press "Add a device" and type "3f9a 1c07"
-    And I press "Continue"
-    Then it asks "Let LeadingLight on Mac open your notes?" with my account and the code
-    When I press "Approve"
-    Then it says "LeadingLight on Mac is connected. It will finish syncing by itself."
-    And the new Mac receives the same account and the recovery key, encrypted for it alone
-    And no recovery key was typed on either Mac or in a browser
+  Scenario: Connect a signed-in Mac to a library
+    Given my first Mac already syncs this library
+    When I choose Connect a device in Account and devices on the new Mac
+    Then the new Mac shows one number and the first Mac shows three
+    When I choose the matching number on the first Mac
+    Then the new Mac receives the library key encrypted for that approval
+    And I can sync without typing a recovery key
 
-  Scenario: A wrong or guessed code approves nothing
+  Scenario: An older app’s wrong or guessed sign-in code approves nothing
     Given LeadingLight on my Mac is signed in and syncing
     When I type a code that no waiting device shows and press "Continue"
     Then it says "No device is waiting with that code. Check the code on your new device."

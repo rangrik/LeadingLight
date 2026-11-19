@@ -83,7 +83,7 @@ const again = (retry: () => void) => (
 );
 
 // The last decision's Undo, for its toast's 8 seconds; Z presses it.
-let undoing: { id: string; undo: Done["undo"]; key?: string } | null = null;
+let undoing: { id: string; undo: Done["undo"]; reopen: boolean; key?: string } | null = null;
 export const canUndo = () => !!undoing;
 export async function undoLast() {
   const u = undoing;
@@ -91,7 +91,7 @@ export async function undoLast() {
   undoing = null;
   toastManager.close(u.id);
   try {
-    if (mail.get().today.closed) await reopenLook();
+    if (u.reopen && mail.get().today.closed) await reopenLook();
     if (!(await u.undo())) toast("It was already sent.");
     else if (u.key) setLook({ key: u.key, trouble: undefined });
   } catch (e) {
@@ -115,7 +115,7 @@ function said(text: string, d: Done, key?: string, open?: () => void) {
       </Button>
     </>,
   );
-  undoing = { id, undo: d.undo, key };
+  undoing = { id, undo: d.undo, key, reopen: lookOpen.now || !mail.get().today.closed };
   setTimeout(() => undoing?.id === id && (undoing = null), 8000);
 }
 

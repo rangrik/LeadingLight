@@ -34,12 +34,12 @@ export function prune(t: Tab, keep: (page: string) => boolean): Tab {
 type Stored = { kind?: unknown; id?: unknown; dir?: unknown; ratio?: unknown; a?: Stored; b?: Stored; active?: unknown; tabs?: { id?: unknown; pages?: unknown[]; at?: unknown }[] };
 
 // A layout read back from storage, with pages gone since pruned. Damaged, it is null and the app opens a page as before.
-export function readLayout(raw: unknown, exists: (page: string) => boolean): { root: PaneNode; focus: string } | null {
+export function readLayout(raw: unknown, exists: (page: string) => boolean, restore = (page: string) => page): { root: PaneNode; focus: string } | null {
   const ids: string[] = [];
   const node = (n: Stored): PaneNode => {
     if (n.kind === "split") return { kind: "split", id: String(n.id), dir: n.dir === "col" ? "col" : "row", ratio: Math.min(0.9, Math.max(0.1, Number(n.ratio) || 0.5)), a: node(n.a!), b: node(n.b!) };
     const tabs = n.tabs!.map((t): Tab => {
-      const pages = t.pages!.map(String);
+      const pages = t.pages!.map((p) => restore(String(p)));
       if (!pages.length) throw new Error("a tab with no pages");
       return prune({ id: String(t.id), pages, at: Math.min(pages.length - 1, Math.max(0, Math.trunc(Number(t.at)) || 0)) }, exists);
     });
