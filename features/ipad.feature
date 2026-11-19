@@ -200,5 +200,5 @@ Feature: LeadingLight on iPad
     When I choose a custom type or enter "new meeting Friday review"
     Then the new page uses that type in the focused pane
     And I can open a search result beside the page or dismiss search by touch
-    When I do that in a narrow window and reopen search above the keyboard
+    When I choose Open in new pane in a narrow window and reopen search above the keyboard
     Then I can still tap the first result and the toolbar search button stays within reach

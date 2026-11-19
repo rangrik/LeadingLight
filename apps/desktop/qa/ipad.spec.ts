@@ -251,7 +251,7 @@ test.describe("iPad workspace search", () => {
     }
     await search.tap();
     await dialog.getByRole("combobox").fill("Trip budget");
-    await dialog.getByRole("button", { name: "Open beside" }).tap();
+    await dialog.getByRole("button", { name: "Open in new pane" }).tap();
     await search.tap();
     await page.evaluate(() => {
       Object.assign(window.visualViewport!, { height: 260 });

@@ -50,7 +50,7 @@ Diagrams render locally in the installed app, including offline, and follow ligh
 
 Tap **Search library** in the sidebar or the magnifying glass at the top of the right-hand toolbar when the sidebar is closed. Choose **Pages**, **Types** or **Create** to narrow the same search. Your words stay in the field as you switch. With a hardware keyboard, use **⌘K** to open search and **⌘1–4** to change categories.
 
-Tap **New page** for a blank note, or type **new meeting Friday review** and choose the result to create a Meeting with that title. The selected result also offers **Open beside** for working in two panes.
+Tap **New page** for a blank note, or type **new meeting Friday review** and choose the result to create a Meeting with that title. The selected result also offers **Open beside** for working in two panes. A narrow window shows one pane at a time and calls this action **Open in new pane**.
 
 ## Narrow windows
 

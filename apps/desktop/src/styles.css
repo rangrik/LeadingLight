@@ -260,6 +260,7 @@ html[data-ipad].dark {
 }
 html[data-ipad]:not([data-phone]) [data-tab-row] { border-bottom-color: transparent; }
 
+html[data-ipad][data-keyboard]:not([data-phone]) [data-slot="command-dialog-viewport"]:has(> .ll-workspace-search) { padding-block: 4px; }
 /* With little height, keep page actions beside the results so they cannot cover the first row. */
 @container library (max-height: 240px) {
   .ll-workspace-search:has(> [data-slot="command-footer"]) {

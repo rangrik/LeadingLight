@@ -90,6 +90,7 @@ export function BarStrip({ onCapture, loaded }: { onCapture: () => void; loaded:
   const mobile = useMobile();
   const keys = useKeysFor()("new-idea");
   const { isMobile, open, openMobile } = useSidebar();
+  const showSearch = mobile && !(isMobile ? openMobile : open);
   // Following: a page coming to the front with suggestions shows Suggestions, unless pinned.
   useEffect(() => {
     let front = focusedPage();
@@ -104,8 +105,8 @@ export function BarStrip({ onCapture, loaded }: { onCapture: () => void; loaded:
   return (
     // Level with the page headers' middle line; the bottom button level with the cards' bottom edge.
     // The hairline is a half-pixel shadow: one device pixel on a Retina screen, where Chromium draws a border's 0.5 px as 2.
-    <nav aria-label="Bar" className={cn("flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]", mobile && "w-11")} data-bar data-tauri-drag-region={!mobile || undefined}>
-      {mobile && !(isMobile ? openMobile : open) && <Tooltip>
+    <nav aria-label="Bar" className={cn("flex w-10 shrink-0 flex-col items-center gap-1 pt-[calc(var(--header-height)/2_-_0.5rem)] pb-2 shadow-[inset_0.5px_0_0_var(--color-border)]", mobile && "w-11", showSearch && "pt-[calc(var(--header-height)/2_-_22px)]")} data-bar data-tauri-drag-region={!mobile || undefined}>
+      {showSearch && <Tooltip>
         <TooltipTrigger render={<Button aria-label="Search library" disabled={!loaded} className="min-h-11 min-w-11" size="icon" variant="ghost" onClick={() => openSearch()} />}><Search /></TooltipTrigger>
         <TooltipPopup side="left">Search library</TooltipPopup>
       </Tooltip>}
