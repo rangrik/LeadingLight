@@ -2,7 +2,8 @@
 // Changes: pages instead of projects, its label given (Pinned or Library), New page and New notebook actions,
 // rows select instead of linking; the row menu is Open beside, Rename,
 // Pin, Copy link and Delete (View/Share and the trailing "More" row dropped); rows can be dragged
-// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children).
+// beside the open page; a page's Thoughts page and essay hang under it on a tree (see Children);
+// `before` sits between the label and the rows (the pinned sites).
 import { Columns2, Ellipsis, Link, NotebookPen, PencilLine, Pin, PinOff, Plus, Trash } from "lucide-react";
 import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -199,7 +200,7 @@ function PageRow({ item }: { item: Row }) {
   );
 }
 
-export function NavProjects({ label, projects, onCreate, onNotebook }: { label: string; projects: Row[]; onCreate?: () => void; onNotebook?: () => void }) {
+export function NavProjects({ label, projects, before, onCreate, onNotebook }: { label: string; projects: Row[]; before?: React.ReactNode; onCreate?: () => void; onNotebook?: () => void }) {
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <SidebarGroupLabel>{label}</SidebarGroupLabel>
@@ -209,6 +210,7 @@ export function NavProjects({ label, projects, onCreate, onNotebook }: { label: 
           <Plus />
         </SidebarGroupAction>
       )}
+      {before}
       <SidebarMenu>
         {projects.map((item) => (
           <PageRow item={item} key={item.id} />

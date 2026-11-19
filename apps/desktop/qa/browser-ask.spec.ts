@@ -7,7 +7,7 @@ test("A click waits for the person, and Not now leaves the page alone", async ({
   await page.addInitScript(() => localStorage.setItem("ll.browser.standin", "1"));
   await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.locator('[data-slot="sidebar-content"]').getByRole("button", { name: "New tab", exact: true }).click();
   await page.keyboard.press("ControlOrMeta+t");
   await page.getByRole("combobox", { name: "Search or enter address" }).fill("fernhill.app/pricing");
   await page.keyboard.press("Enter");
@@ -42,7 +42,7 @@ test("The live page comes back after the command bar covers it", async ({ page }
   await page.addInitScript(() => localStorage.setItem("ll.browser.standin", "1"));
   await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.locator('[data-slot="sidebar-content"]').getByRole("button", { name: "New tab", exact: true }).click();
   const bar = page.getByRole("combobox", { name: "Search or enter address" });
   await bar.fill("example.com");
   await page.keyboard.press("Enter");

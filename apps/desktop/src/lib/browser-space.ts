@@ -20,8 +20,8 @@ export type Bar = { mode: "new" | "here"; text: string };
 
 type Closed = Omit<SpaceTab, "id"> & { at?: number; time?: number; position?: TabPosition };
 // icons: the last sites' icons by host, for history and saved rows, which have no tab.
-type Kept = { front: boolean; tabs: SpaceTab[]; selected: string; closed: Closed[]; pinned: Site[]; base: string; icons: Record<string, string> };
-const prefs = localPrefs<Kept>("ll.browser.space", { front: false, tabs: [], selected: "", closed: [], pinned: [], base: "", icons: {} });
+type Kept = { tabs: SpaceTab[]; selected: string; closed: Closed[]; pinned: Site[]; base: string; icons: Record<string, string> };
+const prefs = localPrefs<Kept>("ll.browser.space", { tabs: [], selected: "", closed: [], pinned: [], base: "", icons: {} });
 
 // Damaged storage is dropped piece by piece, never trusted: a bad address must not load.
 const ID = /^[a-zA-Z0-9-]{1,64}$/;
@@ -34,7 +34,7 @@ function entries<T extends { url: string; title: string; icon?: string }>(list: 
   const p = prefs.get();
   const tabs = entries<SpaceTab>(p.tabs, 200, true, true);
   const icons = Object.fromEntries(Object.entries(p.icons && typeof p.icons === "object" ? p.icons : {}).filter(([, v]) => icon(v)));
-  prefs.set({ front: p.front === true, tabs, selected: tabs.some((t) => t.id === p.selected) ? p.selected : (tabs[0]?.id ?? ""), closed: entries(p.closed, 20, false, true), pinned: entries<Site>(p.pinned, 40, true), base: typeof p.base === "string" ? p.base : "", icons });
+  prefs.set({ tabs, selected: tabs.some((t) => t.id === p.selected) ? p.selected : (tabs[0]?.id ?? ""), closed: entries(p.closed, 20, false, true), pinned: entries<Site>(p.pinned, 40, true), base: typeof p.base === "string" ? p.base : "", icons });
 }
 
 export const space = prefs;
@@ -56,12 +56,12 @@ export const liveOf = (id: string) => live.get()[id] ?? DEFAULT_LIVE;
 // The space can be shown in the Mac app, and in the browser build under the QA flag only.
 export const available = createStore(false);
 void engine.then((e) => available.set(!!e));
-export const useFront = () => prefs.use().front;
 export const browserFocused = () => available.get() && isPersonalBrowser(focusedPage());
 const tabView = { kind: "tab" } as const;
 export const browserView = (selected: string, home: Shown) => selected ? tabView : home;
 
 function showBrowser(page = browserPage(prefs.get().selected), beside = false) {
+  void findBase();
   if (beside) return openBeside(page);
   if (holder(page)) return openPage(page);
   const { root } = panes.get();
@@ -233,17 +233,10 @@ export function openPinned(siteId: string, beside = false) {
   else if (site) void openTab(site.url, { pin: site.id, beside });
 }
 
-// Sidebar mode is independent of the panes and their keyboard focus.
-export function enter() {
-  prefs.set({ front: true });
-  void findBase();
-}
-
 // Where the app would open the personal streamed browser: in the Mac app the browser space takes
 // it instead, with the address in a new tab. False where there is no space (the browser build).
 export function openInSpace(url?: string) {
   if (!available.get()) return false;
-  enter();
   showBrowser();
   if (!url && !prefs.get().tabs.length) bar.set({ mode: "new", text: "" });
   if (url) {
@@ -251,10 +244,6 @@ export function openInSpace(url?: string) {
     void openTab(url);
   }
   return true;
-}
-export function leave() {
-  bar.set(null);
-  prefs.set({ front: false });
 }
 
 // Saved pages and history are the browser's own lists (the streamed pane's bookmarks and history),
@@ -325,7 +314,6 @@ function onOpened(o: Opened) {
 // ⌃⌥B: from another app, the browser comes up ready to type; pressed again in front, it goes away.
 async function onKey(front: boolean) {
   if (front && browserFocused()) return bar.set(null), void (await engine)?.away();
-  enter();
   showBrowser();
   bar.set({ mode: "new", text: "" });
 }
@@ -341,8 +329,8 @@ available.subscribe(menuKeys);
 
 // Browser keys follow pane focus, even while the sidebar lists notes.
 export function spaceKey(id: string): boolean {
-  if (id === "browser") return void (prefs.get().front ? leave() : enter()), true;
   if (!available.get()) return false;
+  if (id === "browser") return openInSpace();
   if (id === "browser-anywhere") return void onKey(true), true;
   if (id === "reopen-tab") {
     const last = prefs.get().closed[0];
@@ -384,6 +372,8 @@ export function useAgentTabs(active: boolean) {
       return next.titles;
     };
     const read = async () => {
+      // The list is always in the sidebar now, so a hidden window does not ask.
+      if (document.hidden) return;
       const locs = await ask<Loc[]>("GET", "/v1/locations").catch(() => [] as Loc[]);
       const found = await Promise.all(locs.flatMap((l) => (l.worktrees ?? []).map(async (w) => {
         const base = browserBase(l.name, w.name);

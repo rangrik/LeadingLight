@@ -6,16 +6,13 @@ Feature: The browser space
     Given I am in the Mac app
 
   Scenario: Go to the browser and back
-    When I press Browser in the sidebar, or ⌥⌘B
-    Then the sidebar shows "Browser" under LeadingLight, a search field, Pinned, Tabs and Agents
-    And my open panes stay as they are
-    When I select a browser tab or open a new one
-    Then its pane has Back, Forward, the address pill, Save and More
+    When I click a tab under Tabs in the sidebar, or press ⌥⌘B
+    Then the browser has the keyboard and the sidebar still shows my pinned pages
+    And its pane has Back, Forward, the address pill, Save and More
     And there is only one place that shows an address
-    And switching sidebar mode does not open the command bar
-    When I press ⌥⌘B again, or choose Notes in the sidebar footer
+    When I click a pinned page
     Then my notes are as I left them
-    And my tabs are still open when I return
+    And my tabs are still listed under Tabs
 
   Scenario: Open a page
     When I press ⌘T
@@ -120,10 +117,10 @@ Feature: The browser space
     Given a page is open
     When I press Save, or ⌘D
     Then the pill says "Saved" for a moment and the Save icon is filled
-    And the page is listed under Saved in the sidebar, and in the command bar
+    And the page is listed under Saved, the icon beside Tabs in the sidebar, and in the command bar
     When I press Save again
     Then it is no longer saved
 
   Scenario: The browser build
     Given I am in the browser build, not the Mac app
-    Then Browser opens the streamed browser pane as before, since a web page cannot host a native view
+    Then Open browser in the sidebar opens the streamed browser pane, since a web page cannot host a native view

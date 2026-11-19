@@ -10,10 +10,9 @@ async function open(page: Page) {
   // No runtime: no agents, and Saved stays under the space's own key.
   await page.route("**/__runtime/**", (route) => route.fulfill({ json: [] }));
   await page.goto("/");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click();
 }
 async function visit(page: Page, input: string) {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.locator('[data-slot="sidebar-content"]').getByRole("button", { name: "New tab", exact: true }).click();
   await bar(page).fill(input);
   await page.keyboard.press("Enter");
   await expect(bar(page)).toBeHidden();

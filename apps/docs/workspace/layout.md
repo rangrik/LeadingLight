@@ -11,12 +11,13 @@ several pages side by side, and each of those places can hold tabs, as a browser
 ## The window
 
 - **The sidebar** shows **Search library** (<kbd>⌘K</kbd>), **New page** with a type picker, shortcuts for Today, Calendar and Mail,
-  and your pinned pages. Search library finds pages, types and open browser tabs from either mode.
-  **Notes** and **Browser** share this sidebar: use the two icons at the bottom left, swipe
-  horizontally across the sidebar, or press <kbd>⌥⌘B</kbd>. Switching mode keeps your panes and
-  edits in place. The bottom of the sidebar is two lines: how much of your Claude and Codex plans
-  is used, then a row of icons for Notes and Browser, **Remote work**, **Account and sync** and
-  **Settings**. Point at an icon to see its name.
+  then two lists that scroll together. **Pinned** holds the sites you pinned, as tiles, above
+  your pinned pages. In the Mac app, **Tabs** holds **New tab** and your open browser tabs, with
+  **Saved** and **History** as the two icons beside its label. There is no mode to switch: click
+  a page or a tab and it opens in its own pane, and both lists stay where they are. Search
+  library finds pages, types and open browser tabs. The bottom of the sidebar is two lines: how
+  much of your Claude and Codex plans is used, then a row of icons for **Remote work**,
+  **Account and sync** and **Settings**. Point at an icon to see its name.
 - **The page area** fills the rest. Each open page is a card with rounded corners, with a small
   gap between it, its neighbours and the window's edges.
 - **The bar** is the slim strip at the right edge of the window. See [The bar](/workspace/bar).
@@ -54,7 +55,7 @@ sidebar uses the same width, and hiding and showing the sidebar brings it back a
 <kbd>⌘B</kbd> always makes text bold. It never hides the sidebar.
 :::
 
-Press <kbd>⌘N</kbd> to create a new note tab or browser tab, following the pane you last clicked. The sidebar mode does not change which pane gets the new tab.
+Press <kbd>⌘N</kbd> to create a new note tab or browser tab, following the pane you last clicked.
 
 ## Open pages side by side
 
@@ -79,10 +80,10 @@ words and scroll position.
 
 ### Keep a note beside a website
 
-Choose **Browser** in the sidebar footer, then Shift-click a tab or choose **Open beside** from
-its **More** menu. The browser and note share the existing pane layout. Selecting another
-browser tab changes the browser pane; selecting another note changes the notes pane. Browser
-shortcuts follow the pane you click, regardless of sidebar mode. Close either pane with its
+Shift-click a tab under **Tabs** in the sidebar, or choose **Open beside** from its **More**
+menu. The browser and note share the existing pane layout. Selecting another browser tab
+changes the browser pane; selecting another note changes the notes pane. Browser shortcuts
+follow the pane you click. Close either pane with its
 **Close page** button; closing a pane keeps its browser tabs available in the sidebar.
 
 ### Shift-click a sidebar row

@@ -154,7 +154,7 @@ async function navigate(page: Page, path = "alpha") {
   await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();
 }
 async function open(page: Page) {
-  await page.goto("/"); await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click(); await navigate(page);
+  await page.goto("/"); await page.getByRole("button", { name: "Open browser", exact: true }).click(); await navigate(page);
   await browser(page).getByRole("button", { name: "Browser menu" }).click();
   await page.getByRole("menuitem", { name: "Desktop viewport", exact: true }).click();
   await expect(browser(page).getByRole("textbox", { name: "Browser page keyboard", exact: true })).toBeEnabled();

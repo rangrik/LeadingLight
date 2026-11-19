@@ -1,11 +1,18 @@
-import { findPage } from "./navigation";
+import { findPage, findPinnedPage } from "./navigation";
 import { expect, type Page, test } from "@playwright/test";
 
 const panes = (page: Page) => page.locator('[data-pane]');
-const mode = (page: Page, name: string) => page.getByRole('radio', { name, exact: true });
+const sidebar = (page: Page) => page.locator('[data-slot="sidebar-content"]');
+const pinned = (page: Page) => page.getByRole('navigation', { name: 'Pinned', exact: true });
+const tabs = (page: Page) => page.getByRole('list', { name: 'Tabs', exact: true });
+const bar = (page: Page) => page.getByRole('combobox', { name: 'Search or enter address' });
 const toggle = (page: Page) => page.getByRole('button', { name: /^(Hide sidebar|Toggle Sidebar)$/ });
 async function setup(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('ll.browser.standin', '1'));
+  // An older version's saved mode must not hide either list.
+  await page.addInitScript(() => {
+    localStorage.setItem('ll.browser.standin', '1');
+    if (!localStorage.getItem('ll.browser.space')) localStorage.setItem('ll.browser.space', '{"front":true}');
+  });
   await page.route('**/__runtime/**', (route) => route.fulfill({ json: [] }));
   await page.goto('/');
   await page.getByRole('button', { name: 'New page', exact: true }).first().click();
@@ -13,63 +20,65 @@ async function setup(page: Page) {
   await page.getByRole('textbox', { name: 'Page body', exact: true }).fill('Compare the walking route with our hotel.');
 }
 async function newBrowser(page: Page, url: string) {
-  await mode(page, 'Browser').click();
-  await page.getByRole('button', { name: /Search or enter address/ }).click();
-  await page.getByRole('combobox', { name: 'Search or enter address' }).fill(url);
+  await sidebar(page).getByRole('button', { name: 'New tab', exact: true }).click();
+  await bar(page).fill(url);
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
 }
 async function split(page: Page) {
   await newBrowser(page, 'https://kyoto.example/Walking-guide');
-  await mode(page, 'Notes').click();
   await (await findPage(page, 'Kyoto research')).click({ modifiers: ['Shift'] });
   await expect(panes(page)).toHaveCount(2);
 }
 
-// Seam: sidebar mode versus pane state. Switching modes must preserve mounted editors and native bounds.
-test('modes preserve a mixed split and provide just one sidebar toggle', async ({ page }) => {
+// Seam: one sidebar list versus pane state. Picking a tab or a note must leave the other list,
+// the mounted editor and the split alone, light only the row in front, and survive a restart.
+test('notes and tabs share one list, a mixed split and one sidebar toggle', async ({ page }) => {
   await setup(page);
-  await expect(page.getByRole('navigation', { name: 'Recent' })).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: 'Browser', exact: true })).toHaveCount(0);
+  await expect(tabs(page)).toHaveCount(0);
   await split(page);
   const note = page.getByRole('textbox', { name: 'Page body' });
   await note.press('ControlOrMeta+End');
   await note.pressSequentially(' Keep this edit.');
-  await page.keyboard.press('Alt+Meta+b');
-  await expect(mode(page, 'Browser')).toBeChecked();
+  const row = await findPinnedPage(page, 'Kyoto research');
+  const tab = tabs(page).getByRole('button', { name: 'Walking-guide', exact: true });
+  await tab.click();
+  await expect(tab).toHaveAttribute('aria-current', 'page');
+  await expect(row).not.toHaveAttribute('aria-current', 'page');
+  await row.click();
+  await expect(row).toHaveAttribute('aria-current', 'page');
+  await expect(tab).not.toHaveAttribute('aria-current', 'page');
   await expect(note).toContainText('Keep this edit.');
   await expect(panes(page)).toHaveCount(2);
   await expect(toggle(page)).toHaveCount(1);
   await toggle(page).click();
-  await expect(page.locator('[data-sidebar-modes]')).not.toBeInViewport();
+  await expect(pinned(page)).not.toBeInViewport();
   await expect(toggle(page)).toHaveCount(1);
   await toggle(page).click();
-  await mode(page, 'Notes').click();
   await page.waitForTimeout(900);
   await page.reload();
   await expect(panes(page)).toHaveCount(2);
   await expect(note).toContainText('Keep this edit.');
-  await expect(mode(page, 'Notes')).toBeChecked();
+  await expect(row).toBeVisible();
+  await expect(tab).toBeVisible();
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
-  await page.screenshot({ path: 'qa/report/sidebar-modes-split.png' });
+  await page.screenshot({ path: 'qa/report/sidebar-split.png' });
 });
 
 // Seam: explicit split navigation and keyboard routing across a native browser and a note.
 test('Open beside is discoverable and subsequent selections keep the other pane', async ({ page }) => {
   await setup(page);
   await newBrowser(page, 'https://kyoto.example/Walking-guide');
-  await page.getByRole('button', { name: 'New tab', exact: true }).click();
-  await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Train-times');
-  await page.keyboard.press('Enter');
-  await mode(page, 'Notes').click();
+  await newBrowser(page, 'https://kyoto.example/Train-times');
   await (await findPage(page, 'Kyoto research')).click();
-  await mode(page, 'Browser').click();
   await page.getByRole('button', { name: 'More for Walking-guide' }).click();
   await page.getByRole('menuitem', { name: 'Open beside' }).click();
   await expect(panes(page)).toHaveCount(2);
-  await page.getByRole('list', { name: 'Tabs', exact: true }).getByRole('button', { name: 'Train-times', exact: true }).click();
+  await tabs(page).getByRole('button', { name: 'Train-times', exact: true }).click();
   await expect(page.getByTestId('standin-page')).toContainText('Train-times');
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('Kyoto research');
-  await mode(page, 'Notes').click();
+  await page.getByRole('textbox', { name: 'Page body' }).click();
   await page.getByRole('button', { name: 'New page', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Title', exact: true })).toHaveValue('');
   await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Packing list');
@@ -84,34 +93,65 @@ test('Open beside is discoverable and subsequent selections keep the other pane'
   await expect(page.getByTestId('standin-page')).toContainText('Train-times');
 });
 
-// Seam: gesture recognition and modal isolation. Vertical and diagonal scroll must not switch modes.
-test('gestures are directional, latched and available in the narrow sidebar sheet', async ({ page }) => {
+// Seam: ⌥⌘B against pane focus and dialogs. It must hand the keyboard to the browser, open the
+// command bar when there is no tab, and never act behind a dialog.
+test('Option Command B opens the browser, and does nothing behind a dialog', async ({ page }) => {
   await setup(page);
-  const sidebar = page.locator('[data-sidebar-modes]');
-  await sidebar.dispatchEvent('wheel', { deltaX: 30, deltaY: 40 });
-  await sidebar.dispatchEvent('wheel', { deltaX: 80, deltaY: 0, ctrlKey: true });
-  await expect(mode(page, 'Notes')).toBeChecked();
-  await sidebar.dispatchEvent('wheel', { deltaX: 80, deltaY: 0 });
-  await expect(mode(page, 'Browser')).toBeChecked();
-  await sidebar.dispatchEvent('wheel', { deltaX: -100, deltaY: 0 });
-  await expect(mode(page, 'Browser')).toBeChecked();
-  await page.waitForTimeout(300);
-  await sidebar.dispatchEvent('wheel', { deltaX: -80, deltaY: 0 });
-  await expect(mode(page, 'Notes')).toBeChecked();
+  await page.keyboard.press('Alt+Meta+b');
+  await bar(page).fill('https://kyoto.example/Walking-guide');
+  await page.keyboard.press('Enter');
+  await (await findPage(page, 'Kyoto research')).click({ modifiers: ['Shift'] });
+  await expect(panes(page)).toHaveCount(2);
+  await page.getByRole('textbox', { name: 'Page body' }).click();
   await page.getByRole('button', { name: 'Search library', exact: true }).click();
   await page.keyboard.press('Alt+Meta+b');
   await expect(page.getByRole('dialog', { name: 'Search library' })).toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(mode(page, 'Notes')).toBeChecked();
+  await page.keyboard.press('Meta+l');
+  await expect(bar(page)).toBeHidden();
+  await page.keyboard.press('Alt+Meta+b');
+  await expect(page.getByRole('textbox', { name: 'Page body' })).toContainText('Compare the walking route');
+  await page.keyboard.press('Meta+l');
+  await expect(bar(page)).toHaveValue('https://kyoto.example/Walking-guide');
+});
+
+// Seam: the browser's pins and lists inside the notes sidebar. A pinned site must join Pinned, and
+// Saved and History, now icons, must still say what they are, in the narrow sheet too.
+test('a pinned site joins Pinned, and Saved and History are named icons', async ({ page }) => {
+  await setup(page);
+  await newBrowser(page, 'https://kyoto.example/Walking-guide');
+  await page.getByRole('button', { name: 'More for Walking-guide' }).click();
+  await page.getByRole('menuitem', { name: 'Pin', exact: true }).click();
+  const tile = pinned(page).getByRole('list', { name: 'Pinned sites' }).getByRole('button', { name: 'Walking-guide', exact: true });
+  await expect(tile).toHaveAttribute('aria-current', 'page');
+  await expect(tabs(page)).toHaveCount(0);
+  for (const name of ['Saved', 'History']) {
+    await sidebar(page).getByRole('button', { name, exact: true }).hover();
+    await expect(page.locator('[data-slot="tooltip-popup"]')).toHaveText(name);
+  }
+  const saved = sidebar(page).getByRole('button', { name: 'Saved', exact: true });
+  await saved.click();
+  await expect(saved).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'qa/report/sidebar-saved.png' });
+  await (await findPinnedPage(page, 'Kyoto research')).click();
+  await expect(saved).toHaveAttribute('aria-pressed', 'false');
+  await saved.click();
+  await expect(page.getByRole('heading', { name: 'Saved', exact: true })).toBeVisible();
+  await saved.click();
+  await expect(page.getByTestId('standin-page')).toContainText('Walking-guide');
   await page.setViewportSize({ width: 700, height: 800 });
   await page.getByRole('button', { name: 'Toggle Sidebar' }).click();
-  await sidebar.dispatchEvent('wheel', { deltaX: 80, deltaY: 0 });
-  await expect(mode(page, 'Browser')).toBeChecked();
+  await expect(tile).toBeVisible();
+  await sidebar(page).getByRole('button', { name: 'New tab', exact: true }).click();
+  await expect(bar(page)).toBeVisible();
+  await expect(tile).toBeHidden();
 });
 
 // Seam: the all-page Library and pins against persisted real note metadata.
 test('Library finds, pins and opens notes without a Recents list', async ({ page }) => {
   await setup(page);
+  await expect(page.getByRole('navigation', { name: 'Recent' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Search library', exact: true }).click();
   const library = page.getByRole('dialog', { name: 'Search library' });
   await library.getByRole('combobox').fill('missing');
@@ -119,9 +159,9 @@ test('Library finds, pins and opens notes without a Recents list', async ({ page
   await library.getByRole('combobox').fill('Kyoto');
   await library.getByRole('button', { name: 'Pin', exact: true }).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('navigation', { name: 'Pinned', exact: true }).getByRole('button', { name: 'Kyoto research', exact: true })).toBeVisible();
+  await expect(pinned(page).getByRole('button', { name: 'Kyoto research', exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole('navigation', { name: 'Pinned', exact: true }).getByRole('button', { name: 'Kyoto research', exact: true })).toBeVisible();
+  await expect(pinned(page).getByRole('button', { name: 'Kyoto research', exact: true })).toBeVisible();
 });
 
 // Seam: native overlay coordinates follow pane movement even when its size does not change.
