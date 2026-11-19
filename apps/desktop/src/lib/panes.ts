@@ -194,7 +194,8 @@ export function newTab(pane = panes.get().focus) {
 }
 
 // Closed tabs, newest last, each with its history and where it was, for ⇧⌘T.
-const closed: { tab: Tab; pane: string; at: number }[] = [];
+const closed: { tab: Tab; pane: string; at: number; time: number }[] = [];
+export const lastTabClose = () => closed.at(-1)?.time ?? 0;
 
 // ⌘W: the front tab, or the tab with id; its pane goes with its last tab, and the last pane leaves "No page open".
 export function closeTab(pane = panes.get().focus, id?: string) {
@@ -202,7 +203,7 @@ export function closeTab(pane = panes.get().focus, id?: string) {
   const l = root && leaves(root).find((x) => x.id === pane);
   const t = l && (id ? l.tabs.find((x) => x.id === id) : frontTab(l));
   if (!root || !l || !t) return;
-  closed.push({ tab: t, pane, at: l.tabs.indexOf(t) });
+  closed.push({ tab: t, pane, at: l.tabs.indexOf(t), time: Date.now() });
   const rest = without(l, t);
   if (rest) setLeaf(pane, () => rest);
   else if (root.kind === "split") closePane(pane);
@@ -316,6 +317,35 @@ export function openBeside(page: string) {
   else if (open) showTab(open.leaf.id, open.tab.id);
   else if (here) placePage(page, here.id, "right");
   else showOnly(page);
+}
+
+export type TabPosition = { pane: string; neighbour?: string; side?: Side };
+
+// A sole tab takes its pane with it when closed. Remember which side to put it back on.
+export function tabPosition(l: Leaf): TabPosition {
+  const find = (node: PaneNode): TabPosition | undefined => {
+    if (node.kind === "leaf") return;
+    const first = node.a.id === l.id;
+    if (first || node.b.id === l.id) return {
+      pane: l.id, neighbour: leaves(first ? node.b : node.a)[0].id,
+      side: node.dir === "row" ? (first ? "left" : "right") : (first ? "top" : "bottom"),
+    };
+    return find(node.a) ?? find(node.b);
+  };
+  const { root } = panes.get();
+  return (l.tabs.length === 1 && root && find(root)) || { pane: l.id };
+}
+
+export function restoreBrowserTab(page: string, position: TabPosition) {
+  const { root } = panes.get();
+  const all = root ? leaves(root) : [];
+  if (all.some((l) => l.id === position.pane)) {
+    focusPane(position.pane);
+    if (focusedPage() === BROWSER_HOME) return openPage(page);
+  } else if (position.neighbour && position.side && all.some((l) => l.id === position.neighbour)) {
+    return placePage(page, position.neighbour, position.side);
+  }
+  openTab(page);
 }
 
 // Opens the panes kept from last time (localStorage, as other layout state is), then keeps every

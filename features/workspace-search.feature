@@ -118,3 +118,10 @@ Feature: One search for the workspace
     When I press Shift+Return on one of these actions
     Then the new item opens beside the focused pane and the original item stays visible
     And a new browser tab is ready for an address
+
+  Scenario: Reopen a quick-created browser tab where it was
+    Given I opened two websites beside one another
+    When I close the right website with Command+W and reopen it with Shift+Command+T
+    Then both websites are visible again on their original sides
+    When I close a blank browser tab and focus returns to my note
+    Then Shift+Command+T reopens that blank browser tab in the note's pane

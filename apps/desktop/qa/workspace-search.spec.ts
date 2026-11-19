@@ -364,6 +364,12 @@ test('Quick create keeps the source tab and opens beside the focused pane', asyn
   await expect(page.getByRole('tab', { name: /^Field notes/ })).toBeVisible();
   await create('Browser tab');
   await expect(address).toBeFocused();
+  await address.press('Escape');
+  await page.keyboard.press('Meta+w');
+  await expect(title(page)).toHaveValue('Reading list');
+  await page.keyboard.press('Meta+Shift+t');
+  await expect(page.getByRole('button', { name: /Enter address/ })).toBeVisible();
+  await page.keyboard.press('Meta+l');
   await address.fill('https://atlas.example/Maps');
   await address.press('Enter');
   await expect(websites).toContainText('atlas.example');
@@ -382,6 +388,12 @@ test('Quick create keeps the source tab and opens beside the focused pane', asyn
   await page.reload();
   await expect(page.locator('[data-testid="standin-page"][data-live="true"]:visible')).toHaveCount(2);
   await websites.filter({ hasText: 'library.example' }).click();
+  await page.keyboard.press('Meta+w');
+  await expect(websites).toHaveCount(1);
+  await expect(websites).toContainText('atlas.example');
+  await page.keyboard.press('Meta+Shift+t');
+  await expect(panes).toHaveCount(2);
+  await expect(websites).toHaveText([/atlas\.example/, /library\.example/]);
   await create('Page');
   await expect(title(page)).toBeFocused();
   await expect(panes).toHaveCount(2);
