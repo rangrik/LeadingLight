@@ -39,6 +39,12 @@ test("Tabs and their order come back after a reload", async ({ page }) => {
   await open(page);
   for (const site of ["one.example", "two.example", "three.example"]) await visit(page, site);
   await tabs(page).nth(1).click();
+  // Previous releases saved one web: page and kept its selected website separately.
+  await page.evaluate(() => {
+    const layout = JSON.parse(localStorage.getItem("ll.panes")!);
+    layout.root.tabs.find((t: { id: string }) => t.id === layout.root.active).pages = ["web:"];
+    localStorage.setItem("ll.panes", JSON.stringify(layout));
+  });
   await page.reload();
   await expect(tabs(page)).toHaveText([/one\.example$/, /two\.example$/, /three\.example$/]);
   await expect(tabs(page).nth(1)).toHaveAttribute("aria-current", "page");

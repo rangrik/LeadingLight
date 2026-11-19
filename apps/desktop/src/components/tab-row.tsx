@@ -11,7 +11,8 @@ import { armDrag } from "~/components/pane-drag";
 import { StateDot } from "~/components/state-dot";
 import { phone, useMobile } from "~/lib/platform";
 import { useKeysFor } from "~/lib/keymap";
-import { closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
+import { closeTab as closeBrowserTab, space as browser } from "~/lib/browser-space";
+import { browserTabId, closeTab, type Leaf, newTab, openPage, pageIn, showTab, type Tab, travel } from "~/lib/panes";
 import { describe } from "~/lib/space";
 import { PAGE_TYPE } from "~/lib/store";
 import { newNotebook } from "~/lib/notebooks";
@@ -75,24 +76,28 @@ export function TabRow({ leaf, inset }: { leaf: Leaf; inset: boolean }) {
 function TabItem({ pane, tab }: { pane: string; tab: Tab }) {
   const page = pageIn(tab);
   const shown = describe(page);
+  const id = browserTabId(page);
+  const { tabs } = browser.use();
+  const label = (id && tabs.find((t) => t.id === id)?.title) || shown.title;
   return (
     <TabsTab
       className="group/tab w-44 min-w-0 shrink grow-0 justify-start pe-1"
       data-tab
       nativeButton={false}
-      onPointerDown={(e) => armDrag(e, { page, label: shown.title, tab: tab.id })}
+      onPointerDown={(e) => armDrag(e, { page, label, tab: tab.id })}
       render={<div />}
       value={tab.id}
     >
       <StateDot className="-left-[3px]" pageId={page} />
       <RowIcon icon={shown.icon} />
-      <span className="min-w-0 flex-1 truncate">{shown.title}</span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
       <Button
         aria-label="Close tab"
         className="opacity-0 transition-opacity duration-150 ease-out focus-visible:opacity-100 group-hover/tab:opacity-100"
         onClick={(e) => {
           e.stopPropagation(); // closing a tab doesn't bring it to the front first
-          closeTab(pane, tab.id);
+          if (id) void closeBrowserTab(id);
+          else closeTab(pane, tab.id);
         }}
         size="icon-xs"
         variant="ghost"

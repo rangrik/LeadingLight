@@ -21,7 +21,7 @@ import { TypeView } from "~/components/type-view";
 import { reportOf } from "~/lib/work";
 import { PLAIN_NEED, paneNeed } from "~/lib/essay";
 import { type LLObject, objects } from "~/lib/objects";
-import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, PERSONAL_BROWSER, type Rect, resizePanes, showIn } from "~/lib/panes";
+import { closeTab, type Divider, focusPane, layout, type PaneNode, pageIn, panes, browserTabId, isPersonalBrowser, type Rect, resizePanes, showIn } from "~/lib/panes";
 import { History, NoPage, TabRow } from "~/components/tab-row";
 import { CaptureInbox } from "~/components/capture-inbox";
 import { FeedView } from "~/components/feed";
@@ -181,7 +181,7 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
                 </button>
               )}
               {!phone && !folded && tabbed && <TabRow inset={lead && rect.x < EPS && rect.y < EPS && !sidebarOpen && windowToggle} leaf={pane} />}
-              {!folded && leaf.page !== PERSONAL_BROWSER && (
+              {!folded && !isPersonalBrowser(leaf.page) && (
               <PanelHeader
                 after={mail ? <MailCount view={leaf.page} /> : !phone && pageOf(leaf.page)?.typeId !== "notebook" && !readPaper(pageOf(leaf.page)?.properties.paper) && <PageStats id={leaf.page} />}
                 current={leaf.page ? shown.title : null}
@@ -219,12 +219,12 @@ export function PaneArea({ windowToggle, lead = true }: { windowToggle: boolean;
               )}
               {/* Its own scroller, so each page opens at its top and narrow panes can be measured. */}
               <div
-                className={cn("@container min-h-0 flex-1 overflow-y-auto", leaf.page === PERSONAL_BROWSER && "flex flex-col", folded && "hidden")}
+                className={cn("@container min-h-0 flex-1 overflow-y-auto", isPersonalBrowser(leaf.page) && "flex flex-col", folded && "hidden")}
                 data-page-scroller
                 key={leaf.page}
               >
-                {leaf.page === PERSONAL_BROWSER ? (
-                  <BrowserSpace placement={`${b.left},${b.top},${b.width},${b.height}`} active={front && !folded && (!isMobile || pane.id === focus)} focused={front && leaf.id === focus} lead={lead && (isMobile || (rect.x < EPS && rect.y < EPS))} mac={windowToggle} under={tabbed} onClose={split || tabbed ? () => closeTab(leaf.id) : undefined} />
+                {isPersonalBrowser(leaf.page) ? (
+                  <BrowserSpace selected={browserTabId(leaf.page)} placement={`${b.left},${b.top},${b.width},${b.height}`} active={front && !folded && (!isMobile || pane.id === focus)} focused={front && leaf.id === focus} lead={lead && (isMobile || (rect.x < EPS && rect.y < EPS))} mac={windowToggle} under={tabbed} onClose={split || tabbed ? () => closeTab(leaf.id) : undefined} />
                 ) : !leaf.page ? (
                   <NoPage className="h-full" />
                 ) : mail ? (

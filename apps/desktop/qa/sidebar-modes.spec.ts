@@ -148,10 +148,10 @@ test('the browser moves with its pane and hides behind an inactive pane tab', as
   await page.getByRole('dialog', { name: 'Search library' }).getByRole('combobox').fill('books');
   await page.getByRole('option', { name: 'Books', exact: true }).click({ modifiers: ['Meta'] });
   await expect(page.getByTestId('browser-space')).toBeHidden();
-  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toBe('');
-  await page.getByRole('tab', { name: /^Browser Close tab$/ }).click();
+  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toEqual([]);
+  await page.getByRole('tab', { name: /^Walking-guide Close tab$/ }).click();
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
   await page.getByRole('region', { name: 'Browser', exact: true }).getByRole('button', { name: 'Close page', exact: true }).click();
   await expect(page.getByTestId('browser-space')).toHaveCount(0);
-  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toBe('');
+  await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toEqual([]);
 });

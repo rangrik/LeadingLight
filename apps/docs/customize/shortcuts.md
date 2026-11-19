@@ -46,7 +46,7 @@ These are grouped as the menu bar has them. In the Mac app each one is also a me
 
 | Keys | Menu item | What it does |
 | --- | --- | --- |
-| <kbd>⌘K</kbd> | **Search library…** | Finds pages, types and browser tabs, and creates any type of page. |
+| <kbd>⌘K</kbd> | **Search library…** | Opens search with **Idea** selected. Return creates it in a new tab. Shift-Return creates it beside the focused pane. Tab and Shift-Tab cycle search categories. |
 | <kbd>⌘J</kbd> | **Ask about this…** | Asks Claude about the selected words, or the page. |
 | <kbd>⌥⌘S</kbd> | **Suggestions** | Shows or hides tail's suggestions. |
 | <kbd>⌥⌘F</kbd> | **Feed** | Shows or hides what agents need from you. |

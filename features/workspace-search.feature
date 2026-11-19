@@ -4,7 +4,7 @@ Feature: One search for the workspace
   Scenario: Recent work is visible without remembering its type
     Given I have older pages, a new Book and an edited Meeting
     When I press Command+K from Notes or Browser
-    Then Search library opens with the most recently changed pages first
+    Then Search library opens with recent pages ordered by their last change below Create
     And I can browse every saved page, including daily notes and unpinned pages
     And reloading keeps the new Book and edited Meeting in the results
 
@@ -81,7 +81,7 @@ Feature: One search for the workspace
     And an empty category shows no Return action
 
   Scenario: Create from the first screen
-    When I click New page in Search library
+    When I choose Page under Create on the All tab
     Then a blank page opens with its title ready to edit
     When my search for "Neighborhood walk" finishes without a match
     Then I can press Return to create a page already titled "Neighborhood walk"
@@ -101,3 +101,27 @@ Feature: One search for the workspace
     And create actions are never marked as the currently open page
     When I type "new field trip Spring walk" and press Return
     Then a Field trip titled "Spring walk" opens using its type's template
+
+  Scenario: Cycle search categories from the keyboard
+    Given I have entered a query on All
+    When I press Tab repeatedly
+    Then I visit each available category in order and return to All with the query and search focus intact
+    And Shift+Tab visits the categories in reverse, wrapping from All to the last available category
+    And Command+1 through Command+5 still select the corresponding available category
+
+  Scenario: Quick create from the All tab
+    When I open Search library with Command+K
+    Then Create comes first, offering Idea, Page and Browser tab on desktop in that order
+    And Idea is selected each time I reopen search
+    When I press Return on one of these actions
+    Then the new item opens in a new tab in the focused pane and the previous tab is kept
+    When I press Shift+Return on one of these actions
+    Then the new item opens beside the focused pane and the original item stays visible
+    And a new browser tab is ready for an address
+
+  Scenario: Reopen a quick-created browser tab where it was
+    Given I opened two websites beside one another
+    When I close the right website with Command+W and reopen it with Shift+Command+T
+    Then both websites are visible again on their original sides
+    When I close a blank browser tab and focus returns to my note
+    Then Shift+Command+T reopens that blank browser tab in the note's pane
