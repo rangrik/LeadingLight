@@ -1,8 +1,10 @@
-import { Cloud } from 'lucide-react';
+import { Cloud, CloudAlert, CloudCheck, CloudOff, CloudSync } from 'lucide-react';
 import { useEffect } from 'react';
 import { useStore } from '@/lib/store';
 import { Badge } from '@leadinglight/ui/components/badge';
+import { Button } from '@leadinglight/ui/components/button';
 import { SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarGroup, useSidebar } from '@leadinglight/ui/components/sidebar';
+import { Tooltip, TooltipPopup, TooltipTrigger } from '@leadinglight/ui/components/tooltip';
 import { useCloud, refreshCloud, startCloud } from '~/lib/cloud';
 import { platform } from '~/lib/platform';
 import { syncEnabled, syncKey } from '~/lib/sync';
@@ -22,12 +24,30 @@ function standing(cloud: ReturnType<typeof useCloud>): { text: string; warn?: bo
   return cloud.sync === 'Up to date' ? { text: 'Synced' } : cloud.sync === 'Off' ? { text: '' } : { text: 'Check', warn: true };
 }
 
+const openAccount = () => window.dispatchEvent(new Event('leadinglight:cloud-account'));
+
+// The iPhone's Notes list keeps a full row.
 export function CloudButton() {
   const { text, warn } = standing(useCloud());
-  return <SidebarGroup className="py-1"><SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={() => window.dispatchEvent(new Event('leadinglight:cloud-account'))}>
+  return <SidebarGroup className="py-1"><SidebarMenu><SidebarMenuItem><SidebarMenuButton onClick={openAccount}>
     <Cloud className="size-4" /><span className="min-w-0 flex-1 truncate">Account and sync</span>
     {text && (warn ? <Badge variant="warning">{text}</Badge> : <span className="shrink-0 text-muted-foreground text-xs">{text}</span>)}
   </SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroup>;
+}
+
+const SYNC_ICON: Record<string, typeof Cloud> = { Synced: CloudCheck, Syncing: CloudSync, Offline: CloudOff, 'Sync off': CloudOff, Paused: CloudOff };
+
+// The sidebar toolbar's button: the icon shows where sync stands, the tooltip says it.
+export function CloudIconButton() {
+  const { text, warn } = standing(useCloud());
+  const Icon = warn ? CloudAlert : SYNC_ICON[text] ?? Cloud;
+  const name = text ? `Account and sync · ${text}` : 'Account and sync';
+  return <Tooltip>
+    <TooltipTrigger render={<Button aria-label={name} onClick={openAccount} size="icon-sm" variant="ghost" />}>
+      <Icon className={warn ? 'text-warning-foreground' : undefined} />
+    </TooltipTrigger>
+    <TooltipPopup>{name}</TooltipPopup>
+  </Tooltip>;
 }
 
 // Starts the account checks and sends "Account and sync" to its place in Settings. In a browser it also holds the page a new device opens.
