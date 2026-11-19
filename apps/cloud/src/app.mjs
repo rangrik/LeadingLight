@@ -2,6 +2,7 @@ import { readPart, saveSyncEvent } from './sync-storage.mjs';
 import { publicationRequest, publishedRequest, publicationHeaders } from './publications.mjs';
 import { gmailRequest, gmailCallback, gmailReady } from './gmail.mjs';
 import { calendarRequest, calendarCallback, calendarReady } from './calendar.mjs';
+import { deviceLinks } from "./device-links.mjs";
 import { relayRequest } from './relay.mjs';
 import { mobileRelayRequest } from './mobile-relay.mjs';
 import { NativeError, authenticateNative, nativePublicRequest, nativeAccountRequest, devicesRequest, revokeNative } from './native.mjs';
@@ -45,6 +46,7 @@ export function application({ env, sql, auth }) {
         return await (path === '/api/calendar/callback' ? calendarCallback : calendarRequest)({ request, env, sql, user, readBody: limitedBody });
       }
       if (path === '/api/me') return json({ ...user, ...await signIn(sql, user, !native), ...(native ? { expiresAt: native.expiresAt } : {}) });
+      if (path.startsWith('/api/device-links/')) return await deviceLinks({request,sql,user,session:native?.sessionId,allowed:enabled(env,user.id),readBody:limitedBody});
       if (path === '/api/devices' || path.startsWith('/api/devices/')) return await devicesRequest({ request, sql, user, session: native?.sessionId, readBody: limitedBody });
       if (path === '/api/native/revoke' && request.method === 'POST') return native ? await revokeNative(sql, native) : json({ error: 'Use the installed app to sign out this device.' }, 403);
       if (path.startsWith('/api/native/')) return await nativeAccountRequest({ request, sql, user, session: native?.sessionId, allowed: enabled(env, user.id), readBody: limitedBody });
@@ -52,6 +54,10 @@ export function application({ env, sql, auth }) {
       if (path === '/api/jobs' && request.method === 'GET') return json({ jobs: [] });
       if (path === '/api/jobs' || path.startsWith('/api/jobs/')) return agentsUnavailable();
       if (request.method === 'POST' && !enabled(env, user.id)) return json({ error: 'Cloud access has not been enabled for this account yet.' }, 403);
+      if (native?.syncRequiresLink && (path === '/api/sync' || path === '/api/sync-part')) {
+        const [grant]=await sql`SELECT 1 FROM device_links l JOIN native_sessions t ON t.id=l.target WHERE l.owner=${user.id} AND l.requester=${native.sessionId} AND l.share_notes AND l.state='approved' AND t.revoked_at IS NULL AND t.expires_at>now() LIMIT 1`;
+        if(!grant)return json({error:'Connect to a trusted device to sync notes.'},403);
+      }
       if (path === '/api/sync-part' && request.method === 'GET') {
         const id = url.searchParams.get('id');
         if (!bounded(id, 200)) return json({ error: 'Invalid part.' }, 400);

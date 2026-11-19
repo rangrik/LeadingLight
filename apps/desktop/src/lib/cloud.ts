@@ -53,7 +53,7 @@ export async function refreshCloud() {
   } catch (e) { setCloud({ initialized: true, error: e instanceof Error ? e.message : String(e) }); }
 }
 export async function signIn(provider: string) {
-  if (await isNative) return (await import('./native-account')).connectNativeAccount();
+  if (await isNative) return (await import('./native-account')).connectNativeAccount(true);
   if (location.origin === 'https://leadinglight-web.vercel.app') throw new Error('Use Copy notes to leadinglight.app above your workspace before signing in at the new address. Your original notes stay here.');
   const { csrfToken } = await cloudApi<{ csrfToken: string }>('auth/csrf');
   localStorage.setItem('leadinglight.last-provider', provider);
