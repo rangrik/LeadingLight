@@ -199,6 +199,6 @@ Feature: LeadingLight on iPad
     And switching category keeps my words
     When I choose a custom type or enter "new meeting Friday review"
     Then the new page uses that type in the focused pane
-    And I can open a search result beside the page or dismiss search by touch
+    And Open in new pane places a result beside the current page when both pages fit
     When I choose Open in new pane in a narrow window and reopen search above the keyboard
     Then I can still tap the first result and the toolbar search button stays within reach

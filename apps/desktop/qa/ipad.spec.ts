@@ -229,7 +229,7 @@ test.describe("iPad workspace search", () => {
     await expect(title).toHaveValue("Friday review");
     await page.keyboard.press("Meta+k");
     await field.fill("Trip checklist");
-    await dialog.getByRole("button", { name: /Open beside/ }).tap();
+    await dialog.getByRole("button", { name: "Open in new pane" }).tap();
     await expect(page.locator("[data-pane]:visible")).toHaveCount(2);
     await search.tap();
     await dialog.getByRole("button", { name: "Close search" }).tap();
