@@ -185,6 +185,7 @@ Feature: LeadingLight on iPhone
   Scenario: Find and create pages from any phone screen
     When I tap Search in Today, Notes or an open page, or press Command+K
     Then a focused search shows All, Create, Pages and Types
+    And the search field shows “Search…” in a narrow phone window
     And switching category keeps the text I entered
     When I tap New page or enter "new meeting Friday review"
     Then the new page opens in the single phone pane
