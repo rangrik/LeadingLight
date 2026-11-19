@@ -207,3 +207,24 @@ CREATE TABLE IF NOT EXISTS gmail_progress (
   revision integer NOT NULL,
   sealed text NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS device_presence (
+  session_id uuid PRIMARY KEY REFERENCES native_sessions(id) ON DELETE CASCADE,
+  public_key jsonb NOT NULL, can_sync boolean NOT NULL, projects jsonb NOT NULL,
+  seen timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS device_links (
+  id uuid PRIMARY KEY, owner text NOT NULL,
+  requester uuid NOT NULL REFERENCES native_sessions(id) ON DELETE CASCADE,
+  target uuid NOT NULL REFERENCES native_sessions(id) ON DELETE CASCADE,
+  project text, requester_key jsonb NOT NULL, target_key jsonb NOT NULL,
+  state text NOT NULL DEFAULT 'pending', envelope jsonb, channel uuid UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL DEFAULT now()+interval '2 minutes'
+);
+ALTER TABLE device_links ADD COLUMN IF NOT EXISTS share_notes boolean NOT NULL DEFAULT true;
+CREATE INDEX IF NOT EXISTS device_links_owner ON device_links(owner,created_at);
+
+ALTER TABLE native_requests ADD COLUMN IF NOT EXISTS signin_only boolean NOT NULL DEFAULT false;
+ALTER TABLE mobile_connections ADD COLUMN IF NOT EXISTS device_link uuid REFERENCES device_links(id) ON DELETE CASCADE;
+ALTER TABLE native_sessions ADD COLUMN IF NOT EXISTS sync_requires_link boolean NOT NULL DEFAULT false;

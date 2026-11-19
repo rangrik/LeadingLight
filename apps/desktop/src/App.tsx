@@ -1,5 +1,6 @@
 import { watchAccountReturns } from '~/lib/account-return';
 import { CALENDAR_VIEW, MAIL_VIEW } from '~/lib/space';
+import { DeviceConnections } from "~/components/device-connections";
 import { CloudSettings } from "~/components/cloud-settings";
 import { BrowserAddressBanner } from '~/components/browser-migration';
 import { FileText, Plus } from "lucide-react";
@@ -420,6 +421,7 @@ export default function App() {
       <ShipyardToasts>
         <TooltipProvider delay={300}>
           {shell}
+          <DeviceConnections />
           {remoteWork && <MobileAgentsHost />}
           {settings && (
             <div ref={settingsRef} tabIndex={-1} className="ll-settings fixed inset-0 z-40 bg-sidebar outline-hidden">

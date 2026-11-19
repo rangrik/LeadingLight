@@ -22,18 +22,18 @@ function envelope(value) {
 export function nativeRoute(request) {
   const path = new URL(request.url).pathname;
   return request.method === 'GET' && ['/api/config', '/api/me', '/api/sync', '/api/sync-part', '/api/calendar/accounts', '/api/gmail/accounts', '/api/gmail/progress', '/api/native/approval', '/api/devices'].includes(path)
-    || request.method === 'POST' && ['/api/publications/status', '/api/publications/publish', '/api/publications/unpublish', '/api/sync', '/api/native/revoke', '/api/native/approve', '/api/devices/name', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['progress', 'connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].map((action) => `/api/gmail/${action}`), ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
+    || request.method === 'POST' && ['/api/device-links/presence','/api/device-links/list','/api/device-links/start','/api/device-links/cancel','/api/device-links/deny','/api/device-links/channel','/api/device-links/approve','/api/device-links/remove','/api/publications/status', '/api/publications/publish', '/api/publications/unpublish', '/api/sync', '/api/native/revoke', '/api/native/approve', '/api/devices/name', '/api/mobile-relay/channels', '/api/mobile-relay/remove', ...['progress', 'connect', 'disconnect', 'messages', 'message', 'thread', 'counts', 'modify', 'send'].map((action) => `/api/gmail/${action}`), ...['connect', 'disconnect', 'calendars', 'events', 'create', 'update', 'delete'].map((action) => `/api/calendar/${action}`)].includes(path);
 }
 
 export async function authenticateNative(request, sql) {
   require(!request.headers.has('origin') && nativeRoute(request), 403, 'This native session cannot use this route.');
   const token = /^Bearer ([A-Za-z0-9_-]{43})$/.exec(request.headers.get('authorization') || '')?.[1];
   require(token, 401, 'Reconnect this device to your account.');
-  const [session] = await sql`SELECT id,owner,account_name,expires_at,(expires_at<now()+interval '29 days' OR last_seen IS NULL OR last_seen<now()-interval '5 minutes') AS renew FROM native_sessions WHERE credential_hash=${hash(token)} AND revoked_at IS NULL AND expires_at>now()`;
+  const [session] = await sql`SELECT id,owner,account_name,sync_requires_link,expires_at,(expires_at<now()+interval '29 days' OR last_seen IS NULL OR last_seen<now()-interval '5 minutes') AS renew FROM native_sessions WHERE credential_hash=${hash(token)} AND revoked_at IS NULL AND expires_at>now()`;
   require(session, 401, 'This connection expired or was revoked. Reconnect this device.');
   // A device in use stays signed in, and the device list says when it was last online. One write in five minutes at most.
   if (session.renew) [{ expires_at: session.expires_at }] = await sql`UPDATE native_sessions SET last_seen=now(),expires_at=now()+interval '30 days' WHERE id=${session.id} RETURNING expires_at`;
-  return { user: { id: session.owner, name: session.account_name }, sessionId: session.id, expiresAt: session.expires_at };
+  return { user: { id: session.owner, name: session.account_name }, sessionId: session.id, syncRequiresLink:session.sync_requires_link, expiresAt: session.expires_at };
 }
 
 export async function nativePublicRequest({ request, sql, readBody, origin }) {
@@ -48,7 +48,7 @@ export async function nativePublicRequest({ request, sql, readBody, origin }) {
       await tx`DELETE FROM native_requests WHERE expires_at<now()`;
       const [{ count }] = await tx`SELECT count(*)::int AS count FROM native_requests WHERE claimed_at IS NULL`;
       require(count < 1000, 429, 'Too many pending connections. Try again later.');
-      const [row] = await tx`INSERT INTO native_requests(id,challenge,device_name,public_key) VALUES(${id},${body.challenge},${body.deviceName.trim()},${tx.json(key)}) RETURNING expires_at`;
+      const [row] = await tx`INSERT INTO native_requests(id,challenge,device_name,public_key,signin_only) VALUES(${id},${body.challenge},${body.deviceName.trim()},${tx.json(key)},${body.signinOnly===true}) RETURNING expires_at`;
       return row;
     });
     return json({ id, expiresAt: result.expires_at, approvalUrl: `${origin}/?connect=${id}` }, 201);
@@ -60,9 +60,9 @@ export async function nativePublicRequest({ request, sql, readBody, origin }) {
     require(pending.active && !pending.claimed_at, 410, 'This connection expired or was already claimed. Start again.');
     if (!pending.owner) return json({ status: 'pending' });
     const token = randomBytes(32).toString('base64url'), sessionId = randomUUID();
-    const [session] = await tx`INSERT INTO native_sessions(id,owner,account_name,device_name,credential_hash) VALUES(${sessionId},${pending.owner},${pending.account_name},${pending.device_name},${hash(token)}) RETURNING expires_at`;
+    const [session] = await tx`INSERT INTO native_sessions(id,owner,account_name,device_name,credential_hash,sync_requires_link) VALUES(${sessionId},${pending.owner},${pending.account_name},${pending.device_name},${hash(token)},${pending.signin_only===true} AND EXISTS(SELECT 1 FROM sync_events WHERE owner=${pending.owner})) RETURNING expires_at`;
     await tx`UPDATE native_requests SET claimed_at=now(),key_envelope=NULL WHERE id=${body.id}`;
-    return json({ status: 'approved', token, user: { id: pending.owner, name: pending.account_name }, expiresAt: session.expires_at, keyEnvelope: pending.key_envelope });
+    return json({ status: 'approved', token, user: { id: pending.owner, name: pending.account_name }, expiresAt: session.expires_at, keyEnvelope: pending.key_envelope, signinOnly: pending.signin_only });
   });
 }
 
@@ -97,16 +97,22 @@ export async function nativeAccountRequest({ request, sql, user, session, allowe
   if (request.method === 'GET' && url.pathname === '/api/native/approval') {
     const code = url.searchParams.get('code'), id = code === null ? url.searchParams.get('id') : await byCode(sql, user.id, code);
     require(uuid(id), 400, 'Invalid connection.');
-    const [pending] = await sql`SELECT id,device_name,public_key,expires_at FROM native_requests WHERE id=${id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL`;
+    const [pending] = await sql`SELECT id,device_name,public_key,expires_at,signin_only FROM native_requests WHERE id=${id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL`;
     require(pending, 410, 'This connection expired or was already approved. Start again on your new device.');
-    return json({ id: pending.id, deviceName: pending.device_name, publicKey: pending.public_key, expiresAt: pending.expires_at });
+    return json({ id: pending.id, deviceName: pending.device_name, publicKey: pending.public_key, expiresAt: pending.expires_at, signinOnly:pending.signin_only });
   }
   require(request.method === 'POST' && url.pathname === '/api/native/approve', 404, 'Not found.');
   const body = await readBody(request, 4096);
   require(uuid(body.id), 400, 'Invalid connection.');
+  if(body.signinOnly===true){
+    require(!session,403,'Sign in using the browser on the new device.');
+    const result=await sql`UPDATE native_requests SET owner=${user.id},account_name=${String(user.name||'Your account').slice(0,80)} WHERE id=${body.id} AND signin_only AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL RETURNING id`;
+    require(result.length,410,'This sign-in expired or was already used.');
+    return json({ok:true});
+  }
   const key = envelope(body.keyEnvelope), device = session ?? null;
   // A device sign-in ended while this ran must not leave an approval behind.
-  const rows = await sql`UPDATE native_requests SET owner=${user.id},account_name=${String(user.name || 'Your account').slice(0,80)},key_envelope=${sql.json(key)} WHERE id=${body.id} AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL AND (${device}::uuid IS NULL OR EXISTS(SELECT 1 FROM native_sessions WHERE id=${device} AND revoked_at IS NULL)) RETURNING id`;
+  const rows = await sql`UPDATE native_requests SET owner=${user.id},account_name=${String(user.name || 'Your account').slice(0,80)},key_envelope=${sql.json(key)} WHERE id=${body.id} AND NOT signin_only AND expires_at>now() AND owner IS NULL AND claimed_at IS NULL AND (${device}::uuid IS NULL OR EXISTS(SELECT 1 FROM native_sessions WHERE id=${device} AND revoked_at IS NULL)) RETURNING id`;
   require(rows.length === 1, 410, 'This connection expired or was already approved. Start again on your new device.');
   return json({ ok: true });
 }

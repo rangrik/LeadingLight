@@ -1,0 +1,390 @@
+diff --git a/internal/box/api.go b/internal/box/api.go
+index c0efc2c..9a8a8b2 100644
+--- a/internal/box/api.go
++++ b/internal/box/api.go
+@@ -196,6 +196,11 @@ func (b *Box) Mount(s *wire.Server) {
+ 	route("GET /v1/locations/{name}/worktrees/{worktree}/touched", b.worktreeTouched)
+ 	route("POST /v1/locations/{name}/worktrees/{worktree}/setup", b.setupWorktree)
+ 	route("POST /v1/locations/{name}/worktrees/{worktree}/{action}", b.pauseAction)
++	route("PUT /v1/mobile/links/{id}", b.putDeviceLink)
++	route("DELETE /v1/mobile/links/{id}", b.removeDeviceLink)
++	route("GET /v1/mobile/review-actions/{name}", b.reviewActions)
++	route("DELETE /v1/mobile/review-actions/{name}/{report}", b.reviewActions)
++	route("PUT /v1/mobile/reviews/{name}", b.publishDeviceReviews)
+ 	route("GET /v1/mobile", b.getMobile)
+ 	route("PUT /v1/mobile", b.putMobile)
+ 	route("GET /v1/phone", b.getPhone)
+diff --git a/internal/box/device_links.go b/internal/box/device_links.go
+new file mode 100644
+index 0000000..5f0175e
+--- /dev/null
++++ b/internal/box/device_links.go
+@@ -0,0 +1,254 @@
++package box
++
++import (
++	"crypto/rand"
++	"encoding/hex"
++	"encoding/json"
++	"errors"
++	"io"
++	"net/http"
++	"os"
++	"path/filepath"
++	"strings"
++
++	"github.com/cosscom/shipyard/internal/statefile"
++	"github.com/cosscom/shipyard/internal/wire"
++)
++
++func (m *Mobile) reviewDir() string {
++	if m.reviews != "" {
++		return m.reviews
++	}
++	return m.Path + ".reviews"
++}
++
++func (m *Mobile) child(id string) *Mobile {
++	if m.links == nil {
++		m.links = map[string]*Mobile{}
++	}
++	if m.links[id] == nil {
++		m.links[id] = &Mobile{Path: filepath.Join(m.Path+".links", id+".json"), ctx: m.ctx, reviews: m.reviewDir()}
++	}
++	return m.links[id]
++}
++
++func (m *Mobile) restoreDeviceLinks(b *Box) {
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	files, _ := os.ReadDir(m.Path + ".links")
++	for _, f := range files {
++		id, ok := strings.CutSuffix(f.Name(), ".json")
++		if ok && mobileUUID.MatchString(id) {
++			m.child(id).apply(b)
++		}
++	}
++}
++
++func (b *Box) putDeviceLink(w http.ResponseWriter, r *http.Request) error {
++	id := r.PathValue("id")
++	if !wire.IsLocal(r.Context()) || b.Mobile == nil || !mobileUUID.MatchString(id) {
++		return httpError{403, "Approve this request on the Mac."}
++	}
++	var req struct {
++		Relay   mobileRelay
++		Project string
++		Folder  string
++	}
++	if err := mobileDecode(r, &req); err != nil {
++		return err
++	}
++	if !req.Relay.valid() || !mobileName.MatchString(req.Project) {
++		return badRequest("Invalid project connection.")
++	}
++	loc, err := b.Locations.Get(r.Context(), req.Project)
++	if err != nil || loc.Missing || req.Folder == "" || req.Folder != mobileIdentity(loc) {
++		return badRequest("The project folder is no longer available.")
++	}
++	m := b.Mobile
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	if m.ctx == nil || m.ctx.Err() != nil {
++		return httpError{503, "The Mac is starting. Try again."}
++	}
++	child := m.child(id)
++	c := child.load()
++	if !c.Enabled {
++		secret := make([]byte, 24)
++		if _, err = rand.Read(secret); err != nil {
++			return err
++		}
++		c = mobileConfig{Enabled: true, Relay: &req.Relay, Projects: []string{req.Project}, Token: hex.EncodeToString(secret), Grants: map[string]string{req.Project: mobileIdentity(loc)}}
++		raw, err := json.Marshal(c)
++		if err != nil {
++			return err
++		}
++		if err = statefile.Write(child.Path, raw); err != nil {
++			return err
++		}
++		child.apply(b)
++	} else if c.Relay == nil || c.Relay.Channel != req.Relay.Channel || c.Grants[req.Project] != mobileIdentity(loc) {
++		return httpError{409, "Start a new connection."}
++	}
++	writeJSON(w, child.status(b.Name))
++	return nil
++}
++
++func (b *Box) removeDeviceLink(w http.ResponseWriter, r *http.Request) error {
++	id := r.PathValue("id")
++	if !wire.IsLocal(r.Context()) || b.Mobile == nil || !mobileUUID.MatchString(id) {
++		return httpError{403, "Manage connections on the Mac."}
++	}
++	m := b.Mobile
++	m.mu.Lock()
++	defer m.mu.Unlock()
++	child := m.child(id)
++	child.mu.Lock()
++	defer child.mu.Unlock()
++	if child.cancel != nil {
++		child.cancel()
++	}
++	if err := os.Remove(child.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
++		return err
++	}
++	delete(m.links, id)
++	writeJSON(w, map[string]bool{"ok": true})
++	return nil
++}
++
++type deviceReview struct {
++	Task        string `json:"task"`
++	Title       string `json:"title"`
++	Report      string `json:"report"`
++	ReportTitle string `json:"reportTitle"`
++	Text        string `json:"text"`
++}
++type deviceReviews struct {
++	Folder  string         `json:"folder"`
++	Reviews []deviceReview `json:"reviews"`
++}
++
++func (b *Box) publishDeviceReviews(w http.ResponseWriter, r *http.Request) error {
++	name := r.PathValue("name")
++	if !wire.IsLocal(r.Context()) || b.Mobile == nil || !mobileName.MatchString(name) {
++		return httpError{403, "Publish project reviews on the Mac."}
++	}
++	loc, err := b.Locations.Get(r.Context(), name)
++	if err != nil || loc.Missing {
++		return badRequest("The project folder is unavailable.")
++	}
++	var snapshot deviceReviews
++	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1800000))
++	if err := dec.Decode(&snapshot); err != nil {
++		return badRequest("Invalid project reviews.")
++	}
++	if err := dec.Decode(new(any)); err != io.EOF {
++		return badRequest("Invalid project reviews.")
++	}
++	if snapshot.Folder != mobileIdentity(loc) {
++		return httpError{409, "The project folder changed."}
++	}
++	raw, err := json.Marshal(snapshot)
++	if err != nil {
++		return err
++	}
++	if err = statefile.Write(filepath.Join(b.Mobile.reviewDir(), name+".json"), raw); err != nil {
++		return err
++	}
++	writeJSON(w, map[string]bool{"ok": true})
++	return nil
++}
++
++func (m *Mobile) readDeviceReviews(b *Box, w http.ResponseWriter, r *http.Request) error {
++	name := r.PathValue("name")
++	if !mobileName.MatchString(name) {
++		return badRequest("Invalid project.")
++	}
++	if _, err := m.location(r.Context(), b, name); err != nil {
++		return err
++	}
++	raw, err := os.ReadFile(filepath.Join(m.reviewDir(), name+".json"))
++	if err != nil {
++		return httpError{503, "Open LeadingLight on the Mac to load this project’s reviews."}
++	}
++	var snapshot deviceReviews
++	if json.Unmarshal(raw, &snapshot) != nil || snapshot.Folder != m.load().Grants[name] {
++		return httpError{409, "The project folder changed. Reconnect on the Mac."}
++	}
++	writeJSON(w, snapshot.Reviews)
++	return nil
++}
++
++type reviewAction struct {
++	Folder string `json:"folder"`
++	Task   string `json:"task"`
++	Report string `json:"report"`
++}
++
++// A click reaches the same task acceptance code that the Mac uses. Repeating it is harmless.
++func (m *Mobile) acceptDeviceReview(b *Box, w http.ResponseWriter, r *http.Request) error {
++	name, id := r.PathValue("name"), r.PathValue("report")
++	if !mobileName.MatchString(name) || !mobileUUID.MatchString(id) {
++		return badRequest("Invalid report.")
++	}
++	if _, err := m.location(r.Context(), b, name); err != nil {
++		return err
++	}
++	raw, err := os.ReadFile(filepath.Join(m.reviewDir(), name+".json"))
++	if err != nil {
++		return httpError{409, "Refresh this project on the Mac."}
++	}
++	var s deviceReviews
++	if json.Unmarshal(raw, &s) != nil || s.Folder != m.load().Grants[name] {
++		return httpError{409, "The project folder changed."}
++	}
++	for _, row := range s.Reviews {
++		if row.Report == id {
++			action, err := json.Marshal(reviewAction{s.Folder, row.Task, id})
++			if err != nil {
++				return err
++			}
++			if err = statefile.Write(filepath.Join(m.reviewDir(), name+".actions", id), action); err != nil {
++				return err
++			}
++			writeJSON(w, map[string]bool{"pending": true})
++			return nil
++		}
++	}
++	return httpError{409, "This report is no longer waiting for review."}
++}
++func (b *Box) reviewActions(w http.ResponseWriter, r *http.Request) error {
++	name := r.PathValue("name")
++	if b.Mobile == nil || !wire.IsLocal(r.Context()) || !mobileName.MatchString(name) {
++		return httpError{403, "Manage reviews on the Mac."}
++	}
++	dir := filepath.Join(b.Mobile.reviewDir(), name+".actions")
++	if r.Method == http.MethodDelete {
++		id := r.PathValue("report")
++		if !mobileUUID.MatchString(id) {
++			return badRequest("Invalid report.")
++		}
++		err := os.Remove(filepath.Join(dir, id))
++		if err != nil && !errors.Is(err, os.ErrNotExist) {
++			return err
++		}
++		writeJSON(w, map[string]bool{"ok": true})
++		return nil
++	}
++	files, err := os.ReadDir(dir)
++	if err != nil && !errors.Is(err, os.ErrNotExist) {
++		return err
++	}
++	out := []reviewAction{}
++	for _, file := range files {
++		if !mobileUUID.MatchString(file.Name()) {
++			continue
++		}
++		data, err := os.ReadFile(filepath.Join(dir, file.Name()))
++		var action reviewAction
++		if err == nil && json.Unmarshal(data, &action) == nil {
++			out = append(out, action)
++		}
++	}
++	writeJSON(w, out)
++	return nil
++}
+diff --git a/internal/box/mobile.go b/internal/box/mobile.go
+index 1a60c89..030d492 100644
+--- a/internal/box/mobile.go
++++ b/internal/box/mobile.go
+@@ -27,6 +27,8 @@ import (
+ 
+ // LeadingLight: mobile access grants selected project agents, never the box API.
+ type Mobile struct {
++	links    map[string]*Mobile
++	reviews  string
+ 	Path     string
+ 	mu       sync.Mutex
+ 	start    sync.Mutex
+@@ -46,12 +48,13 @@ type mobileConfig struct {
+ }
+ 
+ type mobileStatus struct {
+-	Enabled  bool     `json:"enabled"`
+-	Projects []string `json:"projects"`
+-	Code     string   `json:"code,omitempty"`
+-	Channel  string   `json:"channel,omitempty"`
+-	Error    string   `json:"error,omitempty"`
+-	Name     string   `json:"name"`
++	DeviceLinks int      `json:"deviceLinks,omitempty"`
++	Enabled     bool     `json:"enabled"`
++	Projects    []string `json:"projects"`
++	Code        string   `json:"code,omitempty"`
++	Channel     string   `json:"channel,omitempty"`
++	Error       string   `json:"error,omitempty"`
++	Name        string   `json:"name"`
+ }
+ 
+ func (m *Mobile) load() mobileConfig {
+@@ -71,7 +74,7 @@ func (m *Mobile) status(name string) mobileStatus {
+ 	if c.Relay != nil {
+ 		channel = c.Relay.Channel
+ 	}
+-	return mobileStatus{Enabled: c.Enabled, Projects: c.Projects, Code: mobileCode(c, name), Channel: channel, Error: m.err, Name: name}
++	return mobileStatus{DeviceLinks: len(m.links), Enabled: c.Enabled, Projects: c.Projects, Code: mobileCode(c, name), Channel: channel, Error: m.err, Name: name}
+ }
+ 
+ func (m *Mobile) apply(b *Box) {
+@@ -104,6 +107,7 @@ func (m *Mobile) Run(ctx context.Context, b *Box) {
+ 	m.ctx = ctx
+ 	m.mu.Unlock()
+ 	m.apply(b)
++	m.restoreDeviceLinks(b)
+ 	<-ctx.Done()
+ 	m.mu.Lock()
+ 	if m.cancel != nil {
+@@ -348,6 +352,10 @@ func (m *Mobile) handler(b *Box, addr string) http.Handler {
+ 		writeJSON(w, map[string]any{"mobile": true, "version": 1, "name": b.Name, "capabilities": []string{"projects", "sessions", "approvals"}})
+ 		return nil
+ 	})
++	route("POST /v1/locations/{name}/reviews/{report}/accept", func(w http.ResponseWriter, r *http.Request) error { return m.acceptDeviceReview(b, w, r) })
++	route("GET /v1/locations/{name}/reviews", func(w http.ResponseWriter, r *http.Request) error {
++		return m.readDeviceReviews(b, w, r)
++	})
+ 	route("GET /v1/locations", func(w http.ResponseWriter, r *http.Request) error {
+ 		all, err := b.Locations.List(r.Context())
+ 		if err != nil {
+diff --git a/internal/box/mobile_test.go b/internal/box/mobile_test.go
+index e59c2f9..b73f053 100644
+--- a/internal/box/mobile_test.go
++++ b/internal/box/mobile_test.go
+@@ -244,3 +244,48 @@ func TestMobileStartsOnceAndRequiresApprovals(t *testing.T) {
+ 		})
+ 	}
+ }
++
++// The phone may accept only the displayed report in its granted folder.
++func TestDeviceProjectReviewScope(t *testing.T) {
++	b, m, h := mobileFixture(t)
++	loc, _ := b.Locations.Get(context.Background(), "shared")
++	row := deviceReview{Task: "task", Title: "Review task", Report: "00000000-0000-4000-a000-000000000001", ReportTitle: "Ready", Text: "Result"}
++	snapshot := deviceReviews{Folder: mobileIdentity(loc), Reviews: []deviceReview{row}}
++	write := func() {
++		raw, _ := json.Marshal(snapshot)
++		if err := statefile.Write(filepath.Join(m.reviewDir(), "shared.json"), raw); err != nil {
++			t.Fatal(err)
++		}
++	}
++	request := func(method, path string) *httptest.ResponseRecorder {
++		return phoneReq(t, h, method, path, mobileAddr, strings.Repeat("a", 48), "")
++	}
++	write()
++	if w := request("GET", "/v1/locations/shared/reviews"); w.Code != 200 || !strings.Contains(w.Body.String(), row.ReportTitle) {
++		t.Fatal(w.Code, w.Body)
++	}
++	if w := request("GET", "/v1/locations/private/reviews"); w.Code != 403 {
++		t.Fatal(w.Code)
++	}
++	if w := request("POST", "/v1/locations/shared/reviews/00000000-0000-4000-a000-000000000002/accept"); w.Code != 409 {
++		t.Fatal(w.Code)
++	}
++	path := "/v1/locations/shared/reviews/" + row.Report + "/accept"
++	for i := 0; i < 2; i++ {
++		if w := request("POST", path); w.Code != 200 {
++			t.Fatal(w.Code, w.Body)
++		}
++	}
++	files, err := os.ReadDir(filepath.Join(m.reviewDir(), "shared.actions"))
++	if err != nil || len(files) != 1 {
++		t.Fatal(err, len(files))
++	}
++	snapshot.Folder = "relinked"
++	write()
++	if w := request("GET", "/v1/locations/shared/reviews"); w.Code != 409 {
++		t.Fatal(w.Code)
++	}
++	if w := request("POST", path); w.Code != 409 {
++		t.Fatal(w.Code)
++	}
++}

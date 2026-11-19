@@ -2,6 +2,8 @@ import { PublishedPages } from '~/components/published-pages';
 import { Copy, Laptop, Plus, RefreshCw, Smartphone, Tablet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ConfirmDialog } from "@/views/settings/confirm";
+import { DeviceConnectionSettings } from "~/components/device-connections";
+import { connectionPicker } from "~/lib/device-links";
 import { SettingsGroup, SettingsPage, SettingsRow } from "@/views/settings/rows";
 import { Alert, AlertDescription, AlertTitle } from "@leadinglight/ui/components/alert";
 import { Badge } from "@leadinglight/ui/components/badge";
@@ -20,7 +22,7 @@ import { MobileAgentAccess } from "~/components/settings/devices-section";
 import { accountLine, cloudApi, signIn, signOut, useCloud } from "~/lib/cloud";
 import { type Device, devices, nameDevice, refreshDevices, removeDevice } from "~/lib/devices";
 import { formatAgo } from "~/lib/format";
-import { cancelNativeConnection, nativeConnection, openNativeApproval } from "~/lib/native-account";
+import { connectNativeAccount,cancelNativeConnection, nativeConnection, openNativeApproval } from "~/lib/native-account";
 import { phone, platform, useMobile } from "~/lib/platform";
 import { disableSync, enableSync, keySavedName, syncEnabled, syncKey, syncNow } from "~/lib/sync";
 
@@ -75,7 +77,7 @@ export function AccountSection() {
   const quiet = /^(You’re offline|Cloud could not be reached)/.test(cloud.error);
   const connect = () => run(async () => {
     await signIn("");
-    if (nativeConnection.get().message) toastManager.add({ type: "success", title: "Connected", description: "Your notes are syncing with this account." });
+    if (nativeConnection.get().message) toastManager.add({ type: "success", title: "Connected", description: nativeConnection.get().message });
   });
 
   return (
@@ -100,7 +102,7 @@ export function AccountSection() {
           {key ? <SettingsRow description="Turn off to keep this device to itself for a while. Nothing is deleted." label={`Sync ${it}`}>
             <Switch checked={syncing} disabled={busy} onCheckedChange={(on) => { if (on) void run(async () => { await enableSync(); await syncNow(); }); else disableSync(); }} />
           </SettingsRow> : <SettingsRow className="max-sm:flex-wrap max-sm:gap-y-3" description="Turning it on makes a recovery key and keeps a locked copy of your notes for your other devices." label="Sync is off here">
-            <Button disabled={busy || !cloud.config.allowed} onClick={() => void turnOn()}>Turn on sync</Button>
+            <Button disabled={busy || !cloud.config.allowed} onClick={() => native && list?.some(d=>!d.current) ? connectionPicker.set({project:null}) : void turnOn()}>Turn on sync</Button>
           </SettingsRow>}
           {(key ? mismatch : recovery !== undefined) && <Form className="space-y-3 py-4" onSubmit={(event) => { event.preventDefault(); void turnOn(); }}>
             <Field>
@@ -114,7 +116,7 @@ export function AccountSection() {
           {!cloud.config.allowed && <p className="py-3 text-desc text-muted-foreground">Cloud access has not been enabled for this account yet.</p>}
         </SettingsGroup>}
 
-        {!wrong && <div className="outline-none" id="account-devices" tabIndex={-1}><SettingsGroup actions={<Button disabled={!syncing || busy} onClick={() => setOpen("add")} size="sm"><Plus />Add a device</Button>} description="The apps signed in to this account. Browsers are not listed." title="Devices">
+        {!wrong && <div className="outline-none" id="account-devices" tabIndex={-1}><SettingsGroup actions={!native && <Button disabled={!syncing || busy} onClick={() => setOpen("add")} size="sm"><Plus />Add an older app</Button>} description="The apps signed in to this account. Browsers are not listed." title="Devices">
           {!syncing && <p className="py-3 text-desc text-muted-foreground">Turn on sync here to add another device.</p>}
           {rows?.map((d) => {
             const Icon = KIND[d.kind] ?? Laptop;
@@ -150,17 +152,18 @@ export function AccountSection() {
             {!cloud.config.providers.length && <p className="text-muted-foreground text-sm">{navigator.onLine ? "Cloud accounts are not configured in this installation yet." : "Sign-in is available when you are back online. Your local notes still work."}</p>}
           </div> : connection.pending ? <div className="space-y-3 py-4" role="status">
             {connection.code ? <>
-              <p className="text-sm">Type this code in LeadingLight on a device that already syncs: Settings, Account and devices, Add a device.</p>
+              <p className="text-sm">Confirm this sign-in in the browser on this device.</p>
               <p className="rounded-lg bg-muted py-4 text-center font-mono font-semibold text-2xl tracking-[0.14em]">{connection.code.slice(0, 4)} {connection.code.slice(4)}</p>
-              <p className="text-muted-foreground text-sm">Waiting. The code is good for 10 minutes. If this is your first device, or you only use the web so far, continue in the browser.</p>
+              <p className="text-muted-foreground text-sm">Check that the browser shows the same characters before approving.</p>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => void openNativeApproval().catch((e) => setError(String(e)))} variant="outline">Continue in the browser</Button>
                 <Button onClick={cancelNativeConnection} variant="ghost">Cancel</Button>
               </div>
-            </> : <p className="text-muted-foreground text-sm">Getting a code…</p>}
-          </div> : <SettingsRow className="max-sm:flex-wrap max-sm:gap-y-3" description="It shows a code to type on a device that already syncs. A first device continues in the browser." label={cloud.ended ? `Connect ${it} again` : `Connect ${it}`}>
+            </> : <p className="text-muted-foreground text-sm">Opening sign-in…</p>}
+          </div> : <SettingsRow className="max-sm:flex-wrap max-sm:gap-y-3" description="Sign in with your account, then choose a device to approve note sync." label={cloud.ended ? `Connect ${it} again` : `Connect ${it}`}>
             <Button disabled={busy || !cloud.config.ready} onClick={() => void connect()}>{cloud.ended ? "Sign in again" : `Connect ${it}`}</Button>
           </SettingsRow>}
+        {native && !connection.pending && <Button variant="ghost" size="sm" disabled={busy} onClick={()=>void run(()=>connectNativeAccount(false,true))}>Recover with a library key</Button>}
         </SettingsGroup>
       </>}
 
@@ -175,6 +178,7 @@ export function AccountSection() {
         <PairingSettings />
       </section>}
       {user && <PublishedPages key={user.id} owner={user.id} />}
+      {!wrong && native && user && <DeviceConnectionSettings />}
       <MobileAgentAccess />
 
       {user && <AddDeviceDialog account={user} onOpenChange={(next) => { setOpen(next ? "add" : ""); if (!next) load(); }} open={open === "add"} />}

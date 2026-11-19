@@ -74,7 +74,7 @@ fn validate(connection: &Connection) -> Result<(), String> {
             .bytes()
             .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
     {
-        return Err("This Mac connection code is invalid. Copy a new code from your Mac.".into());
+        return Err("This Mac connection is invalid. Request access again from the project.".into());
     }
     Ok(())
 }
@@ -87,7 +87,7 @@ fn decode(code: &str) -> Result<Connection, String> {
     let bytes = URL_SAFE_NO_PAD
         .decode(
             code.strip_prefix("llmac2:")
-                .ok_or("Paste the Mac connection code from Devices settings.")?,
+                .ok_or("Request the Mac again from the project.")?,
         )
         .map_err(|_| "This Mac connection code is invalid.")?;
     let connection: Connection =
@@ -190,6 +190,7 @@ fn endpoint(connection: &Connection, method: &str, path: &str) -> Result<reqwest
                 "transcript" | "turns" | "requests" | "controls" | "draft" | "queue" | "commands",
             ],
         ) => true,
+        ("GET", ["v1", "locations", _, "reviews"]) | ("POST", ["v1", "locations", _, "reviews", _, "accept"]) => true,
         ("GET", ["v1", "sessions", _, "commands", _]) => true,
         ("POST", ["v1", "sessions", _, "send" | "interrupt" | "controls"]) => true,
         ("POST", ["v1", "sessions", _, "requests", _, "respond"]) => true,
@@ -287,7 +288,7 @@ fn open(
     serde_json::from_slice(raw).map_err(|_| "The Mac returned an invalid reply.".into())
 }
 fn client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
+    crate::network_client()
         .no_proxy()
         .https_only(true)
         .redirect(reqwest::redirect::Policy::none())
@@ -384,7 +385,7 @@ async fn check(connection: &Connection) -> Result<(), String> {
     let reply = request(connection, "GET", "/v1/info", None).await?;
     if reply.status == 401 || reply.status == 403 {
         return Err(
-            "This Mac connection is no longer allowed. Copy a new code from your Mac.".into(),
+            "Access to this Mac ended. Request it again from the project.".into(),
         );
     }
     if !(200..300).contains(&reply.status)
@@ -606,7 +607,12 @@ pub async fn mobile_agents_request(
             "The Mac connection changed. Reopen the conversation before continuing.".into(),
         );
     }
-    request(&connection, &method, &path, body.as_ref()).await
+    let result = request(&connection, &method, &path, body.as_ref()).await;
+    #[cfg(all(target_os = "ios", debug_assertions))]
+    if path.ends_with("/reviews") && std::env::var("LL_QA_CELLULAR").as_deref() == Ok("1") {
+        eprintln!("LL QA cellular project reviews HTTP {:?}", result.as_ref().map(|r| r.status));
+    }
+    result
 }
 
 #[cfg(test)]

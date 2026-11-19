@@ -1087,3 +1087,9 @@ The Gmail service stores the import date, account labels, Later choices and dail
 with the service’s Gmail key. Each device fetches its own inbox and checks for changes every
 minute. Revision checks preserve simultaneous decisions. Existing local choices migrate on
 connection. Message text, reply drafts and reader output stay out of the progress record.
+
+## Device approval and remote reviews
+
+Signed-in apps discover devices on their own account. Both derive the match number from their device keys, the request identity and the requested scope. Each project grant has its own encrypted relay and folder identity. Older pairings keep working. Either endpoint can revoke the grant.
+
+The Mac publishes pending reports to its local runtime. Its project connection serves them to approved devices, so an upload limit in note sync cannot hide a review. Accepting a report goes through the Mac's normal task acceptance code.

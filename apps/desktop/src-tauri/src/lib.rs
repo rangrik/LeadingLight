@@ -32,6 +32,16 @@ mod voice;
 mod web;
 mod native_cloud;
 mod mobile_agents;
+
+pub(crate) fn network_client() -> reqwest::ClientBuilder {
+    let builder = reqwest::Client::builder();
+    #[cfg(all(target_os = "ios", debug_assertions))]
+    if std::env::var("LL_QA_CELLULAR").as_deref() == Ok("1") {
+        let interface = std::env::var("LL_QA_CELLULAR_INTERFACE").unwrap_or_else(|_| "ll-no-cellular".into());
+        return builder.no_proxy().interface(&interface);
+    }
+    builder
+}
 mod mobile_notifications;
 
 const DB_URL: &str = "sqlite:leadinglight.db";

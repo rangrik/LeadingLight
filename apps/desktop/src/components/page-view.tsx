@@ -22,6 +22,7 @@ import { IconPicker, PageIconView } from "~/components/page-icon";
 import { FolderRow, LinkFolderButton } from "~/components/project-folder";
 import { PropertyPanel } from "~/components/property-panel";
 import { ReportByline, Reports, ReportSources } from "~/components/reports";
+import { ProjectConnection } from "~/components/device-connections";
 import { WorkPanel } from "~/components/work-panel";
 import { ProjectWork } from "~/components/work-table";
 import { PagePicker } from "~/components/property-value";
@@ -418,6 +419,7 @@ export function PageView({ page }: { page: LLObject }) {
           )}
         </div>
         {report ? <div className="mt-2"><ReportByline about report={current} /></div> : <FolderRow pageId={page.id} />}
+        {typeId === "project" && <ProjectConnection project={page.id} />}
         <WorkPanel pageId={page.id} />
         {templateOf && (
           <p className="mt-2 flex items-center gap-2 text-muted-foreground text-sm">

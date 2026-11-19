@@ -139,7 +139,7 @@ fn endpoint(path: &str, method: &str) -> Result<reqwest::Url, String> {
         (route, method),
         ("config" | "me" | "sync" | "sync-part" | "calendar/accounts" | "gmail/accounts" | "gmail/progress" | "native/approval" | "devices", "GET")
             | (
-                "publications/status" | "publications/publish" | "publications/unpublish" | "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/progress" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
+                "device-links/presence" | "device-links/list" | "device-links/start" | "device-links/cancel" | "device-links/deny" | "device-links/channel" | "device-links/approve" | "device-links/remove" | "publications/status" | "publications/publish" | "publications/unpublish" | "mobile-relay/channels" | "mobile-relay/remove" | "sync" | "native/start" | "native/poll" | "native/revoke" | "native/approve" | "devices/name" | "gmail/progress" | "gmail/connect" | "gmail/disconnect" | "gmail/messages" | "gmail/message" | "gmail/thread" | "gmail/counts" | "gmail/modify" | "gmail/send" | "calendar/connect" | "calendar/disconnect" | "calendar/calendars" | "calendar/events" | "calendar/create" | "calendar/update" | "calendar/delete",
                 "POST"
             )
     );
@@ -157,7 +157,7 @@ async fn request(
     token: Option<&str>,
     expected_owner: Option<&str>,
 ) -> Result<CloudResponse, String> {
-    let client = reqwest::Client::builder()
+    let client = crate::network_client()
         .timeout(Duration::from_secs(20))
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -282,7 +282,7 @@ pub async fn cloud_request(
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect::<String>();
-        let mut result = request(url, &method, Some(&json!({ "publicKey": body["publicKey"], "deviceName": body["deviceName"], "challenge": challenge })), None, None).await?;
+        let mut result = request(url, &method, Some(&json!({ "publicKey": body["publicKey"], "deviceName": body["deviceName"], "signinOnly": body["signinOnly"] == true, "challenge": challenge })), None, None).await?;
         if (200..300).contains(&result.status) {
             let id = result.body["id"]
                 .as_str()
