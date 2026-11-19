@@ -393,7 +393,10 @@ test('Quick create keeps the source tab and opens beside the focused pane', asyn
   await expect(websites).toContainText('atlas.example');
   await page.keyboard.press('Meta+Shift+t');
   await expect(panes).toHaveCount(2);
-  await expect(websites).toHaveText([/atlas\.example/, /library\.example/]);
+  const leftSite = websites.filter({ hasText: 'atlas.example' });
+  const rightSite = websites.filter({ hasText: 'library.example' });
+  await expect(rightSite).toBeVisible();
+  expect((await leftSite.boundingBox())!.x).toBeLessThan((await rightSite.boundingBox())!.x);
   await create('Page');
   await expect(title(page)).toBeFocused();
   await expect(panes).toHaveCount(2);
