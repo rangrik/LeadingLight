@@ -48,9 +48,9 @@ Diagrams render locally in the installed app, including offline, and follow ligh
 
 ## Search and create
 
-Tap **Search library** in the sidebar or the magnifying glass at the top of the right-hand toolbar when the sidebar is closed. Choose **Pages**, **Types** or **Create** to narrow the same search. Your words stay in the field as you switch. With a hardware keyboard, use **⌘K** to open search and **⌘1–4** to change categories.
+Tap **Search library** in the sidebar or the magnifying glass at the top of the right-hand toolbar when the sidebar is closed. Choose **Pages**, **Types** or **Create** to narrow the same search. Your words stay in the field as you switch. With a hardware keyboard, press **⌘K** to open Library. **Tab** and **⇧Tab** cycle categories while the search field stays focused. **⌘1–4** jump to a category.
 
-Tap **New page** for a blank note, or type **new meeting Friday review** and choose the result to create a Meeting with that title. Tap **Open in new pane** on a search result to keep both pages open. They appear side by side when there is room. In a smaller window, the new page comes to the front.
+Choose **Idea** or **Page** under **Create** for a blank note. Idea is selected when Library opens. Type **new meeting Friday review** to search for the action that creates a Meeting with that title. **Return** opens a quick-create note in a tab in the focused pane. **⇧Return** or **Open in new pane** opens the highlighted result in a new pane and keeps the current page open. They appear side by side when there is room. In a smaller window, the new page comes to the front.
 
 ## Narrow windows
 

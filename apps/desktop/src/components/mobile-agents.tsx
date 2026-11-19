@@ -4,6 +4,7 @@ import { ConfirmDialog } from "@/views/settings/confirm";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { turnsOf } from "~/components/project-chat";
 import { Turn } from "~/components/thread-view";
@@ -39,11 +40,13 @@ function connectionSettings() {
   window.dispatchEvent(new Event("leadinglight:cloud-account"));
 }
 
-export function MobileAgentsButton({ className, page, onOpen }: { className?: string; page?: PageWork; onOpen?: () => void } = {}) {
+export function MobileAgentsButton({ className, page, onOpen, icon }: { className?: string; page?: PageWork; onOpen?: () => void; icon?: boolean } = {}) {
   const supported = useRemoteWork(), { user } = useCloud();
   if (!supported) return null;
   const host = taskConnection(page?.task?.id)?.name;
-  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); }}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
+  const open = () => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); };
+  if (icon) return <Tooltip><TooltipTrigger render={<Button aria-label="Remote work" size="icon-sm" variant="ghost" onClick={open} />}><Bot /></TooltipTrigger><TooltipPopup>Remote work</TooltipPopup></Tooltip>;
+  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={open}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
 }
 
 export function MobileAgentsHost() {
@@ -109,7 +112,7 @@ function MobileProjects({ target, page }: { target: MobileAgentTarget | null; pa
     void refresh();
     return () => { done = true; clearTimeout(timer); };
   }, [required]);
-  if (!state.connection) return <div className="px-6 pb-6">{loaded && <Button variant="outline" onClick={connectionSettings}>Connect a Mac</Button>}</div>;
+  if (!state.connection) return <div className="px-6 pb-6">{loaded && <Button variant="outline" onClick={()=>{if(page){panel.set(closed);void import("~/lib/device-links").then(m=>m.connectionPicker.set({project:page.project}))}else connectionSettings()}}>Connect a Mac</Button>}</div>;
   return <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
     {!state.online && !selected && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Mac unavailable. Check the internet connection and keep the Mac awake. Your drafts are kept.</p>}
     {target && listTarget !== target.project && !error && <p role="status" className="px-6 pb-3 text-sm text-muted-foreground">Opening the notified project…</p>}
@@ -120,7 +123,7 @@ function MobileProjects({ target, page }: { target: MobileAgentTarget | null; pa
       <MobileProjectChat hostName={state.connection.name} page={page} key={selected.name} project={selected} host={state.connection.id} online={state.online} target={target?.project === selected.name ? target : null} />
     </> : <div className="space-y-2 overflow-y-auto p-6 pt-0">
       {projects.map((p) => <Button key={p.name} variant="outline" className="w-full justify-start" disabled={p.missing} onClick={() => { clearTarget(); setSelected(p); }}>{label(p)}{p.missing ? " · Folder unavailable" : ""}</Button>)}
-      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? page ? `Link and share the folder for ${page.projectTitle} on ${state.connection.name}. Link the project to its folder, then select it in Account and devices.` : "No shared projects. Choose folders in Settings → Account and devices on your Mac." : "Loading shared projects…"}</p>}
+      {!projects.length && <p className="text-sm text-muted-foreground">{loaded ? page ? `Link and share the folder for ${page.projectTitle} on ${state.connection.name}. Link the project folder on that Mac, then request it again from this project.` : "No shared projects. Open a linked project and request its Mac." : "Loading shared projects…"}</p>}
     </div>}
   </div>;
 }

@@ -20,7 +20,7 @@ import { useShowing } from "~/lib/bar";
 import { BROWSER_ASK } from "~/lib/page-tools";
 import { stopTurn } from "~/lib/turn";
 import { toggleView } from "~/components/bar";
-import { act, acting, bar, closeTab, dataBase, ensure, hostOf, live, openTab, pin, reopen, savedNote, select, shown, space, toggleSaved, zoom, type Shown } from "~/lib/browser-space";
+import { act, acting, bar, browserView, closeTab, dataBase, ensure, hostOf, live, openTab, pin, reopen, savedNote, select, shown, space, toggleSaved, zoom, type Shown } from "~/lib/browser-space";
 import { useKeysFor } from "~/lib/keymap";
 import { engine, standin, standinDone, standinMarks, standinShown, type Engine } from "~/lib/native-browser";
 import { useBrowserViewportOwner } from "~/lib/browser-viewport";
@@ -75,8 +75,8 @@ function Tool({ label, keys, children, className, ...props }: ButtonProps & { la
 }
 
 // The pill: where the page is, how its load goes, and a moment's "Saved". It opens the command bar.
-function Pill({ view, agentURL }: { view: Shown; agentURL: string }) {
-  const { tabs, selected } = space.use();
+function Pill({ view, agentURL, selected }: { view: Shown; agentURL: string; selected: string }) {
+  const { tabs } = space.use();
   const tab = tabs.find((t) => t.id === selected);
   const page = live.use()[selected];
   const note = savedNote.use();
@@ -124,7 +124,7 @@ function Pill({ view, agentURL }: { view: Shown; agentURL: string }) {
       </Button>
       {view.kind === "agent" ? (
         <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 rounded-[5px] bg-accent px-1.5 font-medium text-[0.6875rem] text-muted-foreground leading-[1.125rem]">Agent’s own browser</span>
-      ) : view.kind === "tab" && tab ? (
+      ) : view.kind === "tab" && tab?.url ? (
         <Button aria-label={loading ? "Stop" : "Reload"} className="absolute top-1/2 right-[5px] -translate-y-1/2 text-muted-foreground [&_svg]:size-3.5" onClick={() => void act(loading ? "stop" : "reload")} size="icon-xs" variant="ghost">
           {loading ? <X /> : <RotateCw />}
         </Button>
@@ -135,12 +135,12 @@ function Pill({ view, agentURL }: { view: Shown; agentURL: string }) {
 }
 
 type Chrome = { mac: boolean; lead: boolean; under?: boolean; onClose?: () => void };
-function Toolbar({ mac, lead, under, onClose }: Chrome) {
+function Toolbar({ mac, lead, under, onClose, selected }: Chrome & { selected: string }) {
   const { open: desktopOpen, openMobile, isMobile } = useSidebar();
   const open = isMobile ? openMobile : desktopOpen;
   const keys = useKeysFor();
-  const view = shown.use();
-  const { tabs, selected, closed } = space.use();
+  const view = browserView(selected, shown.use());
+  const { tabs, closed } = space.use();
   const tab = tabs.find((t) => t.id === selected);
   const page = live.use()[selected];
   const [data] = useBrowserData(dataBase(space.use().base));
@@ -158,7 +158,7 @@ function Toolbar({ mac, lead, under, onClose }: Chrome) {
       <Tool disabled={!back} keys={keys("back")} label="Back" onClick={() => travel("back")}><ChevronLeft /></Tool>
       <Tool disabled={!forward} keys={keys("forward")} label="Forward" onClick={() => travel("forward")}><ChevronRight /></Tool>
       <div className="flex min-w-0 flex-1 justify-center px-3" data-tauri-drag-region>
-        <Pill agentURL={view.kind === "agent" ? url : ""} view={view} />
+        <Pill selected={selected} agentURL={view.kind === "agent" ? url : ""} view={view} />
       </div>
       <Tool aria-pressed={saved} disabled={!safeBrowserURL(url)} keys={keys("save-link")} label={saved ? "Saved" : "Save"} onClick={() => toggleSaved(url, view.kind === "agent" ? (agentState.state?.title ?? "") : (tab?.title ?? ""))}>
         <Bookmark className={cn(saved && "fill-current")} />
@@ -176,7 +176,7 @@ function Toolbar({ mac, lead, under, onClose }: Chrome) {
           <MenuItem disabled={!onPage} inset onClick={() => void zoom(0)}>Actual size<MenuShortcut>{keys("zoom-reset")}</MenuShortcut></MenuItem>
           <MenuSeparator />
           {view.kind === "agent" && safeBrowserURL(url) && <MenuItem onClick={() => void openTab(url)}><Globe />Open in a tab of mine</MenuItem>}
-          <MenuItem disabled={!onPage || !!tab?.pin} onClick={() => tab && pin(tab.id)}><Pin />Pin tab</MenuItem>
+          <MenuItem disabled={!tab?.url || !onPage || !!tab.pin} onClick={() => tab && pin(tab.id)}><Pin />Pin tab</MenuItem>
           <MenuItem disabled={!safeBrowserURL(url)} onClick={() => void navigator.clipboard?.writeText(url).catch(() => {})}><Link />Copy link</MenuItem>
           <MenuItem disabled={!safeBrowserURL(url)} onClick={() => void import("@tauri-apps/plugin-opener").then((o) => o.openUrl(url)).catch(() => window.open(url, "_blank", "noopener,noreferrer"))}><ExternalLink />Open in default browser</MenuItem>
           <MenuSeparator />
@@ -271,9 +271,9 @@ function Failed({ url, why }: { url: string; why: string }) {
 
 // The page area. In the Mac app the tab's view is laid exactly over it, at its bottom corners'
 // radius; zoomed notes change CSS pixels, so the notes webview's width goes along.
-function Page({ e, active, placement }: { e: Engine | null; active: boolean; placement: string }) {
-  const view = shown.use();
-  const { tabs, selected } = space.use();
+function Page({ e, active, placement, selected }: { selected: string; e: Engine | null; active: boolean; placement: string }) {
+  const view = browserView(selected, shown.use());
+  const { tabs } = space.use();
   const tab = tabs.find((t) => t.id === selected);
   const page = live.use()[selected];
   const area = useRef<HTMLDivElement>(null);
@@ -284,14 +284,13 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
   const marks = standinMarks.use();
   const done = standinDone.use();
   const shownNow = standinShown.use();
-  const pageShown = active && !!e && view.kind === "tab" && !!tab && !page?.failed;
+  const pageShown = active && !!e && view.kind === "tab" && !!tab?.url && !page?.failed;
 
   useLayoutEffect(() => {
     if (!e) return;
     if (!pageShown || !tab) {
       setFrozen(null);
-      void e.hide().catch(() => {});
-      if (active && tab && view.kind === "tab") void ensure(tab.id);
+      if (active && tab?.url && view.kind === "tab") void ensure(tab.id);
       return;
     }
     const id = tab.id;
@@ -308,7 +307,7 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
           await img.decode().catch(() => {});
           await new Promise(requestAnimationFrame);
         }
-        if (current) await e.hide();
+        if (current) await e.hide(id);
       })().catch(() => {});
       return () => { current = false; };
     }
@@ -345,8 +344,9 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
     window.addEventListener("resize", kick);
     return () => { alive = false; resize.disconnect(); window.removeEventListener("resize", kick); cancelAnimationFrame(raf); };
   }, [e, pageShown, covered, tab?.id, view.kind, active, placement]);
-  // Leaving the space hides every page; they keep running for when it comes back.
-  useEffect(() => () => void e?.hide().catch(() => {}), [e]);
+  useLayoutEffect(() => {
+    if (active && selected && e) return () => { void e.hide(selected).catch(() => {}); };
+  }, [e, selected, active, pageShown]);
 
   return (
     <div className="relative min-h-0 flex-1 overflow-hidden bg-background" data-testid="browser-page" ref={area}>
@@ -354,15 +354,15 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
         <List kind={view.kind} />
       ) : view.kind === "agent" && active ? (
         <AgentPage base={view.base} key={`${view.base}/${view.tab}`} tab={view.tab} />
-      ) : !tab ? (
+      ) : !tab?.url ? (
         <Empty className="absolute inset-0">
           <EmptyHeader>
             <EmptyMedia variant="icon"><Globe /></EmptyMedia>
-            <EmptyTitle>No page open</EmptyTitle>
+            <EmptyTitle>{tab ? "New tab" : "No page open"}</EmptyTitle>
             <EmptyDescription>Search for something, or enter an address.</EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
-            <Button onClick={() => bar.set({ mode: "new", text: "" })} variant="outline">New tab<span className="text-muted-foreground">{keys("new-tab")}</span></Button>
+            <Button onClick={() => bar.set({ mode: tab ? "here" : "new", text: "" })} variant="outline">{tab ? "Enter address" : "New tab"}<span className="text-muted-foreground">{keys(tab ? "open-location" : "new-tab")}</span></Button>
           </EmptyContent>
         </Empty>
       ) : page?.failed ? (
@@ -370,7 +370,7 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
       ) : (
         <>
           {standin && (
-            <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white p-8 text-center text-neutral-900", working && "ring-2 ring-info/70 ring-inset")} data-done={done[tab.id] ?? 0} data-live={shownNow === tab.id} data-testid="standin-page">
+            <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white p-8 text-center text-neutral-900", working && "ring-2 ring-info/70 ring-inset")} data-done={done[tab.id] ?? 0} data-live={shownNow.includes(tab.id)} data-testid="standin-page">
               <SiteIcon large tab={tab} />
               <h1 className="font-semibold text-2xl">{tab.title}</h1>
               <p className="text-neutral-500 text-sm">{tab.url}</p>
@@ -384,7 +384,7 @@ function Page({ e, active, placement }: { e: Engine | null; active: boolean; pla
   );
 }
 
-export function BrowserSpace({ active, focused, placement, ...chrome }: Chrome & { active: boolean; focused: boolean; placement: string }) {
+export function BrowserSpace({ active, focused, placement, selected, ...chrome }: Chrome & { selected: string; active: boolean; focused: boolean; placement: string }) {
   const e = useEngine();
   // Ask is about the browser while it is in front (lib/ask.ts), titled by the tab in view.
   useEffect(() => {
@@ -395,8 +395,8 @@ export function BrowserSpace({ active, focused, placement, ...chrome }: Chrome &
   }, [active, focused]);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" data-testid="browser-space">
-      <Toolbar {...chrome} />
-      <Page active={active} e={e} placement={placement} />
+      <Toolbar selected={selected} {...chrome} />
+      <Page selected={selected} active={active} e={e} placement={placement} />
     </div>
   );
 }

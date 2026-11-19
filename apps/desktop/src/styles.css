@@ -53,6 +53,9 @@
 .ll-capture .ll-handle { display: none; }
 .ll-capture[data-web] .is-empty::before { content: none; }
 
+/* A tooltip only explains, so it never takes a click meant for what lies under it. */
+[data-slot="tooltip-positioner"] { pointer-events: none; }
+
 /* No focus rings on buttons and rows. Unlayered on purpose so it beats utilities. */
 :where(button, [role="button"], [role="option"], [role="menuitem"], [role="tab"], [data-slot="segmented-control-item"], a, [type="checkbox"]):focus-visible {
   outline: none;
@@ -436,5 +439,5 @@ html[data-ipad] [data-actions] > .ll-page-actions { width: max-content; min-widt
 @keyframes ll-rise { from { opacity: 0; transform: translateY(6px); } }
 .ll-rise { animation: ll-rise 180ms ease-out; }
 @media (prefers-reduced-motion: reduce) { .ll-rise { animation: none; } }
-/* While the browser is in front, toasts fit over the sidebar: a native page would cut them (App.tsx). */
-html[data-toasts-beside] [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); right: auto; max-width: calc(var(--toast-room) - 1.5rem); }
+/* Toasts fit over the open sidebar, above its footer: off its buttons and off the pages, where a native page would cut them (App.tsx). */
+@media (min-width: 768px) { html[data-toasts-beside]:not([data-ipad]) [data-slot="toast-viewport"] { --toast-inset: 0.75rem; left: var(--toast-inset); bottom: calc(var(--toast-inset) + 6rem); right: auto; max-width: calc(var(--toast-room) - 1.5rem); } }

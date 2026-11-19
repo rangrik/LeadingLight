@@ -67,7 +67,7 @@ export async function mobileCall<T = unknown>(method: string, path: string, body
   try {
     const result = await command<MobileReply<T>>("request", { method, path, body: body ?? null, expectedConnection: expectedConnection ?? connection.id });
     if (current !== generation) throw new Error("The Mac connection changed. Reopen the conversation before continuing.");
-    const error = result.status === 401 ? "This connection is no longer allowed. Copy a new code from Devices settings on your Mac." : "";
+    const error = result.status === 401 ? "This connection is no longer allowed. Request the Mac again from the project." : "";
     mobileAgents.set({ ...mobileAgents.get(), online: !error, error });
     return result;
   } catch (error) {

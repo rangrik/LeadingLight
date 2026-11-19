@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.13.0](https://github.com/rangrik/LeadingLight/compare/v0.12.1...v0.13.0) (2026-11-19)
+
+
+### Features
+
+* approve devices for sync and remote project reviews ([#61](https://github.com/rangrik/LeadingLight/issues/61)) ([6636b73](https://github.com/rangrik/LeadingLight/commit/6636b735cbfcda4a9f7195a491f1b58cf5417d11))
+
+## [0.12.1](https://github.com/rangrik/LeadingLight/compare/v0.12.0...v0.12.1) (2026-11-19)
+
+
+### Fixes
+
+* fold the sidebar footer into a usage line and one icon row ([#60](https://github.com/rangrik/LeadingLight/issues/60)) ([809693f](https://github.com/rangrik/LeadingLight/commit/809693fcb3fb14c0ec29e03832e8d32117261b1e))
+* open individual mail beside the list ([#57](https://github.com/rangrik/LeadingLight/issues/57)) ([abe1732](https://github.com/rangrik/LeadingLight/commit/abe17326d29addf877822b4cf379ae6f6f5ae089))
+
+
+### Documentation
+
+* start new worktrees from freshly fetched main ([#58](https://github.com/rangrik/LeadingLight/issues/58)) ([cabac76](https://github.com/rangrik/LeadingLight/commit/cabac767f5dcf4532d3da17a0aa512374ba2872d))
+
+## [0.12.0](https://github.com/rangrik/LeadingLight/compare/v0.11.0...v0.12.0) (2026-11-19)
+
+
+### Features
+
+* quick-create tabs from workspace search ([#56](https://github.com/rangrik/LeadingLight/issues/56)) ([00e9ad7](https://github.com/rangrik/LeadingLight/commit/00e9ad78ba04ea8d69e52e799f409dd5ecdb3138))
+
 ## [0.11.0](https://github.com/rangrik/LeadingLight/compare/v0.10.0...v0.11.0) (2026-11-18)
 
 

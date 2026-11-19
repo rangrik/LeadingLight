@@ -21,8 +21,7 @@ import {
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { openSettings } from "@/views/settings/open";
 import { useMobile } from "~/lib/platform";
-import { CloudButton } from "~/components/cloud-settings";
-import { useRemoteWork } from "~/lib/mobile-agents";
+import { CloudIconButton } from "~/components/cloud-settings";
 import { MobileAgentsButton } from "~/components/mobile-agents";
 import { UsageButton } from "~/components/usage-button";
 import { enter, leave, space } from "~/lib/browser-space";
@@ -92,7 +91,6 @@ export function AppSidebar({
   const { isMobile, state, setOpenMobile } = useSidebar();
   const mobile = useMobile();
   const front = space.use().front && !mobile;
-  const remoteWork = useRemoteWork();
   const keys = useKeysFor();
   const [sidebar, setSidebar] = useState<HTMLDivElement | null>(null);
   useEffect(() => isMobile ? workspaceSearch.subscribe(() => { if (workspaceSearch.get()) setOpenMobile(false); }) : undefined, [isMobile, setOpenMobile]);
@@ -246,41 +244,37 @@ export function AppSidebar({
             </>
           )}
           <SidebarFooter>
-            {!mobile && (
+            {!mobile && <UsageButton />}
+            <div className="flex items-center gap-0.5 pe-0.5 pointer-coarse:gap-4">
+              {!mobile && (
+                <RadioGroup
+                  aria-label="Sidebar mode"
+                  className="me-1 flex-row gap-0.5"
+                  value={front ? "browser" : "notes"}
+                  onValueChange={(v) => switchMode(v === "browser")}
+                  render={<SegmentedControl size="sm" />}
+                >
+                  {([["notes", "Notes", FileText], ["browser", "Browser", Globe]] as const).map(([value, name, Icon]) => (
+                    <Tooltip key={value}>
+                      <SegmentedControlItem aria-label={name} className="h-6 w-7 px-0 sm:h-6" render={<TooltipTrigger render={<RadioPrimitive.Root value={value} />} />}>
+                        <Icon />
+                      </SegmentedControlItem>
+                      <TooltipPopup>{name} · {keys("browser")}</TooltipPopup>
+                    </Tooltip>
+                  ))}
+                </RadioGroup>
+              )}
+              <MobileAgentsButton icon onOpen={isMobile ? () => setOpenMobile(false) : undefined} />
+              <span className="flex-1" />
+              <CloudIconButton />
               <Tooltip>
-                <TooltipTrigger render={<div />}>
-                  <RadioGroup
-                    aria-label="Sidebar mode"
-                    className="w-full flex-row gap-0.5"
-                    value={front ? "browser" : "notes"}
-                    onValueChange={(v) => switchMode(v === "browser")}
-                    render={<SegmentedControl className="w-full" size="sm" />}
-                  >
-                    <SegmentedControlItem className="flex-1" render={<RadioPrimitive.Root value="notes" />}>
-                      <FileText />
-                      Notes
-                    </SegmentedControlItem>
-                    <SegmentedControlItem className="flex-1" render={<RadioPrimitive.Root value="browser" />}>
-                      <Globe />
-                      Browser
-                    </SegmentedControlItem>
-                  </RadioGroup>
-                </TooltipTrigger>
-                <TooltipPopup>Swipe across the sidebar or press {keys("browser")}</TooltipPopup>
-              </Tooltip>
-            )}
-            {remoteWork && <MobileAgentsButton onOpen={isMobile ? () => setOpenMobile(false) : undefined} />}
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton onClick={select(() => openSettings())}>
+                <TooltipTrigger render={<Button aria-label="Settings" size="icon-sm" variant="ghost" onClick={select(() => openSettings())} />}>
                   <Settings />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-            <CloudButton />
+                </TooltipTrigger>
+                <TooltipPopup>Settings · {keys("settings")}</TooltipPopup>
+              </Tooltip>
+            </div>
           </SidebarFooter>
-          {!mobile && <UsageButton />}
         </div>
       </Sidebar>
     </>

@@ -174,3 +174,53 @@ test('expiry, revocation and encrypted sync stay isolated between accounts', opt
   assert.equal((await native('config', undefined, second.token)).status, 401);
   assert.equal((await (await native('config')).json()).ready, true);
 }));
+
+test('number matching gives one signed-in device one project and revoking it closes its relay', options, () => fixture(async ({ sql, owner, other, native, start, approve, claim }) => {
+  const device=async user=>{
+    const pending=await start();await approve(pending,user);
+    const {token}=await claim(pending);
+    const key=await webcrypto.subtle.exportKey('jwk',pending.keys.publicKey);
+    const call=(path,body)=>native('device-links/'+path,body,token);
+    const presence=await call('presence',{key,sync:true,projects:['project-A']});
+    assert.equal(presence.status,200);
+    return {id:(await presence.json()).session,call,token};
+  };
+  const host=await device(owner),phone=await device(owner),outsider=await device(other);
+  await sql`UPDATE native_sessions SET sync_requires_link=true WHERE id=${phone.id}`;
+  const sync=()=>native('sync?after=0',undefined,phone.token);
+  assert.equal((await sync()).status,403);
+  assert.equal((await phone.call('start',{target:outsider.id,project:null})).status,409);
+  assert.equal((await phone.call('start',{target:host.id,project:'unlinked'})).status,409);
+  const {id}=await (await phone.call('start',{target:host.id,project:'project-A'})).json();
+  const envelope={iv:'A'.repeat(16),data:'A'.repeat(24)};
+  assert.equal((await outsider.call('deny',{id})).status,404);
+  assert.equal((await phone.call('approve',{id,envelope})).status,409);
+  const {channel,clientToken}=await (await host.call('channel',{id})).json();
+  assert.ok(channel);
+  const access=()=>native('mobile-relay/native/notification-status',{channel,device:'9a23b54d-8281-4f44-80e5-489f3169aa07'},clientToken);
+  assert.equal((await access()).status,403);
+  assert.equal((await host.call('approve',{id,envelope})).status,200);
+  assert.equal((await sync()).status,200);
+  assert.equal((await access()).status,200);
+  assert.equal((await host.call('approve',{id,envelope})).status,409);
+  const mine=(await (await phone.call('list',{})).json()).links.find(l=>l.id===id);
+  assert.deepEqual(mine.envelope,envelope);
+  assert.equal((await phone.call('remove',{id})).status,200);
+  assert.equal((await sync()).status,403);
+  assert.equal((await access()).status,403);
+  for(const end of ['cancel','deny','expire']){
+    const {id}=await (await phone.call('start',{target:host.id,project:null})).json();
+    assert.equal((await host.call('channel',{id})).status,409);
+    if(end==='expire')await sql`UPDATE device_links SET expires_at=now()-interval '1 minute' WHERE id=${id}`;
+    else assert.equal((await (end==='deny'?host:phone).call(end,{id})).status,200);
+    assert.equal((await host.call('approve',{id,envelope})).status,409);
+  }
+  // A Mac with only a folder can approve that project without unlocking note sync.
+  await sql`UPDATE device_presence SET can_sync=false WHERE session_id=${host.id}`;
+  assert.equal((await phone.call('start',{target:host.id,project:null})).status,409);
+  const remote=await (await phone.call('start',{target:host.id,project:'project-A'})).json();
+  assert.equal((await host.call('channel',{id:remote.id})).status,200);
+  assert.equal((await host.call('approve',{id:remote.id,envelope})).status,200);
+  assert.equal((await sync()).status,403);
+
+}));

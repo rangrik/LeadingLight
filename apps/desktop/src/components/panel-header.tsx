@@ -22,6 +22,7 @@ type Props = {
   under?: boolean;
   sidebarOpen: boolean;
   root?: string;
+  showRootInCompact?: boolean;
   onRoot?: (e: React.MouseEvent) => void;
   current: string | null;
   icon?: ReactNode;
@@ -34,9 +35,10 @@ type Props = {
   children?: ReactNode;
 };
 
-export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
+export function PanelHeader({ sidebarOpen, root, showRootInCompact, onRoot, current, icon, lead = true, toggle = true, muted, onGrab, after, children, nav, under }: Props) {
   const mobile = useMobile();
   const { isMobile, openMobile } = useSidebar();
+  const rootVisibility = showRootInCompact ? "" : "hidden md:@[48rem]/header:block";
   if (isMobile) { sidebarOpen = openMobile; toggle = true; }
   return (
     <header className="@container/header flex h-(--header-height) shrink-0 items-center gap-2 pe-2" data-tauri-drag-region={!mobile || undefined}>
@@ -62,13 +64,13 @@ export function PanelHeader({ sidebarOpen, root, onRoot, current, icon, lead = t
           <Breadcrumb className="min-w-0">
             <BreadcrumbList className="flex-nowrap">
               {root && (
-                <BreadcrumbItem className="hidden shrink-0 md:@[48rem]/header:block">
+                <BreadcrumbItem className={cn("shrink-0", rootVisibility)}>
                   {onRoot ? <BreadcrumbLink render={<button onClick={onRoot} type="button" />}>{root}</BreadcrumbLink> : root}
                 </BreadcrumbItem>
               )}
               {current !== null && (
                 <>
-                  {root && <BreadcrumbSeparator className="hidden shrink-0 md:@[48rem]/header:block" />}
+                  {root && <BreadcrumbSeparator className={cn("shrink-0", rootVisibility)} />}
                   <BreadcrumbItem className="min-w-0">
                     {icon}
                     <BreadcrumbPage className={cn("max-w-[40ch] truncate", muted && "text-muted-foreground")}>{current}</BreadcrumbPage>

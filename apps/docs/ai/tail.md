@@ -147,7 +147,7 @@ Changes take effect at once.
 
 Tail starts on GPT-6.1-Sol at High effort, through Codex. Pick a Claude model to run it through Claude Code instead. Suggestions and capture guesses always run at low effort, since the choice is small; the beat uses the effort you set.
 
-Tail runs without being asked, so it uses your plan even when you don't press anything. Its use shows in the usage rings at the bottom of the sidebar, beside Ask's; see [How much of your plan is left](/ai/#see-how-much-of-your-plan-is-left). To use less, choose **Quiet** or **Off**.
+Tail runs without being asked, so it uses your plan even when you don't press anything. Its use shows in the usage bars at the bottom of the sidebar, beside Ask's; see [How much of your plan is left](/ai/#see-how-much-of-your-plan-is-left). To use less, choose **Quiet** or **Off**.
 
 ## The daily card
 

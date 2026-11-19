@@ -216,7 +216,7 @@ test.describe("iPad workspace search", () => {
     const dialog = page.getByRole("dialog", { name: "Search library" });
     const field = dialog.getByRole("combobox");
     await expect(field).toBeFocused();
-    await dialog.getByRole("button", { name: "New page" }).tap();
+    await dialog.getByRole("option", { name: "Page", exact: true }).tap();
     const title = page.getByRole("textbox", { name: "Title", exact: true });
     await title.fill("Trip checklist");
     await search.tap();
@@ -235,6 +235,60 @@ test.describe("iPad workspace search", () => {
     await dialog.getByRole("button", { name: "Close search" }).tap();
     await expect(dialog).toBeHidden();
   });
+  test("hardware shortcuts cycle Library and open pages beside the editor", async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 880 });
+    await page.goto("/?ipad");
+    await page.getByRole("button", { name: "Hide sidebar" }).tap();
+    await expect(page.getByRole("button", { name: "Search library", exact: true })).toBeEnabled();
+    const dialog = page.getByRole("dialog", { name: "Search library" });
+    const field = dialog.getByRole("combobox");
+    const titles = page.getByRole("textbox", { name: "Title", exact: true });
+    const category = (name: string) => dialog.getByRole("radio", { name, exact: true });
+    const panes = page.locator("[data-pane]:visible");
+
+    await page.keyboard.press("Meta+k");
+    await expect(field).toBeFocused();
+    await expect(dialog.getByRole("option")).toHaveText(["Idea", "Page"]);
+    await expect(dialog.getByRole("option", { name: "Idea", exact: true })).toHaveAttribute("data-highlighted", "");
+    await page.keyboard.press("Enter");
+    await expect(titles).toBeFocused();
+    await titles.fill("Trip notes");
+
+    await page.keyboard.press("Meta+k");
+    await expect(field).toBeFocused();
+    await field.fill("Trip notes");
+    for (const [key, name] of [["Shift+Tab", "Types"], ["Tab", "All"], ["Tab", "Create"], ["Tab", "Pages"]]) {
+      await page.keyboard.press(key);
+      await expect(category(name)).toBeChecked();
+      await expect(field).toBeFocused();
+      await expect(field).toHaveValue("Trip notes");
+    }
+
+    await page.keyboard.press("Meta+1");
+    await expect(category("All")).toBeChecked();
+    await field.fill("new meeting Friday review");
+    await page.keyboard.press("Shift+Enter");
+    await expect(panes).toHaveCount(2);
+    await expect(page.getByRole("region", { name: "Friday review", exact: true }).getByRole("textbox", { name: "Page body", exact: true })).toBeFocused();
+    expect(await titles.evaluateAll((fields) => fields.map((field) => (field as HTMLInputElement).value))).toEqual(expect.arrayContaining(["Trip notes", "Friday review"]));
+
+    await page.keyboard.press("Meta+k");
+    await expect(field).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(dialog.getByRole("option", { name: "Page", exact: true })).toHaveAttribute("data-highlighted", "");
+    await page.keyboard.press("Enter");
+    await expect(panes).toHaveCount(2);
+    await expect(titles.and(page.locator(":focus"))).toHaveValue("");
+    await expect(page.getByRole("tab", { name: /^Friday review/ })).toBeVisible();
+    await titles.and(page.locator(":focus")).fill("Agenda");
+
+    await page.getByRole("region", { name: "Trip notes", exact: true }).getByRole("textbox", { name: "Title", exact: true }).tap();
+    await page.keyboard.press("Meta+k");
+    await field.fill("Friday review");
+    await page.keyboard.press("Shift+Enter");
+    await expect(page.getByRole("region", { name: "Friday review", exact: true }).getByRole("textbox", { name: "Page body", exact: true })).toBeFocused();
+    await expect(titles.filter({ visible: true })).toHaveCount(2);
+  });
   test("search stays reachable in a narrow split with the keyboard up", async ({ page }) => {
     await page.addInitScript(() => {
       const viewport = Object.assign(new EventTarget(), { height: 700, width: 375, offsetTop: 0, offsetLeft: 0, scale: 1 });
@@ -246,7 +300,7 @@ test.describe("iPad workspace search", () => {
     const dialog = page.getByRole("dialog", { name: "Search library" });
     for (const title of ["Trip budget", "Itinerary"]) {
       await search.tap();
-      await dialog.getByRole("button", { name: "New page" }).tap();
+      await dialog.getByRole("option", { name: "Page", exact: true }).tap();
       await page.getByRole("textbox", { name: "Title", exact: true }).fill(title);
     }
     await search.tap();
