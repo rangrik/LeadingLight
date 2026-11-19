@@ -181,7 +181,7 @@ or charged for usage. See [Agents from a browser](/sync/pairing).
   larger change stays on the device with a clear error.
 - After a device first joins, later changes to types and properties (renaming a type, say) don't
   sync. Page content and property values do.
-- Sync keeps every version of history for now; there are no storage controls yet.
+- Sync keeps every version of history. Each account has 500 MB for encrypted sync data. If storage fills, pending edits stay on their original device and retry on the next sync.
 - Sync isn't live co-editing: two devices changing one page at the same time keep two copies, not
   one merged page.
 :::
