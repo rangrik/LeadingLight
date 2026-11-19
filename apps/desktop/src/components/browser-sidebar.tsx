@@ -1,13 +1,9 @@
-// The sidebar while the browser space is in front: the app sidebar's frame (sidebar-08 on COSS),
-// with the search field, pinned sites, my tabs and agents' browsers, then Saved, History and
-// Settings over the usage line. Rows are 32 px, 2 px apart, as in the design.
-import { Bookmark, Bot, Columns2, Ellipsis, Globe, History, Link, Pin, PinOff, Plus, Search, Sparkles, X } from "lucide-react";
+// The browser's part of the app sidebar: pinned sites (shown under Pinned), then my tabs with
+// Saved and History beside the label, then agents' browsers.
+import { Bookmark, Bot, Columns2, Ellipsis, Globe, History, Link, Pin, PinOff, Plus, Sparkles, X } from "lucide-react";
 import { ContextMenu, ContextMenuItem, ContextMenuPopup, ContextMenuSeparator, ContextMenuTrigger } from "@leadinglight/ui/components/context-menu";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "@leadinglight/ui/components/menu";
-import { Kbd } from "@leadinglight/ui/components/kbd";
 import {
-  SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupAction,
   SidebarGroupLabel,
@@ -21,10 +17,9 @@ import {
 import { Spinner } from "@leadinglight/ui/components/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { cn } from "@leadinglight/ui/lib/utils";
-import { acting, bar, browserFocused, browserView, closeTab, dataBase, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
+import { acting, bar, browserFocused, browserView, closeTab, hostOf, listed, live, openPinned, pin, select, showBrowserList, shown, space, unpin, useAgentTabs, type AgentTab, type Site, type SpaceTab } from "~/lib/browser-space";
 import { browserTabId, focusedPage, panes } from "~/lib/panes";
 import { useKeysFor } from "~/lib/keymap";
-import { useBrowserData } from "~/lib/project-runtime/browser";
 
 // The site's icon, or the one kept for its host, else a letter tile in the site's own colour, as
 // the design draws them. The letter is the site's name: W for en.wikipedia.org.
@@ -134,71 +129,68 @@ function AgentRow({ agent, active }: { agent: AgentTab; active: boolean }) {
   );
 }
 
-export function BrowserSidebar() {
+// What the browser pane shows: a tab, Saved, History or an agent's browser.
+function useView() {
   panes.use();
-  const ownsKeys = browserFocused();
+  return browserView(browserTabId(focusedPage()), shown.use());
+}
+
+export function PinnedSites() {
+  const { tabs, selected, pinned } = space.use();
+  const view = useView();
+  if (!pinned.length) return null;
+  return (
+    <div className="mb-1 grid grid-cols-4 gap-2" role="list" aria-label="Pinned sites">
+      {pinned.map((site) => {
+        const tab = tabs.find((t) => t.pin === site.id);
+        return <div key={site.id} role="listitem"><Tile active={!!tab && view.kind === "tab" && selected === tab.id} site={site} tab={tab} /></div>;
+      })}
+    </div>
+  );
+}
+
+const LISTS = [["saved", "Saved", Bookmark, "right-9"], ["history", "History", History, ""]] as const;
+
+export function BrowserSidebar() {
+  const view = useView();
   const pick = usePick();
-  const { tabs, selected, pinned, base } = space.use();
-  const view = browserView(browserTabId(focusedPage()), shown.use());
-  const [data] = useBrowserData(dataBase(base));
+  const { tabs, selected } = space.use();
+  const open = listed(tabs);
   const agents = useAgentTabs(true);
   const keys = useKeysFor();
-  const onTab = (id: string) => view.kind === "tab" && selected === id;
   return (
     <>
-      <SidebarContent className="gap-0">
-        <SidebarGroup className="pt-0 pb-1">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton className="bg-sidebar-accent/70 pe-1.5 text-[0.8125rem] text-muted-foreground" onClick={() => pick(() => bar.set({ mode: "new", text: "" }))}>
-                <Search />
-                <span className="flex-1">Search or enter address</span>
-                {ownsKeys && <Kbd className="bg-accent">{keys("new-tab")}</Kbd>}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
-        {pinned.length > 0 && (
-          <SidebarGroup className="py-0">
-            <SidebarGroupLabel>Pinned</SidebarGroupLabel>
-            <div className="grid grid-cols-4 gap-2" role="list" aria-label="Pinned">
-              {pinned.map((site) => {
-                const tab = tabs.find((t) => t.pin === site.id);
-                return <div key={site.id} role="listitem"><Tile active={!!tab && onTab(tab.id)} site={site} tab={tab} /></div>;
-              })}
-            </div>
-          </SidebarGroup>
-        )}
-        <SidebarGroup className="pt-2">
-          <SidebarGroupLabel>Tabs</SidebarGroupLabel>
-          <Tooltip>
-            <TooltipTrigger render={<SidebarGroupAction aria-label="New tab" onClick={() => pick(() => bar.set({ mode: "new", text: "" }))} />}><Plus /></TooltipTrigger>
-            <TooltipPopup side="bottom">New tab {ownsKeys && keys("new-tab")}</TooltipPopup>
+      <SidebarGroup>
+        <SidebarGroupLabel>Tabs</SidebarGroupLabel>
+        {LISTS.map(([kind, name, Icon, place]) => (
+          <Tooltip key={kind}>
+            <TooltipTrigger render={<SidebarGroupAction aria-label={name} aria-pressed={view.kind === kind} className={cn("aria-pressed:bg-sidebar-accent aria-pressed:text-sidebar-accent-foreground", place)} onClick={() => pick(() => view.kind !== kind ? showBrowserList({ kind }) : selected ? select(selected, true) : showBrowserList({ kind: "tab" }))} />}><Icon /></TooltipTrigger>
+            <TooltipPopup side="bottom">{name}</TooltipPopup>
           </Tooltip>
-          <SidebarMenu aria-label="Tabs" className="gap-0.5">
-            {listed(tabs).map((tab) => <TabRow active={onTab(tab.id)} key={tab.id} tab={tab} />)}
-          </SidebarMenu>
-        </SidebarGroup>
-        {agents.length > 0 && (
-          <SidebarGroup className="pt-2">
-            <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <SidebarMenu aria-label="Agents" className="gap-0.5">
-              {agents.map((a) => <AgentRow active={view.kind === "agent" && view.base === a.base && view.tab === a.tab} agent={a} key={`${a.base}/${a.tab}`} />)}
-            </SidebarMenu>
-          </SidebarGroup>
-        )}
-      </SidebarContent>
-      <SidebarFooter>
-        <SidebarMenu className="gap-0.5">
+        ))}
+        <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton isActive={view.kind === "saved"} onClick={() => pick(() => showBrowserList(view.kind === "saved" ? { kind: "tab" } : { kind: "saved" }))}><Bookmark /><span>Saved</span></SidebarMenuButton>
-            {data.bookmarks.length > 0 && <SidebarMenuBadge className="font-normal text-muted-foreground">{data.bookmarks.length}</SidebarMenuBadge>}
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton isActive={view.kind === "history"} onClick={() => pick(() => showBrowserList(view.kind === "history" ? { kind: "tab" } : { kind: "history" }))}><History /><span>History</span></SidebarMenuButton>
+            <SidebarMenuButton aria-label="New tab" onClick={() => pick(() => bar.set({ mode: "new", text: "" }))}>
+              <Plus />
+              <span className="flex-1">New tab</span>
+              {browserFocused() && <span className="text-xs text-muted-foreground">{keys("new-tab")}</span>}
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      </SidebarFooter>
+        {open.length > 0 && (
+          <SidebarMenu aria-label="Tabs" className="mt-1">
+            {open.map((tab) => <TabRow active={view.kind === "tab" && selected === tab.id} key={tab.id} tab={tab} />)}
+          </SidebarMenu>
+        )}
+      </SidebarGroup>
+      {agents.length > 0 && (
+        <SidebarGroup>
+          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarMenu aria-label="Agents">
+            {agents.map((a) => <AgentRow active={view.kind === "agent" && view.base === a.base && view.tab === a.tab} agent={a} key={`${a.base}/${a.tab}`} />)}
+          </SidebarMenu>
+        </SidebarGroup>
+      )}
     </>
   );
 }

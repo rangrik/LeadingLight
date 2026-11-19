@@ -105,13 +105,12 @@ test('recent pages, full library, body search and type creation', async ({ page 
   await expect(body).toContainText('Plan for today');
 });
 
-// Seam: focused pane routing versus independent sidebar mode and native overlay suppression.
+// Seam: focused pane routing versus the shared sidebar and native overlay suppression.
 test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await start(page);
   await page.keyboard.press('Meta+n');
   await title(page).fill('Kyoto itinerary');
-  await page.getByRole('radio', { name: 'Browser', exact: true }).click();
-  await page.getByRole('button', { name: /Search or enter address/ }).click();
+  await page.locator('[data-slot="sidebar-content"]').getByRole('button', { name: 'New tab', exact: true }).click();
   await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Walking-guide');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('standin-page')).toHaveAttribute('data-live', 'true');
@@ -135,14 +134,12 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await expect.poll(() => page.evaluate(async () => (await import('/src/lib/' + 'native-browser.ts')).standinShown.get())).toEqual([]);
   await page.keyboard.press('Shift+Enter');
   await expect(page.locator('[data-pane]')).toHaveCount(2);
-  await expect(page.getByRole('radio', { name: 'Notes', exact: true })).toBeChecked();
   await page.getByTestId('browser-page').click();
   await page.keyboard.press('Meta+n');
   await page.getByRole('combobox', { name: 'Search or enter address' }).fill('https://kyoto.example/Trains');
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('standin-page')).toContainText('Trains');
   await page.getByRole('textbox', { name: 'Page body' }).click();
-  await page.getByRole('radio', { name: 'Browser', exact: true }).click();
   await page.keyboard.press('Meta+n');
   await expect(title(page)).toHaveValue('');
   await title(page).fill('Packing');
@@ -150,7 +147,6 @@ test('Cmd N and global search preserve a mixed split', async ({ page }) => {
   await expect(page.getByTestId('standin-page')).toContainText('Trains');
   await search(page, 'Walking');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('radio', { name: 'Browser', exact: true })).toBeChecked();
   await expect(title(page)).toHaveValue('Packing');
   await expect(page.getByTestId('standin-page')).toContainText('Walking-guide');
   await page.getByRole('button', { name: 'Hide sidebar' }).click();

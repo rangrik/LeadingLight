@@ -93,7 +93,7 @@ Feature: An agent's browser
 
   Scenario: Browse without a linked folder
     Given no page has a linked folder
-    When I press Browser in the sidebar
+    When I press Open browser in the sidebar
     Then the browser opens beside my notes
     And its profile, downloads and workspace stay in the app's own runtime folder
 

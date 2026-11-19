@@ -105,7 +105,7 @@ const test = base.extend<{ runtime: Runtime }>({
 
 async function openBrowser(page: Page) {
   await page.goto("/");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
+  await page.getByRole("button", { name: "Open browser", exact: true }).click();
   await expect(address(page)).toBeVisible();
 }
 
@@ -399,7 +399,7 @@ test("Browser shortcuts leave note tabs and note contents intact", async ({ page
   await page.goto("/");
   await page.getByRole("button", { name: "New page", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Title", exact: true }).fill("Keep this note");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
+  await page.getByRole("button", { name: "Open browser", exact: true }).click();
   await navigate(page, "localhost:1420/alpha");
   await address(page).press("Meta+t");
   await expect(tabList(page).getByRole("tab")).toHaveCount(2);

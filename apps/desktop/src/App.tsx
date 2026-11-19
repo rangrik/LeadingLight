@@ -42,9 +42,8 @@ import { MailRoot } from "~/components/mail";
 import { useRemoteWork } from "~/lib/mobile-agents";
 import { MobileAgentsHost } from "~/components/mobile-agents";
 import { AppSidebar } from "~/components/sidebar/app-sidebar";
-import { BrowserSidebar } from "~/components/browser-sidebar";
 import { BrowserCommand } from "~/components/browser-command";
-import { available as browserAvailable, space as browserSpace, leave as leaveBrowser, useFront } from "~/lib/browser-space";
+import { available as browserAvailable, space as browserSpace } from "~/lib/browser-space";
 import { clampWidth, SidebarEdge } from "~/components/sidebar/sidebar-edge";
 import { hostCapture, openIdea, saveCapture, saveVoice, saveWebpage } from "~/lib/capture";
 import { dayPage, dayShown, ensureDaily, today } from "~/lib/daily";
@@ -146,9 +145,6 @@ export default function App() {
   const [resizing, setResizing] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ObjectSummary | null>(null);
   const projectsOn = projectPrefs.use().enabled && !mobile;
-  // Switching sidebar content leaves the open panes alone.
-  const browserFront = useFront() && !mobile;
-  const canBrowse = browserAvailable.use();
 
   useEffect(() => void isDesktop.then(setNative), []);
   // A linked folder's agents read and publish here, whichever page is open (lib/project-runtime/bridge.ts).
@@ -195,7 +191,7 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  useEffect(() => loaded ? watchAccountReturns((integration) => { useStore.getState().setView({ kind: 'workspace' }); leaveBrowser(); openPage(integration === 'gmail' ? MAIL_VIEW : CALENDAR_VIEW); }) : undefined, [loaded]);
+  useEffect(() => loaded ? watchAccountReturns((integration) => { useStore.getState().setView({ kind: 'workspace' }); openPage(integration === 'gmail' ? MAIL_VIEW : CALENDAR_VIEW); }) : undefined, [loaded]);
 
   const creating = useRef(false);
   const create = useCallback(() => {
@@ -361,8 +357,6 @@ export default function App() {
         {mac && !sidebarOpen && <SidebarTrigger className="fixed top-2.5 left-[86px] z-20 hidden md:flex" />}
         {!mobile && <SidebarEdge onResize={setSidebarWidth} onResizing={setResizing} width={sidebarWidth} />}
         <AppSidebar
-          browser={browserFront ? <BrowserSidebar /> : undefined}
-          native={canBrowse}
           loading={!loaded}
           onCreate={create}
           onToday={(e) => void dayPage(today()).then((id) => opener(id)(e))}

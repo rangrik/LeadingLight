@@ -19,16 +19,16 @@ load inside your notes, and nothing of the browser's is written into your projec
 
 ## The browser in the Mac app
 
-In the Mac app, choose **Browser** in the sidebar footer, swipe horizontally over the sidebar,
-or press <kbd>⌥⌘B</kbd>. The same sidebar then shows your pinned sites, tabs, search,
-Saved and History. Your open notes stay in place. Select a tab to show its page, or choose
-**New tab** to enter an address. Shift-click a tab or use its **More › Open beside** action
-to keep a note beside it. Switch back to **Notes** to browse pages without changing the split.
+In the Mac app your tabs are always in the sidebar, under **Tabs**, below your pinned pages.
+Select a tab to show its page, or choose **New tab** to enter an address. Sites you pin join
+**Pinned** as tiles, and the two icons beside **Tabs** open **Saved** and **History**.
+Shift-click a tab or use its **More › Open beside** action to keep a note beside it. Press
+<kbd>⌥⌘B</kbd> to go to the browser from a note; click a page to go back.
 
 Your pages are real Safari pages (WebKit), sharp at your screen's resolution, with their own
 sign-ins, apart from Safari's and from the notes. Websites can't reach the app or your notes.
 
-- **Open a page.** Press <kbd>⌘T</kbd> (or **+** beside Tabs, or the search field). A bar opens
+- **Open a page.** Press <kbd>⌘T</kbd>, or choose **New tab** under Tabs. A bar opens
   in the middle of the window: type an address, or words to search for, and press <kbd>↩</kbd>.
   With nothing typed it offers a link you copied, your open tabs, pages you saved lately and
   your history. Choosing an open tab shows it rather than opening a copy.
@@ -40,11 +40,12 @@ sign-ins, apart from Safari's and from the notes. Websites can't reach the app o
 - **Tabs.** Click a row to show its page, just as you left it (a video keeps playing). Hover a row
   for its **×**. Right-click a row to **Pin** it, copy its link or close it. A link that opens a new
   window opens in a new tab after its own; <kbd>⌘</kbd>-click a link to open it in a tab behind.
-- **Pinned** sites sit as tiles above your tabs, and stay after you close their tab or restart.
+- **Pinned** sites sit as tiles under **Pinned**, above your pinned pages, and stay after you close their tab or restart.
   Click a tile to show its tab, or open it again. Right-click a tile to **Unpin** it.
 - **Save** (the bookmark in the toolbar, or <kbd>⌘D</kbd>) adds the page to **Saved**; the
   address says "Saved" for a moment and the icon fills. Press it again to stop saving it.
-  **Saved** and **History** in the sidebar list your pages in the page area.
+  **Saved** and **History**, the two icons beside **Tabs**, list your pages in the page area.
+  Click the icon again to go back to your tab.
 - **Agents** lists the browsers your agents work in, with a dot while one works. Click one to watch
   its page; the address says "Agent's own browser". Agents' browsers never share cookies, tabs or
   sign-ins with yours or with each other's.
@@ -91,7 +92,7 @@ Press it again to put LeadingLight away and go back to the app you were in.
 | <kbd>⌘+</kbd> <kbd>⌘−</kbd> <kbd>⌘0</kbd> | Zoom the page |
 | <kbd>⌘D</kbd> | Save the page, or stop saving it |
 | <kbd>⌘&#92;</kbd> | Hide or show the sidebar |
-| <kbd>⌥⌘B</kbd> | Back to your notes |
+| <kbd>⌥⌘B</kbd> | Go to the browser |
 | <kbd>⌃⌥B</kbd> | The browser from any app, or away again |
 
 Copy, Paste, Cut, Select All and Undo act on whatever has the keyboard: the page, or your note.
@@ -104,7 +105,7 @@ browser in a web browser.
 
 - In a [project chat](/ai/project-chat), press **Browser** in the chat's header. The browser
   opens beside the chat, for that project's folder.
-- Outside the Mac app, choose **Browser** in the sidebar footer, then **Open browser**. The browser opens beside your notes. No
+- Outside the Mac app, choose **Open browser** in the sidebar. The browser opens beside your notes. No
   project is needed.
 
 A new browser shows an address field and **New tab**. No website opens until you enter an address.
@@ -360,4 +361,4 @@ review a request, revoke access, or see the same results yourself.
 - [Saving web sources](/capture/web-sources)
 - [Settings](/customize/settings)
 
-Press <kbd>⌘K</kbd> for **Search library** while browsing: find a note, a type, or another open browser tab without changing sidebar modes first. <kbd>⌘N</kbd> opens a new browser-tab address picker when the browser pane has focus. In a split, click the note pane first to make <kbd>⌘N</kbd> create a note instead.
+Press <kbd>⌘K</kbd> for **Search library** while browsing: find a note, a type, or another open browser tab. <kbd>⌘N</kbd> opens a new browser-tab address picker when the browser pane has focus. In a split, click the note pane first to make <kbd>⌘N</kbd> create a note instead.

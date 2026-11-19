@@ -54,7 +54,7 @@ const test = base.extend<{ developer: { calls: { tab: string; method?: string; a
 
 test("Developer access requires its setting and a separate page approval", async ({ page, developer }, testInfo) => {
   await page.goto("/");
-  await page.getByRole("radio", { name: "Browser", exact: true }).click(); await page.getByRole("button", { name: "Open browser", exact: true }).click();
+  await page.getByRole("button", { name: "Open browser", exact: true }).click();
   const browser = page.getByTestId("agent-browser");
   await browser.getByLabel("Address", { exact: true }).fill("https://fixture.test/");
   await browser.getByLabel("Address", { exact: true }).press("Enter");

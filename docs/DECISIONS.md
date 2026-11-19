@@ -1070,12 +1070,19 @@ all pages and types live in Library, and search finds unpinned pages. The person
 browser occupies one ordinary pane, so it can sit beside notes without remounting them.
 A native click reports focus to the pane store so shortcuts follow the pane, not the sidebar.
 
+## One sidebar, no modes (2026-11-19)
+
+Two days of modes showed the cost: reaching a note from a tab, or a tab from a note, took a
+switch first. The sidebar now lists both. Pinned holds pinned sites as tiles above pinned
+pages; Tabs holds New tab and the open tabs, with Saved and History as icons on its label.
+New page and the shortcuts stay fixed above; the lists scroll as one. The footer switch, the
+swipe and the saved mode are gone. ⌥⌘B now opens the browser, as ⌥⌘M opens Mail.
+
 ## Search and Library share one command window (2026-11-17)
 
-Both sidebar modes and ⌘K open Search library. On Mac the empty search offers Idea, Page and Browser tab above recent pages.
+The sidebar and ⌘K open Search library. On Mac the empty search offers Idea, Page and Browser tab above recent pages.
 The same window holds all pages and types. Results include note text, types, creation
-commands and personal browser tabs. Explicit result navigation reveals its sidebar mode;
-ordinary pane focus still leaves the mode alone. ⌘N follows the focused pane and keeps
+commands and personal browser tabs. ⌘N follows the focused pane and keeps
 its previous tab. A new typed page uses the existing template and daily-note paths.
 
 Search keeps a plain-text index in memory, built on demand without resolving image assets.

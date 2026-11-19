@@ -11,7 +11,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/componen
 import { Kbd } from "@leadinglight/ui/components/kbd";
 import { RowIcon } from "~/components/page-icon";
 import { SiteIcon } from "~/components/browser-sidebar";
-import { available, browserFocused, enter, hostOf, leave, newBrowserTab, refocus, select, space as browser } from "~/lib/browser-space";
+import { available, browserFocused, hostOf, newBrowserTab, refocus, select, space as browser } from "~/lib/browser-space";
 import { pageLabel } from "~/lib/labels";
 import { editPage, liveContent, liveEditor, whenLive } from "~/lib/live";
 import { docText, pageTexts, type ObjectSummary } from "~/lib/objects";
@@ -100,7 +100,6 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
   }, [q, searchPages, tokens, pages, retry]);
   const changeQuery = (next: string) => { setQuery(next); setOffset(0); setError(""); };
   const open = (id: string, e: Modifiers) => navigate(() => {
-    leave();
     openFrom(id, e);
     if (isPageView(id)) requestAnimationFrame(() => whenLive(id, (page) => page.focus()));
   });
@@ -109,7 +108,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     working.current = true;
     setBusy(true);
     setError("");
-    try { await createNote(id, (show) => navigate(() => { leave(); show(); }), title, placement); }
+    try { await createNote(id, (show) => navigate(show), title, placement); }
     catch { setError("Could not create this page. Try again."); }
     finally { working.current = false; setBusy(false); }
   };
@@ -131,7 +130,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
       run: (e) => create(id, undefined, e.shiftKey ? "beside" : "tab"),
     }));
     if (canBrowse) items.push({ value: "new:browser", label: "Browser tab", icon: <Globe />, beside: true,
-      run: (e) => navigate(() => { enter(); newBrowserTab(e.shiftKey); }) });
+      run: (e) => navigate(() => newBrowserTab(e.shiftKey)) });
     add("Create", items);
   }
   if (searchPages) {
@@ -144,7 +143,7 @@ function SearchContents({ view, navigate }: { view: SearchView; navigate(fn: () 
     ]);
   }
   if ((view === "search" || view === "tabs") && canBrowse) add("Browser tabs", tabs.filter((t) => matches(t.title, t.url)).map((t) => ({
-    value: `tab:${t.id}`, label: t.title || hostOf(t.url), sub: hostOf(t.url), icon: <SiteIcon tab={t} />, beside: true, run: (e) => navigate(() => { enter(); select(t.id, true, e.shiftKey); }),
+    value: `tab:${t.id}`, label: t.title || hostOf(t.url), sub: hostOf(t.url), icon: <SiteIcon tab={t} />, beside: true, run: (e) => navigate(() => select(t.id, true, e.shiftKey)),
   })));
   if (view === "types" || (view === "search" && q)) add("Types", types.filter((t) => (!t.made || (t.id !== ABOUT && pages.some((p) => p.typeId === t.id))) && matches(t.name, t.plural)).sort((a, b) => Number([b.name, b.plural].some((name) => name.toLocaleLowerCase() === q)) - Number([a.name, a.plural].some((name) => name.toLocaleLowerCase() === q))).map((t) => ({
     value: `type:${t.id}`, label: t.plural, sub: countPages(pages.filter((p) => p.typeId === t.id && !p.properties.templateOf).length), icon: <RowIcon icon={t.icon} />, beside: true, run: (e) => open(typeView(t.id), e),

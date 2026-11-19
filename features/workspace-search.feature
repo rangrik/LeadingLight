@@ -1,9 +1,9 @@
 Feature: One search for the workspace
-  Search and Library share one keyboard-first window, available from either sidebar mode.
+  Search and Library share one keyboard-first window, available wherever I am.
 
   Scenario: Recent work is visible without remembering its type
     Given I have older pages, a new Book and an edited Meeting
-    When I press Command+K from Notes or Browser
+    When I press Command+K from a note or a browser tab
     Then Search library opens with recent pages ordered by their last change below Create
     And I can browse every saved page, including daily notes and unpinned pages
     And reloading keeps the new Book and edited Meeting in the results
@@ -37,19 +37,18 @@ Feature: One search for the workspace
   Scenario: Jump between notes and websites while keeping a split
     Given a note and a browser tab are open side by side
     When I open a note result in Search library
-    Then Notes is selected in the sidebar and the browser pane stays open
+    Then the note shows and the browser pane stays open
     When I open a browser-tab result
-    Then Browser is selected in the sidebar and the note pane stays open
+    Then the tab shows and the note pane stays open
     And Shift+Enter or Shift-click on a page result opens it beside the current pane
     And an inactive note tab in this pane moves into the new pane instead of merely becoming active
 
   Scenario: New follows the focused pane
-    Given the sidebar mode differs from the pane I last clicked
+    Given a note is beside a browser tab
     When I press Command+N in a note pane
     Then a new page opens in a new note tab and the previous page is kept
     When I press Command+N in the browser pane
     Then the new browser-tab address picker opens without creating a note
-    And the sidebar stays in its chosen mode
     And Command+T continues to open a tab
     And holding the shortcut or pressing it behind a dialog does not create extra pages
 

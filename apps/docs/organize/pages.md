@@ -27,7 +27,7 @@ The card header above the page shows where you are: the type's plural name, then
 
 ## Find pages in Library
 
-Press <kbd>⌘K</kbd> or choose **Search library** in either sidebar mode. The same search works with the sidebar hidden. On Mac, **All** opens with three actions under **Create**. **Idea** is selected, followed by **Page** and **Browser tab**. Press <kbd>Return</kbd> to open the selection in a new tab in the focused pane, or <kbd>⇧Return</kbd> to open it beside that pane. Recent pages follow in order of their last change. The **Pages** category lists every saved page, including daily notes and unpinned pages.
+Press <kbd>⌘K</kbd> or choose **Search library** in the sidebar. The same search works with the sidebar hidden. On Mac, **All** opens with three actions under **Create**. **Idea** is selected, followed by **Page** and **Browser tab**. Press <kbd>Return</kbd> to open the selection in a new tab in the focused pane, or <kbd>⇧Return</kbd> to open it beside that pane. Recent pages follow in order of their last change. The **Pages** category lists every saved page, including daily notes and unpinned pages.
 
 Search by title, words in the body, or type. A search for **book** offers matching books, **Books** to open that type's list, and **New book**. **Types** lists all your types. **Tabs** shows open websites when the browser is available. Use <kbd>Tab</kbd> and <kbd>⇧Tab</kbd> to cycle through categories, or <kbd>⌘1</kbd>–<kbd>⌘5</kbd> to jump directly. Your search stays in the field. Templates stay in their type's settings.
 

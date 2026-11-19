@@ -70,7 +70,7 @@ jobs:
           node apps/desktop/qa/device-server.mjs > /tmp/leadinglight-device-qa.log 2>&1 &
           curl --fail --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:18788/api/config
       - name: Browser smoke and recorded feature checks
-        run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa --project=safari smoke.spec.ts saving.spec.ts unsplash.spec.ts gmail.spec.ts publishing.spec.ts app-update.spec.ts workspace-search.spec.ts sidebar-modes.spec.ts browser-space.spec.ts browser-ask.spec.ts panes.spec.ts pages.spec.ts device-connections.spec.ts
+        run: pnpm --filter @leadinglight/desktop exec playwright test -c qa/playwright.config.ts --project=qa --project=safari smoke.spec.ts saving.spec.ts unsplash.spec.ts gmail.spec.ts publishing.spec.ts app-update.spec.ts workspace-search.spec.ts sidebar.spec.ts browser-space.spec.ts browser-ask.spec.ts panes.spec.ts pages.spec.ts device-connections.spec.ts
       - name: Keep review videos and test report
         if: always()
         id: review
