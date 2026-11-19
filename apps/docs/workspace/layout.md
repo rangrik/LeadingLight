@@ -12,9 +12,11 @@ several pages side by side, and each of those places can hold tabs, as a browser
 
 - **The sidebar** shows **Search library** (<kbd>⌘K</kbd>), **New page** with a type picker, shortcuts for Today, Calendar and Mail,
   and your pinned pages. Search library finds pages, types and open browser tabs from either mode.
-  **Notes** and **Browser** share this sidebar: use the footer switch, swipe horizontally
-  across the sidebar, or press <kbd>⌥⌘B</kbd>. Switching mode keeps your panes and edits in place.
-  Settings, Account and sync, and usage stay at the bottom.
+  **Notes** and **Browser** share this sidebar: use the two icons at the bottom left, swipe
+  horizontally across the sidebar, or press <kbd>⌥⌘B</kbd>. Switching mode keeps your panes and
+  edits in place. The bottom of the sidebar is two lines: how much of your Claude and Codex plans
+  is used, then a row of icons for Notes and Browser, **Remote work**, **Account and sync** and
+  **Settings**. Point at an icon to see its name.
 - **The page area** fills the rest. Each open page is a card with rounded corners, with a small
   gap between it, its neighbours and the window's edges.
 - **The bar** is the slim strip at the right edge of the window. See [The bar](/workspace/bar).

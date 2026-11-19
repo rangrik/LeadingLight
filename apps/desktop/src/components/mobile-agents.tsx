@@ -4,6 +4,7 @@ import { ConfirmDialog } from "@/views/settings/confirm";
 import { Button } from "@leadinglight/ui/components/button";
 import { Dialog, DialogDescription, DialogHeader, DialogPopup, DialogTitle } from "@leadinglight/ui/components/dialog";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "@leadinglight/ui/components/select";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "@leadinglight/ui/components/tooltip";
 import { ApprovalCard, DeliveryLine, QuestionCard } from "~/components/agent-requests";
 import { turnsOf } from "~/components/project-chat";
 import { Turn } from "~/components/thread-view";
@@ -39,11 +40,13 @@ function connectionSettings() {
   window.dispatchEvent(new Event("leadinglight:cloud-account"));
 }
 
-export function MobileAgentsButton({ className, page, onOpen }: { className?: string; page?: PageWork; onOpen?: () => void } = {}) {
+export function MobileAgentsButton({ className, page, onOpen, icon }: { className?: string; page?: PageWork; onOpen?: () => void; icon?: boolean } = {}) {
   const supported = useRemoteWork(), { user } = useCloud();
   if (!supported) return null;
   const host = taskConnection(page?.task?.id)?.name;
-  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={() => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); }}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
+  const open = () => { onOpen?.(); panel.set({ open: true, target: null, owner: user?.id, page }); };
+  if (icon) return <Tooltip><TooltipTrigger render={<Button aria-label="Remote work" size="icon-sm" variant="ghost" onClick={open} />}><Bot /></TooltipTrigger><TooltipPopup>Remote work</TooltipPopup></Tooltip>;
+  return <Button aria-label={page ? `Remote work on ${page.task?.title || page.projectTitle}` : undefined} className={className} variant={page ? "ghost" : "outline"} size="sm" onClick={open}><Bot />{host ? `Work on ${host}` : "Remote work"}</Button>;
 }
 
 export function MobileAgentsHost() {
